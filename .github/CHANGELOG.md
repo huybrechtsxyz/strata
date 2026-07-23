@@ -63,6 +63,18 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   - Registered in `IntegrationFactory` and `PolicyEngine`; `iac_security` capability; help file `strata help --topic opa`
   - 34 tests, zero regressions against 4671-test suite
 
+- **Date/time format standard — ADR 0045 (implemented)**
+  - `src/strata/utils/datetime_utils.py` — shared UTC datetime utilities: `now_utc()`, `to_wire_timestamp()`, `format_display_timestamp()`, `parse_iso_timestamp()`, `coerce_to_utc()`
+  - All `datetime.now()` (naive) calls replaced with `datetime.now(timezone.utc)` across `base_command.py`, `sbom_build_command.py`, `schema_base_command.py`, `solution_controller.py`
+  - `base_command._start_time` / `_end_time` initialised as UTC-aware in `__init__` — prevents `can't subtract offset-naive and offset-aware datetimes` errors
+  - Console header timestamp now shows `UTC` suffix
+  - `solution_controller` cutoff time (minutes filter) now UTC-aware — fixes silent comparison bug with UTC log entries
+  - 21 unit tests for `datetime_utils`
+
+### Changed
+
+- **`datetime.now()` → `datetime.now(timezone.utc)` everywhere** — all internal timing and audit timestamps are now timezone-aware UTC. Wire format (`+00:00` suffix) unchanged for existing consumers.
+
 ---
 
 ## [1.3.1] — 2026-07-22

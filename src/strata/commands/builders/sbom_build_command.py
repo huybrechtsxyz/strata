@@ -218,7 +218,7 @@ class SbomBuildCommand(BaseBuildCommand):
         from datetime import datetime, timezone
 
         assert self._scan_path is not None
-        self._start_time = datetime.now()
+        self._start_time = datetime.now(timezone.utc)
 
         if self._is_console_output():
             self.show_console_header(work_path=str(self._scan_path))

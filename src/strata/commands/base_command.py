@@ -3,7 +3,7 @@
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, ClassVar, Dict, List, Optional
 
@@ -39,9 +39,9 @@ class BaseCommand:
         quiet: Optional[bool] = None,
     ) -> None:
         """Initialize the base command."""
-        # Timer attributes
-        self._start_time: datetime
-        self._end_time: datetime
+        # Timer attributes — always UTC-aware
+        self._start_time: datetime = datetime.now(timezone.utc)
+        self._end_time: datetime = datetime.now(timezone.utc)
 
         # Paths
         self._work_path: Path = self._get_current_workpath(work_path)
@@ -189,7 +189,7 @@ class BaseCommand:
         click.echo(f"🚀 Strata — CLI (v{get_version()})")
         click.echo("─" * 80)
         click.echo("Automates workspace preparation, configuration, and deployment.")
-        click.echo(f"⏱️   Timestamp       : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        click.echo(f"⏱️   Timestamp       : {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC")
         click.echo(f"📜  Entry point     : {' '.join(sys.argv)}")
         click.echo(f"📂  Current dir     : {os.getcwd()}")
         if work_path:
@@ -263,7 +263,7 @@ class BaseCommand:
             bool: Success status (errors stored in self._errors)
         """
         try:
-            self._start_time = datetime.now()
+            self._start_time = datetime.now(timezone.utc)
             self._configure_session_logging()
 
             self.logger.debug(
@@ -347,7 +347,7 @@ class BaseCommand:
         neither logged to stdout nor accumulated in ``self._errors``.
         """
         try:
-            self._start_time = datetime.now()
+            self._start_time = datetime.now(timezone.utc)
             self._configure_session_logging()
 
             self.logger.debug(
@@ -476,7 +476,6 @@ class BaseCommand:
 
         if self._is_ndjson_output():
             # ── NDJSON mode: emit final "complete" event ──────────────────────
-            from datetime import timezone
 
             self.emit_ndjson(
                 {
@@ -560,7 +559,7 @@ class BaseCommand:
             # Show footer
             self.show_console_footer()
 
-        self._end_time = datetime.now()
+        self._end_time = datetime.now(timezone.utc)
         duration = self._end_time - self._start_time
 
         # Emit audit entry for every command execution
@@ -624,7 +623,6 @@ class BaseCommand:
         ``run_command(line_callback=...)`` and ``TerraformDeployer`` step methods:
         ``(stream: str, text: str) -> None``.
         """
-        from datetime import timezone
 
         def _cb(stream: str, text: str) -> None:
             event: Dict[str, Any] = {

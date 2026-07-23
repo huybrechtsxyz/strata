@@ -1,7 +1,8 @@
 # Date / Time Format and Handling Standard
 
-- Status: accepted
+- Status: implemented
 - Date: 2026-07-20
+- Implemented: 2026-07-23
 
 ## Context and Problem Statement
 
