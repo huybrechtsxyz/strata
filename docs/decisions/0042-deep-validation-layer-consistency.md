@@ -24,7 +24,7 @@
 - [ ] **Rule Set 1 — Layer Identity Consistency** — Detect mismatches between declared layers and environment file paths
 - [ ] **Rule Set 2 — Template Drift Detection** — Warn when template versions advance beyond reviewed instantiation
 - [ ] **Rule Set 3 — Tenant Field vs Path Consistency** — Check tenant values against path segments
-- [ ] **Rule Set 4 — Path Convention Policy** — Validate directory structure against declared conventions
+- [x] **Rule Set 4 — Path Convention Policy** — Implemented as `path_convention` policy type; see ADR 0052
 - [ ] **Configuration Service Dependency Chain** — Define behavior when `--deep` validation runs without configuration service available; clarify `DeploymentService` ↔ `ConfigurationService` coupling
 - [ ] **Backwards Compatibility & Migration Path** — Document how operators migrate existing non-compliant files; define timeline for optional → mandatory enforcement
 - [ ] **Scope Precedence Algorithm** — Clarify glob matching specificity rules; define ordering when multiple conventions match the same file

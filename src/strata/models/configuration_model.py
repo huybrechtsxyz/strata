@@ -4,7 +4,7 @@
 from enum import Enum
 from typing import Annotated, Any, Dict, List, Optional, Union
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from strata.models.audit_config_model import AuditConfigModel
 from strata.models.common_models import (
@@ -253,6 +253,70 @@ class ScopedLayeringModel(PlatformBaseModel):
         return self
 
 
+class PathConventionModel(PlatformBaseModel):
+    """A path convention rule for directory structure validation.
+
+    Declared in ``spec.paths`` on the configuration model.  Each entry targets a
+    subtree via a ``scope`` glob and defines the expected directory structure via a
+    ``pattern`` with ``{segment}`` captures.  Optional ``validate`` rules check each
+    captured segment value against a model field or a file existence constraint.
+
+    Example::
+
+        paths:
+          - name: zone-deployment-tree
+            scope: "zones/**"
+            pattern: "zones/{zone}/customers/{tenant}/{env}"
+            validate:
+              zone: spec.zones[*].name
+              tenant: "customers/{tenant}/tenant.yaml"
+              env: spec.environments[*].name
+    """
+
+    name: PlatformName = Field(description="Unique convention name for diagnostics and policy filtering")
+    scope: str = Field(
+        description=(
+            "Glob pattern — only files whose relative path (from work_path) matches "
+            "this scope are candidates for this convention."
+        )
+    )
+    pattern: str = Field(
+        description=(
+            "Path template with {segment} captures, anchored at work_path root. "
+            "Each {segment} captures exactly one path part (no '/'). "
+            "Literal segments must match verbatim. "
+            "Trailing path parts after the pattern are ignored."
+        )
+    )
+    rules: Optional[Dict[str, str]] = Field(
+        None,
+        alias="validate",
+        description=(
+            "Per-segment validation rules. Keys must match {segment} names in pattern. "
+            "Values: 'spec.field[*].attr' for model membership lookup, "
+            "or a path template for file existence check."
+        ),
+    )
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    @model_validator(mode="after")
+    def validate_segments_match_pattern(self) -> "PathConventionModel":
+        """Validate that all keys in 'rules' correspond to {segments} in pattern."""
+        if not self.rules:
+            return self
+        import re as _re
+
+        pattern_segments = set(_re.findall(r"\{(\w+)\}", self.pattern))
+        for key in self.rules:
+            if key not in pattern_segments:
+                raise ValueError(
+                    f"Validation key '{key}' does not correspond to a {{segment}} "
+                    f"in pattern '{self.pattern}'. Available segments: {sorted(pattern_segments)}"
+                )
+        return self
+
+
 class ConfigurationLoggingModel(PlatformBaseModel):
     """Model for logging configuration."""
 
@@ -459,6 +523,14 @@ class ConfigurationSpecModel(PlatformBaseModel):
             "an ordered list of layer keys. First-match wins. Mutually exclusive with spec.layering."
         ),
     )
+    paths: Optional[List[PathConventionModel]] = Field(
+        None,
+        description=(
+            "Declared directory structure conventions for path validation policy. "
+            "Each entry targets a subtree via a scope glob and defines the expected "
+            "path structure with per-segment validation rules."
+        ),
+    )
     integrations: List[IntegrationModel] = Field(
         default_factory=list,
         description="External integrations that extend platform capabilities",
@@ -535,6 +607,13 @@ class ConfigurationSpecModel(PlatformBaseModel):
         """Validate that all topology types are unique."""
         if self.topologies:
             check_unique_names([topo.type for topo in self.topologies], "topology types in configuration")
+        return self
+
+    @model_validator(mode="after")
+    def validate_unique_path_convention_names(self) -> "ConfigurationSpecModel":
+        """Validate that path convention names are unique."""
+        if self.paths:
+            check_unique_names([p.name for p in self.paths], "path convention names in configuration")
         return self
 
     @model_validator(mode="after")

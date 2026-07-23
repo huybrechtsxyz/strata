@@ -291,6 +291,87 @@ Multiple configs merge: built-in → 00-_.yaml → 10-_.yaml → 99-\*.yaml
 - Unique provider/topology names after merge
 - Defined regions/resources when additional\_\* = false
 
+## Path Convention Policy
+
+Declare directory structure conventions in `spec.paths`. A `path_convention` policy type
+enforces these at validation time.
+
+### Declaring conventions
+
+```yaml
+spec:
+  paths:
+    - name: zone-deployment-tree
+      scope: "zones/**"                              # files in this subtree are candidates
+      pattern: "zones/{zone}/customers/{tenant}/{env}" # {segment} captures one path part
+      validate:
+        zone: spec.zones[*].name                     # captured value must be a declared zone
+        tenant: "customers/{tenant}/tenant.yaml"     # file at this path must exist
+        env: spec.environments[*].name               # captured value must be a declared environment
+
+    - name: tenant-registry
+      scope: "customers/**"
+      pattern: "customers/{tenant}"
+      validate:
+        tenant: "customers/{tenant}/tenant.yaml"
+
+    - name: landscape-registry
+      scope: "landscape/**"
+      pattern: "landscape/{landscape}"
+      validate:
+        landscape: "landscape/{landscape}/landscape.yaml"
+```
+
+### Enforcement policy
+
+```yaml
+spec:
+  policies:
+    # Enforce all conventions
+    - name: enforce-paths
+      type: path_convention
+      phase: validate
+      enforcement: deny
+
+    # Enforce specific conventions only
+    - name: advisory-landscape
+      type: path_convention
+      phase: validate
+      enforcement: warn
+      configuration:
+        conventions: [landscape-registry]
+```
+
+### Inline convention (deploy-repo mode)
+
+For repositories without a configuration model, declare the convention inline on the policy:
+
+```yaml
+policies:
+  - name: deploy-layout
+    type: path_convention
+    phase: validate
+    enforcement: deny
+    configuration:
+      scope: "deploy/**"
+      pattern: "deploy/{landscape}/{ring}"
+      validate:
+        landscape: "deploy/{landscape}/landscape.yaml"
+```
+
+### Validation rule types
+
+| Rule syntax                      | Meaning                                                                |
+| -------------------------------- | ---------------------------------------------------------------------- |
+| `spec.zones[*].name`             | Captured value must appear in a field of the loaded ConfigurationModel |
+| `customers/{tenant}/tenant.yaml` | File at this path (relative to workspace root) must exist on disk      |
+
+`spec.*` rules require `--deep` validation (configuration service must be available). File
+existence rules work in both surface and deep mode.
+
+Files that match the scope but not the pattern (e.g., shallower depth) are skipped — not a
+violation. Files that match no scope are not checked by that convention.
+
 ## Secret Stores
 
 Secrets in `spec.secrets` are resolved at build time by the `strata build` command. The `store` field controls which backend is used. The following stores are supported:

@@ -20,6 +20,18 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   - Mutual exclusion validation — `spec.layering` and `spec.layerings` cannot both be set; validator enforces this
   - Full test coverage — overlap controller tests adapted to multi-scheme; integration tests validate both flat and scoped schemes
 
+- **Path convention validation — ADR 0052 (completed)**
+  - `spec.paths[]` field on the configuration model — declare directory structure conventions for fleet-wide path enforcement
+  - `PathConventionModel` — each convention has a `name`, `scope` (glob), `pattern` with `{segment}` captures, and optional `validate` rules per segment
+  - Two validation rule types: `spec.field[*].attr` for model membership lookup (e.g., declared zones); or a path template for file existence check (e.g., `customers/{tenant}/tenant.yaml`)
+  - `path_convention` policy type — enforces conventions at validate phase with deny/warn/audit levels; supports per-convention filtering via `configuration.conventions`
+  - Deploy-repo mode — inline convention on policy for repos without a configuration model (`configuration.scope` + `configuration.pattern`)
+  - Scope matching: `fnmatch` glob; pattern matching: positional literal + capture; no-match = skip (never a violation)
+  - `spec.*` rules require configuration service (deep validation); file existence rules work in surface mode
+  - `file_path: Optional[Path]` added to `PolicyContext` — populated by policy engine before `evaluate()`
+  - `strata.utils.path_convention` module — `match_pattern`, `resolve_spec_rule`, `evaluate_file_rule`, `evaluate_conventions`
+  - 45 tests, zero regressions against 4607-test suite
+
 ### Changed
 
 - **Removed hardcoded "environment" layer name constraint** — last layer no longer required to be named `"environment"`. Layer names are now arbitrary (e.g., `ring`, `stage`, `landscape` as last layer). Collision prevention is entirely owned by `OverlapController` artifact path uniqueness check, not by layer naming.
