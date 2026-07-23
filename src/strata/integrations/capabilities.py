@@ -15,7 +15,11 @@ __all__ = [
     "IContainerTool",
     "ISiemSink",
     "ICveScanner",
+    "IIacSecurityScanner",
     "ICostEstimator",
+    "IAzureTool",
+    "IAWSTool",
+    "IGCloudTool",
     # Registry and mapping
     "CAPABILITY_REGISTRY",
     "CAPABILITY_MAP",
@@ -272,6 +276,102 @@ class ICveScanner(Protocol):
 
 
 @runtime_checkable
+class IGCloudTool(Protocol):
+    """
+    Capability: Integration provides Google Cloud CLI operations.
+
+    Integrations implementing this interface can check gcloud CLI
+    availability, retrieve project context, obtain access tokens,
+    and run arbitrary ``gcloud`` subcommands.
+
+    Examples: Google Cloud CLI (gcloud)
+    """
+
+    def ensure_available(self) -> tuple:
+        """Check that gcloud is installed, authenticated, and has an active project."""
+        ...
+
+    def get_project(self):
+        """Return active GCP project ID."""
+        ...
+
+    def get_access_token(self):
+        """Return a cached bearer token from gcloud auth print-access-token."""
+        ...
+
+
+@runtime_checkable
+class IAWSTool(Protocol):
+    """
+    Capability: Integration provides AWS CLI operations.
+
+    Integrations implementing this interface can check AWS CLI
+    availability, retrieve identity context (account, region),
+    and run arbitrary ``aws`` subcommands.
+
+    Examples: AWS CLI (aws)
+    """
+
+    def ensure_available(self) -> tuple:
+        """Check that aws is installed and authenticated."""
+        ...
+
+    def get_identity(self):
+        """Return active identity (Account, UserId, Arn)."""
+        ...
+
+    def get_region(self):
+        """Return the active AWS region."""
+        ...
+
+
+@runtime_checkable
+class IAzureTool(Protocol):
+    """
+    Capability: Integration provides Azure CLI operations.
+
+    Integrations implementing this interface can check Azure CLI
+    availability, retrieve subscription context, obtain access tokens,
+    and run arbitrary ``az`` subcommands.
+
+    Examples: Azure CLI (az)
+    """
+
+    def ensure_available(self) -> tuple:
+        """Check that az is installed and authenticated."""
+        ...
+
+    def get_subscription(self):
+        """Return active subscription metadata (id, name, tenantId)."""
+        ...
+
+    def get_access_token(self, resource: str = "https://management.azure.com"):
+        """Return a cached bearer token for the given resource scope."""
+        ...
+
+
+@runtime_checkable
+class IIacSecurityScanner(Protocol):
+    """
+    Capability: Integration supports IaC static security analysis.
+
+    Integrations implementing this interface can scan Infrastructure-as-Code
+    artifacts (Terraform, CloudFormation, Kubernetes, Helm, Dockerfile, etc.)
+    for misconfigurations and security policy violations.
+
+    Examples: Checkov
+    """
+
+    def scan(self, terraform_dir, framework: str = "terraform", **kwargs):
+        """Scan an IaC artifact directory for security findings.
+
+        Returns:
+            Structured scan result with findings and severity counts.
+        """
+        ...
+
+
+@runtime_checkable
 class ICostEstimator(Protocol):
     """
     Capability: Integration supports cost estimation for infrastructure.
@@ -356,10 +456,30 @@ CAPABILITY_REGISTRY = {
         "methods": ["scan_sbom"],
         "examples": ["Trivy", "Grype"],
     },
+    "IIacSecurityScanner": {
+        "description": "IaC static security analysis (Terraform, CloudFormation, Kubernetes, etc.)",
+        "methods": ["scan"],
+        "examples": ["Checkov"],
+    },
     "ICostEstimator": {
         "description": "Infrastructure cost estimation",
         "methods": ["breakdown", "diff"],
         "examples": ["Infracost"],
+    },
+    "IAzureTool": {
+        "description": "Azure CLI operations: auth check, subscription context, access tokens, az subcommands",
+        "methods": ["ensure_available", "get_subscription", "get_access_token"],
+        "examples": ["Azure CLI (az)"],
+    },
+    "IAWSTool": {
+        "description": "AWS CLI operations: auth check, identity context, region, aws subcommands",
+        "methods": ["ensure_available", "get_identity", "get_region"],
+        "examples": ["AWS CLI (aws)"],
+    },
+    "IGCloudTool": {
+        "description": "Google Cloud CLI operations: auth check, project context, access tokens, gcloud subcommands",
+        "methods": ["ensure_available", "get_project", "get_access_token"],
+        "examples": ["Google Cloud CLI (gcloud)"],
     },
 }
 
@@ -375,7 +495,11 @@ CAPABILITY_MAP = {
     "container": IContainerTool,
     "audit": ISiemSink,
     "cve_scanner": ICveScanner,
+    "iac_security": IIacSecurityScanner,
     "cost": ICostEstimator,
+    "azure": IAzureTool,
+    "aws": IAWSTool,
+    "gcloud": IGCloudTool,
 }
 
 

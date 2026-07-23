@@ -20,12 +20,15 @@ spec:
   logging:
     file: "examples/logging.development.yaml"
 
-  # Deployment hierarchy layers
-  layering:
-    - name: environment
-      description: "Deployment environment (dev, staging, prod)"
-      pattern: "^(dev|staging|prod)$"
-      required: true
+  # Deployment hierarchy layers — scoped multi-scheme format
+  layerings:
+    - name: default
+      scope: "**"
+      layers:
+        - name: environment
+          description: "Deployment environment (dev, staging, prod)"
+          pattern: "^(dev|staging|prod)$"
+          required: true
 
   # Deployment configuration - defines required/optional properties for deployments
   deployment:

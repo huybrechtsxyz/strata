@@ -47,6 +47,11 @@ class IntegrationFactory:
         "opentofu": ("strata.integrations.opentofu", "OpenTofuIntegration"),
         "terraform": ("strata.integrations.terraform", "TerraformIntegration"),
         "infracost": ("strata.integrations.infracost", "InfracostIntegration"),
+        "checkov": ("strata.integrations.checkov", "CheckovIntegration"),
+        "opa": ("strata.integrations.opa", "OPAIntegration"),
+        "azure_cli": ("strata.integrations.azure_cli", "AzureCLIIntegration"),
+        "aws_cli": ("strata.integrations.aws_cli", "AWSCLIIntegration"),
+        "gcloud_cli": ("strata.integrations.gcloud_cli", "GCloudCLIIntegration"),
         # SIEM / audit sinks
         "sentinel": ("strata.integrations.siem.sentinel_integration", "SentinelIntegration"),
         "elk": ("strata.integrations.siem.elk_siem_integration", "ElkSiemIntegration"),

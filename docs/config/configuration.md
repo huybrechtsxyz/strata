@@ -55,6 +55,140 @@ topologies:
         max_count: 0 # unlimited
 ```
 
+## Layering — Artifact Path Hierarchies
+
+Define how deployment artifacts are organized into a hierarchical path structure. Use layering when different deployment files need to be placed into different directories during the build process.
+
+### Layering Schemes
+
+Two formats are supported:
+
+**Single-scheme layering** (`spec.layering` — deprecated, for backward compatibility):
+
+```yaml
+spec:
+  layering:
+    - name: zone
+      required: true
+    - name: customer
+      required: true
+    - name: environment
+      required: false
+      default: dev
+```
+
+This creates a single layer scheme applied to all deployments. The artifact path is constructed by combining values from each layer in order, separated by `/`. For example, `zone: europe`, `customer: contoso`, `environment: prd` produces artifact path `europe/contoso/prd`.
+
+**Multi-scheme layering** (`spec.layerings` — recommended):
+
+```yaml
+spec:
+  layerings:
+    - name: zone-tenant
+      scope: zones/**
+      layers:
+        - name: zone
+          required: true
+        - name: customer
+          required: true
+        - name: environment
+          required: false
+          default: dev
+
+    - name: landscape-ring
+      scope: landscape/**
+      layers:
+        - name: landscape
+          required: true
+        - name: ring
+          required: true
+```
+
+This declares multiple layer schemes. Each scheme has:
+- **`name`**: Identifier for the scheme
+- **`scope`**: Glob pattern matching deployment file paths (e.g., `zones/**`, `landscape/**`, `**`)
+- **`layers`**: Ordered list of layer definitions
+
+During deployment validation, the deployment file's path is matched against schemes in order. The first matching scope wins, and that scheme's layers are used to resolve the artifact path.
+
+### Layer Definition
+
+Each layer entry has:
+
+| Field      | Type   | Default | Description                                                       |
+| ---------- | ------ | ------- | ----------------------------------------------------------------- |
+| `name`     | `str`  | —       | Layer name (e.g., `zone`, `customer`, `ring`, `landscape`)        |
+| `required` | `bool` | `true`  | Whether the deployment must provide a value for this layer        |
+| `default`  | `str`  | `null`  | Default value if no value is provided (only if `required: false`) |
+
+**Important:** Layer names are arbitrary and must be unique within a scheme. The layer named `environment` no longer has special meaning — any valid layer can be the last layer in the hierarchy.
+
+### Artifact Path Resolution
+
+When a deployment references a configuration file with layering:
+
+1. **Scope matching**: The deployment file's relative path (from workspace root) is matched against all scheme scopes in order using glob pattern matching
+2. **First match wins**: The first scheme whose scope matches the file path is selected
+3. **Value resolution**: Layer values are extracted from the deployment's `properties` field or use defaults
+4. **Path construction**: The artifact path is built as `layer1_value/layer2_value/.../layerN_value`
+
+**Example matching:**
+
+```
+Deployment files:
+├── zones/europe/contoso/prd/deploy.yaml    ← matches scope: zones/**
+├── landscape/platform/ring2/deploy.yaml    ← matches scope: landscape/**
+└── shared/base.yaml                        ← no match; layering not applied
+```
+
+### Migration from `layering` to `layerings`
+
+If you're using the deprecated single-scheme `layering` format, migrate as follows:
+
+**Before:**
+
+```yaml
+spec:
+  layering:
+    - name: zone
+      required: true
+    - name: customer
+      required: true
+    - name: environment
+      default: dev
+```
+
+**After:**
+
+```yaml
+spec:
+  layerings:
+    - name: default
+      scope: "**"  # Matches all deployment files
+      layers:
+        - name: zone
+          required: true
+        - name: customer
+          required: true
+        - name: environment
+          default: dev
+```
+
+Wrap your existing `layering` list in a single `ScopedLayeringModel` with `scope: "**"` (catch-all). The `"**"` scope matches all files, so all deployments use that scheme — equivalent to the old single-scheme behavior.
+
+### Mutual Exclusion
+
+A configuration cannot have both `spec.layering` and `spec.layerings` defined. The system enforces this with a validation error:
+
+```yaml
+# ✗ INVALID — both formats present
+spec:
+  layering: [...]
+  layerings: [...]
+```
+
+Choose one format and remove the other.
+
 ## Example
 
 ```yaml
@@ -80,6 +214,27 @@ spec:
           max_count: 7
         - role: worker
           min_count: 1
+  layerings:
+    # Multi-tenant deployments with region isolation
+    - name: regional-tenant
+      scope: zones/**
+      layers:
+        - name: zone
+          required: true
+        - name: customer
+          required: true
+        - name: environment
+          required: false
+          default: dev
+
+    # Ring-based deployments (canary → production)
+    - name: ring-promotion
+      scope: landscape/**
+      layers:
+        - name: landscape
+          required: true
+        - name: ring
+          required: true
 ```
 
 ## Configuration Schema Fields
@@ -135,6 +290,229 @@ Multiple configs merge: built-in → 00-_.yaml → 10-_.yaml → 99-\*.yaml
 - min_count ≤ max_count for topology components
 - Unique provider/topology names after merge
 - Defined regions/resources when additional\_\* = false
+
+## Path Convention Policy
+
+Declare directory structure conventions in `spec.paths`. A `path_convention` policy type
+enforces these at validation time.
+
+### Declaring conventions
+
+```yaml
+spec:
+  paths:
+    - name: zone-deployment-tree
+      scope: "zones/**"                              # files in this subtree are candidates
+      pattern: "zones/{zone}/customers/{tenant}/{env}" # {segment} captures one path part
+      validate:
+        zone: spec.zones[*].name                     # captured value must be a declared zone
+        tenant: "customers/{tenant}/tenant.yaml"     # file at this path must exist
+        env: spec.environments[*].name               # captured value must be a declared environment
+
+    - name: tenant-registry
+      scope: "customers/**"
+      pattern: "customers/{tenant}"
+      validate:
+        tenant: "customers/{tenant}/tenant.yaml"
+
+    - name: landscape-registry
+      scope: "landscape/**"
+      pattern: "landscape/{landscape}"
+      validate:
+        landscape: "landscape/{landscape}/landscape.yaml"
+```
+
+### Enforcement policy
+
+```yaml
+spec:
+  policies:
+    # Enforce all conventions
+    - name: enforce-paths
+      type: path_convention
+      phase: validate
+      enforcement: deny
+
+    # Enforce specific conventions only
+    - name: advisory-landscape
+      type: path_convention
+      phase: validate
+      enforcement: warn
+      configuration:
+        conventions: [landscape-registry]
+```
+
+### Inline convention (deploy-repo mode)
+
+For repositories without a configuration model, declare the convention inline on the policy:
+
+```yaml
+policies:
+  - name: deploy-layout
+    type: path_convention
+    phase: validate
+    enforcement: deny
+    configuration:
+      scope: "deploy/**"
+      pattern: "deploy/{landscape}/{ring}"
+      validate:
+        landscape: "deploy/{landscape}/landscape.yaml"
+```
+
+### Validation rule types
+
+| Rule syntax                      | Meaning                                                                |
+| -------------------------------- | ---------------------------------------------------------------------- |
+| `spec.zones[*].name`             | Captured value must appear in a field of the loaded ConfigurationModel |
+| `customers/{tenant}/tenant.yaml` | File at this path (relative to workspace root) must exist on disk      |
+
+`spec.*` rules require `--deep` validation (configuration service must be available). File
+existence rules work in both surface and deep mode.
+
+Files that match the scope but not the pattern (e.g., shallower depth) are skipped — not a
+violation. Files that match no scope are not checked by that convention.
+
+## Checkov IaC Security Policy
+
+Run [Checkov](https://www.checkov.io) against Terraform build artifacts during the `build` phase.
+Requires Checkov to be installed (`pip install checkov`). Gracefully skipped when not available.
+
+### Declaring the integration
+
+```yaml
+spec:
+  integrations:
+    - name: checkov
+      type: checkov
+      capabilities: [iac_security]
+      required: false
+      validation:
+        command: checkov --version
+        min_version: "2.0.0"
+```
+
+### Enabling the policy
+
+```yaml
+spec:
+  policies:
+    - name: terraform_security_baseline
+      type: checkov
+      phase: build
+      enforcement: deny
+      description: "Block builds with HIGH or CRITICAL Checkov findings"
+      configuration:
+        framework: terraform          # default: terraform
+        severity_gate: high           # critical|high|medium|low (default: high)
+        skip_checks:                  # CKV IDs to suppress (false positives, accepted risks)
+          - CKV_AWS_1
+          - CKV_AWS_20
+        include_checks: []            # if set, run ONLY these checks (empty = run all)
+        custom_checks_dir: ".strata/checkov/custom/"  # optional: custom rule directory
+        timeout: 120                  # subprocess timeout in seconds (default: 120)
+```
+
+### How it works
+
+1. After Terraform artifacts are generated by `strata build run`, the policy engine finds the
+   `terraform/` subdirectory under `build_path` (falling back to `build_path` itself if no
+   subdirectory exists).
+2. Invokes: `checkov --directory <terraform_dir> --framework terraform --output json --compact`
+3. Parses Checkov JSON output into `CheckovFinding` records with severity, resource, and file path.
+4. Applies `severity_gate` — findings at or above the gate level become policy violations.
+
+### Severity gate
+
+| `severity_gate`  | Fails on                    |
+| ---------------- | --------------------------- |
+| `critical`       | CRITICAL only               |
+| `high` (default) | HIGH, CRITICAL              |
+| `medium`         | MEDIUM, HIGH, CRITICAL      |
+| `low`            | LOW, MEDIUM, HIGH, CRITICAL |
+
+### Graceful degradation
+
+- Checkov not installed → policy skips (passes), warning logged
+- No `.tf` files found in build path → policy skips
+- Checkov subprocess fails → policy skips (non-fatal, never blocks build)
+
+## OPA Policy
+
+Evaluate [Open Policy Agent](https://www.openpolicyagent.org) Rego rules against the
+deployment context. Supports two modes: HTTP REST to a running OPA server (fast), or
+`opa eval` CLI as a stateless fallback (no server required).
+
+strata does **not** manage the OPA server lifecycle — that is the operator's responsibility.
+
+### Installation
+
+```bash
+brew install opa          # macOS
+# or: https://www.openpolicyagent.org/docs/latest/#1-download-opa
+```
+
+### Declaring the policy
+
+```yaml
+spec:
+  policies:
+    - name: zone_enforcement
+      type: opa
+      phase: build
+      enforcement: deny
+      configuration:
+        rule: "data.strata.zones.deny"      # OPA rule path to evaluate
+        policy_dir: ".strata/policies/"     # .rego files directory (CLI mode)
+        endpoint: "http://localhost:8181"   # OPA server URL (HTTP mode, optional)
+        timeout: 30
+```
+
+### Writing OPA rules
+
+Rules must return a **set of violation strings** named `deny`:
+
+```rego
+package strata.zones
+
+deny contains msg if {
+    resource := input.platform.spec.resources[_]
+    not resource.properties.region in input.configuration.spec.allowed_regions
+    msg := sprintf("Resource '%s' in disallowed region '%s'",
+                   [resource.meta.name, resource.properties.region])
+}
+```
+
+### OPA input document
+
+strata sends a JSON document containing available context:
+
+```
+{
+  "phase": "build",
+  "platform": { ... },       // platform artifact (if available)
+  "configuration": { ... },  // configuration model (if available)
+  "deployment": { ... },     // deployment model (if available)
+  "plan_data": { ... },      // terraform plan JSON (if available)
+  "work_path": "/workspace",
+  "build_path": "/workspace/.strata/build"
+}
+```
+
+### Mode selection
+
+| `endpoint` / `OPA_ENDPOINT`     | Behavior                              |
+| ------------------------------- | ------------------------------------- |
+| Set and server reachable        | HTTP mode: `POST /v1/data/{rule}`     |
+| Set but server unreachable      | Falls back to CLI mode                |
+| Not set                         | CLI mode: `opa eval --stdin-input`    |
+| Not set and `opa` not installed | Policy skips (passes), warning logged |
+
+### Graceful degradation
+
+- OPA not installed and no server configured → policy skips (passes), warning logged
+- `policy_dir` not found → policy skips
+- Server unreachable → falls back to CLI mode
+- Rule returns empty set or false → pass (no violations)
 
 ## Secret Stores
 

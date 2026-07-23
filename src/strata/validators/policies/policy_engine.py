@@ -62,9 +62,12 @@ class PolicyEngine:
 
     def _create(self, policy_model: PolicyModel) -> BasePolicy:
         """Dispatch policy type to its concrete implementation."""
+        from strata.validators.policies.checkov_policy import CheckovPolicy
         from strata.validators.policies.cost_threshold_policy import CostThresholdPolicy
         from strata.validators.policies.cve_max_severity_policy import CveMaxSeverityPolicy
         from strata.validators.policies.naming_policy import NamingPolicy
+        from strata.validators.policies.opa_policy import OPAPolicy
+        from strata.validators.policies.path_convention_policy import PathConventionPolicy
         from strata.validators.policies.ref_convention_policy import RefConventionPolicy
         from strata.validators.policies.required_tags_policy import RequiredTagsPolicy
         from strata.validators.policies.resource_type_restrictions_policy import ResourceTypeRestrictionsPolicy
@@ -90,6 +93,9 @@ class PolicyEngine:
             "sbom_license": SbomLicensePolicy,
             "cve_max_severity": CveMaxSeverityPolicy,
             "cost_threshold": CostThresholdPolicy,
+            "checkov": CheckovPolicy,
+            "opa": OPAPolicy,
+            "path_convention": PathConventionPolicy,
         }
 
         policy_class = _builtin.get(policy_model.type) or self._custom_types.get(policy_model.type)

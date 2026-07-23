@@ -156,6 +156,11 @@
         "icon": "$(list-ordered)"
       },
       {
+        "command": "strata.showIntegrationHelp",
+        "title": "Strata: Show Integration Help",
+        "icon": "$(book)"
+      },
+      {
         "command": "strata.switchProfile",
         "title": "Strata: Switch Profile",
         "icon": "$(account)"
@@ -408,6 +413,16 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "strata.showIntegrationHelp",
+          "when": "view == strataWorkspace && (viewItem == tool || viewItem == tool-unavailable)",
+          "group": "inline"
+        },
+        {
+          "command": "strata.showIntegrationHelp",
+          "when": "view == strataWorkspace && (viewItem == tool || viewItem == tool-unavailable)",
+          "group": "strata@1"
+        },
         {
           "command": "strata.activateProfile",
           "when": "view == strataWorkspace && viewItem == profile",

@@ -1,6 +1,6 @@
 """Base command variant for schema commands that do not require a solution."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict
 
 from strata.commands.base_command import BaseCommand
@@ -22,7 +22,7 @@ class SchemaBaseCommand(BaseCommand):
         when .strata/solution.json is missing or invalid.
         """
         try:
-            self._start_time = datetime.now()
+            self._start_time = datetime.now(timezone.utc)
             self._configure_session_logging()
 
             if not self._work_path.exists():

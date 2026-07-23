@@ -1,5 +1,31 @@
 # Frequently Asked Questions
 
+## What timestamp format does strata use?
+
+All timestamps in strata's JSON output, artifact files, and audit logs use **ISO 8601 with an explicit UTC offset**:
+
+```
+2026-07-20T14:30:00.123456+00:00
+```
+
+When strata displays timestamps in console output (not `--output json`) it uses a shorter human-readable form:
+
+```
+2026-07-20 14:30:00 UTC
+```
+
+**For `--since` arguments** (e.g. `strata audit list --since ...`) strata accepts:
+
+| Format                                    | Example                     |
+| ----------------------------------------- | --------------------------- |
+| Full ISO 8601 with offset                 | `2026-07-20T14:30:00+00:00` |
+| ISO 8601 with `Z`                         | `2026-07-20T14:30:00Z`      |
+| Date only (interpreted as `00:00:00 UTC`) | `2026-07-20`                |
+
+Bare datetimes without a timezone (e.g. `2026-07-20T14:30:00`) are **rejected** — strata will ask for an explicit offset.
+
+---
+
 ## What is strata?
 
 strata is a Python CLI tool that lets you describe your entire infrastructure stack — environments, deployments, secrets, variables — in plain YAML files, then orchestrates Terraform, Helm, Ansible, and Docker Compose to bring that description to life.

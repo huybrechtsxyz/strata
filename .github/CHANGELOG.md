@@ -7,6 +7,139 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Added
+
+- **Google Cloud CLI integration + lifecycle scripts — ADR 0055 Phase 1**
+  - `GCloudCLIIntegration(BaseIntegration)` — `COMMAND = "gcloud"`; `ensure_available()` checks binary + `gcloud config get-value account` + active project (three-step check, unlike Azure/AWS which stop at auth); `get_project()`, `get_account()`, `get_access_token()` (cached), `run_gcloud()` passthrough
+  - `IGCloudTool` capability protocol + `"gcloud"` in `CAPABILITY_MAP`; registered in `IntegrationFactory`
+  - `strata.utils.gcloud_script_base.GCloudScript` — base class mirroring `AzureScript`/`AWSScript`; `project()` resolves via `GOOGLE_CLOUD_PROJECT` → `CLOUDSDK_CORE_PROJECT` → `gcloud config`; `account()` and `get_access_token()` helpers
+  - Built-in script: `gcloud_gke_credentials.py` — `gcloud container clusters get-credentials`; `GKE_CLUSTER` + `GKE_ZONE`/`GKE_REGION`; optional `GKE_ROLE_ARN` → `GKE_INTERNAL_IP`
+  - Built-in script: `gcloud_artifact_registry_login.py` — `gcloud auth configure-docker`; `GAR_LOCATION` for Artifact Registry or `GCR_ENABLE=true` for legacy GCR
+  - Built-in script: `gcloud_gcs_bucket_ensure.py` — idempotent bucket create with `--no-fail-on-existing-bucket`; optional versioning, storage class, location, labels
+  - Solution scaffold: `.strata/scripts/gcloud_lifecycle_example.py`
+  - Help: `strata help --topic gcloud_cli`, `strata help --topic gcloud_scripts`; guide: `docs/guides/gcloud-lifecycle-scripts.md`
+  - ADR 0055 updated: status → phase 1 implemented; corrected "no existing GCP integrations" (gcp_secretmanager.py and gcp_runtimeconfig.py were fictitious)
+  - 35 tests, zero regressions against 4833-test suite
+
+- **AWS CLI integration + lifecycle scripts**
+  - `AWSCLIIntegration(BaseIntegration)` — `COMMAND = "aws"`; `ensure_available()` checks binary AND `aws sts get-caller-identity`; `get_identity()`, `get_region()`, `run_aws()` passthrough
+  - `IAWSTool` capability protocol + `"aws"` in `CAPABILITY_MAP`; registered in `IntegrationFactory`
+  - `strata.utils.aws_script_base.AWSScript` — base class mirroring `AzureScript` for AWS; adds `region()` (3-tier resolution: `AWS_DEFAULT_REGION` → `AWS_REGION` → `aws configure`) and `account_id()`
+  - Built-in script: `aws_eks_credentials.py` — `aws eks update-kubeconfig` before Helm/ArgoCD/Flux; configured via `EKS_CLUSTER`, `AWS_DEFAULT_REGION`; optional `EKS_ROLE_ARN`, `EKS_CONTEXT_ALIAS`
+  - Built-in script: `aws_ecr_login.py` — two-step `get-login-password | docker login`; accepts `ECR_REGISTRY` or auto-constructs from `ECR_ACCOUNT_ID` + region
+  - Built-in script: `aws_s3_bucket_ensure.py` — idempotent `aws s3api create-bucket`; optional versioning, AES-256 encryption, public access block, and tags in one script
+  - Solution scaffold: `.strata/scripts/aws_lifecycle_example.py` — ready-to-use starter
+  - Help: `strata help --topic aws_cli`, `strata help --topic aws_scripts`; guide: `docs/guides/aws-lifecycle-scripts.md`
+  - 33 tests, zero regressions against 4798-test suite
+
+- **Azure lifecycle scripts — `AzureScript` base class and built-in scripts**
+  - `strata.utils.azure_script_base.AzureScript` — base class for `.strata/scripts/*.py` lifecycle scripts; wraps Azure CLI with `run_az()`, `exit_on_failure()`, `require_env()`, `get_token()`, `log()` and strata context helpers
+  - Built-in script: `azure_aks_credentials.py` — `az aks get-credentials` before Helm/ArgoCD stages; configurable via `AKS_CLUSTER`, `AKS_RESOURCE_GROUP`, optional `AKS_ADMIN_CREDENTIALS`, `AKS_CONTEXT_NAME`
+  - Built-in script: `azure_acr_login.py` — `az acr login` before container push; configured via `ACR_NAME`
+  - Built-in script: `azure_resource_group_ensure.py` — idempotent `az group create` for Bicep subscription-scope deployments; configured via `AZURE_RESOURCE_GROUP`, `AZURE_LOCATION`, optional `AZURE_RG_TAGS`
+  - Solution scaffold includes `.strata/scripts/azure_lifecycle_example.py` — ready-to-use starter with built-in script references and custom script pattern
+  - Help file: `strata help --topic azure_scripts`; guide: `docs/guides/azure-lifecycle-scripts.md`
+  - 26 tests
+
+- **Scoped multi-scheme layering — ADR 0042 Phase 1 (completed)**
+  - `spec.layerings[]` field — declare multiple layering schemes, each with a glob scope that matches deployment files by path
+  - `ScopedLayeringModel` — each scheme has a `name`, `scope` (glob pattern), and ordered `layers[]` list
+  - First-match scope resolution — deployment file is matched against schemes in order; first match wins, no match means no layering validation
+  - Shared `strata.utils.layering` module — `resolve_layering_scheme()` resolves a deployment file path to its matching scheme; `compute_artifact_path()` builds the artifact path from a scheme
+  - `DeploymentService._validate_deployment_layers()` updated — uses scope resolution to pick the active scheme per deployment
+  - `DeploymentService.get_artifact_path()` updated — resolves scheme, then builds path from resolved layers
+  - `OverlapController._compute_artifact_path()` updated — same resolution logic for cross-manifest collision detection
+  - Mutual exclusion validation — `spec.layering` and `spec.layerings` cannot both be set; validator enforces this
+  - Full test coverage — overlap controller tests adapted to multi-scheme; integration tests validate both flat and scoped schemes
+
+- **Path convention validation — ADR 0052 (completed)**
+  - `spec.paths[]` field on the configuration model — declare directory structure conventions for fleet-wide path enforcement
+  - `PathConventionModel` — each convention has a `name`, `scope` (glob), `pattern` with `{segment}` captures, and optional `validate` rules per segment
+  - Two validation rule types: `spec.field[*].attr` for model membership lookup (e.g., declared zones); or a path template for file existence check (e.g., `customers/{tenant}/tenant.yaml`)
+  - `path_convention` policy type — enforces conventions at validate phase with deny/warn/audit levels; supports per-convention filtering via `configuration.conventions`
+  - Deploy-repo mode — inline convention on policy for repos without a configuration model (`configuration.scope` + `configuration.pattern`)
+  - Scope matching: `fnmatch` glob; pattern matching: positional literal + capture; no-match = skip (never a violation)
+  - `spec.*` rules require configuration service (deep validation); file existence rules work in surface mode
+  - `file_path: Optional[Path]` added to `PolicyContext` — populated by policy engine before `evaluate()`
+  - `strata.utils.path_convention` module — `match_pattern`, `resolve_spec_rule`, `evaluate_file_rule`, `evaluate_conventions`
+  - 45 tests, zero regressions against 4607-test suite
+
+- **Checkov IaC security scanning — ADR 0051 Phase 1 (completed)**
+  - `checkov` policy type — runs Checkov CLI against Terraform build artifacts during the `build` phase
+  - `CheckovIntegration(BaseIntegration)` — invokes `checkov --directory ... --output json --compact`; parses single and multi-framework JSON output; graceful degradation when Checkov not installed
+  - `CheckovPolicy(BasePolicy)` — resolves Terraform artifact dir from `context.build_path` (deployment-scoped → `terraform/` subdir → root); applies `severity_gate` and `skip_checks` filters
+  - `CheckovFinding` / `CheckovScanResult` dataclasses — structured scan result with per-finding severity, resource, file path, and guideline
+  - `CheckovScanResult.findings_at_or_above(severity)` — filters findings by severity level for gate evaluation
+  - `iac_security` capability added to `CAPABILITY_MAP` / `CAPABILITY_REGISTRY` with `IIacSecurityScanner` protocol
+  - Registered in `IntegrationFactory._BUILTIN_CLASS_MAP` and `PolicyEngine._create()`
+  - Graceful degradation: Checkov not found → skip; no `.tf` files in build path → skip; subprocess failure → skip (non-fatal, never blocks build)
+  - 30 tests, zero regressions against 4637-test suite
+
+### Changed
+
+- **Removed hardcoded "environment" layer name constraint** — last layer no longer required to be named `"environment"`. Layer names are now arbitrary (e.g., `ring`, `stage`, `landscape` as last layer). Collision prevention is entirely owned by `OverlapController` artifact path uniqueness check, not by layer naming.
+- **`spec.layering` marked as deprecated** — single-scheme flat layering still supported for backward compatibility, but `spec.layerings` is preferred for new configs. Existing deployments continue to work unchanged.
+
+### Breaking Changes
+
+- **Layer name constraint removal** — configurations or deployment code that relied on the final layer being named `"environment"` should be updated. The constraint was overly restrictive and served no functional purpose in artifact path generation.
+
+- **Bicep provisioner — ADR 0046 (completed)**
+  - `ProvisionerType.BICEP = "bicep"` added to the enum — Bicep is now a first-class provisioner type
+  - `BicepDeployer(BaseDeployer)` — Azure-native IaC deployer using ARM deployments (no state file, no backend)
+  - Steps: `setup` → `az bicep build`, `plan` → `az deployment {scope} what-if`, `apply` → `az deployment {scope} create`, `destroy` → `az deployment {scope} delete`, `output` → ARM deployment outputs
+  - Four ARM deployment scopes: `resourceGroup` (default), `subscription`, `managementGroup`, `tenant`
+  - `BicepDeployer` uses `AzureCLIIntegration` for all `az` calls — inherits auth check and token caching
+  - `_deployment_cmd()` routes to the correct `az deployment group/sub/mg/tenant` subcommand based on scope
+  - What-if result cached by `plan()` and returned by `show_plan()`; output parsed from ARM `properties.outputs`
+  - Registered in `DeployerFactory._BUILTIN_MAP`
+  - 27 tests, zero regressions against 4739-test suite
+
+- **Azure CLI integration — ADR 0053 Phase 1 (completed)**
+  - `AzureCLIIntegration(BaseIntegration)` — `COMMAND = "az"`; shared foundation for all Azure CLI-based operations
+
+- **Bicep provisioner — ADR 0046 (completed)**
+  - `ProvisionerType.BICEP = "bicep"` — Bicep is now a first-class provisioner type
+  - `BicepDeployer(BaseDeployer)` — Azure-native IaC deployer; no state file or backend required (ARM manages state server-side)
+  - Steps: `setup` → `az bicep build`, `plan` → `az deployment {scope} what-if`, `apply` → `az deployment {scope} create`, `destroy` → `az deployment {scope} delete`, `output` → ARM deployment outputs
+  - Four ARM scopes: `resourceGroup` (default), `subscription`, `managementGroup`, `tenant`
+  - Uses `AzureCLIIntegration` for all `az` calls — inherits auth check and token caching from ADR-0053
+  - Registered in `DeployerFactory._BUILTIN_MAP`; `provisioner: bicep` valid in workspace YAML
+  - `docs/config/workspace.md` updated — `provisioner: bicep` added to provisioner list with `configuration` fields documented
+  - Help file: `strata help --topic bicep`
+  - 27 tests, zero regressions against 4739-test suite
+  - `ensure_available()` checks binary presence **and** active login (`az account show`) — surfaces "not authenticated" in Tools view immediately
+  - `get_subscription()` — returns active subscription `id`, `name`, `tenantId`
+  - `get_access_token(resource)` — cached bearer tokens per resource scope; avoids repeated `az account get-access-token` spawns
+  - `bicep_version()` — reports Bicep extension version (`az bicep version`)
+  - `run_az(args)` — passthrough for arbitrary `az` subcommands (used by upcoming Bicep deployer)
+  - `IAzureTool` capability protocol + `"azure"` in `CAPABILITY_MAP`
+  - Registered in `IntegrationFactory`; Tools view shows subscription name and auth status
+  - 20 tests, zero regressions against 4712-test suite
+
+- **OPA (Open Policy Agent) integration — ADR 0050 (completed)**
+  - `opa` policy type — evaluates Rego rules against strata deployment context
+  - Two modes: HTTP REST (`POST /v1/data/{rule}` to running OPA server) and `opa eval` CLI fallback (stateless, no server required)
+  - Auto-fallback: if HTTP endpoint unreachable, falls back to CLI mode transparently
+  - `OPAIntegration(BaseIntegration)` — `evaluate_http()`, `evaluate_cli()`, unified `evaluate()` entry point
+  - `OPAPolicy(BasePolicy)` — serializes `PolicyContext` (platform artifact, configuration, deployment, plan data) to OPA input document; parses violations from result
+  - `OPAResult` dataclass — `passed: bool`, `violations: List[str]`, `raw: Any`
+  - strata does **not** manage OPA server lifecycle — binary install and server start/stop are the operator's responsibility
+  - Registered in `IntegrationFactory` and `PolicyEngine`; `iac_security` capability; help file `strata help --topic opa`
+  - 34 tests, zero regressions against 4671-test suite
+
+- **Date/time format standard — ADR 0045 (implemented)**
+  - `src/strata/utils/datetime_utils.py` — shared UTC datetime utilities: `now_utc()`, `to_wire_timestamp()`, `format_display_timestamp()`, `parse_iso_timestamp()`, `coerce_to_utc()`
+  - All `datetime.now()` (naive) calls replaced with `datetime.now(timezone.utc)` across `base_command.py`, `sbom_build_command.py`, `schema_base_command.py`, `solution_controller.py`
+  - `base_command._start_time` / `_end_time` initialised as UTC-aware in `__init__` — prevents `can't subtract offset-naive and offset-aware datetimes` errors
+  - Console header timestamp now shows `UTC` suffix
+  - `solution_controller` cutoff time (minutes filter) now UTC-aware — fixes silent comparison bug with UTC log entries
+  - 21 unit tests for `datetime_utils`
+
+### Changed
+
+- **`datetime.now()` → `datetime.now(timezone.utc)` everywhere** — all internal timing and audit timestamps are now timezone-aware UTC. Wire format (`+00:00` suffix) unchanged for existing consumers.
+
 ---
 
 ## [1.3.1] — 2026-07-22

@@ -30,15 +30,20 @@ def _make_manifest(tmp_path: Path, name: str, layers: dict, workspace_file: str)
 
 
 def _make_config_service(layering: list):
-    """Return a mock ConfigurationService whose layering matches *layering*."""
+    """Return a mock ConfigurationService whose layerings match *layering* (a list of layer names)."""
     layer_objs = []
     for name in layering:
         layer = MagicMock()
         layer.name = name
         layer.default = None
         layer_objs.append(layer)
+    scheme = MagicMock()
+    scheme.name = "default"
+    scheme.scope = "**"
+    scheme.layers = layer_objs
     spec = MagicMock()
-    spec.layering = layer_objs
+    spec.layering = None
+    spec.layerings = [scheme] if layer_objs else []
     model = MagicMock()
     model.spec = spec
     svc = MagicMock()
@@ -140,12 +145,13 @@ class TestCheck1ArtifactPathUniqueness:
         assert len(check0) == 1
 
     def test_no_layering_configured_skips_check(self, tmp_path):
-        """When config has no layering, artifact_path is empty → Check #1 skipped."""
+        """When config has no layerings, artifact_path is empty → Check #1 skipped."""
         layers = {"zone": "eu"}
         m1 = _make_manifest(tmp_path, "a", layers, "ws.yaml")
         m2 = _make_manifest(tmp_path, "b", layers, "ws.yaml")
         config_svc = MagicMock()
-        config_svc.model.spec.layering = []
+        config_svc.model.spec.layering = None
+        config_svc.model.spec.layerings = []
         ctrl = OverlapController(configuration_service=config_svc, repo_map={}, work_path=tmp_path)
         ok = ctrl.run([m1, m2])
         assert ok is True

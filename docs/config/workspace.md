@@ -67,7 +67,7 @@ providers:
 ```yaml
 provisioners:
   - name: <provisioner_name>
-    provisioner: terraform | ansible   # IaC tool
+    provisioner: terraform | ansible | bicep   # IaC tool
     source:
       repository: <repository_name>    # optional — omit for single-repo workspaces
       source_path: <path>              # path within the repo (or workspace root when repository is absent)
@@ -81,6 +81,13 @@ provisioners:
       ssh_private_key_secret: <name>   # Ansible: secret key name in resolved_values.secrets
       extra_vars:                      # Ansible: extra -e variables
         key: value
+      scope: resourceGroup             # Bicep: resourceGroup (default) | subscription | managementGroup | tenant
+      resource_group: <rg>             # Bicep: required when scope=resourceGroup
+      location: <location>             # Bicep: required for subscription/managementGroup/tenant
+      management_group_id: <mg-id>     # Bicep: required when scope=managementGroup
+      deployment_name: strata-infra    # Bicep: ARM deployment name (default: strata-{stage})
+      parameters_file: params.json     # Bicep: parameters file relative to source_path
+      mode: Incremental                # Bicep: Incremental (default) | Complete
     output:                            # Terraform only — controls build output files
       format: strata | custom | script | none   # default: strata
       emits: []                        # categories to emit (omit = format defaults)

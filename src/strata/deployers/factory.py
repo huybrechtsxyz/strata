@@ -51,6 +51,7 @@ class DeployerFactory:
         "script": ("strata.deployers.script_deployer", "ScriptDeployer"),
         "argocd": ("strata.deployers.sync_deployer", "ArgocdDeployer"),
         "flux": ("strata.deployers.sync_deployer", "FluxDeployer"),
+        "bicep": ("strata.deployers.bicep_deployer", "BicepDeployer"),
     }
 
     # Runtime registry populated by load_plugins() and register()

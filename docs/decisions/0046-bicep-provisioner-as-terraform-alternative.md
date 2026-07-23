@@ -1,7 +1,8 @@
 # Bicep Provisioner as Azure-Native Terraform Alternative
 
-- Status: proposed
+- Status: implemented
 - Date: 2026-07-20
+- Implemented: 2026-07-23
 
 ## Context and Problem Statement
 

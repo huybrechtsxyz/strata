@@ -154,6 +154,9 @@ strata
    guides/building-a-provisioner-plugin
    guides/detecting-infrastructure-drift
    guides/cost-estimation
+   guides/azure-lifecycle-scripts
+   guides/aws-lifecycle-scripts
+   guides/gcloud-lifecycle-scripts
 
 .. toctree::
    :maxdepth: 1

@@ -1,8 +1,120 @@
 # OPA (Open Policy Agent) as a first-class integration
 
-- Status: pending
+- Status: implemented
 - Date: 2026-07-22
+- Revised: 2026-07-23
 - Supersedes: Partial aspects of ADR-0006 (policy-engine-for-deployment-guardrails)
+
+## Core Philosophy
+
+**strata does not manage the OPA lifecycle.** That is the operator's concern.
+
+strata's role is exactly:
+1. **Check reachability** — is `opa` installed (CLI mode) or is the server responding (HTTP mode)?
+2. **Send context** — serialize the deployment context as a JSON input document
+3. **Get violations back** — parse the OPA response
+4. **Apply to PolicyResult** — pass/fail with violation messages
+
+Everything else (starting OPA, managing bundles, versioning policy files, conftest workflows) is
+the operator's job, not strata's.
+
+The Tools view shows OPA binary availability. The HTTP server health (`GET /health`) is implicitly
+checked when the first policy evaluation fires — if unreachable, strata falls back to CLI mode or
+skips gracefully.
+
+## Revised Scope (2026-07-23)
+
+The original ADR over-specified the implementation. Comparing against the Checkov integration
+(ADR-0051) which served as the reference pattern, and reviewing the existing
+`BaseIntegration` / `BasePolicy` architecture:
+
+**What the ADR got wrong:**
+- "gRPC" — OPA's primary API is HTTP REST (`/v1/data/`), not gRPC. The gRPC transport
+  is an OPA plugin, not the default.
+- Server lifecycle management, CLI commands (`strata policy activate opa`, `strata policy opa bundle build`)
+  — no other integration has dedicated CLI commands; over-engineered for Phase 1.
+- Bundle artifact lifecycle, conftest integration — deferred.
+
+**Two-mode design (Phase 1):**
+
+| Mode             | When                                                             | How                                                             |
+| ---------------- | ---------------------------------------------------------------- | --------------------------------------------------------------- |
+| **HTTP**         | `endpoint` configured or `OPA_ENDPOINT` set and server reachable | `POST /v1/data/{rule}`                                          |
+| **CLI fallback** | No server, `opa` binary in PATH                                  | `opa eval -d <policy_dir> --format json --stdin-input '<rule>'` |
+
+Users get immediate value with just the `opa` binary (no server required) and can upgrade
+to server mode for performance and state sharing.
+
+**What is actually needed (Phase 1):**
+
+1. `src/strata/integrations/opa.py` — `OPAIntegration(BaseIntegration)`:
+   - `evaluate_http(rule, endpoint, input_data)` — POST to OPA REST API
+   - `evaluate_cli(rule, policy_dir, input_data)` — `opa eval` subprocess
+   - `evaluate(...)` — tries HTTP first, falls back to CLI
+   - `OPAResult` dataclass with `violations: List[str]`, `passed: bool`, `raw: Any`
+
+2. `src/strata/validators/policies/opa_policy.py` — `OPAPolicy(BasePolicy)`:
+   - Serialize `PolicyContext` to OPA input document (models → `model_dump`)
+   - Call `OPAIntegration.evaluate()`
+   - Return `PolicyResult`
+
+3. Register in `IntegrationFactory` and `PolicyEngine`
+
+4. Tests
+
+**Configuration YAML (unchanged from original ADR):**
+
+```yaml
+policies:
+  - name: zone_check
+    type: opa
+    phase: build
+    enforcement: deny
+    configuration:
+      rule: "data.strata.zones.deny"   # OPA rule path
+      policy_dir: ".strata/policies/"  # directory with .rego files (CLI mode)
+      endpoint: "localhost:8181"       # OPA server (HTTP mode, optional)
+      timeout: 30
+```
+
+**OPA input document (what strata sends):**
+
+```json
+{
+  "phase": "build",
+  "platform": { ... },         // platform artifact model (if available)
+  "configuration": { ... },    // configuration model spec (if available)
+  "deployment": { ... },       // deployment model spec (if available)
+  "plan_data": { ... },        // terraform plan JSON (if available)
+  "work_path": "/workspace",
+  "build_path": "/workspace/.strata/build"
+}
+```
+
+**OPA rule conventions (what strata expects back):**
+
+```rego
+# OPA rule must return a set of violation strings under deny[]
+package strata.zones
+
+deny contains msg if {
+    resource := input.platform.spec.resources[_]
+    not resource.properties.region in input.configuration.spec.allowed_regions
+    msg := sprintf("Resource '%s' in disallowed region", [resource.meta.name])
+}
+```
+
+strata reads `result[0].expressions[0].value` from `opa eval` output.
+For HTTP mode, it reads `response.result`.
+
+**Graceful degradation:**
+- No `opa` binary and no endpoint configured → skip (pass), warning logged
+- HTTP endpoint unreachable → fall back to CLI mode
+- CLI mode: policy_dir missing → skip (pass)
+- Rule returns no violations → pass
+- Any subprocess/HTTP error → skip (pass, non-fatal)
+
+---
 
 ## Context and Problem Statement
 

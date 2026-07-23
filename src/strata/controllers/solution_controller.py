@@ -1594,7 +1594,7 @@ class SolutionController(BaseController):
 
         # Filter by time
         if minutes:
-            cutoff_time = datetime.now() - timedelta(minutes=minutes)
+            cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=minutes)
             filtered = [entry for entry in filtered if self._parse_timestamp(entry) >= cutoff_time]
 
         # Filter by level

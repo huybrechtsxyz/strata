@@ -118,12 +118,12 @@ class TestListPolicyCommandOutputData:
     }
 
     def _run_with_data(self, output_format, tmp_path):
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         sample = self._SAMPLE_OUTPUT_DATA
 
         def fake_initialize(self_cmd, show_header: bool = True):
-            self_cmd._start_time = datetime.now()
+            self_cmd._start_time = datetime.now(timezone.utc)
             return True
 
         def fake_run_execution(self_cmd):

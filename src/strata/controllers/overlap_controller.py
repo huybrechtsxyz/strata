@@ -127,7 +127,7 @@ class OverlapController(BaseController):
             elif isinstance(ws_raw, str):
                 ws_file = ws_raw
 
-            artifact_path = self._compute_artifact_path(layers, config_model)
+            artifact_path = self._compute_artifact_path(layers, config_model, str(path))
 
             results.append(
                 {
@@ -142,20 +142,38 @@ class OverlapController(BaseController):
 
         return results
 
-    def _compute_artifact_path(self, layers: Dict[str, str], config_model) -> str:
-        """Reproduce DeploymentService.get_artifact_path() from raw layer data."""
-        if not config_model or not config_model.spec.layering:
+    def _compute_artifact_path(self, layers: Dict[str, str], config_model, manifest_path: str = "") -> str:
+        """Reproduce DeploymentService.get_artifact_path() from raw layer data.
+
+        Supports both ``spec.layering`` (single flat scheme) and ``spec.layerings``
+        (scoped multi-scheme).  The manifest file path is used for scope resolution.
+        """
+        from strata.utils.layering import compute_artifact_path, resolve_layering_scheme
+
+        if not config_model or not layers:
             return ""
-        if not layers:
-            return ""
-        components = []
-        for layer in config_model.spec.layering:
-            value = layers.get(layer.name)
-            if value is None and layer.default:
-                value = layer.default
-            if value:
-                components.append(str(value))
-        return "/".join(components)
+
+        if config_model.spec.layerings:
+            scheme = resolve_layering_scheme(
+                manifest_path,
+                str(self._work_path),
+                config_model.spec.layerings,
+            )
+            if scheme is None:
+                return ""
+            return compute_artifact_path(layers, scheme)
+
+        if config_model.spec.layering:
+            components = []
+            for layer in config_model.spec.layering:
+                value = layers.get(layer.name)
+                if value is None and layer.default:
+                    value = layer.default
+                if value:
+                    components.append(str(value))
+            return "/".join(components)
+
+        return ""
 
     # ------------------------------------------------------------------
     # Check #1 — artifact_path + workspace uniqueness

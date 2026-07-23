@@ -36,6 +36,37 @@ _TOPICS: dict[str, tuple[str, str]] = {
     "bitwarden": ("Bitwarden Secrets Manager: secret resolution for refs and deploy values", "bitwarden.md"),
     "hashicorp_consul": ("HashiCorp Consul: service discovery and distributed config", "hashicorp_consul.md"),
     "hashicorp_vault": ("HashiCorp Vault: secret management and dynamic credentials", "hashicorp_vault.md"),
+    "ansible": ("Ansible: configuration management provisioner for server setup", "ansible.md"),
+    "bicep": ("Bicep: Azure-native IaC provisioner using ARM deployments (no state file)", "bicep.md"),
+    "checkov": ("Checkov: IaC static security scanner for Terraform artifacts", "checkov.md"),
+    "cve_scanner": ("CVE Scanner: Trivy/Grype vulnerability scanner for SBOMs", "cve_scanner.md"),
+    "etcd": ("etcd: distributed key-value store for variables and config", "etcd.md"),
+    "flagsmith": ("Flagsmith: open-source feature flag platform", "flagsmith.md"),
+    "helm": ("Helm: Kubernetes package manager for chart deployments", "helm.md"),
+    "infisical": ("Infisical: open-source secrets manager (cloud and self-hosted)", "infisical.md"),
+    "infracost": ("Infracost: Terraform cost estimation and diff", "infracost.md"),
+    "openbao": ("OpenBao: Linux Foundation Vault fork (MPL-2.0)", "openbao.md"),
+    "opentofu": ("OpenTofu: Linux Foundation Terraform fork (MPL-2.0)", "opentofu.md"),
+    "opa": ("OPA (Open Policy Agent): Rego policy evaluation via HTTP server or opa eval CLI", "opa.md"),
+    "azure_cli": ("Azure CLI (az): availability check, authentication, subscription context", "azure_cli.md"),
+    "azure_scripts": (
+        "Azure lifecycle scripts: AzureScript base class and built-in AKS/ACR/RG scripts",
+        "azure_scripts.md",
+    ),
+    "aws_cli": ("AWS CLI (aws): availability check, authentication, identity and region context", "aws_cli.md"),
+    "aws_scripts": (
+        "AWS lifecycle scripts: AWSScript base class and built-in EKS/ECR/S3 scripts",
+        "aws_scripts.md",
+    ),
+    "gcloud_cli": ("Google Cloud CLI (gcloud): availability check, authentication, project context", "gcloud_cli.md"),
+    "gcloud_scripts": (
+        "GCP lifecycle scripts: GCloudScript base class and built-in GKE/GAR/GCS scripts",
+        "gcloud_scripts.md",
+    ),
+    "sentinel": ("Azure Sentinel: DCR Logs Ingestion API SIEM sink", "siem_sentinel.md"),
+    "elk": ("ELK / Logstash: TCP JSON and Elasticsearch Bulk API SIEM sink", "siem_elk.md"),
+    "otel": ("OpenTelemetry: OTLP/HTTP audit event forwarding", "siem_otel.md"),
+    "splunk": ("Splunk: HTTP Event Collector (HEC) SIEM sink", "siem_splunk.md"),
 }
 
 _HELP_DATA_DIR = get_pkg_help_path()
