@@ -9,6 +9,15 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Added
 
+- **Azure lifecycle scripts — `AzureScript` base class and built-in scripts**
+  - `strata.utils.azure_script_base.AzureScript` — base class for `.strata/scripts/*.py` lifecycle scripts; wraps Azure CLI with `run_az()`, `exit_on_failure()`, `require_env()`, `get_token()`, `log()` and strata context helpers
+  - Built-in script: `azure_aks_credentials.py` — `az aks get-credentials` before Helm/ArgoCD stages; configurable via `AKS_CLUSTER`, `AKS_RESOURCE_GROUP`, optional `AKS_ADMIN_CREDENTIALS`, `AKS_CONTEXT_NAME`
+  - Built-in script: `azure_acr_login.py` — `az acr login` before container push; configured via `ACR_NAME`
+  - Built-in script: `azure_resource_group_ensure.py` — idempotent `az group create` for Bicep subscription-scope deployments; configured via `AZURE_RESOURCE_GROUP`, `AZURE_LOCATION`, optional `AZURE_RG_TAGS`
+  - Solution scaffold includes `.strata/scripts/azure_lifecycle_example.py` — ready-to-use starter with built-in script references and custom script pattern
+  - Help file: `strata help --topic azure_scripts`; guide: `docs/guides/azure-lifecycle-scripts.md`
+  - 26 tests
+
 - **Scoped multi-scheme layering — ADR 0042 Phase 1 (completed)**
   - `spec.layerings[]` field — declare multiple layering schemes, each with a glob scope that matches deployment files by path
   - `ScopedLayeringModel` — each scheme has a `name`, `scope` (glob pattern), and ordered `layers[]` list

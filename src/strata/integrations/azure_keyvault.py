@@ -673,34 +673,16 @@ class AzureKeyVaultIntegration(StoreIntegration):
     # Authentication methods
 
     def _get_access_token_via_cli(self) -> Optional[str]:
-        """
-        Get Azure access token using Azure CLI.
-        Works with both subscription (OIDC) and client secret auth.
-
-        Returns:
-            Access token string or None if failed
-        """
+        """Get Azure access token via AzureCLIIntegration (cached per resource scope)."""
         try:
-            result = self._run_integration(
-                args=[
-                    "account",
-                    "get-access-token",
-                    "--resource",
-                    "https://vault.azure.net",
-                ],
-                timeout=30,
-            )
+            from strata.integrations.azure_cli import AzureCLIIntegration
+            from strata.models.integration_model import IntegrationModel
 
-            if result.returncode == 0 and result.stdout:
-                token_data = json.loads(result.stdout)
-                token = token_data.get("accessToken")
-                if token:
-                    logger.debug("Successfully obtained Azure access token via CLI", name=self.integration_name)
-                return token
-
-            logger.warning("Failed to get Azure access token via CLI", name=self.integration_name)
-            return None
-
+            az = AzureCLIIntegration(IntegrationModel(name="azure", type="azure_cli"))
+            token = az.get_access_token(resource="https://vault.azure.net")
+            if token:
+                logger.debug("Azure access token obtained via AzureCLIIntegration (cached)", name=self.integration_name)
+            return token
         except Exception as e:
             logger.warning(
                 "Error getting Azure access token via CLI", name=self.integration_name, error_type=type(e).__name__

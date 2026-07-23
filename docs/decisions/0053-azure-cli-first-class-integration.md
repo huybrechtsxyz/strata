@@ -1,6 +1,6 @@
 # Azure CLI (`az`) as a First-Class Integration
 
-- Status: phase 1 implemented
+- Status: implemented (all phases complete)
 - Date: 2026-07-23
 - Related: ADR-0046 (Bicep provisioner), ADR-0051 (Checkov pattern)
 
@@ -147,21 +147,28 @@ For Azure, binary-without-login is useless — operators need to know immediatel
 
 ## Implementation Plan
 
-### Phase 1 — Integration + Bicep deployer foundation
-1. `src/strata/integrations/azure_cli.py` — `AzureCLIIntegration`
-2. `ProvisionerType.BICEP = "bicep"` added to enum
-3. Register `azure_cli` in `IntegrationFactory._BUILTIN_CLASS_MAP`
-4. Help file: `src/strata/data/help/azure_cli.md`
-5. Tests for `ensure_available()`, `get_subscription()`, `get_access_token()`
+### Phase 1 — Integration + Bicep deployer foundation ✅
+1. `src/strata/integrations/azure_cli.py` — `AzureCLIIntegration` ✅
+2. `ProvisionerType.BICEP = "bicep"` added to enum ✅
+3. Register `azure_cli` in `IntegrationFactory._BUILTIN_CLASS_MAP` ✅
+4. Help file: `src/strata/data/help/azure_cli.md` ✅
+5. Tests for `ensure_available()`, `get_subscription()`, `get_access_token()` ✅ (20 tests)
 
-### Phase 2 — Bicep deployer (uses AzureCLIIntegration)
-- See ADR-0046 for full Bicep deployer design
-- `BicepDeployer(BaseDeployer)` calls `AzureCLIIntegration` for all `az deployment` commands
+### Phase 2 — Bicep deployer ✅
+- `BicepDeployer(BaseDeployer)` in `src/strata/deployers/bicep_deployer.py` ✅
+- All `az deployment {scope}` commands routed through `AzureCLIIntegration.run_az()` ✅
+- Steps: `setup` (`az bicep build`), `plan` (`what-if`), `apply` (`create`), `destroy` (`delete`), `output` ✅
+- Four ARM scopes: `resourceGroup`, `subscription`, `managementGroup`, `tenant` ✅
+- Registered in `DeployerFactory._BUILTIN_MAP` ✅
+- Help file: `src/strata/data/help/bicep.md` ✅
+- `docs/config/workspace.md` updated ✅
+- 27 tests ✅
 
-### Phase 3 — Token unification (optional)
-- `AzureKeyVaultIntegration._get_access_token()` delegates to `AzureCLIIntegration.get_access_token()`
-- `AzureAppConfigIntegration._get_access_token()` same
-- Single cached token per resource scope per session
+### Phase 3 — Token unification ✅
+- `AzureKeyVaultIntegration._get_access_token_via_cli()` delegates to `AzureCLIIntegration.get_access_token("https://vault.azure.net")` ✅
+- `AzureAppConfigIntegration._get_access_token_via_cli()` delegates to `AzureCLIIntegration.get_access_token("https://azconfig.io")` ✅
+- Single cached token per resource scope per session — second call is instant ✅
+- Zero regressions — existing auth fallback chain unchanged, no YAML config changes needed
 
 ## Consequences
 
