@@ -94,8 +94,8 @@ class DeploymentService(BaseService["DeploymentModel"]):
             ]
 
         # Validate deployment layers against configuration layering
-        if configuration_model and configuration_model.spec.layering:
-            layer_errors = self._validate_deployment_layers(configuration_model)
+        if configuration_model and (configuration_model.spec.layering or configuration_model.spec.layerings):
+            layer_errors = self._validate_deployment_layers(configuration_model, work_path)
             errors.extend(layer_errors)
 
         # Validate deployment properties against configuration schema
@@ -328,29 +328,26 @@ class DeploymentService(BaseService["DeploymentModel"]):
         except Exception:
             return None  # never fail validation because workspace couldn't load
 
-    def _validate_deployment_layers(self, configuration_model: ConfigurationModel) -> List[str]:
+    def _validate_deployment_layers(
+        self, configuration_model: ConfigurationModel, work_path: Optional[str] = None
+    ) -> List[str]:
         """
         Validate deployment layer values against configuration layering definition.
 
+        Supports both ``spec.layering`` (single flat scheme) and ``spec.layerings``
+        (scoped multi-scheme).  For ``spec.layerings``, the scheme is resolved by
+        matching the deployment file path against each scheme's scope glob.
+
         Args:
             configuration_model: Configuration model with layering definition
+            work_path: Workspace root for scope resolution (required for spec.layerings)
 
         Returns:
             List[str]: List of validation error messages
         """
+        from strata.utils.layering import resolve_layering_scheme
+
         errors: List[str] = []
-
-        # No validation if no layering configured
-        if not configuration_model.spec.layering:
-            return errors
-
-        # CRITICAL: Validate last layer is named "environment" (should already be validated in model)
-        if configuration_model.spec.layering[-1].name != "environment":
-            errors.append(
-                f"Configuration error: Last layer must be named 'environment', "
-                f"got '{configuration_model.spec.layering[-1].name}'"
-            )
-            return errors  # Fatal error - can't proceed with other validations
 
         if not self.model:
             errors.append("Deployment model is not initialized")
@@ -358,12 +355,32 @@ class DeploymentService(BaseService["DeploymentModel"]):
 
         deployment_values = self.model.spec.layers or {}
 
-        # Validate all required layers are provided
-        for layer in configuration_model.spec.layering:
-            if layer.required and layer.name not in deployment_values:
-                errors.append(f"Required layer '{layer.name}' not provided in deployment")
+        # Resolve the active layer list
+        active_layers = None
+        scheme_name: Optional[str] = None
 
-            # Validate pattern if value exists and pattern is defined
+        if configuration_model.spec.layerings:
+            scheme = resolve_layering_scheme(
+                self.path or "",
+                work_path or "",
+                configuration_model.spec.layerings,
+            )
+            if scheme is None:
+                # No scope matched — no layering validation for this deployment file
+                return errors
+            active_layers = scheme.layers
+            scheme_name = scheme.name
+        elif configuration_model.spec.layering:
+            active_layers = configuration_model.spec.layering
+        else:
+            return errors
+
+        # Validate required layers are present and pattern-check values
+        for layer in active_layers:
+            if layer.required and layer.name not in deployment_values:
+                where = f" (scheme '{scheme_name}')" if scheme_name else ""
+                errors.append(f"Required layer '{layer.name}' not provided in deployment{where}")
+
             if layer.name in deployment_values and layer.pattern:
                 value = deployment_values[layer.name]
                 try:
@@ -372,12 +389,8 @@ class DeploymentService(BaseService["DeploymentModel"]):
                 except re.error as e:
                     errors.append(f"Invalid regex pattern for layer '{layer.name}': {layer.pattern} - {e}")
 
-        # CRITICAL: Validate environment is provided (last layer must always have a value)
-        if "environment" not in deployment_values:
-            errors.append("Required layer 'environment' not provided in deployment. ")
-
-        # Warn on unknown layers (not in configuration)
-        configured_names = {layer.name for layer in configuration_model.spec.layering}
+        # Warn on unknown layers (not in the active scheme)
+        configured_names = {layer.name for layer in active_layers}
         unknown_layers = set(deployment_values.keys()) - configured_names
         if unknown_layers:
             self.logger.warning("Deployment contains unknown layers", unknown_layers=unknown_layers)
@@ -504,31 +517,40 @@ class DeploymentService(BaseService["DeploymentModel"]):
         """
         self._ensure_validated()
 
-        # No artifact path if no configuration or no layering defined
-        if not configuration_model or not configuration_model.spec.layering:
+        if not configuration_model:
             return ""
 
-        if self.model is None or self.model.spec is None or self.model.spec.layers is None:
+        # Resolve the active layer list (scoped multi-scheme or single flat scheme)
+        from strata.utils.layering import compute_artifact_path, resolve_layering_scheme
+
+        active_layers = None
+        if configuration_model.spec.layerings:
+            scheme = resolve_layering_scheme(
+                self.path or "",
+                "",  # work_path not available here; relies on filename fallback
+                configuration_model.spec.layerings,
+            )
+            if scheme is None:
+                return ""
+            return compute_artifact_path(self.model.spec.layers or {}, scheme)
+        elif configuration_model.spec.layering:
+            active_layers = configuration_model.spec.layering
+        else:
             return ""
 
-        deployment_values = self.model.spec.layers or {}
-        if not deployment_values:
+        if self.model is None or self.model.spec is None or not self.model.spec.layers:
             return ""
 
-        # Build path components in layer order
-        path_components = []
-        for layer in configuration_model.spec.layering:
+        # Single flat scheme path: build inline without a ScopedLayeringModel wrapper
+        deployment_values = self.model.spec.layers
+        components = []
+        for layer in active_layers:
             value = deployment_values.get(layer.name)
-
-            # Use default if not provided and default exists
             if value is None and layer.default:
                 value = layer.default
-
-            # Skip if still no value (optional layer without default)
             if value is not None:
-                path_components.append(value)
-
-        return "/".join(path_components)
+                components.append(str(value))
+        return "/".join(components)
 
     def get_build_path(self, build_path: Path) -> Path:
         """

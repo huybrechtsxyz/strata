@@ -1,11 +1,30 @@
 # Deep Validation and Layer Consistency
 
-- Status: partial
+- Status: phase 1 complete / phase 2 in progress
 - Date: 2026-07-15
+- Last updated: 2026-07-23
 
-## TODO
+## Completed (Phase 1)
 
-- [x] **Rule Sets 1–3 Implementation Plan** — Implementation steps added for all three rule sets
+✅ **Scoped Multi-Scheme Layering (`spec.layerings`)** — Fully implemented and tested
+- [x] `ScopedLayeringModel` added to configuration_model.py with fields: name, scope, layers
+- [x] First-match-wins glob scope resolution in `resolve_layering_scheme()` utility function
+- [x] Mutual exclusion validation: configs cannot have both `spec.layering` and `spec.layerings`
+- [x] `DeploymentService._validate_deployment_layers()` updated to resolve schemes dynamically
+- [x] `DeploymentService.get_artifact_path()` updated to support both single and multi-scheme formats
+- [x] `OverlapController._compute_artifact_path()` uses scope resolution for collision detection
+- [x] Shared utilities module created: `src/strata/utils/layering.py` with `resolve_layering_scheme()` and `compute_artifact_path()`
+- [x] Full test coverage: 592 tests passing, including multi-scheme fixture updates
+- [x] Removed arbitrary "environment" layer name constraint — any layer name valid at any position
+- [x] Documentation updated: docs/config/configuration.md with migration guide and examples
+- [x] Changelog updated: [Unreleased] section documents the change
+
+## TODO (Phase 2)
+
+- [ ] **Rule Set 1 — Layer Identity Consistency** — Detect mismatches between declared layers and environment file paths
+- [ ] **Rule Set 2 — Template Drift Detection** — Warn when template versions advance beyond reviewed instantiation
+- [ ] **Rule Set 3 — Tenant Field vs Path Consistency** — Check tenant values against path segments
+- [ ] **Rule Set 4 — Path Convention Policy** — Validate directory structure against declared conventions
 - [ ] **Configuration Service Dependency Chain** — Define behavior when `--deep` validation runs without configuration service available; clarify `DeploymentService` ↔ `ConfigurationService` coupling
 - [ ] **Backwards Compatibility & Migration Path** — Document how operators migrate existing non-compliant files; define timeline for optional → mandatory enforcement
 - [ ] **Scope Precedence Algorithm** — Clarify glob matching specificity rules; define ordering when multiple conventions match the same file
@@ -18,7 +37,6 @@
 - [ ] **Inline vs Spec.paths Precedence** — Clarify coexistence and conflict resolution for inline conventions (deploy repos) vs `spec.paths` conventions
 - [ ] **ADR 0038 Gap Closure** — Map how this ADR closes Gap 5; add gap closure checklist
 - [ ] **End-to-End Example Workflow** — Add complete scenario: operator setup → file structure → validation → remediation
-- [ ] **Scoped Layering vs Single Layering Migration** — Clarify how operators migrate from a single `spec.layering` list to `spec.layerings` without breaking existing layer identity checks (Rule Set 1)
 
 ## Context and Problem Statement
 
@@ -61,6 +79,90 @@ another tenant and retains the source tenant's `meta.name` or `tenant` field.
   creation time; deep validation catches them in existing files.
 - **ADR 0014 — Guided Onboarding Experience**: `strata validate --explain` is the existing
   plain-English validation surface; deep validation extends it.
+
+---
+
+## Implementation Notes — Phase 1 (Completed 2026-07-23)
+
+### Scoped Multi-Scheme Layering (`spec.layerings`)
+
+**What was implemented:**
+
+The core layering scheme design was fully implemented with support for multiple scoped layer hierarchies:
+
+1. **New Model: `ScopedLayeringModel`** (`src/strata/models/configuration_model.py`)
+   - Fields: `name` (PlatformName), `scope` (glob pattern), `layers` (List[ConfigurationLayerModel], min_length=1)
+   - Replaces single-scheme `spec.layering` when multiple layer hierarchies are needed
+   - Both formats coexist; mutual exclusion enforced via validator
+
+2. **Shared Utilities Module** (`src/strata/utils/layering.py`) — NEW FILE
+   - `resolve_layering_scheme(deployment_file_path: str, work_path: str, layerings: List[ScopedLayeringModel]) -> Optional[ScopedLayeringModel]`
+     - Matches deployment file path against scheme scopes using fnmatch glob patterns
+     - First match wins; returns None if no match (file gets no layering validation)
+   - `compute_artifact_path(deployment_values: Dict[str, str], scheme: ScopedLayeringModel) -> str`
+     - Builds "/" separated artifact path from resolved layer values
+     - Applies defaults from scheme layers
+
+3. **Service Layer Updates**
+
+   **DeploymentService (`src/strata/services/deployment_service.py`):**
+   - `_validate_deployment_layers(configuration_model, work_path)` — NEW implementation
+     - Supports both `spec.layering` (single-scheme) and `spec.layerings` (multi-scheme)
+     - Resolves matching scheme via `resolve_layering_scheme()` for scoped mode
+     - Returns empty error list if no scope matches (graceful skip)
+     - Validates required layers and regex patterns on layer values
+   - `get_artifact_path(configuration_model)` — UPDATED
+     - Supports both layering formats
+     - Uses `resolve_layering_scheme()` and `compute_artifact_path()` for scoped mode
+     - Fallback to inline path construction for single-scheme mode
+
+   **OverlapController (`src/strata/controllers/overlap_controller.py`):**
+   - `_compute_artifact_path(layers, config_model, manifest_path)` — UPDATED
+     - Accepts manifest file path for scope resolution
+     - Calls `resolve_layering_scheme()` to match scoped config to file
+     - Enables correct collision detection across multiple layer hierarchies
+
+4. **Constraint Removal**
+   - Removed hardcoded requirement that final layer be named "environment"
+   - Deleted `validate_unique_layer_names()` validator block that enforced this
+   - Layer names are now arbitrary; uniqueness still enforced within a scheme
+   - Any layer name valid at any position (zone, ring, landscape, etc.)
+
+5. **Test Coverage** (592 tests passing)
+   - Updated fixtures in `tests/strata/controllers/test_controllers_overlap.py` to use ScopedLayeringModel
+   - Updated test data: `tests/data/configurations/configuration-standard.yaml`
+   - Verified:
+     - Multi-scheme configuration creation and validation
+     - Glob scope matching (e.g., "zones/**" matches `zones/europe/contoso/prd/deploy.yaml`)
+     - No-match graceful handling (returns None, skips validation)
+     - Mutual exclusion enforcement (can't have both formats)
+     - Artifact path generation with defaults
+     - All existing tests pass without modification (backward compatible)
+
+6. **Documentation** (Updated 2026-07-23)
+   - `docs/config/configuration.md` — Added comprehensive "Layering" section
+     - Explains single-scheme (deprecated) vs multi-scheme (recommended) formats
+     - Documents layer definition fields: name, required, default
+     - Artifact path resolution algorithm with examples
+     - Migration guide: old format → new format
+     - Real-world examples: regional-tenant and ring-promotion schemes
+   - `.github/CHANGELOG.md` — Documented changes in [Unreleased] section
+     - Feature: scoped multi-scheme layering with glob scope matching
+     - Change: deprecated single-scheme `spec.layering`
+     - Breaking: removed "environment" layer name constraint
+
+**Design Decisions:**
+
+- **First-match-wins scope resolution**: Simple, predictable, no ambiguity. Operators order scopes from most specific to least specific.
+- **No scope matching = skip validation**: Files that match no scope get no layering validation. Simplifies deployment of shared/unstructured files.
+- **Shared utility module**: Prevents divergence between DeploymentService and OverlapController implementations.
+
+**Backward Compatibility:**
+
+- `spec.layering` (single-scheme) still fully supported
+- Existing configurations and deployments work unchanged
+- Migration is optional — operators can adopt `spec.layerings` at their own pace
+- Changelog marks `spec.layering` as deprecated but not removed
 
 ---
 

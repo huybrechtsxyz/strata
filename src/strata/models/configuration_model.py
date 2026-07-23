@@ -2,7 +2,7 @@
 """Pydantic model for provider and resource configuration validation."""
 
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Annotated, Any, Dict, List, Optional, Union
 
 from pydantic import Field, field_validator, model_validator
 
@@ -203,6 +203,56 @@ class ConfigurationLayerModel(PlatformBaseModel):
         return self
 
 
+class ScopedLayeringModel(PlatformBaseModel):
+    """A layering scheme applied to deployment files matching a glob scope.
+
+    Multiple schemes can be declared in ``spec.layerings``; the first whose
+    ``scope`` glob matches a deployment file's path (relative to work_path) is
+    used.  First-match wins — order in the list determines precedence.
+
+    Example::
+
+        layerings:
+          - name: zone-tenant-scheme
+            scope: "zones/**"
+            layers:
+              - name: zone
+                required: true
+              - name: customer
+                required: true
+              - name: environment
+                required: true
+                default: dev
+
+          - name: landscape-scheme
+            scope: "landscape/**"
+            layers:
+              - name: landscape
+                required: true
+              - name: ring
+                required: true
+    """
+
+    name: PlatformName = Field(description="Unique scheme name for diagnostics and policy references")
+    scope: str = Field(
+        description=(
+            "Glob pattern matched against the deployment file path relative to work_path. "
+            "First-match wins. Use '**' to match all files. "
+            "Examples: 'zones/**', 'landscape/*.yaml', '**'"
+        )
+    )
+    layers: Annotated[List[ConfigurationLayerModel], Field(min_length=1)] = Field(
+        description="Ordered layer definitions (shallowest first). At least one layer is required."
+    )
+
+    @model_validator(mode="after")
+    def validate_unique_layer_names_in_scheme(self) -> "ScopedLayeringModel":
+        """Validate that layer names within this scheme are unique."""
+        layer_names = [layer.name for layer in self.layers]
+        check_unique_names(layer_names, f"layer names in layering scheme '{self.name}'")
+        return self
+
+
 class ConfigurationLoggingModel(PlatformBaseModel):
     """Model for logging configuration."""
 
@@ -400,7 +450,14 @@ class ConfigurationSpecModel(PlatformBaseModel):
     logging: Optional[ConfigurationLoggingModel] = Field(None, description="Logging configuration for the platform")
     layering: Optional[List[ConfigurationLayerModel]] = Field(
         None,
-        description="Deployment hierarchy layers (defines artifact path structure and ordering)",
+        description="Single-scheme deployment hierarchy layers (deprecated — use spec.layerings for scope-aware multi-scheme layering)",
+    )
+    layerings: Optional[List[ScopedLayeringModel]] = Field(
+        None,
+        description=(
+            "Scoped layering schemes — each entry matches deployment files by path glob and defines "
+            "an ordered list of layer keys. First-match wins. Mutually exclusive with spec.layering."
+        ),
     )
     integrations: List[IntegrationModel] = Field(
         default_factory=list,
@@ -482,17 +539,20 @@ class ConfigurationSpecModel(PlatformBaseModel):
 
     @model_validator(mode="after")
     def validate_unique_layer_names(self) -> "ConfigurationSpecModel":
-        """Validate that layer names are unique and last layer is 'environment'."""
+        """Validate layer uniqueness and mutual exclusivity of layering vs layerings."""
+        if self.layering and self.layerings:
+            raise ValueError(
+                "spec.layering and spec.layerings are mutually exclusive. "
+                "Use spec.layerings for scope-aware multi-scheme layering."
+            )
+        # Validate single-scheme layering
         if self.layering:
             layer_names = [layer.name for layer in self.layering]
             check_unique_names(layer_names, "layer names")
-
-            # CRITICAL: Last layer must be named "environment"
-            if layer_names[-1] != "environment":
-                raise ValueError(
-                    f"Last layer must be named 'environment', got '{layer_names[-1]}'. "
-                    "This ensures artifact paths always end with environment identifier."
-                )
+        # Validate multi-scheme layerings — scheme names must be unique
+        if self.layerings:
+            scheme_names = [scheme.name for scheme in self.layerings]
+            check_unique_names(scheme_names, "layering scheme names")
         return self
 
 

@@ -55,6 +55,140 @@ topologies:
         max_count: 0 # unlimited
 ```
 
+## Layering — Artifact Path Hierarchies
+
+Define how deployment artifacts are organized into a hierarchical path structure. Use layering when different deployment files need to be placed into different directories during the build process.
+
+### Layering Schemes
+
+Two formats are supported:
+
+**Single-scheme layering** (`spec.layering` — deprecated, for backward compatibility):
+
+```yaml
+spec:
+  layering:
+    - name: zone
+      required: true
+    - name: customer
+      required: true
+    - name: environment
+      required: false
+      default: dev
+```
+
+This creates a single layer scheme applied to all deployments. The artifact path is constructed by combining values from each layer in order, separated by `/`. For example, `zone: europe`, `customer: contoso`, `environment: prd` produces artifact path `europe/contoso/prd`.
+
+**Multi-scheme layering** (`spec.layerings` — recommended):
+
+```yaml
+spec:
+  layerings:
+    - name: zone-tenant
+      scope: zones/**
+      layers:
+        - name: zone
+          required: true
+        - name: customer
+          required: true
+        - name: environment
+          required: false
+          default: dev
+
+    - name: landscape-ring
+      scope: landscape/**
+      layers:
+        - name: landscape
+          required: true
+        - name: ring
+          required: true
+```
+
+This declares multiple layer schemes. Each scheme has:
+- **`name`**: Identifier for the scheme
+- **`scope`**: Glob pattern matching deployment file paths (e.g., `zones/**`, `landscape/**`, `**`)
+- **`layers`**: Ordered list of layer definitions
+
+During deployment validation, the deployment file's path is matched against schemes in order. The first matching scope wins, and that scheme's layers are used to resolve the artifact path.
+
+### Layer Definition
+
+Each layer entry has:
+
+| Field      | Type   | Default | Description                                                       |
+| ---------- | ------ | ------- | ----------------------------------------------------------------- |
+| `name`     | `str`  | —       | Layer name (e.g., `zone`, `customer`, `ring`, `landscape`)        |
+| `required` | `bool` | `true`  | Whether the deployment must provide a value for this layer        |
+| `default`  | `str`  | `null`  | Default value if no value is provided (only if `required: false`) |
+
+**Important:** Layer names are arbitrary and must be unique within a scheme. The layer named `environment` no longer has special meaning — any valid layer can be the last layer in the hierarchy.
+
+### Artifact Path Resolution
+
+When a deployment references a configuration file with layering:
+
+1. **Scope matching**: The deployment file's relative path (from workspace root) is matched against all scheme scopes in order using glob pattern matching
+2. **First match wins**: The first scheme whose scope matches the file path is selected
+3. **Value resolution**: Layer values are extracted from the deployment's `properties` field or use defaults
+4. **Path construction**: The artifact path is built as `layer1_value/layer2_value/.../layerN_value`
+
+**Example matching:**
+
+```
+Deployment files:
+├── zones/europe/contoso/prd/deploy.yaml    ← matches scope: zones/**
+├── landscape/platform/ring2/deploy.yaml    ← matches scope: landscape/**
+└── shared/base.yaml                        ← no match; layering not applied
+```
+
+### Migration from `layering` to `layerings`
+
+If you're using the deprecated single-scheme `layering` format, migrate as follows:
+
+**Before:**
+
+```yaml
+spec:
+  layering:
+    - name: zone
+      required: true
+    - name: customer
+      required: true
+    - name: environment
+      default: dev
+```
+
+**After:**
+
+```yaml
+spec:
+  layerings:
+    - name: default
+      scope: "**"  # Matches all deployment files
+      layers:
+        - name: zone
+          required: true
+        - name: customer
+          required: true
+        - name: environment
+          default: dev
+```
+
+Wrap your existing `layering` list in a single `ScopedLayeringModel` with `scope: "**"` (catch-all). The `"**"` scope matches all files, so all deployments use that scheme — equivalent to the old single-scheme behavior.
+
+### Mutual Exclusion
+
+A configuration cannot have both `spec.layering` and `spec.layerings` defined. The system enforces this with a validation error:
+
+```yaml
+# ✗ INVALID — both formats present
+spec:
+  layering: [...]
+  layerings: [...]
+```
+
+Choose one format and remove the other.
+
 ## Example
 
 ```yaml
@@ -80,6 +214,27 @@ spec:
           max_count: 7
         - role: worker
           min_count: 1
+  layerings:
+    # Multi-tenant deployments with region isolation
+    - name: regional-tenant
+      scope: zones/**
+      layers:
+        - name: zone
+          required: true
+        - name: customer
+          required: true
+        - name: environment
+          required: false
+          default: dev
+
+    # Ring-based deployments (canary → production)
+    - name: ring-promotion
+      scope: landscape/**
+      layers:
+        - name: landscape
+          required: true
+        - name: ring
+          required: true
 ```
 
 ## Configuration Schema Fields

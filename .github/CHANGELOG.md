@@ -7,6 +7,28 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Added
+
+- **Scoped multi-scheme layering — ADR 0042 Phase 1 (completed)**
+  - `spec.layerings[]` field — declare multiple layering schemes, each with a glob scope that matches deployment files by path
+  - `ScopedLayeringModel` — each scheme has a `name`, `scope` (glob pattern), and ordered `layers[]` list
+  - First-match scope resolution — deployment file is matched against schemes in order; first match wins, no match means no layering validation
+  - Shared `strata.utils.layering` module — `resolve_layering_scheme()` resolves a deployment file path to its matching scheme; `compute_artifact_path()` builds the artifact path from a scheme
+  - `DeploymentService._validate_deployment_layers()` updated — uses scope resolution to pick the active scheme per deployment
+  - `DeploymentService.get_artifact_path()` updated — resolves scheme, then builds path from resolved layers
+  - `OverlapController._compute_artifact_path()` updated — same resolution logic for cross-manifest collision detection
+  - Mutual exclusion validation — `spec.layering` and `spec.layerings` cannot both be set; validator enforces this
+  - Full test coverage — overlap controller tests adapted to multi-scheme; integration tests validate both flat and scoped schemes
+
+### Changed
+
+- **Removed hardcoded "environment" layer name constraint** — last layer no longer required to be named `"environment"`. Layer names are now arbitrary (e.g., `ring`, `stage`, `landscape` as last layer). Collision prevention is entirely owned by `OverlapController` artifact path uniqueness check, not by layer naming.
+- **`spec.layering` marked as deprecated** — single-scheme flat layering still supported for backward compatibility, but `spec.layerings` is preferred for new configs. Existing deployments continue to work unchanged.
+
+### Breaking Changes
+
+- **Layer name constraint removal** — configurations or deployment code that relied on the final layer being named `"environment"` should be updated. The constraint was overly restrictive and served no functional purpose in artifact path generation.
+
 ---
 
 ## [1.3.1] — 2026-07-22
