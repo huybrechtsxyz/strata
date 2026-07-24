@@ -115,6 +115,9 @@ exclude = [
     "dist",
     "site-packages",
     "venv",
+    "src/strata/data/help", # markdown help docs — not Python, never format
+    "src/strata/templates", # scaffold templates — may contain non-Python files
+    "docs",                 # Sphinx docs — RST/MD, not Python
 ]
 line-length = 120
 indent-width = 4
