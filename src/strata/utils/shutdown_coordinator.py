@@ -44,7 +44,7 @@ import signal
 import subprocess
 import sys
 import threading
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 from strata.logger import get_logger
 
@@ -118,8 +118,8 @@ class ShutdownCoordinator:
         # Future: child coordinators for rollout/parallel-deploy
         self._children: List["ShutdownCoordinator"] = []
         # Saved signal handlers — restored by deactivate()
-        self._prev_sigterm = None
-        self._prev_sigint = None
+        self._prev_sigterm: Any = None
+        self._prev_sigint: Any = None
         self._atexit_registered = False
 
     # ------------------------------------------------------------------
