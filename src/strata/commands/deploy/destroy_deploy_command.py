@@ -182,6 +182,19 @@ class DestroyDeployCommand(BaseDeployCommand):
             if lock_handle is None:
                 return False
 
+        from strata.utils.shutdown_coordinator import ShutdownCoordinator
+
+        deploy_name = (
+            str(self._deployment_service.model.meta.name)  # type: ignore[union-attr]
+            if self._deployment_service
+            else "deployment"
+        )
+        coordinator = ShutdownCoordinator.activate(
+            lock_backend=lock_backend,
+            lock_handle=lock_handle,
+            deployment_name=deploy_name,
+        )
+
         try:
             for stage in stages_to_run:
                 if self._is_console_output():
@@ -207,6 +220,7 @@ class DestroyDeployCommand(BaseDeployCommand):
 
             return True
         finally:
+            coordinator.deactivate()
             if lock_handle is not None and lock_backend is not None:
                 self._release_lock(lock_backend, lock_handle)
 

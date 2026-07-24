@@ -9,6 +9,16 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Added
 
+- **SIGTERM graceful shutdown — ADR 0028 (implemented)**
+  - `ShutdownCoordinator` in `strata.utils.shutdown_coordinator` — ordered shutdown: terminate subprocesses → release deployment lock → exit 1
+  - Process registry: `run_command()` auto-registers/deregisters every `Popen` instance with the active coordinator — zero boilerplate in deployers
+  - Signal handlers installed per-invocation (scoped to lock-holding window): SIGTERM (Unix), SIGINT (all platforms), `atexit` safety net
+  - Subprocess termination: SIGTERM to all active processes → 30s grace period → SIGKILL stragglers
+  - Re-entrant guard (`threading.Event`) prevents double-shutdown on rapid signals
+  - `children: List[ShutdownCoordinator]` hook for future rollout/parallel-deploy fan-out
+  - Wired into `RunDeployCommand._execute_provisioning()` and `DestroyDeployCommand._execute_provisioning()`
+  - 20 tests (1 skipped on Windows where SIGTERM is unavailable)
+
 - **Google Cloud CLI integration + lifecycle scripts — ADR 0055 Phase 1**
   - `GCloudCLIIntegration(BaseIntegration)` — `COMMAND = "gcloud"`; `ensure_available()` checks binary + `gcloud config get-value account` + active project (three-step check, unlike Azure/AWS which stop at auth); `get_project()`, `get_account()`, `get_access_token()` (cached), `run_gcloud()` passthrough
   - `IGCloudTool` capability protocol + `"gcloud"` in `CAPABILITY_MAP`; registered in `IntegrationFactory`
