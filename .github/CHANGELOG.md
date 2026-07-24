@@ -7,6 +7,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-07-24
+
 ### Added
 
 - **`--timeout` for deploy run and deploy destroy — ADR 0027 (implemented)**
