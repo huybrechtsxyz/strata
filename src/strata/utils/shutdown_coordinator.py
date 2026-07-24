@@ -191,6 +191,27 @@ class ShutdownCoordinator:
         with self._procs_mutex:
             self._procs.discard(proc)
 
+    def update_lock(
+        self,
+        lock_backend: "Optional[BaseLockBackend]",
+        lock_handle: "Optional[LockHandle]",
+    ) -> None:
+        """Update the lock reference held by this coordinator.
+
+        Called from the worker thread after the deployment lock is acquired,
+        so that signal handlers on the main thread can release it on shutdown.
+        Thread-safe via the process mutex (reused for simplicity).
+        """
+        with self._procs_mutex:
+            self._lock_backend = lock_backend
+            self._lock_handle = lock_handle
+
+    def clear_lock(self) -> None:
+        """Clear the lock reference (called after the lock is released normally)."""
+        with self._procs_mutex:
+            self._lock_backend = None
+            self._lock_handle = None
+
     # ------------------------------------------------------------------
     # Rollout / parallel-deploy extension point
     # ------------------------------------------------------------------

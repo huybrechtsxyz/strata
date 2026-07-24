@@ -9,6 +9,14 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Added
 
+- **`--timeout` for deploy run and deploy destroy — ADR 0027 (implemented)**
+  - `--timeout SECONDS` option on `strata deploy run` and `strata deploy destroy` (default: `0` = no timeout)
+  - `timeout=0`: stage loop runs on the main thread with no overhead
+  - `timeout>0`: stage loop runs in a `ThreadPoolExecutor` worker; main thread calls `future.result(timeout=N)` and triggers `coordinator.shutdown("timeout after Ns")` on expiry
+  - `ShutdownCoordinator.update_lock(backend, handle)` / `clear_lock()` — thread-safe handshake so the main thread's signal handlers can release a lock acquired in the worker thread
+  - Exit code 1 on timeout — same as SIGTERM; deployment is in unknown state, operator inspection required
+  - 7 new tests for timeout path and lock handshake
+
 - **SIGTERM graceful shutdown — ADR 0028 (implemented)**
   - `ShutdownCoordinator` in `strata.utils.shutdown_coordinator` — ordered shutdown: terminate subprocesses → release deployment lock → exit 1
   - Process registry: `run_command()` auto-registers/deregisters every `Popen` instance with the active coordinator — zero boilerplate in deployers

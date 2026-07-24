@@ -42,6 +42,7 @@ class RunDeployCommand(BaseDeployCommand):
         ring_override: Optional[str] = None,
         wave: Optional[int] = None,
         promotion_override: Optional[str] = None,
+        timeout: int = 0,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -63,6 +64,7 @@ class RunDeployCommand(BaseDeployCommand):
         self._ring_override = ring_override
         self._wave = wave
         self._promotion_override = promotion_override
+        self._timeout = timeout
         self._resolved_values: Optional[ResolvedValues] = None
 
     # -------------------------------------------------------------------------
@@ -775,16 +777,8 @@ class RunDeployCommand(BaseDeployCommand):
             if not self._check_approvals(stages_to_run):
                 return False
 
-        # Acquire deployment lock wrapping the full stage pipeline
-        lock_handle: Optional[LockHandle] = None
-        lock_backend: Optional[BaseLockBackend] = None
-        if self._should_lock():
-            lock_backend = self._resolve_lock_backend(stages_to_run)
-            lock_handle = self._acquire_lock(lock_backend)
-            if lock_handle is None:
-                return False
+        import concurrent.futures
 
-        # Activate graceful shutdown coordinator for the lock-holding window
         from strata.utils.shutdown_coordinator import ShutdownCoordinator
 
         deploy_name = (
@@ -792,41 +786,69 @@ class RunDeployCommand(BaseDeployCommand):
             if self._deployment_service
             else "deployment"
         )
+
+        # Activate coordinator on the main thread (signal handlers require this)
         coordinator = ShutdownCoordinator.activate(
-            lock_backend=lock_backend,
-            lock_handle=lock_handle,
+            lock_backend=None,  # lock acquired inside _run_stages; updated via update_lock()
+            lock_handle=None,
             deployment_name=deploy_name,
         )
 
-        try:
-            for stage in stages_to_run:
-                if self._is_console_output():
-                    label = f"[{stage.name}]"
-                    if stage.provisioner:
-                        label += f" via {stage.provisioner}"
-                    elif stage.topology:
-                        label += f" topology:{stage.topology}"
-                    prefix = "[DRY-RUN] " if self._dry_run else ""
-                    click.echo(f"\n  ▶  {prefix}Stage: {stage.name}  {label}")
-
-                ok = self._execute_stage_provisioning(stage)
-                if not ok:
-                    if stage.on_failure == "continue":
-                        if self._is_console_output():
-                            click.echo(f"  ⚠️  Stage '{stage.name}' failed — on_failure=continue, proceeding.")
-                        continue
-                    # Default: stop
-                    self._errors.append(f"Stage '{stage.name}' failed (on_failure=stop).")
+        def _run_stages() -> bool:
+            """Lock acquisition + stage loop — may run in a worker thread."""
+            lock_handle: Optional[LockHandle] = None
+            lock_backend: Optional[BaseLockBackend] = None
+            if self._should_lock():
+                lock_backend = self._resolve_lock_backend(stages_to_run)
+                lock_handle = self._acquire_lock(lock_backend)
+                if lock_handle is None:
                     return False
+                coordinator.update_lock(lock_backend, lock_handle)
 
-            if self._is_console_output() and not self._dry_run:
-                click.echo("\n✅  All stages completed.")
+            try:
+                for stage in stages_to_run:
+                    if self._is_console_output():
+                        label = f"[{stage.name}]"
+                        if stage.provisioner:
+                            label += f" via {stage.provisioner}"
+                        elif stage.topology:
+                            label += f" topology:{stage.topology}"
+                        prefix = "[DRY-RUN] " if self._dry_run else ""
+                        click.echo(f"\n  ▶  {prefix}Stage: {stage.name}  {label}")
 
-            return True
+                    ok = self._execute_stage_provisioning(stage)
+                    if not ok:
+                        if stage.on_failure == "continue":
+                            if self._is_console_output():
+                                click.echo(f"  ⚠️  Stage '{stage.name}' failed — on_failure=continue, proceeding.")
+                            continue
+                        self._errors.append(f"Stage '{stage.name}' failed (on_failure=stop).")
+                        return False
+
+                if self._is_console_output() and not self._dry_run:
+                    click.echo("\n✅  All stages completed.")
+                return True
+            finally:
+                coordinator.clear_lock()
+                if lock_handle is not None and lock_backend is not None:
+                    self._release_lock(lock_backend, lock_handle)
+
+        try:
+            if self._timeout > 0:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(_run_stages)
+                    try:
+                        return future.result(timeout=self._timeout)
+                    except concurrent.futures.TimeoutError:
+                        self._errors.append(
+                            f"Deploy timed out after {self._timeout}s. Lock released and subprocesses terminated."
+                        )
+                        coordinator.shutdown(f"timeout after {self._timeout}s")
+                        return False  # unreachable — shutdown exits
+            else:
+                return _run_stages()
         finally:
             coordinator.deactivate()
-            if lock_handle is not None and lock_backend is not None:
-                self._release_lock(lock_backend, lock_handle)
 
     def _execute_stage_provisioning(self, stage: DeploymentStageModel) -> bool:
         """Instantiate the deployer for *stage*, validate, then run the step sequence.

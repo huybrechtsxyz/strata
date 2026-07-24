@@ -37,6 +37,7 @@ class DestroyDeployCommand(BaseDeployCommand):
         force: bool = False,
         dry_run: bool = False,
         force_lock: bool = False,
+        timeout: int = 0,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -53,6 +54,7 @@ class DestroyDeployCommand(BaseDeployCommand):
         self._force = force
         self._dry_run = dry_run
         self._force_lock = force_lock
+        self._timeout = timeout
         self._resolved_values: Optional[ResolvedValues] = None
 
     # -------------------------------------------------------------------------
@@ -172,15 +174,7 @@ class DestroyDeployCommand(BaseDeployCommand):
             action = "Planning destroy for" if self._dry_run else "Destroying"
             click.echo(f"\n💣  {action} {len(stages_to_run)} stage(s)…")
 
-        # Acquire deployment lock wrapping the full stage pipeline.
-        # Destroy is a destructive operation and must hold the lock.
-        lock_handle: Optional[LockHandle] = None
-        lock_backend: Optional[BaseLockBackend] = None
-        if self._should_lock():
-            lock_backend = self._resolve_lock_backend(stages_to_run)
-            lock_handle = self._acquire_lock(lock_backend)
-            if lock_handle is None:
-                return False
+        import concurrent.futures
 
         from strata.utils.shutdown_coordinator import ShutdownCoordinator
 
@@ -190,39 +184,65 @@ class DestroyDeployCommand(BaseDeployCommand):
             else "deployment"
         )
         coordinator = ShutdownCoordinator.activate(
-            lock_backend=lock_backend,
-            lock_handle=lock_handle,
+            lock_backend=None,
+            lock_handle=None,
             deployment_name=deploy_name,
         )
 
-        try:
-            for stage in stages_to_run:
-                if self._is_console_output():
-                    label = f"[{stage.name}]"
-                    if stage.provisioner:
-                        label += f" via {stage.provisioner}"
-                    elif stage.topology:
-                        label += f" topology:{stage.topology}"
-                    prefix = "[DRY-RUN] " if self._dry_run else ""
-                    click.echo(f"\n  ▶  {prefix}Stage: {stage.name}  {label}")
-
-                ok = self._execute_stage_destroy(stage)
-                if not ok:
-                    if stage.on_failure == "continue":
-                        if self._is_console_output():
-                            click.echo(f"  ⚠️  Stage '{stage.name}' failed — on_failure=continue, proceeding.")
-                        continue
-                    self._errors.append(f"Stage '{stage.name}' failed (on_failure=stop).")
+        def _run_stages() -> bool:
+            lock_handle: Optional[LockHandle] = None
+            lock_backend: Optional[BaseLockBackend] = None
+            if self._should_lock():
+                lock_backend = self._resolve_lock_backend(stages_to_run)
+                lock_handle = self._acquire_lock(lock_backend)
+                if lock_handle is None:
                     return False
+                coordinator.update_lock(lock_backend, lock_handle)
 
-            if self._is_console_output() and not self._dry_run:
-                click.echo("\n✅  All stages destroyed.")
+            try:
+                for stage in stages_to_run:
+                    if self._is_console_output():
+                        label = f"[{stage.name}]"
+                        if stage.provisioner:
+                            label += f" via {stage.provisioner}"
+                        elif stage.topology:
+                            label += f" topology:{stage.topology}"
+                        prefix = "[DRY-RUN] " if self._dry_run else ""
+                        click.echo(f"\n  ▶  {prefix}Stage: {stage.name}  {label}")
 
-            return True
+                    ok = self._execute_stage_destroy(stage)
+                    if not ok:
+                        if stage.on_failure == "continue":
+                            if self._is_console_output():
+                                click.echo(f"  ⚠️  Stage '{stage.name}' failed — on_failure=continue, proceeding.")
+                            continue
+                        self._errors.append(f"Stage '{stage.name}' failed (on_failure=stop).")
+                        return False
+
+                if self._is_console_output() and not self._dry_run:
+                    click.echo("\n✅  All stages destroyed.")
+                return True
+            finally:
+                coordinator.clear_lock()
+                if lock_handle is not None and lock_backend is not None:
+                    self._release_lock(lock_backend, lock_handle)
+
+        try:
+            if self._timeout > 0:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(_run_stages)
+                    try:
+                        return future.result(timeout=self._timeout)
+                    except concurrent.futures.TimeoutError:
+                        self._errors.append(
+                            f"Destroy timed out after {self._timeout}s. Lock released and subprocesses terminated."
+                        )
+                        coordinator.shutdown(f"timeout after {self._timeout}s")
+                        return False
+            else:
+                return _run_stages()
         finally:
             coordinator.deactivate()
-            if lock_handle is not None and lock_backend is not None:
-                self._release_lock(lock_backend, lock_handle)
 
     def _execute_stage_destroy(self, stage: DeploymentStageModel) -> bool:
         stage_started = _dt.now(_tz.utc).isoformat()

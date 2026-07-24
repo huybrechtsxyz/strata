@@ -127,6 +127,13 @@ def deploy():
         "Defaults to the strategy declared in the deployment's spec.promotion.strategy."
     ),
 )
+@click.option(
+    "--timeout",
+    type=int,
+    default=0,
+    metavar="SECONDS",
+    help="Abort if the command does not complete within N seconds (0 = no timeout).",
+)
 @click_work_path
 @click_output_format
 @click_output_verbose
@@ -144,6 +151,7 @@ def deploy_run(
     ring_override: Optional[str] = None,
     wave: Optional[int] = None,
     promotion_override: Optional[str] = None,
+    timeout: int = 0,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -162,6 +170,7 @@ def deploy_run(
         ring_override=ring_override,
         wave=wave,
         promotion_override=promotion_override,
+        timeout=timeout,
         output=output,
         verbose=verbose,
         quiet=quiet,
@@ -214,6 +223,13 @@ def deploy_run(
     default=False,
     help="Force-release any held lock before acquiring. Use to recover from a crashed pipeline.",
 )
+@click.option(
+    "--timeout",
+    type=int,
+    default=0,
+    metavar="SECONDS",
+    help="Abort if the command does not complete within N seconds (0 = no timeout).",
+)
 @click_work_path
 @click_output_format
 @click_output_verbose
@@ -226,6 +242,7 @@ def deploy_destroy(
     force: bool = False,
     dry_run: bool = False,
     force_lock: bool = False,
+    timeout: int = 0,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -243,6 +260,7 @@ def deploy_destroy(
         force=force,
         dry_run=dry_run,
         force_lock=force_lock,
+        timeout=timeout,
         output=output,
         verbose=verbose,
         quiet=quiet,
