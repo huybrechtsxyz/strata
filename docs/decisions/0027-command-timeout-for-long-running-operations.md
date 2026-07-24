@@ -1,7 +1,8 @@
 # Command Timeout for Long-Running Operations
 
-- Status: proposed
+- Status: implemented
 - Date: 2026-07-11
+- Implemented: 2026-07-24
 
 ## Context and Problem Statement
 
@@ -67,47 +68,107 @@ added to the command specs. This ADR decides how to implement it.
 ## Decision Outcome
 
 Chosen: **Option C — `ThreadPoolExecutor` with `result(timeout=)`** for the primary
-mechanism. On Unix, enhance with Option B as a belt-and-suspenders fallback: set
-`signal.alarm(timeout + 30)` as a hard kill backstop in case the thread does not
-exit within the timeout grace period.
+mechanism. The SIGALRM backstop from Option B is **dropped** (see revised design below).
 
-### Implementation
+### Revised design (post ADR-0028)
 
-```python
-import concurrent.futures
-import signal
-import sys
+ADR-0028 introduced `ShutdownCoordinator` with signal handlers registered on the main
+thread. The `ThreadPoolExecutor` approach must keep that invariant: coordinator activation
+stays on the main thread; only the stage execution body moves to the worker thread.
 
-def run_with_timeout(fn, timeout_seconds: int):
-    """
-    Run fn() in a thread pool. Raise TimeoutError if it does not complete
-    within timeout_seconds. On Unix, also arm SIGALRM as a hard backstop.
-    """
-    if hasattr(signal, "SIGALRM"):
-        signal.alarm(timeout_seconds + 30)  # hard backstop, Unix only
+**Thread split:**
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(fn)
-        try:
-            return future.result(timeout=timeout_seconds)
-        except concurrent.futures.TimeoutError:
-            raise TimeoutError(
-                f"Command exceeded timeout of {timeout_seconds}s. "
-                "Initiating graceful shutdown."
-            )
-        finally:
-            if hasattr(signal, "SIGALRM"):
-                signal.alarm(0)  # disarm
+```
+Main thread                                    Worker thread
+─────────────────────────────────────────      ──────────────────────────────────────
+coordinator = ShutdownCoordinator.activate()   _execute_provisioning_body()
+                                                 ├─ acquire lock
+future = executor.submit(body)                   ├─ stage 1: terraform apply
+                                                 ├─ stage 2: ansible-playbook
+future.result(timeout=N)  ←── blocks ────────    └─ release lock
+    │
+    ├─ completes normally → coordinator.deactivate()
+    └─ TimeoutError       → coordinator.shutdown("timeout")
+                              ├─ terminates all active subprocesses
+                              ├─ releases deployment lock
+                              └─ sys.exit(1)
 ```
 
-On `TimeoutError`:
-1. Log: `"Timeout after {N}s — initiating graceful shutdown"`
-2. Invoke the same shutdown sequence used for SIGTERM (ADR-0028):
-   - Send SIGTERM to the active provisioner subprocess
-   - Wait up to 30 seconds for it to exit cleanly
-   - SIGKILL if still running after grace period
-   - Release deployment lock
-3. Exit 1
+**Why no SIGALRM backstop:**
+
+The original ADR proposed `signal.alarm(timeout + 30)` as a hard-kill backstop on Unix.
+This is dropped because:
+
+1. `SIGALRM` would kill the process before `coordinator.shutdown()` can release the lock —
+   defeating the entire purpose of ADR-0028.
+2. If the worker thread genuinely won't die after 30 seconds of subprocess termination
+   (e.g., a hung network socket), the CI runner's external job timeout / SIGKILL is the
+   correct last resort — strata cannot reliably recover from this state anyway.
+3. The main thread waits for `future.result()` with the timeout, then calls
+   `coordinator.shutdown()` which terminates subprocesses. The worker thread will exit
+   once its subprocess is dead. No additional backstop is needed for the common case.
+
+**Implementation:**
+
+```python
+# In RunDeployCommand / DestroyDeployCommand / BuildRunCommand
+import concurrent.futures
+
+def _execute_with_timeout(self, timeout_seconds: int) -> bool:
+    """Wrap _execute_provisioning_body() with an optional wall-clock timeout."""
+    coordinator = ShutdownCoordinator.activate(
+        lock_backend=None,     # set inside body after lock acquire
+        lock_handle=None,
+        deployment_name=self._deployment_name(),
+    )
+    try:
+        if timeout_seconds <= 0:
+            # No timeout — run directly on the main thread
+            return self._execute_provisioning_body(coordinator)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(self._execute_provisioning_body, coordinator)
+            try:
+                return future.result(timeout=timeout_seconds)
+            except concurrent.futures.TimeoutError:
+                elapsed = timeout_seconds  # lower bound
+                self.logger.error(
+                    "deploy_timeout",
+                    timeout_seconds=timeout_seconds,
+                    deployment=self._deployment_name(),
+                )
+                coordinator.shutdown(f"timeout after {elapsed}s")
+                return False  # unreachable — shutdown() calls sys.exit(1)
+    finally:
+        coordinator.deactivate()
+```
+
+**Lock/coordinator handshake in the worker thread:**
+
+The worker thread acquires the lock and registers it with the coordinator so signal
+handlers on the main thread can release it:
+
+```python
+def _execute_provisioning_body(self, coordinator: ShutdownCoordinator) -> bool:
+    lock_backend = self._resolve_lock_backend(stages)
+    lock_handle = self._acquire_lock(lock_backend)
+    if lock_handle is None:
+        return False
+
+    # Update coordinator so it can release this lock on shutdown
+    coordinator.update_lock(lock_backend, lock_handle)
+
+    try:
+        for stage in stages:
+            ...
+        return True
+    finally:
+        coordinator.clear_lock()
+        self._release_lock(lock_backend, lock_handle)
+```
+
+`ShutdownCoordinator` needs two new methods: `update_lock(backend, handle)` and
+`clear_lock()` — both thread-safe via the existing mutex.
 
 ### Click decorator
 
@@ -116,31 +177,41 @@ On `TimeoutError`:
     "--timeout",
     "timeout",
     type=int,
-    default=3600,
+    default=0,
     metavar="SECONDS",
-    help="Abort if command does not complete within N seconds (default: 3600).",
+    help=(
+        "Abort if command does not complete within N seconds. "
+        "0 = no timeout (default). Recommended CI value: 3600."
+    ),
 )
 ```
+
+Default changed from `3600` to `0` (no timeout) — safer default since operators
+who have not configured a timeout should not be surprised by unexpected terminations.
+CI pipelines that need a bound should set `--timeout 3600` explicitly.
 
 Applied to: `strata build run`, `strata deploy run`, `strata deploy destroy`.
 
 ### Exit behaviour
 
-Timeout exits with code 1 (system failure — alert, do not auto-retry). This is
-intentional: a timed-out deployment is in an unknown state and requires operator
-inspection before retry. See ADR-0020 exit code table.
+Timeout exits with code 1 (system failure — alert, do not auto-retry). Identical to
+the exit code produced by SIGTERM — both represent an interrupted deployment in an
+unknown state requiring operator inspection before retry.
 
 ## Consequences
 
 - **Good:** CI pipelines always get a clean exit code within a bounded time.
-- **Good:** Deployment lock is released on timeout (via ADR-0028 shutdown sequence).
-- **Good:** Cross-platform — ThreadPoolExecutor works on Windows.
+- **Good:** Deployment lock is released on timeout (via ADR-0028 coordinator).
+- **Good:** Cross-platform — ThreadPoolExecutor works on Windows; no SIGALRM needed.
 - **Good:** No new dependencies.
-- **Bad:** Thread-based isolation means a truly stuck subprocess (e.g., waiting for
-  a network socket that never returns) will keep the thread alive until the OS SIGKILL.
-  The Unix SIGALRM backstop mitigates this on Linux/macOS.
-- **Bad:** The 30-second grace period means the actual wall-clock time before exit can
-  be `timeout + 30`. Operators should account for this in CI job time limits.
+- **Good:** No timeout by default — operators opt in, removing surprise terminations.
+- **Bad:** Thread-based isolation means a truly stuck subprocess (hung network socket)
+  keeps the worker thread alive after coordinator.shutdown(). The CI runner's external
+  job timeout is the final backstop — strata cannot recover from this case.
+- **Bad:** The lock/coordinator handshake (update_lock / clear_lock) adds a small amount
+  of complexity to the coordinator API introduced in ADR-0028.
+- **Neutral:** `timeout=0` default requires CI teams to explicitly set a value — this
+  is intentional (opt-in rather than surprise opt-out).
 
 ## Related
 

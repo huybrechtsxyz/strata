@@ -1,7 +1,8 @@
 # SIGTERM Graceful Shutdown and Deployment Lock Release
 
-- Status: proposed
+- Status: implemented
 - Date: 2026-07-11
+- Implemented: 2026-07-24
 
 ## Context and Problem Statement
 

@@ -9,6 +9,24 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Added
 
+- **`--timeout` for deploy run and deploy destroy — ADR 0027 (implemented)**
+  - `--timeout SECONDS` option on `strata deploy run` and `strata deploy destroy` (default: `0` = no timeout)
+  - `timeout=0`: stage loop runs on the main thread with no overhead
+  - `timeout>0`: stage loop runs in a `ThreadPoolExecutor` worker; main thread calls `future.result(timeout=N)` and triggers `coordinator.shutdown("timeout after Ns")` on expiry
+  - `ShutdownCoordinator.update_lock(backend, handle)` / `clear_lock()` — thread-safe handshake so the main thread's signal handlers can release a lock acquired in the worker thread
+  - Exit code 1 on timeout — same as SIGTERM; deployment is in unknown state, operator inspection required
+  - 7 new tests for timeout path and lock handshake
+
+- **SIGTERM graceful shutdown — ADR 0028 (implemented)**
+  - `ShutdownCoordinator` in `strata.utils.shutdown_coordinator` — ordered shutdown: terminate subprocesses → release deployment lock → exit 1
+  - Process registry: `run_command()` auto-registers/deregisters every `Popen` instance with the active coordinator — zero boilerplate in deployers
+  - Signal handlers installed per-invocation (scoped to lock-holding window): SIGTERM (Unix), SIGINT (all platforms), `atexit` safety net
+  - Subprocess termination: SIGTERM to all active processes → 30s grace period → SIGKILL stragglers
+  - Re-entrant guard (`threading.Event`) prevents double-shutdown on rapid signals
+  - `children: List[ShutdownCoordinator]` hook for future rollout/parallel-deploy fan-out
+  - Wired into `RunDeployCommand._execute_provisioning()` and `DestroyDeployCommand._execute_provisioning()`
+  - 20 tests (1 skipped on Windows where SIGTERM is unavailable)
+
 - **Google Cloud CLI integration + lifecycle scripts — ADR 0055 Phase 1**
   - `GCloudCLIIntegration(BaseIntegration)` — `COMMAND = "gcloud"`; `ensure_available()` checks binary + `gcloud config get-value account` + active project (three-step check, unlike Azure/AWS which stop at auth); `get_project()`, `get_account()`, `get_access_token()` (cached), `run_gcloud()` passthrough
   - `IGCloudTool` capability protocol + `"gcloud"` in `CAPABILITY_MAP`; registered in `IntegrationFactory`

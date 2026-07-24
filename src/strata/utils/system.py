@@ -349,6 +349,8 @@ def run_command(
         stdout_lines: List[str] = []
         stderr_lines: List[str] = []
 
+        from strata.utils.shutdown_coordinator import deregister_process, register_process
+
         try:
             with subprocess.Popen(
                 command,
@@ -359,6 +361,7 @@ def run_command(
                 env=os.environ.copy(),
                 cwd=cwd,
             ) as proc:
+                register_process(proc)
 
                 def _drain(pipe: IO[str], stream_name: str, lines_acc: List[str]) -> None:
                     for raw in pipe:
@@ -398,6 +401,8 @@ def run_command(
                     t_out.join()
                     t_err.join()
                     returncode = proc.wait()
+                finally:
+                    deregister_process(proc)
 
             duration_ms = (time.time() - start_time) * 1000
             stdout_text = "\n".join(stdout_lines)
