@@ -1652,10 +1652,42 @@
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#schema">Schema</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#providers">Providers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#topologies">Topologies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configuration.html#layering-artifact-path-hierarchies">Layering — Artifact Path Hierarchies</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#layering-schemes">Layering Schemes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#layer-definition">Layer Definition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#artifact-path-resolution">Artifact Path Resolution</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#migration-from-layering-to-layerings">Migration from <code class="docutils literal notranslate"><span class="pre">layering</span></code> to <code class="docutils literal notranslate"><span class="pre">layerings</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#mutual-exclusion">Mutual Exclusion</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#example">Example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#configuration-schema-fields">Configuration Schema Fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#merge-behavior">Merge Behavior</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#validation">Validation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configuration.html#path-convention-policy">Path Convention Policy</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#declaring-conventions">Declaring conventions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#enforcement-policy">Enforcement policy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#inline-convention-deploy-repo-mode">Inline convention (deploy-repo mode)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#validation-rule-types">Validation rule types</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="configuration.html#checkov-iac-security-policy">Checkov IaC Security Policy</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#declaring-the-integration">Declaring the integration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#enabling-the-policy">Enabling the policy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#how-it-works">How it works</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#severity-gate">Severity gate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#graceful-degradation">Graceful degradation</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="configuration.html#opa-policy">OPA Policy</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#installation">Installation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#declaring-the-policy">Declaring the policy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#writing-opa-rules">Writing OPA rules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#opa-input-document">OPA input document</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#mode-selection">Mode selection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#id1">Graceful degradation</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#secret-stores">Secret Stores</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="configuration.html#github-github-actions-secrets"><code class="docutils literal notranslate"><span class="pre">github</span></code> — GitHub Actions secrets</a></li>
 </ul>
@@ -2599,6 +2631,7 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../guides/faq.html">Frequently Asked Questions</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-is-strata">What is strata?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
@@ -3196,6 +3229,44 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/cost-estimation.html#troubleshooting">Troubleshooting</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../guides/azure-lifecycle-scripts.html">Azure Lifecycle Scripts</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/azure-lifecycle-scripts.html#quick-start-use-a-built-in-script">Quick start — use a built-in script</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/azure-lifecycle-scripts.html#built-in-scripts">Built-in scripts</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/azure-lifecycle-scripts.html#azure-aks-credentials-py"><code class="docutils literal notranslate"><span class="pre">azure_aks_credentials.py</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/azure-lifecycle-scripts.html#azure-acr-login-py"><code class="docutils literal notranslate"><span class="pre">azure_acr_login.py</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/azure-lifecycle-scripts.html#azure-resource-group-ensure-py"><code class="docutils literal notranslate"><span class="pre">azure_resource_group_ensure.py</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/azure-lifecycle-scripts.html#write-a-custom-script">Write a custom script</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/azure-lifecycle-scripts.html#azurescript-reference"><code class="docutils literal notranslate"><span class="pre">AzureScript</span></code> reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/azure-lifecycle-scripts.html#environment-variables-in-all-lifecycle-scripts">Environment variables in all lifecycle scripts</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../guides/aws-lifecycle-scripts.html">AWS Lifecycle Scripts</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/aws-lifecycle-scripts.html#quick-start-use-a-built-in-script">Quick start — use a built-in script</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/aws-lifecycle-scripts.html#built-in-scripts">Built-in scripts</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/aws-lifecycle-scripts.html#aws-eks-credentials-py"><code class="docutils literal notranslate"><span class="pre">aws_eks_credentials.py</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/aws-lifecycle-scripts.html#aws-ecr-login-py"><code class="docutils literal notranslate"><span class="pre">aws_ecr_login.py</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/aws-lifecycle-scripts.html#aws-s3-bucket-ensure-py"><code class="docutils literal notranslate"><span class="pre">aws_s3_bucket_ensure.py</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/aws-lifecycle-scripts.html#write-a-custom-script">Write a custom script</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/aws-lifecycle-scripts.html#awsscript-reference"><code class="docutils literal notranslate"><span class="pre">AWSScript</span></code> reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/aws-lifecycle-scripts.html#environment-variables-in-all-lifecycle-scripts">Environment variables in all lifecycle scripts</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../guides/gcloud-lifecycle-scripts.html">GCP Lifecycle Scripts</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/gcloud-lifecycle-scripts.html#quick-start-use-a-built-in-script">Quick start — use a built-in script</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/gcloud-lifecycle-scripts.html#built-in-scripts">Built-in scripts</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/gcloud-lifecycle-scripts.html#gcloud-gke-credentials-py"><code class="docutils literal notranslate"><span class="pre">gcloud_gke_credentials.py</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/gcloud-lifecycle-scripts.html#gcloud-artifact-registry-login-py"><code class="docutils literal notranslate"><span class="pre">gcloud_artifact_registry_login.py</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/gcloud-lifecycle-scripts.html#gcloud-gcs-bucket-ensure-py"><code class="docutils literal notranslate"><span class="pre">gcloud_gcs_bucket_ensure.py</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/gcloud-lifecycle-scripts.html#write-a-custom-script">Write a custom script</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/gcloud-lifecycle-scripts.html#gcloudscript-reference"><code class="docutils literal notranslate"><span class="pre">GCloudScript</span></code> reference</a></li>
+</ul>
+</li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Skills:</span></p>
 <ul>
@@ -3351,7 +3422,7 @@
 <h2>Provisioners<a class="headerlink" href="#provisioners" title="Link to this heading"></a></h2>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">provisioners</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;provisioner_name&gt;</span>
-<span class="w">    </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform | ansible</span><span class="w">   </span><span class="c1"># IaC tool</span>
+<span class="w">    </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform | ansible | bicep</span><span class="w">   </span><span class="c1"># IaC tool</span>
 <span class="w">    </span><span class="nt">source</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">repository</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;repository_name&gt;</span><span class="w">    </span><span class="c1"># optional — omit for single-repo workspaces</span>
 <span class="w">      </span><span class="nt">source_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;path&gt;</span><span class="w">              </span><span class="c1"># path within the repo (or workspace root when repository is absent)</span>
@@ -3365,6 +3436,13 @@
 <span class="w">      </span><span class="nt">ssh_private_key_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;name&gt;</span><span class="w">   </span><span class="c1"># Ansible: secret key name in resolved_values.secrets</span>
 <span class="w">      </span><span class="nt">extra_vars</span><span class="p">:</span><span class="w">                      </span><span class="c1"># Ansible: extra -e variables</span>
 <span class="w">        </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">value</span>
+<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">resourceGroup</span><span class="w">             </span><span class="c1"># Bicep: resourceGroup (default) | subscription | managementGroup | tenant</span>
+<span class="w">      </span><span class="nt">resource_group</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;rg&gt;</span><span class="w">             </span><span class="c1"># Bicep: required when scope=resourceGroup</span>
+<span class="w">      </span><span class="nt">location</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;location&gt;</span><span class="w">             </span><span class="c1"># Bicep: required for subscription/managementGroup/tenant</span>
+<span class="w">      </span><span class="nt">management_group_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;mg-id&gt;</span><span class="w">     </span><span class="c1"># Bicep: required when scope=managementGroup</span>
+<span class="w">      </span><span class="nt">deployment_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata-infra</span><span class="w">    </span><span class="c1"># Bicep: ARM deployment name (default: strata-{stage})</span>
+<span class="w">      </span><span class="nt">parameters_file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">params.json</span><span class="w">     </span><span class="c1"># Bicep: parameters file relative to source_path</span>
+<span class="w">      </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Incremental</span><span class="w">                </span><span class="c1"># Bicep: Incremental (default) | Complete</span>
 <span class="w">    </span><span class="nt">output</span><span class="p">:</span><span class="w">                            </span><span class="c1"># Terraform only — controls build output files</span>
 <span class="w">      </span><span class="nt">format</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata | custom | script | none</span><span class="w">   </span><span class="c1"># default: strata</span>
 <span class="w">      </span><span class="nt">emits</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span><span class="w">                        </span><span class="c1"># categories to emit (omit = format defaults)</span>

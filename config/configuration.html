@@ -1652,10 +1652,42 @@
 <li class="toctree-l2"><a class="reference internal" href="#schema">Schema</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#providers">Providers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#topologies">Topologies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#layering-artifact-path-hierarchies">Layering — Artifact Path Hierarchies</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#layering-schemes">Layering Schemes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#layer-definition">Layer Definition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#artifact-path-resolution">Artifact Path Resolution</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#migration-from-layering-to-layerings">Migration from <code class="docutils literal notranslate"><span class="pre">layering</span></code> to <code class="docutils literal notranslate"><span class="pre">layerings</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#mutual-exclusion">Mutual Exclusion</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#example">Example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#configuration-schema-fields">Configuration Schema Fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#merge-behavior">Merge Behavior</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#validation">Validation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#path-convention-policy">Path Convention Policy</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#declaring-conventions">Declaring conventions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#enforcement-policy">Enforcement policy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#inline-convention-deploy-repo-mode">Inline convention (deploy-repo mode)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#validation-rule-types">Validation rule types</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#checkov-iac-security-policy">Checkov IaC Security Policy</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#declaring-the-integration">Declaring the integration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#enabling-the-policy">Enabling the policy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#how-it-works">How it works</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#severity-gate">Severity gate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#graceful-degradation">Graceful degradation</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#opa-policy">OPA Policy</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#installation">Installation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#declaring-the-policy">Declaring the policy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#writing-opa-rules">Writing OPA rules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#opa-input-document">OPA input document</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#mode-selection">Mode selection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id1">Graceful degradation</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#secret-stores">Secret Stores</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#github-github-actions-secrets"><code class="docutils literal notranslate"><span class="pre">github</span></code> — GitHub Actions secrets</a></li>
 </ul>
@@ -2599,6 +2631,7 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../guides/faq.html">Frequently Asked Questions</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-is-strata">What is strata?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
@@ -3196,6 +3229,44 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/cost-estimation.html#troubleshooting">Troubleshooting</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../guides/azure-lifecycle-scripts.html">Azure Lifecycle Scripts</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/azure-lifecycle-scripts.html#quick-start-use-a-built-in-script">Quick start — use a built-in script</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/azure-lifecycle-scripts.html#built-in-scripts">Built-in scripts</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/azure-lifecycle-scripts.html#azure-aks-credentials-py"><code class="docutils literal notranslate"><span class="pre">azure_aks_credentials.py</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/azure-lifecycle-scripts.html#azure-acr-login-py"><code class="docutils literal notranslate"><span class="pre">azure_acr_login.py</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/azure-lifecycle-scripts.html#azure-resource-group-ensure-py"><code class="docutils literal notranslate"><span class="pre">azure_resource_group_ensure.py</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/azure-lifecycle-scripts.html#write-a-custom-script">Write a custom script</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/azure-lifecycle-scripts.html#azurescript-reference"><code class="docutils literal notranslate"><span class="pre">AzureScript</span></code> reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/azure-lifecycle-scripts.html#environment-variables-in-all-lifecycle-scripts">Environment variables in all lifecycle scripts</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../guides/aws-lifecycle-scripts.html">AWS Lifecycle Scripts</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/aws-lifecycle-scripts.html#quick-start-use-a-built-in-script">Quick start — use a built-in script</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/aws-lifecycle-scripts.html#built-in-scripts">Built-in scripts</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/aws-lifecycle-scripts.html#aws-eks-credentials-py"><code class="docutils literal notranslate"><span class="pre">aws_eks_credentials.py</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/aws-lifecycle-scripts.html#aws-ecr-login-py"><code class="docutils literal notranslate"><span class="pre">aws_ecr_login.py</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/aws-lifecycle-scripts.html#aws-s3-bucket-ensure-py"><code class="docutils literal notranslate"><span class="pre">aws_s3_bucket_ensure.py</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/aws-lifecycle-scripts.html#write-a-custom-script">Write a custom script</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/aws-lifecycle-scripts.html#awsscript-reference"><code class="docutils literal notranslate"><span class="pre">AWSScript</span></code> reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/aws-lifecycle-scripts.html#environment-variables-in-all-lifecycle-scripts">Environment variables in all lifecycle scripts</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../guides/gcloud-lifecycle-scripts.html">GCP Lifecycle Scripts</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/gcloud-lifecycle-scripts.html#quick-start-use-a-built-in-script">Quick start — use a built-in script</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/gcloud-lifecycle-scripts.html#built-in-scripts">Built-in scripts</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/gcloud-lifecycle-scripts.html#gcloud-gke-credentials-py"><code class="docutils literal notranslate"><span class="pre">gcloud_gke_credentials.py</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/gcloud-lifecycle-scripts.html#gcloud-artifact-registry-login-py"><code class="docutils literal notranslate"><span class="pre">gcloud_artifact_registry_login.py</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/gcloud-lifecycle-scripts.html#gcloud-gcs-bucket-ensure-py"><code class="docutils literal notranslate"><span class="pre">gcloud_gcs_bucket_ensure.py</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/gcloud-lifecycle-scripts.html#write-a-custom-script">Write a custom script</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/gcloud-lifecycle-scripts.html#gcloudscript-reference"><code class="docutils literal notranslate"><span class="pre">GCloudScript</span></code> reference</a></li>
+</ul>
+</li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Skills:</span></p>
 <ul>
@@ -3299,6 +3370,146 @@
 </pre></div>
 </div>
 </section>
+<section id="layering-artifact-path-hierarchies">
+<h2>Layering — Artifact Path Hierarchies<a class="headerlink" href="#layering-artifact-path-hierarchies" title="Link to this heading"></a></h2>
+<p>Define how deployment artifacts are organized into a hierarchical path structure. Use layering when different deployment files need to be placed into different directories during the build process.</p>
+<section id="layering-schemes">
+<h3>Layering Schemes<a class="headerlink" href="#layering-schemes" title="Link to this heading"></a></h3>
+<p>Two formats are supported:</p>
+<p><strong>Single-scheme layering</strong> (<code class="docutils literal notranslate"><span class="pre">spec.layering</span></code> — deprecated, for backward compatibility):</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">layering</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zone</span>
+<span class="w">      </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer</span>
+<span class="w">      </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
+<span class="w">      </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">      </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dev</span>
+</pre></div>
+</div>
+<p>This creates a single layer scheme applied to all deployments. The artifact path is constructed by combining values from each layer in order, separated by <code class="docutils literal notranslate"><span class="pre">/</span></code>. For example, <code class="docutils literal notranslate"><span class="pre">zone:</span> <span class="pre">europe</span></code>, <code class="docutils literal notranslate"><span class="pre">customer:</span> <span class="pre">contoso</span></code>, <code class="docutils literal notranslate"><span class="pre">environment:</span> <span class="pre">prd</span></code> produces artifact path <code class="docutils literal notranslate"><span class="pre">europe/contoso/prd</span></code>.</p>
+<p><strong>Multi-scheme layering</strong> (<code class="docutils literal notranslate"><span class="pre">spec.layerings</span></code> — recommended):</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">layerings</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zone-tenant</span>
+<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zones/**</span>
+<span class="w">      </span><span class="nt">layers</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zone</span>
+<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer</span>
+<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
+<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">          </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dev</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">landscape-ring</span>
+<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">landscape/**</span>
+<span class="w">      </span><span class="nt">layers</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">landscape</span>
+<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ring</span>
+<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+<p>This declares multiple layer schemes. Each scheme has:</p>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">name</span></code></strong>: Identifier for the scheme</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">scope</span></code></strong>: Glob pattern matching deployment file paths (e.g., <code class="docutils literal notranslate"><span class="pre">zones/**</span></code>, <code class="docutils literal notranslate"><span class="pre">landscape/**</span></code>, <code class="docutils literal notranslate"><span class="pre">**</span></code>)</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">layers</span></code></strong>: Ordered list of layer definitions</p></li>
+</ul>
+<p>During deployment validation, the deployment file’s path is matched against schemes in order. The first matching scope wins, and that scheme’s layers are used to resolve the artifact path.</p>
+</section>
+<section id="layer-definition">
+<h3>Layer Definition<a class="headerlink" href="#layer-definition" title="Link to this heading"></a></h3>
+<p>Each layer entry has:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">str</span></code></p></td>
+<td><p>—</p></td>
+<td><p>Layer name (e.g., <code class="docutils literal notranslate"><span class="pre">zone</span></code>, <code class="docutils literal notranslate"><span class="pre">customer</span></code>, <code class="docutils literal notranslate"><span class="pre">ring</span></code>, <code class="docutils literal notranslate"><span class="pre">landscape</span></code>)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">required</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">bool</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">true</span></code></p></td>
+<td><p>Whether the deployment must provide a value for this layer</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">default</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">str</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">null</span></code></p></td>
+<td><p>Default value if no value is provided (only if <code class="docutils literal notranslate"><span class="pre">required:</span> <span class="pre">false</span></code>)</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Important:</strong> Layer names are arbitrary and must be unique within a scheme. The layer named <code class="docutils literal notranslate"><span class="pre">environment</span></code> no longer has special meaning — any valid layer can be the last layer in the hierarchy.</p>
+</section>
+<section id="artifact-path-resolution">
+<h3>Artifact Path Resolution<a class="headerlink" href="#artifact-path-resolution" title="Link to this heading"></a></h3>
+<p>When a deployment references a configuration file with layering:</p>
+<ol class="arabic simple">
+<li><p><strong>Scope matching</strong>: The deployment file’s relative path (from workspace root) is matched against all scheme scopes in order using glob pattern matching</p></li>
+<li><p><strong>First match wins</strong>: The first scheme whose scope matches the file path is selected</p></li>
+<li><p><strong>Value resolution</strong>: Layer values are extracted from the deployment’s <code class="docutils literal notranslate"><span class="pre">properties</span></code> field or use defaults</p></li>
+<li><p><strong>Path construction</strong>: The artifact path is built as <code class="docutils literal notranslate"><span class="pre">layer1_value/layer2_value/.../layerN_value</span></code></p></li>
+</ol>
+<p><strong>Example matching:</strong></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Deployment files:
+├── zones/europe/contoso/prd/deploy.yaml    ← matches scope: zones/**
+├── landscape/platform/ring2/deploy.yaml    ← matches scope: landscape/**
+└── shared/base.yaml                        ← no match; layering not applied
+</pre></div>
+</div>
+</section>
+<section id="migration-from-layering-to-layerings">
+<h3>Migration from <code class="docutils literal notranslate"><span class="pre">layering</span></code> to <code class="docutils literal notranslate"><span class="pre">layerings</span></code><a class="headerlink" href="#migration-from-layering-to-layerings" title="Link to this heading"></a></h3>
+<p>If you’re using the deprecated single-scheme <code class="docutils literal notranslate"><span class="pre">layering</span></code> format, migrate as follows:</p>
+<p><strong>Before:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">layering</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zone</span>
+<span class="w">      </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer</span>
+<span class="w">      </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
+<span class="w">      </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dev</span>
+</pre></div>
+</div>
+<p><strong>After:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">layerings</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;**&quot;</span><span class="w">  </span><span class="c1"># Matches all deployment files</span>
+<span class="w">      </span><span class="nt">layers</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zone</span>
+<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer</span>
+<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
+<span class="w">          </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dev</span>
+</pre></div>
+</div>
+<p>Wrap your existing <code class="docutils literal notranslate"><span class="pre">layering</span></code> list in a single <code class="docutils literal notranslate"><span class="pre">ScopedLayeringModel</span></code> with <code class="docutils literal notranslate"><span class="pre">scope:</span> <span class="pre">&quot;**&quot;</span></code> (catch-all). The <code class="docutils literal notranslate"><span class="pre">&quot;**&quot;</span></code> scope matches all files, so all deployments use that scheme — equivalent to the old single-scheme behavior.</p>
+</section>
+<section id="mutual-exclusion">
+<h3>Mutual Exclusion<a class="headerlink" href="#mutual-exclusion" title="Link to this heading"></a></h3>
+<p>A configuration cannot have both <code class="docutils literal notranslate"><span class="pre">spec.layering</span></code> and <code class="docutils literal notranslate"><span class="pre">spec.layerings</span></code> defined. The system enforces this with a validation error:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># ✗ INVALID — both formats present</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">layering</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">...</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">layerings</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">...</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+<p>Choose one format and remove the other.</p>
+</section>
+</section>
 <section id="example">
 <h2>Example<a class="headerlink" href="#example" title="Link to this heading"></a></h2>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">meta</span><span class="p">:</span>
@@ -3323,6 +3534,27 @@
 <span class="w">          </span><span class="nt">max_count</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">worker</span>
 <span class="w">          </span><span class="nt">min_count</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">  </span><span class="nt">layerings</span><span class="p">:</span>
+<span class="w">    </span><span class="c1"># Multi-tenant deployments with region isolation</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">regional-tenant</span>
+<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zones/**</span>
+<span class="w">      </span><span class="nt">layers</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zone</span>
+<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer</span>
+<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
+<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">          </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dev</span>
+
+<span class="w">    </span><span class="c1"># Ring-based deployments (canary → production)</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ring-promotion</span>
+<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">landscape/**</span>
+<span class="w">      </span><span class="nt">layers</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">landscape</span>
+<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ring</span>
+<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </pre></div>
 </div>
 </section>
@@ -3399,6 +3631,270 @@ Use <code class="docutils literal notranslate"><span class="pre">&quot;^(true|fa
 <li><p>Unique provider/topology names after merge</p></li>
 <li><p>Defined regions/resources when additional_* = false</p></li>
 </ul>
+</section>
+<section id="path-convention-policy">
+<h2>Path Convention Policy<a class="headerlink" href="#path-convention-policy" title="Link to this heading"></a></h2>
+<p>Declare directory structure conventions in <code class="docutils literal notranslate"><span class="pre">spec.paths</span></code>. A <code class="docutils literal notranslate"><span class="pre">path_convention</span></code> policy type
+enforces these at validation time.</p>
+<section id="declaring-conventions">
+<h3>Declaring conventions<a class="headerlink" href="#declaring-conventions" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">paths</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zone-deployment-tree</span>
+<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;zones/**&quot;</span><span class="w">                              </span><span class="c1"># files in this subtree are candidates</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;zones/{zone}/customers/{tenant}/{env}&quot;</span><span class="w"> </span><span class="c1"># {segment} captures one path part</span>
+<span class="w">      </span><span class="nt">validate</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">zone</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spec.zones[*].name</span><span class="w">                     </span><span class="c1"># captured value must be a declared zone</span>
+<span class="w">        </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;customers/{tenant}/tenant.yaml&quot;</span><span class="w">     </span><span class="c1"># file at this path must exist</span>
+<span class="w">        </span><span class="nt">env</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spec.environments[*].name</span><span class="w">               </span><span class="c1"># captured value must be a declared environment</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tenant-registry</span>
+<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;customers/**&quot;</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;customers/{tenant}&quot;</span>
+<span class="w">      </span><span class="nt">validate</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;customers/{tenant}/tenant.yaml&quot;</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">landscape-registry</span>
+<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;landscape/**&quot;</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;landscape/{landscape}&quot;</span>
+<span class="w">      </span><span class="nt">validate</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">landscape</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;landscape/{landscape}/landscape.yaml&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="enforcement-policy">
+<h3>Enforcement policy<a class="headerlink" href="#enforcement-policy" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">policies</span><span class="p">:</span>
+<span class="w">    </span><span class="c1"># Enforce all conventions</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">enforce-paths</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">path_convention</span>
+<span class="w">      </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">validate</span>
+<span class="w">      </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span>
+
+<span class="w">    </span><span class="c1"># Enforce specific conventions only</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">advisory-landscape</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">path_convention</span>
+<span class="w">      </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">validate</span>
+<span class="w">      </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">warn</span>
+<span class="w">      </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">conventions</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">landscape-registry</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+</section>
+<section id="inline-convention-deploy-repo-mode">
+<h3>Inline convention (deploy-repo mode)<a class="headerlink" href="#inline-convention-deploy-repo-mode" title="Link to this heading"></a></h3>
+<p>For repositories without a configuration model, declare the convention inline on the policy:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">policies</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deploy-layout</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">path_convention</span>
+<span class="w">    </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">validate</span>
+<span class="w">    </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span>
+<span class="w">    </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;deploy/**&quot;</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;deploy/{landscape}/{ring}&quot;</span>
+<span class="w">      </span><span class="nt">validate</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">landscape</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;deploy/{landscape}/landscape.yaml&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="validation-rule-types">
+<h3>Validation rule types<a class="headerlink" href="#validation-rule-types" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Rule syntax</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">spec.zones[*].name</span></code></p></td>
+<td><p>Captured value must appear in a field of the loaded ConfigurationModel</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">customers/{tenant}/tenant.yaml</span></code></p></td>
+<td><p>File at this path (relative to workspace root) must exist on disk</p></td>
+</tr>
+</tbody>
+</table>
+<p><code class="docutils literal notranslate"><span class="pre">spec.*</span></code> rules require <code class="docutils literal notranslate"><span class="pre">--deep</span></code> validation (configuration service must be available). File
+existence rules work in both surface and deep mode.</p>
+<p>Files that match the scope but not the pattern (e.g., shallower depth) are skipped — not a
+violation. Files that match no scope are not checked by that convention.</p>
+</section>
+</section>
+<section id="checkov-iac-security-policy">
+<h2>Checkov IaC Security Policy<a class="headerlink" href="#checkov-iac-security-policy" title="Link to this heading"></a></h2>
+<p>Run <a class="reference external" href="https://www.checkov.io">Checkov</a> against Terraform build artifacts during the <code class="docutils literal notranslate"><span class="pre">build</span></code> phase.
+Requires Checkov to be installed (<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">checkov</span></code>). Gracefully skipped when not available.</p>
+<section id="declaring-the-integration">
+<h3>Declaring the integration<a class="headerlink" href="#declaring-the-integration" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">integrations</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">checkov</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">checkov</span>
+<span class="w">      </span><span class="nt">capabilities</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">iac_security</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">      </span><span class="nt">validation</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">checkov --version</span>
+<span class="w">        </span><span class="nt">min_version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2.0.0&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="enabling-the-policy">
+<h3>Enabling the policy<a class="headerlink" href="#enabling-the-policy" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">policies</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform_security_baseline</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">checkov</span>
+<span class="w">      </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build</span>
+<span class="w">      </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Block</span><span class="nv"> </span><span class="s">builds</span><span class="nv"> </span><span class="s">with</span><span class="nv"> </span><span class="s">HIGH</span><span class="nv"> </span><span class="s">or</span><span class="nv"> </span><span class="s">CRITICAL</span><span class="nv"> </span><span class="s">Checkov</span><span class="nv"> </span><span class="s">findings&quot;</span>
+<span class="w">      </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">framework</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform</span><span class="w">          </span><span class="c1"># default: terraform</span>
+<span class="w">        </span><span class="nt">severity_gate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">high</span><span class="w">           </span><span class="c1"># critical|high|medium|low (default: high)</span>
+<span class="w">        </span><span class="nt">skip_checks</span><span class="p">:</span><span class="w">                  </span><span class="c1"># CKV IDs to suppress (false positives, accepted risks)</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CKV_AWS_1</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CKV_AWS_20</span>
+<span class="w">        </span><span class="nt">include_checks</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span><span class="w">            </span><span class="c1"># if set, run ONLY these checks (empty = run all)</span>
+<span class="w">        </span><span class="nt">custom_checks_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;.strata/checkov/custom/&quot;</span><span class="w">  </span><span class="c1"># optional: custom rule directory</span>
+<span class="w">        </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">120</span><span class="w">                  </span><span class="c1"># subprocess timeout in seconds (default: 120)</span>
+</pre></div>
+</div>
+</section>
+<section id="how-it-works">
+<h3>How it works<a class="headerlink" href="#how-it-works" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p>After Terraform artifacts are generated by <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code>, the policy engine finds the
+<code class="docutils literal notranslate"><span class="pre">terraform/</span></code> subdirectory under <code class="docutils literal notranslate"><span class="pre">build_path</span></code> (falling back to <code class="docutils literal notranslate"><span class="pre">build_path</span></code> itself if no
+subdirectory exists).</p></li>
+<li><p>Invokes: <code class="docutils literal notranslate"><span class="pre">checkov</span> <span class="pre">--directory</span> <span class="pre">&lt;terraform_dir&gt;</span> <span class="pre">--framework</span> <span class="pre">terraform</span> <span class="pre">--output</span> <span class="pre">json</span> <span class="pre">--compact</span></code></p></li>
+<li><p>Parses Checkov JSON output into <code class="docutils literal notranslate"><span class="pre">CheckovFinding</span></code> records with severity, resource, and file path.</p></li>
+<li><p>Applies <code class="docutils literal notranslate"><span class="pre">severity_gate</span></code> — findings at or above the gate level become policy violations.</p></li>
+</ol>
+</section>
+<section id="severity-gate">
+<h3>Severity gate<a class="headerlink" href="#severity-gate" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p><code class="docutils literal notranslate"><span class="pre">severity_gate</span></code></p></th>
+<th class="head"><p>Fails on</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">critical</span></code></p></td>
+<td><p>CRITICAL only</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">high</span></code> (default)</p></td>
+<td><p>HIGH, CRITICAL</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">medium</span></code></p></td>
+<td><p>MEDIUM, HIGH, CRITICAL</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">low</span></code></p></td>
+<td><p>LOW, MEDIUM, HIGH, CRITICAL</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="graceful-degradation">
+<h3>Graceful degradation<a class="headerlink" href="#graceful-degradation" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Checkov not installed → policy skips (passes), warning logged</p></li>
+<li><p>No <code class="docutils literal notranslate"><span class="pre">.tf</span></code> files found in build path → policy skips</p></li>
+<li><p>Checkov subprocess fails → policy skips (non-fatal, never blocks build)</p></li>
+</ul>
+</section>
+</section>
+<section id="opa-policy">
+<h2>OPA Policy<a class="headerlink" href="#opa-policy" title="Link to this heading"></a></h2>
+<p>Evaluate <a class="reference external" href="https://www.openpolicyagent.org">Open Policy Agent</a> Rego rules against the
+deployment context. Supports two modes: HTTP REST to a running OPA server (fast), or
+<code class="docutils literal notranslate"><span class="pre">opa</span> <span class="pre">eval</span></code> CLI as a stateless fallback (no server required).</p>
+<p>strata does <strong>not</strong> manage the OPA server lifecycle — that is the operator’s responsibility.</p>
+<section id="installation">
+<h3>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>brew<span class="w"> </span>install<span class="w"> </span>opa<span class="w">          </span><span class="c1"># macOS</span>
+<span class="c1"># or: https://www.openpolicyagent.org/docs/latest/#1-download-opa</span>
+</pre></div>
+</div>
+</section>
+<section id="declaring-the-policy">
+<h3>Declaring the policy<a class="headerlink" href="#declaring-the-policy" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">policies</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zone_enforcement</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">opa</span>
+<span class="w">      </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build</span>
+<span class="w">      </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span>
+<span class="w">      </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">rule</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;data.strata.zones.deny&quot;</span><span class="w">      </span><span class="c1"># OPA rule path to evaluate</span>
+<span class="w">        </span><span class="nt">policy_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;.strata/policies/&quot;</span><span class="w">     </span><span class="c1"># .rego files directory (CLI mode)</span>
+<span class="w">        </span><span class="nt">endpoint</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;http://localhost:8181&quot;</span><span class="w">   </span><span class="c1"># OPA server URL (HTTP mode, optional)</span>
+<span class="w">        </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
+</pre></div>
+</div>
+</section>
+<section id="writing-opa-rules">
+<h3>Writing OPA rules<a class="headerlink" href="#writing-opa-rules" title="Link to this heading"></a></h3>
+<p>Rules must return a <strong>set of violation strings</strong> named <code class="docutils literal notranslate"><span class="pre">deny</span></code>:</p>
+<div class="highlight-rego notranslate"><div class="highlight"><pre><span></span><span class="k">package</span><span class="w"> </span><span class="n">strata</span><span class="p">.</span><span class="n">zones</span>
+
+<span class="n">deny</span><span class="w"> </span><span class="k">contains</span><span class="w"> </span><span class="n">msg</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">resource</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nb">input</span><span class="p">.</span><span class="n">platform</span><span class="p">.</span><span class="n">spec</span><span class="p">.</span><span class="n">resources</span><span class="p">[</span><span class="n">_</span><span class="p">]</span>
+<span class="w">    </span><span class="k">not</span><span class="w"> </span><span class="n">resource</span><span class="p">.</span><span class="n">properties</span><span class="p">.</span><span class="n">region</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="nb">input</span><span class="p">.</span><span class="n">configuration</span><span class="p">.</span><span class="n">spec</span><span class="p">.</span><span class="n">allowed_regions</span>
+<span class="w">    </span><span class="n">msg</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">sprintf</span><span class="p">(</span><span class="s2">&quot;Resource &#39;%s&#39; in disallowed region &#39;%s&#39;&quot;</span><span class="p">,</span>
+<span class="w">                   </span><span class="p">[</span><span class="n">resource</span><span class="p">.</span><span class="n">meta</span><span class="p">.</span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="n">resource</span><span class="p">.</span><span class="n">properties</span><span class="p">.</span><span class="n">region</span><span class="p">])</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="opa-input-document">
+<h3>OPA input document<a class="headerlink" href="#opa-input-document" title="Link to this heading"></a></h3>
+<p>strata sends a JSON document containing available context:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+  <span class="s2">&quot;phase&quot;</span><span class="p">:</span> <span class="s2">&quot;build&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;platform&quot;</span><span class="p">:</span> <span class="p">{</span> <span class="o">...</span> <span class="p">},</span>       <span class="o">//</span> <span class="n">platform</span> <span class="n">artifact</span> <span class="p">(</span><span class="k">if</span> <span class="n">available</span><span class="p">)</span>
+  <span class="s2">&quot;configuration&quot;</span><span class="p">:</span> <span class="p">{</span> <span class="o">...</span> <span class="p">},</span>  <span class="o">//</span> <span class="n">configuration</span> <span class="n">model</span> <span class="p">(</span><span class="k">if</span> <span class="n">available</span><span class="p">)</span>
+  <span class="s2">&quot;deployment&quot;</span><span class="p">:</span> <span class="p">{</span> <span class="o">...</span> <span class="p">},</span>     <span class="o">//</span> <span class="n">deployment</span> <span class="n">model</span> <span class="p">(</span><span class="k">if</span> <span class="n">available</span><span class="p">)</span>
+  <span class="s2">&quot;plan_data&quot;</span><span class="p">:</span> <span class="p">{</span> <span class="o">...</span> <span class="p">},</span>      <span class="o">//</span> <span class="n">terraform</span> <span class="n">plan</span> <span class="n">JSON</span> <span class="p">(</span><span class="k">if</span> <span class="n">available</span><span class="p">)</span>
+  <span class="s2">&quot;work_path&quot;</span><span class="p">:</span> <span class="s2">&quot;/workspace&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;build_path&quot;</span><span class="p">:</span> <span class="s2">&quot;/workspace/.strata/build&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="mode-selection">
+<h3>Mode selection<a class="headerlink" href="#mode-selection" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p><code class="docutils literal notranslate"><span class="pre">endpoint</span></code> / <code class="docutils literal notranslate"><span class="pre">OPA_ENDPOINT</span></code></p></th>
+<th class="head"><p>Behavior</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Set and server reachable</p></td>
+<td><p>HTTP mode: <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/v1/data/{rule}</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Set but server unreachable</p></td>
+<td><p>Falls back to CLI mode</p></td>
+</tr>
+<tr class="row-even"><td><p>Not set</p></td>
+<td><p>CLI mode: <code class="docutils literal notranslate"><span class="pre">opa</span> <span class="pre">eval</span> <span class="pre">--stdin-input</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Not set and <code class="docutils literal notranslate"><span class="pre">opa</span></code> not installed</p></td>
+<td><p>Policy skips (passes), warning logged</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id1">
+<h3>Graceful degradation<a class="headerlink" href="#id1" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>OPA not installed and no server configured → policy skips (passes), warning logged</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">policy_dir</span></code> not found → policy skips</p></li>
+<li><p>Server unreachable → falls back to CLI mode</p></li>
+<li><p>Rule returns empty set or false → pass (no violations)</p></li>
+</ul>
+</section>
 </section>
 <section id="secret-stores">
 <h2>Secret Stores<a class="headerlink" href="#secret-stores" title="Link to this heading"></a></h2>

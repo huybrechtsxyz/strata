@@ -1652,10 +1652,42 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/configuration.html#schema">Schema</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/configuration.html#providers">Providers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/configuration.html#topologies">Topologies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/configuration.html#layering-artifact-path-hierarchies">Layering — Artifact Path Hierarchies</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#layering-schemes">Layering Schemes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#layer-definition">Layer Definition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#artifact-path-resolution">Artifact Path Resolution</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#migration-from-layering-to-layerings">Migration from <code class="docutils literal notranslate"><span class="pre">layering</span></code> to <code class="docutils literal notranslate"><span class="pre">layerings</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#mutual-exclusion">Mutual Exclusion</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../config/configuration.html#example">Example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/configuration.html#configuration-schema-fields">Configuration Schema Fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/configuration.html#merge-behavior">Merge Behavior</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/configuration.html#validation">Validation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/configuration.html#path-convention-policy">Path Convention Policy</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#declaring-conventions">Declaring conventions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#enforcement-policy">Enforcement policy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#inline-convention-deploy-repo-mode">Inline convention (deploy-repo mode)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#validation-rule-types">Validation rule types</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/configuration.html#checkov-iac-security-policy">Checkov IaC Security Policy</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#declaring-the-integration">Declaring the integration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#enabling-the-policy">Enabling the policy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#how-it-works">How it works</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#severity-gate">Severity gate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#graceful-degradation">Graceful degradation</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/configuration.html#opa-policy">OPA Policy</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#installation">Installation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#declaring-the-policy">Declaring the policy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#writing-opa-rules">Writing OPA rules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#opa-input-document">OPA input document</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#mode-selection">Mode selection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#id1">Graceful degradation</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../config/configuration.html#secret-stores">Secret Stores</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#github-github-actions-secrets"><code class="docutils literal notranslate"><span class="pre">github</span></code> — GitHub Actions secrets</a></li>
 </ul>
@@ -2599,6 +2631,7 @@
 </ul>
 </li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Frequently Asked Questions</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#what-is-strata">What is strata?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
@@ -3196,6 +3229,44 @@
 <li class="toctree-l2"><a class="reference internal" href="cost-estimation.html#troubleshooting">Troubleshooting</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="azure-lifecycle-scripts.html">Azure Lifecycle Scripts</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="azure-lifecycle-scripts.html#quick-start-use-a-built-in-script">Quick start — use a built-in script</a></li>
+<li class="toctree-l2"><a class="reference internal" href="azure-lifecycle-scripts.html#built-in-scripts">Built-in scripts</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="azure-lifecycle-scripts.html#azure-aks-credentials-py"><code class="docutils literal notranslate"><span class="pre">azure_aks_credentials.py</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="azure-lifecycle-scripts.html#azure-acr-login-py"><code class="docutils literal notranslate"><span class="pre">azure_acr_login.py</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="azure-lifecycle-scripts.html#azure-resource-group-ensure-py"><code class="docutils literal notranslate"><span class="pre">azure_resource_group_ensure.py</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="azure-lifecycle-scripts.html#write-a-custom-script">Write a custom script</a></li>
+<li class="toctree-l2"><a class="reference internal" href="azure-lifecycle-scripts.html#azurescript-reference"><code class="docutils literal notranslate"><span class="pre">AzureScript</span></code> reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="azure-lifecycle-scripts.html#environment-variables-in-all-lifecycle-scripts">Environment variables in all lifecycle scripts</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="aws-lifecycle-scripts.html">AWS Lifecycle Scripts</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="aws-lifecycle-scripts.html#quick-start-use-a-built-in-script">Quick start — use a built-in script</a></li>
+<li class="toctree-l2"><a class="reference internal" href="aws-lifecycle-scripts.html#built-in-scripts">Built-in scripts</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="aws-lifecycle-scripts.html#aws-eks-credentials-py"><code class="docutils literal notranslate"><span class="pre">aws_eks_credentials.py</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="aws-lifecycle-scripts.html#aws-ecr-login-py"><code class="docutils literal notranslate"><span class="pre">aws_ecr_login.py</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="aws-lifecycle-scripts.html#aws-s3-bucket-ensure-py"><code class="docutils literal notranslate"><span class="pre">aws_s3_bucket_ensure.py</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="aws-lifecycle-scripts.html#write-a-custom-script">Write a custom script</a></li>
+<li class="toctree-l2"><a class="reference internal" href="aws-lifecycle-scripts.html#awsscript-reference"><code class="docutils literal notranslate"><span class="pre">AWSScript</span></code> reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="aws-lifecycle-scripts.html#environment-variables-in-all-lifecycle-scripts">Environment variables in all lifecycle scripts</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="gcloud-lifecycle-scripts.html">GCP Lifecycle Scripts</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="gcloud-lifecycle-scripts.html#quick-start-use-a-built-in-script">Quick start — use a built-in script</a></li>
+<li class="toctree-l2"><a class="reference internal" href="gcloud-lifecycle-scripts.html#built-in-scripts">Built-in scripts</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="gcloud-lifecycle-scripts.html#gcloud-gke-credentials-py"><code class="docutils literal notranslate"><span class="pre">gcloud_gke_credentials.py</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="gcloud-lifecycle-scripts.html#gcloud-artifact-registry-login-py"><code class="docutils literal notranslate"><span class="pre">gcloud_artifact_registry_login.py</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="gcloud-lifecycle-scripts.html#gcloud-gcs-bucket-ensure-py"><code class="docutils literal notranslate"><span class="pre">gcloud_gcs_bucket_ensure.py</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="gcloud-lifecycle-scripts.html#write-a-custom-script">Write a custom script</a></li>
+<li class="toctree-l2"><a class="reference internal" href="gcloud-lifecycle-scripts.html#gcloudscript-reference"><code class="docutils literal notranslate"><span class="pre">GCloudScript</span></code> reference</a></li>
+</ul>
+</li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Skills:</span></p>
 <ul>
@@ -3247,6 +3318,38 @@
              
   <section id="frequently-asked-questions">
 <h1>Frequently Asked Questions<a class="headerlink" href="#frequently-asked-questions" title="Link to this heading"></a></h1>
+<section id="what-timestamp-format-does-strata-use">
+<h2>What timestamp format does strata use?<a class="headerlink" href="#what-timestamp-format-does-strata-use" title="Link to this heading"></a></h2>
+<p>All timestamps in strata’s JSON output, artifact files, and audit logs use <strong>ISO 8601 with an explicit UTC offset</strong>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="mi">2026</span><span class="o">-</span><span class="mi">07</span><span class="o">-</span><span class="mi">20</span><span class="n">T14</span><span class="p">:</span><span class="mi">30</span><span class="p">:</span><span class="mf">00.123456</span><span class="o">+</span><span class="mi">00</span><span class="p">:</span><span class="mi">00</span>
+</pre></div>
+</div>
+<p>When strata displays timestamps in console output (not <code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">json</span></code>) it uses a shorter human-readable form:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="mi">2026</span><span class="o">-</span><span class="mi">07</span><span class="o">-</span><span class="mi">20</span> <span class="mi">14</span><span class="p">:</span><span class="mi">30</span><span class="p">:</span><span class="mi">00</span> <span class="n">UTC</span>
+</pre></div>
+</div>
+<p><strong>For <code class="docutils literal notranslate"><span class="pre">--since</span></code> arguments</strong> (e.g. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">audit</span> <span class="pre">list</span> <span class="pre">--since</span> <span class="pre">...</span></code>) strata accepts:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Format</p></th>
+<th class="head"><p>Example</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Full ISO 8601 with offset</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">2026-07-20T14:30:00+00:00</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>ISO 8601 with <code class="docutils literal notranslate"><span class="pre">Z</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">2026-07-20T14:30:00Z</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Date only (interpreted as <code class="docutils literal notranslate"><span class="pre">00:00:00</span> <span class="pre">UTC</span></code>)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">2026-07-20</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>Bare datetimes without a timezone (e.g. <code class="docutils literal notranslate"><span class="pre">2026-07-20T14:30:00</span></code>) are <strong>rejected</strong> — strata will ask for an explicit offset.</p>
+</section>
+<hr class="docutils" />
 <section id="what-is-strata">
 <h2>What is strata?<a class="headerlink" href="#what-is-strata" title="Link to this heading"></a></h2>
 <p>strata is a Python CLI tool that lets you describe your entire infrastructure stack — environments, deployments, secrets, variables — in plain YAML files, then orchestrates Terraform, Helm, Ansible, and Docker Compose to bring that description to life.</p>
