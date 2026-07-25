@@ -88,7 +88,8 @@ class SbomBuildCommand(BaseBuildCommand):
                 if not self._execute_sbom_build():
                     if self._is_console_output():
                         click.echo("\n❌  SBOM build failed")
-                    return False                if self._ai:
+                    return False
+                if self._ai:
                     self._run_ai_sbom_analysis()
             self._output_data.update(
                 {

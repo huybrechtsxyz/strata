@@ -32,6 +32,5 @@ Required fields:
             violations_text = violations_text[:8000] + "\n... [truncated]"
 
         return (
-            f"Deployment: {deployment}\n\n"
-            f"Policy violations ({len(violations)} total):\n```json\n{violations_text}\n```"
+            f"Deployment: {deployment}\n\nPolicy violations ({len(violations)} total):\n```json\n{violations_text}\n```"
         )

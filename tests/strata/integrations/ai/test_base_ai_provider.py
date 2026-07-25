@@ -25,8 +25,12 @@ class _ConcreteProvider(BaseAiProvider):
 class TestAiResponse:
     def test_total_tokens(self):
         r = AiResponse(
-            content="x", provider="p", model="m",
-            prompt_tokens=30, completion_tokens=10, duration_ms=50,
+            content="x",
+            provider="p",
+            model="m",
+            prompt_tokens=30,
+            completion_tokens=10,
+            duration_ms=50,
         )
         assert r.total_tokens == 40
 
@@ -35,7 +39,9 @@ class TestAiResponse:
         assert r.cached is False
 
     def test_cached_flag(self):
-        r = AiResponse(content="x", provider="p", model="m", prompt_tokens=0, completion_tokens=0, duration_ms=0, cached=True)
+        r = AiResponse(
+            content="x", provider="p", model="m", prompt_tokens=0, completion_tokens=0, duration_ms=0, cached=True
+        )
         assert r.cached is True
 
 

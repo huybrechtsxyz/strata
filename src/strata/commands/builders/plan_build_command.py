@@ -702,11 +702,6 @@ class PlanBuildCommand(BaseBuildCommand):
                     )
 
         return result
-            "prompt_tokens": response.prompt_tokens,
-            "completion_tokens": response.completion_tokens,
-            "duration_ms": response.duration_ms,
-            "cached": response.cached,
-        }
 
     def _print_ai_analysis(self, ai_analysis: Dict[str, Any]) -> None:
         import json as _json

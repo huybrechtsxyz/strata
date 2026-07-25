@@ -49,6 +49,7 @@ class TestOllamaProviderComplete:
 
     def test_raises_on_request_error(self):
         import requests as _req
+
         p = OllamaProvider()
         with patch("strata.integrations.ai.ollama_provider.requests.post", side_effect=_req.ConnectionError("refused")):
             with pytest.raises(RuntimeError, match="Ollama request failed"):

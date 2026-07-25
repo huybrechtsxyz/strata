@@ -35,8 +35,4 @@ Required fields:
         if len(report_text) > 8000:
             report_text = report_text[:8000] + "\n... [truncated]"
 
-        return (
-            f"Deployment: {deployment}\n"
-            f"Environment: {environment}\n\n"
-            f"Drift report:\n```json\n{report_text}\n```"
-        )
+        return f"Deployment: {deployment}\nEnvironment: {environment}\n\nDrift report:\n```json\n{report_text}\n```"

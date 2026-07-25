@@ -492,7 +492,6 @@ class RunDeployCommand(BaseDeployCommand):
           ``--force`` is not set and stdin is a TTY, prompt the operator. Falls
           back to blocking when running non-interactively (CI mode).
         """
-        import json as _json
         import sys
 
         import click as _click
@@ -502,15 +501,11 @@ class RunDeployCommand(BaseDeployCommand):
         integration = find_ai_integration(self._configuration_service)
         if integration is None or not integration.ensure_available()[0]:
             if self._strict_ai_review:
-                self._errors.append(
-                    "--strict-ai-review set but no reachable ai_agent integration configured"
-                )
+                self._errors.append("--strict-ai-review set but no reachable ai_agent integration configured")
                 return False
             return True  # advisory-only: missing provider is non-fatal
 
-        deployment_name = (
-            str(self._deployment_service.model.meta.name) if self._deployment_service else "unknown"
-        )
+        deployment_name = str(self._deployment_service.model.meta.name) if self._deployment_service else "unknown"
         context = {
             "deployment": deployment_name,
             "stage": str(stage.name),
@@ -532,9 +527,7 @@ class RunDeployCommand(BaseDeployCommand):
 
         risk_str, parsed = _parse_ai_risk(response.content)
         risk_level = self._RISK_LEVELS.get(risk_str, 0)
-        risk_icon = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🟠", "CRITICAL": "🔴"}.get(
-            risk_str.upper(), "⚪"
-        )
+        risk_icon = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🟠", "CRITICAL": "🔴"}.get(risk_str.upper(), "⚪")
 
         if self._is_console_output():
             _click.echo(f"\n  {risk_icon}  AI Risk: {risk_str.upper()}  —  {parsed.get('summary', '')}")
@@ -594,7 +587,8 @@ class RunDeployCommand(BaseDeployCommand):
             self._errors.append(f"Deployment cancelled by operator after AI risk review ({risk_str.upper()})")
         return confirmed
 
-    def _run_ai_failure_diagnosis(self, error_output: str, step: str, stage_name: str) -> None:        """Call AI failure diagnosis after a deployer step fails."""
+    def _run_ai_failure_diagnosis(self, error_output: str, step: str, stage_name: str) -> None:
+        """Call AI failure diagnosis after a deployer step fails."""
         import click as _click
 
         from strata.integrations.ai import find_ai_integration
@@ -603,9 +597,7 @@ class RunDeployCommand(BaseDeployCommand):
         if integration is None or not integration.ensure_available()[0]:
             return
 
-        deployment_name = (
-            str(self._deployment_service.model.meta.name) if self._deployment_service else "unknown"
-        )
+        deployment_name = str(self._deployment_service.model.meta.name) if self._deployment_service else "unknown"
         context = {
             "deployment": deployment_name,
             "stage": stage_name,

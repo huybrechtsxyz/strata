@@ -183,9 +183,7 @@ class AiAgentIntegration(BaseIntegration):
         cache = self._get_cache(work_path) if cacheable else None
         content_hash: str = ""
         if cache is not None:
-            from strata.integrations.ai.cache import AiResponseCache as _C
-
-            content_hash = _C.content_hash(user_prompt)
+            content_hash = AiResponseCache.content_hash(user_prompt)
             cached = cache.get(prompt_version, content_hash, self._model_name)
             if cached is not None:
                 logger.debug("ai_cache_hit", hook=hook)

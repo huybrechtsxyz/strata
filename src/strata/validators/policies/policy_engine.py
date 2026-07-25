@@ -62,6 +62,7 @@ class PolicyEngine:
 
     def _create(self, policy_model: PolicyModel) -> BasePolicy:
         """Dispatch policy type to its concrete implementation."""
+        from strata.validators.policies.ai_review_policy import AiReviewPolicy
         from strata.validators.policies.checkov_policy import CheckovPolicy
         from strata.validators.policies.cost_threshold_policy import CostThresholdPolicy
         from strata.validators.policies.cve_max_severity_policy import CveMaxSeverityPolicy
@@ -78,7 +79,6 @@ class PolicyEngine:
         from strata.validators.policies.sbom_pinned_versions_policy import SbomPinnedVersionsPolicy
         from strata.validators.policies.script_policy import ScriptPolicy
         from strata.validators.policies.tenant_zone_policy import TenantZonePolicy
-        from strata.validators.policies.ai_review_policy import AiReviewPolicy
 
         _builtin = {
             "tenant_zone": TenantZonePolicy,
