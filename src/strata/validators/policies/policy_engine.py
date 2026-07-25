@@ -78,6 +78,7 @@ class PolicyEngine:
         from strata.validators.policies.sbom_pinned_versions_policy import SbomPinnedVersionsPolicy
         from strata.validators.policies.script_policy import ScriptPolicy
         from strata.validators.policies.tenant_zone_policy import TenantZonePolicy
+        from strata.validators.policies.ai_review_policy import AiReviewPolicy
 
         _builtin = {
             "tenant_zone": TenantZonePolicy,
@@ -96,6 +97,7 @@ class PolicyEngine:
             "checkov": CheckovPolicy,
             "opa": OPAPolicy,
             "path_convention": PathConventionPolicy,
+            "ai_review": AiReviewPolicy,
         }
 
         policy_class = _builtin.get(policy_model.type) or self._custom_types.get(policy_model.type)

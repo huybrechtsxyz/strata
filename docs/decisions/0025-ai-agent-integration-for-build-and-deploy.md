@@ -1,6 +1,6 @@
 # AI agent integration for build and deploy workflows
 
-- Status: proposed
+- Status: in progress
 - Date: 2026-07-07
 
 ## Context and Problem Statement
@@ -120,7 +120,7 @@ src/vscode/src/providers/
   └── aiPromptBuilder.ts           # Builds prompts from workspace context; reads .strata/prompts/
 data/
   └── prompts/
-        └── olan_review.py    # Terraform plan analysis prompt (built-in)
+        └── plan_review.py    # Terraform plan analysis prompt (built-in)
         ├── failure_diagnosis.py
         ├── sbom_analysis.py
         ├── drift_explanation.py
@@ -409,7 +409,9 @@ This lets teams inject project-specific context — naming conventions, approved
 
 - `OpenAiProvider` (OpenAI + Azure OpenAI)
 - `AnthropicProvider`
-- Response caching
+- `AzureCliProvider` — acquires bearer token via `az account get-access-token`; reuses existing Azure CLI integration
+- `secret_store` auth resolution — delegates to `SecretStoreType` path (Key Vault, Bitwarden, Vault, Infisical)
+- Response caching (`.strata/cache/ai/`)
 - Token budget tracking
 
 ### Phase 3 — Full Lifecycle Coverage
@@ -424,12 +426,14 @@ This lets teams inject project-specific context — naming conventions, approved
 
 - `ai_review` policy type in the policy engine
 - Risk-score-based deploy gating
-- `--strict-ai-review` flag for CI/CD
-- Interactive confirmation flow for high-risk plans
+- `--strict-ai-review [THRESHOLD]` on `build plan` and `deploy run` — fails non-interactively when AI risk ≥ threshold; no policy declaration required
+- Interactive confirmation flow — prompts operator before apply when risk ≥ high and `--force` is not set; auto-blocks in CI (non-TTY) mode
 
-### Phase 5 — VS Code Chat Participant AI Commands
+### Phase 5 — VS Code Chat Participant AI Commands _(parallel track — can start after Phase 1 interface is stable)_
 
 Extend the existing `@strata` chat participant (`src/vscode/src/providers/strataChatParticipant.ts`) with AI-powered slash commands that surface `AiAgentIntegration` analysis directly in the VS Code chat UX.
+
+**Implemented.** Three new slash commands registered in `package.json` and handled in `strataChatParticipant.ts`:
 
 #### New commands
 

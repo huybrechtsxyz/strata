@@ -24,11 +24,12 @@
 
 import * as vscode from 'vscode';
 import type { StrataClient, WorkspaceStatus, ValidationResult, DriftData } from '../strataClient';
+import { AiPromptBuilder } from './aiPromptBuilder';
 
 const PARTICIPANT_ID = 'strata.chat';
 
 /** Slash-command metadata registered in package.json `chatParticipants[].commands`. */
-type SlashCommand = 'status' | 'validate' | 'guide' | 'build' | 'deploy' | 'stage' | 'values' | 'drift' | 'repos' | 'promote' | 'versions';
+type SlashCommand = 'status' | 'validate' | 'guide' | 'build' | 'deploy' | 'stage' | 'values' | 'drift' | 'repos' | 'promote' | 'versions' | 'review' | 'diagnose' | 'sbom';
 
 export class StrataChatParticipant implements vscode.Disposable {
     private _participant: vscode.ChatParticipant | undefined;
@@ -99,6 +100,12 @@ export class StrataChatParticipant implements vscode.Disposable {
                     return await this._handlePromote(request, response, token);
                 case 'versions':
                     return await this._handleVersions(request, response, token);
+                case 'review':
+                    return await this._handleReview(request, response, token);
+                case 'diagnose':
+                    return await this._handleDiagnose(request, response, token);
+                case 'sbom':
+                    return await this._handleSbom(request, response, token);
                 default:
                     return await this._handleFreeform(request, response, token);
             }
@@ -617,16 +624,210 @@ export class StrataChatParticipant implements vscode.Disposable {
         }
     }
 
+    // ── /review ────────────────────────────────────────────────────────────────
+
+    private async _handleReview(
+        request: vscode.ChatRequest,
+        response: vscode.ChatResponseStream,
+        token: vscode.CancellationToken,
+    ): Promise<vscode.ChatResult> {
+        if (!this._client) {
+            response.markdown('Strata CLI is not available.');
+            return { errorDetails: { message: 'CLI not available' } };
+        }
+
+        const filePath = this._resolveFilePath(request.prompt);
+        if (!filePath) {
+            response.markdown('**Usage:** `@strata /review [deploy-file.yaml]`\n\nNo deployment file specified and no active deployment found.');
+            return { errorDetails: { message: 'No deployment file' } };
+        }
+
+        response.progress('Running terraform plan…');
+
+        let plan;
+        try {
+            plan = await this._client.getBuildPlan(filePath);
+        } catch (err) {
+            response.markdown(`**Plan failed:** ${err instanceof Error ? err.message : String(err)}\n\n`);
+            response.markdown('Run `strata build run` first to ensure artifacts are built.\n');
+            response.button({ title: '🔨 Build', command: 'strata.buildRun', arguments: [filePath] });
+            return { errorDetails: { message: String(err) } };
+        }
+
+        response.progress('Analysing plan with AI…');
+
+        const builder = new AiPromptBuilder(this._client['workPath'] as string);
+        const systemPrompt = await builder.systemPrompt('plan_review');
+        const userPrompt = builder.buildPlanUserPrompt(plan, request.prompt || undefined);
+
+        const messages = [
+            vscode.LanguageModelChatMessage.User(
+                `${systemPrompt}\n\n---\n\n${userPrompt}`,
+            ),
+        ];
+
+        try {
+            const chatResponse = await request.model.sendRequest(messages, {}, token);
+            for await (const fragment of chatResponse.text) {
+                response.markdown(fragment);
+            }
+        } catch (err) {
+            response.markdown(`**AI analysis unavailable:** ${err instanceof Error ? err.message : String(err)}\n\n`);
+            response.markdown(`Plan ran successfully. ${plan.terraform_plan.length} stage(s) planned.\n`);
+        }
+
+        response.button({ title: '🚀 Deploy', command: 'strata.deployRun', arguments: [filePath] });
+        return { metadata: { command: 'review', filePath } };
+    }
+
+    // ── /diagnose ──────────────────────────────────────────────────────────────
+
+    private async _handleDiagnose(
+        request: vscode.ChatRequest,
+        response: vscode.ChatResponseStream,
+        token: vscode.CancellationToken,
+    ): Promise<vscode.ChatResult> {
+        if (!this._client) {
+            response.markdown('Strata CLI is not available.');
+            return { errorDetails: { message: 'CLI not available' } };
+        }
+
+        const filePath = this._resolveFilePath(request.prompt);
+        response.progress('Loading deployment history…');
+
+        let entries;
+        try {
+            entries = await this._client.getAuditChanges(5);
+        } catch (err) {
+            response.markdown(`**Could not load audit history:** ${err instanceof Error ? err.message : String(err)}\n\n`);
+            response.markdown('Run `strata deploy run` first to create a deployment record.\n');
+            return { errorDetails: { message: String(err) } };
+        }
+
+        const failures = entries.filter(e => !e.success);
+        if (failures.length === 0) {
+            response.markdown('✅ **No failed deployments found** in recent history.\n\n');
+            response.markdown('All recent deployments completed successfully.\n');
+            return { metadata: { command: 'diagnose' } };
+        }
+
+        const last = failures[0];
+        response.progress('Diagnosing failure with AI…');
+
+        const builder = new AiPromptBuilder(this._client['workPath'] as string);
+        const systemPrompt = await builder.systemPrompt('failure_diagnosis');
+        const userPrompt = builder.diagnosisUserPrompt(last, request.prompt || undefined);
+
+        const messages = [
+            vscode.LanguageModelChatMessage.User(
+                `${systemPrompt}\n\n---\n\n${userPrompt}`,
+            ),
+        ];
+
+        try {
+            const chatResponse = await request.model.sendRequest(messages, {}, token);
+            for await (const fragment of chatResponse.text) {
+                response.markdown(fragment);
+            }
+        } catch (err) {
+            response.markdown(`**AI analysis unavailable:** ${err instanceof Error ? err.message : String(err)}\n\n`);
+            response.markdown(`Last failure: **${last.deployment}** at ${last.timestamp}\n`);
+            response.markdown(`Failed stages: ${last.stages.filter(s => !s.success).map(s => s.name).join(', ')}\n`);
+        }
+
+        if (filePath) {
+            response.button({ title: '🔄 Retry Deploy', command: 'strata.deployRun', arguments: [filePath] });
+        }
+        return { metadata: { command: 'diagnose' } };
+    }
+
+    // ── /sbom ──────────────────────────────────────────────────────────────────
+
+    private async _handleSbom(
+        request: vscode.ChatRequest,
+        response: vscode.ChatResponseStream,
+        token: vscode.CancellationToken,
+    ): Promise<vscode.ChatResult> {
+        if (!this._client) {
+            response.markdown('Strata CLI is not available.');
+            return { errorDetails: { message: 'CLI not available' } };
+        }
+
+        const filePath = this._resolveFilePath(request.prompt);
+        if (!filePath) {
+            response.markdown('**Usage:** `@strata /sbom [deploy-file.yaml]`\n\nNo deployment file specified and no active deployment found.');
+            return { errorDetails: { message: 'No deployment file' } };
+        }
+
+        response.progress('Loading SBOM…');
+
+        let sbom;
+        try {
+            sbom = await this._client.generateSbom(filePath);
+        } catch (err) {
+            response.markdown(`**SBOM unavailable:** ${err instanceof Error ? err.message : String(err)}\n\n`);
+            response.markdown('Run `strata build sbom` first to generate the SBOM.\n');
+            response.button({ title: '📦 Generate SBOM', command: 'strata.buildSbom', arguments: [filePath] });
+            return { errorDetails: { message: String(err) } };
+        }
+
+        if (sbom.component_count === 0) {
+            response.markdown('**No components found in SBOM.** Run `strata build sbom` to generate it.\n');
+            return { metadata: { command: 'sbom', filePath } };
+        }
+
+        response.progress(`Analysing ${sbom.component_count} components with AI…`);
+
+        const builder = new AiPromptBuilder(this._client['workPath'] as string);
+        const systemPrompt = await builder.systemPrompt('sbom_analysis');
+        const userPrompt = builder.sbomUserPrompt(sbom, request.prompt || undefined);
+
+        const messages = [
+            vscode.LanguageModelChatMessage.User(
+                `${systemPrompt}\n\n---\n\n${userPrompt}`,
+            ),
+        ];
+
+        try {
+            const chatResponse = await request.model.sendRequest(messages, {}, token);
+            for await (const fragment of chatResponse.text) {
+                response.markdown(fragment);
+            }
+        } catch (err) {
+            response.markdown(`**AI analysis unavailable:** ${err instanceof Error ? err.message : String(err)}\n\n`);
+            response.markdown(`SBOM has **${sbom.component_count}** components.`);
+            if (sbom.vulnerabilities_found) {
+                response.markdown(` **Vulnerabilities found**: Critical=${sbom.critical_count}, High=${sbom.high_count}\n`);
+            } else {
+                response.markdown(' No vulnerabilities flagged.\n');
+            }
+        }
+
+        return { metadata: { command: 'sbom', filePath } };
+    }
+
     // ── Freeform (no slash command) ────────────────────────────────────────────
 
     private async _handleFreeform(
         request: vscode.ChatRequest,
         response: vscode.ChatResponseStream,
-        _token: vscode.CancellationToken,
+        token: vscode.CancellationToken,
     ): Promise<vscode.ChatResult> {
+        // Auto-route AI-related keywords to dedicated handlers
+        const prompt = request.prompt.toLowerCase();
+        const isAiQuery = (keywords: string[]) => keywords.some(k => prompt.includes(k));
+
+        if (isAiQuery(['review plan', 'analyse plan', 'analyze plan', 'terraform plan', 'what will change', 'what changes', 'blast radius'])) {
+            return this._handleReview(request, response, token);
+        }
+        if (isAiQuery(['diagnose', 'why did', 'what failed', 'last failure', 'deploy fail', 'error in deploy'])) {
+            return this._handleDiagnose(request, response, token);
+        }
+        if (isAiQuery(['sbom', 'supply chain', 'dependencies', 'vulnerabilities', 'cve', 'components'])) {
+            return this._handleSbom(request, response, token);
+        }
         // Provide workspace context and let the LLM answer
         const status = await this._getStatus();
-
         // Fetch env status for richer deployment context (best-effort, non-blocking)
         let envSummary = '';
         if (this._client) {
@@ -665,7 +866,7 @@ export class StrataChatParticipant implements vscode.Disposable {
         ];
 
         try {
-            const chatResponse = await request.model.sendRequest(messages, {}, _token);
+            const chatResponse = await request.model.sendRequest(messages, {}, token);
             for await (const fragment of chatResponse.text) {
                 response.markdown(fragment);
             }
@@ -753,6 +954,23 @@ export class StrataChatParticipant implements vscode.Disposable {
                     { prompt: '', label: 'Promote', command: 'promote' },
                     { prompt: '', label: 'Deploy', command: 'deploy' },
                 ];
+            case 'review':
+                return [
+                    { prompt: '', label: 'Deploy now', command: 'deploy' },
+                    { prompt: '', label: 'Check policies', command: 'validate' },
+                    { prompt: '', label: 'Check SBOM risks', command: 'sbom' },
+                ];
+            case 'diagnose':
+                return [
+                    { prompt: '', label: 'Retry deploy', command: 'deploy' },
+                    { prompt: '', label: 'Workspace status', command: 'status' },
+                    { prompt: '', label: 'Review plan', command: 'review' },
+                ];
+            case 'sbom':
+                return [
+                    { prompt: '', label: 'Deploy', command: 'deploy' },
+                    { prompt: '', label: 'Workspace status', command: 'status' },
+                ];
             default:
                 return [
                     { prompt: '', label: 'Workspace status', command: 'status' },
@@ -762,6 +980,19 @@ export class StrataChatParticipant implements vscode.Disposable {
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
+
+    /** Extract a file path from the user prompt, falling back to the active editor. */
+    private _resolveFilePath(prompt: string): string | undefined {
+        // Check if prompt contains a .yaml path
+        const match = prompt.match(/\S+\.ya?ml/i);
+        if (match) return match[0];
+        // Fall back to active editor
+        const editor = vscode.window.activeTextEditor;
+        if (editor && /\.ya?ml$/i.test(editor.document.fileName)) {
+            return editor.document.fileName;
+        }
+        return undefined;
+    }
 
     private async _getStatus(): Promise<WorkspaceStatus> {
         if (this._lastStatus) return this._lastStatus;

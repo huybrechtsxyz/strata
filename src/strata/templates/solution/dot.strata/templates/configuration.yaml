@@ -6,14 +6,14 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: configuration
 meta:
-  name: {{ name }}
+  name: { { name } }
   annotations:
     description: "Configuration template for platform setup"
-    owner: {{ owner }}
+    owner: { { owner } }
   labels:
-    version: {{ version }}
+    version: { { version } }
     environment: "template"
-  tags: [ "template", "example" ]
+  tags: ["template", "example"]
 spec:
   # Define deployment layering hierarchy (optional)
   # Used to construct artifact_path from deployment.spec.deployment values
@@ -35,3 +35,21 @@ spec:
     platform_version: "1.0.0"
     api_version: "v1"
     # Add custom properties as needed
+
+  # Integrations — external tools and services
+  # integrations:
+  #
+  #   # AI advisory analysis (ADR-0025) — run `strata help --topic ai_agent` for details
+  #   - name: ai-advisor
+  #     type: ai_agent
+  #     endpoints:
+  #       address: https://my-aoai.openai.azure.com/   # omit for Ollama
+  #     authentication:
+  #       method: cli                                  # cli = az login, no stored key
+  #     properties:
+  #       provider: azure_cli                          # ollama | openai | azure_openai | anthropic | azure_cli
+  #       model: gpt-4o
+  #       temperature: 0.1
+  #       max_tokens: 4096
+  #       timeout: 60
+  #       enabled_hooks: []                            # add hooks to auto-invoke, e.g. [deploy_plan_after]

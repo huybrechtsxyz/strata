@@ -3,7 +3,9 @@
 - Status: proposed
 - Date: 2026-07-11
 
-## Foundational Constraint — Git Is Required
+## Foundational Constraints
+
+### Git Is Required
 
 Strata cannot function without git. Every workspace is a git repository. Every deployment
 references a commit. Every operator who can run `strata deploy` has already authenticated
@@ -29,6 +31,35 @@ This constraint is not a limitation — it is the approval infrastructure:
 It needs to define a convention for what git artifact constitutes approval, verify it at
 deploy time, and record it in the audit log (ADR 0018).
 
+### Cloud CLIs Are Available
+
+Strata has access to `az` (Azure CLI), `aws` (AWS CLI), and `gcloud` (Google Cloud CLI).
+This is significant for approvals because:
+
+- **Identity is stronger than git alone.** When a cloud CLI is authenticated, the caller's
+  cloud IAM principal is already verified. This is harder to spoof than a git config string
+  and is backed by MFA and corporate SSO policies.
+  - `az ad signed-in-user show` → Azure AD / Entra ID principal
+  - `aws sts get-caller-identity` → AWS IAM identity + account + ARN
+  - `gcloud config get-value account` → GCP identity
+- **GCP Cloud Deploy has first-class native approval gates.** `requireApproval: true` in a
+  delivery pipeline and `gcloud deploy releases approve` are already the "approval as a
+  command" primitive this ADR is trying to design — for GCP targets it already exists.
+- **AWS CodePipeline has native manual approval actions.** `aws codepipeline put-approval-result`
+  provides approval state management, notification routing, and an audit trail without strata
+  managing any state.
+- **Cloud-native notification infrastructure is available.** `aws sns publish`,
+  `az eventgrid event send`, `gcloud pubsub topics publish` — no need to build a
+  notification system from scratch.
+- **Cloud-native state stores are available.** AWS SSM Parameter Store, Azure App
+  Configuration, and GCP Cloud Deploy itself can hold approval state. No separate
+  database is needed for cloud targets.
+
+**Implication:** for cloud-managed targets, strata should delegate approval mechanics to
+the provider's native primitive where it exists, rather than reinventing them. The
+git-tag convention remains the right approach for bare-metal and self-hosted targets
+where no cloud approval API is available.
+
 ---
 
 ## Context and Problem Statement
@@ -47,9 +78,11 @@ This creates risk: anyone can deploy anything, potentially causing production ou
 ## Considered Options
 
 - **Option A**: Native approval engine in strata (CLI-based approval workflow)
-- **Option B**: Delegate approval to external tools (GitHub PR reviews, Spacelift, env0)
-- **Option C**: Hybrid — native approval engine with webhooks/integrations to external systems
-- **Option D**: Policy engine integration (approval conditions as policies)
+- **Option B**: Delegate approval to git operations (signed tags, PR merges)
+- **Option C**: Delegate approval to cloud-provider native gates (`gcloud deploy releases approve`, `aws codepipeline put-approval-result`, Azure Pipelines approval steps)
+- **Option D**: Hybrid — provider-native approval for cloud targets; git-tag convention for bare-metal/self-hosted targets
+- **Option E**: Hybrid — native approval engine with webhooks/integrations to external systems
+- **Option F**: Policy engine integration (approval conditions as policies)
 
 ## Decision Outcome
 
@@ -67,6 +100,8 @@ Not yet started. Placeholder for future work.
 
 What does an approval request look like?
 - Who can approve (roles, users, groups)?
+  - For cloud targets: cloud IAM roles/groups (Azure AD groups, AWS IAM groups, GCP IAM roles)
+  - For bare-metal: git GPG keys and signed-tag conventions
 - How many approvals are required (1, 2, consensus)?
 - What triggers an approval requirement (environment, cost threshold, change type)?
 - Approval timeout (auto-deny or wait indefinitely)?
@@ -75,27 +110,43 @@ What does an approval request look like?
 
 How does the workflow work?
 - Approval as a command? (`strata deploy request-approval`, `strata deploy approve`)?
-- Approval state stored where (in deployment manifest, separate record, external system)?
+- For GCP targets: delegate to `gcloud deploy releases approve` — already exists.
+- For AWS targets: delegate to `aws codepipeline put-approval-result` — already exists.
+- For Azure targets: delegate to Azure Pipelines approval gates via `az pipelines`.
+- For bare-metal/self-hosted: git signed-tag convention (`git tag -s approve/<deploy-id>`).
+- Approval state stored where?
+  - Cloud targets: in the cloud provider's native approval state (Cloud Deploy, CodePipeline, Azure Pipelines)
+  - Non-cloud: git tags in the workspace repository
 - How is approval revoked or expired?
 - Can approvals be conditional (e.g., approve if policy passes)?
+
+### Identity Verification
+
+When a deployment requires approval, how is the approver's identity established?
+- Cloud targets: cross-reference the approver's action against their cloud IAM principal
+  (already authenticated via `az`/`aws`/`gcloud`).
+- Non-cloud targets: GPG-signed git tag tied to a known public key.
+- CI runners: OIDC token from the CI provider (GitHub Actions, Azure Pipelines, etc.).
 
 ### Integration Points
 
 Where do approvals appear?
 - CLI (list pending approvals)?
 - VS Code extension (notification in chat)?
-- Slack/email notifications?
+- Cloud-native notifications: AWS SNS, Azure Event Grid, GCP Pub/Sub
 - GitHub PR comments?
 - External approval systems?
 
 ### Audit Trail
 
 What gets recorded?
-- Who requested approval?
+- Who requested approval? (git identity + cloud IAM principal where available)
 - Who approved/rejected?
 - When?
 - Why (approval comment)?
 - What was the deployment (changes, cost, affected resources)?
+- For cloud targets: the cloud provider's own approval event is the canonical record;
+  strata mirrors it into the local audit log (ADR 0018).
 
 ## Open Questions
 

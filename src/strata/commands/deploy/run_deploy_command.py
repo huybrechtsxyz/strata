@@ -23,6 +23,21 @@ from strata.models.deployment_manifest_model import (
 from strata.models.deployment_model import DeploymentStageModel
 
 
+def _parse_ai_risk(content: str) -> tuple:
+    """Extract risk level string and parsed dict from AI response content."""
+    import json as _json
+
+    try:
+        data = _json.loads(content)
+        return str(data.get("risk", "low")).lower(), data
+    except (ValueError, TypeError):
+        lower = content.lower()
+        for level in ("critical", "high", "medium", "low"):
+            if level in lower:
+                return level, {}
+        return "low", {}
+
+
 class RunDeployCommand(BaseDeployCommand):
     """Run the deploy pipeline for a deployment definition."""
 
@@ -43,6 +58,8 @@ class RunDeployCommand(BaseDeployCommand):
         wave: Optional[int] = None,
         promotion_override: Optional[str] = None,
         timeout: int = 0,
+        ai: bool = False,
+        strict_ai_review: Optional[str] = None,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -65,6 +82,8 @@ class RunDeployCommand(BaseDeployCommand):
         self._wave = wave
         self._promotion_override = promotion_override
         self._timeout = timeout
+        self._ai = ai
+        self._strict_ai_review: Optional[str] = strict_ai_review.lower() if strict_ai_review else None
         self._resolved_values: Optional[ResolvedValues] = None
 
     # -------------------------------------------------------------------------
@@ -140,7 +159,6 @@ class RunDeployCommand(BaseDeployCommand):
                     click.echo("\n❌  Deploy provisioning failed")
                 self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
                 return False
-
             if not self._run_lifecycle_phase(
                 "deploy_configure",
                 context={"file": str(self._file_path), "stage": self._stage, "dry_run": self._dry_run},
@@ -176,6 +194,9 @@ class RunDeployCommand(BaseDeployCommand):
             )
             if manifest_path and self._is_console_output():
                 click.echo(f"\n📋  Deployment manifest: {manifest_path}")
+
+            if self._ai and not self._dry_run:
+                self._run_ai_deployment_summary()
 
             return True
 
@@ -452,6 +473,235 @@ class RunDeployCommand(BaseDeployCommand):
         except Exception as exc:
             # Cost diff is always non-fatal
             self.logger.debug("cost_diff_error", stage=stage.name, error=str(exc))
+
+    # -------------------------------------------------------------------------
+    # AI advisory helpers
+    # -------------------------------------------------------------------------
+
+    _RISK_LEVELS = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+
+    def _check_ai_plan_gate(self, stage: "DeploymentStageModel", plan_msgs: list) -> bool:
+        """Run AI plan analysis and optionally block apply.
+
+        Returns True if deployment should proceed, False to block.
+
+        Gating rules:
+        - ``--strict-ai-review [THRESHOLD]``: always fail (non-interactive) when
+          risk ≥ threshold. Suitable for CI/CD pipelines.
+        - ``--ai`` without ``--strict-ai-review``: if risk is high/critical and
+          ``--force`` is not set and stdin is a TTY, prompt the operator. Falls
+          back to blocking when running non-interactively (CI mode).
+        """
+        import json as _json
+        import sys
+
+        import click as _click
+
+        from strata.integrations.ai import find_ai_integration
+
+        integration = find_ai_integration(self._configuration_service)
+        if integration is None or not integration.ensure_available()[0]:
+            if self._strict_ai_review:
+                self._errors.append(
+                    "--strict-ai-review set but no reachable ai_agent integration configured"
+                )
+                return False
+            return True  # advisory-only: missing provider is non-fatal
+
+        deployment_name = (
+            str(self._deployment_service.model.meta.name) if self._deployment_service else "unknown"
+        )
+        context = {
+            "deployment": deployment_name,
+            "stage": str(stage.name),
+            "work_path": str(self._work_path),
+        }
+        plan_data = {"stages": [{"stage": str(stage.name), "messages": plan_msgs}]}
+
+        if self._is_console_output():
+            _click.echo(f"\n  🤖  AI plan review ({integration.integration_name}) …")
+
+        try:
+            response = integration.analyse_plan(plan_data, context)
+        except Exception as exc:
+            self._messages.append(f"AI plan analysis failed: {exc}")
+            if self._strict_ai_review:
+                self._errors.append(f"AI plan analysis failed: {exc}")
+                return False
+            return True  # advisory: don't block on analysis error
+
+        risk_str, parsed = _parse_ai_risk(response.content)
+        risk_level = self._RISK_LEVELS.get(risk_str, 0)
+        risk_icon = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🟠", "CRITICAL": "🔴"}.get(
+            risk_str.upper(), "⚪"
+        )
+
+        if self._is_console_output():
+            _click.echo(f"\n  {risk_icon}  AI Risk: {risk_str.upper()}  —  {parsed.get('summary', '')}")
+            if parsed.get("concerns"):
+                _click.echo("  Concerns:")
+                for c in parsed["concerns"]:
+                    _click.echo(f"    • {c}")
+            if parsed.get("recommendations"):
+                _click.echo("  Recommendations:")
+                for r in parsed["recommendations"]:
+                    _click.echo(f"    → {r}")
+
+        # Determine gate threshold
+        threshold_str = self._strict_ai_review or "high"
+        threshold = self._RISK_LEVELS.get(threshold_str, 2)
+
+        if risk_level < threshold:
+            return True  # below threshold — proceed
+
+        # Risk meets or exceeds threshold
+        if self._strict_ai_review:
+            self._errors.append(
+                f"AI plan review blocked deployment: risk={risk_str.upper()} "
+                f"≥ threshold={threshold_str.upper()} (--strict-ai-review)"
+            )
+            if self._is_console_output():
+                _click.echo(
+                    f"\n  ❌  Deployment blocked — AI risk {risk_str.upper()} ≥ "
+                    f"{threshold_str.upper()} (--strict-ai-review)"
+                )
+            return False
+
+        # Interactive mode (--ai without --strict): prompt if TTY, block if CI
+        if self._force:
+            if self._is_console_output():
+                _click.echo(f"  ⚠️  AI risk {risk_str.upper()} — proceeding (--force)")
+            return True
+
+        is_tty = sys.stdin.isatty()
+        if not is_tty:
+            self._errors.append(
+                f"AI plan review: risk={risk_str.upper()} requires confirmation but stdin is not a TTY. "
+                "Pass --force to override in CI/CD, or use --strict-ai-review to enforce explicitly."
+            )
+            if self._is_console_output():
+                _click.echo(f"\n  ❌  AI risk {risk_str.upper()} — blocking (non-interactive, use --force to override)")
+            return False
+
+        # TTY prompt
+        if self._is_console_output():
+            _click.echo("")
+        confirmed = _click.confirm(
+            f"  AI risk is {risk_str.upper()} for stage '{stage.name}'. Proceed with apply?",
+            default=False,
+        )
+        if not confirmed:
+            self._errors.append(f"Deployment cancelled by operator after AI risk review ({risk_str.upper()})")
+        return confirmed
+
+    def _run_ai_failure_diagnosis(self, error_output: str, step: str, stage_name: str) -> None:        """Call AI failure diagnosis after a deployer step fails."""
+        import click as _click
+
+        from strata.integrations.ai import find_ai_integration
+
+        integration = find_ai_integration(self._configuration_service)
+        if integration is None or not integration.ensure_available()[0]:
+            return
+
+        deployment_name = (
+            str(self._deployment_service.model.meta.name) if self._deployment_service else "unknown"
+        )
+        context = {
+            "deployment": deployment_name,
+            "stage": stage_name,
+            "provisioner": "terraform",
+            "work_path": str(self._work_path),
+        }
+
+        if self._is_console_output():
+            _click.echo(f"\n  🤖  AI failure diagnosis ({integration.integration_name}) …")
+
+        try:
+            response = integration.diagnose_failure(error_output, step, context)
+        except Exception as exc:
+            self._messages.append(f"AI failure diagnosis failed: {exc}")
+            return
+
+        if "ai_analysis" not in self._output_data:
+            self._output_data["ai_analysis"] = {}
+        self._output_data["ai_analysis"]["failure_diagnosis"] = {
+            "provider": response.provider,
+            "model": response.model,
+            "content": response.content,
+        }
+
+        if self._is_console_output():
+            self._print_ai_diagnosis(response.content)
+
+    def _print_ai_diagnosis(self, content: str) -> None:
+        import json as _json
+
+        import click as _click
+
+        try:
+            parsed = _json.loads(content)
+            category = parsed.get("category", "unknown").upper()
+            _click.echo(f"\n  🔍  Root cause [{category}]: {parsed.get('root_cause', '')}")
+            if parsed.get("remediation"):
+                _click.echo("  Remediation:")
+                for i, step in enumerate(parsed["remediation"], 1):
+                    _click.echo(f"    {i}. {step}")
+        except (_json.JSONDecodeError, TypeError):
+            _click.echo(content)
+        _click.echo("")
+
+    def _run_ai_deployment_summary(self) -> None:
+        """Generate an AI deployment summary after successful provisioning."""
+        import click as _click
+
+        from strata.integrations.ai import find_ai_integration
+
+        integration = find_ai_integration(self._configuration_service)
+        if integration is None or not integration.ensure_available()[0]:
+            return
+
+        if self._is_console_output():
+            _click.echo(f"\n  🤖  AI deployment summary ({integration.integration_name}) …")
+
+        manifest = dict(self._output_data)
+        try:
+            response = integration.summarise_deployment(manifest, history=[])
+        except Exception as exc:
+            self._messages.append(f"AI deployment summary failed: {exc}")
+            return
+
+        if "ai_analysis" not in self._output_data:
+            self._output_data["ai_analysis"] = {}
+        self._output_data["ai_analysis"]["deployment_summary"] = {
+            "provider": response.provider,
+            "model": response.model,
+            "content": response.content,
+        }
+
+        if self._is_console_output():
+            self._print_ai_summary(response.content)
+
+    def _print_ai_summary(self, content: str) -> None:
+        import json as _json
+
+        import click as _click
+
+        try:
+            parsed = _json.loads(content)
+            outcome = parsed.get("outcome", "?").upper()
+            outcome_icon = {"SUCCESS": "✅", "PARTIAL": "⚠️", "FAILURE": "❌"}.get(outcome, "📋")
+            _click.echo(f"\n  {outcome_icon}  {parsed.get('headline', '')}")
+            if parsed.get("highlights"):
+                _click.echo("  Highlights:")
+                for h in parsed["highlights"]:
+                    _click.echo(f"    • {h}")
+            if parsed.get("next_steps"):
+                _click.echo("  Next steps:")
+                for s in parsed["next_steps"]:
+                    _click.echo(f"    → {s}")
+        except (_json.JSONDecodeError, TypeError):
+            _click.echo(content)
+        _click.echo("")
 
     def _write_deploy_log(self, success: bool) -> None:
         """Assemble and write deploy-log via AuditController.
@@ -1022,6 +1272,12 @@ class RunDeployCommand(BaseDeployCommand):
                     steps=steps_to_run,
                     error=f"Step '{step_name}' failed",
                 )
+                if self._ai:
+                    self._run_ai_failure_diagnosis(
+                        error_output="\n".join(msgs),
+                        step=step_name,
+                        stage_name=str(stage.name),
+                    )
                 return False
 
             if self._is_ndjson_output():
@@ -1100,6 +1356,22 @@ class RunDeployCommand(BaseDeployCommand):
                         error="Deploy policy denied deployment",
                     )
                     return False
+
+                # --- AI plan gate (--ai / --strict-ai-review) ---
+                if self._ai or self._strict_ai_review:
+                    ai_ok = self._check_ai_plan_gate(stage, msgs)
+                    if not ai_ok:
+                        self._record_stage_result(
+                            stage_name=str(stage.name),
+                            provisioner=stage.provisioner,
+                            topology=stage.topology,
+                            status="failed",
+                            started_at=stage_started,
+                            completed_at=_dt.now(_tz.utc).isoformat(),
+                            steps=steps_to_run,
+                            error="AI plan review blocked deployment",
+                        )
+                        return False
 
         # --- save plan JSON for artifact upload / downstream use ---
         if STEP_PLAN in steps_to_run:

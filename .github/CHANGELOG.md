@@ -7,6 +7,36 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Added
+
+- **AI agent integration — ADR-0025 (Phases 1–4 implemented)**
+  - `AiAgentIntegration(BaseIntegration)` in `strata.integrations.ai` — advisory LLM analysis at build/deploy lifecycle points; purely read-only, opt-in, no infrastructure mutations
+  - Providers: `OllamaProvider` (local, no auth), `OpenAiProvider` (OpenAI + Azure OpenAI), `AzureCliProvider` (bearer token via existing `AzureCLIIntegration.get_access_token()`, no stored key), `AnthropicProvider`
+  - Auth methods on existing `AuthenticationModel`: `api_key` (env var resolution), `cli` (Azure CLI), `managed_identity`; `provider: azure_cli` acquires short-lived bearer token via `az account get-access-token --resource https://cognitiveservices.azure.com/`
+  - Six analysis methods: `analyse_plan()`, `diagnose_failure()`, `analyse_sbom()`, `explain_drift()`, `summarise_deployment()`, `review_policy_violations()`
+  - `PromptLoader` with `.strata/prompts/<name>.md` workspace override support — resolved via `get_ai_prompts_dir(work_path)` from `utils/config.py`; built-in Python templates for all six hooks
+  - `AiResponseCache` — SHA-256-keyed JSON file cache under `get_ai_cache_dir(work_path)` (`.strata/cache/ai/`); configurable TTL (default 24 h); failure-diagnosis never cached
+  - `strata build plan --ai` — runs `analyse_plan()` after terraform plan; renders risk level, summary, concerns, and recommendations to console; adds `ai_analysis` key to JSON output
+  - `strata build sbom --ai` — runs `analyse_sbom()` after SBOM generation; renders supply-chain risk summary to console
+  - `strata deploy run --ai` — runs `diagnose_failure()` on any provisioner step failure (root cause + remediation); runs `summarise_deployment()` on successful completion
+  - `type: ai_review` policy — gates deployment based on LLM risk score; configurable `risk_threshold` (`low`/`medium`/`high`/`critical`); registered in `PolicyEngine`
+  - `--strict-ai-review [THRESHOLD]` on `strata build plan` and `strata deploy run` — fails non-interactively when AI risk ≥ threshold (default `high`); no policy declaration required; suitable for CI/CD
+  - Interactive confirmation on `strata deploy run --ai` — prompts operator before apply when risk is high/critical and `--force` is not set; auto-blocks in non-TTY (CI) mode
+  - Registered in `IntegrationFactory._BUILTIN_CLASS_MAP` as `"ai_agent"`
+  - Path constants `SOLUTION_AI_CACHE_DIR = "cache/ai"` and `SOLUTION_PROMPTS_DIR = "prompts"` + builder functions `get_ai_cache_dir()` / `get_ai_prompts_dir()` added to `utils/config.py`
+  - Every invocation logged to audit trail with provider, model, token counts, duration, and cache status
+  - Help topic: `strata help --topic ai_agent`
+  - Solution scaffold (`strata sln init`) includes commented-out `ai_agent` integration example in `configuration.yaml`
+  - Phase 5: VS Code Chat Participant AI commands
+    - New `@strata /review` — runs terraform plan and analyses risks using `request.model` (VS Code LM API / GitHub Copilot); streams risk level, concerns, and recommendations into chat
+    - New `@strata /diagnose` — loads last failed deployment from audit history and generates root-cause + remediation analysis
+    - New `@strata /sbom` — loads SBOM component inventory and analyses supply-chain risks
+    - `AiPromptBuilder` (`src/vscode/src/providers/aiPromptBuilder.ts`) — resolves system prompts from `.strata/prompts/<name>.md` workspace overrides, falling back to built-in TypeScript constants
+    - Auto-routing in `_handleFreeform` — detects AI-related keywords ("review plan", "why did it fail", "sbom", etc.) and delegates to the appropriate handler
+    - Follow-up suggestions for all three new commands
+    - `package.json` updated with `review`, `diagnose`, `sbom` slash command declarations
+    - No Python AI provider configuration required in IDE — uses the model already active in VS Code (GitHub Copilot)
+
 ## [1.4.0] - 2026-07-24
 
 ### Added

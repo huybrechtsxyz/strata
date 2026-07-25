@@ -39,6 +39,7 @@ class SbomBuildCommand(BaseBuildCommand):
         audit_severity: str = "MEDIUM",
         fail_on: Optional[str] = None,
         audit_report: Optional[str] = None,
+        ai: bool = False,
     ):
         super().__init__(
             file=file,
@@ -55,6 +56,7 @@ class SbomBuildCommand(BaseBuildCommand):
         self._audit_severity = audit_severity
         self._fail_on = fail_on
         self._audit_report = audit_report
+        self._ai = ai
 
     def get_required_integrations(self):
         return {}
@@ -86,8 +88,8 @@ class SbomBuildCommand(BaseBuildCommand):
                 if not self._execute_sbom_build():
                     if self._is_console_output():
                         click.echo("\n❌  SBOM build failed")
-                    return False
-
+                    return False                if self._ai:
+                    self._run_ai_sbom_analysis()
             self._output_data.update(
                 {
                     "file": str(self._file_path),
@@ -335,3 +337,79 @@ class SbomBuildCommand(BaseBuildCommand):
             }
             for c in builder.last_components
         ]
+
+    # ------------------------------------------------------------------
+    # AI SBOM analysis
+    # ------------------------------------------------------------------
+
+    def _run_ai_sbom_analysis(self) -> None:
+        """Analyse the generated SBOM with the configured ai_agent integration."""
+        import json as _json
+
+        from strata.integrations.ai import find_ai_integration
+
+        integration = find_ai_integration(self._configuration_service)
+        if integration is None:
+            if self._is_console_output():
+                click.echo("  ⚠  --ai flag set but no ai_agent integration configured")
+            return
+
+        ok, msg = integration.ensure_available()
+        if not ok:
+            self._messages.append(f"AI provider unavailable: {msg}")
+            return
+
+        # Load the generated sbom.json
+        if self._deployment_service is None:
+            return
+        sbom_path = self._deployment_service.get_build_path(self._build_path) / "sbom.json"
+        if not sbom_path.exists():
+            return
+
+        try:
+            sbom_json = _json.loads(sbom_path.read_text())
+        except Exception:
+            return
+
+        if self._is_console_output():
+            click.echo(f"\n  🤖  AI SBOM analysis ({integration.integration_name}) …")
+
+        try:
+            response = integration.analyse_sbom(sbom_json, policies=[])
+        except Exception as exc:
+            self._messages.append(f"AI SBOM analysis failed: {exc}")
+            return
+
+        self._output_data["ai_sbom_analysis"] = {
+            "provider": response.provider,
+            "model": response.model,
+            "content": response.content,
+            "prompt_tokens": response.prompt_tokens,
+            "completion_tokens": response.completion_tokens,
+            "duration_ms": response.duration_ms,
+        }
+
+        if self._is_console_output():
+            self._print_ai_sbom_analysis(response.content)
+
+    def _print_ai_sbom_analysis(self, content: str) -> None:
+        import json as _json
+
+        try:
+            parsed = _json.loads(content)
+            risk = str(parsed.get("risk", "?")).upper()
+            risk_icon = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🟠", "CRITICAL": "🔴"}.get(risk, "⚪")
+            click.echo(f"\n  {risk_icon} SBOM Risk: {risk}  —  {parsed.get('summary', '')}")
+            if parsed.get("concerns"):
+                click.echo("  Concerns:")
+                for c in parsed["concerns"]:
+                    name = c.get("component", c) if isinstance(c, dict) else c
+                    reason = c.get("reason", "") if isinstance(c, dict) else ""
+                    click.echo(f"    • {name}" + (f"  — {reason}" if reason else ""))
+            if parsed.get("recommendations"):
+                click.echo("  Recommendations:")
+                for r in parsed["recommendations"]:
+                    click.echo(f"    → {r}")
+        except (_json.JSONDecodeError, TypeError):
+            click.echo(content)
+        click.echo("")
