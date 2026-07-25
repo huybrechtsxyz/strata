@@ -35,7 +35,7 @@ class AnthropicProvider(BaseAiProvider):
         max_tokens: int = 4096,
         temperature: float = 0.1,
     ) -> AiResponse:
-        payload = {
+        payload: dict[str, Any] = {
             "model": self._model,
             "max_tokens": max_tokens,
             "temperature": temperature,

@@ -73,7 +73,7 @@ class AiAgentIntegration(BaseIntegration):
     def parse_version(self, version_output: str) -> str:
         return self._model_name
 
-    def is_available(self) -> bool:
+    def is_available(self, use_cache: bool = True) -> bool:  # noqa: ARG002
         if self._is_available is not None:
             return self._is_available
         try:

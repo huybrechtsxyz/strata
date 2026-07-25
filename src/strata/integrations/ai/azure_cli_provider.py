@@ -6,8 +6,6 @@ are cached for the lifetime of the provider to avoid spawning a subprocess on ev
 HTTP request.
 """
 
-from typing import Optional
-
 from strata.integrations.ai.openai_provider import OpenAiProvider
 from strata.logger import get_logger
 
@@ -26,7 +24,7 @@ class AzureCliProvider(OpenAiProvider):
     def __init__(self, model: str, endpoint: str, timeout: int = 60) -> None:
         # Pass empty api_key — _headers() is overridden to use a fresh token.
         super().__init__(model=model, api_key="", endpoint=endpoint, is_azure=True, timeout=timeout)
-        self._cli_integration: Optional[object] = None  # AzureCLIIntegration, lazy init
+        self._cli_integration: Any = None  # AzureCLIIntegration, lazy init
 
     # ------------------------------------------------------------------
     # Token acquisition via AzureCLIIntegration (cached in-process)

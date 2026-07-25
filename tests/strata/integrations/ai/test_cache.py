@@ -35,8 +35,10 @@ class TestAiResponseCacheBasic:
         cache = AiResponseCache(tmp_path)
         cache.put("v1", "hash1", "m", _response("r1"))
         cache.put("v1", "hash2", "m", _response("r2"))
-        assert cache.get("v1", "hash1", "m").content == "r1"
-        assert cache.get("v1", "hash2", "m").content == "r2"
+        r1 = cache.get("v1", "hash1", "m")
+        r2 = cache.get("v1", "hash2", "m")
+        assert r1 is not None and r1.content == "r1"
+        assert r2 is not None and r2.content == "r2"
 
     def test_expired_entry_returns_none(self, tmp_path: Path):
         cache = AiResponseCache(tmp_path, ttl=0)

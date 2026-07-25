@@ -505,7 +505,11 @@ class RunDeployCommand(BaseDeployCommand):
                 return False
             return True  # advisory-only: missing provider is non-fatal
 
-        deployment_name = str(self._deployment_service.model.meta.name) if self._deployment_service else "unknown"
+        deployment_name = (
+            str(self._deployment_service.model.meta.name)  # type: ignore[union-attr]
+            if self._deployment_service and self._deployment_service.model
+            else "unknown"
+        )
         context = {
             "deployment": deployment_name,
             "stage": str(stage.name),
@@ -597,7 +601,11 @@ class RunDeployCommand(BaseDeployCommand):
         if integration is None or not integration.ensure_available()[0]:
             return
 
-        deployment_name = str(self._deployment_service.model.meta.name) if self._deployment_service else "unknown"
+        deployment_name = (
+            str(self._deployment_service.model.meta.name)  # type: ignore[union-attr]
+            if self._deployment_service and self._deployment_service.model
+            else "unknown"
+        )
         context = {
             "deployment": deployment_name,
             "stage": stage_name,

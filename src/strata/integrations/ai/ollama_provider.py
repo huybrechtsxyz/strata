@@ -29,7 +29,7 @@ class OllamaProvider(BaseAiProvider):
         temperature: float = 0.1,
     ) -> AiResponse:
         url = f"{self._endpoint}/api/chat"
-        payload = {
+        payload: dict[str, Any] = {
             "model": self._model,
             "messages": [
                 {"role": "system", "content": system_prompt},
