@@ -113,12 +113,25 @@ integrations/
         ├── openai_provider.py      # OpenAI / Azure OpenAI
         ├── anthropic_provider.py   # Anthropic Claude
         ├── ollama_provider.py      # Local Ollama
-        └── prompts/
-              ├── plan_review.py    # Terraform plan analysis prompt
-              ├── failure_diagnosis.py
-              ├── sbom_analysis.py
-              ├── drift_explanation.py
-              └── deployment_summary.py
+
+# VS Code extension (TypeScript) — chat participant path only
+src/vscode/src/providers/
+  └── strataChatParticipant.ts     # Uses vscode.lm directly (no Python provider needed)
+  └── aiPromptBuilder.ts           # Builds prompts from workspace context; reads .strata/prompts/
+data/
+  └── prompts/
+        └── olan_review.py    # Terraform plan analysis prompt (built-in)
+        ├── failure_diagnosis.py
+        ├── sbom_analysis.py
+        ├── drift_explanation.py
+        └── deployment_summary.py
+
+# Workspace data (operator-managed, see Section 11)
+.strata/
+  └── prompts/                      # Optional — overrides built-in prompts
+        ├── plan_review.md
+        ├── failure_diagnosis.md
+        └── <custom_name>.md
 ```
 
 The `AiAgentIntegration` sits in the integrations layer — it wraps external LLM APIs the same way `TerraformIntegration` wraps the Terraform CLI.
@@ -137,16 +150,43 @@ spec:
     - name: ai-advisor
       type: ai_agent
       endpoints:
-        provider: azure_openai          # openai | azure_openai | anthropic | ollama
+        provider: azure_openai          # openai | azure_openai | anthropic | ollama | vscode_lm
         endpoint: https://my-aoai.openai.azure.com/
         model: gpt-4o
       authentication:
-        type: env_var                   # env_var | managed_identity | token
+        type: env_var                   # env_var | secret_store | azure_cli | managed_identity | token | none
         value: AZURE_OPENAI_API_KEY
       settings:
         temperature: 0.1               # Low temperature for deterministic analysis
         max_tokens: 4096
         timeout: 60                     # seconds
+```
+
+For an API key stored in a secret store (reuses the existing `SecretStoreType` resolution path — same stores available to `spec.secrets` in environment YAML):
+
+```yaml
+    - name: ai-advisor
+      type: ai_agent
+      endpoints:
+        provider: openai
+        model: gpt-4o
+      authentication:
+        type: secret_store
+        store: azure_keyvault         # azure_keyvault | bitwarden | vault | infisical
+        value: my-openai-api-key      # key name in the secret store
+```
+
+For Azure OpenAI with Azure CLI authentication (no API key required — uses the token from `az login`):
+
+```yaml
+    - name: ai-advisor
+      type: ai_agent
+      endpoints:
+        provider: azure_openai
+        endpoint: https://my-aoai.openai.azure.com/
+        model: gpt-4o
+      authentication:
+        type: azure_cli               # Acquires a bearer token via `az account get-access-token`
 ```
 
 For local Ollama:
@@ -160,6 +200,18 @@ For local Ollama:
         model: llama3
       authentication:
         type: none
+```
+
+`provider: vscode_lm` requires no configuration — authentication and model selection are handled by VS Code (e.g. GitHub Copilot). This provider is **only active when running inside the VS Code extension**; the CLI ignores it and falls back to the next configured provider.
+
+```yaml
+    - name: ai-ide
+      type: ai_agent
+      endpoints:
+        provider: vscode_lm
+        model: copilot-gpt-4o        # passed to vscode.lm.selectChatModels() as a hint
+      authentication:
+        type: none                   # VS Code manages auth transparently
 ```
 
 ### 3. Provider Interface
@@ -289,7 +341,7 @@ Every AI invocation is logged to the audit system (ADR-0018):
 To control costs, responses are cached using a content-hash key:
 
 - **Key**: SHA-256 of `(prompt_template_version + artefact_content_hash + model_name)`.
-- **Storage**: `.strata/ai-cache/` directory with JSON files.
+- **Storage**: `.strata/cache/ai` directory with JSON files.
 - **TTL**: Configurable, default 24 hours.
 - **Invalidation**: Cache is invalidated when the artefact content changes (new plan, updated SBOM).
 
@@ -310,9 +362,33 @@ No caching for failure diagnosis (always unique context).
 
 - **No secrets in prompts** — Resolved secrets are never included in AI prompts. The prompt builder strips secret values and replaces them with `[REDACTED]`.
 - **No mutation** — The agent never receives credentials or permissions to modify infrastructure. It is purely analytical.
-- **API key handling** — Provider API keys follow the existing integration authentication patterns (env vars, managed identity). Keys are never logged or included in audit trails.
+- **API key handling** — Provider API keys follow the existing integration authentication patterns. Keys are never logged or included in audit trails. When `type: secret_store` is used, the key is resolved through the same `SecretStoreType` path used by `spec.secrets` in environment YAML (Azure Key Vault, Bitwarden, HashiCorp Vault, Infisical) — no plaintext secret touches the filesystem. When `type: azure_cli` is used, the provider acquires a short-lived bearer token via `az account get-access-token --resource https://cognitiveservices.azure.com/` — no long-lived secret is stored at all. The `secret_store` pattern is equally applicable to other integration types (Terraform Cloud, registry credentials, etc.) and should be adopted as the standard for all integration authentication in future ADRs.
 - **Data residency** — For sensitive environments, operators can use local Ollama to ensure no data leaves the network.
 - **Prompt injection** — Artefact content (plan JSON, error output) is treated as untrusted data. System prompts include guardrails against instruction override.
+
+### 11. Custom Prompt Files
+
+Operators can place Markdown prompt files in `.strata/prompts/` to override or extend the built-in system prompts. This is a **data-layer extension point** — no code changes are required.
+
+```
+.strata/
+  prompts/
+    plan_review.md        # Override the Terraform plan analysis system prompt
+    failure_diagnosis.md  # Override the failure diagnosis system prompt
+    sbom_analysis.md      # Override the SBOM analysis system prompt
+    my_policy_checks.md   # Custom prompt loaded by name: --ai-prompt my_policy_checks
+```
+
+The `PromptLoader` utility (in `data/prompts/`) applies the following resolution order:
+
+1. `.strata/prompts/<name>.md` — operator override (highest priority)
+2. Built-in `data/prompts/<name>.py` template — fallback default
+
+This lets teams inject project-specific context — naming conventions, approved providers, restricted regions, compliance requirements — without modifying the CLI or forking the codebase.
+
+**Scope of override**: Operator files replace the **system prompt** only. The user prompt (artefact content + context injection) is always constructed by the CLI to ensure required fields and token budgeting are respected.
+
+**Selection**: The active prompt file can be selected per-invocation with `--ai-prompt <name>`, allowing teams to maintain multiple prompt strategies (e.g., `strict_review.md` vs. `advisory.md`) and switch between them without configuration changes.
 
 ---
 
@@ -327,6 +403,7 @@ No caching for failure diagnosis (always unique context).
 - Audit logging for AI invocations
 - `--ai` flag to enable AI analysis per-run without persistent configuration
 - Configuration model for `type: ai_agent`
+- `PromptLoader` with `.strata/prompts/` override support (see [Section 11](#11-custom-prompt-files))
 
 ### Phase 2 — Provider Expansion
 
@@ -350,42 +427,27 @@ No caching for failure diagnosis (always unique context).
 - `--strict-ai-review` flag for CI/CD
 - Interactive confirmation flow for high-risk plans
 
-### Phase 5 — Interactive Prompt Mode
+### Phase 5 — VS Code Chat Participant AI Commands
 
-Extend the **existing `strata console` REPL** (`commands/console/run_console_command.py`) with AI chat capability rather than introducing a parallel interactive mechanism. The console already provides `prompt_toolkit` input, `rich` rendering, command dispatch, and session history — the AI integration slots in as an additional command handler.
+Extend the existing `@strata` chat participant (`src/vscode/src/providers/strataChatParticipant.ts`) with AI-powered slash commands that surface `AiAgentIntegration` analysis directly in the VS Code chat UX.
 
-#### REPL extension
+#### New commands
 
-Add an `ai` (alias `ask`) command to `ConsoleCommand._repl_loop()`:
+| Command          | Agent Method         | Description                                                                                               |
+| ---------------- | -------------------- | --------------------------------------------------------------------------------------------------------- |
+| `/review`        | `analyse_plan()`     | Analyse the active deployment's last Terraform plan; stream risk assessment and recommendations into chat |
+| `/diagnose`      | `diagnose_failure()` | Parse the last failed deploy's error output; present root cause and remediation in chat                   |
+| `/sbom` (extend) | `analyse_sbom()`     | Run AI analysis on the generated SBOM; render supply-chain risk summary                                   |
 
-```
-strata> ai why did the last deploy fail?
-strata> ask what resources would be deleted if I apply this plan?
-```
+#### Design notes
 
-The handler calls `AiAgentIntegration.chat()`, which maintains a conversation history list for the lifetime of the console session. Each call appends both the user turn and the assistant response to the history, so follow-up questions have full context. The last analysis result produced by the session (plan review, failure diagnosis, SBOM analysis, etc.) is automatically injected as the opening context message — operators can ask follow-up questions about it without repeating the artefact.
-
-#### Custom prompt files
-
-Operators can place Markdown prompt files in `.strata/prompts/` to override or extend the built-in system prompts:
-
-```
-.strata/
-  prompts/
-    plan_review.md        # Override the Terraform plan analysis system prompt
-    failure_diagnosis.md  # Override the failure diagnosis system prompt
-    my_policy_checks.md   # Custom prompt loaded by name: ai --prompt my_policy_checks
-```
-
-The `PromptLoader` utility (in `integrations/ai/prompts/`) checks `.strata/prompts/<name>.md` first; if absent it falls back to the built-in `prompts/<name>.py` template. This lets teams inject project-specific context (naming conventions, approved providers, restricted regions) without modifying the CLI.
-
-#### Behaviour rules
-
-- `AiAgentIntegration.chat()` — stateful multi-turn method; conversation history is an in-memory list, cleared when the console session ends
-- Session transcript appended to the audit trail under the originating analysis invocation
-- `settings.interactive_timeout` — seconds to wait for TTY input before continuing automatically (useful in semi-attended CI)
-- No interactive mode when `--force` is present or when stdin is not a TTY — CI pipelines fall back to non-interactive
-- `--interactive` flag on `build plan` and `deploy run` drops the operator into the console REPL after analysis completes, pre-loaded with that run's context
+- **No REPL needed** — VS Code chat provides built-in conversation history, follow-up questions, and markdown rendering. The cancelled console REPL is fully superseded.
+- **Context injection** — The chat participant already receives workspace status via `_chatParticipant?.update(status)`. AI commands pass the resolved deployment context, stage history, and transient artefacts to `AiAgentIntegration`.
+- **Custom prompts** — Operators can select a prompt strategy per-invocation (e.g., `@strata /review --prompt strict_review`). Resolution follows [Section 11](#11-custom-prompt-files): `.strata/prompts/<name>.md` → built-in template.
+- **Response buttons** — AI responses include actionable buttons (e.g., "▶ Dry Run", "🛑 Abort Deploy") consistent with existing chat participant patterns.
+- **VS Code LM API** — The chat participant calls `vscode.lm.selectChatModels()` natively in TypeScript when `provider: vscode_lm` is configured (or as a zero-config default). This uses whatever model the user already has access to (GitHub Copilot, etc.) with no API key or endpoint to manage. Prompt construction is handled by `aiPromptBuilder.ts`, which reads `.strata/prompts/` overrides from the workspace and gathers context via the existing `StrataClient` CLI calls.
+- **Fallback** — If no AI provider is configured, commands return a message directing the operator to configure `type: ai_agent` in the configuration YAML. In VS Code the `vscode_lm` provider is tried first before any configured provider.
+- **Freeform queries** — The existing `_handleFreeform()` handler is extended to route AI-related questions (plan analysis, failure diagnosis) to the active provider (VS Code LM or configured) when available.
 
 ---
 
