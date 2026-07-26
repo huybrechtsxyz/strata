@@ -237,9 +237,10 @@ class DoctorEnvCommand(BaseCommand):
     def _print_ai_doctor(self, content: str) -> None:
         import json as _json
 
-        click.echo(f"\n  {'\u2500' * 48}")
+        sep = "\u2500" * 48
+        click.echo(f"\n  {sep}")
         click.echo("  \U0001f916  AI Doctor Analysis")
-        click.echo(f"  {'\u2500' * 48}")
+        click.echo(f"  {sep}")
         try:
             parsed = _json.loads(content)
             click.echo(f"\n  {parsed.get('summary', '')}")

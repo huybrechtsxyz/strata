@@ -128,8 +128,8 @@ data/
         ├── drift_explanation.py
         ├── deployment_summary.py
         ├── policy_review.py
-        ├── doctor_analysis.py     # NEW Phase 6 — env doctor failure explanation
-        └── guide_assistance.py    # NEW Phase 6 — readiness phase guidance
+        ├── doctor_analysis.py     # env doctor failure explanation
+        └── guide_assistance.py    # readiness phase guidance
 
 # Workspace data (operator-managed, see Section 11)
 .strata/
@@ -465,7 +465,7 @@ Extend the existing `@strata` chat participant (`src/vscode/src/providers/strata
 - **Fallback** — If no AI provider is configured, commands return a message directing the operator to configure `type: ai_agent` in the configuration YAML. In VS Code the `vscode_lm` provider is tried first before any configured provider.
 - **Freeform queries** — The existing `_handleFreeform()` handler is extended to route AI-related questions (plan analysis, failure diagnosis) to the active provider (VS Code LM or configured) when available.
 
-### Phase 6 — Extended Command Coverage
+### Phase 6 — Extended Command Coverage _(implemented)_
 
 Wire the two existing analysis methods that are implemented but not yet exposed on the CLI, and add two new analysis methods for `env doctor` and `guide`.
 

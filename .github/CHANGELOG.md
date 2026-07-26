@@ -36,6 +36,14 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
     - Follow-up suggestions for all three new commands
     - `package.json` updated with `review`, `diagnose`, `sbom` slash command declarations
     - No Python AI provider configuration required in IDE — uses the model already active in VS Code (GitHub Copilot)
+  - Phase 6: Extended command coverage
+    - `strata validate --ai` — runs `review_policy_violations()` after finding schema errors or policy violations; explains each violation with a suggested YAML fix
+    - `strata deploy drift run --ai` — runs `explain_drift()` when drift is detected; explains likely cause and reconciliation path
+    - `strata env doctor --ai` — runs `explain_doctor_results()` on failed checks; provides numbered per-check remediation steps
+    - `strata guide --ai` — runs `assist_guide()` when a readiness phase is blocked; explains the blockage and suggests the next concrete action
+    - Two new analysis methods on `AiAgentIntegration`: `explain_doctor_results()`, `assist_guide()`
+    - Two new prompt files: `data/prompts/doctor_analysis.py` (`DoctorAnalysisPrompt`), `data/prompts/guide_assistance.py` (`GuideAssistancePrompt`)
+    - All eight prompts support `.strata/prompts/<name>.md` workspace overrides via `PromptLoader`
 
 ## [1.4.0] - 2026-07-24
 

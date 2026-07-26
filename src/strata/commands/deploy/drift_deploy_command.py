@@ -183,9 +183,10 @@ class DriftDeployCommand(BaseDeployCommand):
 
         import click as _click
 
-        _click.echo(f"\n  {'\u2500' * 48}")
+        sep = "\u2500" * 48
+        _click.echo(f"\n  {sep}")
         _click.echo("  \U0001f916  AI Drift Analysis")
-        _click.echo(f"  {'\u2500' * 48}")
+        _click.echo(f"  {sep}")
         try:
             parsed = _json.loads(content)
             severity = str(parsed.get("severity", "?")).upper()

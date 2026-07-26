@@ -72,13 +72,21 @@ spec:
 
 ## CLI Usage
 
-Run AI plan analysis on demand:
+All AI flags are opt-in. No AI calls are made unless `--ai` or `--strict-ai-review` is present.
 
-```bash
-strata build plan -f deploy/deploy-prd.yaml --ai
-```
+| Command                                                   | AI flag              | What the agent does                                                             |
+| --------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------- |
+| `strata build plan -f ... --ai`                           | `--ai`               | Analyse Terraform plan; render risk, concerns, recommendations                  |
+| `strata build plan -f ... --strict-ai-review [THRESHOLD]` | `--strict-ai-review` | Same as `--ai` but fail non-interactively if risk ≥ threshold (default: `high`) |
+| `strata build sbom -f ... --ai`                           | `--ai`               | Analyse SBOM component inventory for supply-chain risks                         |
+| `strata deploy run -f ... --ai`                           | `--ai`               | Diagnose step failures + summarise successful deployment                        |
+| `strata deploy run -f ... --strict-ai-review [THRESHOLD]` | `--strict-ai-review` | Block apply non-interactively if AI plan risk ≥ threshold                       |
+| `strata deploy drift run -f ... --ai`                     | `--ai`               | Explain detected drift; suggest reconciliation path                             |
+| `strata validate -f ... --ai`                             | `--ai`               | Explain validation errors and policy violations; suggest YAML fixes             |
+| `strata env doctor --ai`                                  | `--ai`               | Explain failed health checks; provide numbered remediation steps                |
+| `strata guide --ai`                                       | `--ai`               | Explain what is blocking the current readiness phase; suggest next action       |
 
-The AI analysis appears after the terraform plan output. Risk levels: `low` · `medium` · `high` · `critical`.
+Risk levels (plan review): `low` · `medium` · `high` · `critical`
 
 ---
 
@@ -113,6 +121,8 @@ Override any built-in system prompt by placing a Markdown file in `.strata/promp
     drift_explanation.md
     deployment_summary.md
     policy_review.md
+    doctor_analysis.md    # overrides the env doctor failure analysis prompt
+    guide_assistance.md   # overrides the guide phase blockage prompt
 ```
 
 The user prompt (artefact content) is always constructed by the CLI; only the system prompt is replaced.
