@@ -342,6 +342,18 @@ class AiAgentIntegration(BaseIntegration):
             prompt_version=prompt._cls.VERSION,
         )
 
+    def summarise_deploy_history(self, history: list, context: dict) -> AiResponse:
+        """Analyse deployment history for trends, recurring failures, and anomalies."""
+        work_path = _work_path(context)
+        prompt = PromptLoader.load("deploy_history_summary", work_path=work_path)
+        return self._analyse(
+            "summarise_deploy_history",
+            prompt.SYSTEM,
+            prompt.build_user_prompt(history, context),
+            work_path=work_path,
+            cacheable=False,  # history changes with each deploy
+        )
+
     def explain_doctor_results(self, failed_checks: list, context: dict) -> AiResponse:
         """Explain env doctor check failures and suggest step-by-step remediation."""
         work_path = _work_path(context)
@@ -401,6 +413,42 @@ class AiAgentIntegration(BaseIntegration):
             prompt.build_user_prompt(log_entries, context),
             work_path=work_path,
             cacheable=False,  # log content changes between runs
+        )
+
+    def summarise_audit_history(
+        self,
+        entries: list,
+        stats: dict,
+        context: dict,
+        work_path: Optional[Path] = None,
+    ) -> AiResponse:
+        """Summarise a window of deployment executions and surface trends/anomalies."""
+        prompt = PromptLoader.load("audit_history_summary", work_path=work_path)
+        return self._analyse(
+            "summarise_audit_history",
+            prompt.SYSTEM,
+            prompt.build_user_prompt(entries, stats, context),
+            work_path=work_path,
+            cacheable=True,
+            prompt_version=prompt._cls.VERSION,
+        )
+
+    def analyse_cost_trend(
+        self,
+        snapshots: list,
+        stats: dict,
+        context: dict,
+        work_path: Optional[Path] = None,
+    ) -> AiResponse:
+        """Analyse cost history snapshots for trends, spikes, and anomalies."""
+        prompt = PromptLoader.load("cost_trend_analysis", work_path=work_path)
+        return self._analyse(
+            "analyse_cost_trend",
+            prompt.SYSTEM,
+            prompt.build_user_prompt(snapshots, stats, context),
+            work_path=work_path,
+            cacheable=True,
+            prompt_version=prompt._cls.VERSION,
         )
 
     # ------------------------------------------------------------------

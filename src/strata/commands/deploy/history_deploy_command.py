@@ -44,6 +44,7 @@ class HistoryDeployCommand(BaseCommand):
         work_path: Optional[str] = None,
         lines: int = 50,
         operation: Optional[str] = None,
+        ai: bool = False,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -56,6 +57,7 @@ class HistoryDeployCommand(BaseCommand):
         )
         self._lines = lines
         self._operation_filter = _resolve_operation_filter(operation)
+        self._ai = ai
 
     def get_required_integrations(self):
         return {}
@@ -134,6 +136,9 @@ class HistoryDeployCommand(BaseCommand):
         if self._is_console_output():
             self._print_table(history)
 
+        if self._ai and len(history) >= 2:
+            self._run_ai_history_analysis(history)
+
         return True
 
     def _print_table(self, history: List[Dict[str, Any]]) -> None:
@@ -163,6 +168,99 @@ class HistoryDeployCommand(BaseCommand):
 
     def _is_verbose(self) -> bool:
         return self._output_verbose
+
+    # -------------------------------------------------------------------------
+    # AI history analysis
+    # -------------------------------------------------------------------------
+
+    def _run_ai_history_analysis(self, history: List[Dict[str, Any]]) -> None:
+        """Analyse deployment history for trends and recurring failures."""
+        from strata.integrations.ai import find_ai_integration
+
+        config_svc = None
+        try:
+            from strata.controllers.solution_controller import SolutionController
+            from strata.services.configuration_service import ConfigurationService
+
+            sol = SolutionController(work_path=self._work_path)
+            sol.load()
+            profile, _ = sol.get_active_profile()
+            if profile:
+                for cp in [str(p.path) for p in (profile.configfile_paths or [])]:
+                    svc = ConfigurationService.load(cp)
+                    if svc.model:
+                        config_svc = svc
+                        break
+        except Exception:
+            pass
+
+        integration = find_ai_integration(config_svc)
+        if integration is None:
+            if self._is_console_output():
+                click.echo("  ⚠  --ai flag set but no ai_agent integration configured")
+            return
+        ok, msg = integration.ensure_available()
+        if not ok:
+            self._messages.append(f"AI provider unavailable: {msg}")
+            return
+
+        context = {"workspace": str(self._work_path)}
+        if self._is_console_output():
+            click.echo(f"\n  🤖  AI history analysis ({integration.integration_name}) …")
+
+        try:
+            response = integration.summarise_deploy_history(history, context)
+        except Exception as exc:
+            self._messages.append(f"AI history analysis failed: {exc}")
+            return
+
+        if isinstance(self._output_data, dict):
+            self._output_data["ai_analysis"] = {
+                "provider": response.provider,
+                "model": response.model,
+                "content": response.content,
+            }
+
+        if self._is_console_output():
+            self._print_ai_history(response.content)
+
+    def _print_ai_history(self, content: str) -> None:
+        import json as _json
+
+        sep = "\u2500" * 48
+        click.echo(f"\n  {sep}")
+        click.echo("  🤖  AI Deployment History Analysis")
+        click.echo(f"  {sep}")
+        try:
+            parsed = _json.loads(content)
+            trend = str(parsed.get("trend", "?")).upper()
+            trend_icon = {
+                "IMPROVING": "📈",
+                "STABLE": "➡️ ",
+                "DEGRADING": "📉",
+                "INSUFFICIENT_DATA": "❓",
+            }.get(trend, "❓")
+            rate = parsed.get("success_rate", "?")
+            click.echo(f"\n  {trend_icon}  Trend: {trend}  |  Success rate: {rate}%")
+            click.echo(f"  {parsed.get('summary', '')}")
+            if parsed.get("recurring_issues"):
+                click.echo("\n  Recurring issues:")
+                for issue in parsed["recurring_issues"]:
+                    if isinstance(issue, dict):
+                        count = issue.get("count", "?")
+                        pattern = issue.get("pattern", "?")
+                        click.echo(f"    • {pattern}  ({count}×)")
+            if parsed.get("anomalies"):
+                click.echo("\n  Anomalies:")
+                for a in parsed["anomalies"]:
+                    click.echo(f"    ⚠  {a}")
+            if parsed.get("recommendations"):
+                click.echo("\n  Recommendations:")
+                for r in parsed["recommendations"]:
+                    click.echo(f"    → {r}")
+        except (_json.JSONDecodeError, TypeError):
+            click.echo(content)
+        click.echo("")
 
 
 def _resolve_operation_filter(value: Optional[str]) -> Optional[str]:

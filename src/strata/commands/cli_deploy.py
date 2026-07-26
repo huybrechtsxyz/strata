@@ -381,10 +381,18 @@ def deploy_list(
 @click_output_format
 @click_output_verbose
 @click_output_quiet
+@click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help="Run AI trend analysis on deployment history (requires an ai_agent integration; needs ≥2 entries).",
+)
 def deploy_history(
     work_path: Optional[str] = None,
     lines: int = 50,
     operation: Optional[str] = None,
+    ai: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -394,6 +402,7 @@ def deploy_history(
         work_path=work_path,
         lines=lines,
         operation=operation,
+        ai=ai,
         output=output,
         verbose=verbose,
         quiet=quiet,

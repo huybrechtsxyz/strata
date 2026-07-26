@@ -628,7 +628,7 @@ Complete survey of every strata CLI command and its AI applicability. Legend: �
 | `deploy`  | `status`    | ➖      | —                            | —                                              | Low-value; covered by `deploy run --ai` summary                                                             |
 | `service` | `deploy`    | 🔶      | `--ai`                       | reuse `diagnose_failure()`                     | Same pattern as `deploy run --ai` for individual service stages                                             |
 | `env`     | `doctor`    | ✅      | `--ai`                       | `explain_doctor_results()`                     | Per-check root cause + numbered remediation                                                                 |
-| `cost`    | `history`   | 🔶      | `--ai`                       | new: `analyse_cost_trend()`                    | Explain cost spikes; correlate with deployment changes                                                      |
+| `cost`    | `history`   | ✅      | `--ai`                       | new: `analyse_cost_trend()`                    | Trend direction, spike detection with likely cause, cost-reduction recommendations      |
 
 ### Inspection & Validation
 
@@ -638,7 +638,7 @@ Complete survey of every strata CLI command and its AI applicability. Legend: �
 | `validate` | `graph`    | ➖      | —      | —                                | VS Code freeform covers "what depends on what" questions                                                                |
 | `guide`    | —          | ✅      | `--ai` | `assist_guide()`                 | Explain blocking phase; suggest next concrete action                                                                    |
 | `policy`   | `check`    | ✅      | `--ai` | `review_policy_violations()`     | Same method as `validate --ai`; multi-phase violations give richer AI context                                           |
-| `audit`    | `changes`  | 🔶      | `--ai` | new: `summarise_audit_history()` | Summarise deployment trends; flag anomalies (growing failure rate, duration spikes)                                     |
+| `audit`    | `changes`  | ✅      | `--ai` | new: `summarise_audit_history()` | Trends, anomalies, recurring stage failures, recommendations; stats pre-computed client-side                            |
 | `tools`    | `status`   | ➖      | —      | —                                | Already covered by `env doctor --ai`                                                                                    |
 | `tools`    | `install`  | ✅      | `--ai` | new: `guide_tool_setup()`        | Combines runtime check state + static setup info into a tailored, OS-aware install guide; skips already-satisfied steps |
 | `schema`   | all        | ➖      | —      | —                                | Schema Q&A is handled by the MCP server and VS Code freeform                                                            |
@@ -677,6 +677,144 @@ Ordered by estimated value:
 5. **`cost history --ai`** — cost spike explanation; new `analyse_cost_trend()` method needed
 6. **`service deploy --ai`** — reuse `diagnose_failure()`; minimal new work
 7. **`log --ai`** — execution log error summary; low priority
+
+---
+
+### Phase 11 — `strata cost history --ai` _(implemented)_
+
+Analyses the cost snapshot history using AI. Detects the trend direction (stable / rising / falling / volatile), identifies significant cost spikes with likely causes, and provides actionable cost-reduction or investigation recommendations.
+
+```
+$ strata cost history -f deploy/deploy-prd.yaml --last 10 --ai
+
+─────────────────────────────────────────────────────────────────────
+💰 Cost History — haven-prd (last 10 snapshots)
+─────────────────────────────────────────────────────────────────────
+
+Date (UTC)             Version       Monthly           Delta
+────────────────────── ──────────── ────────────────── ────────────
+2026-07-26 14:00       1.3.0          4 900.00 USD      +1200.00
+2026-07-25 09:00       1.2.1          3 700.00 USD        +50.00
+2026-07-24 16:00       1.2.0          3 650.00 USD       +847.50
+2026-07-23 10:00       1.1.0          2 802.50 USD          —
+...
+
+  🤖  AI cost analysis (ai-advisor) …
+
+  ──────────────────────────────────────────────────────────────────────
+  🔴  Monthly cost rose 74.8% ($2 802.50 → $4 900.00 USD) over the 10-snapshot window.
+      The largest single spike (+$1 200.00) occurred on 2026-07-26 following version 1.3.0.
+
+  Cost window: 2802.50 → 4900.00 USD  (+2097.50, +74.8%)
+
+  Cost spikes:
+    [2026-07-26T14:00] v1.3.0 [terraform]  +1200.00 (+32.4%)
+      → Three new VM instances (Standard_D4s_v3) added in the 'compute' provisioner.
+    [2026-07-24T16:00] v1.2.0 [terraform]  +847.50 (+30.2%)
+      → Azure Kubernetes node pool scaled from 2→5 nodes in version 1.2.0.
+
+  Recommendations:
+    1. Review VM SKU in version 1.3.0 — Standard_D2s_v3 may be sufficient for non-prod
+    2. Enable autoscaling on the AKS node pool to avoid fixed 5-node cost during off-peak
+    3. Run: strata cost diff -f deploy/deploy-prd.yaml to compare current vs. planned cost
+  ──────────────────────────────────────────────────────────────────────
+```
+
+**Useful flag combinations**:
+
+```bash
+strata cost history -f deploy.yaml --last 10 --ai    # analyse last 10 snapshots
+strata cost history -f deploy.yaml --last 30 --ai    # longer trend window
+```
+
+#### Stats pre-computation
+
+Earliest/latest/min/max/avg costs and the largest single-step spike are computed in Python before the AI call. The AI focuses on interpreting *why* costs changed (version bumps, new provisioners, resource changes) rather than recalculating numbers. Snapshots are re-ordered chronologically (oldest → newest) in the prompt to make trend direction obvious.
+
+#### Spike detection threshold
+
+A spike is defined as a single-step delta ≥ 10% of the previous snapshot total. This threshold is baked into the system prompt — operators can override it via `.strata/prompts/cost_trend_analysis.md`.
+
+#### Implementation
+
+| Step | File | Change |
+| ---- | ---- | ------ |
+| 1 | `data/prompts/cost_trend_analysis.py` | New `CostTrendAnalysisPrompt` — `summary`, `trend`, `total_change`, `spikes[]`, `recommendations[]` |
+| 2 | `ai_integration.py` | Add `analyse_cost_trend(snapshots, stats, context, work_path)` — cached |
+| 3 | `history_cost_command.py` | Add `ai: bool`; at end of `_execute()` call `_run_ai_cost_analysis()` with pre-computed `_compute_cost_stats()`; add `_print_ai_cost_analysis()` renderer |
+| 4 | `cli_cost.py` | Add `--ai` flag to `cost_history` Click command |
+
+**Reuses**: `find_ai_integration()`, `self._configuration_service` (already loaded by `BaseDeployCommand`).
+
+**Output data**: adds `ai_analysis.cost_trend` key to `_output_data` (includes `snapshots_analysed` count) for JSON consumers.
+
+---
+
+### Phase 10 — `strata audit changes --ai` _(implemented)_
+
+Summarises a window of deployment executions using AI. Reports the health of the deployment pipeline: success rate, average duration, anomalies (duration spikes, sudden failures), recurring stage failures, and trends over the window.
+
+```
+$ strata audit changes --last 10 --ai
+
+Timestamp                    Deployment           Success   Duration   Stages
+──────────────────────────────────────────────────────────────────────────────────────────
+2026-07-26T14:30:00+00:00    haven-prd            ✓         242.0s     3
+2026-07-26T12:10:00+00:00    haven-prd            ✗         381.0s     3
+2026-07-25T16:00:00+00:00    haven-prd            ✓         255.0s     3
+...
+
+10 entries shown.
+
+  🤖  AI audit summary (ai-advisor) …
+
+  ────────────────────────────────────────────────────────────
+  🟡  8/10 deployments succeeded (80%) over the last 10 runs.
+      Average duration 248s; two runs were notably slower (380s, 412s).
+
+  Trend: Success rate declined in the last 3 runs: 3 of the most recent 4 runs failed
+         compared to 1/6 failures in earlier runs.
+
+  Anomalies:
+    ⚠  Duration spike in run 2026-07-26T12:10 (+57% above average)
+    ⚠  Run 2026-07-25T09:00 failed immediately with 0 stages completed
+
+  Recurring failing stages: networking
+
+  Recommendations:
+    1. Investigate 'networking' stage — failed in 3/4 recent runs; likely a provider timeout
+    2. Review the commit deployed at 2026-07-25T09:00 for breaking changes
+  ────────────────────────────────────────────────────────────
+```
+
+**Useful flag combinations**:
+
+```bash
+strata audit changes --last 10 --ai                         # summarise last 10 runs
+strata audit changes --since 2026-07-01T00:00:00Z --ai      # summarise since a date
+strata audit changes --last 20 --stage networking --ai      # focus on one stage
+```
+
+#### Stats pre-computation
+
+Success rate, average/min/max duration, and counts are computed in Python before the AI call. This keeps the prompt compact and avoids asking the LLM to do arithmetic. The AI focuses on pattern recognition and narrative — what the numbers mean, not what they are.
+
+#### Caching
+
+Responses are cached (SHA-256 of prompt content + model). A new run or a changed `--last`/`--since` window produces a different cache key. Combine `--stage` filtering with `--ai` for focused analysis without paying for a full-window token cost.
+
+#### Implementation
+
+| Step | File                                    | Change                                                                                                                                               |
+| ---- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `data/prompts/audit_history_summary.py` | New `AuditHistorySummaryPrompt` — `summary`, `health`, `anomalies[]`, `failing_stages[]`, `trends`, `recommendations[]`                              |
+| 2    | `ai_integration.py`                     | Add `summarise_audit_history(entries, stats, context, work_path)` — cached                                                                           |
+| 3    | `changes_audit_command.py`              | Add `ai: bool`; at end of `_execute()` call `_run_ai_audit_summary()` with pre-computed `_compute_stats()`; add `_print_ai_audit_summary()` renderer |
+| 4    | `cli_audit.py`                          | Add `--ai` flag to `audit_changes` Click command                                                                                                     |
+
+**Reuses**: `find_ai_integration()`, `SolutionController` workspace context pattern.
+
+**Output data**: adds `ai_analysis.audit_history` key to `_output_data` (includes `entries_analysed` count) for JSON consumers.
 
 ---
 
@@ -834,30 +972,18 @@ Workspace context (provisioner types, backend types) is injected when an active 
 - [ADR-0023: Pluggable provisioner framework](0023-pluggable-provisioner-framework.md)
 - [MCP Server documentation](../mcp/README.md)
 
+
 ## Temporary list of all ideas (for internal planning)
 
 Command	Sub	AI implemented	New opportunity	Value
 
-deploy	health	—	Explain why health probes fail (HTTP 5xx, TCP timeout) with remediation	Medium
-deploy	history	—	AI summarise trends across recent deployments (growing duration, recurring failures)	Low
+
 validate	graph	—	AI explain the dependency graph in plain language ("what depends on what")	Low
-cost	history	—	AI explain cost spikes: "monthly cost jumped 40% because 3 new VMs added in stage X"	Medium
-audit	changes	—	AI summarise deployment history: "last 5 deploys succeeded, avg duration 4m, no anomalies"	Medium
+audit	changes	✅	AI summarise deployment history: trends, anomalies, recurring failures	Medium
 service	all	—	Same pattern as deploy — could reuse deploy run --ai pattern	Low
 
 
 Medium-value opportunities (new prompt required):
-strata deploy health --ai — "why is my service unhealthy?" when HTTP probes return 5xx or TCP connections timeout
-strata cost history --ai — "why did my costs spike?" with delta analysis
-strata audit changes --ai — "summarise my recent deployment history" with anomaly detection (growing failure rate, duration trends)
-strata build run --audit --ai — after CVE audit, explain critical vulnerabilities and suggest package upgrades
-Low-value (not recommended for now):
-
-promote status, values list, validate graph, deploy history, log, service — either too niche, already covered by other AI hooks, or adds minimal value over what the MCP server + VS Code freeform already provide.
-Recommendation: Wire policy check --ai now (1 quick win), and design 2–5 as a Phase 7 in the ADR for later. Want me to proceed with policy check --ai?
-
-Best Places an AI Agent Can Add Value (Without Rebuilding Existing Features)
-
 Command planner and safe execution assistant
 Input: user goal like deploy prod wave 2 with lock checks.
 Output: exact command sequence with flags, dry-run first, and fallback steps.

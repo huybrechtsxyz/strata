@@ -143,6 +143,13 @@ def cost_diff(
     metavar="N",
     help="Number of most-recent snapshots to show (default: 10).",
 )
+@click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help="Analyse cost history with AI: identify trends, explain spikes, suggest optimisations.",
+)
 @click_work_path
 @click_output_format
 @click_output_verbose
@@ -150,6 +157,7 @@ def cost_diff(
 def cost_history(
     file: Optional[str] = None,
     last: int = 10,
+    ai: bool = False,
     work_path: Optional[str] = None,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
@@ -160,6 +168,7 @@ def cost_history(
         file=file,
         work_path=work_path,
         last=last,
+        ai=ai,
         output=output,
         verbose=verbose,
         quiet=quiet,
