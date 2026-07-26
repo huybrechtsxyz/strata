@@ -6,8 +6,13 @@ are cached for the lifetime of the provider to avoid spawning a subprocess on ev
 HTTP request.
 """
 
+from typing import TYPE_CHECKING
+
 from strata.integrations.ai.openai_provider import OpenAiProvider
 from strata.logger import get_logger
+
+if TYPE_CHECKING:
+    from strata.integrations.azure_cli import AzureCLIIntegration
 
 logger = get_logger(__name__)
 
@@ -24,13 +29,13 @@ class AzureCliProvider(OpenAiProvider):
     def __init__(self, model: str, endpoint: str, timeout: int = 60) -> None:
         # Pass empty api_key — _headers() is overridden to use a fresh token.
         super().__init__(model=model, api_key="", endpoint=endpoint, is_azure=True, timeout=timeout)
-        self._cli_integration: Any = None  # AzureCLIIntegration, lazy init
+        self._cli_integration: "AzureCLIIntegration | None" = None  # lazy init
 
     # ------------------------------------------------------------------
     # Token acquisition via AzureCLIIntegration (cached in-process)
     # ------------------------------------------------------------------
 
-    def _ensure_cli_integration(self) -> "object":
+    def _ensure_cli_integration(self) -> "AzureCLIIntegration":
         if self._cli_integration is None:
             from strata.integrations.azure_cli import AzureCLIIntegration
             from strata.models.integration_model import IntegrationModel
@@ -40,7 +45,7 @@ class AzureCliProvider(OpenAiProvider):
 
     def _get_token(self) -> str:
         cli = self._ensure_cli_integration()
-        token = cli.get_access_token(resource=_COGSERVICES_RESOURCE)  # type: ignore[union-attr]
+        token = cli.get_access_token(resource=_COGSERVICES_RESOURCE)
         if not token:
             raise RuntimeError("Could not acquire Azure CLI token — run 'az login' first")
         return token

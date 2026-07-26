@@ -1,6 +1,7 @@
 """Ollama LLM provider — local, no auth, uses /api/chat endpoint."""
 
 import time
+from typing import Any
 
 import requests
 
