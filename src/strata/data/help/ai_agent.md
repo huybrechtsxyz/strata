@@ -74,21 +74,22 @@ spec:
 
 All AI flags are opt-in. No AI calls are made unless `--ai` or `--strict-ai-review` is present.
 
-| Command                                                   | AI flag              | What the agent does                                                             |
-| --------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------- |
-| `strata build plan -f ... --ai`                           | `--ai`               | Analyse Terraform plan; render risk, concerns, recommendations                  |
-| `strata build plan -f ... --strict-ai-review [THRESHOLD]` | `--strict-ai-review` | Same as `--ai` but fail non-interactively if risk ≥ threshold (default: `high`) |
-| `strata build sbom -f ... --ai`                           | `--ai`               | Analyse SBOM component inventory for supply-chain risks                         |
-| `strata build run -f ... --audit --ai`                    | `--audit --ai`       | Run CVE scan then AI-triage findings: priorities, no-fix CVEs, upgrade paths    |
-| `strata deploy run -f ... --ai`                           | `--ai`               | Diagnose step failures + summarise successful deployment                        |
-| `strata deploy run -f ... --strict-ai-review [THRESHOLD]` | `--strict-ai-review` | Block apply non-interactively if AI plan risk ≥ threshold                       |
-| `strata deploy drift run -f ... --ai`                     | `--ai`               | Explain detected drift; suggest reconciliation path                             |
-| `strata deploy health -f ... --ai`                        | `--ai`               | Explain why HTTP/TCP probes failed; suggest per-check service fixes             |
-| `strata promote status --ai`                              | `--ai`               | Explain in-flight promotions; identify what needs attention; suggest next steps |
-| `strata validate -f ... --ai`                             | `--ai`               | Explain validation errors and policy violations; suggest YAML fixes             |
-| `strata policy check -f ... --ai`                         | `--ai`               | Explain policy violations across all evaluated phases; suggest YAML fixes       |
-| `strata env doctor --ai`                                  | `--ai`               | Explain failed health checks; provide numbered remediation steps                |
-| `strata guide --ai`                                       | `--ai`               | Explain what is blocking the current readiness phase; suggest next action       |
+| Command                                                   | AI flag              | What the agent does                                                                      |
+| --------------------------------------------------------- | -------------------- | ---------------------------------------------------------------------------------------- |
+| `strata build plan -f ... --ai`                           | `--ai`               | Analyse Terraform plan; render risk, concerns, recommendations                           |
+| `strata build plan -f ... --strict-ai-review [THRESHOLD]` | `--strict-ai-review` | Same as `--ai` but fail non-interactively if risk ≥ threshold (default: `high`)          |
+| `strata build sbom -f ... --ai`                           | `--ai`               | Analyse SBOM component inventory for supply-chain risks                                  |
+| `strata build run -f ... --audit --ai`                    | `--audit --ai`       | Run CVE scan then AI-triage findings: priorities, no-fix CVEs, upgrade paths             |
+| `strata deploy run -f ... --ai`                           | `--ai`               | Diagnose step failures + summarise successful deployment                                 |
+| `strata deploy run -f ... --strict-ai-review [THRESHOLD]` | `--strict-ai-review` | Block apply non-interactively if AI plan risk ≥ threshold                                |
+| `strata deploy drift run -f ... --ai`                     | `--ai`               | Explain detected drift; suggest reconciliation path                                      |
+| `strata deploy health -f ... --ai`                        | `--ai`               | Explain why HTTP/TCP probes failed; suggest per-check service fixes                      |
+| `strata promote status --ai`                              | `--ai`               | Explain in-flight promotions; identify what needs attention; suggest next steps          |
+| `strata values list -f ... --ai`                          | `--ai`               | Explain unresolved variables/secrets/features; provide exact store-specific fix commands |
+| `strata validate -f ... --ai`                             | `--ai`               | Explain validation errors and policy violations; suggest YAML fixes                      |
+| `strata policy check -f ... --ai`                         | `--ai`               | Explain policy violations across all evaluated phases; suggest YAML fixes                |
+| `strata env doctor --ai`                                  | `--ai`               | Explain failed health checks; provide numbered remediation steps                         |
+| `strata guide --ai`                                       | `--ai`               | Explain what is blocking the current readiness phase; suggest next action                |
 
 Risk levels (plan review): `low` · `medium` · `high` · `critical`
 

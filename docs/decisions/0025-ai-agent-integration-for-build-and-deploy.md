@@ -659,7 +659,7 @@ Complete survey of every strata CLI command and its AI applicability. Legend: �
 | ------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------- |
 | `sln`, `profile`, `repo`, `ref`, `config`, `vars` | ➖           | Mechanical ops — no useful AI target                                                                     |
 | `versions`, `promote`                             | ✅ (partial) | `promote status` now has `--ai`; `promote matrix` and `versions` remain mechanical — no useful AI target |
-| `values list`                                     | ➖           | Covered by `guide --ai` (unresolved values block phases) and VS Code freeform                            |
+| `values list`                                     | ✅           | `strata values list --ai` explains each unresolved value and provides exact store-specific fix commands  |
 | `new`                                             | ➖           | Template scaffolding — VS Code freeform and MCP server answer "which template to use" questions          |
 | `secret`                                          | ➖           | Security-sensitive — AI must never handle credential context                                             |
 | `mcp`                                             | ➖           | IS the external AI integration point                                                                     |
@@ -844,8 +844,6 @@ validate	graph	—	AI explain the dependency graph in plain language ("what depe
 cost	history	—	AI explain cost spikes: "monthly cost jumped 40% because 3 new VMs added in stage X"	Medium
 audit	changes	—	AI summarise deployment history: "last 5 deploys succeeded, avg duration 4m, no anomalies"	Medium
 service	all	—	Same pattern as deploy — could reuse deploy run --ai pattern	Low
-versions	all	—	No useful AI target (mechanical version management)	—
-manifest	all	—	No useful AI target (query/export)	—
 
 
 Medium-value opportunities (new prompt required):

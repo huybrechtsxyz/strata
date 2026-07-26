@@ -60,12 +60,11 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
     - `--ai` flag on `strata promote status` — triggers `explain_promotion_status()` after loading in-flight promotions
     - AI explains which promotions are in-progress, which need attention, and recommends next action per promotion
     - New `explain_promotion_status()` method on `AiAgentIntegration` + new `PromotionStatusPrompt` (`data/prompts/promotion_status.py`)
-  - Bug fix: `install_tools_command.py` had the same `ConfigurationService(config_paths)` constructor pattern as previously fixed in `doctor_env_command.py`; corrected to `ConfigurationService.load(cp)` + `deployment_paths` → `configfile_paths`
-  - Phase 7 (continued): `strata promote status --ai`
-    - `--ai` flag on `strata promote status` — triggers `explain_promotion_status()` after loading in-flight promotions
-    - AI explains which promotions are in-progress, which need attention, and recommends next action per promotion
-    - New `explain_promotion_status()` method on `AiAgentIntegration` + new `PromotionStatusPrompt` (`data/prompts/promotion_status.py`)
-  - Bug fix: `install_tools_command.py` had the same `ConfigurationService(config_paths)` constructor pattern as previously fixed in `doctor_env_command.py`; corrected to `ConfigurationService.load(cp)` + `deployment_paths` → `configfile_paths`
+  - Bug fix: `install_tools_command.py` and `show_log_command.py` had stale `ConfigurationService(config_paths)` constructor calls; corrected to `ConfigurationService.load(cp)`
+  - Phase 7 (continued): `strata values list --ai`
+    - `--ai` flag on `strata values list` — triggers `explain_unresolved_values()` when any value fails to resolve
+    - AI explains per-value likely cause and exact fix command (env var export, `az keyvault secret set`, `bws secret create`, etc.) tailored to the store type
+    - New `explain_unresolved_values()` method on `AiAgentIntegration` + new `UnresolvedValuesPrompt` (`data/prompts/unresolved_values.py`)
 
 ## [1.4.0] - 2026-07-24
 
