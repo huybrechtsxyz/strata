@@ -106,10 +106,11 @@ class ChangesAuditCommand(SchemaBaseCommand):
             sol.load()
             profile, _ = sol.get_active_profile()
             if profile:
-                config_paths = [str(p.path) for p in (profile.configfile_paths or [])]
-                if config_paths:
-                    config_svc = ConfigurationService(config_paths)
-                    config_svc.load()
+                for cp in [str(p.path) for p in (profile.configfile_paths or [])]:
+                    svc = ConfigurationService.load(cp)
+                    if svc.model:
+                        config_svc = svc
+                        break
         except Exception:
             pass
 

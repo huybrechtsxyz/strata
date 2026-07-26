@@ -84,6 +84,7 @@ All AI flags are opt-in. No AI calls are made unless `--ai` or `--strict-ai-revi
 | `strata deploy run -f ... --strict-ai-review [THRESHOLD]` | `--strict-ai-review` | Block apply non-interactively if AI plan risk ≥ threshold                                |
 | `strata deploy drift run -f ... --ai`                     | `--ai`               | Explain detected drift; suggest reconciliation path                                      |
 | `strata deploy health -f ... --ai`                        | `--ai`               | Explain why HTTP/TCP probes failed; suggest per-check service fixes                      |
+| `strata deploy history --ai`                              | `--ai`               | Trend analysis: success rate, recurring failures, anomalies (≥2 entries needed)          |
 | `strata promote status --ai`                              | `--ai`               | Explain in-flight promotions; identify what needs attention; suggest next steps          |
 | `strata values list -f ... --ai`                          | `--ai`               | Explain unresolved variables/secrets/features; provide exact store-specific fix commands |
 | `strata validate -f ... --ai`                             | `--ai`               | Explain validation errors and policy violations; suggest YAML fixes                      |

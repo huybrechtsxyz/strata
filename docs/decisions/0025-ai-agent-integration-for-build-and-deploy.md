@@ -624,11 +624,11 @@ Complete survey of every strata CLI command and its AI applicability. Legend: �
 | `deploy`  | `run`       | ✅      | `--ai`, `--strict-ai-review` | `diagnose_failure()`, `summarise_deployment()` | Failure diagnosis + post-deploy summary; interactive plan gate                                              |
 | `deploy`  | `drift run` | ✅      | `--ai`                       | `explain_drift()`                              | Drift explanation + reconciliation path                                                                     |
 | `deploy`  | `health`    | ✅      | `--ai`                       | new: `explain_health_failures()`               | Explain why HTTP/TCP probes fail; suggest service fixes. Also fixes missing `@deploy.command` registration. |
-| `deploy`  | `history`   | ➖      | —                            | —                                              | Mechanical query; `audit changes --ai` covers history analysis                                              |
+| `deploy`  | `history`   | ✅      | `--ai`                       | new: `summarise_deploy_history()`              | Trend analysis: success rate, recurring failures, degrading patterns; requires ≥2 entries                   |
 | `deploy`  | `status`    | ➖      | —                            | —                                              | Low-value; covered by `deploy run --ai` summary                                                             |
 | `service` | `deploy`    | 🔶      | `--ai`                       | reuse `diagnose_failure()`                     | Same pattern as `deploy run --ai` for individual service stages                                             |
 | `env`     | `doctor`    | ✅      | `--ai`                       | `explain_doctor_results()`                     | Per-check root cause + numbered remediation                                                                 |
-| `cost`    | `history`   | ✅      | `--ai`                       | new: `analyse_cost_trend()`                    | Trend direction, spike detection with likely cause, cost-reduction recommendations      |
+| `cost`    | `history`   | ✅      | `--ai`                       | new: `analyse_cost_trend()`                    | Trend direction, spike detection with likely cause, cost-reduction recommendations                          |
 
 ### Inspection & Validation
 
@@ -737,12 +737,12 @@ A spike is defined as a single-step delta ≥ 10% of the previous snapshot total
 
 #### Implementation
 
-| Step | File | Change |
-| ---- | ---- | ------ |
-| 1 | `data/prompts/cost_trend_analysis.py` | New `CostTrendAnalysisPrompt` — `summary`, `trend`, `total_change`, `spikes[]`, `recommendations[]` |
-| 2 | `ai_integration.py` | Add `analyse_cost_trend(snapshots, stats, context, work_path)` — cached |
-| 3 | `history_cost_command.py` | Add `ai: bool`; at end of `_execute()` call `_run_ai_cost_analysis()` with pre-computed `_compute_cost_stats()`; add `_print_ai_cost_analysis()` renderer |
-| 4 | `cli_cost.py` | Add `--ai` flag to `cost_history` Click command |
+| Step | File                                  | Change                                                                                                                                                    |
+| ---- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `data/prompts/cost_trend_analysis.py` | New `CostTrendAnalysisPrompt` — `summary`, `trend`, `total_change`, `spikes[]`, `recommendations[]`                                                       |
+| 2    | `ai_integration.py`                   | Add `analyse_cost_trend(snapshots, stats, context, work_path)` — cached                                                                                   |
+| 3    | `history_cost_command.py`             | Add `ai: bool`; at end of `_execute()` call `_run_ai_cost_analysis()` with pre-computed `_compute_cost_stats()`; add `_print_ai_cost_analysis()` renderer |
+| 4    | `cli_cost.py`                         | Add `--ai` flag to `cost_history` Click command                                                                                                           |
 
 **Reuses**: `find_ai_integration()`, `self._configuration_service` (already loaded by `BaseDeployCommand`).
 

@@ -65,6 +65,11 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
     - `--ai` flag on `strata values list` — triggers `explain_unresolved_values()` when any value fails to resolve
     - AI explains per-value likely cause and exact fix command (env var export, `az keyvault secret set`, `bws secret create`, etc.) tailored to the store type
     - New `explain_unresolved_values()` method on `AiAgentIntegration` + new `UnresolvedValuesPrompt` (`data/prompts/unresolved_values.py`)
+  - Phase 7 (continued): `strata deploy history --ai`
+    - `--ai` flag on `strata deploy history` — triggers `summarise_deploy_history()` when ≥2 entries exist
+    - AI analyses success rate trend, detects recurring failures, flags anomalies, recommends next steps
+    - New `summarise_deploy_history()` method on `AiAgentIntegration` + new `DeployHistorySummaryPrompt` (`data/prompts/deploy_history_summary.py`)
+  - Bug fixes: `cost/history_cost_command.py` had duplicate `_execute`/`_render_history` methods and stale `ConfigurationService` constructor; `audit/changes_audit_command.py` had same stale constructor pattern; all corrected
 
 ## [1.4.0] - 2026-07-24
 
