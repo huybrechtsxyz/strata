@@ -329,6 +329,19 @@ class AiAgentIntegration(BaseIntegration):
             cacheable=False,  # promotion state changes frequently
         )
 
+    def explain_unresolved_values(self, unresolved: list, context: dict) -> AiResponse:
+        """Explain why values failed to resolve and suggest how to define them."""
+        work_path = _work_path(context)
+        prompt = PromptLoader.load("unresolved_values", work_path=work_path)
+        return self._analyse(
+            "explain_unresolved_values",
+            prompt.SYSTEM,
+            prompt.build_user_prompt(unresolved, context),
+            work_path=work_path,
+            cacheable=True,
+            prompt_version=prompt._cls.VERSION,
+        )
+
     def explain_doctor_results(self, failed_checks: list, context: dict) -> AiResponse:
         """Explain env doctor check failures and suggest step-by-step remediation."""
         work_path = _work_path(context)
@@ -372,6 +385,22 @@ class AiAgentIntegration(BaseIntegration):
             work_path=work_path,
             cacheable=True,
             prompt_version=prompt._cls.VERSION,
+        )
+
+    def summarise_execution_log(
+        self,
+        log_entries: list,
+        context: dict,
+        work_path: Optional[Path] = None,
+    ) -> AiResponse:
+        """Summarise errors and warnings from execution log entries."""
+        prompt = PromptLoader.load("execution_log_summary", work_path=work_path)
+        return self._analyse(
+            "summarise_execution_log",
+            prompt.SYSTEM,
+            prompt.build_user_prompt(log_entries, context),
+            work_path=work_path,
+            cacheable=False,  # log content changes between runs
         )
 
     # ------------------------------------------------------------------

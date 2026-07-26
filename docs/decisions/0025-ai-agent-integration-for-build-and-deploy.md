@@ -642,7 +642,7 @@ Complete survey of every strata CLI command and its AI applicability. Legend: �
 | `tools`    | `status`   | ➖      | —      | —                                | Already covered by `env doctor --ai`                                                                                    |
 | `tools`    | `install`  | ✅      | `--ai` | new: `guide_tool_setup()`        | Combines runtime check state + static setup info into a tailored, OS-aware install guide; skips already-satisfied steps |
 | `schema`   | all        | ➖      | —      | —                                | Schema Q&A is handled by the MCP server and VS Code freeform                                                            |
-| `log`      | —          | 🔶      | `--ai` | new: `summarise_execution_log()` | Explain errors in the most recent execution log                                                                         |
+| `log`      | `list`     | ✅      | `--ai` | new: `summarise_execution_log()` | Groups related errors, identifies root causes, suggests next steps; only warning/error/critical entries sent to AI      |
 
 ### VS Code Chat Participant
 
@@ -655,16 +655,16 @@ Complete survey of every strata CLI command and its AI applicability. Legend: �
 
 ### Configuration & Setup
 
-| Command group                                     | Status | Notes                                                                                                       |
-| ------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------- |
-| `sln`, `profile`, `repo`, `ref`, `config`, `vars` | ➖      | Mechanical ops — no useful AI target                                                                        |
-| `versions`, `promote`                             | ➖      | Version management — deterministic; `promote status` could yield a basic trend explanation but value is low |
-| `values list`                                     | ➖      | Covered by `guide --ai` (unresolved values block phases) and VS Code freeform                               |
-| `new`                                             | ➖      | Template scaffolding — VS Code freeform and MCP server answer "which template to use" questions             |
-| `secret`                                          | ➖      | Security-sensitive — AI must never handle credential context                                                |
-| `mcp`                                             | ➖      | IS the external AI integration point                                                                        |
-| `console`                                         | ➖      | REPL cancelled — VS Code chat supersedes                                                                    |
-| `completion`, `version`, `help`                   | ➖      | No AI target                                                                                                |
+| Command group                                     | Status      | Notes                                                                                                    |
+| ------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------- |
+| `sln`, `profile`, `repo`, `ref`, `config`, `vars` | ➖           | Mechanical ops — no useful AI target                                                                     |
+| `versions`, `promote`                             | ✅ (partial) | `promote status` now has `--ai`; `promote matrix` and `versions` remain mechanical — no useful AI target |
+| `values list`                                     | ➖           | Covered by `guide --ai` (unresolved values block phases) and VS Code freeform                            |
+| `new`                                             | ➖           | Template scaffolding — VS Code freeform and MCP server answer "which template to use" questions          |
+| `secret`                                          | ➖           | Security-sensitive — AI must never handle credential context                                             |
+| `mcp`                                             | ➖           | IS the external AI integration point                                                                     |
+| `console`                                         | ➖           | REPL cancelled — VS Code chat supersedes                                                                 |
+| `completion`, `version`, `help`                   | ➖           | No AI target                                                                                             |
 
 ### Candidate Phase 7 (not yet designed)
 
@@ -677,6 +677,74 @@ Ordered by estimated value:
 5. **`cost history --ai`** — cost spike explanation; new `analyse_cost_trend()` method needed
 6. **`service deploy --ai`** — reuse `diagnose_failure()`; minimal new work
 7. **`log --ai`** — execution log error summary; low priority
+
+---
+
+### Phase 9 — `strata log list --ai` _(implemented)_
+
+Summarises errors and warnings from execution log entries using AI. Groups related failures, identifies root causes, and produces prioritised next steps — replacing the need to manually scan log files after a failed command.
+
+**Key difference from `diagnose_failure()`**: `diagnose_failure()` operates on a single provisioner step's error output in real time. `log list --ai` operates on the full log history — it can find patterns across multiple entries, correlate related errors, and distinguish transient noise (retries, timeouts) from persistent failures.
+
+```
+$ strata log list --last --ai
+
+  📋  Execution Logs
+  Filters: lines=50 | execution=a1b2c3d4…
+
+  [2026-07-26T14:32:01]  ERROR    terraform apply failed: timeout waiting for resource
+  [2026-07-26T14:32:03]  ERROR    stage 'networking' exceeded timeout (300s)
+  [2026-07-26T14:32:03]  WARNING  retry 3/3 failed for resource azurerm_subnet.main
+  ...
+
+  🤖  AI log summary (ai-advisor) …
+
+  ────────────────────────────────────────────────────────────
+  🤖  AI Log Summary  (3 warning/error entries)
+  ────────────────────────────────────────────────────────────
+
+  🟠  Stage 'networking' timed out waiting for azurerm_subnet.main.
+      All 3 errors are related to a single stuck resource.
+
+  [3x] Azure subnet provisioning timeout
+        Terraform applied but the subnet resource did not reach Ready state within 300s.
+        Likely cause: Azure API throttling or a dependency (VNet) not yet available.
+        → Run: strata deploy run --stage networking --force to retry the stage.
+
+  Next steps:
+    1. Check Azure portal for subnet 'main' provisioning state
+    2. Verify VNet dependency is fully provisioned before retrying
+    3. Consider increasing the Terraform timeout for azurerm_subnet in the module
+  ────────────────────────────────────────────────────────────
+```
+
+**Useful flag combinations**:
+
+```bash
+strata log list --last --ai                     # summarise most recent execution
+strata log list --minutes 60 --ai              # summarise last hour
+strata log list --level error --ai             # focus AI on errors only (fewer tokens)
+strata log list --execution-id <id> --ai       # summarise a specific run
+```
+
+#### Token efficiency
+
+Only `WARNING`, `ERROR`, and `CRITICAL` entries are sent to the AI — `INFO` and `DEBUG` entries are rendered in the console log view but excluded from the AI prompt. This keeps token usage proportional to the signal density, not the log volume. For busy workspaces with verbose debug logging enabled, this can reduce the AI prompt by 90–99%.
+
+#### Implementation
+
+| Step | File                                    | Change                                                                                                                                                                                    |
+| ---- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `data/prompts/execution_log_summary.py` | New `ExecutionLogSummaryPrompt` — groups errors, `severity`, `error_groups[]`, `noise`, `next_steps[]`                                                                                    |
+| 2    | `ai_integration.py`                     | Add `summarise_execution_log(log_entries, context, work_path)` — not cached (log content changes between runs)                                                                            |
+| 3    | `show_log_command.py`                   | Add `ai: bool` to `__init__`; in `_execute()` after populating `_output_data`, call `_run_ai_log_summary()` which filters to warning/error entries then calls `summarise_execution_log()` |
+| 4    | `cli_log.py`                            | Add `--ai` flag to `log list` Click command                                                                                                                                               |
+
+**Reuses**: `find_ai_integration()`, `SolutionController` workspace context pattern.
+
+**Output data**: adds `ai_analysis.log_summary` key to `_output_data` (includes `entries_analysed` count) for JSON consumers.
+
+**Not cached**: each log window is unique; caching would return stale analysis for the same time window after new errors occur.
 
 ---
 
@@ -775,11 +843,10 @@ deploy	history	—	AI summarise trends across recent deployments (growing durati
 validate	graph	—	AI explain the dependency graph in plain language ("what depends on what")	Low
 cost	history	—	AI explain cost spikes: "monthly cost jumped 40% because 3 new VMs added in stage X"	Medium
 audit	changes	—	AI summarise deployment history: "last 5 deploys succeeded, avg duration 4m, no anomalies"	Medium
-values	list	—	AI explain unresolved values and suggest where to define them	Low
 service	all	—	Same pattern as deploy — could reuse deploy run --ai pattern	Low
 versions	all	—	No useful AI target (mechanical version management)	—
 manifest	all	—	No useful AI target (query/export)	—
-log	—	—	AI summarise recent errors from execution logs	Low
+
 
 Medium-value opportunities (new prompt required):
 strata deploy health --ai — "why is my service unhealthy?" when HTTP probes return 5xx or TCP connections timeout

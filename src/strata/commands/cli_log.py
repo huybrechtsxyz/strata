@@ -59,6 +59,13 @@ def log_group():
     default=False,
     help="Show logs for the most recent command execution.",
 )
+@click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help="Summarise errors and warnings with AI: groups related failures, identifies root causes, suggests next steps.",
+)
 @click_work_path
 @click_output_format
 @click_output_verbose
@@ -69,6 +76,7 @@ def log_list(
     level: Optional[str] = None,
     execution_id: Optional[str] = None,
     last: bool = False,
+    ai: bool = False,
     work_path: Optional[str] = None,
     output: Optional[str] = None,
     verbose: bool = False,
@@ -81,6 +89,7 @@ def log_list(
         level=level,
         execution_id=execution_id,
         last=last,
+        ai=ai,
         work_path=work_path,
         output=output,
         verbose=verbose,

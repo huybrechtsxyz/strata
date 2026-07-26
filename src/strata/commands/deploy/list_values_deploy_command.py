@@ -45,6 +45,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
         show_store: bool = False,
         unresolved_only: bool = False,
         trace: bool = False,
+        ai: bool = False,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -61,6 +62,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
         self._show_store = show_store
         self._unresolved_only = unresolved_only
         self._trace = trace
+        self._ai = ai
 
     # ------------------------------------------------------------------
     # Core logic
@@ -119,6 +121,10 @@ class ListValuesDeployCommand(BaseDeployCommand):
 
         if self._is_console_output():
             self._print_console(var_rows, secret_rows, feature_rows)
+
+        # AI analysis — run when there are unresolved values
+        if self._ai and any_failed:
+            self._run_ai_values_analysis(var_rows, secret_rows, feature_rows)
 
         # Exit code 3 if any entry failed to resolve
         if any_failed:

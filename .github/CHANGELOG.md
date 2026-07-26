@@ -56,6 +56,16 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
     - `--ai` flag on `strata deploy health` — triggers `explain_health_failures()` when any probe fails; explains per-check root cause and remediation
     - Bug fix: `deploy health` command was not registered in the `deploy` group (`@deploy.command` decorator was missing); it now appears in `strata deploy --help`
     - New `explain_health_failures()` method on `AiAgentIntegration` + new `HealthAnalysisPrompt` (`data/prompts/health_analysis.py`)
+  - Phase 7 (continued): `strata promote status --ai`
+    - `--ai` flag on `strata promote status` — triggers `explain_promotion_status()` after loading in-flight promotions
+    - AI explains which promotions are in-progress, which need attention, and recommends next action per promotion
+    - New `explain_promotion_status()` method on `AiAgentIntegration` + new `PromotionStatusPrompt` (`data/prompts/promotion_status.py`)
+  - Bug fix: `install_tools_command.py` had the same `ConfigurationService(config_paths)` constructor pattern as previously fixed in `doctor_env_command.py`; corrected to `ConfigurationService.load(cp)` + `deployment_paths` → `configfile_paths`
+  - Phase 7 (continued): `strata promote status --ai`
+    - `--ai` flag on `strata promote status` — triggers `explain_promotion_status()` after loading in-flight promotions
+    - AI explains which promotions are in-progress, which need attention, and recommends next action per promotion
+    - New `explain_promotion_status()` method on `AiAgentIntegration` + new `PromotionStatusPrompt` (`data/prompts/promotion_status.py`)
+  - Bug fix: `install_tools_command.py` had the same `ConfigurationService(config_paths)` constructor pattern as previously fixed in `doctor_env_command.py`; corrected to `ConfigurationService.load(cp)` + `deployment_paths` → `configfile_paths`
 
 ## [1.4.0] - 2026-07-24
 
