@@ -305,9 +305,7 @@ class AiAgentIntegration(BaseIntegration):
             prompt_version=prompt._cls.VERSION,
         )
 
-    def assist_guide(
-        self, phase: int, phase_label: str, blocking_items: list, context: dict
-    ) -> AiResponse:
+    def assist_guide(self, phase: int, phase_label: str, blocking_items: list, context: dict) -> AiResponse:
         """Explain what is blocking a readiness phase and suggest the next action."""
         work_path = _work_path(context)
         prompt = PromptLoader.load("guide_assistance", work_path=work_path)

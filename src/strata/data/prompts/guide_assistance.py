@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 
@@ -45,8 +44,4 @@ Be concise and specific. Provide actual strata CLI commands where applicable."""
 
         items_text = "\n".join(items_lines) if items_lines else "  (no details)"
 
-        return (
-            f"Workspace: {workspace}\n"
-            f"Phase {phase}: {phase_label}\n\n"
-            f"Blocking items:\n{items_text}"
-        )
+        return f"Workspace: {workspace}\nPhase {phase}: {phase_label}\n\nBlocking items:\n{items_text}"

@@ -182,7 +182,7 @@ class DoctorEnvCommand(BaseCommand):
 
         # Build a flat list of failed checks with category context
         failed_checks: List[Dict[str, Any]] = []
-        for cat_entry in (self._output_data.get("categories") or []):
+        for cat_entry in self._output_data.get("categories") or []:
             cat_name = cat_entry.get("name", "?")
             for check in cat_entry.get("checks", []):
                 if check.get("status") == "fail":
@@ -194,8 +194,9 @@ class DoctorEnvCommand(BaseCommand):
         # Use workspace-level configuration (no deployment file required)
         config_svc = None
         try:
-            from strata.services.configuration_service import ConfigurationService
             from strata.controllers.solution_controller import SolutionController
+            from strata.services.configuration_service import ConfigurationService
+
             sol = SolutionController(work_path=self._work_path)
             sol.load()
             profile, _ = sol.get_active_profile()

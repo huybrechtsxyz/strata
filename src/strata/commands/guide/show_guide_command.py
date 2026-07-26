@@ -131,8 +131,8 @@ class GuideCommand(BaseCommand):
         # Guide has no configuration service — try to load one
         config_svc = None
         try:
-            from strata.services.configuration_service import ConfigurationService
             from strata.controllers.solution_controller import SolutionController
+            from strata.services.configuration_service import ConfigurationService
 
             sol = SolutionController(work_path=self._work_path)
             sol.load()

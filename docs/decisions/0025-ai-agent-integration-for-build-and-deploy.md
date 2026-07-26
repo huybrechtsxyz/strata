@@ -540,9 +540,9 @@ $ strata guide --ai
 
 #### New prompt files
 
-| File | Prompt class | Purpose |
-|---|---|---|
-| `data/prompts/doctor_analysis.py` | `DoctorAnalysisPrompt` | Root cause + remediation for env doctor failures |
+| File                               | Prompt class            | Purpose                                                |
+| ---------------------------------- | ----------------------- | ------------------------------------------------------ |
+| `data/prompts/doctor_analysis.py`  | `DoctorAnalysisPrompt`  | Root cause + remediation for env doctor failures       |
 | `data/prompts/guide_assistance.py` | `GuideAssistancePrompt` | Explain readiness phase blockage + suggest next action |
 
 #### New analysis methods on `AiAgentIntegration`

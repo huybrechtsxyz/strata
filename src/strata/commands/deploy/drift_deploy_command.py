@@ -189,7 +189,12 @@ class DriftDeployCommand(BaseDeployCommand):
         try:
             parsed = _json.loads(content)
             severity = str(parsed.get("severity", "?")).upper()
-            severity_icon = {"LOW": "\U0001f7e2", "MEDIUM": "\U0001f7e1", "HIGH": "\U0001f7e0", "CRITICAL": "\U0001f534"}.get(severity, "\u26aa")
+            severity_icon = {
+                "LOW": "\U0001f7e2",
+                "MEDIUM": "\U0001f7e1",
+                "HIGH": "\U0001f7e0",
+                "CRITICAL": "\U0001f534",
+            }.get(severity, "\u26aa")
             _click.echo(f"\n  {severity_icon}  {parsed.get('summary', '')}")
             if parsed.get("likely_cause"):
                 _click.echo(f"  Likely cause: {parsed['likely_cause']}")
