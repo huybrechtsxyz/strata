@@ -38,6 +38,7 @@ class CheckPolicyCommand(BaseCommand):
         file: Optional[str] = None,
         phase: Optional[Tuple[str, ...]] = None,
         plan_file: Optional[str] = None,
+        ai: bool = False,
         work_path: Optional[str] = None,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
@@ -53,6 +54,7 @@ class CheckPolicyCommand(BaseCommand):
         self._file_path: Optional[Path] = Path(file) if file else None
         self._requested_phases: Tuple[str, ...] = phase if phase else _ALL_PHASES
         self._raw_plan_file: Optional[str] = plan_file
+        self._ai: bool = ai
 
         self._configuration_service: Optional[ConfigurationService] = None
         self._deployment_service: Optional[DeploymentService] = None
@@ -74,6 +76,8 @@ class CheckPolicyCommand(BaseCommand):
             if self._is_console_output():
                 click.echo("\n❌  Execution failed")
             return False
+        if self._ai and any(not r["passed"] for r in self._results):
+            self._run_ai_policy_review()
         return not self._denied
 
     def _run_execution(self) -> bool:
@@ -301,6 +305,97 @@ class CheckPolicyCommand(BaseCommand):
             click.echo(click.style("\n  ✗  One or more deny policies failed.", fg="red", bold=True))
         else:
             click.echo(click.style("\n  ✓  All checks passed.", fg="green"))
+        click.echo("")
+
+    # ------------------------------------------------------------------
+    # AI policy review
+    # ------------------------------------------------------------------
+
+    def _run_ai_policy_review(self) -> None:
+        """Run AI explanation of failed policies after evaluation."""
+        from strata.integrations.ai import find_ai_integration
+
+        # configuration_service is already loaded by _run_execution
+        integration = find_ai_integration(self._configuration_service)
+        if integration is None:
+            if self._is_console_output():
+                click.echo("  \u26a0  --ai flag set but no ai_agent integration configured")
+            return
+        ok, msg = integration.ensure_available()
+        if not ok:
+            self._messages.append(f"AI provider unavailable: {msg}")
+            return
+
+        # Build violations list — include phase context for richer AI input
+        violations = [
+            {
+                "policy": r["policy"],
+                "phase": r["phase"],
+                "enforcement": r["enforcement"],
+                "violations": r["violations"],
+            }
+            for r in self._results
+            if not r["passed"]
+        ]
+
+        context = {
+            "deployment": str(self._file_path or self._raw_file or "unknown"),
+            "work_path": str(self._work_path),
+        }
+
+        if self._is_console_output():
+            click.echo(f"\n  \U0001f916  AI policy review ({integration.integration_name}) \u2026")
+
+        try:
+            response = integration.review_policy_violations(violations, context)
+        except Exception as exc:
+            self._messages.append(f"AI policy review failed: {exc}")
+            return
+
+        self._output_data["ai_analysis"] = {
+            "provider": response.provider,
+            "model": response.model,
+            "content": response.content,
+        }
+
+        if self._is_console_output():
+            self._print_ai_policy_review(response.content)
+
+    def _print_ai_policy_review(self, content: str) -> None:
+        import json as _json
+
+        sep = "\u2500" * 48
+        click.echo(f"\n  {sep}")
+        click.echo("  \U0001f916  AI Policy Review")
+        click.echo(f"  {sep}")
+        try:
+            parsed = _json.loads(content)
+            severity = str(parsed.get("severity", "?")).upper()
+            severity_icon = {
+                "LOW": "\U0001f7e2",
+                "MEDIUM": "\U0001f7e1",
+                "HIGH": "\U0001f7e0",
+                "CRITICAL": "\U0001f534",
+            }.get(severity, "\u26aa")
+            click.echo(f"\n  {severity_icon}  {parsed.get('summary', '')}")
+            if parsed.get("violations"):
+                click.echo("\n  Violations:")
+                for v in parsed["violations"]:
+                    if isinstance(v, dict):
+                        policy = v.get("policy", "?")
+                        desc = v.get("description", "")
+                        fix = v.get("fix", "")
+                        click.echo(f"    \u2022 [{policy}] {desc}")
+                        if fix:
+                            click.echo(f"      \u2192 Fix: {fix}")
+                    else:
+                        click.echo(f"    \u2022 {v}")
+            if parsed.get("recommendations"):
+                click.echo("\n  Recommendations:")
+                for r in parsed["recommendations"]:
+                    click.echo(f"    \u2192 {r}")
+        except (_json.JSONDecodeError, TypeError):
+            click.echo(content)
         click.echo("")
 
     # ------------------------------------------------------------------

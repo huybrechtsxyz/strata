@@ -402,6 +402,7 @@ def deploy_history(
     handle_command_exit(command, success)
 
 
+@deploy.command(name="health", help="Run health checks against provisioned infrastructure stages.")
 @click.option(
     "--file",
     "-f",
@@ -417,6 +418,13 @@ def deploy_history(
     metavar="NAME",
     help="Limit checks to a specific deployment stage.",
 )
+@click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help="Run AI explanation of failed health probes (requires an ai_agent integration).",
+)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -424,6 +432,7 @@ def deploy_health(
     file: str,
     work_path: Optional[str] = None,
     stage: Optional[str] = None,
+    ai: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -433,6 +442,7 @@ def deploy_health(
         file=file,
         work_path=work_path,
         stage=stage,
+        ai=ai,
         output=output,
         verbose=verbose,
         quiet=quiet,

@@ -36,6 +36,7 @@ class HealthDeployCommand(BaseDeployCommand):
         file: Optional[str] = None,
         work_path: Optional[str] = None,
         stage: Optional[str] = None,
+        ai: bool = False,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -48,6 +49,7 @@ class HealthDeployCommand(BaseDeployCommand):
             quiet=quiet,
         )
         self._stage = stage
+        self._ai = ai
 
     # -------------------------------------------------------------------------
     # Entry point
@@ -146,7 +148,8 @@ class HealthDeployCommand(BaseDeployCommand):
         if self._is_console_output():
             icon = "✅" if all_passed else "❌"
             click.echo(f"  {icon}  {passed}/{len(results)} stages healthy\n")
-
+        if self._ai and not all_passed:
+            self._run_ai_health_analysis()
         return all_passed
 
     # -------------------------------------------------------------------------
@@ -416,3 +419,80 @@ class HealthDeployCommand(BaseDeployCommand):
             )
         except ValueError:
             return None
+
+    # -------------------------------------------------------------------------
+    # AI health analysis
+    # -------------------------------------------------------------------------
+
+    def _run_ai_health_analysis(self) -> None:
+        """Explain failed health probes using the configured AI integration."""
+        from strata.integrations.ai import find_ai_integration
+
+        integration = find_ai_integration(self._configuration_service)
+        if integration is None:
+            if self._is_console_output():
+                click.echo("  ⚠  --ai flag set but no ai_agent integration configured")
+            return
+        ok, msg = integration.ensure_available()
+        if not ok:
+            self._messages.append(f"AI provider unavailable: {msg}")
+            return
+
+        deployment_name = (
+            str(self._deployment_service.model.meta.name)  # type: ignore[union-attr]
+            if self._deployment_service and self._deployment_service.model
+            else "unknown"
+        )
+        context = {"deployment": deployment_name, "work_path": str(self._work_path)}
+
+        if self._is_console_output():
+            click.echo(f"\n  🤖  AI health analysis ({integration.integration_name}) …")
+
+        try:
+            response = integration.explain_health_failures(
+                self._output_data if isinstance(self._output_data, dict) else {}, context
+            )
+        except Exception as exc:
+            self._messages.append(f"AI health analysis failed: {exc}")
+            return
+
+        if not isinstance(self._output_data, dict):
+            self._output_data = {}
+        self._output_data["ai_analysis"] = {
+            "provider": response.provider,
+            "model": response.model,
+            "content": response.content,
+        }
+
+        if self._is_console_output():
+            self._print_ai_health(response.content)
+
+    def _print_ai_health(self, content: str) -> None:
+        import json as _json
+
+        sep = "\u2500" * 48
+        click.echo(f"\n  {sep}")
+        click.echo("  🤖  AI Health Analysis")
+        click.echo(f"  {sep}")
+        try:
+            parsed = _json.loads(content)
+            click.echo(f"\n  {parsed.get('summary', '')}")
+            if parsed.get("root_cause"):
+                click.echo(f"  Root cause: {parsed['root_cause']}")
+            if parsed.get("checks"):
+                click.echo("\n  Failed checks:")
+                for c in parsed["checks"]:
+                    if isinstance(c, dict):
+                        name = c.get("name", "?")
+                        ctype = c.get("type", "?")
+                        cause = c.get("likely_cause", "")
+                        click.echo(f"    [{ctype}] {name}: {cause}")
+                        for step in c.get("remediation", []):
+                            click.echo(f"      → {step}")
+            if parsed.get("recommendations"):
+                click.echo("\n  Recommendations:")
+                for r in parsed["recommendations"]:
+                    click.echo(f"    → {r}")
+        except (_json.JSONDecodeError, TypeError):
+            click.echo(content)
+        click.echo("")

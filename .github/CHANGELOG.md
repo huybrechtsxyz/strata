@@ -44,6 +44,18 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
     - Two new analysis methods on `AiAgentIntegration`: `explain_doctor_results()`, `assist_guide()`
     - Two new prompt files: `data/prompts/doctor_analysis.py` (`DoctorAnalysisPrompt`), `data/prompts/guide_assistance.py` (`GuideAssistancePrompt`)
     - All eight prompts support `.strata/prompts/<name>.md` workspace overrides via `PromptLoader`
+  - Phase 7: `strata policy check --ai`
+    - `--ai` flag on `strata policy check` — runs `review_policy_violations()` after evaluation when any policy fails; multi-phase violations (validate/build/plan/deploy) are passed together giving the AI cross-phase context
+    - Reuses existing `review_policy_violations()` and `policy_review.py` prompt — no new method or prompt file needed
+    - `configuration_service` is already loaded by the command; `find_ai_integration()` uses it directly without additional loading
+  - Phase 7 (continued): `strata build run --audit --ai`
+    - `--ai` flag on `strata build run` — triggers `analyse_cve_results()` after the `--audit` CVE scan when findings are present
+    - `CveAuditResultModel` (already stored as `self._cve_audit_result` by `_execute_audit`) is serialised and passed to the AI with the full findings list
+    - New `analyse_cve_results()` method on `AiAgentIntegration` + new `CveAnalysisPrompt` (`data/prompts/cve_analysis.py`) — groups findings by severity, flags no-fix CVEs, prioritises packages to upgrade
+  - Phase 7 (continued): `strata deploy health --ai`
+    - `--ai` flag on `strata deploy health` — triggers `explain_health_failures()` when any probe fails; explains per-check root cause and remediation
+    - Bug fix: `deploy health` command was not registered in the `deploy` group (`@deploy.command` decorator was missing); it now appears in `strata deploy --help`
+    - New `explain_health_failures()` method on `AiAgentIntegration` + new `HealthAnalysisPrompt` (`data/prompts/health_analysis.py`)
 
 ## [1.4.0] - 2026-07-24
 

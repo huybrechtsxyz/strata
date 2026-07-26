@@ -292,6 +292,31 @@ class AiAgentIntegration(BaseIntegration):
             prompt_version=prompt._cls.VERSION,
         )
 
+    def analyse_cve_results(self, cve_data: dict, context: dict) -> AiResponse:
+        """Explain CVE findings from a scanner audit and suggest remediation priorities."""
+        work_path = _work_path(context)
+        prompt = PromptLoader.load("cve_analysis", work_path=work_path)
+        return self._analyse(
+            "analyse_cve_results",
+            prompt.SYSTEM,
+            prompt.build_user_prompt(cve_data, context),
+            work_path=work_path,
+            cacheable=True,
+            prompt_version=prompt._cls.VERSION,
+        )
+
+    def explain_health_failures(self, health_data: dict, context: dict) -> AiResponse:
+        """Explain why health probes failed and suggest service fixes."""
+        work_path = _work_path(context)
+        prompt = PromptLoader.load("health_analysis", work_path=work_path)
+        return self._analyse(
+            "explain_health_failures",
+            prompt.SYSTEM,
+            prompt.build_user_prompt(health_data, context),
+            work_path=work_path,
+            cacheable=False,  # probe results are time-sensitive
+        )
+
     def explain_doctor_results(self, failed_checks: list, context: dict) -> AiResponse:
         """Explain env doctor check failures and suggest step-by-step remediation."""
         work_path = _work_path(context)

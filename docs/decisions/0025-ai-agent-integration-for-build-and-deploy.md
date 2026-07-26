@@ -557,6 +557,128 @@ def assist_guide(self, phase: int, phase_label: str, blocking_items: list[dict],
 
 ---
 
+### Phase 7 — `strata policy check --ai` _(implemented)_
+
+Wire `review_policy_violations()` into the standalone `policy check` command. This is a quick win: the AI method is already implemented and battle-tested via `validate --ai`; the violations data structure is identical.
+
+#### Design
+
+`policy check` already evaluates all four phases (validate / build / plan / deploy) and collects results in `self._results: list[{policy, type, phase, enforcement, passed, violations[]}]`. After evaluation, if any entry has `passed=False`, pass the failed entries to `review_policy_violations()`.
+
+**Key difference from `validate --ai`**: policy check can produce violations from multiple phases in one run. The prompt receives all failed entries grouped, giving the AI richer cross-phase context (e.g., a validate-phase naming violation alongside a plan-phase cost threshold breach).
+
+**No new prompt file, no new AI method, no new `AiAgentIntegration` method.**
+
+```
+$ strata policy check -f deploy/deploy-prd.yaml --ai
+
+  Policy Results
+  ──────────────────────────────────────────────────
+  ✗ DENY  [validate] tenant_zone           — resource 'vm-prod' not in allowed zone
+  ✗ WARN  [plan]     cost_threshold        — estimated cost $420/month exceeds $300 limit
+  ✓       [validate] required_tags         — passed
+
+🤖  AI policy review (ai-advisor) …
+
+  🟠  2 policy issues across 2 phases.
+  
+  Violations:
+    [tenant_zone] Resource 'vm-prod' is deployed to 'eu-de' which is not in the
+    allowed zone list [eu-fr, eu-nl]. Set zone: eu-fr in the resource declaration.
+    
+    [cost_threshold] Estimated monthly cost of $420 exceeds the configured threshold
+    of $300. Consider downsizing the VM SKU or splitting into a lower-cost tier.
+  
+  Recommendations:
+    → Update vm-prod zone in stack/vm-infra.yaml
+    → Review cost allocation in configuration; the threshold may need updating if
+      the higher cost is expected
+```
+
+#### Implementation plan
+
+| Step | File                      | Change                                                                                                                          |
+| ---- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `check_policy_command.py` | Add `ai: bool = False` to `__init__`; after `_run_execution()`, call `_run_ai_policy_review()` if any result failed             |
+| 2    | `check_policy_command.py` | Add `_run_ai_policy_review()` — builds violations list from `self._results`, calls `review_policy_violations()`, renders output |
+| 3    | `check_policy_command.py` | Add `_print_ai_policy_review()` console renderer (risk icon + per-violation description + recommendations)                      |
+| 4    | `cli_policy.py`           | Add `--ai` flag to `check_policy_command` Click command                                                                         |
+
+**Reuses**: `review_policy_violations()`, `policy_review.py` prompt, `find_ai_integration()` helper — all unchanged.
+
+**Output data**: adds `ai_analysis.policy_review` key to `_output_data` for JSON consumers.
+
+---
+
+## Command Coverage Reference
+
+Complete survey of every strata CLI command and its AI applicability. Legend: ✅ implemented · 🔶 candidate (not yet done) · ➖ not applicable.
+
+### Build & Deploy
+
+| Command   | Subcommand  | Status | Flag                         | AI method                                      | Notes                                                                                                       |
+| --------- | ----------- | ------ | ---------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `build`   | `plan`      | ✅      | `--ai`, `--strict-ai-review` | `analyse_plan()`                               | Risk assessment + gating                                                                                    |
+| `build`   | `sbom`      | ✅      | `--ai`                       | `analyse_sbom()`                               | Supply-chain risk summary                                                                                   |
+| `build`   | `run`       | ✅      | `--audit --ai`               | new: `analyse_cve_results()`                   | AI CVE triage after the built-in `--audit` scan; prioritises findings, flags no-fix CVEs, suggests upgrades |
+| `deploy`  | `run`       | ✅      | `--ai`, `--strict-ai-review` | `diagnose_failure()`, `summarise_deployment()` | Failure diagnosis + post-deploy summary; interactive plan gate                                              |
+| `deploy`  | `drift run` | ✅      | `--ai`                       | `explain_drift()`                              | Drift explanation + reconciliation path                                                                     |
+| `deploy`  | `health`    | ✅      | `--ai`                       | new: `explain_health_failures()`               | Explain why HTTP/TCP probes fail; suggest service fixes. Also fixes missing `@deploy.command` registration. |
+| `deploy`  | `history`   | ➖      | —                            | —                                              | Mechanical query; `audit changes --ai` covers history analysis                                              |
+| `deploy`  | `status`    | ➖      | —                            | —                                              | Low-value; covered by `deploy run --ai` summary                                                             |
+| `service` | `deploy`    | 🔶      | `--ai`                       | reuse `diagnose_failure()`                     | Same pattern as `deploy run --ai` for individual service stages                                             |
+| `env`     | `doctor`    | ✅      | `--ai`                       | `explain_doctor_results()`                     | Per-check root cause + numbered remediation                                                                 |
+| `cost`    | `history`   | 🔶      | `--ai`                       | new: `analyse_cost_trend()`                    | Explain cost spikes; correlate with deployment changes                                                      |
+
+### Inspection & Validation
+
+| Command    | Subcommand | Status | Flag   | AI method                        | Notes                                                                               |
+| ---------- | ---------- | ------ | ------ | -------------------------------- | ----------------------------------------------------------------------------------- |
+| `validate` | `run`      | ✅      | `--ai` | `review_policy_violations()`     | Schema + policy violation explanations with YAML fix suggestions                    |
+| `validate` | `graph`    | ➖      | —      | —                                | VS Code freeform covers "what depends on what" questions                            |
+| `guide`    | —          | ✅      | `--ai` | `assist_guide()`                 | Explain blocking phase; suggest next concrete action                                |
+| `policy`   | `check`    | ✅      | `--ai` | `review_policy_violations()`     | Same method as `validate --ai`; multi-phase violations give richer AI context       |
+| `audit`    | `changes`  | 🔶      | `--ai` | new: `summarise_audit_history()` | Summarise deployment trends; flag anomalies (growing failure rate, duration spikes) |
+| `tools`    | `status`   | ➖      | —      | —                                | Already covered by `env doctor --ai`                                                |
+| `schema`   | all        | ➖      | —      | —                                | Schema Q&A is handled by the MCP server and VS Code freeform                        |
+| `log`      | —          | 🔶      | `--ai` | new: `summarise_execution_log()` | Explain errors in the most recent execution log                                     |
+
+### VS Code Chat Participant
+
+| Command             | Status | AI method                            | Notes                                         |
+| ------------------- | ------ | ------------------------------------ | --------------------------------------------- |
+| `@strata /review`   | ✅      | `analyse_plan()` via `vscode.lm`     | Terraform plan risk assessment in chat        |
+| `@strata /diagnose` | ✅      | `diagnose_failure()` via `vscode.lm` | Last failure root cause + remediation         |
+| `@strata /sbom`     | ✅      | `analyse_sbom()` via `vscode.lm`     | Supply-chain risk in chat                     |
+| `@strata` freeform  | ✅      | `vscode.lm` with workspace context   | Auto-routes AI keywords to dedicated handlers |
+
+### Configuration & Setup
+
+| Command group                                     | Status | Notes                                                                                                       |
+| ------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------- |
+| `sln`, `profile`, `repo`, `ref`, `config`, `vars` | ➖      | Mechanical ops — no useful AI target                                                                        |
+| `versions`, `promote`                             | ➖      | Version management — deterministic; `promote status` could yield a basic trend explanation but value is low |
+| `values list`                                     | ➖      | Covered by `guide --ai` (unresolved values block phases) and VS Code freeform                               |
+| `new`                                             | ➖      | Template scaffolding — VS Code freeform and MCP server answer "which template to use" questions             |
+| `secret`                                          | ➖      | Security-sensitive — AI must never handle credential context                                                |
+| `mcp`                                             | ➖      | IS the external AI integration point                                                                        |
+| `console`                                         | ➖      | REPL cancelled — VS Code chat supersedes                                                                    |
+| `completion`, `version`, `help`                   | ➖      | No AI target                                                                                                |
+
+### Candidate Phase 7 (not yet designed)
+
+Ordered by estimated value:
+
+1. **`policy check --ai`** — quick win; `review_policy_violations()` is already implemented; needs only `--ai` flag wired into `check_policy_command.py` — **see Phase 7 design below**
+2. **`build run --audit --ai`** — explain CVE findings after the built-in SBOM audit scan; new `analyse_cve_results()` method needed
+3. **`deploy health --ai`** — explain probe failures; new `explain_health_failures()` method needed
+4. **`audit changes --ai`** — deployment history trend summary; new `summarise_audit_history()` method needed
+5. **`cost history --ai`** — cost spike explanation; new `analyse_cost_trend()` method needed
+6. **`service deploy --ai`** — reuse `diagnose_failure()`; minimal new work
+7. **`log --ai`** — execution log error summary; low priority
+
+---
+
 ## References
 
 - [ADR-0003: Layered architecture](0003-layered-architecture.md)
@@ -565,3 +687,73 @@ def assist_guide(self, phase: int, phase_label: str, blocking_items: list[dict],
 - [ADR-0020: Lifecycle phases and environment variables](0020-lifecycle-phases-and-environment-variables.md)
 - [ADR-0023: Pluggable provisioner framework](0023-pluggable-provisioner-framework.md)
 - [MCP Server documentation](../mcp/README.md)
+
+## Temporary list of all ideas (for internal planning)
+
+Command	Sub	AI implemented	New opportunity	Value
+
+deploy	health	—	Explain why health probes fail (HTTP 5xx, TCP timeout) with remediation	Medium
+deploy	history	—	AI summarise trends across recent deployments (growing duration, recurring failures)	Low
+validate	graph	—	AI explain the dependency graph in plain language ("what depends on what")	Low
+cost	history	—	AI explain cost spikes: "monthly cost jumped 40% because 3 new VMs added in stage X"	Medium
+audit	changes	—	AI summarise deployment history: "last 5 deploys succeeded, avg duration 4m, no anomalies"	Medium
+promote	status	—	AI explain promotion state: "canary ring is 2 versions behind production"	Low
+values	list	—	AI explain unresolved values and suggest where to define them	Low
+service	all	—	Same pattern as deploy — could reuse deploy run --ai pattern	Low
+versions	all	—	No useful AI target (mechanical version management)	—
+manifest	all	—	No useful AI target (query/export)	—
+log	—	—	AI summarise recent errors from execution logs	Low
+
+Medium-value opportunities (new prompt required):
+strata deploy health --ai — "why is my service unhealthy?" when HTTP probes return 5xx or TCP connections timeout
+strata cost history --ai — "why did my costs spike?" with delta analysis
+strata audit changes --ai — "summarise my recent deployment history" with anomaly detection (growing failure rate, duration trends)
+strata build run --audit --ai — after CVE audit, explain critical vulnerabilities and suggest package upgrades
+Low-value (not recommended for now):
+
+promote status, values list, validate graph, deploy history, log, service — either too niche, already covered by other AI hooks, or adds minimal value over what the MCP server + VS Code freeform already provide.
+Recommendation: Wire policy check --ai now (1 quick win), and design 2–5 as a Phase 7 in the ADR for later. Want me to proceed with policy check --ai?
+
+Best Places an AI Agent Can Add Value (Without Rebuilding Existing Features)
+
+Command planner and safe execution assistant
+Input: user goal like deploy prod wave 2 with lock checks.
+Output: exact command sequence with flags, dry-run first, and fallback steps.
+Why: your CLI is rich; an agent can reduce option-selection mistakes.
+Failure triage copilot for exit codes 1/3/4
+Parse JSON output and audit logs, then suggest minimal remediation.
+Great fit for validate/build/deploy/policy failures.
+Policy remediation assistant
+After policy check failures, propose targeted YAML edits and explain blast radius.
+This complements existing policy check, not duplicates it.
+Drift and promotion decision assistant
+For deploy drift/history/promote/versions, summarize impact and recommend next safe action.
+Manual test-to-automation bridge
+Convert Tests.ps1 scenarios into structured CI checks and agent-run smoke suites.
+Workspace readiness auto-runner
+Wrap guide next/do loops with context-aware retries and missing-input prompts.
+Command-by-Command AI Opportunity Map
+
+validate run
+Existing: schema and deep validation, explain, AI review.
+Agent add: auto-classify errors into fix-now vs config-debt, then generate patch candidates.
+build plan
+Existing: AI plan analysis and strict thresholds.
+Agent add: summarize risk deltas between two plan runs and propose mitigations before apply.
+build run
+Existing: audit and severity gates.
+Agent add: CVE triage that groups findings by exploitability and deployment criticality.
+deploy run
+Existing: stage/scope/ring/wave/promotion controls.
+Agent add: preflight checklist generation and lock-conflict recovery playbook.
+policy check
+Existing: phase-specific evaluation.
+Agent add: produce concrete policy-to-config mapping and prioritized fix order.
+guide and console
+Existing: onboarding and next-step actions.
+Agent add: persistent session memory and intent-based shortcutting across repeated setup tasks.
+High-Impact Gaps I Noticed
+
+Repeated uv wheel reinstall chatter on each command invocation is noisy and can obscure signal.
+The command surface is broad enough that users benefit from an intent-to-command translator.
+Manual test references are comprehensive but not yet agent-orchestrated as a repeatable quality gate.

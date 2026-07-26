@@ -74,6 +74,13 @@ def build():
 @click_output_format
 @click_output_verbose
 @click_output_quiet
+@click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help="Run AI CVE analysis after --audit (requires an ai_agent integration). Only active when --audit is set.",
+)
 def build_run(
     file: Optional[str] = None,
     work_path: Optional[str] = None,
@@ -83,6 +90,7 @@ def build_run(
     fail_on: Optional[str] = None,
     audit_report: Optional[str] = None,
     require_lock: bool = False,
+    ai: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -97,6 +105,7 @@ def build_run(
         fail_on=fail_on.upper() if fail_on else None,
         audit_report=audit_report,
         require_lock=require_lock,
+        ai=ai,
         output=output,
         verbose=verbose,
         quiet=quiet,
