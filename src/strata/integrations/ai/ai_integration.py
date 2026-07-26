@@ -292,6 +292,35 @@ class AiAgentIntegration(BaseIntegration):
             prompt_version=prompt._cls.VERSION,
         )
 
+    def explain_doctor_results(self, failed_checks: list, context: dict) -> AiResponse:
+        """Explain env doctor check failures and suggest step-by-step remediation."""
+        work_path = _work_path(context)
+        prompt = PromptLoader.load("doctor_analysis", work_path=work_path)
+        return self._analyse(
+            "explain_doctor_results",
+            prompt.SYSTEM,
+            prompt.build_user_prompt(failed_checks, context),
+            work_path=work_path,
+            cacheable=True,
+            prompt_version=prompt._cls.VERSION,
+        )
+
+    def assist_guide(
+        self, phase: int, phase_label: str, blocking_items: list, context: dict
+    ) -> AiResponse:
+        """Explain what is blocking a readiness phase and suggest the next action."""
+        work_path = _work_path(context)
+        prompt = PromptLoader.load("guide_assistance", work_path=work_path)
+        user_prompt = prompt.build_user_prompt(phase, phase_label, blocking_items, context)
+        return self._analyse(
+            "assist_guide",
+            prompt.SYSTEM,
+            user_prompt,
+            work_path=work_path,
+            cacheable=True,
+            prompt_version=prompt._cls.VERSION,
+        )
+
     # ------------------------------------------------------------------
     # Hook gating helper
     # ------------------------------------------------------------------

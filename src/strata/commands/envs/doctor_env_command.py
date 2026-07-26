@@ -77,6 +77,7 @@ class DoctorEnvCommand(BaseCommand):
         work_path: Optional[str] = None,
         category: Optional[str] = None,
         deep: bool = False,
+        ai: bool = False,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -90,6 +91,7 @@ class DoctorEnvCommand(BaseCommand):
         self._file = file
         self._category = category
         self._deep = deep
+        self._ai = ai
         self._has_check_failures = False
 
     def get_required_integrations(self) -> Dict[str, str]:
@@ -168,7 +170,92 @@ class DoctorEnvCommand(BaseCommand):
         }
 
         self._has_check_failures = failed > 0
+
+        if self._ai and failed > 0:
+            self._run_ai_doctor_analysis()
+
         return failed == 0
+
+    def _run_ai_doctor_analysis(self) -> None:
+        """Run AI explanation of failed env doctor checks."""
+        from strata.integrations.ai import find_ai_integration
+
+        # Build a flat list of failed checks with category context
+        failed_checks: List[Dict[str, Any]] = []
+        for cat_entry in (self._output_data.get("categories") or []):
+            cat_name = cat_entry.get("name", "?")
+            for check in cat_entry.get("checks", []):
+                if check.get("status") == "fail":
+                    failed_checks.append({"category": cat_name, **check})
+
+        if not failed_checks:
+            return
+
+        # Use workspace-level configuration (no deployment file required)
+        config_svc = None
+        try:
+            from strata.services.configuration_service import ConfigurationService
+            from strata.controllers.solution_controller import SolutionController
+            sol = SolutionController(work_path=self._work_path)
+            sol.load()
+            profile, _ = sol.get_active_profile()
+            if profile:
+                config_paths = [str(p.path) for p in (profile.configfile_paths or [])]
+                if config_paths:
+                    config_svc = ConfigurationService(config_paths)
+                    config_svc.load()
+        except Exception:
+            pass
+
+        integration = find_ai_integration(config_svc)
+        if integration is None or not integration.ensure_available()[0]:
+            if self._is_console_output():
+                click.echo("  \u26a0  --ai flag set but no reachable ai_agent integration configured")
+            return
+
+        context = {"workspace": str(self._work_path)}
+
+        if self._is_console_output():
+            click.echo(f"\n  \U0001f916  AI doctor analysis ({integration.integration_name}) \u2026")
+
+        try:
+            response = integration.explain_doctor_results(failed_checks, context)
+        except Exception as exc:
+            self._messages.append(f"AI doctor analysis failed: {exc}")
+            return
+
+        self._output_data["ai_analysis"] = {
+            "provider": response.provider,
+            "model": response.model,
+            "content": response.content,
+        }
+
+        if self._is_console_output():
+            self._print_ai_doctor(response.content)
+
+    def _print_ai_doctor(self, content: str) -> None:
+        import json as _json
+
+        click.echo(f"\n  {'\u2500' * 48}")
+        click.echo("  \U0001f916  AI Doctor Analysis")
+        click.echo(f"  {'\u2500' * 48}")
+        try:
+            parsed = _json.loads(content)
+            click.echo(f"\n  {parsed.get('summary', '')}")
+            if parsed.get("root_cause"):
+                click.echo(f"  Root cause: {parsed['root_cause']}")
+            if parsed.get("remediation"):
+                click.echo("  Remediation:")
+                for item in parsed["remediation"]:
+                    if isinstance(item, dict):
+                        click.echo(f"    [{item.get('check', '?')}]")
+                        for i, step in enumerate(item.get("steps", []), 1):
+                            click.echo(f"      {i}. {step}")
+                    else:
+                        click.echo(f"    \u2192 {item}")
+        except (_json.JSONDecodeError, TypeError):
+            click.echo(content)
+        click.echo("")
 
     # ------------------------------------------------------------------
     # Category dispatcher

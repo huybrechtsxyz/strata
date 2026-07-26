@@ -481,6 +481,13 @@ def deploy_drift_group():
     default=False,
     help="Acknowledge all currently drifted resources as the accepted baseline and reset history. Always exits 0.",
 )
+@click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help="Run AI drift explanation when drift is detected (requires an ai_agent integration).",
+)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -490,6 +497,7 @@ def deploy_drift_run(
     stage: Optional[str] = None,
     severity: str = "info",
     baseline: bool = False,
+    ai: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -501,6 +509,7 @@ def deploy_drift_run(
         stage=stage,
         severity=severity,
         baseline=baseline,
+        ai=ai,
         output=output,
         verbose=verbose,
         quiet=quiet,

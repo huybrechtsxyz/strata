@@ -33,6 +33,7 @@ class DriftDeployCommand(BaseDeployCommand):
         stage: Optional[str] = None,
         severity: Optional[str] = None,
         baseline: bool = False,
+        ai: bool = False,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -47,6 +48,7 @@ class DriftDeployCommand(BaseDeployCommand):
         self._stage = stage
         self._severity_threshold = DriftSeverity(severity or "info")
         self._baseline = baseline
+        self._ai = ai
 
     # -------------------------------------------------------------------------
     # Entry point
@@ -128,9 +130,76 @@ class DriftDeployCommand(BaseDeployCommand):
 
         # Determine success: drift above threshold → exit 3
         if report.above_threshold(self._severity_threshold):
+            if self._ai:
+                self._run_ai_drift_explanation(report)
             return False
 
+        if report.has_drift and self._ai:
+            self._run_ai_drift_explanation(report)
+
         return True
+
+    def _run_ai_drift_explanation(self, report: object) -> None:
+        """Explain detected drift using the configured AI integration."""
+        import click as _click
+
+        from strata.integrations.ai import find_ai_integration
+
+        integration = find_ai_integration(self._configuration_service)
+        if integration is None or not integration.ensure_available()[0]:
+            return
+
+        deployment_name = (
+            str(self._deployment_service.model.meta.name)  # type: ignore[union-attr]
+            if self._deployment_service and self._deployment_service.model
+            else "unknown"
+        )
+        context = {"deployment": deployment_name, "work_path": str(self._work_path)}
+
+        if self._is_console_output():
+            _click.echo(f"\n  \U0001f916  AI drift explanation ({integration.integration_name}) \u2026")
+
+        drift_data = self._output_data if isinstance(self._output_data, dict) else {}
+
+        try:
+            response = integration.explain_drift(drift_data, context)
+        except Exception as exc:
+            self._messages.append(f"AI drift explanation failed: {exc}")
+            return
+
+        if "ai_analysis" not in (self._output_data or {}):
+            self._output_data["ai_analysis"] = {}
+        self._output_data["ai_analysis"]["drift_explanation"] = {  # type: ignore[index]
+            "provider": response.provider,
+            "model": response.model,
+            "content": response.content,
+        }
+
+        if self._is_console_output():
+            self._print_ai_drift(response.content)
+
+    def _print_ai_drift(self, content: str) -> None:
+        import json as _json
+
+        import click as _click
+
+        _click.echo(f"\n  {'\u2500' * 48}")
+        _click.echo("  \U0001f916  AI Drift Analysis")
+        _click.echo(f"  {'\u2500' * 48}")
+        try:
+            parsed = _json.loads(content)
+            severity = str(parsed.get("severity", "?")).upper()
+            severity_icon = {"LOW": "\U0001f7e2", "MEDIUM": "\U0001f7e1", "HIGH": "\U0001f7e0", "CRITICAL": "\U0001f534"}.get(severity, "\u26aa")
+            _click.echo(f"\n  {severity_icon}  {parsed.get('summary', '')}")
+            if parsed.get("likely_cause"):
+                _click.echo(f"  Likely cause: {parsed['likely_cause']}")
+            if parsed.get("recommendations"):
+                _click.echo("  Recommendations:")
+                for r in parsed["recommendations"]:
+                    _click.echo(f"    \u2192 {r}")
+        except (_json.JSONDecodeError, TypeError):
+            _click.echo(content)
+        _click.echo("")
 
     # -------------------------------------------------------------------------
     # Console rendering

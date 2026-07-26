@@ -259,6 +259,13 @@ def env_drift(
     default=False,
     help="Run slow checks: backend reachability and auth validation.",
 )
+@click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help="Run AI analysis of failed checks (requires an ai_agent integration).",
+)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -267,6 +274,7 @@ def env_doctor(
     work_path: Optional[str] = None,
     category: Optional[str] = None,
     deep: bool = False,
+    ai: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -277,6 +285,7 @@ def env_doctor(
         work_path=work_path,
         category=category,
         deep=deep,
+        ai=ai,
         output=output,
         verbose=verbose,
         quiet=quiet,

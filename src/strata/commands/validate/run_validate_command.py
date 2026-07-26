@@ -31,6 +31,7 @@ class ValidateCommand(BaseCommand):
         deep: bool = False,
         verify_digests: bool = False,
         explain: bool = False,
+        ai: bool = False,
         work_path: Optional[str] = None,
         output: Optional[str] = None,
         verbose: bool = False,
@@ -42,6 +43,7 @@ class ValidateCommand(BaseCommand):
         self._deep: bool = deep
         self._verify_digests: bool = verify_digests
         self._explain: bool = explain
+        self._ai: bool = ai
         self._resolved_file: Optional[Path] = None
         self._validator: Optional[PlatformValidator] = None
         self._detected_kind: Optional[str] = None
@@ -73,6 +75,8 @@ class ValidateCommand(BaseCommand):
         # Evaluate validate-phase policies — failures are validation errors
         # (exit code 3), not system failures (exit code 1).
         self._evaluate_validate_policies()
+        if self._ai:
+            self._run_ai_validation_review()
         return True
 
     def _before_execute(self) -> bool:
@@ -353,6 +357,88 @@ class ValidateCommand(BaseCommand):
         if denied:
             self._validate_policy_denied = True
         return not denied
+
+    def _run_ai_validation_review(self) -> None:
+        """Run AI policy review if there are schema errors or policy violations."""
+        if not self.has_validation_errors():
+            return
+
+        from strata.integrations.ai import find_ai_integration
+
+        integration = find_ai_integration(self._policy_configuration_service)
+        if integration is None:
+            if self._is_console_output():
+                click.echo("  ⚠  --ai flag set but no ai_agent integration configured")
+            return
+        ok, msg = integration.ensure_available()
+        if not ok:
+            self._messages.append(f"AI provider unavailable: {msg}")
+            return
+
+        # Build violations list from validator errors + policy denials
+        violations: list = []
+        if self._validator:
+            for err in self._validator.get_structured_errors():
+                violations.append(err.to_dict())
+        for err_msg in self._errors:
+            if err_msg.startswith("Policy '"):
+                violations.append({"message": err_msg, "code": "policy_violation"})
+
+        if not violations:
+            return
+
+        context = {
+            "deployment": str(self._resolved_file or self._file_path_raw or "unknown"),
+            "work_path": str(self._work_path),
+        }
+
+        if self._is_console_output():
+            click.echo(f"\n  🤖  AI validation review ({integration.integration_name}) …")
+
+        try:
+            response = integration.review_policy_violations(violations, context)
+        except Exception as exc:
+            self._messages.append(f"AI validation review failed: {exc}")
+            return
+
+        if "ai_analysis" not in self._output_data:
+            self._output_data["ai_analysis"] = {}
+        self._output_data["ai_analysis"]["validation_review"] = {
+            "provider": response.provider,
+            "model": response.model,
+            "content": response.content,
+        }
+
+        if self._is_console_output():
+            self._print_ai_review(response.content)
+
+    def _print_ai_review(self, content: str) -> None:
+        import json as _json
+
+        click.echo(f"\n  {'─' * 48}")
+        click.echo("  🤖  AI Validation Review")
+        click.echo(f"  {'─' * 48}")
+        try:
+            parsed = _json.loads(content)
+            severity = str(parsed.get("severity", "?")).upper()
+            severity_icon = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🟠", "CRITICAL": "🔴"}.get(severity, "⚪")
+            click.echo(f"\n  {severity_icon}  {parsed.get('summary', '')}")
+            if parsed.get("violations"):
+                click.echo("\n  Violations:")
+                for v in parsed["violations"]:
+                    if isinstance(v, dict):
+                        click.echo(f"    • [{v.get('policy', '?')}] {v.get('description', '')}")
+                        if v.get("fix"):
+                            click.echo(f"      → Fix: {v['fix']}")
+                    else:
+                        click.echo(f"    • {v}")
+            if parsed.get("recommendations"):
+                click.echo("\n  Recommendations:")
+                for r in parsed["recommendations"]:
+                    click.echo(f"    → {r}")
+        except (_json.JSONDecodeError, TypeError):
+            click.echo(content)
+        click.echo("")
 
     def _after_execute(self) -> bool:
         """Emit human-readable console output."""

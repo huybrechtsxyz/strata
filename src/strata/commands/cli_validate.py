@@ -90,6 +90,13 @@ def validate_group() -> None:
     default=False,
     help="After validation, emit a plain-English summary of what the file describes.",
 )
+@click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help="Run AI review of validation errors and policy violations (requires an ai_agent integration).",
+)
 @click_work_path
 @click_output_format
 @click_output_verbose
@@ -100,6 +107,7 @@ def validate_run(
     deep: bool = False,
     verify_digests: bool = False,
     explain: bool = False,
+    ai: bool = False,
     work_path: Optional[str] = None,
     output: Optional[str] = None,
     verbose: bool = False,
@@ -124,6 +132,7 @@ def validate_run(
         deep=deep or verify_digests,
         verify_digests=verify_digests,
         explain=explain,
+        ai=ai,
         work_path=work_path,
         output=output,
         verbose=verbose,

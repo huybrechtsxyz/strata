@@ -22,6 +22,8 @@ Adding an AI agent integration layer would let strata call an LLM at well-define
 | **Deploy**   | Drift detected             | Explain configuration vs. actual state delta; recommend reconciliation path                            |
 | **Audit**    | Deployment completes       | Generate human-readable deployment summary from manifest; highlight anomalies vs. previous runs        |
 | **Guide**    | Onboarding (guide show)    | Answer questions about workspace readiness in conversational style                                     |
+| **Doctor**   | `env doctor` check fails   | Explain why a tool/environment check failed; provide step-by-step remediation                          |
+| **Guide**    | Phase blocked              | Explain what is preventing readiness phase completion; suggest concrete next action                    |
 
 ### Why Not Just Use the MCP Server?
 
@@ -124,7 +126,10 @@ data/
         ├── failure_diagnosis.py
         ├── sbom_analysis.py
         ├── drift_explanation.py
-        └── deployment_summary.py
+        ├── deployment_summary.py
+        ├── policy_review.py
+        ├── doctor_analysis.py     # NEW Phase 6 — env doctor failure explanation
+        └── guide_assistance.py    # NEW Phase 6 — readiness phase guidance
 
 # Workspace data (operator-managed, see Section 11)
 .strata/
@@ -271,6 +276,12 @@ class AiAgentIntegration(BaseIntegration):
 
     def review_policy_violations(self, violations: list[dict], context: dict) -> AiResponse:
         """Explain policy violations and suggest fixes."""
+
+    def explain_doctor_results(self, failed_checks: list[dict], context: dict) -> AiResponse:
+        """Explain env doctor check failures and suggest step-by-step remediation."""
+
+    def assist_guide(self, phase: int, phase_label: str, blocking_items: list[dict], context: dict) -> AiResponse:
+        """Explain what is blocking a readiness phase and suggest the next action."""
 ```
 
 ### 5. Lifecycle Hook Points
@@ -285,6 +296,8 @@ The agent is invoked at these lifecycle phases (all opt-in via configuration):
 | `deploy_run_after`   | After successful deploy | `summarise_deployment()`     | No                    |
 | `validate_after`     | After policy evaluation | `review_policy_violations()` | No                    |
 | `drift_after`        | After drift detection   | `explain_drift()`            | No                    |
+| `doctor_after`       | After env doctor run    | `explain_doctor_results()`   | No                    |
+| `guide_after`        | After guide show        | `assist_guide()`             | No                    |
 
 **Gating behaviour**: When `analyse_plan()` returns a risk score above a configurable threshold, the deploy controller pauses and requires explicit confirmation (interactive) or fails (CI mode with `--strict-ai-review`).
 
@@ -434,7 +447,6 @@ This lets teams inject project-specific context — naming conventions, approved
 Extend the existing `@strata` chat participant (`src/vscode/src/providers/strataChatParticipant.ts`) with AI-powered slash commands that surface `AiAgentIntegration` analysis directly in the VS Code chat UX.
 
 **Implemented.** Three new slash commands registered in `package.json` and handled in `strataChatParticipant.ts`:
-
 #### New commands
 
 | Command          | Agent Method         | Description                                                                                               |
@@ -452,6 +464,96 @@ Extend the existing `@strata` chat participant (`src/vscode/src/providers/strata
 - **VS Code LM API** — The chat participant calls `vscode.lm.selectChatModels()` natively in TypeScript when `provider: vscode_lm` is configured (or as a zero-config default). This uses whatever model the user already has access to (GitHub Copilot, etc.) with no API key or endpoint to manage. Prompt construction is handled by `aiPromptBuilder.ts`, which reads `.strata/prompts/` overrides from the workspace and gathers context via the existing `StrataClient` CLI calls.
 - **Fallback** — If no AI provider is configured, commands return a message directing the operator to configure `type: ai_agent` in the configuration YAML. In VS Code the `vscode_lm` provider is tried first before any configured provider.
 - **Freeform queries** — The existing `_handleFreeform()` handler is extended to route AI-related questions (plan analysis, failure diagnosis) to the active provider (VS Code LM or configured) when available.
+
+### Phase 6 — Extended Command Coverage
+
+Wire the two existing analysis methods that are implemented but not yet exposed on the CLI, and add two new analysis methods for `env doctor` and `guide`.
+
+#### 6a — `strata validate --ai`
+
+After validation completes with policy violations, call `review_policy_violations()` and display the explanation + suggested YAML fixes inline.
+
+```
+$ strata validate -f deploy/main.yaml --ai
+✅ Schema valid
+❌ 2 policy violation(s)
+  • tenant_zone: resource 'vm-prod' is not in an allowed zone
+  • required_tags: missing 'env' tag on namespace 'default'
+
+🤖 AI policy review (ai-advisor) ...
+
+  📊 Summary: 2 violations found across zone and tagging policies.
+  Fixes:
+    1. Set zone: eu-fr on vm-prod (currently eu-de, not in allowed list)
+    2. Add env: production under namespace.default.spec.tags
+```
+
+#### 6b — `strata deploy drift --ai`
+
+After drift detection finds changes, call `explain_drift()` and display the explanation + reconciliation path.
+
+```
+$ strata deploy drift run -f deploy/main.yaml --ai
+⚠️  Drift detected in 1 stage(s)
+
+🤖 AI drift explanation (ai-advisor) ...
+
+  💡 2 resources drifted in stage 'infrastructure'
+  Likely cause: manual change to security group rule outside Terraform.
+  Recommendations:
+    → Run 'strata deploy run' to reconcile
+    → Or acknowledge with 'strata deploy drift acknowledge'
+```
+
+#### 6c — `strata env doctor --ai`
+
+After doctor finds failed checks, call `explain_doctor_results()` with the failed check details.
+
+```
+$ strata env doctor --ai
+  ❌ terraform: not found in PATH
+  ❌ azure_cli: not authenticated
+
+🤖 AI doctor analysis (ai-advisor) ...
+
+  🔧 Root cause: Terraform binary missing; Azure CLI present but not logged in.
+  Remediation:
+    1. Install terraform: https://developer.hashicorp.com/terraform/install
+    2. Run: az login
+```
+
+#### 6d — `strata guide --ai`
+
+After guide show identifies the blocking phase, call `assist_guide()` with the phase details.
+
+```
+$ strata guide --ai
+  Phase 3/8: ⚠️  Not all repositories synced
+
+🤖 AI guide assistance (ai-advisor) ...
+
+  Phase 3 is blocked because repository 'haven' is not cloned.
+  Run: strata repo sync --name haven
+  If the repo doesn't exist yet, add it first:
+    strata repo add --name haven --path ../haven
+```
+
+#### New prompt files
+
+| File | Prompt class | Purpose |
+|---|---|---|
+| `data/prompts/doctor_analysis.py` | `DoctorAnalysisPrompt` | Root cause + remediation for env doctor failures |
+| `data/prompts/guide_assistance.py` | `GuideAssistancePrompt` | Explain readiness phase blockage + suggest next action |
+
+#### New analysis methods on `AiAgentIntegration`
+
+```python
+def explain_doctor_results(self, failed_checks: list[dict], context: dict) -> AiResponse:
+    """Explain env doctor check failures and suggest step-by-step remediation."""
+
+def assist_guide(self, phase: int, phase_label: str, blocking_items: list[dict], context: dict) -> AiResponse:
+    """Explain what is blocking a readiness phase and suggest the next action."""
+```
 
 ---
 
