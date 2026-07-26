@@ -317,6 +317,18 @@ class AiAgentIntegration(BaseIntegration):
             cacheable=False,  # probe results are time-sensitive
         )
 
+    def explain_promotion_status(self, promotions: list, context: dict) -> AiResponse:
+        """Explain in-flight promotions and recommend next actions."""
+        work_path = _work_path(context)
+        prompt = PromptLoader.load("promotion_status", work_path=work_path)
+        return self._analyse(
+            "explain_promotion_status",
+            prompt.SYSTEM,
+            prompt.build_user_prompt(promotions, context),
+            work_path=work_path,
+            cacheable=False,  # promotion state changes frequently
+        )
+
     def explain_doctor_results(self, failed_checks: list, context: dict) -> AiResponse:
         """Explain env doctor check failures and suggest step-by-step remediation."""
         work_path = _work_path(context)
@@ -339,6 +351,24 @@ class AiAgentIntegration(BaseIntegration):
             "assist_guide",
             prompt.SYSTEM,
             user_prompt,
+            work_path=work_path,
+            cacheable=True,
+            prompt_version=prompt._cls.VERSION,
+        )
+
+    def guide_tool_setup(
+        self,
+        tool_detail: dict,
+        os_name: str,
+        workspace_context: dict,
+        work_path: Optional[Path] = None,
+    ) -> AiResponse:
+        """Generate a tailored step-by-step setup guide for a single integration."""
+        prompt = PromptLoader.load("tool_setup", work_path=work_path)
+        return self._analyse(
+            "guide_tool_setup",
+            prompt.SYSTEM,
+            prompt.build_user_prompt(tool_detail, os_name, workspace_context),
             work_path=work_path,
             cacheable=True,
             prompt_version=prompt._cls.VERSION,

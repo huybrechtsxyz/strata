@@ -20,11 +20,13 @@ class StatusPromoteCommand(BasePromoteCommand):
     def __init__(
         self,
         work_path: Optional[str] = None,
+        ai: bool = False,
         output: Optional[str] = None,
         verbose: bool = False,
         quiet: bool = False,
     ) -> None:
         super().__init__(work_path=work_path, output=output, verbose=verbose, quiet=quiet)
+        self._ai = ai
         self._controller: Optional[PromoteController] = None
         self._result: list = []
 
@@ -42,6 +44,8 @@ class StatusPromoteCommand(BasePromoteCommand):
         self._result = self._controller.get_status(Path(str(self._work_path)))
         self._output_data = self._result
         self._render()
+        if self._ai and self._result:
+            self._run_ai_promotion_analysis()
         return True
 
     def _render(self) -> None:
@@ -64,3 +68,85 @@ class StatusPromoteCommand(BasePromoteCommand):
                 )
                 if p.get("branch"):
                     click.echo(f"       branch: {p['branch']}")
+
+    # -------------------------------------------------------------------------
+    # AI promotion analysis
+    # -------------------------------------------------------------------------
+
+    def _run_ai_promotion_analysis(self) -> None:
+        """Explain in-flight promotions and recommend next actions."""
+        from strata.integrations.ai import find_ai_integration
+
+        # StatusPromoteCommand has no configuration service — try loading one
+        config_svc = None
+        try:
+            from strata.controllers.solution_controller import SolutionController
+            from strata.services.configuration_service import ConfigurationService
+
+            sol = SolutionController(work_path=self._work_path)
+            sol.load()
+            profile, _ = sol.get_active_profile()
+            if profile:
+                for cp in [str(p.path) for p in (profile.configfile_paths or [])]:
+                    svc = ConfigurationService.load(cp)
+                    if svc.model:
+                        config_svc = svc
+                        break
+        except Exception:
+            pass
+
+        integration = find_ai_integration(config_svc)
+        if integration is None:
+            if not self._output_quiet:
+                click.echo("  ⚠  --ai flag set but no ai_agent integration configured")
+            return
+        ok, msg = integration.ensure_available()
+        if not ok:
+            self._messages.append(f"AI provider unavailable: {msg}")
+            return
+
+        context = {"workspace": str(self._work_path)}
+        if not self._output_quiet:
+            click.echo(f"\n  🤖  AI promotion analysis ({integration.integration_name}) …")
+
+        try:
+            response = integration.explain_promotion_status(self._result, context)
+        except Exception as exc:
+            self._messages.append(f"AI promotion analysis failed: {exc}")
+            return
+
+        if not self._output_quiet:
+            self._print_ai_promotion(response.content)
+
+    def _print_ai_promotion(self, content: str) -> None:
+        import json as _json
+
+        sep = "\u2500" * 48
+        click.echo(f"\n  {sep}")
+        click.echo("  🤖  AI Promotion Analysis")
+        click.echo(f"  {sep}")
+        try:
+            parsed = _json.loads(content)
+            click.echo(f"\n  {parsed.get('summary', '')}")
+            if parsed.get("attention"):
+                click.echo("\n  ⚠  Needs attention:")
+                for a in parsed["attention"]:
+                    click.echo(f"    • {a}")
+            if parsed.get("promotions"):
+                click.echo("\n  Promotion details:")
+                for p in parsed["promotions"]:
+                    if isinstance(p, dict):
+                        target = p.get("target", "?")
+                        ring = p.get("ring", "?")
+                        assessment = p.get("assessment", "")
+                        next_action = p.get("next_action", "")
+                        click.echo(f"    [{ring}] {target}: {assessment}")
+                        if next_action:
+                            click.echo(f"      → {next_action}")
+            if parsed.get("recommendations"):
+                click.echo("\n  Recommendations:")
+                for r in parsed["recommendations"]:
+                    click.echo(f"    → {r}")
+        except (_json.JSONDecodeError, TypeError):
+            click.echo(content)
+        click.echo("")

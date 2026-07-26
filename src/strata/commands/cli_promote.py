@@ -257,14 +257,23 @@ def promote_rollback(
 @click_output_format
 @click_output_verbose
 @click_output_quiet
+@click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help="Run AI analysis of in-flight promotions (requires an ai_agent integration).",
+)
 def promote_status(
     work_path: Optional[str] = None,
     output: Optional[str] = None,
     verbose: bool = False,
     quiet: bool = False,
+    ai: bool = False,
 ) -> None:
     cmd = StatusPromoteCommand(
         work_path=work_path,
+        ai=ai,
         output=output,
         verbose=verbose,
         quiet=quiet,

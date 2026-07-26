@@ -108,12 +108,20 @@ def tools_check(
     metavar="PATH",
     help="Write an env-var template file to PATH (commented, not executable).",
 )
+@click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help="Use AI to generate a tailored, state-aware setup guide based on current runtime state.",
+)
 @click_work_path
 @click_output_verbose
 @click_output_quiet
 def tools_install(
     name: str,
     env_file: Optional[str] = None,
+    ai: bool = False,
     work_path: Optional[str] = None,
     verbose: bool = False,
     quiet: bool = False,
@@ -121,6 +129,7 @@ def tools_install(
     command = InstallToolsCommand(
         name=name,
         env_file=env_file,
+        ai=ai,
         work_path=work_path,
         verbose=verbose,
         quiet=quiet,

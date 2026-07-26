@@ -632,16 +632,17 @@ Complete survey of every strata CLI command and its AI applicability. Legend: �
 
 ### Inspection & Validation
 
-| Command    | Subcommand | Status | Flag   | AI method                        | Notes                                                                               |
-| ---------- | ---------- | ------ | ------ | -------------------------------- | ----------------------------------------------------------------------------------- |
-| `validate` | `run`      | ✅      | `--ai` | `review_policy_violations()`     | Schema + policy violation explanations with YAML fix suggestions                    |
-| `validate` | `graph`    | ➖      | —      | —                                | VS Code freeform covers "what depends on what" questions                            |
-| `guide`    | —          | ✅      | `--ai` | `assist_guide()`                 | Explain blocking phase; suggest next concrete action                                |
-| `policy`   | `check`    | ✅      | `--ai` | `review_policy_violations()`     | Same method as `validate --ai`; multi-phase violations give richer AI context       |
-| `audit`    | `changes`  | 🔶      | `--ai` | new: `summarise_audit_history()` | Summarise deployment trends; flag anomalies (growing failure rate, duration spikes) |
-| `tools`    | `status`   | ➖      | —      | —                                | Already covered by `env doctor --ai`                                                |
-| `schema`   | all        | ➖      | —      | —                                | Schema Q&A is handled by the MCP server and VS Code freeform                        |
-| `log`      | —          | 🔶      | `--ai` | new: `summarise_execution_log()` | Explain errors in the most recent execution log                                     |
+| Command    | Subcommand | Status | Flag   | AI method                        | Notes                                                                                                                   |
+| ---------- | ---------- | ------ | ------ | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `validate` | `run`      | ✅      | `--ai` | `review_policy_violations()`     | Schema + policy violation explanations with YAML fix suggestions                                                        |
+| `validate` | `graph`    | ➖      | —      | —                                | VS Code freeform covers "what depends on what" questions                                                                |
+| `guide`    | —          | ✅      | `--ai` | `assist_guide()`                 | Explain blocking phase; suggest next concrete action                                                                    |
+| `policy`   | `check`    | ✅      | `--ai` | `review_policy_violations()`     | Same method as `validate --ai`; multi-phase violations give richer AI context                                           |
+| `audit`    | `changes`  | 🔶      | `--ai` | new: `summarise_audit_history()` | Summarise deployment trends; flag anomalies (growing failure rate, duration spikes)                                     |
+| `tools`    | `status`   | ➖      | —      | —                                | Already covered by `env doctor --ai`                                                                                    |
+| `tools`    | `install`  | ✅      | `--ai` | new: `guide_tool_setup()`        | Combines runtime check state + static setup info into a tailored, OS-aware install guide; skips already-satisfied steps |
+| `schema`   | all        | ➖      | —      | —                                | Schema Q&A is handled by the MCP server and VS Code freeform                                                            |
+| `log`      | —          | 🔶      | `--ai` | new: `summarise_execution_log()` | Explain errors in the most recent execution log                                                                         |
 
 ### VS Code Chat Participant
 
@@ -679,6 +680,83 @@ Ordered by estimated value:
 
 ---
 
+### Phase 8 — `strata tools install <name> --ai` _(implemented)_
+
+Combines the static setup guide from `tools install` with live runtime state from `tools check` to produce a **tailored, state-aware installation guide** — skipping steps already satisfied and providing OS-appropriate commands.
+
+**Key difference from `env doctor --ai`**: `env doctor` is _reactive_ (something broke, explain why). `tools install --ai` is _proactive_ — the operator is setting up a new integration and wants a personalised walkthrough.
+
+```
+$ strata tools install terraform --ai
+
+  Integration : terraform
+  CLI command : terraform
+  Download    : https://developer.hashicorp.com/terraform/install
+
+  ...
+
+  🤖  AI setup guide (ai-advisor) …
+
+  ────────────────────────────────────────────────────────────
+  terraform binary is not installed; TF_TOKEN is not configured.
+
+  Steps:
+
+  1. Install (Windows)
+       winget install HashiCorp.Terraform
+     → Open a new terminal after install for PATH to take effect.
+
+  2. Configure Terraform Cloud authentication
+       $env:TF_TOKEN_app_terraform_io = "<your-api-token>"
+     → Create a token at https://app.terraform.io/app/settings/tokens
+
+  3. Verify
+       strata tools check terraform
+
+  References:
+    https://developer.hashicorp.com/terraform/install
+  ────────────────────────────────────────────────────────────
+```
+
+When the binary is already installed, the AI skips step 1 and focuses only on missing auth configuration:
+
+```
+  Already configured:
+    ✓ binary installed (v1.9.2)
+
+  Steps:
+
+  1. Configure Terraform Cloud authentication
+       ...
+```
+
+#### What the AI receives
+
+The prompt combines output from two controller calls:
+- `controller.check(name)` — runtime state: `available`, `version`, plus all fields from `install_info`
+- `controller.install_info(name)` — static: `install_url`, `env_vars[]`, `auth_methods[]`, `yaml_example`
+
+Each env var in the prompt includes a live `is_set` field (checked via `os.environ` at call time) so the AI knows exactly which configuration gaps remain.
+
+Workspace context (provisioner types, backend types) is injected when an active profile is found — allowing the AI to recommend the correct auth method for the workspace's IaC backend (e.g. Terraform Cloud vs. local state).
+
+#### Implementation
+
+| Step | File                         | Change                                                                                                                                        |
+| ---- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `data/prompts/tool_setup.py` | New `ToolSetupPrompt` — `status_summary`, `already_done[]`, `steps[]`, `verify_command`, `references[]`                                       |
+| 2    | `ai_integration.py`          | Add `guide_tool_setup(tool_detail, os_name, workspace_context, work_path)`                                                                    |
+| 3    | `install_tools_command.py`   | Add `ai: bool` to `__init__`; after `_print_guide()`, call `_run_ai_setup_guide()` which calls `controller.check()` then `guide_tool_setup()` |
+| 4    | `cli_tools.py`               | Add `--ai` flag to `tools_install` Click command                                                                                              |
+
+**Reuses**: `find_ai_integration()`, `SolutionController` workspace context pattern from `env doctor --ai`.
+
+**Output data**: adds `ai_analysis.tool_setup` key to `_output_data` for JSON consumers.
+
+**Caching**: response is cached (SHA-256 of prompt + tool state) — same tool with same env-var state hits the cache. Cache is invalidated when a new env var is set or the binary is installed.
+
+---
+
 ## References
 
 - [ADR-0003: Layered architecture](0003-layered-architecture.md)
@@ -697,7 +775,6 @@ deploy	history	—	AI summarise trends across recent deployments (growing durati
 validate	graph	—	AI explain the dependency graph in plain language ("what depends on what")	Low
 cost	history	—	AI explain cost spikes: "monthly cost jumped 40% because 3 new VMs added in stage X"	Medium
 audit	changes	—	AI summarise deployment history: "last 5 deploys succeeded, avg duration 4m, no anomalies"	Medium
-promote	status	—	AI explain promotion state: "canary ring is 2 versions behind production"	Low
 values	list	—	AI explain unresolved values and suggest where to define them	Low
 service	all	—	Same pattern as deploy — could reuse deploy run --ai pattern	Low
 versions	all	—	No useful AI target (mechanical version management)	—
