@@ -7,6 +7,80 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Added
+
+- **AI agent integration — ADR-0025 (Phases 1–4 implemented)**
+  - `AiAgentIntegration(BaseIntegration)` in `strata.integrations.ai` — advisory LLM analysis at build/deploy lifecycle points; purely read-only, opt-in, no infrastructure mutations
+  - Providers: `OllamaProvider` (local, no auth), `OpenAiProvider` (OpenAI + Azure OpenAI), `AzureCliProvider` (bearer token via existing `AzureCLIIntegration.get_access_token()`, no stored key), `AnthropicProvider`
+  - Auth methods on existing `AuthenticationModel`: `api_key` (env var resolution), `cli` (Azure CLI), `managed_identity`; `provider: azure_cli` acquires short-lived bearer token via `az account get-access-token --resource https://cognitiveservices.azure.com/`
+  - Six analysis methods: `analyse_plan()`, `diagnose_failure()`, `analyse_sbom()`, `explain_drift()`, `summarise_deployment()`, `review_policy_violations()`
+  - `PromptLoader` with `.strata/prompts/<name>.md` workspace override support — resolved via `get_ai_prompts_dir(work_path)` from `utils/config.py`; built-in Python templates for all six hooks
+  - `AiResponseCache` — SHA-256-keyed JSON file cache under `get_ai_cache_dir(work_path)` (`.strata/cache/ai/`); configurable TTL (default 24 h); failure-diagnosis never cached
+  - `strata build plan --ai` — runs `analyse_plan()` after terraform plan; renders risk level, summary, concerns, and recommendations to console; adds `ai_analysis` key to JSON output
+  - `strata build sbom --ai` — runs `analyse_sbom()` after SBOM generation; renders supply-chain risk summary to console
+  - `strata deploy run --ai` — runs `diagnose_failure()` on any provisioner step failure (root cause + remediation); runs `summarise_deployment()` on successful completion
+  - `type: ai_review` policy — gates deployment based on LLM risk score; configurable `risk_threshold` (`low`/`medium`/`high`/`critical`); registered in `PolicyEngine`
+  - `--strict-ai-review [THRESHOLD]` on `strata build plan` and `strata deploy run` — fails non-interactively when AI risk ≥ threshold (default `high`); no policy declaration required; suitable for CI/CD
+  - Interactive confirmation on `strata deploy run --ai` — prompts operator before apply when risk is high/critical and `--force` is not set; auto-blocks in non-TTY (CI) mode
+  - Registered in `IntegrationFactory._BUILTIN_CLASS_MAP` as `"ai_agent"`
+  - Path constants `SOLUTION_AI_CACHE_DIR = "cache/ai"` and `SOLUTION_PROMPTS_DIR = "prompts"` + builder functions `get_ai_cache_dir()` / `get_ai_prompts_dir()` added to `utils/config.py`
+  - Every invocation logged to audit trail with provider, model, token counts, duration, and cache status
+  - Help topic: `strata help --topic ai_agent`
+  - Solution scaffold (`strata sln init`) includes commented-out `ai_agent` integration example in `configuration.yaml`
+  - Phase 5: VS Code Chat Participant AI commands
+    - New `@strata /review` — runs terraform plan and analyses risks using `request.model` (VS Code LM API / GitHub Copilot); streams risk level, concerns, and recommendations into chat
+    - New `@strata /diagnose` — loads last failed deployment from audit history and generates root-cause + remediation analysis
+    - New `@strata /sbom` — loads SBOM component inventory and analyses supply-chain risks
+    - `AiPromptBuilder` (`src/vscode/src/providers/aiPromptBuilder.ts`) — resolves system prompts from `.strata/prompts/<name>.md` workspace overrides, falling back to built-in TypeScript constants
+    - Auto-routing in `_handleFreeform` — detects AI-related keywords ("review plan", "why did it fail", "sbom", etc.) and delegates to the appropriate handler
+    - Follow-up suggestions for all three new commands
+    - `package.json` updated with `review`, `diagnose`, `sbom` slash command declarations
+    - No Python AI provider configuration required in IDE — uses the model already active in VS Code (GitHub Copilot)
+  - Phase 6: Extended command coverage
+    - `strata validate --ai` — runs `review_policy_violations()` after finding schema errors or policy violations; explains each violation with a suggested YAML fix
+    - `strata deploy drift run --ai` — runs `explain_drift()` when drift is detected; explains likely cause and reconciliation path
+    - `strata env doctor --ai` — runs `explain_doctor_results()` on failed checks; provides numbered per-check remediation steps
+    - `strata guide --ai` — runs `assist_guide()` when a readiness phase is blocked; explains the blockage and suggests the next concrete action
+    - Two new analysis methods on `AiAgentIntegration`: `explain_doctor_results()`, `assist_guide()`
+    - Two new prompt files: `data/prompts/doctor_analysis.py` (`DoctorAnalysisPrompt`), `data/prompts/guide_assistance.py` (`GuideAssistancePrompt`)
+    - All eight prompts support `.strata/prompts/<name>.md` workspace overrides via `PromptLoader`
+  - Phase 7: `strata policy check --ai`
+    - `--ai` flag on `strata policy check` — runs `review_policy_violations()` after evaluation when any policy fails; multi-phase violations (validate/build/plan/deploy) are passed together giving the AI cross-phase context
+    - Reuses existing `review_policy_violations()` and `policy_review.py` prompt — no new method or prompt file needed
+    - `configuration_service` is already loaded by the command; `find_ai_integration()` uses it directly without additional loading
+  - Phase 7 (continued): `strata build run --audit --ai`
+    - `--ai` flag on `strata build run` — triggers `analyse_cve_results()` after the `--audit` CVE scan when findings are present
+    - `CveAuditResultModel` (already stored as `self._cve_audit_result` by `_execute_audit`) is serialised and passed to the AI with the full findings list
+    - New `analyse_cve_results()` method on `AiAgentIntegration` + new `CveAnalysisPrompt` (`data/prompts/cve_analysis.py`) — groups findings by severity, flags no-fix CVEs, prioritises packages to upgrade
+  - Phase 7 (continued): `strata deploy health --ai`
+    - `--ai` flag on `strata deploy health` — triggers `explain_health_failures()` when any probe fails; explains per-check root cause and remediation
+    - Bug fix: `deploy health` command was not registered in the `deploy` group (`@deploy.command` decorator was missing); it now appears in `strata deploy --help`
+    - New `explain_health_failures()` method on `AiAgentIntegration` + new `HealthAnalysisPrompt` (`data/prompts/health_analysis.py`)
+  - Phase 7 (continued): `strata promote status --ai`
+    - `--ai` flag on `strata promote status` — triggers `explain_promotion_status()` after loading in-flight promotions
+    - AI explains which promotions are in-progress, which need attention, and recommends next action per promotion
+    - New `explain_promotion_status()` method on `AiAgentIntegration` + new `PromotionStatusPrompt` (`data/prompts/promotion_status.py`)
+  - Bug fix: `install_tools_command.py` and `show_log_command.py` had stale `ConfigurationService(config_paths)` constructor calls; corrected to `ConfigurationService.load(cp)`
+  - Phase 7 (continued): `strata values list --ai`
+    - `--ai` flag on `strata values list` — triggers `explain_unresolved_values()` when any value fails to resolve
+    - AI explains per-value likely cause and exact fix command (env var export, `az keyvault secret set`, `bws secret create`, etc.) tailored to the store type
+    - New `explain_unresolved_values()` method on `AiAgentIntegration` + new `UnresolvedValuesPrompt` (`data/prompts/unresolved_values.py`)
+  - Phase 7 (continued): `strata deploy history --ai`
+    - `--ai` flag on `strata deploy history` — triggers `summarise_deploy_history()` when ≥2 entries exist
+    - AI analyses success rate trend, detects recurring failures, flags anomalies, recommends next steps
+    - New `summarise_deploy_history()` method on `AiAgentIntegration` + new `DeployHistorySummaryPrompt` (`data/prompts/deploy_history_summary.py`)
+  - Bug fixes: `cost/history_cost_command.py` had duplicate `_execute`/`_render_history` methods and stale `ConfigurationService` constructor; `audit/changes_audit_command.py` had same stale constructor pattern; all corrected
+  - Phase 10: `strata audit changes --ai`
+    - `--ai` flag on `strata audit changes` — triggers `summarise_audit_history()` after querying deploy-log entries
+    - Success rate, duration stats, and failure counts pre-computed client-side; AI detects patterns and produces a narrative
+    - Works with all existing filter flags: `--last N`, `--since TIMESTAMP`, `--stage NAME`
+    - New `summarise_audit_history()` method on `AiAgentIntegration` + new `AuditHistorySummaryPrompt` (`data/prompts/audit_history_summary.py`)
+  - Phase 7 (final): `strata service deploy --ai`
+    - `--ai` flag on `strata service deploy` — triggers `diagnose_failure()` when a helm, compose, or script step fails
+    - Error output captured per-target; AI receives deployer type (`helm`/`compose`/`script`), namespace/module, and error text
+    - Reuses existing `diagnose_failure()` method and `failure_diagnosis.py` prompt — no new prompt or AI method needed
+    - With `--force --ai`, AI diagnoses each failing service independently and continues to the next
+
 ## [1.4.0] - 2026-07-24
 
 ### Added

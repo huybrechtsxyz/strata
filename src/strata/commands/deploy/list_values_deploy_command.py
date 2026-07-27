@@ -45,6 +45,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
         show_store: bool = False,
         unresolved_only: bool = False,
         trace: bool = False,
+        ai: bool = False,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -61,6 +62,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
         self._show_store = show_store
         self._unresolved_only = unresolved_only
         self._trace = trace
+        self._ai = ai
 
     # ------------------------------------------------------------------
     # Core logic
@@ -119,6 +121,10 @@ class ListValuesDeployCommand(BaseDeployCommand):
 
         if self._is_console_output():
             self._print_console(var_rows, secret_rows, feature_rows)
+
+        # AI analysis — run when there are unresolved values
+        if self._ai and any_failed:
+            self._run_ai_values_analysis(var_rows, secret_rows, feature_rows)
 
         # Exit code 3 if any entry failed to resolve
         if any_failed:
@@ -316,3 +322,125 @@ class ListValuesDeployCommand(BaseDeployCommand):
             if row.get("note"):
                 line += f"  [{row['note']}]"
             click.echo(line)
+
+    # ------------------------------------------------------------------
+    # AI values analysis
+    # ------------------------------------------------------------------
+
+    def _run_ai_values_analysis(
+        self,
+        var_rows: List[Dict[str, Any]],
+        secret_rows: List[Dict[str, Any]],
+        feature_rows: List[Dict[str, Any]],
+    ) -> None:
+        """Explain unresolved values and suggest how to define them."""
+        from strata.integrations.ai import find_ai_integration
+
+        integration = find_ai_integration(self._configuration_service)
+        if integration is None:
+            if self._is_console_output():
+                click.echo("  ⚠  --ai flag set but no ai_agent integration configured")
+            return
+        ok, msg = integration.ensure_available()
+        if not ok:
+            self._messages.append(f"AI provider unavailable: {msg}")
+            return
+
+        # Build flat list of unresolved entries
+        unresolved: List[Dict[str, Any]] = []
+        for r in var_rows:
+            if not r["ok"]:
+                unresolved.append({"type": "variable", **r})
+        for r in secret_rows:
+            if not r["ok"]:
+                unresolved.append({"type": "secret", **r})
+        for r in feature_rows:
+            if not r["ok"]:
+                unresolved.append({"type": "feature", **r})
+
+        if not unresolved:
+            return
+
+        deployment_name = (
+            str(self._deployment_service.model.meta.name)  # type: ignore[union-attr]
+            if self._deployment_service and self._deployment_service.model
+            else str(self._file_path or "unknown")
+        )
+
+        # Include active environment file in context if available
+        env_file = ""
+        try:
+            env_svc = self._deployment_service.get_environment_service() if self._deployment_service else None
+            if env_svc and hasattr(env_svc, "file_path") and env_svc.file_path:  # type: ignore[union-attr]
+                env_file = str(env_svc.file_path)  # type: ignore[union-attr]
+        except Exception:
+            pass
+
+        context = {
+            "deployment": deployment_name,
+            "env_file": env_file,
+            "work_path": str(self._work_path),
+        }
+
+        # Strip full error messages — pass clean store+ref to avoid noise
+        clean_unresolved = [
+            {
+                "key": r["key"],
+                "type": r["type"],
+                "store": r["store"],
+                "store_ref": r["store_ref"],
+                "error": r["display"].replace("❌  ", ""),
+            }
+            for r in unresolved
+        ]
+
+        if self._is_console_output():
+            click.echo(f"\n  🤖  AI values analysis ({integration.integration_name}) …")
+
+        try:
+            response = integration.explain_unresolved_values(clean_unresolved, context)
+        except Exception as exc:
+            self._messages.append(f"AI values analysis failed: {exc}")
+            return
+
+        if isinstance(self._output_data, dict):
+            self._output_data["ai_analysis"] = {
+                "provider": response.provider,
+                "model": response.model,
+                "content": response.content,
+            }
+
+        if self._is_console_output():
+            self._print_ai_values(response.content)
+
+    def _print_ai_values(self, content: str) -> None:
+        import json as _json
+
+        sep = "\u2500" * 48
+        click.echo(f"\n  {sep}")
+        click.echo("  🤖  AI Values Analysis")
+        click.echo(f"  {sep}")
+        try:
+            parsed = _json.loads(content)
+            click.echo(f"\n  {parsed.get('summary', '')}")
+            if parsed.get("entries"):
+                click.echo("\n  Fixes:")
+                for e in parsed["entries"]:
+                    if isinstance(e, dict):
+                        etype = e.get("type", "?")
+                        key = e.get("key", "?")
+                        store = e.get("store", "?")
+                        fix = e.get("fix", "")
+                        cause = e.get("likely_cause", "")
+                        click.echo(f"    [{etype}/{store}] {key}")
+                        if cause:
+                            click.echo(f"      Cause: {cause}")
+                        if fix:
+                            click.echo(f"      Fix:   {fix}")
+            if parsed.get("recommendations"):
+                click.echo("\n  Recommendations:")
+                for r in parsed["recommendations"]:
+                    click.echo(f"    → {r}")
+        except (_json.JSONDecodeError, TypeError):
+            click.echo(content)
+        click.echo("")

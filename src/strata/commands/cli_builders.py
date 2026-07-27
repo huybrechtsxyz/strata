@@ -74,6 +74,13 @@ def build():
 @click_output_format
 @click_output_verbose
 @click_output_quiet
+@click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help="Run AI CVE analysis after --audit (requires an ai_agent integration). Only active when --audit is set.",
+)
 def build_run(
     file: Optional[str] = None,
     work_path: Optional[str] = None,
@@ -83,6 +90,7 @@ def build_run(
     fail_on: Optional[str] = None,
     audit_report: Optional[str] = None,
     require_lock: bool = False,
+    ai: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -97,6 +105,7 @@ def build_run(
         fail_on=fail_on.upper() if fail_on else None,
         audit_report=audit_report,
         require_lock=require_lock,
+        ai=ai,
         output=output,
         verbose=verbose,
         quiet=quiet,
@@ -154,6 +163,20 @@ def build_clean(
     default=False,
     help="Show only the artifact diff — skip terraform plan.",
 )
+@click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help="Run AI plan analysis after terraform plan (requires an ai_agent integration in configuration).",
+)
+@click.option(
+    "--strict-ai-review",
+    "strict_ai_review",
+    metavar="THRESHOLD",
+    default=None,
+    help="Fail (exit 3) when AI risk ≥ THRESHOLD without prompting. THRESHOLD: low|medium|high|critical (default: high). Implies --ai.",
+)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -162,6 +185,8 @@ def build_plan(
     work_path: Optional[str] = None,
     stage: Optional[str] = None,
     artifacts_only: bool = False,
+    ai: bool = False,
+    strict_ai_review: Optional[str] = None,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -177,6 +202,8 @@ def build_plan(
         work_path=work_path,
         stage=stage,
         artifacts_only=artifacts_only,
+        ai=ai,
+        strict_ai_review=strict_ai_review,
         output=output,
         verbose=verbose,
         quiet=quiet,
@@ -248,6 +275,13 @@ def build_plan(
     metavar="FORMATS",
     help="Write audit report files. Comma-separated: vex, sarif (e.g. --audit-report vex,sarif).",
 )
+@click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help="Run AI SBOM risk analysis after generation (requires an ai_agent integration in configuration).",
+)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -262,6 +296,7 @@ def build_sbom(
     audit_severity: str = "MEDIUM",
     fail_on: Optional[str] = None,
     audit_report: Optional[str] = None,
+    ai: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -284,6 +319,7 @@ def build_sbom(
         audit_severity=audit_severity.upper(),
         fail_on=fail_on.upper() if fail_on else None,
         audit_report=audit_report,
+        ai=ai,
     )
     success = command.execute()
     handle_command_exit(command, success)

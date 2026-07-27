@@ -284,6 +284,43 @@ Multiple configs merge: built-in → 00-_.yaml → 10-_.yaml → 99-\*.yaml
 **Properties:** Last wins (override)  
 **Providers/Topologies:** Additive (extend list)
 
+## Integrations — AI Agent
+
+Add an `ai_agent` integration to enable advisory LLM analysis at build/deploy lifecycle points.
+Requires no extra dependencies for Ollama; `openai`/`anthropic` SDKs are optional.
+
+```yaml
+spec:
+  integrations:
+    # Azure OpenAI via az login (recommended — no stored key)
+    - name: ai-advisor
+      type: ai_agent
+      endpoints:
+        address: https://my-aoai.openai.azure.com/
+      authentication:
+        method: cli
+      properties:
+        provider: azure_cli
+        model: gpt-4o
+        temperature: 0.1
+        max_tokens: 4096
+        timeout: 60
+        enabled_hooks: [deploy_plan_after]
+
+    # Local Ollama (air-gapped / zero-cost)
+    - name: ai-local
+      type: ai_agent
+      properties:
+        provider: ollama
+        model: llama3
+```
+
+**CLI:** `strata build plan -f deploy.yaml --ai` — runs analysis after terraform plan.
+
+**Policy gating** (`type: ai_review`) blocks or warns when the AI rates a plan above a configurable risk threshold.
+
+See `strata help --topic ai_agent` and [ADR-0025](../decisions/0025-ai-agent-integration-for-build-and-deploy.md) for full reference.
+
 ## Validation
 
 - Valid regex patterns in resource configuration

@@ -31,6 +31,13 @@ from strata.commands.guide.show_guide_command import GuideCommand
     default=False,
     help="Execute the next pending setup step if all values are resolved; show what is missing otherwise.",
 )
+@click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help="Run AI assistance when a readiness phase is blocked (requires an ai_agent integration).",
+)
 @click_work_path
 @click_output_format
 @click_output_verbose
@@ -39,6 +46,7 @@ def guide_command(
     file: Optional[str] = None,
     next_step: bool = False,
     do_step: bool = False,
+    ai: bool = False,
     work_path: Optional[str] = None,
     output: Optional[str] = None,
     verbose: bool = False,
@@ -49,6 +57,7 @@ def guide_command(
         file=file,
         next_step=next_step,
         do_step=do_step,
+        ai=ai,
         work_path=work_path,
         output=output,
         verbose=verbose,

@@ -93,6 +93,13 @@ def list_policy_command(
 @click_output_format
 @click_output_verbose
 @click_output_quiet
+@click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help="Run AI explanation of policy violations (requires an ai_agent integration).",
+)
 def check_policy_command(
     file: str,
     phase: Tuple[str, ...] = (),
@@ -101,6 +108,7 @@ def check_policy_command(
     output: Optional[str] = None,
     verbose: bool = False,
     quiet: bool = False,
+    ai: bool = False,
 ) -> None:
     """Evaluate policies against a deployment without running a deploy.
 
@@ -119,6 +127,7 @@ def check_policy_command(
         file=file,
         phase=phase if phase else None,
         plan_file=plan_file,
+        ai=ai,
         work_path=work_path,
         output=output,
         verbose=verbose,

@@ -25,6 +25,7 @@ class GuideCommand(BaseCommand):
         file: Optional[str] = None,
         next_step: bool = False,
         do_step: bool = False,
+        ai: bool = False,
         work_path: Optional[str] = None,
         output: Optional[str] = None,
         verbose: bool = False,
@@ -34,6 +35,7 @@ class GuideCommand(BaseCommand):
         self._file = file
         self._next = next_step
         self._do = do_step
+        self._ai = ai
         self._do_failed: bool = False
         self._guide_controller: Optional[GuideController] = None
 
@@ -97,6 +99,104 @@ class GuideCommand(BaseCommand):
             self._output_data = self._render_json(
                 checklist, next_step, ctrl.workspace_name, ctrl.solution_id, ctrl.is_complete
             )
+
+        # AI guidance: explain what's blocking and suggest next action
+        if self._ai and not ctrl.is_complete:
+            blocking = [
+                {"status": item.status, "label": item.label, "detail": item.detail}
+                for item in checklist
+                if item.status in ("warn", "pending")
+            ]
+            if blocking and next_step:
+                self._run_ai_guide_assistance(
+                    phase=next_step.phase,
+                    phase_label=next_step.label,
+                    blocking_items=blocking,
+                    workspace_name=ctrl.workspace_name or "",
+                )
+
+    # ------------------------------------------------------------------
+    # AI guide assistance
+    # ------------------------------------------------------------------
+
+    def _run_ai_guide_assistance(
+        self,
+        phase: int,
+        phase_label: str,
+        blocking_items: List[Dict[str, Any]],
+        workspace_name: str,
+    ) -> None:
+        from strata.integrations.ai import find_ai_integration
+
+        # Guide has no configuration service — try to load one
+        config_svc = None
+        try:
+            from strata.controllers.solution_controller import SolutionController
+            from strata.services.configuration_service import ConfigurationService
+
+            sol = SolutionController(work_path=self._work_path)
+            sol.load()
+            profile, _ = sol.get_active_profile()
+            if profile:
+                config_paths = [str(p.path) for p in (profile.configfile_paths or [])]
+                for cp in config_paths:
+                    svc = ConfigurationService.load(cp)
+                    if svc.model:
+                        config_svc = svc
+                        break
+        except Exception:
+            pass
+
+        integration = find_ai_integration(config_svc)
+        if integration is None or not integration.ensure_available()[0]:
+            if self._is_console_output():
+                click.echo("  ⚠  --ai flag set but no reachable ai_agent integration configured")
+            return
+
+        context = {"workspace": workspace_name, "work_path": str(self._work_path)}
+
+        if self._is_console_output():
+            click.echo(f"\n  🤖  AI guide assistance ({integration.integration_name}) …")
+
+        try:
+            response = integration.assist_guide(phase, phase_label, blocking_items, context)
+        except Exception as exc:
+            self._messages.append(f"AI guide assistance failed: {exc}")
+            return
+
+        if not isinstance(self._output_data, dict):
+            self._output_data = {}
+        self._output_data["ai_analysis"] = {
+            "provider": response.provider,
+            "model": response.model,
+            "content": response.content,
+        }
+
+        if self._is_console_output():
+            self._print_ai_guide(response.content)
+
+    def _print_ai_guide(self, content: str) -> None:
+        import json as _json
+
+        click.echo(f"\n  {'─' * 48}")
+        click.echo("  🤖  AI Guide Assistance")
+        click.echo(f"  {'─' * 48}")
+        try:
+            parsed = _json.loads(content)
+            click.echo(f"\n  {parsed.get('summary', '')}")
+            if parsed.get("root_cause"):
+                click.echo(f"  Root cause: {parsed['root_cause']}")
+            if parsed.get("next_action"):
+                click.echo(f"\n  Next action: {parsed['next_action']}")
+            if parsed.get("steps"):
+                click.echo("  Steps:")
+                for i, step in enumerate(parsed["steps"], 1):
+                    click.echo(f"    {i}. {step}")
+            if parsed.get("hint"):
+                click.echo(f"\n  💡 {parsed['hint']}")
+        except (_json.JSONDecodeError, TypeError):
+            click.echo(content)
+        click.echo("")
 
     # ------------------------------------------------------------------
     # File mode

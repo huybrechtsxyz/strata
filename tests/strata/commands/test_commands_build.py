@@ -411,6 +411,8 @@ def _make_plan_cmd(tmp_path):
     cmd._file_path = tmp_path / "deploy.yaml"
     cmd._stage = None
     cmd._artifacts_only = False
+    cmd._ai = False
+    cmd._strict_ai_review = None
     cmd._errors = []
     cmd._messages = []
     cmd._output_data = {}

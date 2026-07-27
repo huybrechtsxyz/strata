@@ -42,6 +42,8 @@ class PlanBuildCommand(BaseBuildCommand):
         work_path: Optional[str] = None,
         stage: Optional[str] = None,
         artifacts_only: bool = False,
+        ai: bool = False,
+        strict_ai_review: Optional[str] = None,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -55,6 +57,8 @@ class PlanBuildCommand(BaseBuildCommand):
         )
         self._stage = stage
         self._artifacts_only = artifacts_only
+        self._ai = ai
+        self._strict_ai_review: Optional[str] = strict_ai_review.lower() if strict_ai_review else None
 
     # ------------------------------------------------------------------
     # Core logic
@@ -119,8 +123,14 @@ class PlanBuildCommand(BaseBuildCommand):
             "providers": provider_rows,
         }
 
+        ai_analysis: Optional[Dict[str, Any]] = None
+        if self._ai or self._strict_ai_review:
+            ai_analysis = self._run_ai_analysis(plan_results)
+            if ai_analysis:
+                self._output_data["ai_analysis"] = ai_analysis
+
         if self._is_console_output():
-            self._print_console(deployment_name, diff_rows, plan_results, value_rows, provider_rows)
+            self._print_console(deployment_name, diff_rows, plan_results, value_rows, provider_rows, ai_analysis)
 
         return True
 
@@ -519,8 +529,9 @@ class PlanBuildCommand(BaseBuildCommand):
         plan_results: List[Dict[str, Any]],
         value_rows: List[Dict[str, Any]],
         provider_rows: Optional[List[Dict[str, Any]]] = None,
+        ai_analysis: Optional[Dict[str, Any]] = None,
     ) -> None:
-        click.echo(f"\n📋  Build Plan — {deployment_name}")
+        click.echo(f"\n\U0001f4cb  Build Plan — {deployment_name}")
         click.echo(f"  {self._SEP}")
 
         self._print_provider_resolution(provider_rows or [])
@@ -531,6 +542,9 @@ class PlanBuildCommand(BaseBuildCommand):
             self._print_terraform_plan(pr)
 
         self._print_summary(diff_rows, plan_results)
+
+        if ai_analysis:
+            self._print_ai_analysis(ai_analysis)
 
     def _print_provider_resolution(self, rows: List[Dict[str, Any]]) -> None:
         if not rows:
@@ -604,4 +618,124 @@ class PlanBuildCommand(BaseBuildCommand):
             tf_ok = sum(1 for p in plan_results if p["ok"])
             tf_fail = len(plan_results) - tf_ok
             click.echo(f"  Terraform: {tf_ok} stage(s) planned" + (f", {tf_fail} failed" if tf_fail else ""))
+        click.echo("")
+
+    # ------------------------------------------------------------------
+    # AI analysis
+    # ------------------------------------------------------------------
+
+    def _run_ai_analysis(self, plan_results: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """Run AI plan analysis if an ai_agent integration is configured.
+
+        When ``--strict-ai-review`` is set and risk ≥ threshold the command fails
+        (adds to ``self._errors`` so the caller propagates a non-zero exit code).
+        """
+        import json as _json
+
+        from strata.integrations.ai import find_ai_integration
+
+        enable = self._ai or bool(self._strict_ai_review)
+        integration = find_ai_integration(self._configuration_service)
+        if integration is None:
+            if enable and self._is_console_output():
+                click.echo("  ⚠  AI flag set but no ai_agent integration configured")
+            if self._strict_ai_review:
+                self._errors.append("--strict-ai-review set but no ai_agent integration configured")
+            return None
+
+        ok, msg = integration.ensure_available()
+        if not ok:
+            self._messages.append(f"AI provider unavailable: {msg}")
+            if self._strict_ai_review:
+                self._errors.append(f"AI provider unavailable: {msg}")
+            return None
+
+        deployment_name = str(self._deployment_service.model.meta.name) if self._deployment_service else "unknown"
+        context = {
+            "deployment": deployment_name,
+            "work_path": str(self._work_path),
+        }
+
+        if self._is_console_output():
+            click.echo(f"\n  🤖  AI plan review ({integration.integration_name}) …")
+
+        try:
+            response = integration.analyse_plan({"stages": plan_results}, context)
+        except Exception as exc:
+            self._messages.append(f"AI analysis failed: {exc}")
+            if self._strict_ai_review:
+                self._errors.append(f"AI analysis failed: {exc}")
+            return None
+
+        result = {
+            "provider": response.provider,
+            "model": response.model,
+            "content": response.content,
+            "prompt_tokens": response.prompt_tokens,
+            "completion_tokens": response.completion_tokens,
+            "duration_ms": response.duration_ms,
+            "cached": response.cached,
+        }
+
+        # --strict-ai-review gate
+        if self._strict_ai_review:
+            _risk_levels = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+            threshold = _risk_levels.get(self._strict_ai_review, 2)
+            try:
+                parsed = _json.loads(response.content)
+                risk_str = str(parsed.get("risk", "low")).lower()
+            except (ValueError, TypeError):
+                risk_str = "low"
+            risk_level = _risk_levels.get(risk_str, 0)
+            if risk_level >= threshold:
+                self._errors.append(
+                    f"AI plan review: risk={risk_str.upper()} ≥ threshold={self._strict_ai_review.upper()} "
+                    f"(--strict-ai-review)"
+                )
+                if self._is_console_output():
+                    risk_icon = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🟠", "CRITICAL": "🔴"}.get(
+                        risk_str.upper(), "⚪"
+                    )
+                    click.echo(
+                        f"\n  ❌  Plan blocked — AI risk {risk_icon} {risk_str.upper()} ≥ "
+                        f"{self._strict_ai_review.upper()} (--strict-ai-review)"
+                    )
+
+        return result
+
+    def _print_ai_analysis(self, ai_analysis: Dict[str, Any]) -> None:
+        import json as _json
+
+        click.echo(f"\n  {self._SEP}")
+        click.echo(f"  🤖  AI Plan Analysis  ({ai_analysis.get('model', '')})")
+        click.echo(f"  {self._SEP}")
+        content = ai_analysis.get("content", "")
+        # Try to pretty-print if JSON; otherwise print raw
+        try:
+            parsed = _json.loads(content)
+            risk = parsed.get("risk", "?").upper()
+            risk_icon = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🟠", "CRITICAL": "🔴"}.get(risk, "⚪")
+            click.echo(f"\n  Risk: {risk_icon} {risk}")
+            click.echo(f"\n  Summary: {parsed.get('summary', '')}")
+            counts = (
+                f"  Changes: +{parsed.get('creates', 0)} create  "
+                f"~{parsed.get('updates', 0)} update  "
+                f"⟳{parsed.get('replaces', 0)} replace  "
+                f"-{parsed.get('deletes', 0)} delete"
+            )
+            click.echo(counts)
+            if parsed.get("concerns"):
+                click.echo("\n  Concerns:")
+                for c in parsed["concerns"]:
+                    click.echo(f"    • {c}")
+            if parsed.get("recommendations"):
+                click.echo("\n  Recommendations:")
+                for r in parsed["recommendations"]:
+                    click.echo(f"    → {r}")
+        except (_json.JSONDecodeError, TypeError):
+            click.echo(content)
+
+        tokens = ai_analysis.get("prompt_tokens", 0) + ai_analysis.get("completion_tokens", 0)
+        cached_note = " (cached)" if ai_analysis.get("cached") else ""
+        click.echo(f"\n  [{tokens} tokens • {ai_analysis.get('duration_ms', 0)}ms{cached_note}]")
         click.echo("")

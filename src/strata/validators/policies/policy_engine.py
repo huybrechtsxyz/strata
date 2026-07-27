@@ -62,6 +62,7 @@ class PolicyEngine:
 
     def _create(self, policy_model: PolicyModel) -> BasePolicy:
         """Dispatch policy type to its concrete implementation."""
+        from strata.validators.policies.ai_review_policy import AiReviewPolicy
         from strata.validators.policies.checkov_policy import CheckovPolicy
         from strata.validators.policies.cost_threshold_policy import CostThresholdPolicy
         from strata.validators.policies.cve_max_severity_policy import CveMaxSeverityPolicy
@@ -96,6 +97,7 @@ class PolicyEngine:
             "checkov": CheckovPolicy,
             "opa": OPAPolicy,
             "path_convention": PathConventionPolicy,
+            "ai_review": AiReviewPolicy,
         }
 
         policy_class = _builtin.get(policy_model.type) or self._custom_types.get(policy_model.type)

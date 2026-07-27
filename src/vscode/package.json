@@ -80,6 +80,18 @@
           {
             "name": "versions",
             "description": "Show version pins and lock status for a ring"
+          },
+          {
+            "name": "review",
+            "description": "AI plan review: run terraform plan and analyse risks with AI"
+          },
+          {
+            "name": "diagnose",
+            "description": "AI failure diagnosis: explain the last failed deployment"
+          },
+          {
+            "name": "sbom",
+            "description": "AI SBOM analysis: analyse supply-chain risks in the component inventory"
           }
         ]
       }

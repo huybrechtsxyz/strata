@@ -71,6 +71,13 @@ def values_group():
 @click_output_format
 @click_output_verbose
 @click_output_quiet
+@click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help="Run AI explanation of unresolved values (requires an ai_agent integration).",
+)
 def values_list(
     file: str,
     work_path: Optional[str] = None,
@@ -79,6 +86,7 @@ def values_list(
     show_store: bool = False,
     unresolved_only: bool = False,
     trace: bool = False,
+    ai: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -96,6 +104,7 @@ def values_list(
         show_store=show_store,
         unresolved_only=unresolved_only,
         trace=trace,
+        ai=ai,
         output=output,
         verbose=verbose,
         quiet=quiet,

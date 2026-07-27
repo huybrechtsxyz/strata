@@ -36,6 +36,7 @@ class RunBuildCommand(BaseBuildCommand):
         fail_on: Optional[str] = None,
         audit_report: Optional[str] = None,
         require_lock: bool = False,
+        ai: bool = False,
     ):
         super().__init__(
             file=file,
@@ -50,6 +51,7 @@ class RunBuildCommand(BaseBuildCommand):
         self._fail_on = fail_on
         self._audit_report = audit_report
         self._require_lock = require_lock
+        self._ai = ai
         self._build_started_at: Optional[str] = None
         self._sbom_reference = None
         self._policy_results: List[Dict[str, Any]] = []
@@ -131,6 +133,8 @@ class RunBuildCommand(BaseBuildCommand):
                 if sbom_path and sbom_path.exists():
                     if not self._execute_audit(sbom_path):
                         return False
+                    if self._ai and self._cve_audit_result and self._cve_audit_result.total_findings > 0:
+                        self._run_ai_cve_analysis()
 
             if not self._run_lifecycle_phase(
                 "build_generate",
@@ -174,6 +178,102 @@ class RunBuildCommand(BaseBuildCommand):
     def _load_related_services(self) -> bool:
         """Services are already loaded by BaseBuildCommand._before_execute."""
         return True
+
+    # ------------------------------------------------------------------
+    # AI CVE analysis
+    # ------------------------------------------------------------------
+
+    def _run_ai_cve_analysis(self) -> None:
+        """Explain CVE findings from the audit scan using the configured AI integration."""
+        from strata.integrations.ai import find_ai_integration
+
+        integration = find_ai_integration(self._configuration_service)
+        if integration is None:
+            if self._is_console_output():
+                click.echo("  ⚠  --ai flag set but no ai_agent integration configured")
+            return
+        ok, msg = integration.ensure_available()
+        if not ok:
+            self._messages.append(f"AI provider unavailable: {msg}")
+            return
+
+        result = self._cve_audit_result
+        if result is None:
+            return
+
+        # Build a serialisable dict including the full findings list
+        cve_data = {
+            "scanner": result.scanner,
+            "scanner_version": result.scanner_version,
+            "total_findings": result.total_findings,
+            "critical": result.critical,
+            "high": result.high,
+            "medium": result.medium,
+            "low": result.low,
+            "unknown": result.unknown,
+            "findings": [
+                {
+                    "vulnerability_id": f.vulnerability_id,
+                    "severity": f.severity,
+                    "package_name": f.package_name,
+                    "installed_version": f.installed_version,
+                    "fixed_version": f.fixed_version,
+                    "title": f.title,
+                }
+                for f in result.findings
+            ],
+        }
+        deployment_name = (
+            str(self._deployment_service.model.meta.name)  # type: ignore[union-attr]
+            if self._deployment_service and self._deployment_service.model
+            else "unknown"
+        )
+        context = {"deployment": deployment_name, "work_path": str(self._work_path)}
+
+        if self._is_console_output():
+            click.echo(f"\n  🤖  AI CVE analysis ({integration.integration_name}) …")
+
+        try:
+            response = integration.analyse_cve_results(cve_data, context)
+        except Exception as exc:
+            self._messages.append(f"AI CVE analysis failed: {exc}")
+            return
+
+        self._output_data["ai_analysis"] = {
+            "provider": response.provider,
+            "model": response.model,
+            "content": response.content,
+        }
+
+        if self._is_console_output():
+            self._print_ai_cve(response.content)
+
+    def _print_ai_cve(self, content: str) -> None:
+        import json as _json
+
+        sep = "\u2500" * 48
+        click.echo(f"\n  {sep}")
+        click.echo("  🤖  AI CVE Analysis")
+        click.echo(f"  {sep}")
+        try:
+            parsed = _json.loads(content)
+            risk = str(parsed.get("risk", "?")).upper()
+            risk_icon = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🟠", "CRITICAL": "🔴"}.get(risk, "⚪")
+            click.echo(f"\n  {risk_icon}  {parsed.get('summary', '')}")
+            no_fix = parsed.get("no_fix_count", 0)
+            if no_fix:
+                click.echo(f"  ⚠  {no_fix} finding(s) have no available fix")
+            if parsed.get("priorities"):
+                click.echo("\n  Priority upgrades:")
+                for pkg in parsed["priorities"]:
+                    click.echo(f"    • {pkg}")
+            if parsed.get("recommendations"):
+                click.echo("\n  Recommendations:")
+                for r in parsed["recommendations"]:
+                    click.echo(f"    → {r}")
+        except (_json.JSONDecodeError, TypeError):
+            click.echo(content)
+        click.echo("")
 
     def _evaluate_build_policies(self) -> bool:
         """Evaluate 'build' phase policies. Returns False if any deny-enforcement policy fails."""

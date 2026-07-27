@@ -51,6 +51,13 @@ def audit_group():
     type=str,
     help="Filter to entries that executed a specific stage name.",
 )
+@click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help="Summarise deployment history with AI: trends, anomalies, recurring failures, recommendations.",
+)
 @click_work_path
 @click_output_format
 @click_output_verbose
@@ -59,6 +66,7 @@ def audit_changes(
     last: int,
     since: Optional[str],
     stage: Optional[str],
+    ai: bool,
     work_path: Optional[str],
     output: Optional[str],
     verbose: bool,
@@ -69,6 +77,7 @@ def audit_changes(
         last=last,
         since=since,
         stage=stage,
+        ai=ai,
         work_path=work_path,
         output=output,
         verbose=verbose,

@@ -152,6 +152,8 @@ def deploy_run(
     wave: Optional[int] = None,
     promotion_override: Optional[str] = None,
     timeout: int = 0,
+    ai: bool = False,
+    strict_ai_review: Optional[str] = None,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -171,6 +173,8 @@ def deploy_run(
         wave=wave,
         promotion_override=promotion_override,
         timeout=timeout,
+        ai=ai,
+        strict_ai_review=strict_ai_review,
         output=output,
         verbose=verbose,
         quiet=quiet,
@@ -377,10 +381,18 @@ def deploy_list(
 @click_output_format
 @click_output_verbose
 @click_output_quiet
+@click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help="Run AI trend analysis on deployment history (requires an ai_agent integration; needs ≥2 entries).",
+)
 def deploy_history(
     work_path: Optional[str] = None,
     lines: int = 50,
     operation: Optional[str] = None,
+    ai: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -390,6 +402,7 @@ def deploy_history(
         work_path=work_path,
         lines=lines,
         operation=operation,
+        ai=ai,
         output=output,
         verbose=verbose,
         quiet=quiet,
@@ -398,6 +411,7 @@ def deploy_history(
     handle_command_exit(command, success)
 
 
+@deploy.command(name="health", help="Run health checks against provisioned infrastructure stages.")
 @click.option(
     "--file",
     "-f",
@@ -413,6 +427,13 @@ def deploy_history(
     metavar="NAME",
     help="Limit checks to a specific deployment stage.",
 )
+@click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help="Run AI explanation of failed health probes (requires an ai_agent integration).",
+)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -420,6 +441,7 @@ def deploy_health(
     file: str,
     work_path: Optional[str] = None,
     stage: Optional[str] = None,
+    ai: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -429,6 +451,7 @@ def deploy_health(
         file=file,
         work_path=work_path,
         stage=stage,
+        ai=ai,
         output=output,
         verbose=verbose,
         quiet=quiet,
@@ -477,6 +500,13 @@ def deploy_drift_group():
     default=False,
     help="Acknowledge all currently drifted resources as the accepted baseline and reset history. Always exits 0.",
 )
+@click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help="Run AI drift explanation when drift is detected (requires an ai_agent integration).",
+)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -486,6 +516,7 @@ def deploy_drift_run(
     stage: Optional[str] = None,
     severity: str = "info",
     baseline: bool = False,
+    ai: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -497,6 +528,7 @@ def deploy_drift_run(
         stage=stage,
         severity=severity,
         baseline=baseline,
+        ai=ai,
         output=output,
         verbose=verbose,
         quiet=quiet,

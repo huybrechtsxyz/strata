@@ -55,6 +55,10 @@ SOLUTION_DRIFT_RULES_FILE: str = "drift_rules.yaml"
 SOLUTION_COST_DIR: str = "cost"
 SOLUTION_COST_CACHE_DIR: str = "cache/cost"
 
+# AI agent integration (ADR-0025)
+SOLUTION_AI_CACHE_DIR: str = "cache/ai"
+SOLUTION_PROMPTS_DIR: str = "prompts"
+
 
 # ---------------------------------------------------------------------------
 # Workspace path builders — canonical fallback; one source of truth.
@@ -190,3 +194,13 @@ def get_drift_dir(work_path: Path) -> Path:
 def get_drift_rules_path(work_path: Path) -> Path:
     """Return the path to ``.strata/drift_rules.yaml`` (workspace override)."""
     return work_path / SOLUTION_DIR / SOLUTION_DRIFT_RULES_FILE
+
+
+def get_ai_cache_dir(work_path: Path) -> Path:
+    """Return the path to ``.strata/cache/ai/`` (AI response cache)."""
+    return work_path / SOLUTION_DIR / SOLUTION_AI_CACHE_DIR
+
+
+def get_ai_prompts_dir(work_path: Path) -> Path:
+    """Return the path to ``.strata/prompts/`` (operator prompt overrides)."""
+    return work_path / SOLUTION_DIR / SOLUTION_PROMPTS_DIR
