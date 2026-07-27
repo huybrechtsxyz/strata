@@ -673,7 +673,7 @@ Ordered by estimated value:
 1. **`policy check --ai`** — quick win; `review_policy_violations()` is already implemented; needs only `--ai` flag wired into `check_policy_command.py` — **see Phase 7 design below**
 2. **`build run --audit --ai`** — explain CVE findings after the built-in SBOM audit scan; new `analyse_cve_results()` method needed
 3. **`deploy health --ai`** — explain probe failures; new `explain_health_failures()` method needed
-4. **`audit changes --ai`** — deployment history trend summary; new `summarise_audit_history()` method needed
+4. **`audit changes --ai`** — ~~deployment history trend summary~~ **implemented in Phase 10**
 5. **`cost history --ai`** — cost spike explanation; new `analyse_cost_trend()` method needed
 6. **`service deploy --ai`** — reuse `diagnose_failure()`; minimal new work
 7. **`log --ai`** — execution log error summary; low priority
@@ -971,57 +971,3 @@ Workspace context (provisioner types, backend types) is injected when an active 
 - [ADR-0020: Lifecycle phases and environment variables](0020-lifecycle-phases-and-environment-variables.md)
 - [ADR-0023: Pluggable provisioner framework](0023-pluggable-provisioner-framework.md)
 - [MCP Server documentation](../mcp/README.md)
-
-
-## Temporary list of all ideas (for internal planning)
-
-Command	Sub	AI implemented	New opportunity	Value
-
-
-validate	graph	—	AI explain the dependency graph in plain language ("what depends on what")	Low
-audit	changes	✅	AI summarise deployment history: trends, anomalies, recurring failures	Medium
-service	all	—	Same pattern as deploy — could reuse deploy run --ai pattern	Low
-
-
-Medium-value opportunities (new prompt required):
-Command planner and safe execution assistant
-Input: user goal like deploy prod wave 2 with lock checks.
-Output: exact command sequence with flags, dry-run first, and fallback steps.
-Why: your CLI is rich; an agent can reduce option-selection mistakes.
-Failure triage copilot for exit codes 1/3/4
-Parse JSON output and audit logs, then suggest minimal remediation.
-Great fit for validate/build/deploy/policy failures.
-Policy remediation assistant
-After policy check failures, propose targeted YAML edits and explain blast radius.
-This complements existing policy check, not duplicates it.
-Drift and promotion decision assistant
-For deploy drift/history/promote/versions, summarize impact and recommend next safe action.
-Manual test-to-automation bridge
-Convert Tests.ps1 scenarios into structured CI checks and agent-run smoke suites.
-Workspace readiness auto-runner
-Wrap guide next/do loops with context-aware retries and missing-input prompts.
-Command-by-Command AI Opportunity Map
-
-validate run
-Existing: schema and deep validation, explain, AI review.
-Agent add: auto-classify errors into fix-now vs config-debt, then generate patch candidates.
-build plan
-Existing: AI plan analysis and strict thresholds.
-Agent add: summarize risk deltas between two plan runs and propose mitigations before apply.
-build run
-Existing: audit and severity gates.
-Agent add: CVE triage that groups findings by exploitability and deployment criticality.
-deploy run
-Existing: stage/scope/ring/wave/promotion controls.
-Agent add: preflight checklist generation and lock-conflict recovery playbook.
-policy check
-Existing: phase-specific evaluation.
-Agent add: produce concrete policy-to-config mapping and prioritized fix order.
-guide and console
-Existing: onboarding and next-step actions.
-Agent add: persistent session memory and intent-based shortcutting across repeated setup tasks.
-High-Impact Gaps I Noticed
-
-Repeated uv wheel reinstall chatter on each command invocation is noisy and can obscure signal.
-The command surface is broad enough that users benefit from an intent-to-command translator.
-Manual test references are comprehensive but not yet agent-orchestrated as a repeatable quality gate.

@@ -70,6 +70,11 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
     - AI analyses success rate trend, detects recurring failures, flags anomalies, recommends next steps
     - New `summarise_deploy_history()` method on `AiAgentIntegration` + new `DeployHistorySummaryPrompt` (`data/prompts/deploy_history_summary.py`)
   - Bug fixes: `cost/history_cost_command.py` had duplicate `_execute`/`_render_history` methods and stale `ConfigurationService` constructor; `audit/changes_audit_command.py` had same stale constructor pattern; all corrected
+  - Phase 10: `strata audit changes --ai`
+    - `--ai` flag on `strata audit changes` — triggers `summarise_audit_history()` after querying deploy-log entries
+    - Success rate, duration stats, and failure counts pre-computed client-side; AI detects patterns and produces a narrative
+    - Works with all existing filter flags: `--last N`, `--since TIMESTAMP`, `--stage NAME`
+    - New `summarise_audit_history()` method on `AiAgentIntegration` + new `AuditHistorySummaryPrompt` (`data/prompts/audit_history_summary.py`)
 
 ## [1.4.0] - 2026-07-24
 

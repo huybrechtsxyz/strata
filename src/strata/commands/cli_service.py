@@ -96,12 +96,20 @@ def service_status(
 @click_output_format
 @click_output_verbose
 @click_output_quiet
+@click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help="Run AI failure diagnosis when a service deploy step fails (requires an ai_agent integration).",
+)
 def service_deploy(
     name: str,
     file: Optional[str] = None,
     work_path: Optional[str] = None,
     force: bool = False,
     dry_run: bool = False,
+    ai: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -113,6 +121,7 @@ def service_deploy(
         work_path=work_path,
         force=force,
         dry_run=dry_run,
+        ai=ai,
         output=output,
         verbose=verbose,
         quiet=quiet,

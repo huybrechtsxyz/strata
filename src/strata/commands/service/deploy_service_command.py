@@ -22,6 +22,7 @@ class DeployServiceCommand(BaseServiceCommand):
         work_path: Optional[str] = None,
         force: bool = False,
         dry_run: bool = False,
+        ai: bool = False,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -36,6 +37,7 @@ class DeployServiceCommand(BaseServiceCommand):
         )
         self._force = force
         self._dry_run = dry_run
+        self._ai = ai
         self._resolved_values: Optional[ResolvedValues] = None
 
     def _execute(self) -> bool:
@@ -61,9 +63,18 @@ class DeployServiceCommand(BaseServiceCommand):
 
         all_ok = True
         for target in targets:
+            errors_before = list(self._errors)
             ok = self._deploy_target(target)
             if not ok:
                 all_ok = False
+                # Collect errors added by this target's deployment
+                new_errors = self._errors[len(errors_before) :]
+                if self._ai and new_errors:
+                    self._run_ai_failure_diagnosis(
+                        error_output="\n".join(new_errors),
+                        step=target.deployer_type.value,
+                        target=target,
+                    )
                 if not self._force:
                     break
 
@@ -217,3 +228,54 @@ class DeployServiceCommand(BaseServiceCommand):
         if self._is_console_output():
             click.echo(f"    ⚠️  Script-based service deploy not yet implemented for {target.namespace}/{target.module}")
         return True
+
+    # ------------------------------------------------------------------
+    # AI failure diagnosis
+    # ------------------------------------------------------------------
+
+    def _run_ai_failure_diagnosis(self, error_output: str, step: str, target: ServiceTarget) -> None:
+        """Call AI failure diagnosis after a service deploy step fails."""
+        from strata.integrations.ai import find_ai_integration
+
+        integration = find_ai_integration(self._configuration_service)
+        if integration is None or not integration.ensure_available()[0]:
+            return
+
+        deployment_name = (
+            str(self._deployment_service.model.meta.name)  # type: ignore[union-attr]
+            if self._deployment_service and self._deployment_service.model
+            else "unknown"
+        )
+        context = {
+            "deployment": deployment_name,
+            "stage": f"{target.namespace}/{target.module or ''}",
+            "provisioner": step,
+            "work_path": str(self._work_path),
+        }
+
+        if self._is_console_output():
+            click.echo(f"\n  🤖  AI failure diagnosis ({integration.integration_name}) …")
+
+        try:
+            response = integration.diagnose_failure(error_output, step, context)
+        except Exception as exc:
+            self._messages.append(f"AI failure diagnosis failed: {exc}")
+            return
+
+        if self._is_console_output():
+            self._print_ai_diagnosis(response.content)
+
+    def _print_ai_diagnosis(self, content: str) -> None:
+        import json as _json
+
+        try:
+            parsed = _json.loads(content)
+            category = parsed.get("category", "unknown").upper()
+            click.echo(f"\n  🔍  Root cause [{category}]: {parsed.get('root_cause', '')}")
+            if parsed.get("remediation"):
+                click.echo("  Remediation:")
+                for i, step in enumerate(parsed["remediation"], 1):
+                    click.echo(f"    {i}. {step}")
+        except (_json.JSONDecodeError, TypeError):
+            click.echo(content)
+        click.echo("")
