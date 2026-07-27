@@ -331,6 +331,11 @@
         "command": "strata.showCostHistory",
         "title": "Strata: Show Cost History",
         "icon": "$(dashboard)"
+      },
+      {
+        "command": "strata.showHelp",
+        "title": "Strata: Show Help",
+        "icon": "$(book)"
       }
     ],
     "viewsContainers": {
@@ -373,6 +378,11 @@
           "id": "strataPromotions",
           "name": "Promotions",
           "contextualTitle": "Strata Promotions"
+        },
+        {
+          "id": "strataHelp",
+          "name": "Help",
+          "contextualTitle": "Strata Help"
         }
       ]
     },
@@ -421,6 +431,11 @@
         {
           "command": "strata.addRepo",
           "when": "view == strataWorkspace",
+          "group": "navigation"
+        },
+        {
+          "command": "strata.showHelp",
+          "when": "view == strataHelp",
           "group": "navigation"
         }
       ],

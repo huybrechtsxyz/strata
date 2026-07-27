@@ -3,6 +3,11 @@
 - Status: proposed
 - Date: 2026-07-11
 
+> **Note**: This ADR covers the specific approval use case. The general work-item
+> orchestration layer that underpins it is designed in
+> [ADR-0057: Deployment workflow orchestration](0057-deployment-workflow-orchestration.md).
+> Read ADR-0057 first — this ADR only covers what is specific to `type: approval`.
+
 ## Foundational Constraints
 
 ### Git Is Required
@@ -86,15 +91,85 @@ This creates risk: anyone can deploy anything, potentially causing production ou
 
 ## Decision Outcome
 
-[To be decided in implementation]
+**Option D — Hybrid**, implemented on top of the general work-item orchestration layer
+(ADR-0057).
+
+Approval is `WorkItem` with `type: approval`. The approval-specific concerns are:
+
+- Which identities count as valid approvers (cloud IAM group, git user, email list)
+- Minimum approval count
+- Whether the requester can self-approve
+- What the `context` payload includes (plan summary, AI risk score, change counts)
+
+Everything else — storage, timeout enforcement, SIEM notification, CLI surface,
+audit trail, exit code 5 — is inherited from ADR-0057.
+
+Cloud-native gates (GCP Cloud Deploy, AWS CodePipeline, Azure Pipelines) are
+implemented as the `cloud_native` backend variant in ADR-0057.
 
 ## Implementation Status
 
-Not yet started. Placeholder for future work.
+Design complete (pending ADR-0057 Phase 1 foundation). Approval gate is Phase 4
+of ADR-0057.
 
-## Detailed Design
+## Approval-Specific Design
 
-[To be filled in]
+See ADR-0057 for the general `WorkItem` model, backends, controller, CLI surface,
+and gate configuration. This section covers only what is specific to
+`type: approval`.
+
+### Gate Configuration Example
+
+```yaml
+# environment YAML
+spec:
+  gates:
+    - type: approval
+      when: always                        # or condition: environment == "production"
+      approvers: ["ops-team"]             # cloud IAM group, git usernames, or emails
+      min_approvals: 1
+      allow_self_approval: false          # requester cannot approve their own deploy
+      timeout_minutes: 60
+```
+
+### Approval Context Payload
+
+The `WorkItem.context` dict for an approval gate includes:
+
+```json
+{
+  "plan_summary": "3 create, 1 update, 2 delete",
+  "creates": 3, "updates": 1, "deletes": 2, "replaces": 0,
+  "ai_risk": "high",
+  "ai_summary": "Two resource deletions are destructive...",
+  "cost_delta_monthly": "+420.00",
+  "cost_currency": "USD",
+  "stages": ["infrastructure", "networking"],
+  "deployment_file": "deploy/deploy-prd.yaml"
+}
+```
+
+### Approver Identity Verification
+
+Approvers are verified in this order (per ADR-0057 §7):
+
+1. Cloud IAM principal (`az`/`aws`/`gcloud`) — matched against `approvers` group membership
+2. Git identity (`git config user.email`) — matched against `approvers` list
+3. CI OIDC token subject — matched against `approvers` list
+
+If `allow_self_approval: false` (default), the identity of the deployer (requester) is
+compared to the resolver identity. A match is rejected.
+
+### Cloud-Native Delegation
+
+For cloud-managed pipelines, the `cloud_native` backend (ADR-0057 §3) delegates to:
+
+- **GCP**: `gcloud deploy releases approve --delivery-pipeline=<pipeline>`
+- **AWS**: `aws codepipeline put-approval-result --action-name=<action> --result=Approved`
+- **Azure**: Azure Pipelines approval step via `az pipelines runs set-variables`
+
+Strata polls the provider API; the provider's own event is the canonical approval
+record. Strata mirrors it into the local audit log (ADR-0018) and SIEM.
 
 ### Approval Model
 

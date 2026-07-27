@@ -26,6 +26,23 @@ _TOPICS: dict[str, tuple[str, str]] = {
     "cross-repo": ("Using @repo_name/ references across repos", "cross-repo.md"),
     "environments": ("Mapping profiles to deployment environments", "environments.md"),
     "troubleshooting": ("Common errors and exactly how to fix them", "troubleshooting.md"),
+    # Governance and deployment configuration
+    "configuration": ("What configuration.yaml is and how to structure it", "configuration.md"),
+    "integrations": ("External tools: Terraform, Ansible, AI, secrets stores, SIEM sinks", "integrations.md"),
+    "policies": ("Rules enforced across validate/build/plan/deploy phases", "policies.md"),
+    "gates": ("Hand-off gates for approval, cost review, verification, scheduled deploys", "gates.md"),
+    "audit": ("Deploy-log and SIEM integration (Sentinel, Splunk, ELK, OTel)", "audit.md"),
+    # Platform kinds
+    "deployment": ("Orchestrates workspace + environments into a deployable unit", "deployment.md"),
+    "environment": ("Configuration set for a specific deployment stage", "environment.md"),
+    "module": ("Reusable infrastructure module packaged for sharing", "module.md"),
+    "provider": ("Cloud provider credentials and region configuration", "provider.md"),
+    "namespace": ("Application namespace for organizing resources", "namespace.md"),
+    "resource": ("Custom resource definition for infrastructure components", "resource.md"),
+    "firewall": ("Security ruleset for network traffic and resource access", "firewall.md"),
+    "network": ("Virtual network topology (VPC, VNet, subnets, routing)", "network.md"),
+    "dns": ("Domain Name System zone configuration and records", "dns.md"),
+    "tenant": ("Tenant scoping and multi-tenancy configuration", "tenant.md"),
     # Integrations
     "git": ("Git: repository clone, fetch, push, branch, and diff operations", "git.md"),
     "terraform": ("Terraform: IaC provisioner used by the build and deploy pipeline", "terraform.md"),
@@ -63,9 +80,10 @@ _TOPICS: dict[str, tuple[str, str]] = {
         "GCP lifecycle scripts: GCloudScript base class and built-in GKE/GAR/GCS scripts",
         "gcloud_scripts.md",
     ),
-    "sentinel": ("Azure Sentinel: DCR Logs Ingestion API SIEM sink", "siem_sentinel.md"),
-    "elk": ("ELK / Logstash: TCP JSON and Elasticsearch Bulk API SIEM sink", "siem_elk.md"),
-    "otel": ("OpenTelemetry: OTLP/HTTP audit event forwarding", "siem_otel.md"),
+    "ai_agent": ("AI Agent: using strata with AI coding assistants and MCP integration", "ai_agent.md"),
+    "sentinel": ("Azure Sentinel: DCR Logs Ingestion API SIEM sink", "sentinel.md"),
+    "elk": ("ELK / Logstash: TCP JSON and Elasticsearch Bulk API SIEM sink", "elk.md"),
+    "otel": ("OpenTelemetry: OTLP/HTTP audit event forwarding", "otel.md"),
     "splunk": ("Splunk: HTTP Event Collector (HEC) SIEM sink", "siem_splunk.md"),
 }
 

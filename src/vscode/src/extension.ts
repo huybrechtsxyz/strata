@@ -32,6 +32,7 @@ import { ValuesViewProvider } from './providers/valuesViewProvider';
 import { BuildPlanProvider } from './providers/buildPlanProvider';
 import { PromotionsViewProvider } from './providers/promotionsViewProvider';
 import { IntegrationHelpProvider } from './providers/integrationHelpProvider';
+import { HelpViewProvider } from './providers/helpViewProvider';
 
 // ---------------------------------------------------------------------------
 // Extension state (singleton per VS Code window)
@@ -55,6 +56,7 @@ let _auditView: AuditViewProvider | undefined;
 let _valuesView: ValuesViewProvider | undefined;
 let _promotionsView: PromotionsViewProvider | undefined;
 let _integrationHelp: IntegrationHelpProvider | undefined;
+let _helpView: HelpViewProvider | undefined;
 let _lastStatus: import('./strataClient').WorkspaceStatus | undefined;
 let _lastDriftTarget: string | undefined;
 let _lastDeployTarget: string | undefined;
@@ -166,6 +168,10 @@ export function activate(context: vscode.ExtensionContext): void {
 
     _integrationHelp = new IntegrationHelpProvider();
     _integrationHelp.setClient(_client);
+    _integrationHelp.setWorkPath(workPath);
+
+    _helpView = new HelpViewProvider();
+    _helpView.setWorkPath(workPath);
 
     // Propagate deployment context changes to status bar
     context.subscriptions.push(
@@ -205,6 +211,10 @@ export function activate(context: vscode.ExtensionContext): void {
             treeDataProvider: _promotionsView!,
             showCollapseAll: true,
         }),
+        vscode.window.createTreeView('strataHelp', {
+            treeDataProvider: _helpView!,
+            showCollapseAll: false,
+        }),
     );
 
     // ── Register other providers ───────────────────────────────────────────────
@@ -217,6 +227,7 @@ export function activate(context: vscode.ExtensionContext): void {
     _fileDecorations.register();
     _chatParticipant.setClient(_client);
     _chatParticipant.register(context);
+    _helpView.register(context);
     _statusBar.show();
 
     // ── Register commands ──────────────────────────────────────────────────────
@@ -232,6 +243,10 @@ export function activate(context: vscode.ExtensionContext): void {
                 return;
             }
             await _integrationHelp?.show(name);
+        }),
+
+        vscode.commands.registerCommand('strata.showHelp', () => {
+            void vscode.commands.executeCommand('strataHelp.focus');
         }),
         // ── Deployment context ─────────────────────────────────────────────────
 

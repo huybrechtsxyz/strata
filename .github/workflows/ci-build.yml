@@ -62,6 +62,14 @@ jobs:
       - name: Test Python
         uses: ./.github/actions/test-python
 
+      # Sync help files from docs/help (single source) to src/strata/data/help
+      # (required before uv build to include in wheel package)
+      - name: Sync help files for build
+        run: |
+          mkdir -p src/strata/data/help
+          cp docs/help/*.md src/strata/data/help/
+          echo "Synced $(ls src/strata/data/help/*.md | wc -l) help files"
+
       # Build the Python package (wheel + sdist)
       - name: Build package
         run: uv build
@@ -344,6 +352,12 @@ jobs:
       - name: Install Node dependencies
         working-directory: src/vscode
         run: npm ci
+
+      - name: Sync help files for extension
+        run: |
+          mkdir -p src/vscode/resources/help
+          cp docs/help/*.md src/vscode/resources/help/
+          echo "Synced $(ls src/vscode/resources/help/*.md | wc -l) help files"
 
       - name: Compile TypeScript
         working-directory: src/vscode

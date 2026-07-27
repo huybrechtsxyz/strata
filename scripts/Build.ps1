@@ -37,6 +37,15 @@ if ($SkipExtension) {
 Write-Host "[*] ==========================================" -ForegroundColor Cyan
 Write-Host ""
 
+# Sync help files from docs/help (single source of truth) to Python package
+Write-Host "[*] Syncing help files from docs/help to src/strata/data/help..." -ForegroundColor Blue
+$helpSource = Join-Path $projectRoot "docs\help"
+$helpPythonDest = Join-Path $projectRoot "src\strata\data\help"
+New-Item -ItemType Directory -Path $helpPythonDest -Force | Out-Null
+Copy-Item "$helpSource\*.md" $helpPythonDest -Force
+Write-Host "[+] Help files synced ($((Get-ChildItem $helpPythonDest -Filter '*.md').Count) files)." -ForegroundColor Green
+Write-Host ""
+
 # Build wheel
 Write-Host "[*] Building wheel..." -ForegroundColor Blue
 uv build --wheel --index-strategy unsafe-best-match
@@ -112,6 +121,16 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 Write-Host "[+] TypeScript compiled." -ForegroundColor Green
+Write-Host ""
+
+# Sync help topics from docs/help (single source) into extension resources
+# (ensures bundled help matches the CLI version being packaged)
+Write-Host "[*] Syncing help topics from docs/help into extension resources..." -ForegroundColor Blue
+$helpSource = Join-Path $projectRoot "docs\help"
+$helpDest = Join-Path $extensionRoot "resources\help"
+New-Item -ItemType Directory -Path $helpDest -Force | Out-Null
+Copy-Item "$helpSource\*.md" $helpDest -Force
+Write-Host "[+] Help topics synced ($((Get-ChildItem $helpDest -Filter '*.md').Count) files)." -ForegroundColor Green
 Write-Host ""
 
 # Package extension — vsce writes <name>-<version>.vsix into dist/
