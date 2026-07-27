@@ -24,7 +24,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Extending strata SBOM — Custom Collectors and Parsers" href="extending-sbom-plugins.html" />
-    <link rel="prev" title="Deployment Manifests for Compliance &amp; Audit" href="compliance-and-deployment-manifests.html" /> 
+    <link rel="prev" title="Deployment Approval Gates" href="deployment-approval-gates.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -1663,6 +1663,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/configuration.html#example">Example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/configuration.html#configuration-schema-fields">Configuration Schema Fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/configuration.html#merge-behavior">Merge Behavior</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/configuration.html#integrations-ai-agent">Integrations — AI Agent</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/configuration.html#validation">Validation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/configuration.html#path-convention-policy">Path Convention Policy</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#declaring-conventions">Declaring conventions</a></li>
@@ -2846,9 +2847,39 @@
 <li class="toctree-l2"><a class="reference internal" href="compliance-and-deployment-manifests.html#see-also">See Also</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="deployment-approval-gates.html">Deployment Approval Gates</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="deployment-approval-gates.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="deployment-approval-gates.html#declaring-gates">Declaring Gates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="deployment-approval-gates.html#gate-types">Gate Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="deployment-approval-gates.html#conditions">Conditions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="deployment-approval-gates.html#workflow-deploy-pause-approve-resume">Workflow: Deploy → Pause → Approve → Resume</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="deployment-approval-gates.html#step-1-initial-deploy-may-pause">Step 1: Initial Deploy (may pause)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-approval-gates.html#step-2-approve-or-reject">Step 2: Approve (or Reject)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-approval-gates.html#step-3-resume-if-approved">Step 3: Resume (if approved)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="deployment-approval-gates.html#ci-cd-integration">CI/CD Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="deployment-approval-gates.html#backend-storage">Backend Storage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="deployment-approval-gates.html#security-considerations">Security Considerations</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="deployment-approval-gates.html#commit-mismatch-protection">Commit Mismatch Protection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-approval-gates.html#asserted-identity-as">Asserted Identity (<code class="docutils literal notranslate"><span class="pre">--as</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-approval-gates.html#audit-trail">Audit Trail</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="deployment-approval-gates.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="deployment-approval-gates.html#production-deployment-with-triple-gate">Production Deployment with Triple Gate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-approval-gates.html#maintenance-window-only">Maintenance Window Only</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-approval-gates.html#security-gated-deploys">Security-Gated Deploys</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="deployment-approval-gates.html#troubleshooting">Troubleshooting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="deployment-approval-gates.html#see-also">See Also</a></li>
+</ul>
+</li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">SIEM Audit Forwarding</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#supported-backends">Supported Backends</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#audit-events">Audit Events</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#setup-automatic-forwarding">Setup: Automatic Forwarding</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#step-1-declare-the-integration">Step 1 — Declare the integration</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#step-2-configure-the-audit-sink">Step 2 — Configure the audit sink</a></li>
@@ -3391,6 +3422,38 @@
 </tbody>
 </table>
 <p>The <code class="docutils literal notranslate"><span class="pre">otel</span></code> integration reaches Datadog and Sumo Logic without a dedicated integration — point it at their OTLP endpoints.</p>
+</section>
+<hr class="docutils" />
+<section id="audit-events">
+<h2>Audit Events<a class="headerlink" href="#audit-events" title="Link to this heading"></a></h2>
+<p>The following events are logged during deployments:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Event</p></th>
+<th class="head"><p>When</p></th>
+<th class="head"><p>Payload</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">workitem.created</span></code></p></td>
+<td><p>A gate pauses the deployment</p></td>
+<td><p>Work item ID, gate type, approvers, timeout</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">workitem.approved</span></code></p></td>
+<td><p>Operator approves a gate</p></td>
+<td><p>Work item ID, approver, timestamp, note</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">workitem.rejected</span></code></p></td>
+<td><p>Operator rejects a gate</p></td>
+<td><p>Work item ID, rejector, reason</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">workitem.resumed</span></code></p></td>
+<td><p>Deployment resumes after gate approval</p></td>
+<td><p>Work item ID, commit SHA, deploy stage</p></td>
+</tr>
+</tbody>
+</table>
+<p>For SIEM, these events are forwarded to your configured backend during the deploy or on-demand via <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">audit</span> <span class="pre">export</span> <span class="pre">--siem</span> <span class="pre">&lt;name&gt;</span></code>.</p>
 </section>
 <hr class="docutils" />
 <section id="setup-automatic-forwarding">
@@ -3980,7 +4043,7 @@ strata<span class="w"> </span>tools<span class="w"> </span>status<span class="w"
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="compliance-and-deployment-manifests.html" class="btn btn-neutral float-left" title="Deployment Manifests for Compliance &amp; Audit" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="deployment-approval-gates.html" class="btn btn-neutral float-left" title="Deployment Approval Gates" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="extending-sbom-plugins.html" class="btn btn-neutral float-right" title="Extending strata SBOM — Custom Collectors and Parsers" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 

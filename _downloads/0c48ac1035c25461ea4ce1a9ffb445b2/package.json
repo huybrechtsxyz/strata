@@ -2,7 +2,7 @@
   "name": "xyz-strata",
   "displayName": "Strata",
   "description": "Strata infrastructure workspace integration — validate YAML, explore workspace, build and deploy.",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "publisher": "huybrechts-xyz",
   "icon": "resources/icon.png",
   "license": "AGPL-3.0-or-later",
@@ -80,11 +80,47 @@
           {
             "name": "versions",
             "description": "Show version pins and lock status for a ring"
+          },
+          {
+            "name": "review",
+            "description": "AI plan review: run terraform plan and analyse risks with AI"
+          },
+          {
+            "name": "diagnose",
+            "description": "AI failure diagnosis: explain the last failed deployment"
+          },
+          {
+            "name": "sbom",
+            "description": "AI SBOM analysis: analyse supply-chain risks in the component inventory"
+          },
+          {
+            "name": "approvals",
+            "description": "Show pending work items (approval gates, cost reviews, security reviews)"
           }
         ]
       }
     ],
     "commands": [
+      {
+        "command": "strata.approveWorkItem",
+        "title": "Strata: Approve Work Item",
+        "icon": "$(check)"
+      },
+      {
+        "command": "strata.rejectWorkItem",
+        "title": "Strata: Reject Work Item",
+        "icon": "$(x)"
+      },
+      {
+        "command": "strata.refreshWorkItems",
+        "title": "Strata: Refresh Work Items",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "strata.showWorkItem",
+        "title": "Strata: Show Work Item Details",
+        "icon": "$(info)"
+      },
       {
         "command": "strata.initWorkspace",
         "title": "Strata: Initialize Workspace",
@@ -319,6 +355,11 @@
         "command": "strata.showCostHistory",
         "title": "Strata: Show Cost History",
         "icon": "$(dashboard)"
+      },
+      {
+        "command": "strata.showHelp",
+        "title": "Strata: Show Help",
+        "icon": "$(book)"
       }
     ],
     "viewsContainers": {
@@ -361,6 +402,16 @@
           "id": "strataPromotions",
           "name": "Promotions",
           "contextualTitle": "Strata Promotions"
+        },
+        {
+          "id": "strataWorkItems",
+          "name": "Pending Work",
+          "contextualTitle": "Strata Pending Work Items"
+        },
+        {
+          "id": "strataHelp",
+          "name": "Help",
+          "contextualTitle": "Strata Help"
         }
       ]
     },
@@ -410,9 +461,39 @@
           "command": "strata.addRepo",
           "when": "view == strataWorkspace",
           "group": "navigation"
+        },
+        {
+          "command": "strata.showHelp",
+          "when": "view == strataHelp",
+          "group": "navigation"
+        },
+        {
+          "command": "strata.refreshWorkItems",
+          "when": "view == strataWorkItems",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
+        {
+          "command": "strata.approveWorkItem",
+          "when": "view == strataWorkItems && viewItem == workitem-pending",
+          "group": "inline"
+        },
+        {
+          "command": "strata.rejectWorkItem",
+          "when": "view == strataWorkItems && viewItem == workitem-pending",
+          "group": "inline"
+        },
+        {
+          "command": "strata.approveWorkItem",
+          "when": "view == strataWorkItems && viewItem == workitem-pending",
+          "group": "strata@1"
+        },
+        {
+          "command": "strata.rejectWorkItem",
+          "when": "view == strataWorkItems && viewItem == workitem-pending",
+          "group": "strata@2"
+        },
         {
           "command": "strata.showIntegrationHelp",
           "when": "view == strataWorkspace && (viewItem == tool || viewItem == tool-unavailable)",
@@ -556,6 +637,12 @@
           "type": "string",
           "default": "strata",
           "description": "Path to the strata CLI. Use 'uv run strata' for uv-managed projects."
+        },
+        "strata.workItemPollIntervalSeconds": {
+          "type": "number",
+          "default": 60,
+          "minimum": 10,
+          "description": "How often (in seconds) the Pending Work panel polls for new work items. Set to a higher value (e.g. 300) on slow networks or shared workspaces. Minimum 10."
         },
         "strata.validateOnSave": {
           "type": "boolean",

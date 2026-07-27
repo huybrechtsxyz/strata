@@ -145,6 +145,7 @@ strata
    guides/setup-azure-oidc
    guides/deployment-manifests
    guides/compliance-and-deployment-manifests
+   guides/deployment-approval-gates
    guides/siem-audit-forwarding
    guides/extending-sbom-plugins
    guides/sbom-plugin-examples

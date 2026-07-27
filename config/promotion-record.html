@@ -1663,6 +1663,7 @@
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#example">Example</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#configuration-schema-fields">Configuration Schema Fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#merge-behavior">Merge Behavior</a></li>
+<li class="toctree-l2"><a class="reference internal" href="configuration.html#integrations-ai-agent">Integrations — AI Agent</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#validation">Validation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#path-convention-policy">Path Convention Policy</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="configuration.html#declaring-conventions">Declaring conventions</a></li>
@@ -2846,9 +2847,39 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#see-also">See Also</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../guides/deployment-approval-gates.html">Deployment Approval Gates</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deployment-approval-gates.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deployment-approval-gates.html#declaring-gates">Declaring Gates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deployment-approval-gates.html#gate-types">Gate Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deployment-approval-gates.html#conditions">Conditions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deployment-approval-gates.html#workflow-deploy-pause-approve-resume">Workflow: Deploy → Pause → Approve → Resume</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/deployment-approval-gates.html#step-1-initial-deploy-may-pause">Step 1: Initial Deploy (may pause)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/deployment-approval-gates.html#step-2-approve-or-reject">Step 2: Approve (or Reject)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/deployment-approval-gates.html#step-3-resume-if-approved">Step 3: Resume (if approved)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deployment-approval-gates.html#ci-cd-integration">CI/CD Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deployment-approval-gates.html#backend-storage">Backend Storage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deployment-approval-gates.html#security-considerations">Security Considerations</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/deployment-approval-gates.html#commit-mismatch-protection">Commit Mismatch Protection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/deployment-approval-gates.html#asserted-identity-as">Asserted Identity (<code class="docutils literal notranslate"><span class="pre">--as</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/deployment-approval-gates.html#audit-trail">Audit Trail</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deployment-approval-gates.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/deployment-approval-gates.html#production-deployment-with-triple-gate">Production Deployment with Triple Gate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/deployment-approval-gates.html#maintenance-window-only">Maintenance Window Only</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/deployment-approval-gates.html#security-gated-deploys">Security-Gated Deploys</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deployment-approval-gates.html#troubleshooting">Troubleshooting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deployment-approval-gates.html#see-also">See Also</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../guides/siem-audit-forwarding.html">SIEM Audit Forwarding</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/siem-audit-forwarding.html#overview">Overview</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/siem-audit-forwarding.html#supported-backends">Supported Backends</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/siem-audit-forwarding.html#audit-events">Audit Events</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/siem-audit-forwarding.html#setup-automatic-forwarding">Setup: Automatic Forwarding</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../guides/siem-audit-forwarding.html#step-1-declare-the-integration">Step 1 — Declare the integration</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/siem-audit-forwarding.html#step-2-configure-the-audit-sink">Step 2 — Configure the audit sink</a></li>
