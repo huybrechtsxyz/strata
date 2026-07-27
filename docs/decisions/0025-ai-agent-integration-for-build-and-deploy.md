@@ -616,19 +616,19 @@ Complete survey of every strata CLI command and its AI applicability. Legend: �
 
 ### Build & Deploy
 
-| Command   | Subcommand  | Status | Flag                         | AI method                                      | Notes                                                                                                       |
-| --------- | ----------- | ------ | ---------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `build`   | `plan`      | ✅      | `--ai`, `--strict-ai-review` | `analyse_plan()`                               | Risk assessment + gating                                                                                    |
-| `build`   | `sbom`      | ✅      | `--ai`                       | `analyse_sbom()`                               | Supply-chain risk summary                                                                                   |
-| `build`   | `run`       | ✅      | `--audit --ai`               | new: `analyse_cve_results()`                   | AI CVE triage after the built-in `--audit` scan; prioritises findings, flags no-fix CVEs, suggests upgrades |
-| `deploy`  | `run`       | ✅      | `--ai`, `--strict-ai-review` | `diagnose_failure()`, `summarise_deployment()` | Failure diagnosis + post-deploy summary; interactive plan gate                                              |
-| `deploy`  | `drift run` | ✅      | `--ai`                       | `explain_drift()`                              | Drift explanation + reconciliation path                                                                     |
-| `deploy`  | `health`    | ✅      | `--ai`                       | new: `explain_health_failures()`               | Explain why HTTP/TCP probes fail; suggest service fixes. Also fixes missing `@deploy.command` registration. |
-| `deploy`  | `history`   | ✅      | `--ai`                       | new: `summarise_deploy_history()`              | Trend analysis: success rate, recurring failures, degrading patterns; requires ≥2 entries                   |
-| `deploy`  | `status`    | ➖      | —                            | —                                              | Low-value; covered by `deploy run --ai` summary                                                             |
-| `service` | `deploy`    | 🔶      | `--ai`                       | reuse `diagnose_failure()`                     | Same pattern as `deploy run --ai` for individual service stages                                             |
-| `env`     | `doctor`    | ✅      | `--ai`                       | `explain_doctor_results()`                     | Per-check root cause + numbered remediation                                                                 |
-| `cost`    | `history`   | ✅      | `--ai`                       | new: `analyse_cost_trend()`                    | Trend direction, spike detection with likely cause, cost-reduction recommendations                          |
+| Command   | Subcommand  | Status | Flag                         | AI method                                      | Notes                                                                                                         |
+| --------- | ----------- | ------ | ---------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `build`   | `plan`      | ✅      | `--ai`, `--strict-ai-review` | `analyse_plan()`                               | Risk assessment + gating                                                                                      |
+| `build`   | `sbom`      | ✅      | `--ai`                       | `analyse_sbom()`                               | Supply-chain risk summary                                                                                     |
+| `build`   | `run`       | ✅      | `--audit --ai`               | new: `analyse_cve_results()`                   | AI CVE triage after the built-in `--audit` scan; prioritises findings, flags no-fix CVEs, suggests upgrades   |
+| `deploy`  | `run`       | ✅      | `--ai`, `--strict-ai-review` | `diagnose_failure()`, `summarise_deployment()` | Failure diagnosis + post-deploy summary; interactive plan gate                                                |
+| `deploy`  | `drift run` | ✅      | `--ai`                       | `explain_drift()`                              | Drift explanation + reconciliation path                                                                       |
+| `deploy`  | `health`    | ✅      | `--ai`                       | new: `explain_health_failures()`               | Explain why HTTP/TCP probes fail; suggest service fixes. Also fixes missing `@deploy.command` registration.   |
+| `deploy`  | `history`   | ✅      | `--ai`                       | new: `summarise_deploy_history()`              | Trend analysis: success rate, recurring failures, degrading patterns; requires ≥2 entries                     |
+| `deploy`  | `status`    | ➖      | —                            | —                                              | Low-value; covered by `deploy run --ai` summary                                                               |
+| `service` | `deploy`    | ✅      | `--ai`                       | reuse `diagnose_failure()`                     | When a helm/compose deploy step fails, AI explains root cause + remediation; same method as `deploy run --ai` |
+| `env`     | `doctor`    | ✅      | `--ai`                       | `explain_doctor_results()`                     | Per-check root cause + numbered remediation                                                                   |
+| `cost`    | `history`   | ✅      | `--ai`                       | new: `analyse_cost_trend()`                    | Trend direction, spike detection with likely cause, cost-reduction recommendations                            |
 
 ### Inspection & Validation
 
@@ -675,7 +675,7 @@ Ordered by estimated value:
 3. **`deploy health --ai`** — explain probe failures; new `explain_health_failures()` method needed
 4. **`audit changes --ai`** — ~~deployment history trend summary~~ **implemented in Phase 10**
 5. **`cost history --ai`** — cost spike explanation; new `analyse_cost_trend()` method needed
-6. **`service deploy --ai`** — reuse `diagnose_failure()`; minimal new work
+6. **`service deploy --ai`** — ~~reuse `diagnose_failure()`~~ **implemented in Phase 7**
 7. **`log --ai`** — execution log error summary; low priority
 
 ---

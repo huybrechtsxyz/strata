@@ -75,6 +75,11 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
     - Success rate, duration stats, and failure counts pre-computed client-side; AI detects patterns and produces a narrative
     - Works with all existing filter flags: `--last N`, `--since TIMESTAMP`, `--stage NAME`
     - New `summarise_audit_history()` method on `AiAgentIntegration` + new `AuditHistorySummaryPrompt` (`data/prompts/audit_history_summary.py`)
+  - Phase 7 (final): `strata service deploy --ai`
+    - `--ai` flag on `strata service deploy` — triggers `diagnose_failure()` when a helm, compose, or script step fails
+    - Error output captured per-target; AI receives deployer type (`helm`/`compose`/`script`), namespace/module, and error text
+    - Reuses existing `diagnose_failure()` method and `failure_diagnosis.py` prompt — no new prompt or AI method needed
+    - With `--force --ai`, AI diagnoses each failing service independently and continues to the next
 
 ## [1.4.0] - 2026-07-24
 

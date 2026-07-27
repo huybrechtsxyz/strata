@@ -86,6 +86,7 @@ All AI flags are opt-in. No AI calls are made unless `--ai` or `--strict-ai-revi
 | `strata deploy health -f ... --ai`                        | `--ai`               | Explain why HTTP/TCP probes failed; suggest per-check service fixes                      |
 | `strata deploy history --ai`                              | `--ai`               | Trend analysis: success rate, recurring failures, anomalies (≥2 entries needed)          |
 | `strata audit changes --ai`                               | `--ai`               | Summarise deploy-log history: success rate, duration anomalies, recurring stage failures |
+| `strata service deploy <name> -f ... --ai`                | `--ai`               | Diagnose helm/compose/script step failures; same AI method as `deploy run --ai`          |
 | `strata promote status --ai`                              | `--ai`               | Explain in-flight promotions; identify what needs attention; suggest next steps          |
 | `strata values list -f ... --ai`                          | `--ai`               | Explain unresolved variables/secrets/features; provide exact store-specific fix commands |
 | `strata validate -f ... --ai`                             | `--ai`               | Explain validation errors and policy violations; suggest YAML fixes                      |
