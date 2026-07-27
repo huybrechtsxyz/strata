@@ -924,7 +924,12 @@ class RunDeployCommand(BaseDeployCommand):
             )
             if self._is_console_output():
                 click.echo(f"\n⏰  Scheduled gate: outside window ({window}). Retry when the window opens.")
+            # Use exit code 5 so CI distinguishes "retry later" from a system error (exit 1)
+            self._hand_off_required = True
             return result
+        # A real work item was created — forward to SIEM
+        if result is not None:
+            self._forward_workitem_event("workitem.created", result)
         return result
 
     def _evaluate_condition_gates_post_plan(
@@ -969,6 +974,7 @@ class RunDeployCommand(BaseDeployCommand):
         if work_item is None:
             return True
 
+        self._forward_workitem_event("workitem.created", work_item)
         self._hand_off_required = True
         if self._is_console_output():
             click.echo(f"\n⏸️  Deployment paused — {work_item.type} gate triggered:")
@@ -1033,6 +1039,7 @@ class RunDeployCommand(BaseDeployCommand):
         if work_item is None:
             return True
 
+        self._forward_workitem_event("workitem.created", work_item)
         self._hand_off_required = True
         if self._is_console_output():
             click.echo("\n⏸️  Verify gate: deployment applied — awaiting manual verification:")
@@ -1070,6 +1077,7 @@ class RunDeployCommand(BaseDeployCommand):
 
         try:
             item = controller.verify_resume(self._resume_id, commit)
+            self._forward_workitem_event("workitem.resumed", item)
             if self._is_console_output():
                 click.echo(f"\n✅  Gate cleared: {item.id}  ({item.status} by {item.resolved_by or 'system'})")
             return True
@@ -1078,6 +1086,30 @@ class RunDeployCommand(BaseDeployCommand):
             if self._is_console_output():
                 click.echo(f"\n❌  Gate resume failed: {exc}")
             return False
+
+    def _forward_workitem_event(self, event_name: str, item) -> None:
+        """Forward a work-item lifecycle event to configured SIEM sinks.
+
+        Best-effort — never raises. Uses the same sinks as deploy_audit but
+        sends event_name="workitem.created" / "workitem.approved" / etc.
+        Sinks without an events filter receive all events; sinks filtered to
+        ["deploy_audit"] also receive workitem events (deployment gate context).
+        """
+        try:
+            audit_cfg = None
+            if self._configuration_service:
+                audit_cfg = getattr(getattr(self._configuration_service.model, "spec", None), "audit", None)
+            sinks = self._resolve_siem_sinks(audit_cfg)
+            if not sinks:
+                return
+            data = {**item.to_dict(), "event": event_name}
+            for sink in sinks:
+                try:
+                    sink.send_event(event_name, data)
+                except Exception as exc:
+                    self.logger.debug("workitem_siem_forward_failed", event=event_name, error=str(exc))
+        except Exception as exc:
+            self.logger.debug("workitem_siem_forward_error", event=event_name, error=str(exc))
 
     def _resolve_siem_sinks(self, audit_config=None) -> list:
         """Resolve integration-backed SIEM sinks from the current configuration.
