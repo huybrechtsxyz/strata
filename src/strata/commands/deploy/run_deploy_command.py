@@ -987,7 +987,7 @@ class RunDeployCommand(BaseDeployCommand):
             if work_item.expires_at:
                 click.echo(f"   Expires: {work_item.expires_at[:19].replace('T', ' ')} UTC")
             click.echo(f"\n   Resolve:  strata workitem approve {work_item.id!r}")
-            click.echo(f"   Resume:   strata deploy run -f {self._file} --resume {work_item.id!r}")
+            click.echo(f"   Resume:   strata deploy run -f {self._file_path} --resume {work_item.id!r}")
         self._record_stage_result(
             stage_name=str(stage.name),
             provisioner=stage.provisioner,
@@ -1050,7 +1050,7 @@ class RunDeployCommand(BaseDeployCommand):
             if work_item.expires_at:
                 click.echo(f"   Expires: {work_item.expires_at[:19].replace('T', ' ')} UTC")
             click.echo(f"\n   Complete:  strata workitem complete {work_item.id!r}")
-            click.echo(f"   Resume:    strata deploy run -f {self._file} --resume {work_item.id!r}")
+            click.echo(f"   Resume:    strata deploy run -f {self._file_path} --resume {work_item.id!r}")
         self._record_stage_result(
             stage_name=str(stage.name),
             provisioner=stage.provisioner,
@@ -1076,7 +1076,7 @@ class RunDeployCommand(BaseDeployCommand):
         commit = self._get_current_commit()
 
         try:
-            item = controller.verify_resume(self._resume_id, commit)
+            item = controller.verify_resume(self._resume_id or "", commit)
             self._forward_workitem_event("workitem.resumed", item)
             if self._is_console_output():
                 click.echo(f"\n✅  Gate cleared: {item.id}  ({item.status} by {item.resolved_by or 'system'})")
@@ -1107,9 +1107,9 @@ class RunDeployCommand(BaseDeployCommand):
                 try:
                     sink.send_event(event_name, data)
                 except Exception as exc:
-                    self.logger.debug("workitem_siem_forward_failed", event=event_name, error=str(exc))
+                    self.logger.debug("workitem_siem_forward_failed", event_name=event_name, error=str(exc))
         except Exception as exc:
-            self.logger.debug("workitem_siem_forward_error", event=event_name, error=str(exc))
+            self.logger.debug("workitem_siem_forward_error", event_name=event_name, error=str(exc))
 
     def _resolve_siem_sinks(self, audit_config=None) -> list:
         """Resolve integration-backed SIEM sinks from the current configuration.
@@ -1293,7 +1293,7 @@ class RunDeployCommand(BaseDeployCommand):
                         if work_item.expires_at:
                             click.echo(f"   Expires: {work_item.expires_at[:19].replace('T', ' ')} UTC")
                         click.echo(f"\n   Resolve:  strata workitem approve {work_item.id!r}")
-                        click.echo(f"   Resume:   strata deploy run -f {self._file} --resume {work_item.id!r}")
+                        click.echo(f"   Resume:   strata deploy run -f {self._file_path} --resume {work_item.id!r}")
                     return False
 
         import concurrent.futures

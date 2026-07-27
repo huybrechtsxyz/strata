@@ -423,9 +423,9 @@ class BaseBuildCommand(BaseCommand):
                     ),
                     encoding="utf-8",
                 )
-                logger.debug("cve_audit_artifact_written", path=str(cve_artifact))
+                self.logger.debug("cve_audit_artifact_written", path=str(cve_artifact))
             except Exception as exc:
-                logger.debug("cve_audit_artifact_write_failed", error=str(exc))
+                self.logger.debug("cve_audit_artifact_write_failed", error=str(exc))
 
         return True
 

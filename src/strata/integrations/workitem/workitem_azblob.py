@@ -156,8 +156,9 @@ class AzureBlobWorkItemBackend(BaseWorkItemBackend):
         status, _ = self._request("HEAD", url, token)
         if status == 200:
             existing = self.get(item.id)
+            existing_status = existing.status if existing else "?"
             raise WorkItemStateError(
-                f"Work item {item.id!r} already exists with status {existing.status!r if existing else '?'}",
+                f"Work item {item.id!r} already exists with status {existing_status!r}",
                 item_id=item.id,
             )
 
