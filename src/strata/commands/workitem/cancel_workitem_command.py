@@ -35,7 +35,7 @@ class CancelWorkItemCommand(BaseCommand):
         return self._initialize_session(show_header=show_header)
 
     def _execute(self) -> bool:
-        controller = WorkItemController.local(self._work_path)
+        controller = WorkItemController.from_config(self._work_path)
 
         try:
             item = controller.cancel(self._item_id, reason=self._reason)

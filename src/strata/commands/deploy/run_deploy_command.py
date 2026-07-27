@@ -900,7 +900,7 @@ class RunDeployCommand(BaseDeployCommand):
         from strata.controllers.workitem_controller import WorkItemController
 
         context = GateContext()
-        controller = WorkItemGateController(WorkItemController.local(self._work_path))
+        controller = WorkItemGateController(WorkItemController.from_config(self._work_path))
         deployment_path = str(self._file_path) if self._file_path else ""
         commit = self._get_current_commit()
 
@@ -966,7 +966,7 @@ class RunDeployCommand(BaseDeployCommand):
         ai_analysis = self._output_data.get("ai_analysis") if hasattr(self, "_output_data") else None
         context = builder.build(stage=stage, deployer=deployer, ai_analysis=ai_analysis)
 
-        controller = WorkItemGateController(WorkItemController.local(self._work_path))
+        controller = WorkItemGateController(WorkItemController.from_config(self._work_path))
         deployment_path = str(self._file_path) if self._file_path else ""
         commit = self._get_current_commit()
 
@@ -1029,7 +1029,7 @@ class RunDeployCommand(BaseDeployCommand):
         context.extra["stage"] = str(stage.name)
         context.extra["action"] = "verify post-deploy"
 
-        controller = WorkItemGateController(WorkItemController.local(self._work_path))
+        controller = WorkItemGateController(WorkItemController.from_config(self._work_path))
         deployment_path = str(self._file_path) if self._file_path else ""
         commit = self._get_current_commit()
 
@@ -1072,7 +1072,7 @@ class RunDeployCommand(BaseDeployCommand):
         from strata.controllers.gate_controller import WorkItemGateController
         from strata.controllers.workitem_controller import WorkItemController
 
-        controller = WorkItemGateController(WorkItemController.local(self._work_path))
+        controller = WorkItemGateController(WorkItemController.from_config(self._work_path))
         commit = self._get_current_commit()
 
         try:

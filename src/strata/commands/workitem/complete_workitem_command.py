@@ -35,7 +35,7 @@ class CompleteWorkItemCommand(BaseCommand):
         return self._initialize_session(show_header=show_header)
 
     def _execute(self) -> bool:
-        controller = WorkItemController.local(self._work_path)
+        controller = WorkItemController.from_config(self._work_path)
 
         try:
             item = controller.complete(self._item_id, comment=self._comment)

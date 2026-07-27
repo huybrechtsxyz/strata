@@ -39,7 +39,7 @@ class RejectWorkItemCommand(BaseCommand):
     def _execute(self) -> bool:
         from strata.controllers.workitem_controller import _get_identity
 
-        controller = WorkItemController.local(self._work_path)
+        controller = WorkItemController.from_config(self._work_path)
         resolver = self._as_identity or _get_identity()
         # Tag asserted identity in audit trail per ADR-0057 §11
         if self._as_identity:

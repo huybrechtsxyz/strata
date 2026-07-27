@@ -30,7 +30,7 @@ class ExpireWorkItemCommand(BaseCommand):
         return self._initialize_session(show_header=show_header)
 
     def _execute(self) -> bool:
-        controller = WorkItemController.local(self._work_path)
+        controller = WorkItemController.from_config(self._work_path)
         count = controller.expire_stale()
 
         if self._is_console_output():

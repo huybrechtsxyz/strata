@@ -47,7 +47,7 @@ class ListWorkItemCommand(BaseCommand):
         return self._initialize_session(show_header=show_header)
 
     def _execute(self) -> bool:
-        controller = WorkItemController.local(self._work_path)
+        controller = WorkItemController.from_config(self._work_path)
 
         # Expire stale items before listing so statuses are current
         expired = controller.expire_stale()
