@@ -1,7 +1,8 @@
 # AI agent integration for build and deploy workflows
 
-- Status: in progress
+- Status: completed
 - Date: 2026-07-07
+- Completed: 2026-07-27
 
 ## Context and Problem Statement
 
@@ -407,7 +408,7 @@ This lets teams inject project-specific context — naming conventions, approved
 
 ## Implementation Phases
 
-### Phase 1 — Foundation (MVP)
+### Phase 1 — Foundation (MVP) _(implemented)_
 
 - `BaseAiProvider` ABC + `AiResponse` dataclass
 - `OllamaProvider` (simplest — no auth, local, free)
@@ -418,7 +419,7 @@ This lets teams inject project-specific context — naming conventions, approved
 - Configuration model for `type: ai_agent`
 - `PromptLoader` with `.strata/prompts/` override support (see [Section 11](#11-custom-prompt-files))
 
-### Phase 2 — Provider Expansion
+### Phase 2 — Provider Expansion _(implemented)_
 
 - `OpenAiProvider` (OpenAI + Azure OpenAI)
 - `AnthropicProvider`
@@ -427,7 +428,7 @@ This lets teams inject project-specific context — naming conventions, approved
 - Response caching (`.strata/cache/ai/`)
 - Token budget tracking
 
-### Phase 3 — Full Lifecycle Coverage
+### Phase 3 — Full Lifecycle Coverage _(implemented)_
 
 - `diagnose_failure()` on deployer step errors
 - `analyse_sbom()` after SBOM generation
@@ -435,18 +436,18 @@ This lets teams inject project-specific context — naming conventions, approved
 - `explain_drift()` after drift detection
 - `summarise_deployment()` after successful deploy
 
-### Phase 4 — Gating and Policy Integration
+### Phase 4 — Gating and Policy Integration _(implemented)_
 
 - `ai_review` policy type in the policy engine
 - Risk-score-based deploy gating
 - `--strict-ai-review [THRESHOLD]` on `build plan` and `deploy run` — fails non-interactively when AI risk ≥ threshold; no policy declaration required
 - Interactive confirmation flow — prompts operator before apply when risk ≥ high and `--force` is not set; auto-blocks in CI (non-TTY) mode
 
-### Phase 5 — VS Code Chat Participant AI Commands _(parallel track — can start after Phase 1 interface is stable)_
+### Phase 5 — VS Code Chat Participant AI Commands _(implemented)_
 
 Extend the existing `@strata` chat participant (`src/vscode/src/providers/strataChatParticipant.ts`) with AI-powered slash commands that surface `AiAgentIntegration` analysis directly in the VS Code chat UX.
 
-**Implemented.** Three new slash commands registered in `package.json` and handled in `strataChatParticipant.ts`:
+**Implemented.** Three new slash commands registered in `package.json` and handled in `strataChatParticipant.ts`. The VS Code LM API (`vscode.lm`) is used natively — no Python provider configuration required in the IDE.
 #### New commands
 
 | Command          | Agent Method         | Description                                                                                               |
@@ -666,17 +667,20 @@ Complete survey of every strata CLI command and its AI applicability. Legend: �
 | `console`                                         | ➖           | REPL cancelled — VS Code chat supersedes                                                                 |
 | `completion`, `version`, `help`                   | ➖           | No AI target                                                                                             |
 
-### Candidate Phase 7 (not yet designed)
+### Extended Coverage — All Phases Implemented
 
-Ordered by estimated value:
+All seven candidate items were implemented across Phases 7–11:
 
-1. **`policy check --ai`** — quick win; `review_policy_violations()` is already implemented; needs only `--ai` flag wired into `check_policy_command.py` — **see Phase 7 design below**
-2. **`build run --audit --ai`** — explain CVE findings after the built-in SBOM audit scan; new `analyse_cve_results()` method needed
-3. **`deploy health --ai`** — explain probe failures; new `explain_health_failures()` method needed
-4. **`audit changes --ai`** — ~~deployment history trend summary~~ **implemented in Phase 10**
-5. **`cost history --ai`** — cost spike explanation; new `analyse_cost_trend()` method needed
-6. **`service deploy --ai`** — ~~reuse `diagnose_failure()`~~ **implemented in Phase 7**
-7. **`log --ai`** — execution log error summary; low priority
+1. **`policy check --ai`** — implemented in Phase 7 (`review_policy_violations()`)
+2. **`build run --audit --ai`** — implemented in Phase 7 (`analyse_cve_results()`)
+3. **`deploy health --ai`** — implemented in Phase 7 (`explain_health_failures()`)
+4. **`audit changes --ai`** — implemented in Phase 10 (`summarise_audit_history()`)
+5. **`cost history --ai`** — implemented in Phase 11 (`analyse_cost_trend()`)
+6. **`service deploy --ai`** — implemented in Phase 7 (reuses `diagnose_failure()`)
+7. **`log list --ai`** — implemented in Phase 9 (`summarise_execution_log()`)
+
+Additional Phase 7 items implemented beyond the original list:
+- `deploy drift --ai`, `validate --ai`, `env doctor --ai`, `guide --ai`, `promote status --ai`, `values list --ai`, `deploy history --ai`, `tools install --ai`
 
 ---
 
