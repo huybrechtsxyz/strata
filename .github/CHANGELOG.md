@@ -9,6 +9,24 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Added
 
+- **Deployment workflow orchestration — ADR-0057 (Phases 1–5 implemented)**
+  - `WorkItem` dataclass + `BaseWorkItemBackend` ABC with `local`, `git_tag`, `s3`, `azblob`, `gcs`, and `cloud_native` backends
+  - `WorkItemController` with `request()`, `resolve()`, `approve()`, `reject()`, `complete()`, `cancel()`, `expire_stale()`, `verify_resolved()`
+  - `DeploymentGateModel` / `GateWhenConditionsModel` — gate config in environment `spec.gates`; `GateConditionEvaluator` supporting `cost_delta_monthly`, `cve_critical`, `cve_high`, `ai_risk`, and `time_utc` conditions
+  - Gate evaluation wired into `strata deploy run`: approval/scheduled gates pre-plan; cost_review/security_review gates post-plan with real Infracost and CVE data; verify gates post-apply
+  - `strata deploy run --resume <work-item-id>` — resumes a paused deployment after gate resolution; commit-mismatch guard prevents replay attacks
+  - Exit code 5 (`hand-off required`) from `strata deploy run` when a gate pauses the pipeline
+  - **`strata workitem` command group**: `list`, `show`, `approve`, `reject`, `complete`, `cancel`, `expire`
+  - `--as IDENTITY` flag on approve/reject — asserted identity tagged `[asserted]` in audit trail
+  - Audit log entries written for `workitem.created` and `workitem.{status}` events
+  - SIEM forwarding of `workitem.created` and `workitem.resumed` events via configured SIEM sinks (fires from `strata deploy run`)
+  - `WorkItemBackendFactory` — backend selected via `STRATA_WORKITEM_BACKEND` env var (fallback: `local`)
+  - `cve-audit.json` artifact written after SBOM CVE scan so deploy gate evaluation can read CVE counts
+  - `GateContextBuilder` — assembles `GateContext` from `cost.json` and `cve-audit.json` build artifacts
+  - `scheduled` gate `auto_resolve: true` — enforces deployment window; exits with code 5 outside window
+  - `.strata/workitems/` added to workspace `.gitignore` template
+  - Help topic: `strata help --topic workitem`
+
 - **Help system — comprehensive documentation for all platform kinds**
   - Help files created for all 12 YAML kinds: `deployment`, `environment`, `module`, `provider`, `namespace`, `resource`, `firewall`, `network`, `dns`, `tenant` (plus existing `configuration` and `workspace`)
   - `docs/help/` established as single source of truth for all 55 help files; `src/strata/data/help/` and `src/vscode/resources/help/` are now generated artifacts (added to `.gitignore`)

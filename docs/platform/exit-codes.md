@@ -9,6 +9,7 @@
 | 2    | Usage Error            | Invalid CLI arguments, missing required options (Click handles) |
 | 3    | Validation Failure     | File processed but contains validation errors                   |
 | 4    | Lock Conflict          | Deployment locked by another process (safe to retry)            |
+| 5    | Hand-off Required      | Gate paused deployment; awaiting approval/verification          |
 
 ## Usage by Command
 
@@ -21,7 +22,7 @@
 | `ref`      | ✅      | ✅      | ⚠️ Click only | ❌                     |
 | `validate` | ✅      | ✅      | ⚠️ Click only | ✅ Schema-invalid file |
 | `build`    | ✅      | ✅      | ⚠️ Click only | ✅ Invalid deployment  |
-| `deploy`   | ✅      | ✅      | ⚠️ Click only | ✅ Invalid deployment  | ✅ Lock held by other process |
+| `deploy`   | ✅      | ✅      | ⚠️ Click only | ✅ Invalid deployment  | ✅ Lock held by other process | ✅ Gate paused |
 | `values`   | ✅      | ✅      | ⚠️ Click only | ✅ Unresolved entries  |
 | `log`      | ✅      | ✅      | ⚠️ Click only | ❌                     |
 

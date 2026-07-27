@@ -47,7 +47,7 @@ const FALLBACK_TOPICS = ['quickstart', 'workspace', 'troubleshooting'];
 const ALL_TOPICS: string[] = [
     'quickstart', 'workspace', 'profiles', 'refs', 'config-merge', 'cross-repo',
     'environments', 'troubleshooting',
-    'configuration', 'integrations', 'policies', 'gates', 'audit',
+    'configuration', 'integrations', 'policies', 'gates', 'audit', 'workitem',
     'deployment', 'dns', 'environment', 'firewall', 'module', 'namespace', 'network', 'provider', 'resource', 'tenant',
     'git', 'terraform', 'terraform-cloud-auth', 'docker',
     'azure_appconfig', 'azure_keyvault', 'azure_cli', 'azure_scripts',

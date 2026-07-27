@@ -48,6 +48,7 @@ This is a comprehensive guide to all Strata documentation and resources. Use thi
 | [Validation & Error Handling](./platform/validators.md)                 | How validation works and error resolution |
 | [Building Deployments](./platform/builders.md)                          | Pre-deployment artifact generation        |
 | [Deploying Infrastructure](./guides/deploying.md)                       | End-to-end deployment operations          |
+| [Deployment Approval Gates](./guides/deployment-approval-gates.md)      | Pausing deployments for approval/review   |
 | [Managing Environments](./guides/environment-composition.md)            | Environment composition and overrides     |
 | [Environment Inspection](./guides/environment-command-group.md)         | Query outputs, state, and drift           |
 | [Multi-Repository Setup](./guides/multi-repo-setup.md)                  | Version pinning and promotion workflows   |
