@@ -68,3 +68,4 @@ uv.lock
 **/.strata/cli.yaml
 **/.strata/audit.log
 **/.strata/solution.json
+**/.strata/console-history

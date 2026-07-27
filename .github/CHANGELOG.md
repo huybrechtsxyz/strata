@@ -9,6 +9,14 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Added
 
+- **Help system — comprehensive documentation for all platform kinds**
+  - Help files created for all 12 YAML kinds: `deployment`, `environment`, `module`, `provider`, `namespace`, `resource`, `firewall`, `network`, `dns`, `tenant` (plus existing `configuration` and `workspace`)
+  - `docs/help/` established as single source of truth for all 55 help files; `src/strata/data/help/` and `src/vscode/resources/help/` are now generated artifacts (added to `.gitignore`)
+  - `Build.ps1` syncs `docs/help/` to both destinations before packaging; `ci-build.yml` does the same in CI (Python job before `uv build`, VS Code extension job before `vsce package`)
+  - `ai_agent` topic registered in CLI `_TOPICS` — `strata help --topic ai_agent` now works
+  - SIEM help files renamed to match their topic keys (`siem_sentinel.md` → `sentinel.md`, etc.) so VS Code extension resolves them from bundled resources without requiring CLI fallback
+  - `deployment` kind now includes its own topic in the context-sensitive suggestions panel
+
 - **AI agent integration — ADR-0025 (Phases 1–4 implemented)**
   - `AiAgentIntegration(BaseIntegration)` in `strata.integrations.ai` — advisory LLM analysis at build/deploy lifecycle points; purely read-only, opt-in, no infrastructure mutations
   - Providers: `OllamaProvider` (local, no auth), `OpenAiProvider` (OpenAI + Azure OpenAI), `AzureCliProvider` (bearer token via existing `AzureCLIIntegration.get_access_token()`, no stored key), `AnthropicProvider`

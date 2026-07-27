@@ -13,8 +13,9 @@ STANDARD_EPILOG = (
     "  0  success\n"
     "  1  system error (infrastructure unavailable, timeout, permissions) \u2014 alert\n"
     "  2  usage error (bad arguments, file not found) \u2014 fix script\n"
-    "  3  validation error (schema, cross-ref) \u2014 fix config\n\n"
-    "Note: exit code 4 (lock conflict) is only returned by 'deploy run' and 'deploy destroy'."
+    "  3  validation error (schema, cross-ref) — fix config\n"
+    "  4  lock conflict — another deploy is in progress\n"
+    "  5  hand-off required — approval/gate pending; use --resume <id> after resolution\n"
 )
 
 
@@ -37,14 +38,19 @@ def handle_command_exit(command, success: bool) -> None:
         1 - System/execution failure
         3 - Validation failure (file invalid)
         4 - Lock conflict (deploy run / deploy destroy only)
+        5 - Hand-off required (work item created, deployment paused)
 
     Args:
-        command: Command instance with optional has_validation_errors() / has_lock_conflict()
+        command: Command instance with optional has_validation_errors() / has_lock_conflict() / has_hand_off_required()
         success: Initial success status from command.execute()
 
     Raises:
         click.exceptions.Exit: With appropriate exit code
     """
+    # Hand-off required: work item created, CI pipeline should pause and --resume after resolution.
+    if not success and hasattr(command, "has_hand_off_required") and command.has_hand_off_required():
+        raise click.exceptions.Exit(5)
+
     # Lock conflict takes priority over all other failure classifications.
     # Only reachable for deploy run / deploy destroy (has_lock_conflict lives on BaseDeployCommand).
     if not success and hasattr(command, "has_lock_conflict") and command.has_lock_conflict():

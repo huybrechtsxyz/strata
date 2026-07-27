@@ -1,10 +1,14 @@
 # Strata — .strata/ gitignore
 #
-# Commit:   solution.json, logging.yaml
-# Ignore:   cli.yaml (personal CLI prefs), logs, temp files, local-only overrides
+# Commit:   logging.yaml, collectors.yaml, sbom-ignore.yaml, lockfile_parsers/
+# Ignore:   runtime-written state files, personal CLI prefs, build output, temp files
 
-# Personal CLI preferences — each developer sets these locally via `strata config set`
+# Runtime-written state — never commit
 cli.yaml
+solution.json
+audit.log
+console-history
+workitems/
 
 # Build output — generated artifacts, never committed
 build/

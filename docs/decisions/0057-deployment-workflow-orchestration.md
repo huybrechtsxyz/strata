@@ -1,6 +1,6 @@
 # Deployment workflow orchestration — work items and hand-off gates
 
-- Status: proposed
+- Status: implemented
 - Date: 2026-07-27
 
 ## Context and Problem Statement

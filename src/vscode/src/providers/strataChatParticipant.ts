@@ -29,7 +29,7 @@ import { AiPromptBuilder } from './aiPromptBuilder';
 const PARTICIPANT_ID = 'strata.chat';
 
 /** Slash-command metadata registered in package.json `chatParticipants[].commands`. */
-type SlashCommand = 'status' | 'validate' | 'guide' | 'build' | 'deploy' | 'stage' | 'values' | 'drift' | 'repos' | 'promote' | 'versions' | 'review' | 'diagnose' | 'sbom';
+type SlashCommand = 'status' | 'validate' | 'guide' | 'build' | 'deploy' | 'stage' | 'values' | 'drift' | 'repos' | 'promote' | 'versions' | 'review' | 'diagnose' | 'sbom' | 'approvals';
 
 export class StrataChatParticipant implements vscode.Disposable {
     private _participant: vscode.ChatParticipant | undefined;
@@ -106,6 +106,8 @@ export class StrataChatParticipant implements vscode.Disposable {
                     return await this._handleDiagnose(request, response, token);
                 case 'sbom':
                     return await this._handleSbom(request, response, token);
+                case 'approvals':
+                    return await this._handleApprovals(response, token);
                 default:
                     return await this._handleFreeform(request, response, token);
             }
@@ -888,6 +890,78 @@ export class StrataChatParticipant implements vscode.Disposable {
         return { metadata: { command: 'freeform' } };
     }
 
+    // ── /approvals ─────────────────────────────────────────────────────────────
+
+    private async _handleApprovals(
+        response: vscode.ChatResponseStream,
+        _token: vscode.CancellationToken,
+    ): Promise<vscode.ChatResult> {
+        if (!this._client) {
+            response.markdown('⚠️ Strata CLI is not available.');
+            return { metadata: { command: 'approvals' } };
+        }
+
+        response.progress('Loading pending work items…');
+
+        let items: import('../strataClient').WorkItemSummary[] = [];
+        try {
+            items = await this._client.listWorkItems('pending');
+        } catch (err) {
+            response.markdown(`**Error loading work items:** ${err instanceof Error ? err.message : String(err)}`);
+            return { metadata: { command: 'approvals' } };
+        }
+
+        if (items.length === 0) {
+            response.markdown('✅ **No pending work items.** All deployment gates are clear.\n');
+            response.button({ title: 'Refresh', command: 'strata.refreshWorkItems' });
+            return { metadata: { command: 'approvals' } };
+        }
+
+        response.markdown(`## ⏸️ Pending Work Items (${items.length})\n\n`);
+
+        for (const item of items) {
+            const shortId = item.id.includes('/') ? item.id.split('/').slice(1).join('/') : item.id;
+            const deployName = item.deployment.split('/').pop()?.replace('.yaml', '') ?? item.deployment;
+            const created = item.created_at.slice(0, 19).replace('T', ' ');
+            const expires = item.expires_at ? ` · expires ${item.expires_at.slice(0, 19).replace('T', ' ')} UTC` : '';
+            const typeLabel = item.type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+            response.markdown(`### 🟡 ${typeLabel}: \`${shortId}\`\n`);
+            response.markdown(`**Deployment:** ${deployName}  \n**Created:** ${created} UTC${expires}  \n**By:** ${item.created_by}\n\n`);
+
+            // Show type-specific context
+            const ctx = item.context as Record<string, unknown>;
+            if (ctx.plan_summary && typeof ctx.plan_summary === 'object') {
+                const ps = ctx.plan_summary as Record<string, unknown>;
+                response.markdown(`**Plan:** ${ps.summary ?? ''}\n\n`);
+            }
+            if (ctx.cost_delta_monthly !== undefined) {
+                const delta = Number(ctx.cost_delta_monthly);
+                response.markdown(`**Cost delta:** ${delta >= 0 ? '+' : ''}$${delta.toFixed(2)}/month\n\n`);
+            }
+            if (ctx.cve_critical_count) {
+                response.markdown(`**Critical CVEs:** ${ctx.cve_critical_count}\n\n`);
+            }
+            if (ctx.ai_risk) {
+                const riskIcon = ctx.ai_risk === 'critical' ? '🔴' : ctx.ai_risk === 'high' ? '🟠' : '🟡';
+                response.markdown(`**AI Risk:** ${riskIcon} ${String(ctx.ai_risk).toUpperCase()}\n\n`);
+            }
+            if (ctx.approvers && Array.isArray(ctx.approvers)) {
+                response.markdown(`**Approvers:** ${(ctx.approvers as string[]).join(', ')}\n\n`);
+            }
+
+            response.button({ title: `✅ Approve`, command: 'strata.approveWorkItem', arguments: [{ workItem: item }] });
+            response.button({ title: `❌ Reject`, command: 'strata.rejectWorkItem', arguments: [{ workItem: item }] });
+            response.markdown('\n---\n\n');
+        }
+
+        response.markdown(`\n**CLI:** \`strata workitem list --status pending\`\n`);
+        response.button({ title: 'Open Work Items panel', command: 'strataWorkItems.focus' });
+        response.button({ title: 'Refresh', command: 'strata.refreshWorkItems' });
+
+        return { metadata: { command: 'approvals' } };
+    }
+
     // ── Follow-ups ─────────────────────────────────────────────────────────────
 
     private _provideFollowups(result: vscode.ChatResult): vscode.ChatFollowup[] {
@@ -970,6 +1044,12 @@ export class StrataChatParticipant implements vscode.Disposable {
                 return [
                     { prompt: '', label: 'Deploy', command: 'deploy' },
                     { prompt: '', label: 'Workspace status', command: 'status' },
+                ];
+            case 'approvals':
+                return [
+                    { prompt: '', label: 'Refresh approvals', command: 'approvals' },
+                    { prompt: '', label: 'Deploy status', command: 'status' },
+                    { prompt: '', label: 'Review plan', command: 'review' },
                 ];
             default:
                 return [

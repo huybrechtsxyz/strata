@@ -54,6 +54,7 @@ from strata.commands.cli_values import values_group
 from strata.commands.cli_vars import vars_group
 from strata.commands.cli_version import version_command
 from strata.commands.cli_versions import versions_group
+from strata.commands.cli_workitem import workitem_group
 from strata.controllers.configuration_controller import ConfigurationController
 from strata.logger import configure_logging, get_logger, shutdown_logging
 from strata.utils import system
@@ -130,7 +131,7 @@ def _build_default_map(command: click.Command, defaults: dict) -> dict:
 _HELP_SECTIONS: list[tuple[str, list[str]]] = [
     ("Workspace Setup", ["sln", "profile", "new"]),
     ("Configuration", ["config", "ref", "repo", "vars", "values"]),
-    ("Build & Deploy", ["build", "deploy", "cost", "env", "service", "versions"]),
+    ("Build & Deploy", ["build", "deploy", "workitem", "cost", "env", "service", "versions"]),
     ("Inspection & Validation", ["guide", "validate", "schema", "policy", "tools"]),
     ("Utility", ["secret", "version", "help", "log", "completion", "mcp"]),
 ]
@@ -311,6 +312,7 @@ main.add_command(service_group, name="service")
 main.add_command(audit_group, name="audit")
 main.add_command(manifest_group, name="manifest")
 main.add_command(mcp_group, name="mcp")
+main.add_command(workitem_group, name="workitem")
 
 # Apply the standard exit-code epilog to every leaf command that doesn't
 # already define its own (deploy run / deploy destroy / validate run carry
