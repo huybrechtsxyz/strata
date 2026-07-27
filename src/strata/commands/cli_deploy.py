@@ -134,6 +134,13 @@ def deploy():
     metavar="SECONDS",
     help="Abort if the command does not complete within N seconds (0 = no timeout).",
 )
+@click.option(
+    "--resume",
+    "resume_id",
+    default=None,
+    metavar="ID",
+    help="Resume a paused deployment after gate resolution. Provide the work-item ID printed when the deploy was paused.",
+)
 @click_work_path
 @click_output_format
 @click_output_verbose
@@ -154,6 +161,7 @@ def deploy_run(
     timeout: int = 0,
     ai: bool = False,
     strict_ai_review: Optional[str] = None,
+    resume_id: Optional[str] = None,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -175,6 +183,7 @@ def deploy_run(
         timeout=timeout,
         ai=ai,
         strict_ai_review=strict_ai_review,
+        resume_id=resume_id,
         output=output,
         verbose=verbose,
         quiet=quiet,

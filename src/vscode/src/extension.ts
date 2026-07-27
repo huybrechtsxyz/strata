@@ -32,6 +32,8 @@ import { ValuesViewProvider } from './providers/valuesViewProvider';
 import { BuildPlanProvider } from './providers/buildPlanProvider';
 import { PromotionsViewProvider } from './providers/promotionsViewProvider';
 import { IntegrationHelpProvider } from './providers/integrationHelpProvider';
+import { HelpViewProvider } from './providers/helpViewProvider';
+import { WorkItemsViewProvider } from './providers/workItemsViewProvider';
 
 // ---------------------------------------------------------------------------
 // Extension state (singleton per VS Code window)
@@ -55,6 +57,8 @@ let _auditView: AuditViewProvider | undefined;
 let _valuesView: ValuesViewProvider | undefined;
 let _promotionsView: PromotionsViewProvider | undefined;
 let _integrationHelp: IntegrationHelpProvider | undefined;
+let _helpView: HelpViewProvider | undefined;
+let _workItemsView: WorkItemsViewProvider | undefined;
 let _lastStatus: import('./strataClient').WorkspaceStatus | undefined;
 let _lastDriftTarget: string | undefined;
 let _lastDeployTarget: string | undefined;
@@ -166,6 +170,14 @@ export function activate(context: vscode.ExtensionContext): void {
 
     _integrationHelp = new IntegrationHelpProvider();
     _integrationHelp.setClient(_client);
+    _integrationHelp.setWorkPath(workPath);
+
+    _helpView = new HelpViewProvider();
+    _helpView.setWorkPath(workPath);
+
+    _workItemsView = new WorkItemsViewProvider();
+    _workItemsView.setClient(_client);
+    _workItemsView.setWorkPath(workPath);
 
     // Propagate deployment context changes to status bar
     context.subscriptions.push(
@@ -205,7 +217,20 @@ export function activate(context: vscode.ExtensionContext): void {
             treeDataProvider: _promotionsView!,
             showCollapseAll: true,
         }),
+        vscode.window.createTreeView('strataHelp', {
+            treeDataProvider: _helpView!,
+            showCollapseAll: false,
+        }),
     );
+
+    // Register the work-items view separately to capture the TreeView reference
+    // for badge updates and visibility-triggered refresh.
+    const _workItemsTreeView = vscode.window.createTreeView('strataWorkItems', {
+        treeDataProvider: _workItemsView!,
+        showCollapseAll: false,
+    });
+    context.subscriptions.push(_workItemsTreeView);
+    _workItemsView!.register(_workItemsTreeView);
 
     // ── Register other providers ───────────────────────────────────────────────
 
@@ -217,6 +242,7 @@ export function activate(context: vscode.ExtensionContext): void {
     _fileDecorations.register();
     _chatParticipant.setClient(_client);
     _chatParticipant.register(context);
+    _helpView.register(context);
     _statusBar.show();
 
     // ── Register commands ──────────────────────────────────────────────────────
@@ -233,7 +259,70 @@ export function activate(context: vscode.ExtensionContext): void {
             }
             await _integrationHelp?.show(name);
         }),
-        // ── Deployment context ─────────────────────────────────────────────────
+
+        vscode.commands.registerCommand('strata.showHelp', () => {
+            void vscode.commands.executeCommand('strataHelp.focus');
+        }),
+
+        // ── Work items ─────────────────────────────────────────────────────────
+
+        vscode.commands.registerCommand('strata.refreshWorkItems', () => {
+            _workItemsView?.refresh();
+        }),
+
+        vscode.commands.registerCommand('strata.showWorkItem', async (id: string) => {
+            void vscode.commands.executeCommand('strataWorkItems.focus');
+            if (!_client || !id) return;
+            try {
+                const items = await _client.listWorkItems(undefined, undefined);
+                const item = items.find(i => i.id === id || i.id.endsWith(id));
+                if (!item) { void vscode.window.showWarningMessage(`Work item not found: ${id}`); return; }
+                const lines = [
+                    `# Work Item: ${item.id}`,
+                    `Type: ${item.type}  |  Status: ${item.status}`,
+                    `Deployment: ${item.deployment}`,
+                    `Created: ${item.created_at.slice(0, 19).replace('T', ' ')} UTC  by ${item.created_by}`,
+                    item.expires_at ? `Expires: ${item.expires_at.slice(0, 19).replace('T', ' ')} UTC` : '',
+                    item.resolved_by ? `Resolved by: ${item.resolved_by}  at ${(item.resolved_at ?? '').slice(0, 19).replace('T', ' ')} UTC` : '',
+                    item.resolution_note ? `Note: ${item.resolution_note}` : '',
+                    Object.keys(item.context).length ? `\nContext:\n${JSON.stringify(item.context, null, 2)}` : '',
+                ].filter(Boolean).join('\n');
+                const out = vscode.window.createOutputChannel('Strata Work Item');
+                out.clear();
+                out.appendLine(lines);
+                out.show(true);
+            } catch (err) {
+                void vscode.window.showErrorMessage(`Failed to load work item: ${err}`);
+            }
+        }),
+
+        vscode.commands.registerCommand('strata.approveWorkItem', async (item?: import('./providers/workItemsViewProvider').WorkItemTreeItem) => {
+            const id = item?.workItem?.id;
+            if (!id) { void vscode.window.showWarningMessage('No work item selected.'); return; }
+            const note = await vscode.window.showInputBox({ prompt: 'Optional approval note', placeHolder: 'Looks good' });
+            if (note === undefined) return; // cancelled
+            try {
+                await _client?.approveWorkItem(id, note || undefined);
+                _workItemsView?.refresh();
+                void vscode.window.showInformationMessage(`✅ Approved: ${id}`);
+            } catch (err) {
+                void vscode.window.showErrorMessage(`Failed to approve: ${err}`);
+            }
+        }),
+
+        vscode.commands.registerCommand('strata.rejectWorkItem', async (item?: import('./providers/workItemsViewProvider').WorkItemTreeItem) => {
+            const id = item?.workItem?.id;
+            if (!id) { void vscode.window.showWarningMessage('No work item selected.'); return; }
+            const reason = await vscode.window.showInputBox({ prompt: 'Reason for rejection', placeHolder: 'Risk too high' });
+            if (reason === undefined) return; // cancelled
+            try {
+                await _client?.rejectWorkItem(id, reason || undefined);
+                _workItemsView?.refresh();
+                void vscode.window.showInformationMessage(`❌ Rejected: ${id}`);
+            } catch (err) {
+                void vscode.window.showErrorMessage(`Failed to reject: ${err}`);
+            }
+        }),
 
         vscode.commands.registerCommand('strata.selectDeployment', async () => {
             if (!_lastStatus) { void vscode.window.showWarningMessage('Strata: workspace not ready yet.'); return; }

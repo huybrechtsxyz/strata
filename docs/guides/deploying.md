@@ -7,7 +7,7 @@
 `strata deploy run` is the command that applies infrastructure changes: provisioning resources,
 running configuration management, and enforcing state consistency. This guide covers the practical
 operational aspects.
-
+> **Tip:** Deployments can be paused at **approval gates** (cost review, security review, manual verification). See [Deployment Approval Gates](./deployment-approval-gates.md) for the full workflow.
 ---
 
 ## Before You Deploy

@@ -60,6 +60,7 @@ class RunDeployCommand(BaseDeployCommand):
         timeout: int = 0,
         ai: bool = False,
         strict_ai_review: Optional[str] = None,
+        resume_id: Optional[str] = None,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -84,7 +85,13 @@ class RunDeployCommand(BaseDeployCommand):
         self._timeout = timeout
         self._ai = ai
         self._strict_ai_review: Optional[str] = strict_ai_review.lower() if strict_ai_review else None
+        self._resume_id: Optional[str] = resume_id
+        self._hand_off_required: bool = False
         self._resolved_values: Optional[ResolvedValues] = None
+
+    def has_hand_off_required(self) -> bool:
+        """Return True when a gate work item was created and the deploy is paused."""
+        return self._hand_off_required
 
     # -------------------------------------------------------------------------
     # Finalize override — writes deploy-log before standard finalization
@@ -864,6 +871,246 @@ class RunDeployCommand(BaseDeployCommand):
             pass
         return None
 
+    def _get_current_commit(self) -> str:
+        """Return the current HEAD commit SHA, or 'unknown' on failure."""
+        return self._get_git_field("rev-parse", "HEAD") or "unknown"
+
+    def _evaluate_environment_gates(self):
+        """Evaluate spec.gates from the environment model — pre-provisioning.
+
+        Handles gates with `when: always` (approval) and `type: scheduled`.
+        Condition-based gates (cost_review, security_review) run post-plan via
+        _evaluate_condition_gates_post_plan(). Verify gates run post-apply.
+        Returns a WorkItem if a gate is triggered, else None.
+        """
+        try:
+            env_svc = getattr(self._deployment_service, "_environment_service", None)
+            env_model = env_svc.model if env_svc else None
+            gates = (env_model.spec.gates or []) if (env_model and env_model.spec) else []
+            if not gates:
+                return None
+            # Only pre-provisioning gate types: approval, scheduled, cab, incident
+            pre_gates = [g for g in gates if g.type in ("approval", "scheduled", "cab", "incident")]
+            if not pre_gates:
+                return None
+        except Exception:
+            return None
+
+        from strata.controllers.gate_controller import _SCHEDULED_BLOCK_SENTINEL, GateContext, WorkItemGateController
+        from strata.controllers.workitem_controller import WorkItemController
+
+        context = GateContext()
+        controller = WorkItemGateController(WorkItemController.from_config(self._work_path))
+        deployment_path = str(self._file_path) if self._file_path else ""
+        commit = self._get_current_commit()
+
+        result = controller.evaluate_and_create(pre_gates, deployment_path, commit, context)
+        # Scheduled block sentinel means "blocked by window, no work item needed"
+        if result is _SCHEDULED_BLOCK_SENTINEL:
+            env_svc = getattr(self._deployment_service, "_environment_service", None)
+            env_model = env_svc.model if env_svc else None
+            gates = (env_model.spec.gates or []) if (env_model and env_model.spec) else []
+            window = next(
+                (
+                    g.when.time_utc
+                    for g in gates
+                    if g.type == "scheduled" and hasattr(g.when, "time_utc") and g.when.time_utc
+                ),
+                "configured window",
+            )
+            self._errors.append(
+                f"Deployment blocked by scheduled gate: outside maintenance window ({window}). "
+                "Retry when the window opens."
+            )
+            if self._is_console_output():
+                click.echo(f"\n⏰  Scheduled gate: outside window ({window}). Retry when the window opens.")
+            # Use exit code 5 so CI distinguishes "retry later" from a system error (exit 1)
+            self._hand_off_required = True
+            return result
+        # A real work item was created — forward to SIEM
+        if result is not None:
+            self._forward_workitem_event("workitem.created", result)
+        return result
+
+    def _evaluate_condition_gates_post_plan(
+        self,
+        stage,
+        deployer,
+        stage_started: str,
+        steps_to_run: list,
+    ) -> bool:
+        """Evaluate condition-based gates (cost_review, security_review) after plan.
+
+        Called after STEP_PLAN, before STEP_APPLY. Populates GateContext with
+        real cost delta and CVE counts so gate conditions are evaluated accurately.
+        Returns True if provisioning should continue, False if a gate triggered.
+        """
+        try:
+            env_svc = getattr(self._deployment_service, "_environment_service", None)
+            env_model = env_svc.model if env_svc else None
+            gates = (env_model.spec.gates or []) if (env_model and env_model.spec) else []
+            condition_gates = [g for g in gates if g.type in ("cost_review", "security_review")]
+            if not condition_gates:
+                return True
+        except Exception:
+            return True
+
+        from strata.controllers.gate_context_builder import GateContextBuilder
+        from strata.controllers.gate_controller import WorkItemGateController
+        from strata.controllers.workitem_controller import WorkItemController
+
+        builder = GateContextBuilder(
+            build_path=self._build_path,
+            deployment_service=self._deployment_service,
+        )
+        ai_analysis = self._output_data.get("ai_analysis") if hasattr(self, "_output_data") else None
+        context = builder.build(stage=stage, deployer=deployer, ai_analysis=ai_analysis)
+
+        controller = WorkItemGateController(WorkItemController.from_config(self._work_path))
+        deployment_path = str(self._file_path) if self._file_path else ""
+        commit = self._get_current_commit()
+
+        work_item = controller.evaluate_and_create(condition_gates, deployment_path, commit, context)
+        if work_item is None:
+            return True
+
+        self._forward_workitem_event("workitem.created", work_item)
+        self._hand_off_required = True
+        if self._is_console_output():
+            click.echo(f"\n⏸️  Deployment paused — {work_item.type} gate triggered:")
+            click.echo(f"   ID:   {work_item.id}")
+            if work_item.context.get("cost_delta_monthly") is not None:
+                delta = work_item.context["cost_delta_monthly"]
+                click.echo(f"   Cost delta: ${delta:+.2f}/month")
+            if work_item.context.get("cve_critical_count"):
+                click.echo(f"   Critical CVEs: {work_item.context['cve_critical_count']}")
+            if work_item.expires_at:
+                click.echo(f"   Expires: {work_item.expires_at[:19].replace('T', ' ')} UTC")
+            click.echo(f"\n   Resolve:  strata workitem approve {work_item.id!r}")
+            click.echo(f"   Resume:   strata deploy run -f {self._file_path} --resume {work_item.id!r}")
+        self._record_stage_result(
+            stage_name=str(stage.name),
+            provisioner=stage.provisioner,
+            topology=stage.topology,
+            status="failed",
+            started_at=stage_started,
+            completed_at=_dt.now(_tz.utc).isoformat(),
+            steps=steps_to_run,
+            error=f"Gate {work_item.type!r} triggered — awaiting resolution",
+        )
+        return False
+
+    def _evaluate_verify_gate_post_apply(
+        self,
+        stage,
+        stage_started: str,
+        steps_to_run: list,
+    ) -> bool:
+        """Evaluate verify gates after apply completes.
+
+        Pauses the pipeline pending human verification that the deployment
+        is functioning correctly. Returns True to continue, False to pause.
+        """
+        try:
+            env_svc = getattr(self._deployment_service, "_environment_service", None)
+            env_model = env_svc.model if env_svc else None
+            gates = (env_model.spec.gates or []) if (env_model and env_model.spec) else []
+            verify_gates = [g for g in gates if g.type == "verify"]
+            if not verify_gates:
+                return True
+        except Exception:
+            return True
+
+        from strata.controllers.gate_controller import GateContext, WorkItemGateController
+        from strata.controllers.workitem_controller import WorkItemController
+
+        context = GateContext()
+        # Enrich with deploy summary
+        context.extra["stage"] = str(stage.name)
+        context.extra["action"] = "verify post-deploy"
+
+        controller = WorkItemGateController(WorkItemController.from_config(self._work_path))
+        deployment_path = str(self._file_path) if self._file_path else ""
+        commit = self._get_current_commit()
+
+        work_item = controller.evaluate_and_create(
+            verify_gates, deployment_path, commit, context, gate_type_filter="verify"
+        )
+        if work_item is None:
+            return True
+
+        self._forward_workitem_event("workitem.created", work_item)
+        self._hand_off_required = True
+        if self._is_console_output():
+            click.echo("\n⏸️  Verify gate: deployment applied — awaiting manual verification:")
+            click.echo(f"   ID:   {work_item.id}")
+            click.echo(f"   Stage: {stage.name}")
+            if work_item.context.get("description"):
+                click.echo(f"   Instructions: {work_item.context['description']}")
+            if work_item.expires_at:
+                click.echo(f"   Expires: {work_item.expires_at[:19].replace('T', ' ')} UTC")
+            click.echo(f"\n   Complete:  strata workitem complete {work_item.id!r}")
+            click.echo(f"   Resume:    strata deploy run -f {self._file_path} --resume {work_item.id!r}")
+        self._record_stage_result(
+            stage_name=str(stage.name),
+            provisioner=stage.provisioner,
+            topology=stage.topology,
+            status="pending_verification",
+            started_at=stage_started,
+            completed_at=_dt.now(_tz.utc).isoformat(),
+            steps=steps_to_run,
+            error="Verify gate triggered — awaiting manual verification",
+        )
+        return False
+
+    def _verify_gate_resume(self) -> bool:
+        """Verify the --resume work item is approved for this commit.
+
+        Returns True if the deployment can proceed, False otherwise.
+        Populates self._errors on failure.
+        """
+        from strata.controllers.gate_controller import WorkItemGateController
+        from strata.controllers.workitem_controller import WorkItemController
+
+        controller = WorkItemGateController(WorkItemController.from_config(self._work_path))
+        commit = self._get_current_commit()
+
+        try:
+            item = controller.verify_resume(self._resume_id or "", commit)
+            self._forward_workitem_event("workitem.resumed", item)
+            if self._is_console_output():
+                click.echo(f"\n✅  Gate cleared: {item.id}  ({item.status} by {item.resolved_by or 'system'})")
+            return True
+        except Exception as exc:
+            self._errors.append(str(exc))
+            if self._is_console_output():
+                click.echo(f"\n❌  Gate resume failed: {exc}")
+            return False
+
+    def _forward_workitem_event(self, event_name: str, item) -> None:
+        """Forward a work-item lifecycle event to configured SIEM sinks.
+
+        Best-effort — never raises. Uses the same sinks as deploy_audit but
+        sends event_name="workitem.created" / "workitem.approved" / etc.
+        Sinks without an events filter receive all events; sinks filtered to
+        ["deploy_audit"] also receive workitem events (deployment gate context).
+        """
+        try:
+            audit_cfg = None
+            if self._configuration_service:
+                audit_cfg = getattr(getattr(self._configuration_service.model, "spec", None), "audit", None)
+            sinks = self._resolve_siem_sinks(audit_cfg)
+            if not sinks:
+                return
+            data = {**item.to_dict(), "event": event_name}
+            for sink in sinks:
+                try:
+                    sink.send_event(event_name, data)
+                except Exception as exc:
+                    self.logger.debug("workitem_siem_forward_failed", event_name=event_name, error=str(exc))
+        except Exception as exc:
+            self.logger.debug("workitem_siem_forward_error", event_name=event_name, error=str(exc))
+
     def _resolve_siem_sinks(self, audit_config=None) -> list:
         """Resolve integration-backed SIEM sinks from the current configuration.
 
@@ -1026,6 +1273,28 @@ class RunDeployCommand(BaseDeployCommand):
         if not self._dry_run:
             if not self._check_approvals(stages_to_run):
                 return False
+
+            # Evaluate environment spec.gates (ADR-0057 Phase 2/4)
+            if self._resume_id:
+                if not self._verify_gate_resume():
+                    return False
+            else:
+                from strata.controllers.gate_controller import _SCHEDULED_BLOCK_SENTINEL
+
+                work_item = self._evaluate_environment_gates()
+                if work_item is not None:
+                    if work_item is _SCHEDULED_BLOCK_SENTINEL:
+                        return False  # error already recorded in _evaluate_environment_gates
+                    self._hand_off_required = True
+                    if self._is_console_output():
+                        click.echo("\n⏸️  Deployment paused — gate work item created:")
+                        click.echo(f"   ID:   {work_item.id}")
+                        click.echo(f"   Type: {work_item.type}")
+                        if work_item.expires_at:
+                            click.echo(f"   Expires: {work_item.expires_at[:19].replace('T', ' ')} UTC")
+                        click.echo(f"\n   Resolve:  strata workitem approve {work_item.id!r}")
+                        click.echo(f"   Resume:   strata deploy run -f {self._file_path} --resume {work_item.id!r}")
+                    return False
 
         import concurrent.futures
 
@@ -1357,6 +1626,13 @@ class RunDeployCommand(BaseDeployCommand):
                     )
                     return False
 
+                # --- post-plan condition gate evaluation (ADR-0057 Phase 4) ---
+                # Evaluates cost_review and security_review gates with real plan data.
+                # Runs AFTER plan (so cost delta and CVE counts are available) and
+                # BEFORE apply. approval and scheduled gates already ran pre-provisioning.
+                if not self._evaluate_condition_gates_post_plan(stage, deployer, stage_started, steps_to_run):
+                    return False
+
                 # --- AI plan gate (--ai / --strict-ai-review) ---
                 if self._ai or self._strict_ai_review:
                     ai_ok = self._check_ai_plan_gate(stage, msgs)
@@ -1469,6 +1745,12 @@ class RunDeployCommand(BaseDeployCommand):
         ):
             self._errors.append(f"Stage '{stage.name}': deploy_stage_after lifecycle hook failed.")
             return False
+
+        # --- post-apply verify gate (ADR-0057 Phase 4) ---
+        # Evaluates verify gates AFTER apply completes — requires human confirmation.
+        if STEP_APPLY in steps_to_run and not self._dry_run:
+            if not self._evaluate_verify_gate_post_apply(stage, stage_started, steps_to_run):
+                return False
 
         return True
 

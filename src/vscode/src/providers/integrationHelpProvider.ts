@@ -16,8 +16,46 @@
  * panel; calls for a different topic replace its content.
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import type { StrataClient } from '../strataClient';
+
+// ---------------------------------------------------------------------------
+// Bundled help file reader
+// ---------------------------------------------------------------------------
+
+/** Priority order for resolving a help topic:
+ *  1. <workPath>/.strata/help/<topic>.md  — workspace custom / override
+ *  2. resources/help/<topic>.md           — bundled with the extension
+ *  3. CLI fallback                        — for dynamic / unlisted topics
+ */
+function _readHelpFile(topic: string, workPath: string | undefined): string | undefined {
+    const candidates: string[] = [];
+
+    // 1. Workspace override
+    if (workPath) {
+        candidates.push(path.join(workPath, '.strata', 'help', `${topic}.md`));
+        candidates.push(path.join(workPath, '.strata', 'help', `${topic.replace(/_/g, '-')}.md`));
+    }
+
+    // 2. Bundled resources
+    try {
+        const ext = vscode.extensions.getExtension('huybrechts-xyz.xyz-strata');
+        const root = ext?.extensionUri.fsPath ?? path.resolve(__dirname, '..', '..');
+        candidates.push(path.join(root, 'resources', 'help', `${topic}.md`));
+        candidates.push(path.join(root, 'resources', 'help', `${topic.replace(/_/g, '-')}.md`));
+    } catch { /* ignore */ }
+
+    for (const file of candidates) {
+        try {
+            if (fs.existsSync(file)) {
+                return fs.readFileSync(file, 'utf-8');
+            }
+        } catch { /* skip */ }
+    }
+    return undefined;
+}
 
 // ---------------------------------------------------------------------------
 // Minimal Markdown → HTML converter (no external deps)
@@ -84,9 +122,14 @@ export class IntegrationHelpProvider implements vscode.Disposable {
     private _panel: vscode.WebviewPanel | undefined;
     private _currentTopic: string | undefined;
     private _client: StrataClient | undefined;
+    private _workPath: string | undefined;
 
     setClient(client: StrataClient): void {
         this._client = client;
+    }
+
+    setWorkPath(workPath: string): void {
+        this._workPath = workPath;
     }
 
     dispose(): void {
@@ -101,9 +144,11 @@ export class IntegrationHelpProvider implements vscode.Disposable {
     async show(integrationName: string): Promise<void> {
         const topic = integrationName.toLowerCase().replace(/-/g, '_');
 
-        // Fetch content via CLI
-        let markdown: string | undefined;
-        if (this._client) {
+        // 1. Try workspace override then bundled resources (no CLI needed for static content)
+        let markdown: string | undefined = _readHelpFile(topic, this._workPath);
+
+        // 2. Fall back to CLI if not found in either location (e.g. unlisted workspace topics)
+        if (!markdown && this._client) {
             try {
                 markdown = await this._client.getHelpTopic(topic);
             } catch {

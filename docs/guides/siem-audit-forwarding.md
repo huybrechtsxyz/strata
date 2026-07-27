@@ -37,6 +37,21 @@ The `otel` integration reaches Datadog and Sumo Logic without a dedicated integr
 
 ---
 
+## Audit Events
+
+The following events are logged during deployments:
+
+| Event               | When                                   | Payload                                     |
+| ------------------- | -------------------------------------- | ------------------------------------------- |
+| `workitem.created`  | A gate pauses the deployment           | Work item ID, gate type, approvers, timeout |
+| `workitem.approved` | Operator approves a gate               | Work item ID, approver, timestamp, note     |
+| `workitem.rejected` | Operator rejects a gate                | Work item ID, rejector, reason              |
+| `workitem.resumed`  | Deployment resumes after gate approval | Work item ID, commit SHA, deploy stage      |
+
+For SIEM, these events are forwarded to your configured backend during the deploy or on-demand via `strata audit export --siem <name>`.
+
+---
+
 ## Setup: Automatic Forwarding
 
 ### Step 1 — Declare the integration

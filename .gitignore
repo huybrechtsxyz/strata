@@ -44,6 +44,8 @@ terraform.rc
 build/
 dist/
 *.egg-info/
+src/strata/data/help/
+src/vscode/resources/help/
 
 # Python runtime artifacts
 .coverage
@@ -66,3 +68,4 @@ uv.lock
 **/.strata/cli.yaml
 **/.strata/audit.log
 **/.strata/solution.json
+**/.strata/console-history

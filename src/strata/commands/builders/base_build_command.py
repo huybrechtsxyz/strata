@@ -400,6 +400,33 @@ class BaseBuildCommand(BaseCommand):
         # Store for policy engine consumption
         self._cve_audit_result = result
 
+        # Write cve-audit.json artifact so deploy gate evaluation can read CVE counts
+        # (GateContextBuilder reads this file for security_review gate conditions)
+        if result and sbom_path:
+            try:
+                cve_artifact = sbom_path.parent / "cve-audit.json"
+                import json as _json
+
+                cve_artifact.write_text(
+                    _json.dumps(
+                        {
+                            "scanner": result.scanner,
+                            "critical": result.critical,
+                            "high": result.high,
+                            "medium": result.medium,
+                            "low": result.low,
+                            "unknown": result.unknown,
+                            "total_findings": result.total_findings,
+                            "sbom_path": str(sbom_path),
+                        },
+                        indent=2,
+                    ),
+                    encoding="utf-8",
+                )
+                self.logger.debug("cve_audit_artifact_written", path=str(cve_artifact))
+            except Exception as exc:
+                self.logger.debug("cve_audit_artifact_write_failed", error=str(exc))
+
         return True
 
     @staticmethod

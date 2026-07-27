@@ -108,6 +108,21 @@ export interface ToolsStatusRow {
     requirement: string | null; // "required" | "optional" | null
 }
 
+export interface WorkItemSummary {
+    id: string;
+    type: string;
+    status: string;
+    deployment: string;
+    commit: string;
+    created_by: string;
+    created_at: string;
+    expires_at?: string;
+    resolved_by?: string;
+    resolved_at?: string;
+    resolution_note?: string;
+    context: Record<string, unknown>;
+}
+
 export interface HealthData {
     status: 'HEALTHY' | 'DEGRADED' | 'BROKEN';
     issues: string[];
@@ -1050,6 +1065,44 @@ export class StrataClient {
         } catch {
             return [];
         }
+    }
+
+    /**
+     * List work items from the CLI.
+     * Calls: strata workitem list [--status STATUS] [--type TYPE] --output json
+     */
+    async listWorkItems(status?: string, type?: string): Promise<WorkItemSummary[]> {
+        const args = ['workitem', 'list', '--output', 'json'];
+        if (status) args.push('--status', status);
+        if (type) args.push('--type', type);
+        try {
+            const resp = await this._run<{ items?: WorkItemSummary[] } | WorkItemSummary[]>(args);
+            // The CLI may return an array directly or wrapped in data.items
+            const data = resp.data;
+            return Array.isArray(data) ? data : (data as any).items ?? [];
+        } catch {
+            return [];
+        }
+    }
+
+    /**
+     * Approve a pending work item.
+     * Calls: strata workitem approve <id> [--note NOTE] --output json
+     */
+    async approveWorkItem(id: string, note?: string): Promise<void> {
+        const args = ['workitem', 'approve', id, '--output', 'json'];
+        if (note) args.push('--note', note);
+        await this._run(args);
+    }
+
+    /**
+     * Reject a pending work item.
+     * Calls: strata workitem reject <id> [--reason REASON] --output json
+     */
+    async rejectWorkItem(id: string, reason?: string): Promise<void> {
+        const args = ['workitem', 'reject', id, '--output', 'json'];
+        if (reason) args.push('--reason', reason);
+        await this._run(args);
     }
 
     // ── Internal ─────────────────────────────────────────────────────────────

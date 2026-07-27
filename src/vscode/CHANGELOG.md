@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **Help pane** (`strataHelp` tree view) — context-aware sidebar that detects the `kind:` of the active YAML file and shows suggested help topics, quick-action buttons (Validate, Schema, Guide), and a full A–Z topic list
+  - Workspace override support: custom help files placed in `.strata/help/*.md` are discovered automatically and shown in a "Workspace" section with override indicators; file system watcher keeps the list live
+  - 55 help topics bundled in the extension (`resources/help/`) so content is available without requiring the system CLI
+  - All 12 platform kinds mapped to relevant suggested topics
+
+### Fixed
+
+- SIEM help topics (`sentinel`, `elk`, `otel`, `splunk`) now resolve from bundled extension resources; previously the file lookup always failed due to a `siem_` filename prefix mismatch and fell through to CLI fallback
+- `deployment` kind now suggests its own help topic alongside related topics in the Help pane
+- **Pending Work panel** (`strataWorkItems` tree view) — shows pending work items with type icons, deployment name, inline ✅ Approve / ❌ Reject buttons, and a badge count on the activity bar when items are waiting; auto-polls every 60 seconds with configurable `strata.workItemPollIntervalSeconds` setting
+- **`@strata /approvals` chat command** — lists pending work items with plan summary, cost delta, CVE count, and AI risk; inline approve/reject buttons; follow-up suggestions
+- **`strata.approveWorkItem`** / **`strata.rejectWorkItem`** commands — prompt for note/reason, call CLI, refresh panel
+- **`strata.showWorkItem`** command — opens Output Channel with full work-item detail (type, status, deployment, commit, context)
+- **`strata.workItemPollIntervalSeconds`** setting (default: 60, min: 10)
+
 ---
 
 ## [1.0.0] — 2026-07-08
