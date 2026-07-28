@@ -7,6 +7,10 @@ User: Vincent Huybrechts. Stack: Python 3.13, uv, Click, Pydantic v2, structlog,
 
 ## Learnings
 
+### 2026-07-28 — Global review pass 2: C1/C2 verdicts, ADR-0059 filed, stale ADR index removed
+
+- C1 🟢 (54%-proposed stat was itself sourced from a stale `docs/decisions/README.md` index table, now removed — real rate is ~70% shipped). C2 🟡 (three overlapping "approval" concepts — `spec.approvals`, ADR-0032, ADR-0057 — filed ADR-0059 recommending docs-only clarification now, rejecting removal/rename, flagging an `enforce:` bridge as the unscheduled future direction).
+
 ### 2026-07-28 — Global good/meh/ugly review, pass 1: contributed Concept + Design items to `_lesson.md`
 
 - Scanned ADR coherence and architecture layering for the global audit Vincent kicked off; contributed Concept (C1–C6) and Design (D1–D7) items to the new root-level `_lesson.md` tracker. Collection only — no verdicts assigned yet.
