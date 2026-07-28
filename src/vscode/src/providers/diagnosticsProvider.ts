@@ -17,6 +17,13 @@ import type { StrataClient, ValidationError, PolicyCheckData } from '../strataCl
 /** Strata apiVersion prefixes that identify a strata YAML document. */
 const STRATA_API_PREFIXES = ['strata.omp.com/v1', 'strata.huybrechts.xyz/v1'];
 
+/**
+ * Matches workspace-local template source directories (e.g. `.strata/templates/tenant.yaml`).
+ * Files here intentionally contain unrendered `{{ var }}` Jinja2 placeholders — they are
+ * rendered into concrete documents by `strata new` and must never be validated in place.
+ */
+const TEMPLATE_DIR_PATTERN = /[\\/]\.strata[\\/]templates[\\/]/;
+
 /** Diagnostic source label shown in the Problems panel. */
 const SOURCE = 'strata';
 
@@ -306,6 +313,11 @@ export class DiagnosticsProvider implements vscode.Disposable {
         if (document.languageId !== 'yaml' &&
             !document.uri.fsPath.endsWith('.yaml') &&
             !document.uri.fsPath.endsWith('.yml')) {
+            return false;
+        }
+        // Template source files are never validated as concrete documents —
+        // skip before spawning the CLI to avoid false-positive schema errors.
+        if (TEMPLATE_DIR_PATTERN.test(document.uri.fsPath)) {
             return false;
         }
         // Fast scan of first 20 lines — avoid validating every YAML in the workspace

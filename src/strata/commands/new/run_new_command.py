@@ -839,6 +839,15 @@ class NewCommand(BaseCommand):
         if not paths:
             return True
 
+        # Resolve repo map for @repo/ references (same pattern as _scaffold_missing_deps)
+        repo_map: Dict[str, str] = {}
+        try:
+            ok, _ = self._solution_controller.load()
+            if ok:
+                repo_map = self._solution_controller.get_repo_map()
+        except Exception:
+            pass
+
         all_ok = True
         for path_str in paths:
             file_path = Path(path_str)
@@ -846,7 +855,7 @@ class NewCommand(BaseCommand):
                 validator = PlatformValidator(
                     file_path=file_path,
                     configuration_service=None,
-                    repo_map=None,
+                    repo_map=repo_map,
                     verify_digests=False,
                 )
                 for phase_fn in (validator.before_validate, validator.validate, validator.after_validate):
