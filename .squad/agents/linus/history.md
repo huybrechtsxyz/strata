@@ -13,6 +13,10 @@ Key paths: `src/strata/cli.py`, `commands/cli_common.py`, `models/`, `services/`
 
 ## Learnings
 
+### 2026-07-28 — Cross-deployment dependency gating: `DeploymentManifestModel.spec.status` is the authoritative signal; proposed `spec.requires`
+
+- Found `DeploymentManifestModel.spec.status` (`success|partial|failed`, ADR-0021) is the authoritative, already-implemented deployment-outcome signal. Proposed `spec.requires: Optional[List[str]]` on `DeploymentModel`, checked pre-flight in `deploy run`/`validate --deep` — a simple hard precondition, no human-approval machinery. Argued successfully against routing through ADR-0057 gates (environment-scoped, human-decision-oriented — wrong fit).
+
 ### 2026-07-28 — Secret post_generate/derive feature: implementation footprint estimates
 
 - Estimated footprint for 3 design options: Option D (docs recipe) = zero core code; Option C (`derive:` spec on `SecretStoreModel`) = ~1 new field, 1 resolution branch, cycle detection, ~9-11 tests; Option A (`post_generate` hook) = ~15-18 tests across 3 call sites, discouraged due to duplicated logic and new subprocess attack surface. No code changes made — estimation only.

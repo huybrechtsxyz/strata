@@ -8,6 +8,10 @@ Key paths: `src/strata/integrations/`, `models/deployment_model.py`.
 
 ## Learnings
 
+### 2026-07-28 — Cross-deployment dependency gating: `deploy history` success field is the reliable DIY signal, not status/health
+
+- Verified a `deploy_run_before` lifecycle-script hook works today as a DIY precondition check across separate deployment files. `deploy status` is deprecated/unreliable (live terraform outputs only); `deploy health` silently passes (`no_checks_defined`) when no health checks configured — footgun. `deploy history --output json`'s per-execution `success` boolean is the reliable signal; CI must persist/share `.strata/logs/` across ephemeral checkouts between layers.
+
 ### 2026-07-28 — Audit log redaction gap: full argv (incl. `--value` secrets) logged unredacted
 
 - Confirmed Option D (docs-only secret-derive recipe) works today with existing CLI, no code needed. Independently found: `base_command.py` (~line 565-570) audits every command with `target=" ".join(sys.argv[1:])` — full unredacted argv, so `strata secret put KEY --value <plaintext>` writes the plaintext into `.strata/deploy-log/*.json` (and possibly `audit resend`). Option-independent, pre-existing issue; flagged in decisions.md as an open finding, not yet fixed.

@@ -179,6 +179,14 @@
 - **Tests:** `tests/strata/utils/test_utils_system.py::TestRedactArgv` covers two-token and `=`-joined forms, non-sensitive passthrough, custom masks, non-mutation, and a trailing flag with no value.
 - **Follow-up (not yet actioned):** `strata audit resend` may still forward previously-written, unredacted historical entries in `.strata/deploy-log/*.json` from before this fix — those old files are not retroactively scrubbed.
 
+### 2026-07-28 — [OPEN] No cross-deployment-file dependency gating (e.g. zone requires landscape deployed first)
+- **By:** Danny (Lead/Architect), with Basher (DevOps Integrations) and Linus (Python/CLI Dev)
+- **Status:** Flagged open finding — not yet actioned. Discussion only, no code or docs written.
+- **Finding:** No built-in mechanism exists for gating a lower deployment layer (e.g. zone) on an upper layer (e.g. landscape) having already succeeded, where each layer is a separate `kind: deployment` file. The only existing dependency primitive, `stages[].depends_on`, is intra-file only. `spec.inputs.from` (drafted in `docs/guides/at-scale.md`) is unimplemented. Raised for a partner team's layered tenant/landscape/zone/zone-tenant/zone-tenant-environment hierarchy.
+- **Recommended future fix:** New `spec.requires: Optional[List[str]]` field on `DeploymentModel`, checked against `DeploymentManifestModel.spec.status` (`success|partial|failed`, ADR-0021) at deploy pre-flight (and optionally `validate --deep`). Explicitly **not** via ADR-0057 gates — those are environment-scoped and human-decision-oriented (approvals, `WorkItem`, exit code 5), the wrong fit for a binary, disk-checkable precondition with no human decision involved.
+- **Interim recipe (not yet authored as docs):** Lifecycle script hooked at `deploy_run_before`, checking `strata deploy history --output json`'s per-execution `success` field for the upstream deployment file. `deploy status` (deprecated/unreliable) and `deploy health` (silently passes via `no_checks_defined` when unconfigured) were both rejected as check signals. Requires CI to persist/share `.strata/logs/` across ephemeral checkouts between the two layers' pipeline jobs.
+- **Scoped out:** Reverse-direction "prevent destroying a zone while tenants still exist" — depends on ADR-0038 Gap 3 (fleet-level visibility), not yet built.
+
 ## Governance
 
 - All meaningful architectural changes require a decision entry here
