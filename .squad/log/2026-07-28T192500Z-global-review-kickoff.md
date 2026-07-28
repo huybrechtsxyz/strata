@@ -57,3 +57,31 @@ reason, updating the file in place.
   now, reject outright removal/rename of `spec.approvals` (real usage confirmed),
   flag an opt-in `enforce:` bridge field as the future streamlining direction, not
   yet scheduled.
+
+## C4/C5/C6 reviewed
+
+- **C4 verdict: 🟡** — The code itself is fine (`PlatformKind` enum in
+  `common_models.py` is the single source of truth, 17 kinds cleanly organized),
+  but the docs have sprawled: four separate hand-maintained "valid kinds" lists
+  found, three of them wrong (`docs/platform/commands.md` missing `tenant` and
+  wrongly including internal-only `platform_model`; `.squad/templates/platform.instructions.md`
+  listing a nonexistent `datacenter` kind; `docs/GLOSSARY.md` listing an unbuilt
+  `workflow` kind from ADR-0049 as if it existed). Added to `_todo.md` as a
+  mechanical fix: generate these lists from `PlatformKind` instead of hand-copying.
+- **C5 verdict: 🟢** — Re-verified ADR-0044's gap-analysis table against current
+  code, not just ADR titles. Dependency graph/parallel execution and drift
+  detection gaps are still accurate: no parallel execution scheduler and no drift
+  detection scheduler exist anywhere in the codebase today. The two flagged gaps
+  remain the top two; no priority shift found.
+- **C6 verdict: 🔴** — Worse than the original framing: not 2 overlapping "is it
+  deployed" surfaces, but 4. `strata deploy status` is deprecated with deprecation
+  messages that themselves split guidance across two different replacements
+  (`env output` vs. `deploy plan` depending on `--plan`), and it has no
+  `hidden=True` on its Click registration — fully visible in `--help` competing
+  with `env output`, `env status`, and `env show`. Filed
+  `docs/decisions/0060-deploy-status-deprecation-and-env-command-clarity.md`
+  (Status: proposed) recommending `hidden=True` now (no functional removal),
+  fixing stale doc cross-references (already tracked as I7), and adding a doc
+  clarity note distinguishing the three real `env` commands. Full removal
+  deferred to a future breaking-change release. Consolidating the three `env`
+  commands into a single mega-command explicitly rejected.

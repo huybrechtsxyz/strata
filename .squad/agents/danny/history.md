@@ -7,6 +7,17 @@ User: Vincent Huybrechts. Stack: Python 3.13, uv, Click, Pydantic v2, structlog,
 
 ## Learnings
 
+### 2026-07-28 — Global review pass 2 (cont.): C4/C5/C6 verdicts, ADR-0060 filed
+
+- C4 🟡 (kind-catalog docs sprawl — 4 hand-maintained "valid kinds" lists, 3 wrong;
+  code itself is fine via `PlatformKind` enum; added to `_todo.md`). C5 🟢
+  (ADR-0044's dependency-graph/parallel-execution and drift-detection gaps
+  re-verified against current code — still accurate, no priority shift). C6 🔴
+  (not 2 but 4 overlapping "is it deployed" commands — `deploy status` deprecated
+  but not `hidden=True`, its own deprecation messages split across two different
+  replacements; filed ADR-0060 recommending `hidden=True` + doc fixes now, full
+  removal deferred, mega-command consolidation rejected).
+
 ### 2026-07-28 — Global review pass 2: C1/C2 verdicts, ADR-0059 filed, stale ADR index removed
 
 - C1 🟢 (54%-proposed stat was itself sourced from a stale `docs/decisions/README.md` index table, now removed — real rate is ~70% shipped). C2 🟡 (three overlapping "approval" concepts — `spec.approvals`, ADR-0032, ADR-0057 — filed ADR-0059 recommending docs-only clarification now, rejecting removal/rename, flagging an `enforce:` bridge as the unscheduled future direction).
