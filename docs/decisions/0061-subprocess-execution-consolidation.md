@@ -41,6 +41,17 @@ converting that path's internals from `subprocess.run(...)` to an explicit
 object exists and can be registered/deregistered, mirroring what the streaming path
 already does. This is a real, moderate refactor, not a trivial fix.
 
+Separately (`_lesson.md` item D3, same review): `run_command()` also has no
+stdin-injection support today. This is what forced the secret-hashing cookbook
+(documented earlier the same day) to bypass `run_command()` entirely and pipe stdin
+through the user's own shell instead. Adding an `input: Optional[str] = None`
+parameter is trivial for the buffered path — `subprocess.run(..., input=input)` /
+`proc.communicate(input=input, timeout=timeout)` support it directly, no manual pipe
+wiring needed. Since this ADR already converts the buffered path from
+`subprocess.run()` to `Popen` + `.communicate()` for SIGTERM registration, adding
+stdin support in the same change is close to free — bundled here rather than tracked
+as a separate change, to avoid touching the same function twice.
+
 This ADR records the recommended direction only. It does not implement anything.
 
 ## Decision Drivers
@@ -58,6 +69,10 @@ This ADR records the recommended direction only. It does not implement anything.
   buffered-path internals can change (Popen instead of `subprocess.run()`) as long as
   the public `CommandResult` contract (returncode/stdout/stderr/duration_ms) and
   timeout/error semantics stay identical.
+- Bundle the D3 stdin-injection addition into this same buffered-path change rather
+  than opening a second ADR for it — it's a mechanical addition (one new optional
+  parameter), not a separate design decision, and the refactor already touches the
+  exact code that would need to change for it.
 
 ## Considered Options
 
@@ -142,6 +157,14 @@ contributor doesn't accidentally do the incomplete version.
   the exact existing `CommandResult` output shape and existing behavior for
   `check=True` (raises `CalledProcessError`) and the `FileNotFoundError` → returncode
   127 fallback.
+- **Stdin injection (D3, bundled in)**: add `input: Optional[str] = None` to
+  `run_command()`'s signature. Buffered path passes it straight to
+  `proc.communicate(input=input, timeout=timeout)`. Streaming path only sets
+  `stdin=subprocess.PIPE` when `input is not None`, writes and closes `proc.stdin`
+  immediately after `Popen()` returns, before the drain threads start. The value must
+  never appear in `cmd_display` or the `logger.debug("Executing command", ...)` call —
+  only the argv is logged, `input` never is, for any caller (this matters for secret
+  values passed via stdin).
 - **`terraform_builder.py::_execute_format_script`**: add a `timeout` parameter (with a
   sensible default, e.g. reuse whatever default `run_command()` uses or a
   build-appropriate value — pick a reasonable default rather than leaving it unbounded)
@@ -171,6 +194,9 @@ contributor doesn't accidentally do the incomplete version.
 
 - Fix `run_command()`'s buffered path (Popen + process registration), verify no
   regression against existing tests.
+- Add `input` stdin-injection support in the same change (D3) — same buffered-path
+  code, same Popen conversion, negligible incremental cost. Add a test confirming
+  `input` is never logged.
 
 ### Phase 3
 

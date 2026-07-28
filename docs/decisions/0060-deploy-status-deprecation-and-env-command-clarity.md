@@ -150,7 +150,16 @@ recorded so it isn't re-proposed without new evidence that Option 3 wasn't enoug
 ### Phase 1 (small, low-risk, could ship soon)
 
 - `hidden=True` on `deploy status`'s Click registration.
-- Fix stale doc cross-references (I7).
+- Fix stale doc cross-references (I7). Concrete list, expanded during the
+  `_lesson.md` review after grepping beyond the original single docstring:
+  - `output_deploy_command.py` docstring (*"...or `deploy status`"*, no
+    deprecation note)
+  - `docs/help/deployment.md` (usage example recommending it as current)
+  - `docs/guides/deploying.md` (same pattern)
+  - `docs/platform/provisioner-plugin-api.md` (tells plugin authors to
+    support it as if current)
+  - (ADRs referencing it as historical design context are lower priority —
+    they describe the command as it existed at the time, not live guidance)
 
 ### Phase 2 (docs)
 
