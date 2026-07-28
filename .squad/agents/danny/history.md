@@ -7,6 +7,17 @@ User: Vincent Huybrechts. Stack: Python 3.13, uv, Click, Pydantic v2, structlog,
 
 ## Learnings
 
+### 2026-07-28 — Global review pass 2 (cont.): D1/D2 verdicts, ADR-0061 filed
+
+- D1 🟡 (`deploy_log_path` genuinely lacks a remote backend, but SIEM forwarding
+  and the gitops manifest already cover the real cross-machine needs — real but
+  low-priority, doc-only follow-up added to `_todo.md`). D2 🔴 (4 subprocess
+  execution implementations, not 3 — `format=script` builder has no timeout at
+  all, live hang risk; `run_command()`'s buffered/default path lacks the
+  SIGTERM registration its streaming path has; filed ADR-0061 recommending
+  fixing the buffered path first, then migrating the other two call sites,
+  with the timeout fix shippable independently and immediately).
+
 ### 2026-07-28 — Global review pass 2 (cont.): C4/C5/C6 verdicts, ADR-0060 filed
 
 - C4 🟡 (kind-catalog docs sprawl — 4 hand-maintained "valid kinds" lists, 3 wrong;

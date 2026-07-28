@@ -85,3 +85,30 @@ reason, updating the file in place.
   clarity note distinguishing the three real `env` commands. Full removal
   deferred to a future breaking-change release. Consolidating the three `env`
   commands into a single mega-command explicitly rejected.
+
+## D1/D2 reviewed
+
+- **D1 verdict: 🟡** — `deploy_log_path` genuinely has no remote-backend support
+  (confirmed: `ConfigurationService.get_deploy_log_path()` is pure filesystem
+  path resolution, no S3/Blob/GCS client anywhere in that path), but the real
+  needs it would serve are already covered elsewhere: SIEM/webhook forwarding
+  (`forward_to_siem()`) already gets the same audit event off-machine, and the
+  gitops deployment manifest (`push_manifest: true`) already covers
+  cross-machine "did this deployment succeed" checks. Real but low-priority
+  gap — not worth a code fix. Doc-only follow-up added to `_todo.md`
+  (document the three audit/status delivery mechanisms and when to use which).
+- **D2 verdict: 🔴** — Worse than the original framing: not 3 but **4**
+  independent subprocess execution implementations (`run_command()`'s buffered
+  path, `run_command()`'s streaming path, `script_deployer.py`'s direct
+  `subprocess.run`, and `terraform_builder.py`'s `format=script` builder).
+  Confirmed the `format=script` builder has **no `timeout` parameter at
+  all** — a live hang risk for `strata build run` today. Also confirmed
+  `run_command()`'s own default/buffered path (the common case) lacks the
+  `register_process`/`deregister_process` SIGTERM registration that only its
+  less-used streaming path has, meaning ADR-0028's graceful-shutdown coverage
+  is narrower than advertised. Filed
+  `docs/decisions/0061-subprocess-execution-consolidation.md` (Status:
+  proposed): fix `run_command()`'s buffered path first (Popen +
+  registration), then migrate the other two call sites onto it, with the
+  `format=script` timeout fix shippable independently and immediately as the
+  most urgent piece.
