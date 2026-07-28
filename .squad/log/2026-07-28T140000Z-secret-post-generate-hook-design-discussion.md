@@ -52,3 +52,7 @@ This finding has been filed as an open item in `.squad/decisions/inbox/basher-au
 | Agent history         | `.squad/agents/danny/history.md` (appended)                                          |
 | Agent history         | `.squad/agents/basher/history.md` (appended)                                         |
 | Agent history         | `.squad/agents/linus/history.md` (appended)                                          |
+
+## Outcome
+
+Reuben shipped the Option D docs-only recipe: `docs/guides/cookbook-hash-secret-before-storage.md` (new), registered in the `docs/index.rst` toctree, with a pointer link added from `docs/guides/secrets-variables-features.md`. This closes out the Option D thread from this session — no core code changes. Option C (`derive:` spec) remains the fallback if the pattern recurs; Option A (`post_generate` hook) remains discouraged. See `.squad/orchestration-log/2026-07-28T160000Z-reuben.md` for details.

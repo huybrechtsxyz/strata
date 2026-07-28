@@ -139,6 +139,7 @@ strata
    guides/faq
    guides/config-faq
    guides/cookbook-add-environment
+   guides/cookbook-hash-secret-before-storage
    guides/environment-composition
    guides/pattern-cross-env-changes
    guides/troubleshooting-what-changed
