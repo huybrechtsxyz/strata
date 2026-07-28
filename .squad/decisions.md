@@ -171,6 +171,13 @@
 - **Rationale:** Repository verification confirmed the normal deploy flow writes the deploy-log but does not automatically invoke `AuditController.enrich_with_pr_data()`, `AuditController.push_to_remote()`, or `AuditController.forward_to_siem()` end-to-end. The ADR also describes a future `strata audit diff` capability that is not present in this repository, and Layer 1 PR-template process evidence appears to live outside this repo, so it cannot be verified here.
 - **Implications:** Keep the ADR narrative intact, but preserve the explicit status downgrade and the short "What Still Needs To Be Done" checklist until the deploy-path wiring, CLI surface, and any external process boundaries are either implemented or the ADR scope is narrowed.
 
+### 2026-07-28 — [OPEN FINDING, not yet a decision] Audit log records unredacted secret values via full argv logging
+- **By:** Basher (DevOps Integrations)
+- **Status:** Open finding — not yet actioned. Not a finalized decision; flagged for future triage.
+- **Finding:** `base_command.py` logs full argv (including `--value` secret content) to the audit log via `target=" ".join(sys.argv[1:])`. Needs redaction of sensitive option values (e.g. `--value`, `--password`) before persisting to `.strata/deploy-log/` or forwarding via `strata audit resend`.
+- **Context:** Discovered during secret post_generate/derive feature discussion, 2026-07-28. Option-independent — affects the existing `--value` flag today, regardless of which (if any) secret-transform option is eventually built.
+- **Not yet actioned.**
+
 ## Governance
 
 - All meaningful architectural changes require a decision entry here

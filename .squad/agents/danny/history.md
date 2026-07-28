@@ -7,6 +7,10 @@ User: Vincent Huybrechts. Stack: Python 3.13, uv, Click, Pydantic v2, structlog,
 
 ## Learnings
 
+### 2026-07-28 — Secret post_generate/derive feature request: recommend docs recipe now, `derive:` spec as fallback
+
+- Assessed a request to derive a secret from a generated one via a transform. Verdict: narrow use case — recommend Option D (documented CLI recipe: `secret put --generate` → `secret get --unmask` → `secret put --value`) now, zero new code. Recommend Option C (`derive:` spec on the secret store model) only if the pattern recurs. Option A (`post_generate` hook) is discouraged — unsafe in unattended build/deploy paths.
+
 ### 2026-07-11 — Naming: "promotion" verdict + verb/noun asymmetry rule
 
 **Requested by:** Vincent Huybrechts (ADR 0011 name gut-check).

@@ -13,6 +13,10 @@ Key paths: `src/strata/cli.py`, `commands/cli_common.py`, `models/`, `services/`
 
 ## Learnings
 
+### 2026-07-28 — Secret post_generate/derive feature: implementation footprint estimates
+
+- Estimated footprint for 3 design options: Option D (docs recipe) = zero core code; Option C (`derive:` spec on `SecretStoreModel`) = ~1 new field, 1 resolution branch, cycle detection, ~9-11 tests; Option A (`post_generate` hook) = ~15-18 tests across 3 call sites, discouraged due to duplicated logic and new subprocess attack surface. No code changes made — estimation only.
+
 ### 2026-06-15 — Policy Engine Phase 1
 
 **Files created:**

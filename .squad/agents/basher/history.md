@@ -8,6 +8,10 @@ Key paths: `src/strata/integrations/`, `models/deployment_model.py`.
 
 ## Learnings
 
+### 2026-07-28 — Audit log redaction gap: full argv (incl. `--value` secrets) logged unredacted
+
+- Confirmed Option D (docs-only secret-derive recipe) works today with existing CLI, no code needed. Independently found: `base_command.py` (~line 565-570) audits every command with `target=" ".join(sys.argv[1:])` — full unredacted argv, so `strata secret put KEY --value <plaintext>` writes the plaintext into `.strata/deploy-log/*.json` (and possibly `audit resend`). Option-independent, pre-existing issue; flagged in decisions.md as an open finding, not yet fixed.
+
 ### 2026-06-15 — Policy template blocks in config/data files
 - `xyz-config.yaml` has no top-level `lifecycle:` or `security:` section in `spec:` — policies block was appended after the `topologies:` section (end of file).
 - `src/strata/data/configuration.yaml` is the scaffold template for `strata new configuration` — it is minimal (only a `configuration:` sub-key). Policies block was appended after the existing `configuration:` block.
