@@ -8,6 +8,10 @@ Key paths: `src/strata/integrations/`, `models/deployment_model.py`.
 
 ## Learnings
 
+### 2026-07-28 — Global good/meh/ugly review, pass 1: contributed integration/subprocess items to `_lesson.md`
+
+- Scanned integrations and subprocess-execution patterns for the global audit; contributed Design/Implementation items (subprocess duplication, `BaseIntegration` drift, remote-backend maturity) to the new root-level `_lesson.md` tracker. Collection only — no verdicts assigned yet.
+
 ### 2026-07-28 — Cross-deployment dependency gating: `deploy history` success field is the reliable DIY signal, not status/health
 
 - Verified a `deploy_run_before` lifecycle-script hook works today as a DIY precondition check across separate deployment files. `deploy status` is deprecated/unreliable (live terraform outputs only); `deploy health` silently passes (`no_checks_defined`) when no health checks configured — footgun. `deploy history --output json`'s per-execution `success` boolean is the reliable signal; CI must persist/share `.strata/logs/` across ephemeral checkouts between layers.

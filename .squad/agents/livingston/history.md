@@ -19,6 +19,10 @@ Key paths: `tests/strata/`, `conftest.py`, `noxfile.py`.
 
 ## Learnings
 
+### 2026-07-28 — Global good/meh/ugly review, pass 1: contributed Testing & Quality items to `_lesson.md`
+
+- Scanned test coverage and CI gating for the global audit; contributed Testing & Quality (T1–T5) items (secret command coverage gap, no pytest step in `Check.ps1`, src/test parity, skipped policy tests) to the new root-level `_lesson.md` tracker. Collection only — no verdicts assigned yet.
+
 ### 2026-06-10 — guide command tests (anticipatory)
 
 **What was added:** `tests/strata/commands/test_guide_command.py` (new file) — 26 tests across 3 classes.

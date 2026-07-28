@@ -44,6 +44,7 @@ Key paths: `docs/`, `docs/conf.py`, `docs/index.rst`, `docs/cli-preferences.md`,
 
 ## Learnings
 
+- **2026-07-28 — Global good/meh/ugly review, pass 1:** contributed Docs & Usability items (X1–X5 — stale ADR index, guide/ADR overlap without cross-linking, duplicated onboarding skill files, INDEX.md/index.rst drift) to the new root-level `_lesson.md` tracker. Collection only — no verdicts assigned yet.
 - **ADR completion status checks:** Mark an ADR as partial when helper methods exist but the owning execution path does not invoke them. For deploy/audit work, verify the real command flow and the actual CLI surface before documenting a feature as complete.
 - **Squad recording follow-through:** When that gap is confirmed, promote the note into `.squad/decisions.md` so the completion-state correction is visible outside the originating agent history.
 - **Union fields in record tables:** When a model field becomes a union (one-of), the Required column should change from "Yes"/"No" to "one of" to accurately signal mutual exclusivity. This pattern works for any doc where Pydantic discriminates exactly one field from a set.

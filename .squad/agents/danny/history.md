@@ -7,6 +7,10 @@ User: Vincent Huybrechts. Stack: Python 3.13, uv, Click, Pydantic v2, structlog,
 
 ## Learnings
 
+### 2026-07-28 — Global good/meh/ugly review, pass 1: contributed Concept + Design items to `_lesson.md`
+
+- Scanned ADR coherence and architecture layering for the global audit Vincent kicked off; contributed Concept (C1–C6) and Design (D1–D7) items to the new root-level `_lesson.md` tracker. Collection only — no verdicts assigned yet.
+
 ### 2026-07-28 — ADR 0058 published: cross-deployment dependency gating via `spec.requires`
 
 - Formalized the earlier discussion (below) into `docs/decisions/0058-cross-deployment-dependency-gating.md` (Status: Proposed) and added it to the ADR index. Records the `spec.requires: Optional[List[str]]` field decision, backed by the gitops-manifest status signal with `env status` as a live-state fallback.
