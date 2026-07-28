@@ -10,7 +10,7 @@ import yaml
 
 from strata.commands.base_command import BaseCommand
 from strata.logger import get_logger
-from strata.models.solution_model import SolutionTemplateModel
+from strata.models.solution_model import SolutionSpecModel, SolutionTemplateModel
 from strata.utils.system import get_pkg_templates_path
 from strata.utils.templater import TemplateProcessor
 
@@ -55,8 +55,11 @@ def _resolve_solution_template(name: str, solution_spec) -> Optional["SolutionTe
     return None
 
 
-def _collect_available_templates(work_path: Optional[Path]) -> list[str]:
-    """Collect template stems from workspace and package directories.
+def _collect_available_templates(
+    work_path: Optional[Path],
+    solution_templates: Optional[List["SolutionTemplateModel"]] = None,
+) -> list[str]:
+    """Collect template stems from workspace, package, and solution.json sources.
 
     Workspace templates (`.strata/templates/`) take precedence but both
     sources contribute to the *available* list shown to the user.  A template
@@ -65,6 +68,8 @@ def _collect_available_templates(work_path: Optional[Path]) -> list[str]:
 
     Args:
         work_path: Root of the current workspace, or None.
+        solution_templates: Solution-level templates declared in
+            ``solution.json``'s ``spec.templates[]``, or None.
 
     Returns:
         Sorted, deduplicated list of template stems (e.g. ``["namespace", "provider"]``).
@@ -90,10 +95,18 @@ def _collect_available_templates(work_path: Optional[Path]) -> list[str]:
                 elif f.is_dir():
                     stems.add(f.name)
 
+    # Solution-level templates (solution.json spec.templates[])
+    if solution_templates:
+        for tpl in solution_templates:
+            stems.add(tpl.name)
+
     return sorted(stems)
 
 
-def _collect_templates_with_descriptions(work_path: Optional[Path]) -> List[Dict[str, str]]:
+def _collect_templates_with_descriptions(
+    work_path: Optional[Path],
+    solution_templates: Optional[List["SolutionTemplateModel"]] = None,
+) -> List[Dict[str, str]]:
     """Collect all templates with descriptions from all sources.
 
     Scans:
@@ -101,6 +114,12 @@ def _collect_templates_with_descriptions(work_path: Optional[Path]) -> List[Dict
     2. Package bundle templates (``templates/examples/``)
     3. Workspace single-file templates
     4. Workspace bundle templates
+    5. Solution-level templates (``solution.json`` ``spec.templates[]``)
+
+    Args:
+        work_path: Root of the current workspace, or None.
+        solution_templates: Solution-level templates declared in
+            ``solution.json``'s ``spec.templates[]``, or None.
 
     Returns a sorted list of dicts with keys: ``name``, ``description``, ``type``.
     """
@@ -158,6 +177,19 @@ def _collect_templates_with_descriptions(work_path: Optional[Path]) -> List[Dict
                         "description": desc or f"Workspace template: {f.name}",
                         "type": tpl_type,
                     }
+
+    # Solution-level templates (solution.json spec.templates[]) — a third source,
+    # distinct from workspace/package filesystem templates. On name collision with
+    # a filesystem template, last-write-wins (mirrors existing workspace-vs-package
+    # collision behavior above) since both accumulate into the same `templates` dict.
+    if solution_templates:
+        for tpl in solution_templates:
+            count = len(tpl.bundle)
+            templates[tpl.name] = {
+                "name": tpl.name,
+                "description": f"Solution template: {tpl.name} ({count} file{'s' if count != 1 else ''})",
+                "type": "bundle (solution)",
+            }
 
     return sorted(templates.values(), key=lambda t: t["name"])
 
@@ -331,10 +363,29 @@ class NewCommand(BaseCommand):
     def _before_execute(self) -> bool:
         return super()._before_execute()
 
+    def _load_solution_spec(self) -> Optional[SolutionSpecModel]:
+        """Best-effort load of solution.json.
+
+        Returns the solution spec, or ``None`` when no workspace/solution.json
+        is present or loading fails for any reason (silent, by design).
+        """
+        try:
+            ok, _errors = self._solution_controller.load()
+            if ok and self._solution_controller._solution is not None:
+                return self._solution_controller._solution.spec
+        except Exception:
+            pass  # No workspace — skip silently
+        return None
+
     def _execute(self) -> bool:
+        # Best-effort: load solution.json for team context and solution templates.
+        # Hoisted above the --list branch so both branches can see solution_spec.
+        solution_spec = self._load_solution_spec()
+
         # --list: show available templates and exit cleanly
         if self._list_templates:
-            templates = _collect_templates_with_descriptions(self._work_path)
+            solution_templates = solution_spec.templates if solution_spec else None
+            templates = _collect_templates_with_descriptions(self._work_path, solution_templates=solution_templates)
             available = [t["name"] for t in templates]
             self._output_data = {"templates": templates}
             if self._is_console_output():
@@ -370,16 +421,8 @@ class NewCommand(BaseCommand):
 
         # 1. Build substitution context (shared by all tiers)
         context: Dict[str, str] = {"name": self._name}
-
-        # Best-effort: load solution.json for team context and solution templates
-        solution_spec = None
-        try:
-            ok, _errors = self._solution_controller.load()
-            if ok and self._solution_controller._solution is not None:
-                solution_spec = self._solution_controller._solution.spec
-                context.update(solution_spec.context or {})
-        except Exception:
-            pass  # No workspace — skip silently
+        if solution_spec is not None:
+            context.update(solution_spec.context or {})
 
         # Apply --set overrides (CLI wins over solution context)
         for kv in self._set_values:
@@ -403,7 +446,10 @@ class NewCommand(BaseCommand):
             # 3. Tiers 1-4: file-system resolution (workspace bundle/file → package bundle/file)
             template_path = _resolve_template_path(self._template, self._work_path)
             if template_path is None:
-                available = _collect_available_templates(self._work_path)
+                available = _collect_available_templates(
+                    self._work_path,
+                    solution_templates=solution_spec.templates if solution_spec else None,
+                )
                 self._errors.append(
                     f"Template '{self._template}' not found. Available: {', '.join(available) if available else '(none)'}"
                 )

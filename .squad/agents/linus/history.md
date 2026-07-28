@@ -13,6 +13,10 @@ Key paths: `src/strata/cli.py`, `commands/cli_common.py`, `models/`, `services/`
 
 ## Learnings
 
+### 2026-07-28 — `strata new --list` missing solution-level templates
+
+Fixed: `--list` only walked the filesystem for templates, never `solution.json`'s `spec.templates[]`. Hoisted a `_load_solution_spec()` best-effort load ahead of the `--list` early-return; `_collect_available_templates()` / `_collect_templates_with_descriptions()` now take an optional `solution_templates` param merged in as a third source (`type: "bundle (solution)"`, last-write-wins on name collision). 37 tests passing. Flagged (not fixed): the "Scaffold bundles (strata sln init --template <name>):" header text is now misleading for solution templates, which are invoked via `strata new <name> <NAME>` — out of scope for this surgical fix.
+
 ### 2026-07-28 — Cross-deployment dependency gating: `DeploymentManifestModel.spec.status` is the authoritative signal; proposed `spec.requires`
 
 - Found `DeploymentManifestModel.spec.status` (`success|partial|failed`, ADR-0021) is the authoritative, already-implemented deployment-outcome signal. Proposed `spec.requires: Optional[List[str]]` on `DeploymentModel`, checked pre-flight in `deploy run`/`validate --deep` — a simple hard precondition, no human-approval machinery. Argued successfully against routing through ADR-0057 gates (environment-scoped, human-decision-oriented — wrong fit).

@@ -1,5 +1,6 @@
 """Tests for the ``new`` command."""
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
@@ -198,6 +199,64 @@ class TestNewCommandContextSubstitution:
         assert rendered_context["name"] == "myapp"
         assert rendered_context["owner"] == "acme"
         assert rendered_context["version"] == "3.0.0"  # --set overrides context
+
+    def test_list_includes_solution_level_template(self, tmp_path):
+        """--list surfaces solution-level templates declared in solution.json's spec.templates[]."""
+        bundle_entry = SimpleNamespace(path="{{ name }}.yaml", name="namespace")
+        solution_tpl = MagicMock()
+        solution_tpl.name = "onboard-customer"
+        solution_tpl.bundle = [bundle_entry]
+
+        mock_solution = MagicMock()
+        mock_solution.spec.templates = [solution_tpl]
+        mock_solution.spec.context = {}
+
+        cmd = NewCommand(
+            template=None,
+            name=None,
+            list_templates=True,
+            work_path=str(tmp_path),
+        )
+
+        def _fake_load() -> tuple:
+            cmd._solution_controller._solution = mock_solution
+            return True, []
+
+        with patch.object(cmd._solution_controller, "load", side_effect=_fake_load):
+            result = cmd.execute()
+
+        assert result is True
+        names = [t["name"] for t in cmd._output_data["templates"]]
+        assert "onboard-customer" in names
+        matched = next(t for t in cmd._output_data["templates"] if t["name"] == "onboard-customer")
+        assert matched["type"] == "bundle (solution)"
+
+    def test_template_not_found_lists_solution_level_template(self, tmp_path):
+        """The 'template not found' error's Available list includes solution-level templates."""
+        bundle_entry = SimpleNamespace(path="{{ name }}.yaml", name="namespace")
+        solution_tpl = MagicMock()
+        solution_tpl.name = "onboard-customer"
+        solution_tpl.bundle = [bundle_entry]
+
+        mock_solution = MagicMock()
+        mock_solution.spec.templates = [solution_tpl]
+        mock_solution.spec.context = {}
+
+        cmd = NewCommand(
+            template="nonexistent_xyz_template",
+            name="myapp",
+            work_path=str(tmp_path),
+        )
+
+        def _fake_load() -> tuple:
+            cmd._solution_controller._solution = mock_solution
+            return True, []
+
+        with patch.object(cmd._solution_controller, "load", side_effect=_fake_load):
+            result = cmd.execute()
+
+        assert result is False
+        assert any("onboard-customer" in e for e in cmd.get_errors())
 
 
 class TestNewCommandBundle:
