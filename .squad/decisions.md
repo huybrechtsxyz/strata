@@ -186,6 +186,7 @@
 - **Recommended future fix:** New `spec.requires: Optional[List[str]]` field on `DeploymentModel`, checked against `DeploymentManifestModel.spec.status` (`success|partial|failed`, ADR-0021) at deploy pre-flight (and optionally `validate --deep`). Explicitly **not** via ADR-0057 gates — those are environment-scoped and human-decision-oriented (approvals, `WorkItem`, exit code 5), the wrong fit for a binary, disk-checkable precondition with no human decision involved.
 - **Interim recipe (not yet authored as docs):** Lifecycle script hooked at `deploy_run_before`, checking `strata deploy history --output json`'s per-execution `success` field for the upstream deployment file. `deploy status` (deprecated/unreliable) and `deploy health` (silently passes via `no_checks_defined` when unconfigured) were both rejected as check signals. Requires CI to persist/share `.strata/logs/` across ephemeral checkouts between the two layers' pipeline jobs.
 - **Scoped out:** Reverse-direction "prevent destroying a zone while tenants still exist" — depends on ADR-0038 Gap 3 (fleet-level visibility), not yet built.
+- **Update 2026-07-28:** recommended backing store for `spec.requires` is the existing `manifest: { type: gitops, push_manifest: true }` mechanism (already implemented, genuinely remote via git push) plus `strata env status` as a live-Terraform-backend fallback check. Correction: the command is `strata env status`, not `strata deploy status` (which does not exist).
 
 ## Governance
 

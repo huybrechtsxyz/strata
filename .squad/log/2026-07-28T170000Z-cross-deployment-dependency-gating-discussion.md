@@ -32,18 +32,34 @@ The reverse-direction concern — preventing a zone from being destroyed while t
 
 ## Files Touched
 
-| Area                  | Modified / New                                                                                             |
-| --------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Orchestration log     | `.squad/orchestration-log/2026-07-28T170000Z-danny.md` (new)                                                |
-| Orchestration log     | `.squad/orchestration-log/2026-07-28T170000Z-basher.md` (new)                                               |
-| Orchestration log     | `.squad/orchestration-log/2026-07-28T170000Z-linus.md` (new)                                                |
-| Session log           | `.squad/log/2026-07-28T170000Z-cross-deployment-dependency-gating-discussion.md` (new)                     |
-| Inbox                 | `.squad/decisions/inbox/danny-cross-deployment-dependency-gap.md` (filed and merged)                        |
-| Squad decision ledger | `.squad/decisions.md` (appended — flagged open finding)                                                     |
-| Agent history         | `.squad/agents/danny/history.md` (appended)                                                                 |
-| Agent history         | `.squad/agents/basher/history.md` (appended)                                                                |
-| Agent history         | `.squad/agents/linus/history.md` (appended)                                                                 |
+| Area                  | Modified / New                                                                         |
+| --------------------- | -------------------------------------------------------------------------------------- |
+| Orchestration log     | `.squad/orchestration-log/2026-07-28T170000Z-danny.md` (new)                           |
+| Orchestration log     | `.squad/orchestration-log/2026-07-28T170000Z-basher.md` (new)                          |
+| Orchestration log     | `.squad/orchestration-log/2026-07-28T170000Z-linus.md` (new)                           |
+| Session log           | `.squad/log/2026-07-28T170000Z-cross-deployment-dependency-gating-discussion.md` (new) |
+| Inbox                 | `.squad/decisions/inbox/danny-cross-deployment-dependency-gap.md` (filed and merged)   |
+| Squad decision ledger | `.squad/decisions.md` (appended — flagged open finding)                                |
+| Agent history         | `.squad/agents/danny/history.md` (appended)                                            |
+| Agent history         | `.squad/agents/basher/history.md` (appended)                                           |
+| Agent history         | `.squad/agents/linus/history.md` (appended)                                            |
 
 ## Outcome
 
 Discussion only — no code or docs written this round. The lifecycle-script DIY recipe (using `deploy history`'s success field) has not yet been authored as a docs cookbook; the `spec.requires` field has not yet been implemented. Both remain open items for a future session, filed in `.squad/decisions/inbox/danny-cross-deployment-dependency-gap.md` and merged into `.squad/decisions.md`.
+
+## Update — cross-machine verification
+
+**Date:** 2026-07-28 (follow-up round)
+**Agent:** Basher (background, follow-up verification)
+
+The user asked whether pointing `deploy_log_path` at a shared/remote path is the only cross-machine-safe option for the dependency check discussed above. Basher verified in code:
+
+1. `deploy_log_path` (`ConfigurationService.get_deploy_log_path`) is confirmed pure filesystem path resolution — no remote transport (no S3/Blob/GCS), unlike locks (ADR-0007) or work items (ADR-0057).
+2. **New finding:** `ConfigurationManifestModel` already supports `manifest: { type: gitops, repository, branch, push_manifest: true }` — after every deploy, `push_to_remote()` does a real git commit+push of the deployment manifest (with `spec.status: success|partial|failed`) to a remote repo. This is genuinely remote today, no shared filesystem needed. Gap: no matching `pull_from_remote()` — a downstream consumer must `git pull` the state-repo itself first.
+3. **Correction to this session log and the `decisions.md` inbox entry from this session:** "strata deploy status" does **not** exist as a registered command — that was a naming error carried over from stale docs. The actual live-Terraform-state-query command is `strata env status -f <file>` (`StatusEnvCommand`), which runs `terraform init` + `terraform show -json` against the upstream's real remote Terraform backend — inherently cross-machine since that's the point of a Terraform remote backend. Only `deploy lock status` exists under the `deploy` group.
+4. **Ranked recommendation for cross-machine dependency checking (best to worst):** (1) `strata env status -f <upstream>` — queries live Terraform backend directly, no shared storage needed; (2) deployment manifest with `type: gitops` + `push_manifest: true` — genuinely remote via git, matches the earlier-proposed `spec.requires` design well, but needs an explicit `git pull` step downstream; (3) shared `deploy_log_path` on a mounted network share — works but zero strata-side remote mechanics, all on the operator; (4) webhook/ndjson audit sinks — not usable standalone, no query-side API today.
+
+This updates/corrects the earlier flagged open finding (`danny-cross-deployment-dependency-gap`, already merged into `decisions.md`) — the recommended backing store for the future `spec.requires` field should now specifically call out the gitops-manifest mechanism (already implemented) as the preferred remote signal, not "the manifest" generically, and `env status` as a live-state fallback.
+
+Details: `.squad/orchestration-log/2026-07-28T183000Z-basher.md`
