@@ -59,6 +59,7 @@ were considered, and why. They exist so the rationale survives beyond the author
 | [0047](0047-pulumi-provisioner-code-first-iac.md)                   | Pulumi Provisioner — Code-First Multi-Cloud IaC                    | Proposed  |
 | [0048](0048-cdk-provisioner-on-popular-demand.md)                   | CDK Provisioner — Cloud Development Kit                            | Proposed  |
 | [0049](0049-workflow-as-executable-runbook.md)                      | Workflow file as executable project runbook                        | Proposed  |
+| [0058](0058-cross-deployment-dependency-gating.md)                  | Cross-deployment dependency gating (layered tenant/landscape/zone hierarchies) | Proposed  |
 
 ## Adding a new ADR
 

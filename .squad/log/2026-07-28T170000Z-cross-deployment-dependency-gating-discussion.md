@@ -63,3 +63,14 @@ The user asked whether pointing `deploy_log_path` at a shared/remote path is the
 This updates/corrects the earlier flagged open finding (`danny-cross-deployment-dependency-gap`, already merged into `decisions.md`) — the recommended backing store for the future `spec.requires` field should now specifically call out the gitops-manifest mechanism (already implemented) as the preferred remote signal, not "the manifest" generically, and `env status` as a live-state fallback.
 
 Details: `.squad/orchestration-log/2026-07-28T183000Z-basher.md`
+
+## Outcome — ADR 0058 published
+
+**Date:** 2026-07-28 (follow-up)
+**Agent:** Danny
+
+This discussion is now formally recorded as an ADR: [docs/decisions/0058-cross-deployment-dependency-gating.md](../../docs/decisions/0058-cross-deployment-dependency-gating.md)
+(Status: Proposed). It documents the `spec.requires: Optional[List[str]]` field decision, backed
+by the gitops-manifest status signal with `env status` as a live-state fallback, and records the
+rejected alternatives (ADR-0057 gate extension, `inputs.from` overload). An index row for ADR
+0058 has been added to `docs/decisions/README.md`.

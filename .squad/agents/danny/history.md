@@ -7,6 +7,10 @@ User: Vincent Huybrechts. Stack: Python 3.13, uv, Click, Pydantic v2, structlog,
 
 ## Learnings
 
+### 2026-07-28 — ADR 0058 published: cross-deployment dependency gating via `spec.requires`
+
+- Formalized the earlier discussion (below) into `docs/decisions/0058-cross-deployment-dependency-gating.md` (Status: Proposed) and added it to the ADR index. Records the `spec.requires: Optional[List[str]]` field decision, backed by the gitops-manifest status signal with `env status` as a live-state fallback.
+
 ### 2026-07-28 — Cross-deployment dependency gating: no built-in mechanism; recommend `spec.requires` over ADR-0057 gates
 
 - Assessed whether strata can gate a lower deployment layer (zone) on an upper layer (landscape) succeeding first, across separate `kind: deployment` files. No built-in mechanism exists — `stages[].depends_on` is intra-file only, `spec.inputs.from` is unimplemented. Initially proposed an ADR-0057 `type: dependency` gate, but revised after Linus showed gates are environment-scoped/human-decision-oriented — concurred a new `spec.requires` field is the better fit. Flagged open, not actioned.
