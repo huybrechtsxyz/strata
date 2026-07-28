@@ -4,6 +4,7 @@
 from unittest.mock import MagicMock
 
 from strata.models.policy_model import PolicyModel
+from strata.models.repository_model import RemoteConventionsModel, RemoteModel, RemoteType
 from strata.validators.policies.base_policy import PolicyContext
 from strata.validators.policies.ref_convention_policy import RefConventionPolicy
 
@@ -19,9 +20,24 @@ def _policy_model(config=None) -> PolicyModel:
     )
 
 
+def _make_remote(name: str, release_pattern=None, quality_pattern=None) -> RemoteModel:
+    """Create a test RemoteModel, optionally with conventions declared on it."""
+    conventions = None
+    if release_pattern or quality_pattern:
+        conventions = RemoteConventionsModel(release_pattern=release_pattern, quality_pattern=quality_pattern)
+    return RemoteModel(
+        name=name,
+        type=RemoteType.GITOPS,
+        repository="https://example.com/acme/repo.git",
+        reference="main",
+        source_path=".",
+        conventions=conventions,
+    )
+
+
 class TestRefConventionPolicyConfiguration:
-    def test_passes_when_no_configuration(self):
-        policy = RefConventionPolicy(_policy_model(config=None))
+    def test_passes_when_no_services(self):
+        policy = RefConventionPolicy(_policy_model())
         context = PolicyContext(
             phase="validate",
             work_path=None,
@@ -34,43 +50,105 @@ class TestRefConventionPolicyConfiguration:
         assert result.passed is True
         assert result.violations == []
 
-    def test_passes_when_no_remotes_configured(self):
-        config = {"remotes": []}
-        policy = RefConventionPolicy(_policy_model(config=config))
+    def test_passes_when_no_remotes_have_conventions(self):
+        mock_config_service = MagicMock()
+        mock_config_service.get_remotes.return_value = [_make_remote("my-service")]
+        mock_deployment_service = MagicMock()
+        mock_deployment_service.all.return_value = []
+
+        policy = RefConventionPolicy(_policy_model())
         context = PolicyContext(
             phase="validate",
             work_path=None,
-            deployment_service=None,
-            configuration_service=None,
-        )
-
-        result = policy.evaluate(context)
-
-        assert result.passed is True
-
-
-class TestRefConventionPolicyServices:
-    def test_passes_when_no_services(self):
-        config = {
-            "remotes": [
-                {
-                    "name": "my-service",
-                    "release_pattern": r"^v\d+\.\d+\.\d+$",
-                }
-            ]
-        }
-        policy = RefConventionPolicy(_policy_model(config=config))
-        context = PolicyContext(
-            phase="validate",
-            work_path=None,
-            deployment_service=None,
-            configuration_service=None,
+            deployment_service=mock_deployment_service,
+            configuration_service=mock_config_service,
         )
 
         result = policy.evaluate(context)
 
         assert result.passed is True
         assert "skipped" in result.details
+
+    def test_passes_when_no_remotes_declared_at_all(self):
+        mock_config_service = MagicMock()
+        mock_config_service.get_remotes.return_value = None
+        mock_deployment_service = MagicMock()
+        mock_deployment_service.all.return_value = []
+
+        policy = RefConventionPolicy(_policy_model())
+        context = PolicyContext(
+            phase="validate",
+            work_path=None,
+            deployment_service=mock_deployment_service,
+            configuration_service=mock_config_service,
+        )
+
+        result = policy.evaluate(context)
+
+        assert result.passed is True
+
+
+class TestRefConventionPolicyEvaluate:
+    """End-to-end: patterns come from spec.remotes[].conventions, not policy config."""
+
+    def test_detects_violation_from_remote_conventions(self):
+        mock_config_service = MagicMock()
+        mock_config_service.get_remotes.return_value = [_make_remote("my-service", release_pattern=r"^v\d+\.\d+\.\d+$")]
+        mock_config_service.environments = []
+
+        mock_override = MagicMock()
+        mock_override.name = "my-service"
+        mock_override.reference = "main"  # does not match release pattern
+
+        mock_deployment = MagicMock()
+        mock_deployment.model.meta.name = "acme"
+        mock_deployment.model.spec.overrides.remotes = [mock_override]
+
+        mock_deployment_service = MagicMock()
+        mock_deployment_service.all.return_value = [mock_deployment]
+
+        policy = RefConventionPolicy(_policy_model())
+        context = PolicyContext(
+            phase="validate",
+            work_path=None,
+            deployment_service=mock_deployment_service,
+            configuration_service=mock_config_service,
+        )
+
+        result = policy.evaluate(context)
+
+        assert result.passed is False
+        assert len(result.violations) == 1
+        assert "my-service" in result.violations[0]
+
+    def test_passes_when_reference_matches_remote_conventions(self):
+        mock_config_service = MagicMock()
+        mock_config_service.get_remotes.return_value = [_make_remote("my-service", release_pattern=r"^v\d+\.\d+\.\d+$")]
+        mock_config_service.environments = []
+
+        mock_override = MagicMock()
+        mock_override.name = "my-service"
+        mock_override.reference = "v1.2.0"
+
+        mock_deployment = MagicMock()
+        mock_deployment.model.meta.name = "acme"
+        mock_deployment.model.spec.overrides.remotes = [mock_override]
+
+        mock_deployment_service = MagicMock()
+        mock_deployment_service.all.return_value = [mock_deployment]
+
+        policy = RefConventionPolicy(_policy_model())
+        context = PolicyContext(
+            phase="validate",
+            work_path=None,
+            deployment_service=mock_deployment_service,
+            configuration_service=mock_config_service,
+        )
+
+        result = policy.evaluate(context)
+
+        assert result.passed is True
+        assert result.violations == []
 
 
 class TestRefConventionPolicyValidation:

@@ -8,6 +8,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Fixed
+
+- **`ref_convention` policy / `strata repo status` design drift (ADR-0017)** — tag naming conventions now live in one place, `spec.remotes[].conventions` (`RemoteConventionsModel`), instead of being duplicated inside the policy's own config. `repo status` no longer guesses release/quality tags from hardcoded name prefixes — it links a local repo to its configured remote by comparing normalized git remote URLs and only classifies tags when that remote declares `conventions`. No backward compatibility with the old policy-level `configuration.remotes[]` shape (never released/documented before this fix).
+
 ---
 
 ## [1.5.0] - 2026-07-27

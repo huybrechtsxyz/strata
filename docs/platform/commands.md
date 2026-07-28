@@ -627,7 +627,11 @@ strata repo status [--name NAME] [standard options]
 - Repository path, current branch, tracking remote
 - Ahead/behind counts vs. tracking remote
 - File status: count of staged, unstaged, untracked, conflicted files
-- **NEW:** Latest release tag and quality-gate tag with age (if any tags exist)
+- Latest release tag and quality-gate tag with age — **only shown when this repo's
+  actual git remote URL matches a `configuration.spec.remotes[]` entry that declares
+  `conventions`** (see the [`ref_convention` policy](policies.md#ref_convention)).
+  There is no name-based guessing and no built-in tag-name heuristic — an unlinked
+  repo simply shows no tags section.
 
 **Console output example:**
 

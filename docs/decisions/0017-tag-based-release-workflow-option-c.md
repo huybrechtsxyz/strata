@@ -1,7 +1,8 @@
 # Tag-based release workflow support (Option C: Validation + Visibility)
 
-- Status: deferred
+- Status: completed
 - Date: 2026-07-03
+- Revised: 2026-07-28 — fixed design drift between `ref_convention` policy and `repo status` tag discovery (see "Revision" section)
 - Related: [GitHub Issue #111](https://github.com/huybrechtsxyz/strata/issues/111), [ADR 0011 (Promotion strategies)](0011-promotion-strategies-for-version-progression.md)
 
 ## Summary
@@ -363,6 +364,64 @@ PolicyEngine.register_type("script", ScriptPolicy)
 
 **File:** `src/strata/commands/repo/status_repo_solution_command.py`
 
+> **Revised 2026-07-28.** The original design below (kept for history) assumed
+> `strata repo status` could invent its own default tag-name heuristics
+> (`v\d+\.\d+\.\d+`, `tested`, `rc-*`) independent of the `ref_convention` policy.
+> The shipped implementation did exactly that — and diverged from the policy's
+> actual configured patterns, since a solution repo's name (`solution.json →
+> spec.repositories`) and a configuration remote's name (`configuration.yaml →
+> spec.remotes`) are two separately-managed registries with no guaranteed name
+> correspondence (ADR-0010). Two features validating "is this tag OK" ended up
+> with two different, silently disagreeing answers.
+>
+> **Corrected design:** `repo status` never invents its own patterns. It links
+> a local solution repo to a configured remote by comparing the repo's actual
+> `git remote get-url origin` output against `spec.remotes[].repository`, after
+> normalizing both (strip scheme, `.git` suffix, trailing slash, SSH `git@host:`
+> form, lowercase) — real identity, not a name coincidence. Only when a link is
+> found *and* that remote declares `conventions` does tag classification happen,
+> using the exact same `RemoteConventionsModel.release_pattern` /
+> `quality_pattern` the `ref_convention` policy reads. An unlinked repo, or one
+> whose linked remote has no `conventions`, shows no tags section — never a guess.
+
+```python
+def _build_remotes_by_url(self) -> Dict[str, RemoteModel]:
+    """Best-effort: normalized remote URL -> RemoteModel, for remotes with conventions.
+    Loading configuration is optional — repo status must keep working with no
+    active profile. Any failure just means no repo gets tag classification."""
+    config_service = self._load_configuration_service_best_effort()
+    if config_service is None:
+        return {}
+    remotes = config_service.get_remotes() or []
+    return {
+        self._normalize_repo_url(r.repository): r
+        for r in remotes
+        if r.conventions is not None
+    }
+
+def _discover_tags(
+    self, git: GitIntegration, repo_path: str, matched_remote: Optional[RemoteModel]
+) -> Optional[Dict[str, Any]]:
+    """Classify tags using the linked remote's declared conventions.
+    No link, no conventions => None. Never guesses from the tag name."""
+    if matched_remote is None or matched_remote.conventions is None:
+        return None
+    conventions = matched_remote.conventions
+    all_tags = git.list_tags(repo_path, timeout=30)
+    latest_release = self._find_latest_matching(all_tags, conventions.release_pattern)
+    latest_quality = self._find_latest_matching(all_tags, conventions.quality_pattern)
+    ...  # build result dict, same shape as before
+
+@staticmethod
+def _normalize_repo_url(url: str) -> str:
+    """Strip scheme/.git/trailing-slash, convert git@host:org/repo -> host/org/repo, lowercase.
+    Lets 'git@github.com:acme/x.git' and 'https://github.com/acme/x' compare equal."""
+    ...
+```
+
+<details>
+<summary>Original design (2026-07-03, superseded — kept for history)</summary>
+
 Add tag discovery to the per-repo output:
 
 ```python
@@ -436,6 +495,9 @@ class StatusRepoSolutionCommand(BaseCommand):
                     return tag
         return None
 ```
+
+</details>
+
 
 **Console output (with colors):**
 
@@ -655,24 +717,33 @@ Waiting for approval... (or run `strata promote start --wave 2` to advance)
 ## Open Questions
 
 1. **Should `ref_convention` policy be enforcement: warn by default?**
-   - Proposed: yes — validating conventions is helpful but shouldn't block deployment (teams adjust patterns)
-   - Alternative: deny — stricter but may be too aggressive for adoption
+   - Decided: yes — validating conventions is helpful but shouldn't block deployment (teams adjust patterns)
 
 2. **Should `list_tags()` accept a limit to prevent large repos from slowing down `repo status`?**
-   - Proposed: yes, default limit=100, let caller override
-   - Alternative: no limit, rely on git to be fast (it usually is)
+   - Not yet implemented. `list_tags()` has no `limit` parameter and `repo status` calls it unfiltered
+     for every repo. Left open — revisit if this becomes a measured problem in practice.
 
-3. **Should repo config support quality/release patterns, or only the policy?**
-   - Proposed: Only policy (single source of truth)
-   - Alternative: Both (allows per-repo customization, but adds complexity)
+3. **Should repo config support quality/release patterns, or only the policy? — CLOSED (2026-07-28)**
+   - Original proposal ("only policy") turned out to be under-specified: it assumed a solution repo's
+     name and a configuration remote's name refer to the same entity. They don't — `solution.json →
+     spec.repositories` (developer-local checkouts) and `configuration.yaml → spec.remotes` (team-shared,
+     named build-time sources) are two independently-named registries (ADR-0010). Matching them by name
+     is a coincidence, not an identity, and the shipped implementation had in fact drifted into a *third*,
+     undecided path: `repo status` used its own hardcoded tag-name heuristic (`v` + semver, `tested`/`rc-`
+     prefixes) instead of reading the policy's patterns at all.
+   - **Final answer:** patterns live in exactly one place — `spec.remotes[].conventions`
+     (`RemoteConventionsModel`), declared directly on the remote itself. `ref_convention` policy reads
+     from there (no more policy-level `configuration.remotes[]` duplicate). `strata repo status` links
+     a local solution repo to a configured remote by comparing normalized git remote URLs (real identity,
+     not name coincidence) and only classifies tags when a link with declared conventions is found —
+     otherwise it shows no tags section at all, rather than guessing.
 
 4. **How should we handle repos with no release tags yet (e.g., new projects)?**
-   - Proposed: `strata repo status` shows "none", no warning
+   - Decided: `strata repo status` shows no tags section, no warning
    - `strata validate` can warn if policy is enabled and no quality tags found
 
 5. **Should we compute tag age for display?**
-   - Proposed: yes, use `now() - created` to show "14 days old" (better UX than ISO timestamps)
-   - Alternative: show raw ISO timestamp (more precise but less readable)
+   - Decided: yes, use `now() - created` to show "14 days old" (better UX than ISO timestamps)
 
 ## Appendix: Example Release Workflow (Using CI/CD + Option C)
 

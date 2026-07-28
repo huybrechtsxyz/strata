@@ -2,48 +2,41 @@
 """Built-in policy: remote reference convention enforcement.
 
 Evaluates at the ``validate`` phase. Checks that remote references (pins to
-git tags, branches, or commits) follow declared naming conventions per remote.
+git tags, branches, or commits) follow the naming conventions declared on
+each remote itself.
 
 Configuration
 -------------
-``remotes`` (required)
-    List of remote configurations. Each remote specifies:
+None required. This policy is config-free — patterns are declared once, on
+the remote itself, via ``spec.remotes[].conventions`` (``RemoteConventionsModel``):
 
-    ``name`` (required)
-        Remote repository name from solution.remotes (e.g., "my-service", "tf-landscape")
-
-    ``release_pattern`` (optional)
-        Full-match regex for release tags. Example: "^v\\d+\\.\\d+\\.\\d+$"
-
-    ``quality_pattern`` (optional)
-        Full-match regex for quality-gate tags. Example: "^tested(-\\d+)?$"
-
-    At least one pattern must be specified per remote.
-
-Examples
---------
 ::
 
-    policies:
-      - name: release_conventions
-        type: ref_convention
-        phase: validate
-        enforcement: warn
-        configuration:
-          remotes:
-            - name: my-service
-              release_pattern: "^v\\d+\\.\\d+\\.\\d+$"
-              quality_pattern: "^tested(-\\d+)?$"
-            - name: tf-landscape
-              release_pattern: "^v\\d+\\.\\d+\\.\\d+$"
+    spec:
+      remotes:
+        - name: my-service
+          repository: https://github.com/acme/my-service
+          reference: main
+          conventions:
+            release_pattern: "^v\\d+\\.\\d+\\.\\d+$"
+            quality_pattern: "^tested(-\\d+)?$"
+
+      policies:
+        - name: release_conventions
+          type: ref_convention
+          phase: validate
+          enforcement: warn
+
+This keeps the naming convention declared in exactly one place — on the
+remote — instead of duplicated inside a separate policy configuration
+block that could drift out of sync with the remote's actual name.
 
 Graceful degradation
 --------------------
 - No configuration service in context → pass (skip)
+- No remotes declared, or none have ``conventions`` set → pass (skip)
 - No deployments/environments found → pass (skip)
-- Remote not found in configuration → pass (skip that remote)
-- No pattern configured for a remote → pass (skip that remote)
-- Reference is a commit SHA or branch → may warn depending on patterns
+- Remote override references a remote with no ``conventions`` → pass (skip that remote)
 """
 
 import re
@@ -57,7 +50,7 @@ logger = get_logger(__name__)
 
 
 class RefConventionPolicy(BasePolicy):
-    """Validate that remote references follow declared tag naming conventions."""
+    """Validate that remote references follow the conventions declared on each remote."""
 
     def __init__(self, policy_model: PolicyModel) -> None:
         super().__init__(policy_model)
@@ -72,32 +65,19 @@ class RefConventionPolicy(BasePolicy):
                 details={"skipped": "no deployment or configuration service"},
             )
 
-        # --- Read remote patterns from configuration ---
-        configuration: Dict[str, Any] = self.policy.configuration or {}
-        remotes_config: List[Dict[str, str]] = configuration.get("remotes", [])
-
-        if not remotes_config:
-            return PolicyResult(
-                passed=True,
-                policy_name=self.name,
-                enforcement=self.enforcement,
-                details={"skipped": "no remote patterns configured"},
-            )
-
-        # Build remote name -> patterns mapping
+        # --- Build remote name -> patterns mapping from spec.remotes[].conventions ---
+        remotes = context.configuration_service.get_remotes() or []
         remote_patterns: Dict[str, Dict[str, Optional[str]]] = {}
-        for remote_cfg in remotes_config:
-            name = remote_cfg.get("name")
-            release_pattern = remote_cfg.get("release_pattern")
-            quality_pattern = remote_cfg.get("quality_pattern")
-
-            if not name or (not release_pattern and not quality_pattern):
-                # Skip remotes without name or without any patterns
+        for remote in remotes:
+            name = remote.name
+            conventions = remote.conventions
+            if not name or conventions is None:
                 continue
-
+            if not conventions.release_pattern and not conventions.quality_pattern:
+                continue
             remote_patterns[name] = {
-                "release": release_pattern,
-                "quality": quality_pattern,
+                "release": conventions.release_pattern,
+                "quality": conventions.quality_pattern,
             }
 
         if not remote_patterns:
@@ -105,7 +85,7 @@ class RefConventionPolicy(BasePolicy):
                 passed=True,
                 policy_name=self.name,
                 enforcement=self.enforcement,
-                details={"skipped": "no valid remote patterns configured"},
+                details={"skipped": "no remotes with conventions declared"},
             )
 
         violations: List[str] = []
