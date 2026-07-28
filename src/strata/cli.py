@@ -60,7 +60,7 @@ from strata.logger import configure_logging, get_logger, shutdown_logging
 from strata.utils import system
 from strata.utils.integration_loader import load_workspace_integrations
 from strata.utils.policy_loader import load_workspace_policies
-from strata.utils.system import resolve_work_path
+from strata.utils.system import redact_argv, resolve_work_path
 
 logger = get_logger(__name__)
 
@@ -342,7 +342,7 @@ if __name__ == "__main__":
         else:
             click.echo(
                 f"❌ Unexpected error: {e}\n"
-                f"   Command: {' '.join(sys.argv)}\n"
+                f"   Command: {' '.join(redact_argv(sys.argv))}\n"
                 f"   Version: {get_version()}\n"
                 f"   Please report at: {SUPPORT_URL}",
                 err=True,

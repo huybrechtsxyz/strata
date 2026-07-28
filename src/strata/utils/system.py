@@ -35,6 +35,66 @@ def generate_uuid() -> str:
     return str(uuid.uuid4())
 
 
+# Flag names whose value (the next argv token, or the part after "=") is
+# sensitive and must never be persisted or echoed in cleartext.
+_SENSITIVE_ARGV_FLAGS = frozenset(
+    {
+        "--value",
+        "--password",
+        "--secret",
+        "--token",
+        "--api-key",
+        "--apikey",
+        "--credential",
+        "--client-secret",
+        "--private-key",
+    }
+)
+
+_ARGV_REDACTION_MASK = "***REDACTED***"
+
+
+def redact_argv(argv: List[str], mask: str = _ARGV_REDACTION_MASK) -> List[str]:
+    """Return a copy of *argv* with values of known-sensitive flags masked.
+
+    Some Strata commands receive secret material as CLI arguments (e.g.
+    ``secret put KEY --value <plaintext>``). Several call sites echo or
+    persist the raw process argv verbatim — the console header, the audit
+    log, and the unhandled-error banner — which would otherwise write
+    plaintext secrets to disk (``.strata/deploy-log/*.json``, log files) or
+    the terminal. This helper masks the value that follows a sensitive flag,
+    whether passed as two tokens (``--value secret``) or a single
+    ``--value=secret`` token.
+
+    Args:
+        argv: Raw argv tokens (typically ``sys.argv`` or ``sys.argv[1:]``).
+        mask: Replacement text for sensitive values.
+
+    Returns:
+        List[str]: A new list with sensitive values replaced by *mask*.
+    """
+    redacted: List[str] = []
+    redact_next = False
+    for token in argv:
+        if redact_next:
+            redacted.append(mask)
+            redact_next = False
+            continue
+
+        flag = token.split("=", 1)[0].lower()
+        if flag in _SENSITIVE_ARGV_FLAGS:
+            if "=" in token:
+                redacted.append(f"{token.split('=', 1)[0]}={mask}")
+            else:
+                redacted.append(token)
+                redact_next = True
+            continue
+
+        redacted.append(token)
+
+    return redacted
+
+
 # Get the normalized path
 def sanitize_filename(name: str) -> str:
     """Sanitize a string into a valid filename component matching PlatformName rules.

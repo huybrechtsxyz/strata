@@ -41,14 +41,14 @@ This finding has been filed as an open item in `.squad/decisions/inbox/basher-au
 
 ## Files Touched
 
-| Area                  | Modified / New                                                                    |
-| --------------------- | ----------------------------------------------------------------------------------- |
-| Orchestration log      | `.squad/orchestration-log/2026-07-28T140000Z-danny.md` (new)                       |
-| Orchestration log      | `.squad/orchestration-log/2026-07-28T140000Z-basher.md` (new)                      |
-| Orchestration log      | `.squad/orchestration-log/2026-07-28T140000Z-linus.md` (new)                       |
-| Session log            | `.squad/log/2026-07-28T140000Z-secret-post-generate-hook-design-discussion.md` (new) |
-| Inbox                  | `.squad/decisions/inbox/basher-audit-log-redaction-gap.md` (filed and merged)       |
-| Squad decision ledger  | `.squad/decisions.md` (appended — flagged open finding)                             |
-| Agent history          | `.squad/agents/danny/history.md` (appended)                                        |
-| Agent history          | `.squad/agents/basher/history.md` (appended)                                       |
-| Agent history          | `.squad/agents/linus/history.md` (appended)                                        |
+| Area                  | Modified / New                                                                       |
+| --------------------- | ------------------------------------------------------------------------------------ |
+| Orchestration log     | `.squad/orchestration-log/2026-07-28T140000Z-danny.md` (new)                         |
+| Orchestration log     | `.squad/orchestration-log/2026-07-28T140000Z-basher.md` (new)                        |
+| Orchestration log     | `.squad/orchestration-log/2026-07-28T140000Z-linus.md` (new)                         |
+| Session log           | `.squad/log/2026-07-28T140000Z-secret-post-generate-hook-design-discussion.md` (new) |
+| Inbox                 | `.squad/decisions/inbox/basher-audit-log-redaction-gap.md` (filed and merged)        |
+| Squad decision ledger | `.squad/decisions.md` (appended — flagged open finding)                              |
+| Agent history         | `.squad/agents/danny/history.md` (appended)                                          |
+| Agent history         | `.squad/agents/basher/history.md` (appended)                                         |
+| Agent history         | `.squad/agents/linus/history.md` (appended)                                          |
