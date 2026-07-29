@@ -450,6 +450,9 @@ Work through `_lesson.md` first; come back and knock these out afterward.
   Verified: full `Check.ps1` green including docs-index coverage and the
   Sphinx build (confirms the toctree/index-coverage checks still pass with
   the edited files), full suite unchanged at 4991 passed / 16 skipped.
+  **Superseded 2026-07-29 by X4:** `docs/INDEX.md` (and the callout added
+  here) was removed entirely — see X4 below. The `🚧 DESIGN DRAFT` marker on
+  `at-scale.md` itself is unaffected.
 
 - [x] **Cross-link overlapping guides and ADRs.**
   (from `_lesson.md` X3) **Done 2026-07-29 — partial scope, documented below.**
@@ -492,14 +495,46 @@ Work through `_lesson.md` first; come back and knock these out afterward.
   cross-links or the ADR-0024 fence fix), full suite unchanged at 4991
   passed / 16 skipped.
 
-- [ ] **Add a drift check between `docs/INDEX.md` and `docs/index.rst`.**
-  (from `_lesson.md` X4) Both are hand-maintained lists of "what docs exist"
-  with no automated check tying them together — the same failure mode already
-  proven real for the ADR index (X1) and `PlatformKind` doc lists (C4). Add a
-  script/CI check that flags when one references a doc the other doesn't (or
-  document explicitly that `docs/INDEX.md` is intentionally a curated subset,
-  if that's the actual intent, so future contributors don't assume drift is a
-  bug). => jsut remove index.md? like is index.rst is the source of truth.
+- [x] **Add a drift check between `docs/INDEX.md` and `docs/index.rst`.**
+  (from `_lesson.md` X4) **Done 2026-07-29 — resolved by removing
+  `docs/INDEX.md` entirely, per explicit user direction, rather than adding a
+  checker for it.** Initially implemented the checker option first: a new
+  "INDEX.md link validity" step in `scripts/Check.ps1` that parsed every
+  local markdown link in `docs/INDEX.md` and verified the target file exists
+  on disk (deliberately one-directional — `docs/INDEX.md` is a curated
+  subset by design, e.g. `at-scale.md` is intentionally absent from it per
+  X2, so a full bidirectional diff against `index.rst` would have been noisy
+  and wrong). **This immediately found 4 real, pre-existing broken links**
+  in `docs/INDEX.md`: `../CONTRIBUTING.md` (file is actually at
+  `.github/CONTRIBUTING.md`, 3 occurrences), `./guides/policies.md` (file is
+  actually at `platform/policies.md`), `./guides/troubleshooting.md` (file is
+  actually named `troubleshooting-what-changed.md`), and
+  `./platform/json-api.md` (never existed — the source line even hedged
+  "(if exists)"; repointed to `platform/commands.md`, which documents
+  `--output json`). Fixed all 4 and verified the checker step then passed.
+  **Then asked the user directly** whether to keep this checker (INDEX.md
+  stays as a GitHub-facing curated nav page) or remove `docs/INDEX.md`
+  entirely (index.rst becomes the sole "what docs exist" source) — chose the
+  latter, which also matches an existing, stronger precedent already set in
+  this repo: `docs/decisions/README.md` explicitly rejected a hand-maintained
+  ADR index for the same reason ("it always drifted out of sync... nobody
+  caught it until it was audited directly against the files themselves").
+  Applying that same reasoning to `docs/INDEX.md` — eliminating the
+  duplicate index instead of trying to keep two hand-maintained lists in
+  sync forever.
+  - Reverted the "INDEX.md link validity" `Check.ps1` step (moot — nothing
+    left to check).
+  - Deleted `docs/INDEX.md`; removed its `INDEX` entry from `docs/index.rst`'s
+    "Getting Started" toctree (alongside `README`/`GLOSSARY`).
+  - No other file references `docs/INDEX.md` by path — confirmed via a
+    repo-wide grep (`README.md` at the repo root never actually linked to it,
+    despite `_lesson.md`'s X5 entry describing a README → INDEX.md →
+    getting-started.md chain; that chain wasn't real in practice).
+  - Added a superseding note to X2's completion entry above, since it had
+    added a callout to `docs/INDEX.md` that no longer exists.
+  Verified: full `Check.ps1` green including docs-index coverage (confirms
+  removing the file and its toctree entry together didn't break anything)
+  and the Sphinx build, full suite unchanged at 4991 passed / 16 skipped.
 
 - [ ] **De-duplicate `strata-onboarding.md` between `docs/skills/` and `.github/skills/`.**
   (from `_lesson.md` X5) Two copies of the same onboarding-skill content exist

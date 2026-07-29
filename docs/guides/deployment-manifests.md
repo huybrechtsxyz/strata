@@ -639,13 +639,13 @@ strata build run -f deploy.yaml
 
 ### Key Differences from Deploy Manifests
 
-| Aspect | Build | Deploy |
-|--------|-------|--------|
-| **Trigger** | `strata build run` | `strata deploy run` |
-| **Stages** | None | Multiple (infrastructure, configure, etc.) |
-| **Outputs** | SBOM, policy results | Stage outputs, resource IDs, IPs |
-| **Errors** | Build/validation errors | Provisioner errors |
-| **Purpose** | Gate before deploying | Record what was deployed |
+| Aspect      | Build                   | Deploy                                     |
+| ----------- | ----------------------- | ------------------------------------------ |
+| **Trigger** | `strata build run`      | `strata deploy run`                        |
+| **Stages**  | None                    | Multiple (infrastructure, configure, etc.) |
+| **Outputs** | SBOM, policy results    | Stage outputs, resource IDs, IPs           |
+| **Errors**  | Build/validation errors | Provisioner errors                         |
+| **Purpose** | Gate before deploying   | Record what was deployed                   |
 
 ### Querying Build Manifests
 

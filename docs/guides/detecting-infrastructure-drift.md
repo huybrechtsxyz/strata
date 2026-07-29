@@ -172,12 +172,12 @@ They remain suppressed until explicitly removed or until the baseline is reset.
 
 ### `drift acknowledge` flags
 
-| Flag               | Required | Description                                                    |
-| ------------------ | -------- | -------------------------------------------------------------- |
-| `-f / --file`      | yes      | Deployment YAML to identify the deployment                     |
-| `--address ADDR`   | yes      | Terraform resource address (e.g. `azurerm_autoscale_setting.web`) |
-| `--reason TEXT`    | no       | Explanation stored in history for audit purposes               |
-| `--remove`         | no       | Remove a previously added acknowledgement                      |
+| Flag             | Required | Description                                                       |
+| ---------------- | -------- | ----------------------------------------------------------------- |
+| `-f / --file`    | yes      | Deployment YAML to identify the deployment                        |
+| `--address ADDR` | yes      | Terraform resource address (e.g. `azurerm_autoscale_setting.web`) |
+| `--reason TEXT`  | no       | Explanation stored in history for audit purposes                  |
+| `--remove`       | no       | Remove a previously added acknowledgement                         |
 
 ---
 
@@ -194,11 +194,11 @@ Shows:
 
 ### `drift history` flags
 
-| Flag           | Default | Description                                      |
-| -------------- | ------- | ------------------------------------------------ |
-| `-f / --file`  | yes     | Deployment YAML to identify the deployment       |
-| `--last N`     | `10`    | Number of most-recent runs to display            |
-| `--output`     | console | `console` or `json`                              |
+| Flag          | Default | Description                                |
+| ------------- | ------- | ------------------------------------------ |
+| `-f / --file` | yes     | Deployment YAML to identify the deployment |
+| `--last N`    | `10`    | Number of most-recent runs to display      |
+| `--output`    | console | `console` or `json`                        |
 
 ---
 

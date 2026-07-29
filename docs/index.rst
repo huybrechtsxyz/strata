@@ -13,7 +13,6 @@ strata
    :caption: Getting Started:
 
    README
-   INDEX
    GLOSSARY
 
 .. toctree::
