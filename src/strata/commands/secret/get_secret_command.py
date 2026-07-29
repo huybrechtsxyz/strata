@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any, Dict, Optional
 
 import click
@@ -92,9 +91,7 @@ class GetSecretCommand(BaseCommand):
 
         self._output_data = result
 
-        if self._output_format == "json":
-            click.echo(json.dumps(result, indent=2))
-        elif self._is_console_output():
+        if self._is_console_output():
             click.echo(display if val is not None else "(not found)")
 
         return val is not None

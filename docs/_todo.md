@@ -279,13 +279,59 @@ Work through `_lesson.md` first; come back and knock these out afterward.
   live `strata new --help` check confirming the shipped interface now
   matches ADR-0020's own reference exactly.
 
-- [ ] **Write missing tests for `put`/`get`/`rotate`/`status`/`list` secret commands.**
-  (from `_lesson.md` T1) `tests/strata/commands/test_commands_secret.py` and
-  `test_cli_secret.py` cover `generate`/`mask` exhaustively (format, length,
-  password-validation, JSON-output variants) but have **zero** tests for the
-  other five secret subcommands. This is the most sensitive command group in
-  the CLI (writes/reads/rotates actual secret values) with no coverage on its
-  core write-path. Highest-priority test gap in the codebase.
+- [x] **Write missing tests for `put`/`get`/`rotate`/`status`/`list` secret commands.**
+  (from `_lesson.md` T1) **Done 2026-07-29.** Added
+  `tests/strata/commands/test_commands_secret_write_path.py` — 35 new tests
+  across 5 test classes (`TestSecretList`/`TestSecretGet`/`TestSecretPut`/
+  `TestSecretRotate`/`TestSecretStatus`) covering argument validation, missing
+  file/key errors, mutually-exclusive `--value`/`--generate`, store-integration
+  mocking, confirmation prompts (`--force` / accept / decline), and
+  `--output json` structure for every one of these five previously-uncovered
+  subcommands. Strategy: mock `DeploymentService.load()` to return a fake
+  deployment exposing a fixed list of `SecretStoreModel` items, and mock
+  `ValueController._get_integration_by_type()` to return a fake store
+  integration — isolates command logic from the YAML-loading pipeline (which
+  has its own separate coverage) and from real secret-store backends. Added an
+  `autouse` fixture that seeds a minimal `.strata/solution.json` in `tmp_path`,
+  since all 5 commands use `BaseCommand`'s default strict `_initialize()`
+  (unlike `generate`/`mask`, migrated in D7 to skip the workspace requirement).
+
+  **Two genuine production bugs surfaced by writing these tests (both fixed,
+  not just documented):**
+  1. **Double JSON output on `--output json`.** All 5 commands manually
+     `click.echo(json.dumps(result, indent=2))`'d their own flat result dict
+     inside `_execute()`, *in addition to* `_finalize()`'s standard envelope
+     rendering (`{"success", "command", "data": {...}, "messages", "errors"}`)
+     firing right after — since none of these 5 commands override
+     `_is_structured_output()` the way `generate`/`mask` do. Net effect: `strata
+     secret {list,get,put,rotate,status} --output json` printed **two
+     back-to-back JSON objects**, breaking any consumer piping the output
+     through `json.loads()` (exactly what the new tests do — this is how it
+     was caught). Fix: removed the redundant manual echo from all 5
+     `_execute()` methods; `self._output_data` was already being set correctly
+     in every case, so `_finalize()` now emits the single correct envelope.
+     `--output text` was unaffected (these commands never had a manual
+     text-echo branch — text mode already relied solely on `_finalize()`).
+  2. **`secret status`'s exit-code-3-on-overdue never actually fired.**
+     `StatusSecretCommand._execute()` did `raise click.exceptions.Exit(3)`
+     directly when secrets were overdue for rotation, but `BaseCommand.execute()`
+     wraps Phase 3 in `except click.UsageError: raise / except Exception as e:
+     ...` — and `click.exceptions.Exit` is a plain `RuntimeError` subclass, so
+     it was silently caught by the generic `except Exception` handler and
+     turned into an ordinary command failure, which `handle_command_exit()`
+     then mapped to exit code **1**, not 3. The "3 = overdue" contract
+     documented in the command's own epilog had never worked. Fix: replaced
+     the direct `raise` with the standard convention every other exit-code-3
+     command already uses — added `has_validation_errors(self) -> bool:
+     return self._overdue_count > 0` and let `handle_command_exit()` (called
+     uniformly from `cli_secret.py`) map it to exit 3 via its existing
+     `hasattr(command, "has_validation_errors")` check.
+
+  Verified: all 35 new tests pass, plus the existing 144 tests across
+  `test_commands_secret.py`/`test_cli_secret.py`/`test_secret_rotation.py`
+  (179 total secret-related tests, no regressions), ruff/mypy clean, full
+  `Check.ps1` green, full repo test suite green (4991 passed, 16 skipped).
+
 
 - [ ] **Add a `pytest`/coverage step to `scripts/Check.ps1`.**
   (from `_lesson.md` T2) `Check.ps1` currently runs ruff lint/format, mypy, a

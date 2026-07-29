@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -31,9 +30,14 @@ class StatusSecretCommand(BaseCommand):
     ) -> None:
         super().__init__(work_path=work_path, output=output, verbose=verbose, quiet=quiet)
         self._file = file
+        self._overdue_count = 0
 
     def get_required_integrations(self) -> Dict[str, str]:
         return {}
+
+    def has_validation_errors(self) -> bool:
+        """Signal exit code 3 to handle_command_exit() when any secret is overdue for rotation."""
+        return self._overdue_count > 0
 
     def _execute(self) -> bool:
 
@@ -55,9 +59,8 @@ class StatusSecretCommand(BaseCommand):
         # Only check secrets that have a rotate spec
         secrets = [s for s in env_svc.get_secrets() if s.rotate is not None]
         if not secrets:
-            if self._output_format == "json":
-                click.echo(json.dumps({"secrets": [], "overdue": 0}))
-            elif self._is_console_output():
+            self._output_data = {"secrets": [], "overdue": 0}
+            if self._is_console_output():
                 click.echo("No secrets with rotation policy defined.")
             return True
 
@@ -111,10 +114,9 @@ class StatusSecretCommand(BaseCommand):
             rows.append(row)
 
         self._output_data = {"secrets": rows, "overdue": overdue_count}
+        self._overdue_count = overdue_count
 
-        if self._output_format == "json":
-            click.echo(json.dumps(self._output_data, indent=2))
-        elif self._is_console_output() and not self._output_quiet:
+        if self._is_console_output() and not self._output_quiet:
             key_w = max(len(r["key"]) for r in rows) if rows else 10
             for r in rows:
                 if r["status"] == "overdue":
@@ -127,9 +129,5 @@ class StatusSecretCommand(BaseCommand):
 
             if overdue_count:
                 click.echo(f"\n  {overdue_count} secret(s) overdue for rotation.")
-
-        # Exit code 3 if any secret is overdue (validation failure convention)
-        if overdue_count > 0:
-            raise click.exceptions.Exit(3)
 
         return True

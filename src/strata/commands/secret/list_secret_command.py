@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any, Dict, List, Optional
 
 import click
@@ -69,9 +68,7 @@ class ListSecretCommand(BaseCommand):
 
         self._output_data = {"secrets": rows, "count": len(rows)}
 
-        if self._output_format == "json":
-            click.echo(json.dumps(self._output_data, indent=2))
-        elif self._is_console_output() and not self._output_quiet:
+        if self._is_console_output() and not self._output_quiet:
             if not rows:
                 click.echo("No secrets defined.")
             else:
