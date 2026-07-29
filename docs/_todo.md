@@ -226,19 +226,58 @@ Work through `_lesson.md` first; come back and knock these out afterward.
   `test_store_models.py` + `test_secret_rotation.py` + `test_controllers_value.py`,
   full `Check.ps1` green including the Sphinx build.
 
-- [ ] **Revisit ADR-0020 — reconcile `strata new`'s shipped interface with the standard, and re-check its "completed" status.**
-  (from `_lesson.md` I4) ADR-0020 mandates templates as a `--template TEMPLATE`
-  flag, never positional, with `strata new NAME --template namespace` as its
-  own worked example — but `cli_new.py` actually has `template` and `name` as
-  two positional arguments (template first), the opposite of both the rule
-  and the ADR's own documented reference for this exact command. Two things
-  need doing, not just one: (1) decide whether to migrate `cli_new.py` to
-  match the ADR (a real breaking CLI change — needs a deprecation path, e.g.
-  accept both positional and `--template` for a release or two before
-  removing positional support, not a same-day patch), and (2) separately
-  correct ADR-0020's "completed" status, since its own roadmap only ever
-  promised incremental migration, not full conformance — "completed" oversells
-  what's actually true today.
+- [x] **Revisit ADR-0020 — reconcile `strata new`'s shipped interface with the standard, and re-check its "completed" status.**
+  (from `_lesson.md` I4) **Done 2026-07-29 — decision: implement the breaking
+  change directly (user explicitly accepted it — limited, guidable audience;
+  "it's on the new CLI so not that bad"), no deprecation/transition period.**
+  Surfaced a critical fact before implementing: strata is now **v1.5.0**
+  (checked `VERSION.txt`), not pre-1.0 — ADR-0020's own migration strategy
+  explicitly assumed a "free breaking-change window" that only existed
+  pre-1.0 ("Post-1.0, operator workflows are locked in... Apply this
+  standard now"). That window had already closed, so this was a deliberate,
+  informed call to break anyway, not a default "just follow the ADR" move.
+  - `cli_new.py`: `TEMPLATE` argument removed, replaced with `--template
+    TEMPLATE` option; `NAME` remains the sole positional argument (now
+    first, since it's the only one). New usage: `strata new NAME --template
+    TEMPLATE` — matches ADR-0020's own worked example exactly.
+  - Preserved the existing custom exit-2 error messages for missing
+    name/template (previously both were "missing argument", now
+    "missing argument 'NAME'" / "missing option '--template'" — accurately
+    reflects which is now an argument vs. an option).
+  - Updated 19 CLI-invocation call sites across `test_commands_new.py`
+    (direct `NewCommand(...)` instantiations were untouched — the command
+    class's own constructor signature never changed, only the Click
+    wiring). Also split `test_missing_template_exits_2` /
+    `test_missing_name_exits_2` to each independently omit only the one
+    field they're named for (previously both omitted both fields, which
+    happened to still pass but tested the wrong thing under the old
+    argument order).
+  - Fixed 7 live docs using the old `TEMPLATE NAME` positional syntax:
+    `docs/platform/commands.md`, `docs/platform/workflow.md`,
+    `docs/platform/getting-started.md`, `docs/config/network.md` (also
+    fixed a second bug found in passing — used nonexistent `--path` flag,
+    should be `--output-file`), and all **3** copies of
+    `strata-onboarding.md` (`docs/skills/`, `.github/skills/`, and the
+    scaffold-template copy under `src/strata/templates/...` — fixed all
+    three so newly-onboarded users don't inherit the wrong syntax either;
+    same `--path` bug found there too).
+  - Updated `docs/decisions/0020-cli-parameter-consistency-standard.md`:
+    corrected "completed" status with an explicit 2026-07-29 note — the
+    standard is adopted for new commands, but retroactive migration is
+    still incremental per the ADR's own Phase 4, not 100% complete; this
+    fix resolves the one flagged instance, not a blanket "everything now
+    conforms" claim.
+  - **Explicitly out of scope, left alone:** `docs/decisions/*.md` mentions
+    in other ADRs (0038, 0035, 0016, 0014) — historical design records,
+    same precedent as I7; `docs/vscode/chat.md`'s illustrative AI-response
+    example (uses a different, already-nonexistent `--name` flag — a
+    separate, unrelated doc inaccuracy, not this fix's scope);
+    `docs/_build/**` — generated Sphinx output, regenerates on next build,
+    never hand-edited.
+  Verified: ruff/mypy clean, 37 tests pass in `test_commands_new.py`, full
+  `Check.ps1` green including Sphinx build and docs-index coverage, plus a
+  live `strata new --help` check confirming the shipped interface now
+  matches ADR-0020's own reference exactly.
 
 - [ ] **Write missing tests for `put`/`get`/`rotate`/`status`/`list` secret commands.**
   (from `_lesson.md` T1) `tests/strata/commands/test_commands_secret.py` and

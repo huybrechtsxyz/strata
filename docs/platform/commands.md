@@ -297,14 +297,14 @@ Create a new platform configuration file (or set of files) from a built-in or
 workspace-local template.
 
 ```
-strata new TEMPLATE NAME [--output-file FILE] [--overwrite] [--set KEY=VALUE ...] [standard options]
+strata new NAME --template TEMPLATE [--output-file FILE] [--overwrite] [--set KEY=VALUE ...] [standard options]
 strata new --list
 ```
 
 | Option / Argument    | Description                                                                                                   |
 | -------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `TEMPLATE`           | Template name (e.g. `namespace`, `provider`, `tenant`)                                                        |
 | `NAME`               | Injected as `{{ name }}`; used in output filenames and path segments                                          |
+| `--template TEMPLATE` | Template name (e.g. `namespace`, `provider`, `tenant`)                                                        |
 | `--output-file FILE` | Output file path or directory (default: current directory)                                                    |
 | `--overwrite`        | Overwrite output file(s) if they already exist                                                                |
 | `--set KEY=VALUE`    | Inject an extra variable into the template (repeatable)                                                       |
@@ -319,17 +319,17 @@ strata new --list
 Workspace-local templates are marked with `*` in the output.
 
 ```bash
-strata new namespace my-app
-strata new provider azure --output-file config/
-strata new workspace my-ws --set owner=myteam
-strata new dns my-zones --output-file config/dns/
-strata new tenant newcorp --output-file repos/xyz-config/ --set zone=eu --set tier=premium
+strata new my-app --template namespace
+strata new azure --template provider --output-file config/
+strata new my-ws --template workspace --set owner=myteam
+strata new my-zones --template dns --output-file config/dns/
+strata new newcorp --template tenant --output-file repos/xyz-config/ --set zone=eu --set tier=premium
 strata new --list
 ```
 
 ### Template resolution order
 
-For any `TEMPLATE` name, strata searches in this order — first match wins:
+For any `--template` name, strata searches in this order — first match wins:
 
 1. `.strata/templates/<name>/` — workspace bundle directory
 2. `.strata/templates/<name>.yaml` — workspace single file
@@ -361,7 +361,7 @@ substitution runs on both file content and path segments using the same
         └── prd.yaml
 ```
 
-Running `strata new tenant contoso --output-file tenants/` produces:
+Running `strata new contoso --template tenant --output-file tenants/` produces:
 
 ```
 tenants/contoso/

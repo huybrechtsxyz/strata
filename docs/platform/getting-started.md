@@ -392,5 +392,5 @@ After reloading your shell, `strata <TAB>` completes commands and `--<TAB>` comp
 - [Configuration Format](../config/configuration.md) — YAML schema reference
 
 > **Tip:** Use `strata new --list` to see all built-in config file templates, then
-> `strata new namespace my-ns` (or any other kind) to scaffold a new YAML file with
+> `strata new my-ns --template namespace` (or any other kind) to scaffold a new YAML file with
 > `meta.name` pre-filled and all spec fields as editable placeholders.

@@ -70,10 +70,10 @@ strata new --list
 strata sln init --list
 
 # 3. Scaffold individual files
-strata new configuration my-platform --path config/
-strata new environment dev --path envs/
-strata new workspace my-platform --path stack/
-strata new deployment my-platform-dev --path deploy/
+strata new my-platform --template configuration --output-file config/
+strata new dev --template environment --output-file envs/
+strata new my-platform --template workspace --output-file stack/
+strata new my-platform-dev --template deployment --output-file deploy/
 
 # 4. Validate files
 strata validate run -f config/my-platform-config.yaml

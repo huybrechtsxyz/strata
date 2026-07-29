@@ -22,7 +22,7 @@ class TestNewCommand:
         with patch("strata.commands.new.run_new_command.NewCommand.execute", return_value=True):
             result = runner.invoke(
                 new_command,
-                ["namespace", "myapp", "--work-path", str(tmp_path)],
+                ["myapp", "--template", "namespace", "--work-path", str(tmp_path)],
             )
         assert result.exit_code == 0
 
@@ -31,7 +31,7 @@ class TestNewCommand:
         with patch("strata.commands.new.run_new_command.NewCommand.execute", return_value=True):
             result = runner.invoke(
                 new_command,
-                ["namespace", "myapp", "--overwrite", "--work-path", str(tmp_path)],
+                ["myapp", "--template", "namespace", "--overwrite", "--work-path", str(tmp_path)],
             )
         assert result.exit_code == 0
 
@@ -40,7 +40,7 @@ class TestNewCommand:
         with patch("strata.commands.new.run_new_command.NewCommand.execute", return_value=True):
             result = runner.invoke(
                 new_command,
-                ["namespace", "myapp", "--output-file", str(tmp_path), "--work-path", str(tmp_path)],
+                ["myapp", "--template", "namespace", "--output-file", str(tmp_path), "--work-path", str(tmp_path)],
             )
         assert result.exit_code == 0
 
@@ -49,7 +49,7 @@ class TestNewCommand:
         with patch("strata.commands.new.run_new_command.NewCommand.execute", return_value=True):
             result = runner.invoke(
                 new_command,
-                ["namespace", "myapp", "--set", "owner=myteam", "--work-path", str(tmp_path)],
+                ["myapp", "--template", "namespace", "--set", "owner=myteam", "--work-path", str(tmp_path)],
             )
         assert result.exit_code == 0
 
@@ -91,19 +91,19 @@ class TestNewCommand:
 
     def test_missing_template_exits_2(self, tmp_path):
         runner = CliRunner()
-        result = runner.invoke(new_command, ["--work-path", str(tmp_path)])
+        result = runner.invoke(new_command, ["myapp", "--work-path", str(tmp_path)])
         assert result.exit_code == 2
 
     def test_missing_name_exits_2(self, tmp_path):
         runner = CliRunner()
-        result = runner.invoke(new_command, ["namespace", "--work-path", str(tmp_path)])
+        result = runner.invoke(new_command, ["--template", "namespace", "--work-path", str(tmp_path)])
         assert result.exit_code == 2
 
     def test_unknown_template_exits_1(self, tmp_path):
         runner = CliRunner()
         result = runner.invoke(
             new_command,
-            ["nonexistent_xyz_template", "myapp", "--work-path", str(tmp_path)],
+            ["myapp", "--template", "nonexistent_xyz_template", "--work-path", str(tmp_path)],
         )
         assert result.exit_code == 1
 
@@ -113,8 +113,9 @@ class TestNewCommand:
         result = runner.invoke(
             new_command,
             [
-                "namespace",
                 "myapp",
+                "--template",
+                "namespace",
                 "--output-file",
                 str(tmp_path),
                 "--work-path",
@@ -133,12 +134,12 @@ class TestNewCommand:
         # First write succeeds
         runner.invoke(
             new_command,
-            ["namespace", "myapp", "--output-file", str(tmp_path), "--work-path", str(tmp_path)],
+            ["myapp", "--template", "namespace", "--output-file", str(tmp_path), "--work-path", str(tmp_path)],
         )
         # Second write without --overwrite must fail
         result = runner.invoke(
             new_command,
-            ["namespace", "myapp", "--output-file", str(tmp_path), "--work-path", str(tmp_path)],
+            ["myapp", "--template", "namespace", "--output-file", str(tmp_path), "--work-path", str(tmp_path)],
         )
         assert result.exit_code == 1
 
@@ -147,13 +148,14 @@ class TestNewCommand:
         runner = CliRunner()
         runner.invoke(
             new_command,
-            ["namespace", "myapp", "--output-file", str(tmp_path), "--work-path", str(tmp_path)],
+            ["myapp", "--template", "namespace", "--output-file", str(tmp_path), "--work-path", str(tmp_path)],
         )
         result = runner.invoke(
             new_command,
             [
-                "namespace",
                 "myapp",
+                "--template",
+                "namespace",
                 "--output-file",
                 str(tmp_path),
                 "--overwrite",
@@ -277,7 +279,7 @@ class TestNewCommandBundle:
         runner = CliRunner()
         result = runner.invoke(
             new_command,
-            ["widget", "acme", "--output-file", str(out), "--work-path", str(tmp_path)],
+            ["acme", "--template", "widget", "--output-file", str(out), "--work-path", str(tmp_path)],
         )
         assert result.exit_code == 0, result.output
         assert (out / "acme.yaml").exists()
@@ -292,8 +294,9 @@ class TestNewCommandBundle:
         result = runner.invoke(
             new_command,
             [
-                "widget",
                 "acme",
+                "--template",
+                "widget",
                 "--output-file",
                 str(out),
                 "--set",
@@ -320,7 +323,7 @@ class TestNewCommandBundle:
         runner = CliRunner()
         result = runner.invoke(
             new_command,
-            ["widget", "acme", "--output-file", str(out), "--work-path", str(tmp_path)],
+            ["acme", "--template", "widget", "--output-file", str(out), "--work-path", str(tmp_path)],
         )
         assert result.exit_code == 0, result.output
         assert (out / "acme" / "deployment.yaml").exists()
@@ -337,7 +340,7 @@ class TestNewCommandBundle:
         runner = CliRunner()
         result = runner.invoke(
             new_command,
-            ["widget", "globex", "--output-file", str(out), "--work-path", str(tmp_path)],
+            ["globex", "--template", "widget", "--output-file", str(out), "--work-path", str(tmp_path)],
         )
         assert result.exit_code == 0, result.output
         assert (out / "envs" / "globex" / "globex-dev.yaml").exists()
@@ -349,8 +352,12 @@ class TestNewCommandBundle:
 
         out = tmp_path / "out"
         runner = CliRunner()
-        runner.invoke(new_command, ["widget", "acme", "--output-file", str(out), "--work-path", str(tmp_path)])
-        result = runner.invoke(new_command, ["widget", "acme", "--output-file", str(out), "--work-path", str(tmp_path)])
+        runner.invoke(
+            new_command, ["acme", "--template", "widget", "--output-file", str(out), "--work-path", str(tmp_path)]
+        )
+        result = runner.invoke(
+            new_command, ["acme", "--template", "widget", "--output-file", str(out), "--work-path", str(tmp_path)]
+        )
         assert result.exit_code == 1
 
     def test_bundle_overwrite_flag(self, tmp_path):
@@ -360,10 +367,12 @@ class TestNewCommandBundle:
 
         out = tmp_path / "out"
         runner = CliRunner()
-        runner.invoke(new_command, ["widget", "acme", "--output-file", str(out), "--work-path", str(tmp_path)])
+        runner.invoke(
+            new_command, ["acme", "--template", "widget", "--output-file", str(out), "--work-path", str(tmp_path)]
+        )
         result = runner.invoke(
             new_command,
-            ["widget", "acme", "--output-file", str(out), "--overwrite", "--work-path", str(tmp_path)],
+            ["acme", "--template", "widget", "--output-file", str(out), "--overwrite", "--work-path", str(tmp_path)],
         )
         assert result.exit_code == 0, result.output
 
@@ -388,7 +397,7 @@ class TestNewCommandBundle:
         runner = CliRunner()
         result = runner.invoke(
             new_command,
-            ["namespace", "myapp", "--output-file", str(out), "--work-path", str(tmp_path)],
+            ["myapp", "--template", "namespace", "--output-file", str(out), "--work-path", str(tmp_path)],
         )
         assert result.exit_code == 0, result.output
         # Bundle output file (not the single-file default name)
@@ -511,7 +520,16 @@ class TestScaffoldDepsCommand:
         runner = CliRunner()
         result = runner.invoke(
             new_command,
-            ["namespace", "myapp", "--output-file", str(out), "--scaffold-deps", "--work-path", str(tmp_path)],
+            [
+                "myapp",
+                "--template",
+                "namespace",
+                "--output-file",
+                str(out),
+                "--scaffold-deps",
+                "--work-path",
+                str(tmp_path),
+            ],
         )
         assert result.exit_code == 0
         assert "Scaffold missing files?" not in result.output
@@ -536,7 +554,16 @@ class TestScaffoldDepsCommand:
         runner = CliRunner()
         result = runner.invoke(
             new_command,
-            ["deployment", "prd", "--output-file", str(deploy_out), "--scaffold-deps", "--work-path", str(tmp_path)],
+            [
+                "prd",
+                "--template",
+                "deployment",
+                "--output-file",
+                str(deploy_out),
+                "--scaffold-deps",
+                "--work-path",
+                str(tmp_path),
+            ],
             input="y\n",
         )
 
@@ -567,7 +594,16 @@ class TestScaffoldDepsCommand:
         runner = CliRunner()
         result = runner.invoke(
             new_command,
-            ["deployment", "prd", "--output-file", str(deploy_out), "--scaffold-deps", "--work-path", str(tmp_path)],
+            [
+                "prd",
+                "--template",
+                "deployment",
+                "--output-file",
+                str(deploy_out),
+                "--scaffold-deps",
+                "--work-path",
+                str(tmp_path),
+            ],
             input="n\n",
         )
 
