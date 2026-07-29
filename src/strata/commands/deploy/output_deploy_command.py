@@ -20,8 +20,11 @@ class OutputDeployCommand(BaseDeployCommand):
     """Show Terraform outputs for a deployment.
 
     Default (no flags)
-        Reads ``build/<stage>.tf-outputs.json`` written after the last
-        ``deploy run`` or ``deploy status``.  No network calls.
+        Reads ``build/<stage>.tf-outputs.json``, written as a side effect
+        whenever the underlying Terraform deployer applies a stage (e.g.
+        ``deploy run``).  No network calls.  (The deprecated ``deploy
+        status`` also writes this cache today — prefer ``deploy run`` or
+        this command's own ``--refresh`` instead.)
 
     ``--refresh``
         Re-runs ``terraform output -json`` against the remote backend and

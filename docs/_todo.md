@@ -113,15 +113,32 @@ Work through `_lesson.md` first; come back and knock these out afterward.
   the default/`--output text` bare-version-string behavior needs preserving
   (likely does, for scripting: `VERSION=$(strata version)`).
 
-- [ ] **Fix stale `deploy status` doc pointers (docs-only, no code needed).**
+- [x] **Fix stale `deploy status` doc pointers (docs-only, no code needed).**
   (from `_lesson.md` I7 — already tracked as ADR-0060 Phase 1, listed here too
-  for a plain-checklist view) `output_deploy_command.py`'s docstring, plus
-  three live user-facing docs — `docs/help/deployment.md`,
-  `docs/guides/deploying.md`, `docs/platform/provisioner-plugin-api.md` —
-  recommend `strata deploy status` as a current command with no mention that
-  it's deprecated. The deprecation warnings themselves already work correctly
-  at runtime; only the surrounding docs need updating to point at `env output`
-  / `deploy plan` instead. See ADR-0060 for the full context.
+  for a plain-checklist view) **Done 2026-07-29.** Fixed all 4 targets:
+  - `output_deploy_command.py`'s docstring — now notes `deploy status` is
+    deprecated and points at `deploy run` / `--refresh` instead of implying
+    it's a normal companion command.
+  - `docs/help/deployment.md` — replaced the `strata deploy status` CLI
+    example with `strata env output` / `strata env status`.
+  - `docs/guides/deploying.md` — replaced the "check current infrastructure
+    state" example with `strata env status` (its own docstring — resource
+    count, last-apply serial, cached-output freshness, drift — matches this
+    guide's description almost verbatim, confirming it's the right
+    replacement, not `env output`).
+  - `docs/platform/provisioner-plugin-api.md` — **found a deeper bug while
+    fixing this one, not just staleness.** The doc claimed overriding
+    `status()` supports `strata deploy status` and `strata env status` —
+    traced both commands' actual code and neither calls `provisioner.status()`
+    at all (`deploy status` calls output-fetching methods; `env status` calls
+    `terraform show -json` directly). The only real caller of
+    `deployer.status()` is `strata deploy health` (confirmed in
+    `health_deploy_command.py`, alongside `deployer.output()`). Corrected the
+    doc to name the actual caller and added a note explaining the two
+    similarly-named commands do *not* go through this method, to prevent
+    future plugin authors from being misled by the naming coincidence.
+  Verified: full `Check.ps1` green including the Sphinx build (not skipped
+  this time, to confirm no broken doc references).
 
 - [ ] **Deduplicate manifest-artifact collector methods shared between build and deploy.**
   (from `_lesson.md` I1) `_collect_platform_artifact()` is defined near-verbatim

@@ -54,7 +54,8 @@ strata build run -f deploy-prd.yaml              # build artifacts
 strata build run -f deploy-prd.yaml --dry-run    # preview changes
 strata deploy run -f deploy-prd.yaml --dry-run   # dry-run provisioning
 strata deploy run -f deploy-prd.yaml --force     # apply infrastructure
-strata deploy status -f deploy-prd.yaml          # check status
+strata env output -f deploy-prd.yaml             # check live outputs
+strata env status -f deploy-prd.yaml             # check live infra status
 ```
 
 ---

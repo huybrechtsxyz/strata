@@ -282,7 +282,7 @@ Lock: still held (to prevent concurrent corrections)
 Check current infrastructure state without re-deploying:
 
 ```bash
-strata deploy status -f deployments/deploy-prd.yaml
+strata env status -f deployments/deploy-prd.yaml
 ```
 
 This shows:
