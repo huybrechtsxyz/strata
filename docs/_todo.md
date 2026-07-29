@@ -203,15 +203,28 @@ Work through `_lesson.md` first; come back and knock these out afterward.
   `test_commands_deploy.py` + `test_commands_build.py`, full `Check.ps1`
   green including the Sphinx build.
 
-- [ ] **Generalize the "not valid on builtin store" validators in `store_models.py`.**
-  (from `_lesson.md` I2) `validate_generate_not_on_builtin`,
-  `validate_rotate_not_on_builtin`, and the Variable/Feature
-  `validate_default_not_on_builtin` equivalents (4 total) are identical in
-  shape — same error-message template, only the model/field/builtin-set/
-  suggested-stores text differ. Extract a shared
-  `validate_field_not_on_builtin(model, field_name, field_value, builtin_types,
-  kind_noun, suggested_stores)` helper; collapse all four call sites to 1-2
-  lines each. Low risk, no functional change, purely a maintenance cleanup.
+- [x] **Generalize the "not valid on builtin store" validators in `store_models.py`.**
+  (from `_lesson.md` I2) **Done 2026-07-29.** Confirmed all 4 validators —
+  `SecretStoreModel.validate_generate_not_on_builtin`,
+  `validate_rotate_not_on_builtin`, `VariableStoreModel` and
+  `FeatureStoreModel`'s `validate_default_not_on_builtin` — had the identical
+  9-line shape, differing only in the field checked, the model's builtin-store
+  set, and the suggested-stores text. Extracted a shared
+  `_validate_field_not_on_builtin(*, kind_noun, key, field_name, field_value,
+  store, builtin_types, suggested_stores)` helper; each `@model_validator`
+  method now stays defined (Pydantic v2 requires them per-model — can't be
+  fully eliminated) but its body collapses to a single call, ~9 lines → ~10
+  lines of keyword-argument call but zero duplicated logic/message template.
+  Existing tests (`test_store_models.py`, `test_secret_rotation.py`) assert
+  `"built-in store type" in str(exc_info.value)` — message text preserved
+  exactly, zero test changes needed. Added
+  `tests/strata/models/test_store_models_validate_helper.py` — 4 new direct
+  unit tests for the helper itself (no-op cases, exact message shape,
+  per-kind-noun variation), since the shared logic itself had no dedicated
+  test before (only indirectly exercised through each model).
+  Verified: ruff/mypy clean, 139 tests pass across the new helper test file +
+  `test_store_models.py` + `test_secret_rotation.py` + `test_controllers_value.py`,
+  full `Check.ps1` green including the Sphinx build.
 
 - [ ] **Revisit ADR-0020 — reconcile `strata new`'s shipped interface with the standard, and re-check its "completed" status.**
   (from `_lesson.md` I4) ADR-0020 mandates templates as a `--template TEMPLATE`

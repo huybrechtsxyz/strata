@@ -148,6 +148,30 @@ class FeatureStoreType(str, Enum):
     FLAGSMITH = "flagsmith"
 
 
+def _validate_field_not_on_builtin(
+    *,
+    kind_noun: str,
+    key: str,
+    field_name: str,
+    field_value: Any,
+    store: Enum,
+    builtin_types: frozenset,
+    suggested_stores: str,
+) -> None:
+    """Raise if *field_value* is set while *store* is one of the built-in types.
+
+    Shared by the `generate`/`rotate`/`default` "not valid on built-in store"
+    validators across `SecretStoreModel`, `VariableStoreModel`, and
+    `FeatureStoreModel` — same check, same message shape, only the model/field/
+    builtin-set/suggested-stores text differ per call site.
+    """
+    if field_value is not None and store in builtin_types:
+        raise ValueError(
+            f"{kind_noun} '{key}': '{field_name}' is not valid on built-in store type '{store.value}'. "
+            f"Use an integration-backed store ({suggested_stores})."
+        )
+
+
 # Model for secret definitions.
 class SecretStoreModel(BaseModel):
     """
@@ -185,22 +209,28 @@ class SecretStoreModel(BaseModel):
 
     @model_validator(mode="after")
     def validate_generate_not_on_builtin(self) -> "SecretStoreModel":
-        builtin = {SecretStoreType.CONSTANT, SecretStoreType.ENVIRONMENT, SecretStoreType.GITHUB}
-        if self.generate is not None and self.store in builtin:
-            raise ValueError(
-                f"Secret '{self.key}': 'generate' is not valid on built-in store type '{self.store.value}'. "
-                "Use an integration-backed store (azure-keyvault, vault, bitwarden, infisical)."
-            )
+        _validate_field_not_on_builtin(
+            kind_noun="Secret",
+            key=self.key,
+            field_name="generate",
+            field_value=self.generate,
+            store=self.store,
+            builtin_types=frozenset({SecretStoreType.CONSTANT, SecretStoreType.ENVIRONMENT, SecretStoreType.GITHUB}),
+            suggested_stores="azure-keyvault, vault, bitwarden, infisical",
+        )
         return self
 
     @model_validator(mode="after")
     def validate_rotate_not_on_builtin(self) -> "SecretStoreModel":
-        builtin = {SecretStoreType.CONSTANT, SecretStoreType.ENVIRONMENT, SecretStoreType.GITHUB}
-        if self.rotate is not None and self.store in builtin:
-            raise ValueError(
-                f"Secret '{self.key}': 'rotate' is not valid on built-in store type '{self.store.value}'. "
-                "Use an integration-backed store (azure-keyvault, vault, bitwarden, infisical)."
-            )
+        _validate_field_not_on_builtin(
+            kind_noun="Secret",
+            key=self.key,
+            field_name="rotate",
+            field_value=self.rotate,
+            store=self.store,
+            builtin_types=frozenset({SecretStoreType.CONSTANT, SecretStoreType.ENVIRONMENT, SecretStoreType.GITHUB}),
+            suggested_stores="azure-keyvault, vault, bitwarden, infisical",
+        )
         return self
 
     @model_validator(mode="after")
@@ -253,12 +283,15 @@ class VariableStoreModel(BaseModel):
 
     @model_validator(mode="after")
     def validate_default_not_on_builtin(self) -> "VariableStoreModel":
-        builtin = {VariableStoreType.CONSTANT, VariableStoreType.ENVIRONMENT}
-        if self.default is not None and self.store in builtin:
-            raise ValueError(
-                f"Variable '{self.key}': 'default' is not valid on built-in store type '{self.store.value}'. "
-                "Use an integration-backed store (azure-appconfig, consul, vault, infisical, etcd)."
-            )
+        _validate_field_not_on_builtin(
+            kind_noun="Variable",
+            key=self.key,
+            field_name="default",
+            field_value=self.default,
+            store=self.store,
+            builtin_types=frozenset({VariableStoreType.CONSTANT, VariableStoreType.ENVIRONMENT}),
+            suggested_stores="azure-appconfig, consul, vault, infisical, etcd",
+        )
         return self
 
 
@@ -291,12 +324,15 @@ class FeatureStoreModel(BaseModel):
 
     @model_validator(mode="after")
     def validate_default_not_on_builtin(self) -> "FeatureStoreModel":
-        builtin = {FeatureStoreType.CONSTANT, FeatureStoreType.ENVIRONMENT}
-        if self.default is not None and self.store in builtin:
-            raise ValueError(
-                f"Feature '{self.key}': 'default' is not valid on built-in store type '{self.store.value}'. "
-                "Use an integration-backed store (azure-appconfig, flagsmith)."
-            )
+        _validate_field_not_on_builtin(
+            kind_noun="Feature",
+            key=self.key,
+            field_name="default",
+            field_value=self.default,
+            store=self.store,
+            builtin_types=frozenset({FeatureStoreType.CONSTANT, FeatureStoreType.ENVIRONMENT}),
+            suggested_stores="azure-appconfig, flagsmith",
+        )
         return self
 
 
