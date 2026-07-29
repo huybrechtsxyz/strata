@@ -301,15 +301,15 @@ strata new NAME --template TEMPLATE [--output-file FILE] [--overwrite] [--set KE
 strata new --list
 ```
 
-| Option / Argument    | Description                                                                                                   |
-| -------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `NAME`               | Injected as `{{ name }}`; used in output filenames and path segments                                          |
+| Option / Argument     | Description                                                                                                   |
+| --------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `NAME`                | Injected as `{{ name }}`; used in output filenames and path segments                                          |
 | `--template TEMPLATE` | Template name (e.g. `namespace`, `provider`, `tenant`)                                                        |
-| `--output-file FILE` | Output file path or directory (default: current directory)                                                    |
-| `--overwrite`        | Overwrite output file(s) if they already exist                                                                |
-| `--set KEY=VALUE`    | Inject an extra variable into the template (repeatable)                                                       |
-| `--list`             | List available templates and bundles, then exit                                                               |
-| `--scaffold-deps`    | After creation, detect any missing files referenced by the new file and offer to scaffold them automatically. |
+| `--output-file FILE`  | Output file path or directory (default: current directory)                                                    |
+| `--overwrite`         | Overwrite output file(s) if they already exist                                                                |
+| `--set KEY=VALUE`     | Inject an extra variable into the template (repeatable)                                                       |
+| `--list`              | List available templates and bundles, then exit                                                               |
+| `--scaffold-deps`     | After creation, detect any missing files referenced by the new file and offer to scaffold them automatically. |
 
 **Template discovery** — `strata new --list` shows all templates grouped by type:
 
