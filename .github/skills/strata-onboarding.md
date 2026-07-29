@@ -79,8 +79,9 @@ strata new my-platform-dev --template deployment --output-file deploy/
 strata validate run -f config/my-platform-config.yaml
 strata validate run -f deploy/my-platform-dev-deploy.yaml --explain
 
-# 5. Interactive onboarding session
-strata console
+# 5. Two ways to fast-track onboarding — pick one:
+strata sln init --guided      # cold-start wizard: answers questions, scaffolds a connected workspace
+strata console                # interactive REPL: guided next-steps, validate/scaffold/graph from one session
 
 # 6. Build artifacts (dry-run)
 strata build plan -f deploy/my-platform-dev-deploy.yaml
@@ -224,7 +225,10 @@ strata validate run -f <file.yaml>
 strata validate run -f <file.yaml> --explain
 
 # Validate all deployment manifests
-strata validate run --path "deployments/**"
+strata validate run --pattern "deployments/**"
+
+# Visualize workspace dependency graph
+strata validate graph
 
 # Exit code 3 = validation failed — read the suggestions
 ```
@@ -237,6 +241,29 @@ Use `strata schema get <kind>` to inspect the full field reference for any kind.
 
 ---
 
+## Guided Onboarding
+
+**Cold-start wizard** — asks a few questions and scaffolds a complete connected workspace:
+
+```bash
+strata sln init --guided
+```
+
+**Dependency scaffolding** — after creating a file, automatically scaffold missing referenced files:
+
+```bash
+strata new my-platform --template deployment --scaffold-deps
+```
+
+**Workspace readiness checklist** — shows the 8-phase onboarding progress and next action:
+
+```bash
+strata guide
+strata guide -f deploy/my-platform.yaml   # file-mode analysis
+```
+
+---
+
 ## Console REPL (Interactive Onboarding)
 
 ```bash
@@ -246,7 +273,7 @@ strata console
 Commands inside the REPL:
 
 | Command             | What it does                            |
-| ------------------- | --------------------------------------- |
+| ------------------- | ---------------------------------------- |
 | `status`            | 8-phase workspace readiness checklist   |
 | `next`              | Show the next step to take              |
 | `do`                | Execute the suggested next-step command |

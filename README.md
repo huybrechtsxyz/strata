@@ -60,7 +60,9 @@ Key conventions for automation:
 | Execution correlation | `execution_id` in the envelope maps directly to `strata audit list --execution-id <id>`         |
 | Env-var overrides     | Every CLI flag has an `XYZ_<OPTION>` equivalent (`STRATA_VERBOSE=true`, `STRATA_QUIET=true`, …) |
 
-Safe read-only commands that work outside an initialized workspace (`INIT_REQUIRED=False`): `validate`, `status`, `schema list`, `schema get`.
+Safe read-only commands that work outside an initialized workspace (no `.strata/solution.json` required): `validate`, `status`, `schema list`, `schema get`.
+
+**AI agents/Copilot users:** drop [`.github/skills/strata-onboarding.md`](.github/skills/strata-onboarding.md) into your agent's skill/instructions folder for strata-aware YAML assistance before you even have a workspace — the same content is also published at [`docs/skills/strata-onboarding.md`](docs/skills/strata-onboarding.md).
 
 ---
 

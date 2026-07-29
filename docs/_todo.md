@@ -536,15 +536,47 @@ Work through `_lesson.md` first; come back and knock these out afterward.
   removing the file and its toctree entry together didn't break anything)
   and the Sphinx build, full suite unchanged at 4991 passed / 16 skipped.
 
-- [ ] **De-duplicate `strata-onboarding.md` between `docs/skills/` and `.github/skills/`.**
-  (from `_lesson.md` X5) Two copies of the same onboarding-skill content exist
-  in this repo (`docs/skills/strata-onboarding.md` and
-  `.github/skills/strata-onboarding.md`) with no single source of truth —
-  drift risk if one is updated and not the other. (The third copy, under
-  `src/strata/templates/solution/dot.github/skills/`, is a scaffold template
-  stamped into new user workspaces and is intentionally separate — leave that
-  one alone.) Pick one canonical copy and have the other reference/symlink/
-  generate from it. Also consider linking it from the main onboarding chain
-  (README → `docs/INDEX.md` → `docs/platform/getting-started.md`), which
-  currently doesn't mention it at all.
+- [x] **De-duplicate `strata-onboarding.md` between `docs/skills/` and `.github/skills/`.**
+  (from `_lesson.md` X5) **Done 2026-07-29.** The two copies had actually
+  already **diverged in content, not just location** — each described a
+  real, current, non-overlapping feature the other was missing:
+  `docs/skills/` had the guided cold-start wizard (`sln init --guided`),
+  dependency scaffolding (`--scaffold-deps`), and `strata guide`, plus the
+  correct `--pattern` flag and `strata validate graph`; `.github/skills/` had
+  the `strata console` REPL section (with its full command table) but a real
+  bug — `--path` instead of the actual `--pattern` flag — and was missing
+  `strata validate graph` entirely. Verified every command/flag referenced
+  against the live CLI's own `--help` output before merging, rather than
+  guessing which file was "newer."
+  - **Merged both** into one complete, accurate file: kept `docs/skills/`'s
+    structure (correct flags), added the missing `## Console REPL` section,
+    and updated the "Onboarding Command Sequence" to present the guided
+    wizard and the console REPL as two alternative fast-track entry points.
+  - **Canonical copy: `docs/skills/strata-onboarding.md`** — this matches
+    ADR-0014's own original design decision, which explicitly says the skill
+    file "ships... at `docs/skills/strata-onboarding.md`" as the primary
+    location. Copied the merged content byte-for-byte onto
+    `.github/skills/strata-onboarding.md` (can't be a symlink — fragile
+    without git symlink support enabled on a Windows checkout; can't be
+    generated at build time — `.github/skills/` needs real, committed
+    content for Copilot's own skill-discovery to read, not a build
+    artifact). Left the third copy under
+    `src/strata/templates/solution/dot.github/skills/` untouched, exactly as
+    the todo specified (intentional point-in-time scaffold snapshot).
+  - **Added an enforcement mechanism**, not just a one-time fix: a new
+    "strata-onboarding.md duplication drift" step in `scripts/Check.ps1`
+    that fails CI the moment the two copies diverge again (byte-for-byte
+    `Compare-Object`), same drift-prevention pattern as every other doc
+    check added this session (C4, X2, X3).
+  - **Linked it from the onboarding chain**, adjusted for X4 (which removed
+    `docs/INDEX.md` from that chain entirely, earlier today): added a
+    mention + link in README.md's existing "Automation & AI Agents" section,
+    and a "Next Steps" bullet in `docs/platform/getting-started.md`. In
+    passing, fixed an adjacent stale reference in that same README section to
+    the `INIT_REQUIRED` flag, which no longer exists (eliminated by
+    ADR-0030 earlier this session) — reworded to describe the behavior
+    functionally instead of naming the dead flag.
+  Verified: full `Check.ps1` green including the new duplication-drift check,
+  docs-index coverage, and the Sphinx build; full suite unchanged at 4991
+  passed / 16 skipped.
 

@@ -79,8 +79,9 @@ strata new my-platform-dev --template deployment --output-file deploy/
 strata validate run -f config/my-platform-config.yaml
 strata validate run -f deploy/my-platform-dev-deploy.yaml --explain
 
-# 5. Cold-start wizard (first-time setup)
-strata sln init --guided
+# 5. Two ways to fast-track onboarding — pick one:
+strata sln init --guided      # cold-start wizard: answers questions, scaffolds a connected workspace
+strata console                # interactive REPL: guided next-steps, validate/scaffold/graph from one session
 
 # 6. Build artifacts (dry-run)
 strata build plan -f deploy/my-platform-dev-deploy.yaml
@@ -260,6 +261,31 @@ strata new my-platform --template deployment --scaffold-deps
 strata guide
 strata guide -f deploy/my-platform.yaml   # file-mode analysis
 ```
+
+---
+
+## Console REPL (Interactive Onboarding)
+
+```bash
+strata console
+```
+
+Commands inside the REPL:
+
+| Command             | What it does                            |
+| ------------------- | ---------------------------------------- |
+| `status`            | 8-phase workspace readiness checklist   |
+| `next`              | Show the next step to take              |
+| `do`                | Execute the suggested next-step command |
+| `check <file>`      | Validate a specific file                |
+| `new <kind> [name]` | Scaffold a new YAML file                |
+| `validate [file]`   | Run validation                          |
+| `graph`             | Show dependency graph                   |
+| `templates`         | List available templates                |
+| `tools`             | Check external tool availability        |
+| `open <file>`       | Open file in editor                     |
+| `reload`            | Re-evaluate workspace state             |
+| `help`              | Show all commands                       |
 
 ---
 

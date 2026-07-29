@@ -298,6 +298,30 @@ else {
     $failed += "kind docs coverage"
 }
 Write-Host ""
+# ── 10. strata-onboarding.md duplication drift ───────────────────────────────
+# docs/skills/strata-onboarding.md (canonical, per ADR-0014) and
+# .github/skills/strata-onboarding.md (Copilot-discoverable copy — the actual
+# runtime location Copilot's skill-discovery reads) must stay byte-identical.
+# They can't be a symlink (fragile on a Windows dev machine without git
+# symlink support enabled) or a generated-at-build-time file (.github/skills/
+# needs real content checked into git, not a build artifact), so this check
+# is the enforcement mechanism instead. The third copy under
+# src/strata/templates/solution/dot.github/skills/ is a scaffold template
+# stamped into new user workspaces — intentionally a point-in-time snapshot,
+# not kept in sync, and excluded from this check.
+Write-Host "[*] strata-onboarding.md duplication drift..." -ForegroundColor Blue
+$onboardingCanonical = Join-Path $projectRoot "docs\skills\strata-onboarding.md"
+$onboardingCopy = Join-Path $projectRoot ".github\skills\strata-onboarding.md"
+$onboardingDiff = Compare-Object (Get-Content $onboardingCanonical) (Get-Content $onboardingCopy)
+if (-not $onboardingDiff) {
+    Write-Host "    [+] docs/skills/ and .github/skills/ copies are identical" -ForegroundColor Green
+}
+else {
+    Write-Host "    [!] docs/skills/strata-onboarding.md and .github/skills/strata-onboarding.md have diverged:" -ForegroundColor Red
+    Write-Host "        Copy docs/skills/strata-onboarding.md over .github/skills/strata-onboarding.md (or vice versa) to resync." -ForegroundColor Yellow
+    $failed += "strata-onboarding.md duplication drift"
+}
+Write-Host ""
 # ── Summary ─────────────────────────────────────────────────────────────────
 # Restore the original index strategy
 $env:UV_INDEX_STRATEGY = $prevIndexStrategy
