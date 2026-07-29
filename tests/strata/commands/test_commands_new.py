@@ -400,24 +400,24 @@ class TestScaffoldDepsHelpers:
     """Unit tests for the module-level helpers used by --scaffold-deps."""
 
     def test_resolve_at_repo_path_basic(self, tmp_path):
-        from strata.commands.new.run_new_command import _resolve_at_repo_path
+        from strata.services.template_resolver import resolve_at_repo_path as _resolve_at_repo_path
 
         repo_map = {"myrepo": str(tmp_path)}
         result = _resolve_at_repo_path("@myrepo/stack/ws.yaml", repo_map)
         assert result == tmp_path / "stack" / "ws.yaml"
 
     def test_resolve_at_repo_path_unknown_repo(self):
-        from strata.commands.new.run_new_command import _resolve_at_repo_path
+        from strata.services.template_resolver import resolve_at_repo_path as _resolve_at_repo_path
 
         assert _resolve_at_repo_path("@unknown/path.yaml", {}) is None
 
     def test_resolve_at_repo_path_non_at_ref(self, tmp_path):
-        from strata.commands.new.run_new_command import _resolve_at_repo_path
+        from strata.services.template_resolver import resolve_at_repo_path as _resolve_at_repo_path
 
         assert _resolve_at_repo_path("stack/ws.yaml", {"myrepo": str(tmp_path)}) is None
 
     def test_collect_dep_candidates_missing_local(self, tmp_path):
-        from strata.commands.new.run_new_command import _collect_dep_candidates
+        from strata.services.template_resolver import collect_dep_candidates as _collect_dep_candidates
         from strata.utils.graph import GraphEdge, GraphNode, GraphResult
 
         result = GraphResult(mode="files")
@@ -438,7 +438,7 @@ class TestScaffoldDepsHelpers:
         assert all(str(c[2]).startswith(str(tmp_path)) for c in candidates)
 
     def test_collect_dep_candidates_skips_existing(self, tmp_path):
-        from strata.commands.new.run_new_command import _collect_dep_candidates
+        from strata.services.template_resolver import collect_dep_candidates as _collect_dep_candidates
         from strata.utils.graph import GraphNode, GraphResult
 
         existing = tmp_path / "stack" / "ws.yaml"
@@ -454,7 +454,7 @@ class TestScaffoldDepsHelpers:
         assert _collect_dep_candidates(result, tmp_path, {}) == []
 
     def test_collect_dep_candidates_external_ref_resolved(self, tmp_path):
-        from strata.commands.new.run_new_command import _collect_dep_candidates
+        from strata.services.template_resolver import collect_dep_candidates as _collect_dep_candidates
         from strata.utils.graph import GraphEdge, GraphNode, GraphResult
 
         repo_root = tmp_path / "myrepo"
@@ -479,7 +479,7 @@ class TestScaffoldDepsHelpers:
         assert resolved == repo_root / "stack" / "ws.yaml"
 
     def test_collect_dep_candidates_external_ref_unresolvable(self, tmp_path):
-        from strata.commands.new.run_new_command import _collect_dep_candidates
+        from strata.services.template_resolver import collect_dep_candidates as _collect_dep_candidates
         from strata.utils.graph import GraphNode, GraphResult
 
         result = GraphResult(mode="files")

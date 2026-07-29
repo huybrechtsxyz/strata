@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Resolves a --template argument to a scaffold folder and optional manifest."""
 
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -10,7 +11,9 @@ from pydantic import ValidationError
 from strata.exceptions import ModelValidationError, PlatformError
 from strata.logger import get_logger
 from strata.models.scaffold_template_model import ScaffoldTemplateModel
+from strata.models.solution_model import SolutionSpecModel, SolutionTemplateModel
 from strata.utils.config import get_templates_dir
+from strata.utils.graph import GraphResult
 from strata.utils.system import get_pkg_templates_path
 
 logger = get_logger(__name__)
@@ -18,6 +21,7 @@ logger = get_logger(__name__)
 _EXAMPLES_DIR = "examples"
 _MANIFEST_FILE = "template.yaml"
 _SCAFFOLD_DIR = "scaffold"
+_JINJA_VAR_RE = re.compile(r"\{\{\s*(\w+)\s*\}\}")
 
 
 # ---------------------------------------------------------------------------
@@ -218,3 +222,281 @@ def _load_manifest(template_folder: Path) -> Optional[ScaffoldTemplateModel]:
             validation_errors=errors,
             message=f"Template manifest '{manifest_path}' validation failed ({len(errors)} error(s))",
         ) from exc
+
+
+# ---------------------------------------------------------------------------
+# `strata new` template discovery/resolution (multi-source: workspace, package,
+# and solution.json — distinct from the `--template`/`sln init` scaffold-folder
+# resolution above, which only looks at the package `examples/` directory).
+# ---------------------------------------------------------------------------
+
+
+def extract_jinja_vars(paths: List[str]) -> set:
+    """Return all undeclared variable names found in the given Jinja2 path strings."""
+    found: set = set()
+    for path in paths:
+        found.update(_JINJA_VAR_RE.findall(path))
+    return found
+
+
+def resolve_solution_template(name: str, solution_spec: Optional[SolutionSpecModel]) -> Optional[SolutionTemplateModel]:
+    """Return the first template entry in *solution_spec* whose name matches *name*."""
+    if solution_spec is None or not solution_spec.templates:
+        return None
+    for tpl in solution_spec.templates:
+        if tpl.name == name:
+            return tpl
+    return None
+
+
+def collect_available_templates(
+    work_path: Optional[Path],
+    solution_templates: Optional[List[SolutionTemplateModel]] = None,
+) -> list[str]:
+    """Collect template stems from workspace, package, and solution.json sources.
+
+    Workspace templates (`.strata/templates/`) take precedence but both
+    sources contribute to the *available* list shown to the user.  A template
+    may be either a single YAML file (``namespace.yaml``) or a bundle
+    directory (``tenant/``).
+
+    Args:
+        work_path: Root of the current workspace, or None.
+        solution_templates: Solution-level templates declared in
+            ``solution.json``'s ``spec.templates[]``, or None.
+
+    Returns:
+        Sorted, deduplicated list of template stems (e.g. ``["namespace", "provider"]``).
+    """
+    stems: set[str] = set()
+
+    # Package-bundled templates
+    pkg_dir = get_pkg_templates_path() / "solution" / "dot.strata" / "templates"
+    if pkg_dir.exists() and pkg_dir.is_dir():
+        for f in pkg_dir.iterdir():
+            if f.is_file() and f.suffix == ".yaml":
+                stems.add(f.stem)
+            elif f.is_dir():
+                stems.add(f.name)
+
+    # Workspace-local templates (may override package ones)
+    if work_path is not None:
+        ws_dir = work_path / ".strata" / "templates"
+        if ws_dir.exists() and ws_dir.is_dir():
+            for f in ws_dir.iterdir():
+                if f.is_file() and f.suffix == ".yaml":
+                    stems.add(f.stem)
+                elif f.is_dir():
+                    stems.add(f.name)
+
+    # Solution-level templates (solution.json spec.templates[])
+    if solution_templates:
+        for tpl in solution_templates:
+            stems.add(tpl.name)
+
+    return sorted(stems)
+
+
+def collect_templates_with_descriptions(
+    work_path: Optional[Path],
+    solution_templates: Optional[List[SolutionTemplateModel]] = None,
+) -> List[Dict[str, str]]:
+    """Collect all templates with descriptions from all sources.
+
+    Scans:
+    1. Package single-file templates (``.strata/templates/*.yaml``)
+    2. Package bundle templates (``templates/examples/``)
+    3. Workspace single-file templates
+    4. Workspace bundle templates
+    5. Solution-level templates (``solution.json`` ``spec.templates[]``)
+
+    Args:
+        work_path: Root of the current workspace, or None.
+        solution_templates: Solution-level templates declared in
+            ``solution.json``'s ``spec.templates[]``, or None.
+
+    Returns a sorted list of dicts with keys: ``name``, ``description``, ``type``.
+    """
+    templates: Dict[str, Dict[str, str]] = {}
+
+    # Package single-file templates
+    pkg_dir = get_pkg_templates_path() / "solution" / "dot.strata" / "templates"
+    if pkg_dir.exists() and pkg_dir.is_dir():
+        for f in pkg_dir.iterdir():
+            if f.is_file() and f.suffix == ".yaml":
+                templates[f.stem] = {
+                    "name": f.stem,
+                    "description": f"Single-file {f.stem} template",
+                    "type": "file",
+                }
+            elif f.is_dir():
+                desc = _read_bundle_description(f)
+                templates[f.name] = {
+                    "name": f.name,
+                    "description": desc or f"Bundle template: {f.name}",
+                    "type": "bundle",
+                }
+
+    # Package scaffold templates (examples/)
+    examples_dir = get_pkg_templates_path() / _EXAMPLES_DIR
+    if examples_dir.is_dir():
+        for p in examples_dir.iterdir():
+            if p.is_dir():
+                desc = _read_bundle_description(p)
+                templates[p.name] = {
+                    "name": p.name,
+                    "description": desc or f"Scaffold template: {p.name}",
+                    "type": "scaffold",
+                }
+
+    # Workspace-local templates — directories take priority over same-named YAML files
+    if work_path is not None:
+        ws_dir = work_path / ".strata" / "templates"
+        if ws_dir.is_dir():
+            # Pass 1: single-file templates
+            for f in ws_dir.iterdir():
+                if f.is_file() and f.suffix == ".yaml":
+                    templates[f.stem] = {
+                        "name": f.stem,
+                        "description": f"Workspace {f.stem} template",
+                        "type": "file (workspace)",
+                    }
+            # Pass 2: bundle directories (overrides same-named file entry)
+            for f in ws_dir.iterdir():
+                if f.is_dir():
+                    desc = _read_bundle_description(f)
+                    tpl_type = "scaffold (workspace)" if (f / "scaffold").is_dir() else "bundle (workspace)"
+                    templates[f.name] = {
+                        "name": f.name,
+                        "description": desc or f"Workspace template: {f.name}",
+                        "type": tpl_type,
+                    }
+
+    # Solution-level templates (solution.json spec.templates[]) — a third source,
+    # distinct from workspace/package filesystem templates. On name collision with
+    # a filesystem template, last-write-wins (mirrors existing workspace-vs-package
+    # collision behavior above) since both accumulate into the same `templates` dict.
+    if solution_templates:
+        for tpl in solution_templates:
+            count = len(tpl.bundle)
+            templates[tpl.name] = {
+                "name": tpl.name,
+                "description": f"Solution template: {tpl.name} ({count} file{'s' if count != 1 else ''})",
+                "type": "bundle (solution)",
+            }
+
+    return sorted(templates.values(), key=lambda t: t["name"])
+
+
+def _read_bundle_description(bundle_dir: Path) -> str:
+    """Read description from template.yaml manifest if present."""
+    manifest_path = bundle_dir / _MANIFEST_FILE
+    if not manifest_path.exists():
+        return ""
+    try:
+        data = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return data.get("description", "")
+    except Exception:
+        pass
+    return ""
+
+
+def resolve_at_repo_path(identifier: str, repo_map: Dict[str, str]) -> Optional[Path]:
+    """Resolve a ``@repo_name/relative/path`` reference to an absolute ``Path``.
+
+    Returns ``None`` if the repo is not registered or the identifier is malformed.
+    """
+    if not identifier.startswith("@"):
+        return None
+    rest = identifier[1:]
+    if "/" not in rest:
+        return None
+    repo_name, rel_path = rest.split("/", 1)
+    if repo_name not in repo_map:
+        return None
+    return Path(repo_map[repo_name]) / rel_path
+
+
+def collect_dep_candidates(
+    graph_result: GraphResult,
+    work_path: Path,
+    repo_map: Dict[str, str],
+) -> List[Tuple[str, str, Path]]:
+    """Return ``(kind, name, resolved_path)`` tuples for unresolved dependencies.
+
+    Covers two node statuses from the graph:
+
+    - ``"missing"``: local relative path that does not exist on disk.
+    - ``"external"``: ``@repo/...`` reference; resolved via *repo_map* and
+      checked for existence — only included when the resolved file is absent.
+
+    Nodes that are already present on disk are silently skipped.
+    """
+    seen: set[str] = set()
+    candidates: List[Tuple[str, str, Path]] = []
+
+    for node in graph_result.nodes:
+        if node.status not in ("missing", "external"):
+            continue
+        if node.identifier in seen:
+            continue
+        seen.add(node.identifier)
+
+        kind = node.kind if node.kind not in ("unknown", "") else None
+        if not kind:
+            continue
+
+        if node.identifier.startswith("@"):
+            resolved = resolve_at_repo_path(node.identifier, repo_map)
+            if resolved is None:
+                continue  # Repo not registered — cannot scaffold
+            if resolved.exists():
+                continue
+        else:
+            resolved = work_path / node.identifier
+            if resolved.exists():
+                continue
+
+        candidates.append((kind, resolved.stem, resolved))
+
+    return candidates
+
+
+def resolve_new_template_path(template: str, work_path: Optional[Path]) -> Optional[Path]:
+    """Resolve the template for ``strata new``, preferring workspace over package.
+
+    Resolution order (first match wins):
+
+    1. Workspace bundle directory  (``.strata/templates/<name>/``)
+    2. Workspace single YAML file  (``.strata/templates/<name>.yaml``)
+    3. Package bundle directory
+    4. Package single YAML file
+
+    Args:
+        template: Template stem (e.g. ``"namespace"`` or ``"Tenant"``).
+        work_path: Root of the current workspace, or None.
+
+    Returns:
+        Path to the template file or bundle directory, or None when not found.
+    """
+    pkg_base = get_pkg_templates_path() / "solution" / "dot.strata" / "templates"
+
+    # 1 & 2 — workspace
+    if work_path is not None:
+        ws_bundle = work_path / ".strata" / "templates" / template
+        if ws_bundle.exists() and ws_bundle.is_dir():
+            return ws_bundle
+        ws_file = work_path / ".strata" / "templates" / f"{template}.yaml"
+        if ws_file.exists():
+            return ws_file
+
+    # 3 & 4 — package
+    pkg_bundle = pkg_base / template
+    if pkg_bundle.exists() and pkg_bundle.is_dir():
+        return pkg_bundle
+    pkg_file = pkg_base / f"{template}.yaml"
+    if pkg_file.exists():
+        return pkg_file
+
+    return None

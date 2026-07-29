@@ -33,16 +33,36 @@ Work through `_lesson.md` first; come back and knock these out afterward.
   path as the natural extension point if that's ever needed, rather than
   building a fourth mechanism speculatively.
 
-- [ ] **Extract `run_new_command.py`'s template logic into a `TemplateService`.**
-  (from `_lesson.md` D6) Template discovery/resolution
-  (`_resolve_template_path`, `_collect_available_templates`,
-  `_collect_templates_with_descriptions`), bundle rendering
-  (`_run_file_execution`, `_run_bundle_execution`, `_run_solution_bundle_execution`),
-  and dependency-scaffolding logic (`_collect_dep_candidates`) all live directly
-  in the command file today with no corresponding service, unlike e.g.
-  `put_secret_command.py`, which correctly delegates to `ValueController`.
-  Low urgency (self-contained, not reused elsewhere) but worth doing for
-  consistency with the rest of the codebase's layering.
+- [x] **Extract `run_new_command.py`'s template logic into a `TemplateService`.**
+  (from `_lesson.md` D6) **Done 2026-07-29.** Moved the pure discovery/resolution
+  functions — `_resolve_template_path`, `_collect_available_templates`,
+  `_collect_templates_with_descriptions`, `_read_bundle_description`,
+  `_resolve_solution_template`, `_resolve_at_repo_path`, `_collect_dep_candidates`,
+  `_extract_jinja_vars` — into the existing `src/strata/services/template_resolver.py`
+  module (already the established home for `--template`/`sln init` scaffold
+  resolution, so this consolidates two template-resolution code paths into one
+  place instead of inventing a second parallel abstraction). Renamed without
+  the leading underscore since they're now public service functions; the
+  `strata new`-specific resolver was named `resolve_new_template_path` to stay
+  distinct from the module's existing `resolve_template()` (different resolution
+  order/sources — `sln init` only looks at package `examples/`, `strata new`
+  checks workspace + package `dot.strata/templates/` + solution.json).
+  `run_new_command.py` now imports these instead of defining them — its own
+  scope shrank from ~330 lines of module-level helpers to just the interactive
+  `_prompt_missing_vars` (uses `click.prompt`, correctly stays in the command/UI
+  layer) plus the `NewCommand` class itself.
+  **Scope note:** the stateful render/execution methods (`_run_file_execution`,
+  `_run_bundle_execution`, `_run_solution_bundle_execution`,
+  `_scaffold_missing_deps`, `_scaffold_single_dep`) were deliberately left on
+  the command — they mutate `self._errors`/`self._messages`/`self._output_data`
+  per `BaseCommand`'s established error-accumulation convention, and extracting
+  them would require redesigning that into a return-value-based API, a bigger
+  and riskier change than this todo's "low urgency" scope warranted.
+  Updated `tests/strata/commands/test_commands_new.py`'s direct imports of
+  `_resolve_at_repo_path`/`_collect_dep_candidates` to the new location.
+  Verified: `ruff`/`mypy` clean, 54 tests pass across
+  `test_services_template_resolver.py` + `test_commands_new.py`, full
+  `Check.ps1` green.
 
 - [ ] **Migrate `generate`/`mask` in `cli_secret.py` onto `BaseCommand` +
   `INIT_REQUIRED = False`.** (from `_lesson.md` D7) They're currently bare
