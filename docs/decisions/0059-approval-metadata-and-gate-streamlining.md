@@ -3,6 +3,14 @@
 - Status: proposed
 - Date: 2026-07-28
 
+> **Update 2026-07-29:** The "Option 2 docs-only" recommendation below was the
+> original scope. Further design discussion concluded a full breaking-change
+> unification is worth doing now instead — `spec.approvals`, ADR-0032, and
+> ADR-0057's `spec.gates` converge into a single deployment-level `spec.gates`
+> list. See the **"Unified Schema (2026-07-29 addendum)"** section at the end of
+> this ADR for the actual design and implementation plan; treat it as superseding
+> Option 2 as the shipped decision, not merely a future direction.
+
 ## Context and Problem Statement
 
 During a global project review (`_lesson.md`, item C2), it was found that strata has
@@ -202,3 +210,146 @@ they are not re-litigated later).
   mechanisms initially appeared to gate/block a deploy (policy engine, `spec.approvals`,
   ADR-0032, ADR-0057), verdict was "architecturally coherent, not competing" but with a
   real naming/clarity problem, which this ADR addresses.
+
+---
+
+## Unified Schema (2026-07-29 addendum)
+
+**This section supersedes Option 2 as the shipped decision.** Discussion after the
+initial docs-only recommendation concluded that, since the two mechanisms are never
+legitimately used together and a breaking change is acceptable here, a full
+unification removes more real confusion than a docs note alone — and does so with
+less total complexity than maintaining two shapes forever.
+
+### Decision
+
+Delete `spec.approvals`, `DeploymentApprovalModel`, `DeploymentStageApprovalModel`,
+and ADR-0032 as separate concepts. Extend ADR-0057's gate model
+(`DeploymentGateModel`) to absorb everything `spec.approvals` did, and **move it from
+the environment to the deployment**, living next to `stages`. No backward-compat
+shim — existing `spec.approvals`/environment-level `spec.gates` YAML fails validation
+immediately once this ships.
+
+### Why the deployment, not the environment
+
+Environments are explicitly designed to be reused across multiple deployments
+(ADR-0024 environment composition). Deployments already have a proven, simple
+inheritance mechanism deployments use for exactly this kind of shared-base-plus-
+override config:
+
+```python
+# deployment_model.py — already exists, unchanged by this ADR
+partial: bool        # True = reusable base, not deployable standalone
+extends: Optional[str]  # @repo/path to a base deployment; top-level fields replaced,
+                         # stages merged by name, environments appended
+```
+
+Gates need to reference stage names to be scoped (`scope: [production]`) — but stage
+names only exist on the deployment, not the environment. Keeping gates on the
+environment would mean a gate's `scope` could silently stop matching if a second
+deployment reused that environment with different stage names. Moving gates to the
+deployment removes that cross-file ambiguity entirely: stages and gates resolve in the
+same pass, from the same `extends` chain.
+
+### Schema
+
+```yaml
+# deployment.yaml
+spec:
+  extends: "@platform/base/deploy-tenant-base.yaml"   # optional — partial base
+
+  gates:
+    - name: prod-approval              # merge key — same semantics as stages[].name
+      type: approval                   # approval | cost_review | security_review |
+                                        # verify | scheduled | incident | cab
+      mode: enforce                    # declare (record only, never blocks) | enforce
+      scope: [production]              # stage name(s), or "all"
+      when: always                     # "always" | a GateWhenConditionsModel object
+      approvers:
+        platform-team:
+          type: github-team
+          value: "org/platform-team"
+        devops-lead:
+          type: user
+          value: "devops@example.com"
+      min_approvals: 1
+      timeout_minutes: 60
+
+    - name: cost-guard
+      type: cost_review
+      mode: enforce
+      scope: all
+      when:
+        cost_delta_monthly: ">= 1000"
+      approvers:
+        finance:
+          type: user
+          value: "finance@example.com"
+
+  stages:
+    - name: staging
+      secrets: [deploy_token]
+    - name: production
+      secrets: [deploy_token, db_password]
+```
+
+```yaml
+# base/deploy-tenant-base.yaml  (partial: true)
+spec:
+  partial: true
+  gates:
+    - name: cost-guard          # same name → child's cost-guard entry overrides this one
+      type: cost_review
+      mode: enforce
+      scope: all
+      when:
+        cost_delta_monthly: ">= 500"   # base default; child above overrides with 1000
+```
+
+### Field-by-field resolution of prior open questions
+
+| Question | Resolution |
+| --- | --- |
+| Where do gates live? | Deployment level, next to `stages` (was: environment level) |
+| How is a gate identified for `extends` override? | Explicit `name:` field, merged by name — identical semantics to `stages[].name`, not a new pattern |
+| Approver shape | `Dict[str, ApproverRef]` (typed `github-team`/`user`/`ado-group` refs) everywhere — `spec.approvals`' richer shape wins over `spec.gates`' plain `List[str]` |
+| Declare vs. enforce | `mode: declare \| enforce` on every gate entry, not just `approval` — generalizes cleanly to `cost_review`/`security_review` teams who want strata to log-only, not block |
+| Duplicate/ambiguous config | A single `spec.gates` list — the old "both `spec.approvals` and an explicit `spec.gates` approval entry" conflict can't occur anymore because there's only one list |
+| Stage scoping | `scope: [stage names] \| "all"` on each gate — replaces the old per-stage nested `approval:` override block on `DeploymentStageModel` |
+
+### Impact inventory (full breaking-change scope)
+
+**Models**
+- `deployment_model.py` — delete `DeploymentApprovalModel`, `DeploymentStageApprovalModel`, the `approvals` field, `DeploymentStageModel.approval`, and the stage-key cross-validation `@model_validator`. Relocate `ApproverRef` to a shared location (it's currently deployment-only; gates need it too).
+- `gate_model.py` — add `name: str`, `mode: Literal["declare", "enforce"] = "enforce"`, `scope: Union[Literal["all"], List[str]] = "all"`; change `approvers` from `Optional[List[str]]` to `Optional[Dict[str, ApproverRef]]`.
+- `environment_model.py` — remove `EnvironmentSpecModel.gates` (moves to deployment).
+- `platform_artifact_model.py` — remove its `approvals` mirror field.
+- `.strata/schemas/*.json` — auto-regenerated from `model_json_schema()`; no manual edits, but existing users must re-run `sln update`.
+
+**Controllers**
+- `gate_controller.py` (`GateConditionEvaluator`, `WorkItemGateController.evaluate_and_create()`) — add a `mode` branch (declare → audit-log only, never call `WorkItemController.request()`) and scope filtering against the current stage; re-source gates from the deployment instead of the environment.
+- `run_deploy_command.py` — delete `_check_approvals()` (lines ~1830–1869); its audit-only behavior is absorbed into the gate evaluator's `mode: declare` branch. Re-wire all 3 existing gate-evaluation phases (pre-plan / post-plan / post-apply) to read `deployment.spec.gates` instead of `environment.spec.gates`.
+
+**Tests**
+- Rewrite `tests/data/deployments/deployment-with-approvals.yaml` onto the new schema.
+- Update the 7 `_check_approvals` mock call sites in `test_commands_deploy.py`.
+- Delete model tests for `DeploymentApprovalModel`/`DeploymentStageApprovalModel`; add tests for the extended `DeploymentGateModel` (`name`, `mode`, `scope`, dict-shaped `approvers`).
+- **New coverage needed, not just migrated:** `gate_controller.py` and `WorkItemController` currently have no dedicated unit tests at all — this change should add them.
+
+**VS Code extension**
+- `workItemsViewProvider.ts`, `strataChatParticipant.ts` (`/approvals` handler) — audit for any code assuming `approvers` is a flat list (e.g. `.join(', ')`) — breaks silently once it's a dict.
+
+**Docs**
+- ADR-0032 — mark superseded/closed (absorbed into ADR-0057 via this ADR).
+- ADR-0057 — pointer added (this session); its own Detailed Design section should eventually inline the extended model rather than just link out.
+- `docs/help/gates.md`, `docs/help/workitem.md`, `docs/guides/deployment-approval-gates.md`, `docs/config/deployment.md` (remove approvals section), `docs/config/environment.md` (remove gates section), `docs/platform/workflow.md` §7.9, `docs/GLOSSARY.md`, MCP docs mentioning approval gates.
+
+### Implementation Plan (supersedes the old Phase 1/Phase 2 below)
+
+1. **Models first, in isolation.** Extend `DeploymentGateModel` (`name`/`mode`/`scope`/dict `approvers`) and relocate `ApproverRef`. Delete the old approval models. Get `model_json_schema()` generating cleanly before touching any controller.
+2. **Gate controller + deploy command rewiring.** Move gate sourcing from environment to deployment; add the `mode: declare` branch; re-point all 3 evaluation phases. This is the highest-risk step — it touches the one piece of infrastructure that works today.
+3. **New test coverage.** Add `gate_controller.py`/`WorkItemController` unit tests (real gap, not just migration) before relying on them to catch regressions in step 2's rewiring.
+4. **Fixture + existing test migration.** Rewrite `deployment-with-approvals.yaml` and the `_check_approvals` mock call sites.
+5. **VS Code extension audit.** Check approver-shape assumptions in the two identified files; fix if broken.
+6. **Docs sweep.** ADR-0032 superseded note, ADR-0057 inline update, guide/help/config doc rewrites, `Check.ps1`'s existing docs checks should catch any dangling references.
+7. **Full `Check.ps1` + full test suite green before merge** — same verification bar as every other change this session.
