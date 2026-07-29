@@ -273,7 +273,7 @@ strata console
 Commands inside the REPL:
 
 | Command             | What it does                            |
-| ------------------- | ---------------------------------------- |
+| ------------------- | --------------------------------------- |
 | `status`            | 8-phase workspace readiness checklist   |
 | `next`              | Show the next step to take              |
 | `do`                | Execute the suggested next-step command |
