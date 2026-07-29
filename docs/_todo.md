@@ -426,11 +426,30 @@ Work through `_lesson.md` first; come back and knock these out afterward.
   affected test files' full suites pass (258 tests), full `Check.ps1` green,
   full suite unchanged at 4991 passed / 16 skipped.
 
-- [ ] **Add a consistent "not yet implemented" visual marker for draft guides.**
-  (from `_lesson.md` X2) `docs/guides/at-scale.md`'s draft status is a single
-  easy-to-miss blockquote line. Define one consistent admonition-style marker
-  for guides describing unbuilt functionality and audit the other guides for
-  whether they need it too.
+- [x] **Add a consistent "not yet implemented" visual marker for draft guides.**
+  (from `_lesson.md` X2) **Done 2026-07-29.** Audited all 33 guides under
+  `docs/guides/` (content + a targeted grep for any top-of-file `> **Status**`-
+  style blockquote) for draft/unbuilt-functionality markers — confirmed
+  `at-scale.md` is the only whole-guide draft; `how-deployment-locking-works.md`
+  has one unrelated inline table cell noting `s3`/`gcs` lock backends are
+  "Phase 3 — not yet implemented" (a single-row caveat inside an otherwise-
+  shipped guide, not a whole-guide draft — left alone, different category).
+  - Replaced `at-scale.md`'s single easy-to-miss `> **Status:** Design draft
+    — not yet implemented.` line with a more visually distinct 3-line
+    blockquote: `> 🚧 **DESIGN DRAFT — NOT YET IMPLEMENTED**` followed by an
+    explicit "nothing below can be run with the current CLI" caveat, keeping
+    the existing `**Context:**` line.
+  - Documented the convention where future guide authors will actually see
+    it: added a short callout under `docs/INDEX.md`'s "User Guides" heading
+    explaining the `🚧 DESIGN DRAFT` marker, pointing at `at-scale.md` as the
+    live example, and noting draft guides are intentionally omitted from the
+    curated guide tables (confirmed `at-scale.md` was already absent from
+    every `docs/INDEX.md` table, by design, while still present in
+    `docs/index.rst`'s Sphinx toctree — so it's fully buildable/discoverable,
+    just not "front-page" promoted).
+  Verified: full `Check.ps1` green including docs-index coverage and the
+  Sphinx build (confirms the toctree/index-coverage checks still pass with
+  the edited files), full suite unchanged at 4991 passed / 16 skipped.
 
 - [ ] **Cross-link overlapping guides and ADRs.**
   (from `_lesson.md` X3) Guides and ADRs describing the same topic (e.g.

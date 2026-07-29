@@ -25,6 +25,12 @@ This is a comprehensive guide to all Strata documentation and resources. Use thi
 
 ## �📖 **User Guides**
 
+> Guides describing a proposed design rather than shipped functionality open
+> with a `> 🚧 **DESIGN DRAFT — NOT YET IMPLEMENTED**` blockquote (see
+> [Operating Strata at Scale](./guides/at-scale.md) for the current example).
+> Such guides are intentionally omitted from the tables below and are only
+> reachable via the full docs site — link them here once implemented.
+
 ### Core Concepts
 
 | Guide                                                                            | Purpose                               |
