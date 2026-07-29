@@ -333,13 +333,28 @@ Work through `_lesson.md` first; come back and knock these out afterward.
   `Check.ps1` green, full repo test suite green (4991 passed, 16 skipped).
 
 
-- [ ] **Add a `pytest`/coverage step to `scripts/Check.ps1`.**
-  (from `_lesson.md` T2) `Check.ps1` currently runs ruff lint/format, mypy, a
-  CLI smoke test, docs-index coverage, and a Sphinx build — but never runs the
-  actual test suite. This is the root cause that let T1's coverage gap persist
-  invisibly. Add a `uv run pytest` (with `--cov` reporting, no hard threshold
-  needed initially) step so future gaps surface in the standard check flow
-  instead of requiring a manual audit to find.
+- [x] **Add a `pytest`/coverage step to `scripts/Check.ps1`.**
+  (from `_lesson.md` T2) **Done 2026-07-29.** Added a new "Pytest + coverage"
+  step (step 4, right after mypy and before the CLI smoke test) that runs
+  `uv run python -m pytest -q --cov=src/strata --cov-report=term-missing`
+  and adds `"pytest"` to `$failed` on nonzero exit — same pattern as every
+  other check in the script. No `--cov-fail-under` threshold yet, per the
+  todo's own scope ("no hard threshold needed initially"); this step exists
+  to surface gaps like T1's in the standard flow, not to gate on a coverage
+  number. Renumbered the remaining step comments (smoke test → 5, docs index
+  → 6, Sphinx build → 7, ADR guards → 8, kind docs → 9).
+  **Finding while wiring this up:** `uv run pytest` (the direct script entry
+  point) fails in this environment with `Failed to canonicalize script
+  path` — a `uv`/venv entry-point issue, not a pytest problem. Used
+  `uv run python -m pytest` instead (the module-invocation form used
+  successfully throughout this session), which works correctly and is
+  arguably more portable anyway.
+  `pytest-cov` was already an installed dev dependency (`cov-7.1.0` shows in
+  every pytest run's plugin line) — no `pyproject.toml` dependency change
+  needed.
+  Verified: full `Check.ps1` green end-to-end (including the Sphinx build),
+  full suite reports via the new step: 4991 passed, 16 skipped, 60% overall
+  coverage.
 
 - [ ] **Clean up the vestigial `IMPL_MISSING` try/except guards in policy tests.**
   (from `_lesson.md` T4 — low priority, cosmetic) ~26 files have a

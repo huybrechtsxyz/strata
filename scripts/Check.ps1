@@ -95,7 +95,17 @@ uv run python -m mypy ./src ./tests
 if ($LASTEXITCODE -ne 0) { $failed += "mypy" }
 Write-Host ""
 
-# ── 4. Smoke test ───────────────────────────────────────────────────────────
+# ── 4. Pytest + coverage ─────────────────────────────────────────────────────
+# Run the full test suite with coverage reporting. No hard --cov-fail-under
+# threshold yet — this step exists to surface untested code paths in the
+# standard check flow (see T1: a 5-command coverage gap went unnoticed for a
+# long time because nothing here ever ran pytest).
+Write-Host "[*] Pytest + coverage..." -ForegroundColor Blue
+uv run python -m pytest -q --cov=src/strata --cov-report=term-missing
+if ($LASTEXITCODE -ne 0) { $failed += "pytest" }
+Write-Host ""
+
+# ── 5. Smoke test ───────────────────────────────────────────────────────────
 # Verify the CLI is importable and basic commands run without crashing.
 # These run without a workspace — no deployment file required.
 Write-Host "[*] Smoke test..." -ForegroundColor Blue
@@ -115,7 +125,7 @@ else { Write-Host "    [+] strata tools status" -ForegroundColor Green }
 
 if (-not $smokeOk) { $failed += "smoke test" }
 Write-Host ""
-# ── 5. Docs index coverage ──────────────────────────────────────────────────────────
+# ── 6. Docs index coverage ──────────────────────────────────────────────────────────
 # Verify every .md file under docs/ is referenced in index.rst.
 # Excludes _build/, _static/, and underscore-prefixed files (temp/scratch docs).
 Write-Host "[*] Docs index coverage..." -ForegroundColor Blue
@@ -151,7 +161,7 @@ else {
 }
 Write-Host ""
 
-# ── 6. Sphinx docs build ─────────────────────────────────────────────────────────────
+# ── 7. Sphinx docs build ─────────────────────────────────────────────────────────────
 # Build the Sphinx HTML docs to catch broken references and missing pages.
 # Pass -SkipDocsBuild to skip this step (e.g. when doc dependencies are not
 # installed or in environments where the build is handled separately).
@@ -179,7 +189,7 @@ else {
     }
 }
 Write-Host ""
-# ── 7. ADR 0030 migration guards ─────────────────────────────────────────────
+# ── 8. ADR 0030 migration guards ─────────────────────────────────────────────
 # Regression guards for the BaseCommand lifecycle migration (ADR 0030 Option D).
 # These patterns were deliberately eliminated; a failure here means a regression.
 Write-Host "[*] ADR 0030 migration guards..." -ForegroundColor Blue
@@ -224,7 +234,7 @@ else {
 if (-not $guardOk) { $failed += "ADR 0030 migration guards" }
 Write-Host ""
 
-# ── 8. Kind docs coverage ────────────────────────────────────────────────────
+# ── 9. Kind docs coverage ────────────────────────────────────────────────────
 # Several docs hand-copy the list of valid `kind:` values instead of deriving it
 # from PlatformKind. Verify each hand-typed list still matches reality, using
 # `strata schema list --output json` (backed by PlatformKind/INTERNAL_KINDS in
