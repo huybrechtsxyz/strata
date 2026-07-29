@@ -167,16 +167,41 @@ Work through `_lesson.md` first; come back and knock these out afterward.
   Verified: full `Check.ps1` green including the Sphinx build (not skipped
   this time, to confirm no broken doc references).
 
-- [ ] **Deduplicate manifest-artifact collector methods shared between build and deploy.**
-  (from `_lesson.md` I1) `_collect_platform_artifact()` is defined near-verbatim
-  in both `base_deploy_command.py` and `run_build_command.py` — same docstring,
-  same SHA-256 computation, same JSON parsing, same `ManifestPlatformModel`
-  construction. `_collect_repository_info()`/`_collect_provider_info()` follow
-  the same paired-naming pattern in both files (worth confirming they're
-  equally identical, not just similarly named). Extract into one shared
-  location (a small service/mixin — exact home is an implementation detail,
-  not a design decision) used by both command families, so a future manifest
-  schema change only needs to happen once.
+- [x] **Deduplicate manifest-artifact collector methods shared between build and deploy.**
+  (from `_lesson.md` I1) **Done 2026-07-29.** Confirmed `_collect_platform_artifact`,
+  `_collect_repository_info`, `_collect_provider_info` were byte-for-byte
+  identical in `base_deploy_command.py` and `run_build_command.py` (only
+  cosmetic differences — local vs. module-level model imports, looser type
+  hints in the build side). `_collect_image_info` was **not** duplicated
+  (deploy-only, reads runtime `self._stage_results` that don't exist at
+  build time) — left untouched on `BaseDeployCommand`.
+  - New `src/strata/services/manifest_artifact_collector.py` — 3 pure
+    functions taking explicit params (`deployment_service`, `build_path`,
+    `work_path`, `solution_controller`) instead of `self`, since the two
+    command classes share no common base beyond `BaseCommand`. Matches this
+    session's `template_resolver.py` precedent (plain function module, not a
+    mixin/new base class).
+  - Both `base_deploy_command.py` and `run_build_command.py` now have the 3
+    methods collapsed to one-line delegates to the shared functions —
+    **method names/signatures unchanged**, so the 5 existing direct-call
+    tests in `test_commands_build_manifest.py` and the
+    `BaseDeployCommand._collect_artifacts` mock in
+    `test_commands_deploy_audit.py` needed zero changes.
+  - Added `tests/strata/services/test_services_manifest_artifact_collector.py`
+    — new direct unit coverage for the extracted logic (17 tests), including
+    cases the old duplicated-and-only-indirectly-tested code never had
+    dedicated coverage for (invalid JSON content, symbolic-ref vs.
+    detached-HEAD commit resolution, missing backend/properties).
+  - Cleaned up now-unused imports as a side effect: `hashlib` from
+    `base_deploy_command.py`, `hashlib` + the 3 local
+    `from strata.models.deployment_manifest_model import ...` statements
+    from `run_build_command.py`.
+  Verified: ruff/mypy clean (one single-file mypy artifact at an unrelated
+  line confirmed pre-existing and absent from the real `./src ./tests`
+  sweep), 179 tests pass across the new service test file +
+  `test_commands_build_manifest.py` + `test_commands_deploy_audit.py` +
+  `test_commands_deploy.py` + `test_commands_build.py`, full `Check.ps1`
+  green including the Sphinx build.
 
 - [ ] **Generalize the "not valid on builtin store" validators in `store_models.py`.**
   (from `_lesson.md` I2) `validate_generate_not_on_builtin`,
