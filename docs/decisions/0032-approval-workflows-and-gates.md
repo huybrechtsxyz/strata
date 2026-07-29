@@ -1,8 +1,15 @@
 # Approval workflows and gates
 
-- Status: proposed
+- Status: superseded
 - Date: 2026-07-11
 
+> **Superseded 2026-07-29:** This ADR was never built. Its approval-workflow design
+> is now fully absorbed into [ADR-0057](0057-deployment-workflow-orchestration.md)'s
+> `spec.gates` (`type: approval`), unified with the old `spec.approvals` metadata
+> block per [ADR-0059](0059-approval-metadata-and-gate-streamlining.md)'s "Unified
+> Schema" addendum. Do not implement anything described below — it predates the
+> unified `name`/`mode`/`scope` gate schema and would conflict with it.
+>
 > **Note**: This ADR covers the specific approval use case. The general work-item
 > orchestration layer that underpins it is designed in
 > [ADR-0057: Deployment workflow orchestration](0057-deployment-workflow-orchestration.md).

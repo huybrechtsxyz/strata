@@ -3,7 +3,7 @@
 Manage deployment workflow hand-off gates and approvals.
 
 Work items are created automatically by `strata deploy run` when a deployment
-reaches a gate declared in the environment YAML (`spec.gates`). They represent
+reaches a gate declared in the deployment YAML (`spec.gates`). They represent
 a decision point that pauses the pipeline until resolved by an operator, a
 CI/CD approval step, or the clock.
 
@@ -25,42 +25,60 @@ strata workitem expire
 
 ## Gate Configuration
 
-Gates are declared in the **environment YAML** (`spec.gates`):
+Gates are declared in the **deployment YAML** (`spec.gates`, next to `stages`):
 
 ```yaml
 spec:
   gates:
     # Human approval required for all production deploys
-    - type: approval
+    - name: prod-approval
+      type: approval
       when: always
-      approvers: [ops-team]
+      approvers:
+        ops-team:
+          type: github-team
+          value: "org/ops-team"
       timeout_minutes: 60
 
     # Finance approval when monthly cost rises by more than $1,000
-    - type: cost_review
+    - name: cost-guard
+      type: cost_review
       when:
         cost_delta_monthly: ">= 1000"
-      approvers: [finance]
+      approvers:
+        finance:
+          type: user
+          value: "finance@example.com"
       timeout_minutes: 240
 
     # Security team review when SBOM audit finds critical CVEs
-    - type: security_review
+    - name: sbom-audit
+      type: security_review
       when:
         cve_critical: ">= 1"
-      approvers: [security-team]
+      approvers:
+        security-team:
+          type: github-team
+          value: "org/security-team"
       timeout_minutes: 480
 
     # Only deploy inside the maintenance window
-    - type: scheduled
+    - name: maintenance-window
+      type: scheduled
       when:
         time_utc: "02:00-04:00"
       auto_resolve: true
 
     # Manual verification after deploy
-    - type: verify
+    - name: post-deploy-check
+      type: verify
       when: always
       timeout_minutes: 30
 ```
+
+Each gate also has a **mode: declare | enforce** (default `enforce`) and a
+**scope** (stage name(s), or `"all"` — default). See `strata help --topic gates`
+for the full field reference.
 
 ---
 

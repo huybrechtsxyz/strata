@@ -21,7 +21,6 @@ from strata.models.common_models import (
     check_unique_names,
     validate_slot_type,
 )
-from strata.models.gate_model import DeploymentGateModel
 from strata.models.promotion_model import EnvironmentPromotionModel
 from strata.models.store_models import (
     FeatureStoreModel,
@@ -365,10 +364,6 @@ class EnvironmentSpecModel(PlatformBaseModel):
     promotion: Optional[EnvironmentPromotionModel] = Field(
         None,
         description="Promotion membership: declares which strategy and ring this environment belongs to",
-    )
-    gates: Optional[List[DeploymentGateModel]] = Field(
-        None,
-        description="Hand-off gates for this environment (approval, cost_review, security_review, verify, scheduled).",
     )
 
     @model_validator(mode="after")

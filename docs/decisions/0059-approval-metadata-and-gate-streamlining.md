@@ -308,14 +308,14 @@ spec:
 
 ### Field-by-field resolution of prior open questions
 
-| Question | Resolution |
-| --- | --- |
-| Where do gates live? | Deployment level, next to `stages` (was: environment level) |
-| How is a gate identified for `extends` override? | Explicit `name:` field, merged by name — identical semantics to `stages[].name`, not a new pattern |
-| Approver shape | `Dict[str, ApproverRef]` (typed `github-team`/`user`/`ado-group` refs) everywhere — `spec.approvals`' richer shape wins over `spec.gates`' plain `List[str]` |
-| Declare vs. enforce | `mode: declare \| enforce` on every gate entry, not just `approval` — generalizes cleanly to `cost_review`/`security_review` teams who want strata to log-only, not block |
-| Duplicate/ambiguous config | A single `spec.gates` list — the old "both `spec.approvals` and an explicit `spec.gates` approval entry" conflict can't occur anymore because there's only one list |
-| Stage scoping | `scope: [stage names] \| "all"` on each gate — replaces the old per-stage nested `approval:` override block on `DeploymentStageModel` |
+| Question                                         | Resolution                                                                                                                                                                |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Where do gates live?                             | Deployment level, next to `stages` (was: environment level)                                                                                                               |
+| How is a gate identified for `extends` override? | Explicit `name:` field, merged by name — identical semantics to `stages[].name`, not a new pattern                                                                        |
+| Approver shape                                   | `Dict[str, ApproverRef]` (typed `github-team`/`user`/`ado-group` refs) everywhere — `spec.approvals`' richer shape wins over `spec.gates`' plain `List[str]`              |
+| Declare vs. enforce                              | `mode: declare \| enforce` on every gate entry, not just `approval` — generalizes cleanly to `cost_review`/`security_review` teams who want strata to log-only, not block |
+| Duplicate/ambiguous config                       | A single `spec.gates` list — the old "both `spec.approvals` and an explicit `spec.gates` approval entry" conflict can't occur anymore because there's only one list       |
+| Stage scoping                                    | `scope: [stage names] \| "all"` on each gate — replaces the old per-stage nested `approval:` override block on `DeploymentStageModel`                                     |
 
 ### Impact inventory (full breaking-change scope)
 

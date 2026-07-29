@@ -482,7 +482,7 @@ class TestLockingWiring:
             patch.object(cmd, "_should_lock", return_value=True),
             patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
             patch.object(cmd, "_execute_stage_provisioning", return_value=True),
-            patch.object(cmd, "_check_approvals", return_value=True),
+            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
         ):
             stage = _make_stage()
             # Call directly via the helper
@@ -513,7 +513,7 @@ class TestLockingWiring:
             patch.object(cmd, "_should_lock", return_value=True),
             patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
             patch.object(cmd, "_execute_stage_provisioning", return_value=True),
-            patch.object(cmd, "_check_approvals", return_value=True),
+            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
         ):
             cmd._execute_provisioning()  # type: ignore[call-arg]
 
@@ -543,7 +543,7 @@ class TestLockingWiring:
             patch.object(cmd, "_should_lock", return_value=True),
             patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
             patch.object(cmd, "_execute_stage_provisioning", return_value=False),
-            patch.object(cmd, "_check_approvals", return_value=True),
+            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
         ):
             result = cmd._execute_provisioning()  # type: ignore[call-arg]
 
@@ -560,7 +560,7 @@ class TestLockingWiring:
         with (
             patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
             patch.object(cmd, "_execute_stage_provisioning", return_value=True),
-            patch.object(cmd, "_check_approvals", return_value=True),
+            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
         ):
             cmd._execute_provisioning()  # type: ignore[call-arg]
 
@@ -582,7 +582,7 @@ class TestLockingWiring:
         with (
             patch.object(cmd, "_should_lock", return_value=True),
             patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
-            patch.object(cmd, "_check_approvals", return_value=True),
+            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
         ):
             result = cmd._execute_provisioning()  # type: ignore[call-arg]
 

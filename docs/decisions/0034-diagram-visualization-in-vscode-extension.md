@@ -135,18 +135,18 @@ The full catalog is organized into 27 categories. Users browse the catalog from 
 
 ### Category 2: Deployment Orchestration (10 diagrams)
 
-| #   | Name                           | Data Source                                                      | Mermaid Type | Description                                           |
-| --- | ------------------------------ | ---------------------------------------------------------------- | ------------ | ----------------------------------------------------- |
-| 13  | Deployment Stage Pipeline      | `deployment_model.DeploymentStageModel`                          | flowchart    | Sequential/parallel stage execution order             |
-| 14  | Stage DAG (depends_on)         | `DeploymentStageModel.depends_on`                                | flowchart    | Full directed acyclic graph of stage dependencies     |
-| 15  | Stage Failure Handling Flow    | `DeploymentStageModel.on_failure`                                | stateDiagram | State machine: stop/rollback/continue paths per stage |
-| 16  | Deployment File Reference Tree | `DeploymentModel.spec` (workspace, environments, configurations) | flowchart    | All YAML files referenced by a deployment             |
-| 17  | Stage-Provisioner Mapping      | `DeploymentStageModel.provisioner/topology`                      | flowchart    | Which provisioner runs each stage                     |
-| 18  | Health Check Flow              | `DeploymentStageModel.health_checks`                             | sequence     | Post-deploy health check sequence per stage           |
-| 19  | Approval Gate Flow             | `DeploymentApprovalModel` + stage approvals                      | flowchart    | Approval requirements per stage and approver routing  |
-| 20  | Stage Timeout Budget           | `DeploymentStageTimeoutsModel`                                   | gantt        | Per-step timeout allocation within each stage         |
-| 21  | Secret Access Allowlist        | `DeploymentStageModel.secrets`                                   | flowchart    | Which stages can access which secret keys             |
-| 22  | Deployment Layers Hierarchy    | `deployment_model.spec.layers`                                   | flowchart    | Layer stack (tenant → zone → environment)             |
+| #   | Name                           | Data Source                                                      | Mermaid Type | Description                                              |
+| --- | ------------------------------ | ---------------------------------------------------------------- | ------------ | -------------------------------------------------------- |
+| 13  | Deployment Stage Pipeline      | `deployment_model.DeploymentStageModel`                          | flowchart    | Sequential/parallel stage execution order                |
+| 14  | Stage DAG (depends_on)         | `DeploymentStageModel.depends_on`                                | flowchart    | Full directed acyclic graph of stage dependencies        |
+| 15  | Stage Failure Handling Flow    | `DeploymentStageModel.on_failure`                                | stateDiagram | State machine: stop/rollback/continue paths per stage    |
+| 16  | Deployment File Reference Tree | `DeploymentModel.spec` (workspace, environments, configurations) | flowchart    | All YAML files referenced by a deployment                |
+| 17  | Stage-Provisioner Mapping      | `DeploymentStageModel.provisioner/topology`                      | flowchart    | Which provisioner runs each stage                        |
+| 18  | Health Check Flow              | `DeploymentStageModel.health_checks`                             | sequence     | Post-deploy health check sequence per stage              |
+| 19  | Approval Gate Flow             | `DeploymentGateModel` (`spec.gates`, ADR-0059)                   | flowchart    | Gate scope, mode (declare/enforce), and approver routing |
+| 20  | Stage Timeout Budget           | `DeploymentStageTimeoutsModel`                                   | gantt        | Per-step timeout allocation within each stage            |
+| 21  | Secret Access Allowlist        | `DeploymentStageModel.secrets`                                   | flowchart    | Which stages can access which secret keys                |
+| 22  | Deployment Layers Hierarchy    | `deployment_model.spec.layers`                                   | flowchart    | Layer stack (tenant → zone → environment)                |
 
 ### Category 3: Version & Promotion Flows (11 diagrams)
 

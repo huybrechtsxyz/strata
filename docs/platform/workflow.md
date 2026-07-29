@@ -121,7 +121,11 @@ spec:
         value: "devops@company.com"
 ```
 
-> **Note:** `spec.approvals` in a workspace template is metadata only — it declares default approvers for deployments initialized from this template. Enforcement is handled by your CI/CD system. See §7.9 for the full approvals schema.
+> **Note:** `spec.gates` in a workspace template is metadata only until a gate's
+> `mode` is `enforce` — use `mode: declare` to declare default approvers for
+> deployments initialized from this template without strata blocking anything
+> itself (enforcement then happens externally, e.g. your CI/CD system). See
+> §7.9 for the full gates schema.
 
 - `--template` accepts any local path (absolute or relative to `--work-path`).
 - Remote / `@repo-name/...` template references are **not** supported — the file must be on disk before `init` runs.
@@ -621,46 +625,57 @@ strata deploy history --verbose
 - No deployment file required — reads workspace logs only.
 - Exit code `0` even when the history is empty.
 
-### 7.9 Declare approval metadata
+### 7.9 Declare or enforce hand-off gates
 
-Approvals are **metadata declared in the deployment YAML** — the CLI logs which
-approvers apply per stage, but enforcement is done by the CI/CD system
-(Azure DevOps environment gate, GitHub Actions environment protection rule, etc.).
+Gates are declared in the **deployment YAML**, next to `stages` (ADR-0057 /
+ADR-0059). Each gate has a `mode`: `declare` only logs it to the audit trail
+(enforcement happens externally — Azure DevOps environment gate, GitHub
+Actions environment protection rule, etc.); `enforce` (default) makes strata
+itself pause the deploy and require `--resume`.
 
-**Deployment YAML — add `approvals` to the spec:**
+**Deployment YAML — add `gates` to the spec:**
 
 ```yaml
 spec:
-  approvals:
-    approvers:
-      platform-team:
-        type: github-team       # github-team | ado-group | user
-        value: "org/platform-team"
-      devops-lead:
-        type: user
-        value: "vhuybrec@company.com"
-      ado-approvers:
-        type: ado-group
-        value: "Platform-Approvers"
+  gates:
+    - name: staging-declare
+      type: approval
+      mode: declare        # audit only — enforcement happens in CI/CD
+      scope: [xyz-dc-eu-fr]
+      approvers:
+        platform-team:
+          type: github-team       # github-team | ado-group | user
+          value: "org/platform-team"
+        devops-lead:
+          type: user
+          value: "vhuybrec@company.com"
+
+    - name: prod-approval
+      type: approval
+      mode: enforce         # strata itself pauses the deploy (exit code 5)
+      scope: [xyz-dc-eu-prod]
+      approvers:
+        platform-team:
+          type: github-team
+          value: "org/platform-team"
+        ado-approvers:
+          type: ado-group
+          value: "Platform-Approvers"
+      min_approvals: 1
+      timeout_minutes: 60
 
   stages:
     - name: xyz-dc-eu-fr
-      type: infrastructure
-      # no approval field → all spec-level approvers apply
+      provisioner: platform_iac
 
     - name: xyz-dc-eu-prod
-      type: infrastructure
-      approval:
-        approvers:
-          - platform-team       # keys from spec.approvals.approvers
-          - ado-approvers
+      provisioner: platform_iac
 ```
 
-- `spec.approvals` absent → no gate declared, deploy proceeds.
-- `spec.approvals.approvers` empty dict → silently treated as no gate.
-- Stage without `approval` field → no stage-level restriction.
-- Stage `approval.approvers` lists keys from `spec.approvals.approvers`; unknown keys are a validation error.
+- `spec.gates` absent → no gate declared, deploy proceeds.
+- A gate's `scope` (a list of stage names, or `"all"`) determines which stage(s) it applies to; referencing an unknown stage name is a validation error.
 - Approver types: `github-team`, `ado-group`, `user`.
+- `mode: declare` never blocks; `mode: enforce` creates a real work item and requires `strata deploy run ... --resume <id>` to proceed.
 
 ---
 

@@ -2,12 +2,14 @@
 
 Hand-off points where execution pauses for external approval or verification.
 
-Gates are declared under `spec.gates` in the **environment YAML** (not the
-configuration). A gate creates a work item when triggered, notifies interested
+Gates are declared under `spec.gates` in the **deployment YAML** (next to
+`stages`). A gate creates a work item when triggered, notifies interested
 parties, and resumes deployment once resolved. Gates include approval, cost
 review, manual verification, and scheduled deployment.
 
-See ADR-0057 for the full orchestration design.
+See ADR-0057 for the full orchestration design, and ADR-0059 for the unified
+schema (`name`/`mode`/`scope`) that replaced the old, separate `spec.approvals`
+metadata block.
 
 ---
 
@@ -21,38 +23,67 @@ See ADR-0057 for the full orchestration design.
 | `verify`          | Post-deploy health checks      | Operator             | Manual confirmation service is healthy    |
 | `scheduled`       | Deployment window opens        | Clock (auto-resolve) | Deploy only at 2am UTC maintenance window |
 
+Each gate also has a **mode**:
+
+| Mode      | Behavior                                                                                                                                                                   |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enforce` | (default) strata creates a real work item and pauses the deploy (exit code 5)                                                                                              |
+| `declare` | strata only records the gate in the audit trail — never blocks. Use when enforcement already happens externally (Azure DevOps approvals, GitHub Actions protection rules). |
+
+And a **scope** — which stage(s) the gate applies to: a list of stage names,
+or `"all"` (default).
+
 ---
 
-## Configuration in Environment YAML
+## Configuration in Deployment YAML
 
 ```yaml
-# environments/production.yaml
+# deploy.yaml
 spec:
   gates:
-    # Human approval required for all production deploys
-    - type: approval
+    # Human approval required before the production stage
+    - name: prod-approval
+      type: approval
+      mode: enforce
+      scope: [production]
       when: always
-      approvers: [ops-team, on-call]
+      approvers:
+        ops-team:
+          type: github-team
+          value: "org/ops-team"
+        on-call:
+          type: user
+          value: "oncall@example.com"
       min_approvals: 1
       timeout_minutes: 60
 
-    # Finance approval if cost rises > $1000/month
-    - type: cost_review
+    # Finance approval if cost rises > $1000/month (applies to all stages)
+    - name: cost-guard
+      type: cost_review
       when:
         cost_delta_monthly: ">= 1000"
-      approvers: [finance]
+      approvers:
+        finance:
+          type: user
+          value: "finance@example.com"
 
-    # Security review if SBOM finds critical CVEs
-    - type: security_review
+    # Security review if SBOM finds critical CVEs — audit only, external SOC gates it
+    - name: sbom-audit
+      type: security_review
+      mode: declare
       when:
         cve_critical: ">= 1"
-      approvers: [security-team]
 
     # Scheduled deployment (auto-resolves)
-    - type: scheduled
+    - name: maintenance-window
+      type: scheduled
       when:
         time_utc: "02:00-04:00"    # maintenance window
       auto_resolve: true
+
+  stages:
+    - name: staging
+    - name: production
 ```
 
 ---

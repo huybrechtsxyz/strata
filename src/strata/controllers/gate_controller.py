@@ -195,6 +195,7 @@ class WorkItemGateController:
         commit: str,
         context: GateContext,
         gate_type_filter: Optional[str] = None,
+        scope_stages: Optional[List[str]] = None,
     ) -> Optional[WorkItem]:
         """Evaluate all gates. Returns a WorkItem for the first triggered gate, else None.
 
@@ -202,11 +203,23 @@ class WorkItemGateController:
             gate_type_filter: when set, only evaluate gates of this type
                               (e.g. "approval" pre-plan, "cost_review" post-plan,
                                "verify" post-apply).
+            scope_stages: stage name(s) relevant to this evaluation call (a single
+                          stage for post-plan/post-apply checks, or the full
+                          stages-to-run list for the pre-provisioning check). A gate
+                          is skipped unless its own `scope` is "all" or overlaps
+                          with this list. `None` means "don't filter by scope"
+                          (used by callers that already pre-selected an exact gate
+                          list).
         """
         for gate in gates:
             # Filter by type if requested
             if gate_type_filter is not None and gate.type != gate_type_filter:
                 continue
+
+            # Filter by scope: skip gates that don't target any stage in this call
+            if scope_stages is not None and gate.scope != "all":
+                if not set(gate.scope) & set(scope_stages):
+                    continue
 
             # --- Scheduled gate with auto_resolve: enforce window, no work item ---
             if gate.type == "scheduled" and gate.auto_resolve:
@@ -249,12 +262,23 @@ class WorkItemGateController:
                 logger.debug("gate.condition_not_met", gate_type=gate.type, deployment=deployment)
                 continue
 
+            # --- mode: declare — audit-log only, never blocks, never creates a WorkItem ---
+            if gate.mode == "declare":
+                logger.info(
+                    "gate.declared",
+                    gate_name=gate.name,
+                    gate_type=gate.type,
+                    deployment=deployment,
+                    approvers=({k: v.model_dump() for k, v in gate.approvers.items()} if gate.approvers else None),
+                )
+                continue
+
             # Gate triggers — build work item context
             gate_context = {}
             if gate.description:
                 gate_context["description"] = gate.description
             if gate.approvers:
-                gate_context["approvers"] = gate.approvers
+                gate_context["approvers"] = {k: v.model_dump() for k, v in gate.approvers.items()}
             if gate.min_approvals != 1:
                 gate_context["min_approvals"] = gate.min_approvals
             # Type-specific context enrichment

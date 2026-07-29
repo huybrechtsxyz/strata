@@ -31,9 +31,13 @@ spec:
     - name: verify
       type: manual_verification
   gates:
-    - type: approval
+    - name: prod-approval
+      type: approval
       when: always
-      approvers: [ops-team]
+      approvers:
+        ops-team:
+          type: github-team
+          value: "org/ops-team"
 ```
 
 ---

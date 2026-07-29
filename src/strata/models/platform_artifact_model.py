@@ -28,7 +28,6 @@ from strata.models.common_models import (
     SourceModel,
 )
 from strata.models.deployment_model import (
-    DeploymentApprovalModel,
     DeploymentMetaModel,
     DeploymentSpecModel,
     DeploymentStageModel,
@@ -47,6 +46,7 @@ from strata.models.firewall_model import (
 from strata.models.firewall_model import (
     FirewallModel as InputFirewallModel,
 )
+from strata.models.gate_model import DeploymentGateModel
 from strata.models.module_model import (
     ModuleModel,
     ModulePropertiesModel,
@@ -642,7 +642,7 @@ class PlatformSpecModel(BaseModel):
 
     Aggregates all workspace sections (providers, provisioners, topologies,
     stereotypes, resources, namespaces, modules, firewalls) together with
-    deployment-level settings (lifecycle, stages, approvals, variables, secrets,
+    deployment-level settings (lifecycle, stages, gates, variables, secrets,
     features, properties, custom).
     """
 
@@ -662,9 +662,9 @@ class PlatformSpecModel(BaseModel):
         None,
         description="Deployment stages defining the execution plan and provisioning steps",
     )
-    approvals: Optional[DeploymentApprovalModel] = Field(
+    gates: Optional[List[DeploymentGateModel]] = Field(
         None,
-        description="Deployment approval configuration (auto or manual approval gates)",
+        description="Deployment hand-off gates (approval, cost_review, security_review, verify, scheduled, incident, cab)",
     )
     properties: Optional[Dict[str, Any]] = Field(None, description="Deployment-specific properties and configurations")
     custom: Optional[Dict[str, Any]] = Field(
@@ -765,7 +765,7 @@ class PlatformSpecModel(BaseModel):
             deployment=None,
             artifact_path=artifact_path,
             stages=model.stages,
-            approvals=model.approvals,
+            gates=model.gates,
             properties=model.properties,
             custom=model.custom,
             workspace=PlatformWorkspaceModel(
