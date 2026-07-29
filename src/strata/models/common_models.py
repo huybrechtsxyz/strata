@@ -76,7 +76,21 @@ class PlatformVersion(str, Enum):
 CANONICAL_API_VERSION = PlatformVersion.v1
 
 # Kinds that are internal build/deploy artifacts, not user-authored YAML documents.
-INTERNAL_KINDS: frozenset = frozenset({PlatformKind.PLATFORM_MODEL, PlatformKind.DEPLOYMENT_MANIFEST})
+INTERNAL_KINDS: frozenset = frozenset(
+    {
+        PlatformKind.PLATFORM_MODEL,
+        PlatformKind.DEPLOYMENT_MANIFEST,
+        PlatformKind.VERSION_LOCK,
+        PlatformKind.VERSION_MANIFEST,
+        PlatformKind.PROMOTION_RECORD,
+    }
+)
+
+# Kinds users actually author as YAML documents — everything in PlatformKind except
+# the internal, machine-generated-only kinds above. Single source of truth for any
+# doc/script that needs to print a "valid kinds" list — derive from this, don't
+# hand-copy the values (see scripts/Check.ps1's kind docs coverage check).
+USER_AUTHORABLE_KINDS: frozenset = frozenset(PlatformKind) - INTERNAL_KINDS
 
 
 # Enumeration of supported provisioner names.

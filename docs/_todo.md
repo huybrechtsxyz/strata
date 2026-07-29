@@ -4,18 +4,22 @@ Concrete, actionable fixes surfaced while working through `_lesson.md`. Plain
 checkboxes, no ADR needed for these — small, mechanical, low-risk changes.
 Work through `_lesson.md` first; come back and knock these out afterward.
 
-- [ ] **Generate "valid kinds" lists from `PlatformKind` instead of hand-copying them.**
-  (from `_lesson.md` C4) Four docs each hand-maintain their own copy of the
-  `kind:` catalog and three of them are wrong: `docs/platform/commands.md` is
-  missing `tenant` and wrongly includes internal-only `platform_model`;
-  `.squad/templates/platform.instructions.md` lists a `datacenter` kind that
-  doesn't exist anywhere in the codebase; `docs/GLOSSARY.md` lists a `workflow`
-  kind that doesn't exist either (it's unbuilt ADR-0049). Only
-  `.github/copilot-instructions.md` and `.github/instructions/strata.instructions.md`
-  match reality. Fix: derive these lists from `PlatformKind`
-  (`src/strata/models/common_models.py`) at doc-build time (or at minimum, a
-  script/check that fails CI if a doc's hand-typed kind list drifts from the
-  enum) instead of re-typing them by hand in N places.
+- [x] **Generate "valid kinds" lists from `PlatformKind` instead of hand-copying them.**
+  (from `_lesson.md` C4) **Done 2026-07-29.** Fixed `INTERNAL_KINDS` in
+  `common_models.py` (it was only tracking 2 of the 5 real internal kinds —
+  `version-lock`/`version`/`promotion-record` were being mislabeled as
+  user-authorable by `strata schema list`); added `USER_AUTHORABLE_KINDS` as
+  the single derived source of truth. Fixed the 3 wrong docs:
+  `docs/platform/commands.md` (added `tenant`, removed internal-only
+  `platform_model`), `.squad/templates/platform.instructions.md` (removed
+  nonexistent `datacenter`, added `network`/`dns`/`tenant`), `docs/GLOSSARY.md`
+  (removed nonexistent `workflow`, listed all 5 internal kinds explicitly).
+  Added a "Kind docs coverage" step to `scripts/Check.ps1` that runs
+  `strata schema list --output json` and fails CI if any of the 4
+  exact-match docs drift from `PlatformKind`, or if `docs/GLOSSARY.md`
+  mentions a kind that doesn't exist at all — verified it actually catches
+  drift by re-introducing the `datacenter` bug and confirming the check
+  fails.
 
 - [ ] **Document the three audit/status delivery mechanisms and when to use which.**
   (from `_lesson.md` D1) Strata has three separate, undocumented-as-a-set

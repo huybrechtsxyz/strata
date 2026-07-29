@@ -223,6 +223,71 @@ else {
 
 if (-not $guardOk) { $failed += "ADR 0030 migration guards" }
 Write-Host ""
+
+# ── 8. Kind docs coverage ────────────────────────────────────────────────────
+# Several docs hand-copy the list of valid `kind:` values instead of deriving it
+# from PlatformKind. Verify each hand-typed list still matches reality, using
+# `strata schema list --output json` (backed by PlatformKind/INTERNAL_KINDS in
+# common_models.py) as the single source of truth.
+Write-Host "[*] Kind docs coverage..." -ForegroundColor Blue
+$kindDocsOk = $true
+$schemaListJson = uv run strata schema list --output json 2>$null | ConvertFrom-Json
+$allKinds = $schemaListJson.data.kinds | ForEach-Object { $_.kind }
+$userKinds = $schemaListJson.data.kinds | Where-Object { -not $_.internal } | ForEach-Object { $_.kind } | Sort-Object
+
+# Docs that must list EXACTLY the user-authorable kinds (no more, no less).
+$exactMatchDocs = @(
+    "docs\platform\commands.md",
+    ".squad\templates\platform.instructions.md",
+    ".github\copilot-instructions.md",
+    ".github\instructions\strata.instructions.md"
+)
+foreach ($docPath in $exactMatchDocs) {
+    $fullPath = Join-Path $projectRoot $docPath
+    if (-not (Test-Path $fullPath)) { continue }
+    $content = Get-Content $fullPath -Raw
+    $lineMatch = [regex]::Match($content, 'Valid kinds:\s*\**\s*(.+)')
+    if (-not $lineMatch.Success) {
+        Write-Host "    [!] No 'Valid kinds' line found in $docPath" -ForegroundColor Red
+        $kindDocsOk = $false
+        continue
+    }
+    $tokens = [regex]::Matches($lineMatch.Groups[1].Value, '`([a-z0-9_-]+)`') | ForEach-Object { $_.Groups[1].Value } | Sort-Object
+    $missing = $userKinds | Where-Object { $_ -notin $tokens }
+    $extra = $tokens | Where-Object { $_ -notin $userKinds }
+    if ($missing -or $extra) {
+        Write-Host "    [!] $docPath 'Valid kinds' drifted from PlatformKind:" -ForegroundColor Red
+        if ($missing) { Write-Host "        missing: $($missing -join ', ')" -ForegroundColor Yellow }
+        if ($extra) { Write-Host "        unknown/internal: $($extra -join ', ')" -ForegroundColor Yellow }
+        $kindDocsOk = $false
+    }
+}
+
+# docs/GLOSSARY.md intentionally lists a broader set (including some internal
+# kinds) — only check that every token it mentions is a REAL kind, catching
+# invented ones (e.g. a since-removed `workflow`/`datacenter` typo).
+$glossaryPath = Join-Path $projectRoot "docs\GLOSSARY.md"
+if (Test-Path $glossaryPath) {
+    $glossaryContent = Get-Content $glossaryPath -Raw
+    $glossaryMatch = [regex]::Match($glossaryContent, 'Valid kinds:\s*(.+?)(?:\r?\n\r?\n|$)', 'Singleline')
+    if ($glossaryMatch.Success) {
+        $glossaryTokens = [regex]::Matches($glossaryMatch.Groups[1].Value, '`([a-z0-9_-]+)`') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
+        $unknownTokens = $glossaryTokens | Where-Object { $_ -notin $allKinds }
+        if ($unknownTokens) {
+            Write-Host "    [!] docs\GLOSSARY.md lists kind(s) that don't exist in PlatformKind:" -ForegroundColor Red
+            Write-Host "        $($unknownTokens -join ', ')" -ForegroundColor Yellow
+            $kindDocsOk = $false
+        }
+    }
+}
+
+if ($kindDocsOk) {
+    Write-Host "    [+] All 'Valid kinds' doc lists match PlatformKind" -ForegroundColor Green
+}
+else {
+    $failed += "kind docs coverage"
+}
+Write-Host ""
 # ── Summary ─────────────────────────────────────────────────────────────────
 # Restore the original index strategy
 $env:UV_INDEX_STRATEGY = $prevIndexStrategy
