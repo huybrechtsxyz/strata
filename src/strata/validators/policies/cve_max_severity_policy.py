@@ -33,7 +33,7 @@ Example configuration YAML::
 """
 
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from strata.logger import get_logger
 from strata.models.policy_model import PolicyModel
@@ -154,7 +154,7 @@ class CveMaxSeverityPolicy(BasePolicy):
             return None
 
     @staticmethod
-    def _apply_allowlist(audit_result, work_path):
+    def _apply_allowlist(audit_result: Any, work_path: Optional[Path]) -> Any:
         """Filter findings through .strata/cve-allowed.yaml if it exists."""
         from datetime import date
 

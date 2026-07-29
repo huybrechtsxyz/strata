@@ -393,7 +393,7 @@ class TestComposeDeployerApply:
         assert ok is True
         assert not any("Injecting" in m for m in msgs)
 
-    def test_secrets_injected_into_env_during_deploy(self, tmp_path):
+    def test_secrets_injected_into_env_during_deploy(self, tmp_path: Path) -> None:
         """Secrets from resolved_values must be present in os.environ during the subprocess call."""
         import os
 

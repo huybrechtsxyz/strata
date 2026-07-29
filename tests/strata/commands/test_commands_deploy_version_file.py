@@ -473,13 +473,13 @@ spec:
         (d / f"{ring}.wave.1.lock.yaml").write_text(yaml.dump(wave_lock))
         return {"vf_ring": vf_ring, "vf_wave": vf_wave, "dir": d}
 
-    def test_wave_flag_injects_ring_then_wave(self, tmp_path):
+    def test_wave_flag_injects_ring_then_wave(self, tmp_path: Path) -> None:
         """With --wave 1, ring version file injected first, then wave (wave wins)."""
         paths = self._write_version_and_locks(tmp_path)
 
         cmd = _setup_promotion_cmd(tmp_path, ring="prd", wave=1)
         injected: list = []
-        cmd._inject_version_file = MagicMock(side_effect=lambda p: injected.append(p))
+        cmd._inject_version_file = MagicMock(side_effect=lambda p: injected.append(p))  # type: ignore[method-assign]
         err = cmd._auto_resolve_version_from_promotion()
 
         assert err is None, err
@@ -497,18 +497,18 @@ spec:
         assert "wave" in err.lower()
         assert "wave.2" in err
 
-    def test_no_wave_flag_injects_only_ring_file(self, tmp_path):
+    def test_no_wave_flag_injects_only_ring_file(self, tmp_path: Path) -> None:
         """Without --wave, only the ring version file is injected (no wave lock)."""
         self._write_version_and_locks(tmp_path)
         cmd = _setup_promotion_cmd(tmp_path, ring="prd", wave=None)
         injected: list = []
-        cmd._inject_version_file = MagicMock(side_effect=lambda p: injected.append(p))
+        cmd._inject_version_file = MagicMock(side_effect=lambda p: injected.append(p))  # type: ignore[method-assign]
         err = cmd._auto_resolve_version_from_promotion()
         assert err is None
         assert len(injected) == 1
         assert "v2.0.0" in injected[0]
 
-    def test_wave_lock_with_inline_pins_layers_correctly(self, tmp_path):
+    def test_wave_lock_with_inline_pins_layers_correctly(self, tmp_path: Path) -> None:
         """Old-style wave lock (inline pins) also layers correctly."""
         d = tmp_path / "versions" / "app"
         d.mkdir(parents=True)
@@ -542,7 +542,7 @@ spec:
 
         cmd = _setup_promotion_cmd(tmp_path, ring="prd", wave=1)
         injected: list = []
-        cmd._inject_version_file = MagicMock(side_effect=lambda p: injected.append(p))
+        cmd._inject_version_file = MagicMock(side_effect=lambda p: injected.append(p))  # type: ignore[method-assign]
         err = cmd._auto_resolve_version_from_promotion()
         assert err is None
         assert len(injected) == 2

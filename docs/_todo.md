@@ -394,14 +394,37 @@ Work through `_lesson.md` first; come back and knock these out afterward.
   CVE-scanner skips), full `Check.ps1` green including the new T2 pytest step
   and the Sphinx build, full suite unchanged at 4991 passed / 16 skipped.
 
-- [ ] **Fix the recurring mypy `--check-untyped-defs` blind spot.**
-  (from `_lesson.md` T5) The same file list has shown up in every `Check.ps1`
-  run this session: `test_controllers_lifecycle.py`, `test_services_deployment.py`,
-  `cve_max_severity_policy.py` (a real source file, not a test), `test_deployers_compose.py`,
-  `test_commands_new.py`, `test_commands_deploy_version_file.py`,
-  `test_commands_deploy.py`. Add type annotations to the untyped function
-  bodies mypy is flagging (or enable `--check-untyped-defs` and fix what comes
-  up) — low-cost, has just been recurring unaddressed.
+- [x] **Fix the recurring mypy `--check-untyped-defs` blind spot.**
+  (from `_lesson.md` T5) **Done 2026-07-29.** Tried the todo's second option
+  first — globally enabling `check_untyped_defs = true` in `[tool.mypy]` —
+  but reverted immediately: it surfaced **274 unrelated pre-existing errors
+  across 47 files**, almost entirely test-mock patterns mypy is pedantic
+  about (`Item "None" of "X | None" has no attribute`, `"append" of "list"
+  does not return a value`, mock `.return_value`/`.side_effect` on narrowly-
+  typed callables) — nowhere near "low-cost", and a completely different
+  (much bigger) undertaking than this todo intended. Went with the first,
+  actually-scoped option instead: found the exact 10 `[annotation-unchecked]`
+  note locations across the 7 named files (some files had more than one),
+  identified the *enclosing untyped function* for each, and added proper
+  parameter/return type annotations directly to those 10 test methods (mostly
+  `(self, tmp_path)` → `(self, tmp_path: Path) -> None`) plus one real source
+  method (`CveMaxSeverityPolicy._apply_allowlist`, typed `Any`/`Optional[Path]`
+  → `Any`, consistent with the existing loose `Optional[Any]` typing already
+  used for `PolicyContext.cve_audit_result`).
+  - Annotating 3 of the 10 functions in `test_commands_deploy_version_file.py`
+    surfaced 3 genuine (if cosmetic) `[method-assign]` errors — a bound
+    method (`cmd._inject_version_file`) being reassigned to a `MagicMock`,
+    a pattern mypy correctly flags but that's already an established,
+    accepted convention elsewhere in the suite (`test_integrations_lock_gcs.py`
+    has 10+ instances). Suppressed with the same
+    `# type: ignore[method-assign]` convention rather than reworking the
+    mocking pattern.
+  - `test_commands_new.py` needed a new `from pathlib import Path` import
+    (wasn't previously imported there).
+  Verified: `uv run python -m mypy ./src ./tests` reports **zero errors and
+  zero notes** (down from 10 recurring notes), ruff/mypy clean, the 7
+  affected test files' full suites pass (258 tests), full `Check.ps1` green,
+  full suite unchanged at 4991 passed / 16 skipped.
 
 - [ ] **Add a consistent "not yet implemented" visual marker for draft guides.**
   (from `_lesson.md` X2) `docs/guides/at-scale.md`'s draft status is a single

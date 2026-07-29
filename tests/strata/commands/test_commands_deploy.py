@@ -758,7 +758,7 @@ class TestRunHierarchyLifecyclePhase:
         ):
             assert cmd._run_hierarchy_lifecycle_phase("deploy_stage_before") is True
 
-    def test_all_levels_called_in_order(self, tmp_path):
+    def test_all_levels_called_in_order(self, tmp_path: Path) -> None:
         cmd = self._make_command(tmp_path)
         ns_svc = _make_service_mock("NamespaceService")
         prov_svc = _make_service_mock("ProviderService")
@@ -844,7 +844,7 @@ class TestRunHierarchyLifecyclePhase:
         # workspace level was called once (for the workspace itself)
         assert lc.execute_workspace_phase.call_count == 1
 
-    def test_context_enriched_per_level(self, tmp_path):
+    def test_context_enriched_per_level(self, tmp_path: Path) -> None:
         cmd = self._make_command(tmp_path)
         ns_svc = _make_service_mock("NamespaceService")
         ds, ws_svc = self._make_deployment_service(namespaces={"production": ns_svc})

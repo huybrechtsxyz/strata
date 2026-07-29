@@ -1,5 +1,6 @@
 """Tests for the ``new`` command."""
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -169,7 +170,7 @@ class TestNewCommand:
 class TestNewCommandContextSubstitution:
     """Unit-level tests for context variable substitution in NewCommand."""
 
-    def test_context_substitution(self, tmp_path):
+    def test_context_substitution(self, tmp_path: Path) -> None:
         """Team context from solution.json is merged into the render context."""
         mock_solution = MagicMock()
         mock_solution.spec.context = {"owner": "acme", "version": "2.0.0"}

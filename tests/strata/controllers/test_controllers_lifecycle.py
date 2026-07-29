@@ -215,7 +215,7 @@ class TestLifecycleControllerExecuteScript:
         assert result is False
         assert ctrl.has_errors()
 
-    def test_strata_env_vars_injected(self, tmp_path):
+    def test_strata_env_vars_injected(self, tmp_path: Path) -> None:
         """STRATA_PHASE and standard STRATA_* vars must be present in subprocess env."""
         script_file = tmp_path / "probe.sh"
         script_file.write_text("#!/bin/sh\necho ok\n", encoding="utf-8")
