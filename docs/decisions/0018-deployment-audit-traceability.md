@@ -63,7 +63,20 @@ Chosen:
 
 **Option C — External SIEM integration**, initial support for Azure Sentinel (Log Analytics). Others (Splunk, AWS CloudTrail) deferred to future implementations.
 
+### Which Delivery Mechanism To Use
+
+Strata ends up with three separate ways to get deployment audit/status data *out* of the machine that produced it. They look similar at a glance but answer different questions — this section exists so the split reads as intentional, not confusing.
+
+| Mechanism | What it carries | Who can read it, and from where | Reach for it when… |
+| --- | --- | --- | --- |
+| **Local deploy-log** (`.strata/deploy-log/`, this ADR's Layer 2) | The full record — commit SHA, PR metadata, per-step timings, errors, everything. | Queryable via `strata audit list` / `audit diff` / `deploy history` — **only on the machine (or checked-out repo) that produced the entry**, unless you also push it to a remote (Layer 4 remote persistence). | You need the complete audit trail for a deployment: what changed, why, who approved, how long each step took. This is strata's own operational source of truth. |
+| **SIEM / webhook forwarding** (`forward_to_siem()`, Layer 4) | Whatever fields you configure a sink to forward — write-only broadcast. | Whatever external system you forwarded to (Splunk, Sentinel, a webhook, etc.). **Strata itself never reads this back** — it's outbound only. | You need this data inside an external monitoring/compliance platform (SIEM correlation, alerting, long-term retention outside git). |
+| **Gitops deployment manifest** (`manifest: { type: gitops, push_manifest: true }`, ADR-0021) | Only `spec.status` — a lightweight "did this deployment succeed" signal, not the full audit record. | Pulled and read from **any other machine** via a normal `git pull` on the manifest repo — this is the one mechanism actually designed for cross-machine reads. | You need a quick, scriptable "is this deployment healthy" check from a different machine (see ADR-0058 cross-deployment dependency gating). |
+
+**Known gap:** none of the three gives you the *full* deploy-log detail from a different machine unless you've also pushed the deploy-log itself to a remote (Layer 4 remote persistence, above) — the gitops manifest deliberately only carries `spec.status`, and SIEM forwarding is outbound-only broadcast, not something strata queries back. This is a real but narrow gap: nothing today needs the full cross-machine record, so it's tracked here rather than built speculatively. If a concrete use case shows up, the deploy-log's own Layer 4 remote-persistence path (already implemented) is the natural place to extend, not a fourth mechanism.
+
 ### Architecture: AuditController
+
 
 All audit orchestration flows through an `AuditController` (extends `BaseController`). The controller is the single point of coordination between:
 - Layer 2 (deploy-log JSON writing)
