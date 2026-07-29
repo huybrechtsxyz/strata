@@ -356,13 +356,43 @@ Work through `_lesson.md` first; come back and knock these out afterward.
   full suite reports via the new step: 4991 passed, 16 skipped, 60% overall
   coverage.
 
-- [ ] **Clean up the vestigial `IMPL_MISSING` try/except guards in policy tests.**
-  (from `_lesson.md` T4 — low priority, cosmetic) ~26 files have a
-  `try: import ... IMPL_MISSING = False / except ImportError: IMPL_MISSING =
-  True` + `pytest.mark.skipif(IMPL_MISSING, ...)` pattern left over from when
-  the referenced policies didn't exist yet. All the imports succeed today (54
-  passed, 0 skipped verified via direct pytest run), so the except-branch is
-  dead code. Not urgent — purely a readability cleanup, no functional impact.
+- [x] **Clean up the vestigial `IMPL_MISSING` try/except guards in policy tests.**
+  (from `_lesson.md` T4 — low priority, cosmetic) **Done 2026-07-29.** Confirmed
+  the full scope first: 26 files repo-wide (not just the ~16 `validators/policies/`
+  ones — the pattern also existed in `deployers/`, `utils/`, `builders/`,
+  `commands/`, and `integrations/` test files) had the
+  `try: import ... IMPL_MISSING = False / except ImportError: ... IMPL_MISSING =
+  True` + `pytest.mark.skipif(IMPL_MISSING, ...)` pattern. Ran the full suite
+  with `-rs` (skip-reason reporting) first to verify none of the 16 currently-
+  skipped tests trace back to any of these 26 files before touching anything —
+  all 16 skips are unrelated (CVE-scanner-not-in-PATH and Windows-platform
+  skips) — confirming every one of these 26 guards is 100% dead code today.
+  - 24 files: removed the `try`/`except ImportError` wrapper (dedented the
+    imports to plain top-level `from ... import ...`), deleted the
+    `IMPL_MISSING`/fallback-`None` assignments, and deleted the
+    `pytestmark = pytest.mark.skipif(...)` line.
+  - `test_tenant_zone_policy.py` and `test_policy_engine.py`: same header
+    cleanup, plus removed 4 additional inline `if IMPL_MISSING: return
+    MagicMock()` fallback branches in helper functions, and dedented a whole
+    `if not IMPL_MISSING:`-wrapped block of 3 stub classes in
+    `test_policy_engine.py` (the most complex case — the wrapper existed only
+    because the classes subclass `BasePolicy`/`PolicyEngine`, which needed to
+    exist at class-definition time when this was written).
+  - Also trimmed 3 now-false docstring notes ("may not exist yet... will be
+    collected once the implementation is in place") from `test_policy_model.py`,
+    `test_guide_command.py`, `test_builders_helm.py` — directly misleading
+    once the guard they described is gone.
+  - `ruff check --fix` cleaned up the resulting fallout automatically: import
+    sorting (18 files) and 6 now-genuinely-unused imports (`pytest` in 6
+    files that no longer reference `IMPL_MISSING`/`pytest.mark.skipif`, and
+    `PolicyResult` in 4 policy test files — these had been silently unused
+    all along, just not flagged because the name was also assigned in the
+    dead `except` branch).
+  Verified: ruff/mypy clean on `./tests`, full `./src ./tests` mypy sweep
+  clean, all affected test files pass with **zero unexpected skips** (1357
+  passed / 12 skipped in the affected subset, all 12 the same pre-existing
+  CVE-scanner skips), full `Check.ps1` green including the new T2 pytest step
+  and the Sphinx build, full suite unchanged at 4991 passed / 16 skipped.
 
 - [ ] **Fix the recurring mypy `--check-untyped-defs` blind spot.**
   (from `_lesson.md` T5) The same file list has shown up in every `Check.ps1`

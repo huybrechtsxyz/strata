@@ -1,23 +1,9 @@
-"""Tests for PolicyModel validation.
-
-NOTE: `src/strata/models/policy_model.py` may not exist yet.
-These tests are written from ADR 0006 and will be collected once the
-implementation is in place.
-"""
+"""Tests for PolicyModel validation."""
 
 import pytest
 from pydantic import ValidationError
 
-try:
-    from strata.models.policy_model import PolicyModel
-
-    IMPL_MISSING = False
-except ImportError:
-    PolicyModel = None  # type: ignore[assignment,misc]
-    IMPL_MISSING = True
-
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="PolicyModel not yet implemented")
-
+from strata.models.policy_model import PolicyModel
 
 # ---------------------------------------------------------------------------
 # Helpers

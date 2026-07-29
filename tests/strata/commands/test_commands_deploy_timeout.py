@@ -8,15 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-try:
-    from strata.utils.shutdown_coordinator import ShutdownCoordinator
-
-    IMPL_MISSING = False
-except ImportError:
-    IMPL_MISSING = True
-
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="ShutdownCoordinator not available")
-
+from strata.utils.shutdown_coordinator import ShutdownCoordinator
 
 # ===========================================================================
 # ShutdownCoordinator.update_lock / clear_lock

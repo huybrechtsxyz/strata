@@ -10,24 +10,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-try:
-    from strata.integrations.opa import OPAIntegration, OPAResult
-    from strata.models.integration_model import IntegrationModel
-    from strata.models.policy_model import PolicyModel
-    from strata.validators.policies.base_policy import PolicyContext
-    from strata.validators.policies.opa_policy import OPAPolicy
-
-    IMPL_MISSING = False
-except ImportError:
-    OPAPolicy = None  # type: ignore[assignment,misc]
-    OPAIntegration = None  # type: ignore[assignment,misc]
-    OPAResult = None  # type: ignore[assignment,misc]
-    PolicyContext = None  # type: ignore[assignment,misc]
-    PolicyModel = None  # type: ignore[assignment,misc]
-    IMPL_MISSING = True
-
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="OPAPolicy not yet implemented")
-
+from strata.integrations.opa import OPAIntegration, OPAResult
+from strata.models.integration_model import IntegrationModel
+from strata.models.policy_model import PolicyModel
+from strata.validators.policies.base_policy import PolicyContext
+from strata.validators.policies.opa_policy import OPAPolicy
 
 # ===========================================================================
 # Helpers

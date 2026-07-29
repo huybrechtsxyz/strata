@@ -1,78 +1,61 @@
-"""Tests for PolicyEngine — phase routing, enforcement levels, and filtering.
-
-NOTE: `src/strata/validators/policies/` may not exist yet.
-These tests are written from ADR 0006 and will be collected once the
-implementation is in place.
-"""
+"""Tests for PolicyEngine — phase routing, enforcement levels, and filtering."""
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-try:
-    from strata.models.policy_model import PolicyModel
-    from strata.validators.policies.base_policy import BasePolicy, PolicyContext, PolicyResult
-    from strata.validators.policies.policy_engine import PolicyEngine
-
-    IMPL_MISSING = False
-except ImportError:
-    BasePolicy = None  # type: ignore[assignment,misc]
-    PolicyContext = None  # type: ignore[assignment,misc]
-    PolicyResult = None  # type: ignore[assignment,misc]
-    PolicyEngine = None  # type: ignore[assignment,misc]
-    PolicyModel = None  # type: ignore[assignment,misc]
-    IMPL_MISSING = True
-
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="Policy engine not yet implemented")
-
+from strata.models.policy_model import PolicyModel
+from strata.validators.policies.base_policy import BasePolicy, PolicyContext, PolicyResult
+from strata.validators.policies.policy_engine import PolicyEngine
 
 # ---------------------------------------------------------------------------
 # Stub policies — bypass _create() for engine routing tests
 # ---------------------------------------------------------------------------
 
-if not IMPL_MISSING:
 
-    class _AlwaysPassPolicy(BasePolicy):
-        """Test stub that always returns a passing result."""
+class _AlwaysPassPolicy(BasePolicy):
+    """Test stub that always returns a passing result."""
 
-        @property
-        def name(self) -> str:
-            return self.policy.name
+    @property
+    def name(self) -> str:
+        return self.policy.name
 
-        def evaluate(self, context) -> PolicyResult:
-            return PolicyResult(
-                passed=True,
-                policy_name=self.name,
-                enforcement=self.enforcement,
-                violations=[],
-            )
+    def evaluate(self, context) -> PolicyResult:
+        return PolicyResult(
+            passed=True,
+            policy_name=self.name,
+            enforcement=self.enforcement,
+            violations=[],
+        )
 
-    class _AlwaysFailPolicy(BasePolicy):
-        """Test stub that always returns a failing result with one violation."""
 
-        @property
-        def name(self) -> str:
-            return self.policy.name
+class _AlwaysFailPolicy(BasePolicy):
+    """Test stub that always returns a failing result with one violation."""
 
-        def evaluate(self, context) -> PolicyResult:
-            return PolicyResult(
-                passed=False,
-                policy_name=self.name,
-                enforcement=self.enforcement,
-                violations=["violation: policy check failed"],
-            )
+    @property
+    def name(self) -> str:
+        return self.policy.name
 
-    class _TestableEngine(PolicyEngine):
-        """Engine subclass that accepts pre-built policy instances, bypassing _create().
+    def evaluate(self, context) -> PolicyResult:
+        return PolicyResult(
+            passed=False,
+            policy_name=self.name,
+            enforcement=self.enforcement,
+            violations=["violation: policy check failed"],
+        )
 
-        This lets tests exercise evaluate() and has_denials() without needing to
-        register real policy types in the factory.
-        """
 
-        def __init__(self, policy_instances):
-            self.logger = MagicMock()
-            self._policies = list(policy_instances)
+class _TestableEngine(PolicyEngine):
+    """Engine subclass that accepts pre-built policy instances, bypassing _create().
+
+    This lets tests exercise evaluate() and has_denials() without needing to
+    register real policy types in the factory.
+    """
+
+    def __init__(self, policy_instances):
+        self.logger = MagicMock()
+        self._policies = list(policy_instances)
 
 
 # ---------------------------------------------------------------------------
@@ -87,8 +70,6 @@ def _make_policy_model(
     enforcement="deny",
     enabled=True,
 ) -> "PolicyModel":
-    if IMPL_MISSING:
-        return MagicMock()
     return PolicyModel(
         name=name,
         type=type,
@@ -99,8 +80,6 @@ def _make_policy_model(
 
 
 def _make_context(phase="plan") -> "PolicyContext":
-    if IMPL_MISSING:
-        return MagicMock()
     return PolicyContext(
         phase=phase,
         work_path=Path("/tmp"),

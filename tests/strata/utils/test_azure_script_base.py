@@ -6,16 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-try:
-    from strata.utils.azure_script_base import AzureScript
-
-    IMPL_MISSING = False
-except ImportError:
-    AzureScript = None  # type: ignore[assignment,misc]
-    IMPL_MISSING = True
-
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="AzureScript not available")
-
+from strata.utils.azure_script_base import AzureScript
 
 # ===========================================================================
 # Helpers

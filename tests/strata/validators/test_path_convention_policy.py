@@ -17,30 +17,17 @@ from unittest.mock import MagicMock
 
 import pytest
 
-try:
-    from strata.models.configuration_model import PathConventionModel
-    from strata.models.policy_model import PolicyModel
-    from strata.utils.path_convention import (
-        evaluate_conventions,
-        evaluate_file_rule,
-        is_spec_rule,
-        match_pattern,
-        resolve_spec_rule,
-    )
-    from strata.validators.policies.base_policy import PolicyContext, PolicyResult
-    from strata.validators.policies.path_convention_policy import PathConventionPolicy
-
-    IMPL_MISSING = False
-except ImportError:
-    PathConventionPolicy = None  # type: ignore[assignment,misc]
-    PathConventionModel = None  # type: ignore[assignment,misc]
-    PolicyContext = None  # type: ignore[assignment,misc]
-    PolicyResult = None  # type: ignore[assignment,misc]
-    PolicyModel = None  # type: ignore[assignment,misc]
-    IMPL_MISSING = True
-
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="PathConventionPolicy not yet implemented")
-
+from strata.models.configuration_model import PathConventionModel
+from strata.models.policy_model import PolicyModel
+from strata.utils.path_convention import (
+    evaluate_conventions,
+    evaluate_file_rule,
+    is_spec_rule,
+    match_pattern,
+    resolve_spec_rule,
+)
+from strata.validators.policies.base_policy import PolicyContext
+from strata.validators.policies.path_convention_policy import PathConventionPolicy
 
 # ===========================================================================
 # Fixtures & helpers

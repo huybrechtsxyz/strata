@@ -8,32 +8,16 @@ from pathlib import Path
 from typing import Optional
 from unittest.mock import patch
 
-import pytest
-
-try:
-    from strata.integrations.checkov import (
-        CheckovFinding,
-        CheckovIntegration,
-        CheckovScanResult,
-        _severity_index,
-    )
-    from strata.models.integration_model import IntegrationModel
-    from strata.models.policy_model import PolicyModel
-    from strata.validators.policies.base_policy import PolicyContext
-    from strata.validators.policies.checkov_policy import CheckovPolicy
-
-    IMPL_MISSING = False
-except ImportError:
-    CheckovPolicy = None  # type: ignore[assignment,misc]
-    CheckovIntegration = None  # type: ignore[assignment,misc]
-    CheckovScanResult = None  # type: ignore[assignment,misc]
-    CheckovFinding = None  # type: ignore[assignment,misc]
-    PolicyContext = None  # type: ignore[assignment,misc]
-    PolicyModel = None  # type: ignore[assignment,misc]
-    IMPL_MISSING = True
-
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="CheckovPolicy not yet implemented")
-
+from strata.integrations.checkov import (
+    CheckovFinding,
+    CheckovIntegration,
+    CheckovScanResult,
+    _severity_index,
+)
+from strata.models.integration_model import IntegrationModel
+from strata.models.policy_model import PolicyModel
+from strata.validators.policies.base_policy import PolicyContext
+from strata.validators.policies.checkov_policy import CheckovPolicy
 
 # ===========================================================================
 # Fixtures & helpers

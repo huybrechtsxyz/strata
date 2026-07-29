@@ -5,19 +5,8 @@ from pathlib import Path
 from typing import Optional
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-try:
-    from strata.deployers.bicep_deployer import _SCOPE_CMD, BicepDeployer
-    from strata.models.common_models import ProvisionerType
-
-    IMPL_MISSING = False
-except ImportError:
-    BicepDeployer = None  # type: ignore[assignment,misc]
-    IMPL_MISSING = True
-
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="BicepDeployer not available")
-
+from strata.deployers.bicep_deployer import _SCOPE_CMD, BicepDeployer
+from strata.models.common_models import ProvisionerType
 
 # ===========================================================================
 # Helpers
