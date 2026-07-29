@@ -64,15 +64,54 @@ Work through `_lesson.md` first; come back and knock these out afterward.
   `test_services_template_resolver.py` + `test_commands_new.py`, full
   `Check.ps1` green.
 
-- [ ] **Migrate `generate`/`mask` in `cli_secret.py` onto `BaseCommand` +
-  `INIT_REQUIRED = False`.** (from `_lesson.md` D7) They're currently bare
-  Click functions entirely outside `BaseCommand`, hand-rolling their own JSON
-  output shape instead of using the shared envelope — unlike `validate`,
-  `status`, `schema list/get`, and `guide`, which correctly use
-  `BaseCommand` + `INIT_REQUIRED = False` for the same "doesn't need a
-  workspace" case. No functional gap today (both are stateless utilities,
-  nothing to audit), purely a consistency fix. Worth spot-checking other
-  `cli_*.py` files for the same split while in there.
+- [x] **Migrate `generate`/`mask` in `cli_secret.py` onto `BaseCommand` +
+  `INIT_REQUIRED = False`.** (from `_lesson.md` D7) **Done 2026-07-29 — note:
+  the `INIT_REQUIRED` flag itself no longer exists** (eliminated repo-wide by
+  ADR-0030 Phase 2 — confirmed via `Check.ps1`'s own "ADR 0030 migration
+  guards" step, which fails CI if `INIT_REQUIRED` ever reappears). The current,
+  correct pattern for "doesn't need a workspace" commands is overriding
+  `_initialize()` to delegate to `BaseCommand._initialize_session()` instead
+  of `super()._initialize()` — exactly what `ValidateCommand`, `GuideCommand`,
+  and `NewCommand` already do. Migrated `generate`/`mask` accordingly:
+  - New `GenerateSecretCommand`/`MaskSecretCommand` classes in
+    `generate_secret_command.py`/`mask_secret_command.py`, `OPERATION =
+    "secret_generate"`/`"secret_mask"`, `SHOW_CHROME = False` (no header/footer
+    banner — matches the `base_promote_command.py`/`base_versions_command.py`
+    precedent for utility-style commands).
+  - **Deliberately preserved two existing, tested behavior contracts** rather
+    than blindly adopting 100% of `BaseCommand`'s defaults: (1) invalid
+    `--format`/`--length`/`--char` combos still raise `click.UsageError` →
+    exit code 2 (not the generic exit-1 `handle_command_exit` path) — verified
+    3 existing tests assert `exit_code == 2` specifically; (2) `--output text`
+    and console (default) modes still print the **bare value only** (no
+    envelope, no chrome) so output stays pipeable — overrode
+    `_is_structured_output()` to return `True` only for `--output json`,
+    since the original code's own comment said "text or console — just the
+    bare value so it can be piped directly" and an existing test
+    (`test_generate_output_text_explicit`) already locks this in.
+  - **What did change (the actual point of the fix):** `--output json` now
+    uses the shared envelope (`{"success", "command", "data": {...}, ...}`)
+    instead of the old flat hand-rolled shape (`{"secret": ..., "format":
+    ...}`) — updated 7 existing JSON-output tests across both
+    `test_commands_secret.py` and `test_cli_secret.py` (duplicate test files,
+    per T1) to unwrap `envelope["data"]`.
+  - Verified: ruff/mypy clean, 118 tests pass across both secret test files,
+    full `Check.ps1` green.
+  - **Spot-check finding (not fixed, see new todo below):** `cli_version.py`
+    imports `BaseCommand` but `version_command` is still a bare Click
+    function with hand-rolled JSON — same pattern, different file. Other
+    `cli_*.py` files are all consistently `BaseCommand`-based already;
+    `cli_completion.py`/`cli_help.py`/`cli_mcp.py` are legitimately exempt
+    (Click's own shell-completion/help machinery, not business commands).
+
+- [ ] **Migrate `strata version` (`cli_version.py`) onto `BaseCommand`.**
+  (spot-check finding from the D7 fix above) `version_command` in
+  `cli_version.py` is a bare Click function hand-rolling its own JSON output
+  for `--check-updates`, the same pattern just fixed for `secret
+  generate`/`mask`. Same considerations apply: check for any existing
+  exit-code contracts before changing error handling, and confirm whether
+  the default/`--output text` bare-version-string behavior needs preserving
+  (likely does, for scripting: `VERSION=$(strata version)`).
 
 - [ ] **Fix stale `deploy status` doc pointers (docs-only, no code needed).**
   (from `_lesson.md` I7 — already tracked as ADR-0060 Phase 1, listed here too

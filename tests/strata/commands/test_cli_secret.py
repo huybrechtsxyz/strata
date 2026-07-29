@@ -182,7 +182,10 @@ class TestGenerateSecretCommandJsonOutput:
         runner = CliRunner()
         result = runner.invoke(secret_group, ["generate", "--format", "urlsafe", "--length", "16", "--output", "json"])
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        envelope = json.loads(result.output)
+        assert envelope["success"] is True
+        assert envelope["command"] == "secret_generate"
+        data = envelope["data"]
         assert "secret" in data
         assert "format" in data
         assert data["format"] == "urlsafe"
@@ -195,7 +198,7 @@ class TestGenerateSecretCommandJsonOutput:
         runner = CliRunner()
         result = runner.invoke(secret_group, ["generate", "--format", "hex", "--length", "8", "--output", "json"])
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.output)["data"]
         assert data["format"] == "hex"
         assert data["length"] == 8
 
@@ -204,7 +207,7 @@ class TestGenerateSecretCommandJsonOutput:
         runner = CliRunner()
         result = runner.invoke(secret_group, ["generate", "--format", "password", "--length", "16", "--output", "json"])
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.output)["data"]
         assert data["format"] == "password"
         assert data["length"] == 16
 
@@ -213,7 +216,7 @@ class TestGenerateSecretCommandJsonOutput:
         runner = CliRunner()
         result = runner.invoke(secret_group, ["generate", "--format", "uuid4", "--output", "json"])
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.output)["data"]
         assert "secret" in data
         assert data["format"] == "uuid4"
         # UUID formats should not have length in JSON
@@ -224,7 +227,7 @@ class TestGenerateSecretCommandJsonOutput:
         runner = CliRunner()
         result = runner.invoke(secret_group, ["generate", "--format", "uuid7", "--output", "json"])
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.output)["data"]
         assert "secret" in data
         assert data["format"] == "uuid7"
         # UUID formats should not have length in JSON
@@ -401,7 +404,10 @@ class TestMaskSecretCommandJsonOutput:
         runner = CliRunner()
         result = runner.invoke(secret_group, ["mask", "mysecret", "--output", "json"])
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        envelope = json.loads(result.output)
+        assert envelope["success"] is True
+        assert envelope["command"] == "secret_mask"
+        data = envelope["data"]
         assert "masked" in data
         assert "show" in data
         assert "char" in data
@@ -416,7 +422,7 @@ class TestMaskSecretCommandJsonOutput:
             secret_group, ["mask", "databasepassword", "--output", "json", "--show", "6", "--char", "#"]
         )
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.output)["data"]
         assert data["show"] == 6
         assert data["char"] == "#"
         # 16 chars - 6 shown = 10 masked
