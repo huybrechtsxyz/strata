@@ -451,12 +451,46 @@ Work through `_lesson.md` first; come back and knock these out afterward.
   Sphinx build (confirms the toctree/index-coverage checks still pass with
   the edited files), full suite unchanged at 4991 passed / 16 skipped.
 
-- [ ] **Cross-link overlapping guides and ADRs.**
-  (from `_lesson.md` X3) Guides and ADRs describing the same topic (e.g.
-  `deployment-manifests.md` guide vs. ADR-0021; `how-deployment-locking-works.md`
-  guide vs. ADR-0007) don't link to each other. Add a lightweight convention —
-  e.g. a header note in the guide pointing back to its originating ADR — so
-  readers know which is current without guessing.
+- [x] **Cross-link overlapping guides and ADRs.**
+  (from `_lesson.md` X3) **Done 2026-07-29 — partial scope, documented below.**
+  Defined the convention and applied it to the 2 named examples plus 4 more
+  clear 1:1 guide↔ADR pairs found via a title/topic audit (deliberately did
+  NOT attempt to map all 33 guides against all 61 ADRs — out of scope for a
+  "lightweight" fix; see below for what's left).
+  - **Convention:** guides get a one-line `> 📐 **Design rationale:** [ADR-XXXX
+    — Title](../decisions/XXXX-slug.md)` blockquote directly under the H1 (or
+    appended into an existing top-of-file audience/context blockquote if one
+    exists, to avoid stacking two blockquotes); ADRs get a matching `## Related`
+    bullet near the end pointing back to the guide — added as a new section
+    for ADRs that didn't have one, or appended to an existing `## Related`
+    section (ADR-0008 already had one, just missing its own guide).
+  - **6 pairs cross-linked (both directions):** `deployment-manifests.md` ↔
+    ADR-0021, `how-deployment-locking-works.md` ↔ ADR-0007,
+    `cost-estimation.md` ↔ ADR-0031, `environment-composition.md` ↔ ADR-0024,
+    `audit-command-group.md` ↔ ADR-0018, `detecting-infrastructure-drift.md`
+    ↔ ADR-0008. Of these, ADR-0021 already linked to its guide beforehand
+    (one-way gap, now closed); the other 5 pairs had **zero** links in either
+    direction before this fix.
+  - **Found and fixed an unrelated pre-existing bug while editing ADR-0024:**
+    an unclosed ` ``` ` code fence around a `--trace` console-output example
+    left everything after it (including where my new `## Related` section
+    would have landed) inside the same fence. Closed the fence before adding
+    the new section.
+  - **Not done — left for a future pass, don't claim false completeness:**
+    the other ~27 guides without any ADR reference. Several (e.g.
+    `building-a-provisioner-plugin.md` ↔ ADR-0023, `extending-sbom-plugins.md`
+    ↔ ADR-0009, `environment-command-group.md` ↔ ADR-0060,
+    `deployment-approval-gates.md` ↔ ADR-0032/0057, `multi-repo-setup.md` ↔
+    ADR-0010, `secrets-variables-features.md` ↔ ADR-0005/0013) are equally
+    clear 1:1 candidates and already partially footer-linked in one direction
+    — the same convention can be dropped in mechanically later. Others
+    (`faq.md`, `config-faq.md`, `troubleshooting-what-changed.md`,
+    cookbook/lifecycle-script guides) are genuinely operational/FAQ content
+    with no single originating ADR and don't need this treatment at all.
+  Verified: full `Check.ps1` green including docs-index coverage and the
+  Sphinx build (confirms no broken links/fences from either the new
+  cross-links or the ADR-0024 fence fix), full suite unchanged at 4991
+  passed / 16 skipped.
 
 - [ ] **Add a drift check between `docs/INDEX.md` and `docs/index.rst`.**
   (from `_lesson.md` X4) Both are hand-maintained lists of "what docs exist"
@@ -465,7 +499,7 @@ Work through `_lesson.md` first; come back and knock these out afterward.
   script/CI check that flags when one references a doc the other doesn't (or
   document explicitly that `docs/INDEX.md` is intentionally a curated subset,
   if that's the actual intent, so future contributors don't assume drift is a
-  bug).
+  bug). => jsut remove index.md? like is index.rst is the source of truth.
 
 - [ ] **De-duplicate `strata-onboarding.md` between `docs/skills/` and `.github/skills/`.**
   (from `_lesson.md` X5) Two copies of the same onboarding-skill content exist

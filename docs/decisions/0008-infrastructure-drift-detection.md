@@ -623,6 +623,8 @@ Full `terraform plan` catches both directions and is the established mechanism.
 
 ## Related
 
+- [Detecting Infrastructure Drift Guide](../guides/detecting-infrastructure-drift.md) —
+  user-facing walkthrough of running and interpreting `strata deploy drift`
 - [ADR 0007 — Deployment state locking](0007-deployment-state-locking.md) — drift checks
   respect the locking mechanism (`strategy: wrap` acquires a read lock; `delegate`
   skips)

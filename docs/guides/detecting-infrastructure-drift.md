@@ -2,6 +2,8 @@
 
 > **Audience:** Operators who want to know if live infrastructure has diverged from
 > what the Terraform code declares — before running a full deploy.
+>
+> 📐 **Design rationale:** [ADR-0008 — Infrastructure drift detection](../decisions/0008-infrastructure-drift-detection.md)
 
 ---
 

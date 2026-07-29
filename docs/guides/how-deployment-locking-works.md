@@ -2,6 +2,8 @@
 
 > A plain-language walkthrough of strata's deployment state locking — what it protects,
 > how it behaves across different backends, and how to manage stuck locks.
+>
+> 📐 **Design rationale:** [ADR-0007 — Deployment state locking](../decisions/0007-deployment-state-locking.md)
 
 ---
 

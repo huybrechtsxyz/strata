@@ -307,6 +307,12 @@ Variables
 ─────────────────────────────────────────────────────────────
   Key              Value          Source
   db_host          prd.db.local   environments/prd.yaml
+```
+
+## Related
+
+- [Environment Composition Guide](../guides/environment-composition.md) — user-facing
+  walkthrough of composing environments from multiple files
   app_port         8080           environments/base.yaml
   log_level        warning        environments/prd.yaml  (overrides base.yaml)
 

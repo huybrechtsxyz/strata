@@ -1,5 +1,7 @@
 # Environment Composition
 
+> 📐 **Design rationale:** [ADR-0024 — Environment composition: complete flat-merge and provenance tracking](../decisions/0024-environment-composition-flat-merge-fix.md)
+
 Compose environments from multiple files to separate shared baseline settings from
 environment-specific overrides — without repeating yourself.
 

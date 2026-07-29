@@ -1652,3 +1652,8 @@ Phase 5: Deploy (actual infrastructure)
 - [ ] Cost trending over time
 - [ ] VS Code extension integration
 - [ ] AI scenario generation (VS Code chat)
+
+## Related
+
+- [Cost Estimation and Visibility Guide](../guides/cost-estimation.md) — user-facing
+  walkthrough of running `strata cost` commands

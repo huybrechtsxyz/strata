@@ -2,6 +2,8 @@
 
 > **Audience:** DevOps engineers, security teams, and compliance officers who need to track
 > deployment changes, generate compliance reports, and troubleshoot what changed when.
+>
+> 📐 **Design rationale:** [ADR-0018 — Deployment audit and traceability for compliance](../decisions/0018-deployment-audit-traceability.md)
 
 The `strata audit` command group provides a complete audit trail of all deployments, changes,
 and infrastructure updates.

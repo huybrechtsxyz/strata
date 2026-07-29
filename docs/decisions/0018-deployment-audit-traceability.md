@@ -2687,4 +2687,9 @@ spec:
 
 **Test coverage:** 183 tests covering models, integrations, controllers, and CLI commands.
 
+## Related
+
+- [Audit Command Group Guide](../guides/audit-command-group.md) — user-facing walkthrough
+  of `strata audit` subcommands and compliance workflows
+
 

@@ -1,5 +1,7 @@
 # Deployment Manifests Guide
 
+> 📐 **Design rationale:** [ADR-0021 — Deployment manifests as first-class build artifacts](../decisions/0021-deployment-manifests-as-first-class-build-artifacts.md)
+
 Learn how to enable, interpret, and use deployment manifests for compliance, auditing, and operational visibility.
 
 ---
