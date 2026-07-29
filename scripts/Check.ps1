@@ -105,9 +105,9 @@ uv run python -m strata --help | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Host "    [!] strata --help exited $LASTEXITCODE" -ForegroundColor Red; $smokeOk = $false }
 else { Write-Host "    [+] strata --help" -ForegroundColor Green }
 
-uv run python -m strata version | Out-Null
-if ($LASTEXITCODE -ne 0) { Write-Host "    [!] strata version exited $LASTEXITCODE" -ForegroundColor Red; $smokeOk = $false }
-else { Write-Host "    [+] strata version" -ForegroundColor Green }
+uv run python -m strata --version | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Host "    [!] strata --version exited $LASTEXITCODE" -ForegroundColor Red; $smokeOk = $false }
+else { Write-Host "    [+] strata --version" -ForegroundColor Green }
 
 uv run python -m strata tools status | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Host "    [!] strata tools status exited $LASTEXITCODE" -ForegroundColor Red; $smokeOk = $false }

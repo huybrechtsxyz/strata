@@ -104,14 +104,41 @@ Work through `_lesson.md` first; come back and knock these out afterward.
     `cli_completion.py`/`cli_help.py`/`cli_mcp.py` are legitimately exempt
     (Click's own shell-completion/help machinery, not business commands).
 
-- [ ] **Migrate `strata version` (`cli_version.py`) onto `BaseCommand`.**
-  (spot-check finding from the D7 fix above) `version_command` in
-  `cli_version.py` is a bare Click function hand-rolling its own JSON output
-  for `--check-updates`, the same pattern just fixed for `secret
-  generate`/`mask`. Same considerations apply: check for any existing
-  exit-code contracts before changing error handling, and confirm whether
-  the default/`--output text` bare-version-string behavior needs preserving
-  (likely does, for scripting: `VERSION=$(strata version)`).
+- [x] **Migrate `strata version` (`cli_version.py`) onto `BaseCommand`.**
+  (spot-check finding from the D7 fix above) **Done 2026-07-29 — resolved
+  differently than proposed: removed the `version` subcommand entirely**
+  rather than migrating it onto `BaseCommand`. Design discussion first
+  established, empirically (wrote and ran throwaway Click scripts to verify
+  rather than guessing), that combining `--output` with an eager `--version`
+  flag is fragile/order-dependent in Click (`--output json --version` sees
+  the value, `-v --output json` doesn't — same flags, different order, only
+  one works) — and no mainstream CLI (git, docker, npm, kubectl) supports
+  `--output` alongside a bare `--version` flag anyway, so there was nothing
+  worth preserving there. Also, `strata version` (singular) vs. `strata
+  versions` (plural, an unrelated version-lock/promotion feature) was a real,
+  confusing naming collision.
+  - Removed `main.add_command(version_command, name="version")`, its import,
+    and its `_HELP_SECTIONS` listing from `cli.py`; deleted
+    `src/strata/commands/cli_version.py` and its dedicated test file.
+  - `-v`/`--version` remains exactly as before (Click's built-in
+    `version_option`, already wired) — simple, standard, matches convention.
+  - `--check-updates` (separate top-level eager flag, already existed)
+    remains the way to check for updates — unaffected by this change.
+  - `strata version` now correctly errors with "No such command 'version'.
+    Did you mean 'versions'?" — no more ambiguity.
+  - Added `TestVersionFlag`/`TestCheckUpdatesFlag` test classes to
+    `test_cli.py` (better coverage than the deleted file had — now tests
+    the actual top-level flags, including the eager-short-circuit-before-
+    invalid-subcommand case) and fixed `test_all_groups_registered` to
+    assert `version` is *not* in the registered commands.
+  - Updated the 5 live references that invoked `strata version` as a
+    command: `scripts/Check.ps1` (smoke test), `scripts/Build.ps1`,
+    `.github/actions/setup-strata/action.yml`, `docs/platform/commands.md`,
+    `docs/platform/workflow.md`. Left 2 historical ADR mentions
+    (0020, 0030) untouched — same "historical design record, lower
+    urgency" precedent established for I7.
+  Verified: full `Check.ps1` green (including Sphinx build), 73 tests pass
+  across `test_cli.py` + both `versions` test files.
 
 - [x] **Fix stale `deploy status` doc pointers (docs-only, no code needed).**
   (from `_lesson.md` I7 — already tracked as ADR-0060 Phase 1, listed here too

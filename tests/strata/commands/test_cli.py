@@ -118,7 +118,6 @@ class TestMainGroup:
             "env",
             "secret",
             "values",
-            "version",
             "help",
         }
         assert expected.issubset(registered)
@@ -126,6 +125,10 @@ class TestMainGroup:
         assert "init" not in registered
         assert "clean" not in registered
         assert "status" not in registered
+        # version is no longer a subcommand — only -v/--version (Click's
+        # version_option) prints the CLI version, to avoid the confusing
+        # `version` (CLI version) vs `versions` (version-lock feature) split
+        assert "version" not in registered
 
     def test_sln_subcommands_registered(self):
         from strata.commands.cli_sln import sln_group
@@ -156,3 +159,60 @@ class TestDefaultMapIntegration:
         with patch("strata.commands.config.set_config_command.SetConfigCommand.execute", return_value=True):
             result = runner.invoke(main, ["config", "list", "--work-path", str(tmp_path)])
         assert result.exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# -v / --version (Click's built-in version_option) — no `strata version`
+# subcommand exists; this flag is the only way to print the CLI version.
+# ---------------------------------------------------------------------------
+
+
+class TestVersionFlag:
+    def test_version_flag_long(self):
+        runner = CliRunner()
+        result = runner.invoke(main, ["--version"])
+        assert result.exit_code == 0
+        assert "strata" in result.output.lower()
+
+    def test_version_flag_short(self):
+        runner = CliRunner()
+        result = runner.invoke(main, ["-v"])
+        assert result.exit_code == 0
+        assert "strata" in result.output.lower()
+
+    def test_version_flag_short_circuits_before_subcommand_validation(self):
+        """--version must print and exit even if followed by an invalid subcommand —
+        this is what makes it eager rather than a plain boolean option."""
+        runner = CliRunner()
+        result = runner.invoke(main, ["--version", "not-a-real-subcommand"])
+        assert result.exit_code == 0
+        assert "strata" in result.output.lower()
+
+
+# ---------------------------------------------------------------------------
+# --check-updates (top-level eager flag, independent of --version)
+# ---------------------------------------------------------------------------
+
+
+class TestCheckUpdatesFlag:
+    def test_up_to_date(self):
+        runner = CliRunner()
+        with patch("strata.utils.version.check_for_updates", return_value=("1.2.3", False)):
+            result = runner.invoke(main, ["--check-updates"])
+        assert result.exit_code == 0
+        assert "up to date" in result.output
+
+    def test_update_available(self):
+        runner = CliRunner()
+        with patch("strata.utils.version.check_for_updates", return_value=("9.9.9", True)):
+            result = runner.invoke(main, ["--check-updates"])
+        assert result.exit_code == 0
+        assert "9.9.9" in result.output
+        assert "available" in result.output
+
+    def test_network_failure_falls_back_gracefully(self):
+        runner = CliRunner()
+        with patch("strata.utils.version.check_for_updates", return_value=(None, False)):
+            result = runner.invoke(main, ["--check-updates"])
+        assert result.exit_code == 0
+        assert "could not check" in result.output.lower()

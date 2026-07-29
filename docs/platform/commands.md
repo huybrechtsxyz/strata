@@ -2247,13 +2247,19 @@ strata values resolve -f xyz-deploy-prd.yaml --probe
 
 ---
 
-## `version`
+## `--version` / `-v`
 
-Show the current CLI version.
+Show the current CLI version. This is a top-level flag on `strata` itself (not a subcommand — there is no `strata version` command, to avoid confusion with the unrelated `strata versions` version-lock/promotion feature).
 
 ```bash
-strata version
-strata version --output json
+strata --version
+strata -v
+```
+
+For update checks, use the separate top-level `--check-updates` flag:
+
+```bash
+strata --check-updates
 ```
 
 ---

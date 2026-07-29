@@ -75,7 +75,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "[+] ==========================================" -ForegroundColor Cyan
-Write-Host "[+] strata installed: $(strata version)" -ForegroundColor Green
+Write-Host "[+] strata installed: $(strata --version)" -ForegroundColor Green
 Write-Host "[+] ==========================================" -ForegroundColor Cyan
 
 # ── VS Code extension ──────────────────────────────────────────────────────

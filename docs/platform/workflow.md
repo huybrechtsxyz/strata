@@ -779,7 +779,7 @@ strata log list --last
 | `strata sln status`                             | Show workspace health and integration availability                               |
 | `strata sln update`                             | Refresh package-owned files (schemas, templates, devcontainer) after upgrade     |
 | `strata sln clean [--dry-run]`                  | Remove logs and temp artifacts                                                   |
-| `strata version`                                | Print CLI version                                                                |
+| `strata --version` / `-v`                       | Print CLI version                                                                |
 | `strata help [--topic NAME]`                    | Show workflow guidance topics                                                    |
 
 ### Configuration

@@ -52,7 +52,6 @@ from strata.commands.cli_tools import tools_group
 from strata.commands.cli_validate import validate_command
 from strata.commands.cli_values import values_group
 from strata.commands.cli_vars import vars_group
-from strata.commands.cli_version import version_command
 from strata.commands.cli_versions import versions_group
 from strata.commands.cli_workitem import workitem_group
 from strata.controllers.configuration_controller import ConfigurationController
@@ -133,7 +132,7 @@ _HELP_SECTIONS: list[tuple[str, list[str]]] = [
     ("Configuration", ["config", "ref", "repo", "vars", "values"]),
     ("Build & Deploy", ["build", "deploy", "workitem", "cost", "env", "service", "versions"]),
     ("Inspection & Validation", ["guide", "validate", "schema", "policy", "tools"]),
-    ("Utility", ["secret", "version", "help", "log", "completion", "mcp"]),
+    ("Utility", ["secret", "help", "log", "completion", "mcp"]),
 ]
 
 
@@ -283,7 +282,6 @@ def main(ctx: click.Context, no_color: bool = False) -> None:
 # Register command groups so they're available when module is imported
 #
 
-main.add_command(version_command, name="version")
 main.add_command(completion_command, name="completion")
 main.add_command(help_command, name="help")
 main.add_command(sln_group, name="sln")
