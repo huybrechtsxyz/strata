@@ -176,10 +176,9 @@ health checks — no extra flags needed.
 
 ```bash
 strata deploy show     --file deploy/deploy-prd.yaml   # inspect resolved configuration
-strata env output      --file deploy/deploy-prd.yaml   # live infrastructure outputs
 strata deploy history  --file deploy/deploy-prd.yaml   # deployment history
 strata deploy health   --file deploy/deploy-prd.yaml   # run health checks
-strata deploy output   --file deploy/deploy-prd.yaml   # print infrastructure outputs (cached)
+strata deploy output   --file deploy/deploy-prd.yaml   # print infrastructure outputs (cached, or --refresh for live)
 strata deploy destroy  --file deploy/deploy-prd.yaml   # tear down (with confirmation)
 strata deploy lock     --file deploy/deploy-prd.yaml   # acquire deployment lock
 ```

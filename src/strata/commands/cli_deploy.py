@@ -24,6 +24,7 @@ from strata.commands.deploy.output_deploy_command import OutputDeployCommand
 from strata.commands.deploy.plan_deploy_command import PlanDeployCommand
 from strata.commands.deploy.run_deploy_command import RunDeployCommand
 from strata.commands.deploy.show_deploy_command import ShowDeployCommand
+from strata.commands.deploy.status_deploy_command import StatusDeployCommand
 
 
 @click.group(name="deploy", help="Deploy platform using provisioners.")
@@ -287,12 +288,19 @@ def deploy_destroy(
 )
 @click_file
 @click_work_path
+@click.option(
+    "--stage",
+    default=None,
+    metavar="NAME",
+    help="Filter secrets visibility to a specific stage's allowlist.",
+)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
 def deploy_show(
     file: Optional[str] = None,
     work_path: Optional[str] = None,
+    stage: Optional[str] = None,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -301,6 +309,7 @@ def deploy_show(
     command = ShowDeployCommand(
         file=file,
         work_path=work_path,
+        stage=stage,
         output=output,
         verbose=verbose,
         quiet=quiet,
@@ -461,6 +470,47 @@ def deploy_health(
         work_path=work_path,
         stage=stage,
         ai=ai,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@deploy.command(name="status", help="Show the live infrastructure status for a single deployment.")
+@click_file
+@click_work_path
+@click.option(
+    "--stage",
+    default=None,
+    metavar="NAME",
+    help="Query only a single stage (default: all).",
+)
+@click.option(
+    "--offline",
+    is_flag=True,
+    default=False,
+    help="Use cached data only — do not contact remote backends.",
+)
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def deploy_status(
+    file: Optional[str] = None,
+    work_path: Optional[str] = None,
+    stage: Optional[str] = None,
+    offline: bool = False,
+    output: Optional[str] = None,
+    verbose: Optional[bool] = None,
+    quiet: Optional[bool] = None,
+):
+    """Show infrastructure status: per-stage resources, outputs, serial, and cache freshness."""
+    command = StatusDeployCommand(
+        file=file,
+        work_path=work_path,
+        stage=stage,
+        offline=offline,
         output=output,
         verbose=verbose,
         quiet=quiet,
@@ -653,10 +703,29 @@ def deploy_drift_history(
     help="Limit output to a specific deployment stage.",
 )
 @click.option(
+    "--provisioner",
+    default=None,
+    metavar="NAME",
+    help="Limit to stages that use a specific provisioner (default: all).",
+)
+@click.option(
     "--key",
     default=None,
     metavar="NAME",
     help="Show only a single output key (useful for scripting).",
+)
+@click.option(
+    "--raw",
+    is_flag=True,
+    default=False,
+    help="Print bare value with no formatting — requires --key.",
+)
+@click.option(
+    "--json",
+    "json_output",
+    is_flag=True,
+    default=False,
+    help="Emit outputs as JSON — bypasses the strata envelope.",
 )
 @click.option(
     "--refresh",
@@ -683,7 +752,10 @@ def deploy_output(
     file: Optional[str] = None,
     work_path: Optional[str] = None,
     stage: Optional[str] = None,
+    provisioner: Optional[str] = None,
     key: Optional[str] = None,
+    raw: bool = False,
+    json_output: bool = False,
     refresh: bool = False,
     version: Optional[str] = None,
     all_versions: bool = False,
@@ -696,7 +768,10 @@ def deploy_output(
         file=file,
         work_path=work_path,
         stage=stage,
+        provisioner=provisioner,
         key=key,
+        raw=raw,
+        json_output=json_output,
         refresh=refresh,
         version=version,
         all_versions=all_versions,

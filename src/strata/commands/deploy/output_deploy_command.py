@@ -41,8 +41,21 @@ class OutputDeployCommand(BaseDeployCommand):
     ``--stage NAME``
         Limit to a single deployment stage.
 
+    ``--provisioner NAME``
+        Limit to stages that use a specific provisioner (default: all).
+
     ``--key NAME``
         Print a single output key (useful for scripting).
+
+    ``--raw``
+        Print bare value with no formatting — requires ``--key``.
+        Suppresses the header/footer chrome; intended for shell scripting::
+
+            IP=$(strata deploy output -f deploy.yaml --key hearth_ip --raw)
+
+    ``--json``
+        Emit outputs as JSON — bypasses the strata envelope. Equivalent to
+        running ``tofu output -json`` directly.
     """
 
     OPERATION = "deploy_output"
@@ -53,6 +66,9 @@ class OutputDeployCommand(BaseDeployCommand):
         work_path: Optional[str] = None,
         stage: Optional[str] = None,
         key: Optional[str] = None,
+        provisioner: Optional[str] = None,
+        raw: bool = False,
+        json_output: bool = False,
         refresh: bool = False,
         version: Optional[str] = None,
         all_versions: bool = False,
@@ -69,13 +85,26 @@ class OutputDeployCommand(BaseDeployCommand):
         )
         self._stage = stage
         self._key = key
+        self._provisioner = provisioner
+        self._raw = raw
+        self._json_output = json_output
         self._refresh = refresh
         self._version = version
         self._all_versions = all_versions
+        # Suppress header/footer chrome in raw/json passthrough modes so only
+        # the bare value or JSON object is printed (used for shell scripting).
+        self.SHOW_CHROME = not (raw or json_output)
 
     # -------------------------------------------------------------------------
     # Entry point
     # -------------------------------------------------------------------------
+
+    def _before_execute(self) -> bool:
+        # In raw/json passthrough modes, prevent the strata JSON envelope from
+        # wrapping the native terraform output -- force console format instead.
+        if not self.SHOW_CHROME:
+            self._output_format = "console"
+        return super()._before_execute()
 
     # -------------------------------------------------------------------------
     # Core logic
@@ -100,6 +129,16 @@ class OutputDeployCommand(BaseDeployCommand):
                 self._errors.append(
                     f"Stage '{self._stage}' not found or is not a terraform stage. "
                     f"Available terraform stages: {[s.name for s in all_stages if self._is_terraform_stage(s)]}"
+                )
+                return False
+
+        if self._provisioner:
+            terraform_stages = [s for s in terraform_stages if str(s.provisioner) == self._provisioner]
+            if not terraform_stages:
+                avail = sorted({str(s.provisioner) for s in all_stages if self._is_terraform_stage(s)})
+                self._errors.append(
+                    f"No terraform stages found for provisioner '{self._provisioner}'. "
+                    f"Available: {avail if avail else ['(none)']}"
                 )
                 return False
 
@@ -132,6 +171,29 @@ class OutputDeployCommand(BaseDeployCommand):
                 any_failed = True
             if self._is_console_output():
                 self._print_stage(str(stage.name), ok, filtered, cached_at, msgs)
+
+        # ── --raw: bare value, no formatting ────────────────────────────────
+        if self._raw:
+            if not self._key:
+                self._errors.append("--raw requires --key to identify which output to return.")
+                return False
+            for data in all_outputs.values():
+                val = data["outputs"].get(self._key)
+                if val is not None:
+                    click.echo(str(val))
+                    return not any_failed
+            self._errors.append(
+                f"Output '{self._key}' not found in any stage. Check the name or run without --key to list all outputs."
+            )
+            return False
+
+        # ── --json: raw JSON passthrough ─────────────────────────────────────
+        if self._json_output:
+            combined: Dict[str, Any] = {}
+            for data in all_outputs.values():
+                combined.update(data["outputs"])
+            click.echo(json.dumps(combined, indent=2, default=str))
+            return not any_failed
 
         self._output_data = {
             "file": str(self._file_path),

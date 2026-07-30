@@ -91,7 +91,7 @@ All AI flags are opt-in. No AI calls are made unless `--ai` or `--strict-ai-revi
 | `strata values list -f ... --ai`                          | `--ai`               | Explain unresolved variables/secrets/features; provide exact store-specific fix commands |
 | `strata validate -f ... --ai`                             | `--ai`               | Explain validation errors and policy violations; suggest YAML fixes                      |
 | `strata policy check -f ... --ai`                         | `--ai`               | Explain policy violations across all evaluated phases; suggest YAML fixes                |
-| `strata env doctor --ai`                                  | `--ai`               | Explain failed health checks; provide numbered remediation steps                         |
+| `strata sln doctor --ai`                                  | `--ai`               | Explain failed health checks; provide numbered remediation steps                         |
 | `strata guide --ai`                                       | `--ai`               | Explain what is blocking the current readiness phase; suggest next action                |
 
 Risk levels (plan review): `low` · `medium` · `high` · `critical`
@@ -129,7 +129,7 @@ Override any built-in system prompt by placing a Markdown file in `.strata/promp
     drift_explanation.md
     deployment_summary.md
     policy_review.md
-    doctor_analysis.md    # overrides the env doctor failure analysis prompt
+    doctor_analysis.md    # overrides the sln doctor failure analysis prompt
     guide_assistance.md   # overrides the guide phase blockage prompt
 ```
 

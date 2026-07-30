@@ -115,7 +115,7 @@ class TestMainGroup:
             "validate",
             "build",
             "deploy",
-            "env",
+            "rollout",
             "secret",
             "values",
             "help",
@@ -125,6 +125,8 @@ class TestMainGroup:
         assert "init" not in registered
         assert "clean" not in registered
         assert "status" not in registered
+        # env dissolved into deploy/rollout/sln per ADR-0062 — must NOT appear at top level
+        assert "env" not in registered
         # version is no longer a subcommand — only -v/--version (Click's
         # version_option) prints the CLI version, to avoid the confusing
         # `version` (CLI version) vs `versions` (version-lock feature) split
@@ -134,7 +136,7 @@ class TestMainGroup:
         from strata.commands.cli_sln import sln_group
 
         sln_cmds = set(sln_group.commands.keys())
-        assert {"init", "update", "clean", "status", "export", "deployment"} == sln_cmds
+        assert {"init", "update", "clean", "status", "export", "deployment", "doctor"} == sln_cmds
 
     def test_sln_deployment_subcommands_registered(self):
         from strata.commands.cli_sln import deployment_group

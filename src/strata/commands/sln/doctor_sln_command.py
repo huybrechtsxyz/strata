@@ -42,7 +42,7 @@ class CheckResult:
     fix_hint: Optional[str] = None
 
 
-class DoctorEnvCommand(BaseCommand):
+class DoctorSlnCommand(BaseCommand):
     """Run a workspace health check and report diagnostic results.
 
     Checks five categories:
@@ -69,7 +69,7 @@ class DoctorEnvCommand(BaseCommand):
     Exit code ``3`` when one or more checks fail.
     """
 
-    OPERATION = "env_doctor"
+    OPERATION = "sln_doctor"
 
     def __init__(
         self,
@@ -177,7 +177,7 @@ class DoctorEnvCommand(BaseCommand):
         return failed == 0
 
     def _run_ai_doctor_analysis(self) -> None:
-        """Run AI explanation of failed env doctor checks."""
+        """Run AI explanation of failed doctor checks."""
         from strata.integrations.ai import find_ai_integration
 
         # Build a flat list of failed checks with category context

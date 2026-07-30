@@ -107,7 +107,7 @@ strata
 
    guides/audit-command-group
    guides/deploying
-   guides/environment-command-group
+   guides/deployment-inspection
    guides/multi-repo-setup
    guides/secrets-variables-features
    guides/service-command-group

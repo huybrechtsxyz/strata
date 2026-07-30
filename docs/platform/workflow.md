@@ -538,14 +538,14 @@ strata deploy destroy -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yam
 ### 7.6 Outputs, plan details, and history
 
 ```bash
-# Live infrastructure outputs per stage (queries the Terraform backend)
-strata env output -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+# Terraform outputs per stage (cached by default; --refresh to query the backend live)
+strata deploy output -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --refresh
 
 # Single stage only
-strata env output -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --provisioner xyz-dc-eu-fr
+strata deploy output -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --provisioner xyz-dc-eu-fr
 
 # Single output value — bare, for shell scripting
-IP=$(strata env output -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --name endpoint --raw)
+IP=$(strata deploy output -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --key endpoint --raw)
 
 # Decode the last saved .tfplan — no backend call, instant
 strata deploy plan -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
@@ -555,7 +555,7 @@ strata deploy history
 strata deploy history --lines 20
 ```
 
-- `env output`: runs `terraform output -json` per stage — shows live endpoint URLs, resource IDs, etc.
+- `deploy output --refresh`: runs `terraform output -json` per stage — shows live endpoint URLs, resource IDs, etc. Without `--refresh`, reads the local cache instead (no network call).
 - `deploy plan`: reads the `.tfplan` written by the last `deploy run --dry-run`. Shows resource add/change/destroy counts. No network required.
 
 For execution history use `strata deploy history`.
@@ -872,14 +872,15 @@ All `ref` subgroups (`env`, `config`, `data`, `secret`) share:
 
 ### Deploy
 
-| Command                                                           | Description                                                          |
-| ----------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `strata deploy run -f FILE [--stage S] [--force] [--dry-run]`     | Execute the deploy pipeline                                          |
-| `strata deploy destroy -f FILE [--stage S] [--force] [--dry-run]` | Tear down infrastructure; `--dry-run` plans, `--force` auto-approves |
-| `strata deploy plan -f FILE [--stage S]`                          | Saved `.tfplan` change summary (offline, no backend)                 |
-| `strata env output -f FILE [--name N] [--raw]`                    | Live Terraform outputs per stage                                     |
-| `strata deploy history [--lines N] [--operation run\|destroy]`    | Execution history from workspace logs                                |
-| `strata deploy health -f FILE [--stage S]`                        | Run `health_checks` defined in the deployment YAML                   |
+| Command                                                           | Description                                                           |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `strata deploy run -f FILE [--stage S] [--force] [--dry-run]`     | Execute the deploy pipeline                                           |
+| `strata deploy destroy -f FILE [--stage S] [--force] [--dry-run]` | Tear down infrastructure; `--dry-run` plans, `--force` auto-approves  |
+| `strata deploy plan -f FILE [--stage S]`                          | Saved `.tfplan` change summary (offline, no backend)                  |
+| `strata deploy output -f FILE [--key K] [--raw] [--refresh]`      | Terraform outputs per stage (cached by default, `--refresh` for live) |
+| `strata deploy status -f FILE [--stage S] [--offline]`            | Live infrastructure status: resources, outputs, serial, cache         |
+| `strata deploy history [--lines N] [--operation run\|destroy]`    | Execution history from workspace logs                                 |
+| `strata deploy health -f FILE [--stage S]`                        | Run `health_checks` defined in the deployment YAML                    |
 
 ### Values
 

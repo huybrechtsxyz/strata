@@ -32,7 +32,6 @@ from strata.commands.cli_config import config_group
 from strata.commands.cli_console import console_command
 from strata.commands.cli_cost import cost_group
 from strata.commands.cli_deploy import deploy as deploy_group
-from strata.commands.cli_env import env_group
 from strata.commands.cli_guide import guide_command
 from strata.commands.cli_help import help_command
 from strata.commands.cli_log import log_group
@@ -44,6 +43,7 @@ from strata.commands.cli_profile import profile_group
 from strata.commands.cli_promote import promote_group
 from strata.commands.cli_ref import ref_group
 from strata.commands.cli_repo import repo_group
+from strata.commands.cli_rollout import rollout_group
 from strata.commands.cli_schema import schema_group
 from strata.commands.cli_secret import secret_group
 from strata.commands.cli_service import service_group
@@ -130,7 +130,7 @@ def _build_default_map(command: click.Command, defaults: dict) -> dict:
 _HELP_SECTIONS: list[tuple[str, list[str]]] = [
     ("Workspace Setup", ["sln", "profile", "new"]),
     ("Configuration", ["config", "ref", "repo", "vars", "values"]),
-    ("Build & Deploy", ["build", "deploy", "workitem", "cost", "env", "service", "versions"]),
+    ("Build & Deploy", ["build", "deploy", "rollout", "workitem", "cost", "service", "versions"]),
     ("Inspection & Validation", ["guide", "validate", "schema", "policy", "tools"]),
     ("Utility", ["secret", "help", "log", "completion", "mcp"]),
 ]
@@ -299,8 +299,8 @@ main.add_command(schema_group, name="schema")
 main.add_command(policy_group, name="policy")
 main.add_command(build_group, name="build")
 main.add_command(deploy_group, name="deploy")
+main.add_command(rollout_group, name="rollout")
 main.add_command(cost_group, name="cost")
-main.add_command(env_group, name="env")
 main.add_command(values_group, name="values")
 main.add_command(versions_group, name="versions")
 main.add_command(promote_group, name="promote")
