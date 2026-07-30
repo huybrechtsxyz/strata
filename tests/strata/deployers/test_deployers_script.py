@@ -1,12 +1,12 @@
 """Unit tests for ScriptDeployer."""
 
-import subprocess
 from pathlib import Path
 from typing import Optional
 from unittest.mock import MagicMock, patch
 
 from strata.deployers.script_deployer import _STEP_TO_PHASE, ScriptDeployer
 from strata.models.deployment_model import DeploymentStageTimeoutsModel
+from strata.utils.system import CommandResult
 
 
 def _make_deployer(
@@ -258,12 +258,9 @@ class TestScriptDeployerExecuteScript:
         script.write_text("#!/bin/bash\nexit 0")
         d = _make_deployer(tmp_path=tmp_path)
 
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = ""
-        mock_result.stderr = ""
+        mock_result = CommandResult(returncode=0, stdout="", stderr="", command="bash run.sh", duration_ms=0.0)
 
-        with patch("subprocess.run", return_value=mock_result) as mock_run:
+        with patch("strata.deployers.script_deployer.run_command", return_value=mock_result) as mock_run:
             ok, msgs = d._execute_script(script, "deploy_setup")
 
         assert ok is True
@@ -275,12 +272,9 @@ class TestScriptDeployerExecuteScript:
         script.write_text("print('hi')")
         d = _make_deployer(tmp_path=tmp_path)
 
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = ""
-        mock_result.stderr = ""
+        mock_result = CommandResult(returncode=0, stdout="", stderr="", command="python run.py", duration_ms=0.0)
 
-        with patch("subprocess.run", return_value=mock_result) as mock_run:
+        with patch("strata.deployers.script_deployer.run_command", return_value=mock_result) as mock_run:
             ok, msgs = d._execute_script(script, "deploy_setup")
 
         assert ok is True
@@ -292,12 +286,9 @@ class TestScriptDeployerExecuteScript:
         script.write_text("Write-Host hi")
         d = _make_deployer(tmp_path=tmp_path)
 
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = ""
-        mock_result.stderr = ""
+        mock_result = CommandResult(returncode=0, stdout="", stderr="", command="pwsh -File run.ps1", duration_ms=0.0)
 
-        with patch("subprocess.run", return_value=mock_result) as mock_run:
+        with patch("strata.deployers.script_deployer.run_command", return_value=mock_result) as mock_run:
             ok, msgs = d._execute_script(script, "deploy_setup")
 
         assert ok is True
@@ -309,12 +300,11 @@ class TestScriptDeployerExecuteScript:
         script.write_text("exit 1")
         d = _make_deployer(tmp_path=tmp_path)
 
-        mock_result = MagicMock()
-        mock_result.returncode = 1
-        mock_result.stdout = ""
-        mock_result.stderr = "something broke"
+        mock_result = CommandResult(
+            returncode=1, stdout="", stderr="something broke", command="bash fail.sh", duration_ms=0.0
+        )
 
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("strata.deployers.script_deployer.run_command", return_value=mock_result):
             ok, msgs = d._execute_script(script, "deploy_setup")
 
         assert ok is False
@@ -326,7 +316,10 @@ class TestScriptDeployerExecuteScript:
         script.write_text("sleep 999")
         d = _make_deployer(tmp_path=tmp_path)
 
-        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="bash", timeout=300)):
+        mock_result = CommandResult(
+            returncode=-1, stdout="", stderr="", command="bash slow.sh", duration_ms=0.0, timed_out=True
+        )
+        with patch("strata.deployers.script_deployer.run_command", return_value=mock_result):
             ok, msgs = d._execute_script(script, "deploy_setup")
 
         assert ok is False
@@ -337,7 +330,10 @@ class TestScriptDeployerExecuteScript:
         script.write_text("")
         d = _make_deployer(tmp_path=tmp_path)
 
-        with patch("subprocess.run", side_effect=FileNotFoundError):
+        mock_result = CommandResult(
+            returncode=127, stdout="", stderr="Command not found: bash", command="bash missing.sh", duration_ms=0.0
+        )
+        with patch("strata.deployers.script_deployer.run_command", return_value=mock_result):
             ok, msgs = d._execute_script(script, "deploy_setup")
 
         assert ok is False
@@ -351,18 +347,18 @@ class TestScriptDeployerExecuteScript:
         d.build_path = Path("/my/build")
         d.stage.name = "staging"
 
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = ""
-        mock_result.stderr = ""
+        captured_env: dict = {}
 
-        with patch("subprocess.run", return_value=mock_result) as mock_run:
+        def _capture(cmd, **kwargs):
+            captured_env.update(kwargs.get("env", {}))
+            return CommandResult(returncode=0, stdout="", stderr="", command=" ".join(cmd), duration_ms=0.0)
+
+        with patch("strata.deployers.script_deployer.run_command", side_effect=_capture):
             d._execute_script(script, "deploy_setup")
 
-        env = mock_run.call_args[1]["env"]
-        assert env["STRATA_WORKSPACE_PATH"] == str(Path("/my/work"))
-        assert env["STRATA_BUILD_PATH"] == str(Path("/my/build"))
-        assert env["STRATA_STAGE_NAME"] == "staging"
+        assert captured_env["STRATA_WORKSPACE_PATH"] == str(Path("/my/work"))
+        assert captured_env["STRATA_BUILD_PATH"] == str(Path("/my/build"))
+        assert captured_env["STRATA_STAGE_NAME"] == "staging"
 
     def test_stdout_always_captured(self, tmp_path):
         """stdout is always added to messages regardless of verbose flag."""
@@ -370,12 +366,9 @@ class TestScriptDeployerExecuteScript:
         script.write_text("#!/bin/bash\necho hello")
         d = _make_deployer(tmp_path=tmp_path, verbose=False)
 
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "hello"
-        mock_result.stderr = ""
+        mock_result = CommandResult(returncode=0, stdout="hello", stderr="", command="bash out.sh", duration_ms=0.0)
 
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("strata.deployers.script_deployer.run_command", return_value=mock_result):
             ok, msgs = d._execute_script(script, "deploy_setup")
 
         assert ok is True
@@ -386,12 +379,9 @@ class TestScriptDeployerExecuteScript:
         script.write_text("console.log('hi')")
         d = _make_deployer(tmp_path=tmp_path)
 
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = ""
-        mock_result.stderr = ""
+        mock_result = CommandResult(returncode=0, stdout="", stderr="", command="node run.js", duration_ms=0.0)
 
-        with patch("subprocess.run", return_value=mock_result) as mock_run:
+        with patch("strata.deployers.script_deployer.run_command", return_value=mock_result) as mock_run:
             ok, msgs = d._execute_script(script, "deploy_setup")
 
         assert ok is True
@@ -403,12 +393,9 @@ class TestScriptDeployerExecuteScript:
         script.write_text("console.log('hi')")
         d = _make_deployer(tmp_path=tmp_path)
 
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = ""
-        mock_result.stderr = ""
+        mock_result = CommandResult(returncode=0, stdout="", stderr="", command="node run.mjs", duration_ms=0.0)
 
-        with patch("subprocess.run", return_value=mock_result) as mock_run:
+        with patch("strata.deployers.script_deployer.run_command", return_value=mock_result) as mock_run:
             ok, msgs = d._execute_script(script, "deploy_setup")
 
         assert ok is True
@@ -420,12 +407,9 @@ class TestScriptDeployerExecuteScript:
         script.write_text("package main\nfunc main() {}")
         d = _make_deployer(tmp_path=tmp_path)
 
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = ""
-        mock_result.stderr = ""
+        mock_result = CommandResult(returncode=0, stdout="", stderr="", command="go run run.go", duration_ms=0.0)
 
-        with patch("subprocess.run", return_value=mock_result) as mock_run:
+        with patch("strata.deployers.script_deployer.run_command", return_value=mock_result) as mock_run:
             ok, msgs = d._execute_script(script, "deploy_setup")
 
         assert ok is True
@@ -449,7 +433,7 @@ class TestStepToPhaseMapping:
 
 
 class TestScriptDeployerTimeouts:
-    """Verify stage.timeouts is forwarded as timeout= to subprocess.run."""
+    """Verify stage.timeouts is forwarded as timeout= to run_command."""
 
     def _phase_with_script(self, tmp_path, name="run.sh"):
         script = tmp_path / name
@@ -459,17 +443,13 @@ class TestScriptDeployerTimeouts:
         return phase
 
     def _mock_ok(self):
-        r = MagicMock()
-        r.returncode = 0
-        r.stdout = ""
-        r.stderr = ""
-        return r
+        return CommandResult(returncode=0, stdout="", stderr="", command="bash run.sh", duration_ms=0.0)
 
     def test_apply_uses_default_timeout_when_none(self, tmp_path):
         phase = self._phase_with_script(tmp_path)
         d = _make_deployer(lifecycle_root={"deploy_apply": phase}, tmp_path=tmp_path)
         d.stage.timeouts = None
-        with patch("subprocess.run", return_value=self._mock_ok()) as mock_run:
+        with patch("strata.deployers.script_deployer.run_command", return_value=self._mock_ok()) as mock_run:
             d.apply()
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs.get("timeout") == 1800
@@ -478,7 +458,7 @@ class TestScriptDeployerTimeouts:
         phase = self._phase_with_script(tmp_path)
         d = _make_deployer(lifecycle_root={"deploy_apply": phase}, tmp_path=tmp_path)
         d.stage.timeouts = DeploymentStageTimeoutsModel(apply=900)
-        with patch("subprocess.run", return_value=self._mock_ok()) as mock_run:
+        with patch("strata.deployers.script_deployer.run_command", return_value=self._mock_ok()) as mock_run:
             d.apply()
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs.get("timeout") == 900
@@ -487,7 +467,7 @@ class TestScriptDeployerTimeouts:
         phase = self._phase_with_script(tmp_path)
         d = _make_deployer(lifecycle_root={"deploy_setup": phase}, tmp_path=tmp_path)
         d.stage.timeouts = None
-        with patch("subprocess.run", return_value=self._mock_ok()) as mock_run:
+        with patch("strata.deployers.script_deployer.run_command", return_value=self._mock_ok()) as mock_run:
             d.setup()
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs.get("timeout") == 300
@@ -496,7 +476,7 @@ class TestScriptDeployerTimeouts:
         phase = self._phase_with_script(tmp_path)
         d = _make_deployer(lifecycle_root={"deploy_setup": phase}, tmp_path=tmp_path)
         d.stage.timeouts = DeploymentStageTimeoutsModel(setup=60)
-        with patch("subprocess.run", return_value=self._mock_ok()) as mock_run:
+        with patch("strata.deployers.script_deployer.run_command", return_value=self._mock_ok()) as mock_run:
             d.setup()
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs.get("timeout") == 60
@@ -505,7 +485,7 @@ class TestScriptDeployerTimeouts:
         phase = self._phase_with_script(tmp_path)
         d = _make_deployer(lifecycle_root={"deploy_destroy": phase}, tmp_path=tmp_path)
         d.stage.timeouts = None
-        with patch("subprocess.run", return_value=self._mock_ok()) as mock_run:
+        with patch("strata.deployers.script_deployer.run_command", return_value=self._mock_ok()) as mock_run:
             d.destroy()
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs.get("timeout") == 1800
@@ -514,7 +494,7 @@ class TestScriptDeployerTimeouts:
         phase = self._phase_with_script(tmp_path)
         d = _make_deployer(lifecycle_root={"deploy_destroy": phase}, tmp_path=tmp_path)
         d.stage.timeouts = DeploymentStageTimeoutsModel(destroy=600)
-        with patch("subprocess.run", return_value=self._mock_ok()) as mock_run:
+        with patch("strata.deployers.script_deployer.run_command", return_value=self._mock_ok()) as mock_run:
             d.destroy()
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs.get("timeout") == 600
@@ -529,11 +509,11 @@ class TestScriptDeployerTimeouts:
         )
         d.stage.timeouts = DeploymentStageTimeoutsModel(apply=999)
 
-        with patch("subprocess.run", return_value=self._mock_ok()) as mock_run:
+        with patch("strata.deployers.script_deployer.run_command", return_value=self._mock_ok()) as mock_run:
             d.setup()
         assert mock_run.call_args[1].get("timeout") == 300  # default
 
-        with patch("subprocess.run", return_value=self._mock_ok()) as mock_run:
+        with patch("strata.deployers.script_deployer.run_command", return_value=self._mock_ok()) as mock_run:
             d.apply()
         assert mock_run.call_args[1].get("timeout") == 999  # override
 

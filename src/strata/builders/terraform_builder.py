@@ -7,7 +7,6 @@ It only documents required keys.
 import json
 import os
 import shutil
-import subprocess
 from glob import glob
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
@@ -1056,16 +1055,20 @@ class TerraformBuilder(BaseBuilder):
             "STRATA_WORKSPACE_PATH": str(work_path),
             "STRATA_DRY_RUN": "false",
         }
-        result = subprocess.run(
+        from strata.utils.system import run_command
+
+        result = run_command(
             ["python", str(script_path)],
             env=env,
-            capture_output=True,
-            text=True,
+            timeout=300,
         )
-        if result.returncode != 0:
-            self._errors.append(
-                f"output.files['{file_def.name}']: script failed (exit {result.returncode}):\n{result.stderr}"
-            )
+        if not result.is_successful:
+            if result.timed_out:
+                self._errors.append(f"output.files['{file_def.name}']: script timed out after 300s")
+            else:
+                self._errors.append(
+                    f"output.files['{file_def.name}']: script failed (exit {result.returncode}):\n{result.stderr}"
+                )
             return False
 
         expected = terraform_path / file_def.name
@@ -1116,14 +1119,18 @@ class TerraformBuilder(BaseBuilder):
             "STRATA_PROVISIONER": provisioner_name,
             "STRATA_DRY_RUN": "false",
         }
-        result = subprocess.run(
+        from strata.utils.system import run_command
+
+        result = run_command(
             ["python", str(script_path)],
             env=env,
-            capture_output=True,
-            text=True,
+            timeout=300,
         )
-        if result.returncode != 0:
-            self._errors.append(f"format=script: script failed (exit {result.returncode}):\n{result.stderr}")
+        if not result.is_successful:
+            if result.timed_out:
+                self._errors.append("format=script: script timed out after 300s")
+            else:
+                self._errors.append(f"format=script: script failed (exit {result.returncode}):\n{result.stderr}")
             return False
 
         tfvars_files = list(terraform_path.glob("*.auto.tfvars.json"))

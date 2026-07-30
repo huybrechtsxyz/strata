@@ -1,6 +1,6 @@
 # CLI consolidation — `env` dissolves into `deploy`, `rollout`, and `sln`
 
-- Status: proposed
+- Status: completed
 - Date: 2026-07-30
 
 ## Context and Problem Statement
@@ -46,28 +46,28 @@ dissolve `env` entirely rather than patch it again.
 
 ## Command Mapping — Old → New
 
-| Old command                                                                       | New command                 | Disposition                                                                                                                                                                                                                        |
-| --------------------------------------------------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `strata deploy run`                                                               | `strata deploy run`         | Unchanged                                                                                                                                                                                                                          |
-| `strata deploy destroy`                                                           | `strata deploy destroy`     | Unchanged                                                                                                                                                                                                                          |
-| `strata deploy plan`                                                              | `strata deploy plan`        | Unchanged                                                                                                                                                                                                                          |
-| `strata deploy show` + `strata env show`                                          | `strata deploy show`        | **Merge** — adds resolved vars/secrets/features/overrides (today's `env show` payload) to the existing remote-versions/workspace payload                                                                                           |
-| `strata deploy output` + `strata env output`                                      | `strata deploy output`      | **Merge** — unify flag surface (cache-first `--refresh`/`--version`/`--all-versions` from `deploy output`, plus `--name`/`--provisioner`/`--raw`/`--json` from `env output`)                                                       |
-| *(removed)* `strata deploy status` + `strata env status` (single-deployment mode) | `strata deploy status`      | **Revive** — re-registered in `cli_deploy.py`, takes `-f FILE`, behavior sourced from `StatusEnvCommand` (resources, outputs, serial, cache-freshness) rather than the old plan-diff hybrid, which is redundant with `deploy plan` |
-| `strata deploy health`                                                            | `strata deploy health`      | Unchanged                                                                                                                                                                                                                          |
-| `strata deploy drift ...` + `strata env drift`                                    | `strata deploy drift ...`   | **Merge** — `env drift`'s single-check behavior is a strict subset of `deploy drift run`; drop `env drift`, keep the existing subgroup (`run`/`acknowledge`/`history`)                                                             |
-| `strata deploy history`                                                           | `strata deploy history`     | Unchanged                                                                                                                                                                                                                          |
-| `strata deploy list`                                                              | `strata deploy list`        | Unchanged                                                                                                                                                                                                                          |
-| `strata deploy lock ...`                                                          | `strata deploy lock ...`    | Unchanged                                                                                                                                                                                                                          |
-| *(not yet implemented)*                                                           | `strata rollout run`        | **New** — mass/wave deployment per ADR-0037, future                                                                                                                                                                                |
-| `strata env status --all` / `strata env status --path DIR`                        | `strata rollout status`     | **Move** — multi-deployment scanning is a fleet concern per ADR-0037, not a single-deployment `env` concern                                                                                                                        |
-| `strata sln init`                                                                 | `strata sln init`           | Unchanged                                                                                                                                                                                                                          |
-| `strata env info`                                                                 | `strata sln status`         | **Absorb** — `sln status` already reports overlapping workspace-identity data; extend it with the fields unique to `env info` (active profile, strata version) instead of maintaining two views of the same workspace              |
-| `strata env doctor`                                                               | `strata sln doctor`         | **Move** — workspace-level tooling/health check belongs beside `sln status`, not under a per-deployment group                                                                                                                      |
-| `strata sln clean`                                                                | `strata sln clean`          | Unchanged                                                                                                                                                                                                                          |
-| `strata sln update`                                                               | `strata sln update`         | Unchanged                                                                                                                                                                                                                          |
-| `strata sln deployment ...`                                                       | `strata sln deployment ...` | Unchanged                                                                                                                                                                                                                          |
-| `strata sln export`                                                               | `strata sln export`         | Unchanged                                                                                                                                                                                                                          |
+| Old command                                                                       | New command                 | Disposition                                                                                                                                                                                                                                                                                                                                                              |
+| --------------------------------------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `strata deploy run`                                                               | `strata deploy run`         | Unchanged                                                                                                                                                                                                                                                                                                                                                                |
+| `strata deploy destroy`                                                           | `strata deploy destroy`     | Unchanged                                                                                                                                                                                                                                                                                                                                                                |
+| `strata deploy plan`                                                              | `strata deploy plan`        | Unchanged                                                                                                                                                                                                                                                                                                                                                                |
+| `strata deploy show` + `strata env show`                                          | `strata deploy show`        | **Merge** — adds resolved vars/secrets/features/overrides (today's `env show` payload) to the existing remote-versions/workspace payload                                                                                                                                                                                                                                 |
+| `strata deploy output` + `strata env output`                                      | `strata deploy output`      | **Merge** — unify flag surface (cache-first `--refresh`/`--version`/`--all-versions` from `deploy output`, plus `--provisioner`/`--raw`/`--json` from `env output`). Implementation note: the single-value filter kept `deploy output`'s existing `--key NAME` rather than adding a second, redundant `--name NAME` flag — `--raw` requires `--key` instead of `--name`. |
+| *(removed)* `strata deploy status` + `strata env status` (single-deployment mode) | `strata deploy status`      | **Revive** — re-registered in `cli_deploy.py`, takes `-f FILE`, behavior sourced from `StatusEnvCommand` (resources, outputs, serial, cache-freshness) rather than the old plan-diff hybrid, which is redundant with `deploy plan`                                                                                                                                       |
+| `strata deploy health`                                                            | `strata deploy health`      | Unchanged                                                                                                                                                                                                                                                                                                                                                                |
+| `strata deploy drift ...` + `strata env drift`                                    | `strata deploy drift ...`   | **Merge** — `env drift`'s single-check behavior is a strict subset of `deploy drift run`; drop `env drift`, keep the existing subgroup (`run`/`acknowledge`/`history`)                                                                                                                                                                                                   |
+| `strata deploy history`                                                           | `strata deploy history`     | Unchanged                                                                                                                                                                                                                                                                                                                                                                |
+| `strata deploy list`                                                              | `strata deploy list`        | Unchanged                                                                                                                                                                                                                                                                                                                                                                |
+| `strata deploy lock ...`                                                          | `strata deploy lock ...`    | Unchanged                                                                                                                                                                                                                                                                                                                                                                |
+| *(not yet implemented)*                                                           | `strata rollout run`        | **New** — mass/wave deployment per ADR-0037, future                                                                                                                                                                                                                                                                                                                      |
+| `strata env status --all` / `strata env status --path DIR`                        | `strata rollout status`     | **Move** — multi-deployment scanning is a fleet concern per ADR-0037, not a single-deployment `env` concern                                                                                                                                                                                                                                                              |
+| `strata sln init`                                                                 | `strata sln init`           | Unchanged                                                                                                                                                                                                                                                                                                                                                                |
+| `strata env info`                                                                 | `strata sln status`         | **Absorb** — `sln status` already reports overlapping workspace-identity data; extend it with the fields unique to `env info`. Implementation note: `sln status` already reported the active profile name — only `strata version` was actually missing, so that's the only field added.                                                                                  |
+| `strata env doctor`                                                               | `strata sln doctor`         | **Move** — workspace-level tooling/health check belongs beside `sln status`, not under a per-deployment group                                                                                                                                                                                                                                                            |
+| `strata sln clean`                                                                | `strata sln clean`          | Unchanged                                                                                                                                                                                                                                                                                                                                                                |
+| `strata sln update`                                                               | `strata sln update`         | Unchanged                                                                                                                                                                                                                                                                                                                                                                |
+| `strata sln deployment ...`                                                       | `strata sln deployment ...` | Unchanged                                                                                                                                                                                                                                                                                                                                                                |
+| `strata sln export`                                                               | `strata sln export`         | Unchanged                                                                                                                                                                                                                                                                                                                                                                |
 
 **Zero commands are left behind.** Every `env` subcommand maps to exactly one new
 home. The `env` group is deleted outright — no top-level group is added purely to
@@ -316,6 +316,54 @@ in the same PR.
 - Update or delete tests under `tests/strata/` that exercise `cli_env.py` /
   `commands/envs/*`, moving relevant coverage to the new command locations.
 
+## Implementation Notes
+
+Implemented in full in a single change, as planned. Deviations found during
+implementation (kept intentionally, not treated as bugs):
+
+- **`deploy output`** kept the existing `--key NAME` flag as the single-value
+  filter instead of adding a second, near-duplicate `--name NAME` flag —
+  `env output`'s `--name` and `deploy output`'s pre-existing `--key` served the
+  identical purpose, and carrying both would have reintroduced exactly the kind
+  of "two flags, one meaning" confusion this ADR exists to remove. `--raw`
+  requires `--key`; `--provisioner` and `--json` were added as designed.
+- **`deploy show`** merges the resolved-environment payload under a new
+  `environment_detail` JSON key (`name`, `labels`, `annotations`, `properties`,
+  `custom`, `variables[]`, `secrets[]`, `features[]`, `overrides{}`), alongside
+  a new top-level `stages[]` key — additive, no existing `deploy show` keys
+  changed shape. The ported `--stage NAME` flag is stored but does not filter
+  secret visibility, carrying forward a pre-existing no-op in `env show`
+  unchanged; fixing that behavior is out of scope for this ADR.
+- **`sln status`** turned out to already report the active profile name before
+  this change — code review found only `strata version` was actually missing
+  from `env info`'s field set, not both fields as originally assumed. Only
+  `version` was added.
+- **`sln doctor`** is a straight file move plus a rename for consistency:
+  `DoctorEnvCommand` → `DoctorSlnCommand` (`src/strata/commands/sln/doctor_sln_command.py`),
+  `OPERATION` changed from `env_doctor` to `sln_doctor`. No behavior change.
+- **`rollout status`** landed as designed, in a new `src/strata/commands/rollout/`
+  package (`StatusRolloutCommand`) plus `cli_rollout.py`. `rollout run` was
+  **not** implemented — it remains a future ADR-0037 deliverable, unaffected by
+  this change, exactly as the fallback plan above anticipated.
+- **`deploy_status` MCP tool** was updated with a corrected docstring and a new
+  `offline` parameter, matching the revived command's flag surface.
+- **No MCP tools referenced `env_*` operations** — the only MCP tool touched
+  was `deploy_status` (already existed, pointed at the wrong command shape).
+- **Docs updated:** `docs/platform/commands.md` (env section replaced by a
+  `rollout` section; `sln`/`deploy` sections updated), `docs/help/deployment.md`,
+  `docs/help/ai_agent.md`, `docs/guides/deploying.md`, `docs/guides/features.md`,
+  `docs/platform/workflow.md`. `docs/guides/environment-command-group.md` was
+  replaced by `docs/guides/deployment-inspection.md` (and `docs/index.rst`'s
+  toctree updated to match) rather than edited in place, since its entire
+  premise (a dedicated `env` guide) no longer applies.
+- **Tests:** `tests/strata/commands/test_commands_env.py` deleted; its
+  multi-deployment scanning coverage moved to a new
+  `tests/strata/commands/test_commands_rollout.py`; `tests/strata/commands/test_cli.py`
+  updated (`env` removed / `rollout` added to the top-level group assertion,
+  `doctor` added to the `sln` subcommand assertion).
+- **Verification:** full test suite green after implementation — 5036 passed,
+  16 skipped, 0 failed.
+
 ## References
 
 - [ADR-0060: Deploy status deprecation and env command clarity](0060-deploy-status-deprecation-and-env-command-clarity.md) —
@@ -324,7 +372,7 @@ in the same PR.
   after it was written).
 - [ADR-0037: Fleet rollout — multi-deployment wave execution](0037-mass-wave-deployment.md) —
   source of the `rollout run`/`rollout status` design that `rollout status`
-  depends on for its group placement.
+  depends on for its group placement. `rollout run` remains unimplemented.
 - [ADR-0058: Cross-deployment dependency gating](0058-cross-deployment-dependency-gating.md) —
   established `env status` (now `deploy status`) as the most reliable
   cross-machine "is it deployed" signal; that property carries over to the

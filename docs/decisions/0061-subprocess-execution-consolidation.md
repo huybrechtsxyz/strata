@@ -1,13 +1,14 @@
 # Subprocess execution consolidation — one path through `run_command()`, with SIGTERM and timeout parity
 
-- Status: proposed
+- Status: completed
 - Date: 2026-07-28
+- Completed: 2026-07-30
 
 ## Context and Problem Statement
 
-During the global project review (`_lesson.md`, item D2), strata was found to have **at
-least three independent subprocess execution implementations with real behavioral
-drift, not just stylistic duplication**:
+During the global project review (`_lesson.md`, item D2), strata was found to have **five
+independent subprocess execution implementations with real behavioral drift, not just
+stylistic duplication**:
 
 1. **`run_command()`'s buffered path** (`src/strata/utils/system.py`, the default —
    used when no `line_callback` and `show_output=False`) — calls plain
@@ -29,7 +30,16 @@ drift, not just stylistic duplication**:
    str(script_path)], env=env, capture_output=True, text=True)` with **no `timeout`
    parameter at all** — confirmed via direct code read. A hung user script here hangs
    the entire `strata build run` indefinitely. No shutdown-coordinator registration
-   either.
+   either. (`_execute_file_script` in the same file follows the identical pattern —
+   also missing timeout and SIGTERM registration.)
+5. **`lifecycle_controller.py`'s `_execute_script`** — a FIFTH, independent
+   implementation: calls `subprocess.run(cmd, cwd=..., env=..., capture_output=True,
+   text=True, timeout=300)` directly. Has a hardcoded 300s timeout (matching
+   `script_deployer.py`'s `_SCRIPT_TIMEOUT`), but no shutdown-coordinator registration
+   (same gap as #1 and #3). Executes lifecycle hook phases (before/after provision,
+   deploy, destroy) and is the only implementation that also has its own template
+   substitution layer (`_process_script_template`). Missed by the original `_lesson.md`
+   review — found during ADR validation.
 
 Critical technical detail for the fix: `register_process()`/`deregister_process()` (in
 `shutdown_coordinator.py`) are typed to accept a `subprocess.Popen` object specifically
@@ -118,13 +128,17 @@ Ship **Option 3**, in this order:
 
 1. Fix `run_command()`'s buffered path to use `Popen` + process registration, verified
    against existing `run_command()` tests to ensure no behavior change in the public
-   contract.
+   contract. Bundle the `input` stdin-injection parameter and `env` override parameter
+   into this same change (D3 + confirmed gap — `run_command()` has no `env` param today).
 2. Fix the `format=script` builder's missing timeout as an independent, can-ship-
-   immediately safety fix (does not need to wait for the full migration).
-3. Migrate `script_deployer.py`'s `_execute_script` onto `run_command()`.
-4. Migrate `terraform_builder.py`'s `_execute_format_script` onto `run_command()`
-   (picking up both correct timeout enforcement and SIGTERM coverage in the same
-   change).
+   immediately safety fix (does not need to wait for the full migration). Also fix the
+   identical gap in `_execute_file_script` in the same file.
+3. Migrate `script_deployer.py`'s `_execute_script` and `lifecycle_controller.py`'s
+   `_execute_script` onto `run_command()` — same structural pattern, can be done in the
+   same change.
+4. Migrate `terraform_builder.py`'s `_execute_format_script` and `_execute_file_script`
+   onto `run_command()`, replacing the standalone Phase 2 timeout fixes with the shared
+   implementation.
 
 Option 2 is explicitly rejected/superseded by Option 3 — recorded here so a future
 contributor doesn't accidentally do the incomplete version.
@@ -137,7 +151,7 @@ contributor doesn't accidentally do the incomplete version.
   case) gains the same graceful-shutdown behavior the streaming path already has,
   instead of the gap being silently relocated by a naive consolidation.
 - Good: ends with exactly one subprocess execution implementation
-  (`run_command()`) instead of four independently-drifting ones.
+  (`run_command()`) instead of five independently-drifting ones.
 - Neutral: `run_command()`'s public contract (`CommandResult`, timeout parameter,
   streaming mode) does not change — only its buffered-path internals do.
 - Bad (accepted): this is a real, moderate refactor of `run_command()`'s buffered
@@ -170,13 +184,17 @@ contributor doesn't accidentally do the incomplete version.
   build-appropriate value — pick a reasonable default rather than leaving it unbounded)
   once migrated onto `run_command()`.
 - **`script_deployer.py::_execute_script`**: replace its direct `subprocess.run(...)`
-  call with a call to `run_command()`, passing through `cwd`, `env` (note: `run_command()`
-  needs to support an `env` override if it doesn't already — check whether
-  `run_command()` currently allows overriding environment variables, since
-  `script_deployer.py` merges `self.resolved_values.as_compose_env()` plus `STRATA_*`
-  vars into its subprocess env today; if `run_command()` doesn't support an env
-  override param, that's an additional small addition needed as part of this
-  migration, not a blocker to the overall design), and `timeout`.
+  call with a call to `run_command()`, passing through `cwd`, `env`, and `timeout`.
+  **Confirmed**: `run_command()` does NOT currently accept an `env` override
+  (it hardcodes `os.environ.copy()`) — adding `env: Optional[Dict[str, str]] = None`
+  is required as part of Phase 2, not a future concern.
+- **`lifecycle_controller.py::_execute_script`**: replace its direct `subprocess.run(...)`
+  call with a call to `run_command()`, passing `cwd=str(work_path)`, `env` (the dict
+  built by `self._prepare_environment(phase_name, work_path, context)`), and
+  `timeout=300`. The surrounding `try/except subprocess.TimeoutExpired` and
+  `except Exception` handlers collapse into a `result.timed_out` check and a
+  `result.is_successful` check. The `finally` block for temp-dir cleanup remains
+  unchanged.
 - **Test impact**: existing `run_command()` unit tests must keep passing unchanged
   (public contract stability); add new tests for buffered-path SIGTERM registration
   (verify `register_process`/`deregister_process` are called), and for the
@@ -185,28 +203,33 @@ contributor doesn't accidentally do the incomplete version.
 
 ## Implementation Phases
 
-### Phase 1 (safety fix, can ship independently and immediately)
+### Phase 2 (safety fix, can ship independently and immediately)
 
-- Add a timeout to `terraform_builder.py::_execute_format_script` even before the
-  broader migration — this is the most urgent piece per `_lesson.md` D2.
+- Add a timeout to `terraform_builder.py::_execute_format_script` and
+  `terraform_builder.py::_execute_file_script` even before the broader migration —
+  the missing timeout is the most urgent piece per `_lesson.md` D2.
 
-### Phase 2
+### Phase 1
 
 - Fix `run_command()`'s buffered path (Popen + process registration), verify no
   regression against existing tests.
-- Add `input` stdin-injection support in the same change (D3) — same buffered-path
-  code, same Popen conversion, negligible incremental cost. Add a test confirming
-  `input` is never logged.
+- Add `input` stdin-injection and `env` override parameters in the same change (D3 +
+  confirmed missing param) — same buffered-path code, same Popen conversion, negligible
+  incremental cost. Add a test confirming `input` is never logged.
+- Add `timed_out: bool` field to `CommandResult` so callers can distinguish timeout
+  failures from other non-zero exit codes without checking a magic returncode value.
 
 ### Phase 3
 
-- Migrate `script_deployer.py::_execute_script` onto `run_command()` (may require
-  adding an `env` override parameter to `run_command()` if one doesn't already exist).
+- Migrate `script_deployer.py::_execute_script` and `lifecycle_controller.py::_execute_script`
+  onto `run_command()` in the same change. Both follow the same structural pattern;
+  replace `try/except subprocess.TimeoutExpired` with `result.timed_out` check.
 
 ### Phase 4
 
-- Migrate `terraform_builder.py::_execute_format_script` onto `run_command()`,
-  replacing the standalone Phase 1 timeout fix with the shared implementation.
+- Migrate `terraform_builder.py::_execute_format_script` and `_execute_file_script`
+  onto `run_command()`, replacing the standalone Phase 2 timeout fix with the shared
+  implementation.
 
 ## References
 

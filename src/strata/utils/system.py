@@ -329,6 +329,7 @@ class CommandResult:
     stderr: str
     command: str
     duration_ms: float
+    timed_out: bool = False
 
     @property
     def is_successful(self) -> bool:
@@ -360,6 +361,8 @@ def run_command(
     capture_output: Optional[bool] = None,
     cwd: Optional[str] = None,
     line_callback: Optional[Callable[[str, str], None]] = None,
+    input: Optional[str] = None,
+    env: Optional[Dict[str, str]] = None,
 ) -> "CommandResult":
     """
     Run a shell command and capture its output.
@@ -375,10 +378,15 @@ def run_command(
             line as it arrives.  *stream* is ``"stdout"`` or ``"stderr"``.  When set,
             the command is run with ``Popen`` for true streaming instead of
             ``subprocess.run``; ``show_output`` is ignored in this mode.
+        input: Optional string to write to the process stdin before reading output.
+            The value is never logged (safe for secret material). Requires the process
+            to read stdin before producing significant output to avoid deadlock.
+        env: Optional environment mapping for the subprocess. When ``None``, the
+            current process environment (``os.environ.copy()``) is used.
 
     Returns:
-        CommandResult object with returncode, stdout, stderr, command, and duration_ms.
-        Use result.is_successful to check if command succeeded.
+        CommandResult object with returncode, stdout, stderr, command, duration_ms, and
+        timed_out. Use result.is_successful to check if command succeeded.
     """
     if isinstance(command, List):
         cmd_display = " ".join(command)
@@ -417,11 +425,19 @@ def run_command(
                 shell=isinstance(command, str),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                stdin=subprocess.PIPE if input is not None else None,
                 text=True,
-                env=os.environ.copy(),
+                env=env if env is not None else os.environ.copy(),
                 cwd=cwd,
             ) as proc:
                 register_process(proc)
+
+                # Write stdin before drain threads start (safe for short inputs).
+                # The value is never logged — callers may pass secret material here.
+                if input is not None:
+                    assert proc.stdin is not None
+                    proc.stdin.write(input)
+                    proc.stdin.close()
 
                 def _drain(pipe: IO[str], stream_name: str, lines_acc: List[str]) -> None:
                     for raw in pipe:
@@ -507,53 +523,66 @@ def run_command(
             )
 
     # ------------------------------------------------------------------
-    # Buffered path (default) — subprocess.run, results after completion.
+    # Buffered path — Popen + communicate for SIGTERM parity with the
+    # streaming path. The shutdown coordinator can now cancel buffered
+    # commands on SIGTERM (ADR-0028 gap closed).
     # ------------------------------------------------------------------
+    from strata.utils.shutdown_coordinator import deregister_process, register_process
+
+    timed_out = False
     try:
-        result = subprocess.run(
+        with subprocess.Popen(
             command,
             shell=isinstance(command, str),
-            check=False,
             stdout=subprocess.PIPE if capture_output else None,
             stderr=subprocess.PIPE if capture_output else None,
+            stdin=subprocess.PIPE if input is not None else None,
             text=True,
-            env=os.environ.copy(),  # Explicitly pass environment variables
-            timeout=timeout,
+            env=env if env is not None else os.environ.copy(),
             cwd=cwd,
-        )
+        ) as proc:
+            register_process(proc)
+            try:
+                stdout_data, stderr_data = proc.communicate(input=input, timeout=timeout)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                stdout_data, stderr_data = proc.communicate()
+                timed_out = True
+            finally:
+                deregister_process(proc)
+            returncode = proc.returncode
 
-        if check and result.returncode != 0:
+        if check and returncode != 0:
             duration_ms = (time.time() - start_time) * 1000
             logger.error(
                 "Command failed",
                 command=cmd_display,
-                returncode=result.returncode,
+                returncode=returncode,
                 duration_ms=round(duration_ms, 2),
-                stderr=result.stderr.strip() if result.stderr else "",
+                stderr=(stderr_data or "").strip(),
             )
-            raise subprocess.CalledProcessError(result.returncode, cmd_display, result.stdout, result.stderr)
+            raise subprocess.CalledProcessError(returncode, cmd_display, stdout_data, stderr_data)
 
         duration_ms = (time.time() - start_time) * 1000
         logger.debug(
             "Command completed",
             command=cmd_display,
-            returncode=result.returncode,
+            returncode=returncode,
             duration_ms=round(duration_ms, 2),
         )
 
         return CommandResult(
-            returncode=result.returncode,
-            stdout=result.stdout.strip() if result.stdout else "",
-            stderr=result.stderr.strip() if result.stderr else "",
+            returncode=returncode,
+            stdout=(stdout_data or "").strip(),
+            stderr=(stderr_data or "").strip(),
             command=cmd_display,
             duration_ms=round(duration_ms, 2),
+            timed_out=timed_out,
         )
 
     except subprocess.CalledProcessError:
-        # Re-raise CalledProcessError when check=True
         raise
     except FileNotFoundError as e:
-        # Handle command not found in PATH
         duration_ms = (time.time() - start_time) * 1000
         logger.debug(
             "Command not found in PATH",
@@ -561,7 +590,7 @@ def run_command(
             error=str(e),
         )
         return CommandResult(
-            returncode=127,  # Standard "command not found" exit code
+            returncode=127,
             stdout="",
             stderr=f"Command not found: {cmd_display}",
             command=cmd_display,

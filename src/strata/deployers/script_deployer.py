@@ -32,7 +32,6 @@ Environment variables injected into every script subprocess:
 """
 
 import os
-import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
@@ -51,6 +50,7 @@ from strata.models.deployment_model import DeploymentStageModel
 from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_service import DeploymentService
 from strata.utils.resolved_values import ResolvedValues
+from strata.utils.system import run_command
 
 if TYPE_CHECKING:
     from strata.controllers.solution_controller import SolutionController
@@ -319,29 +319,23 @@ class ScriptDeployer(BaseDeployer):
         env["STRATA_OBJECT_PATH"] = str(self.build_path / "objects")
         env["STRATA_STAGE_NAME"] = self.stage.name
 
-        try:
-            result = subprocess.run(
-                cmd,
-                cwd=self._get_stage_dir(),
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-            )
-        except subprocess.TimeoutExpired:
+        result = run_command(
+            cmd,
+            cwd=str(self._get_stage_dir()),
+            env=env,
+            timeout=timeout,
+        )
+        if result.timed_out:
             messages.append(f"Script timed out after {timeout}s: {script_path}")
             return False, messages
-        except FileNotFoundError:
+        if result.returncode == 127:
             messages.append(f"Interpreter not found for script: {script_path}")
             return False, messages
-
-        if result.returncode != 0:
+        if not result.is_successful:
             messages.append(f"Script exited with code {result.returncode}: {script_path.name}")
             if result.stderr:
                 messages.append(result.stderr.strip())
             return False, messages
-
         if result.stdout:
             messages.append(result.stdout.strip())
-
         return True, messages
