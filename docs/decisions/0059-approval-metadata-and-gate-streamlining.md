@@ -1,7 +1,8 @@
 # Approval metadata and gate streamlining — clarify `spec.approvals` vs. ADR-0057 gates
 
-- Status: proposed
+- Status: completed
 - Date: 2026-07-28
+- Completed: 2026-07-30
 
 > **Update 2026-07-29:** The "Option 2 docs-only" recommendation below was the
 > original scope. Further design discussion concluded a full breaking-change
