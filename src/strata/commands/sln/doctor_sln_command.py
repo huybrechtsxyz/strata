@@ -115,7 +115,7 @@ class DoctorSlnCommand(BaseCommand):
 
     def _execute(self) -> bool:
         # Validate --category filter
-        categories = _CATEGORIES
+        categories: tuple[str, ...] = _CATEGORIES
         if self._category:
             if self._category not in _CATEGORIES:
                 self._errors.append(f"Unknown category '{self._category}'. Available: {', '.join(_CATEGORIES)}")
@@ -201,10 +201,11 @@ class DoctorSlnCommand(BaseCommand):
             sol.load()
             profile, _ = sol.get_active_profile()
             if profile:
-                config_paths = [str(p.path) for p in (profile.configfile_paths or [])]
-                if config_paths:
-                    config_svc = ConfigurationService(config_paths)
-                    config_svc.load()
+                for cp in [str(p.path) for p in (profile.configfile_paths or [])]:
+                    svc = ConfigurationService.load(cp)
+                    if svc.model:
+                        config_svc = svc
+                        break
         except Exception:
             pass
 

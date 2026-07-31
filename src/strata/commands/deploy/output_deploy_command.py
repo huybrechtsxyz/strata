@@ -93,7 +93,7 @@ class OutputDeployCommand(BaseDeployCommand):
         self._all_versions = all_versions
         # Suppress header/footer chrome in raw/json passthrough modes so only
         # the bare value or JSON object is printed (used for shell scripting).
-        self.SHOW_CHROME = not (raw or json_output)
+        self.SHOW_CHROME = not (raw or json_output)  # type: ignore[misc]  # deliberate per-instance override
 
     # -------------------------------------------------------------------------
     # Entry point

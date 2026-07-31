@@ -133,6 +133,7 @@ class StatusDeployCommand(BaseDeployCommand):
             return result
 
         # Resolve provisioner type
+        assert self._deployment_service is not None
         resolved_type, _ = DeployerFactory.resolve_type(stage, self._deployment_service)
         if resolved_type != "terraform":
             # Non-terraform: limited info (reachability via cache)

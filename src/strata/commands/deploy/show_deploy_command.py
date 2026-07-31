@@ -170,6 +170,7 @@ class ShowDeployCommand(BaseDeployCommand):
                 env_data["custom"] = dict(env_model.spec.custom)
 
         controller = ValueController()
+        assert self._deployment_service is not None
         _, resolved, _ = controller.resolve_values(self._deployment_service, strict=False)
 
         declared_vars = env_service.get_variables()
