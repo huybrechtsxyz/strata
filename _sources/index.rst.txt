@@ -13,7 +13,6 @@ strata
    :caption: Getting Started:
 
    README
-   INDEX
    GLOSSARY
 
 .. toctree::
@@ -108,7 +107,7 @@ strata
 
    guides/audit-command-group
    guides/deploying
-   guides/environment-command-group
+   guides/deployment-inspection
    guides/multi-repo-setup
    guides/secrets-variables-features
    guides/service-command-group
@@ -139,6 +138,7 @@ strata
    guides/faq
    guides/config-faq
    guides/cookbook-add-environment
+   guides/cookbook-hash-secret-before-storage
    guides/environment-composition
    guides/pattern-cross-env-changes
    guides/troubleshooting-what-changed

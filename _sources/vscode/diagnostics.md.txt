@@ -175,7 +175,7 @@ Both can be toggled in Settings without reloading the extension.
 
 1. Disable `validateOnType` if it's on
 2. Use on-demand validation (Command Palette → Validate Current File) instead of on-save
-3. Check `strata audit list --last` to see how long the CLI call took
+3. Check `strata log list --last` to see how long the CLI call took
 
 **No validation errors but I expect some**
 

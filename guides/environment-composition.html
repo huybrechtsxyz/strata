@@ -24,7 +24,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Pattern: Change a Value Across All Environments" href="pattern-cross-env-changes.html" />
-    <link rel="prev" title="Cookbook: Add a New Environment" href="cookbook-add-environment.html" /> 
+    <link rel="prev" title="Cookbook: Hash a Secret Before Storing It" href="cookbook-hash-secret-before-storage.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -78,49 +78,6 @@
 <li class="toctree-l3"><a class="reference internal" href="../README.html#audit-trail">Audit Trail</a></li>
 </ul>
 </li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="../INDEX.html">Documentation Index</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#getting-started">🚀 <strong>Getting Started</strong></a></li>
-<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#reference">� <strong>Reference</strong></a></li>
-<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#user-guides">�📖 <strong>User Guides</strong></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#core-concepts">Core Concepts</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#operational-guides">Operational Guides</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#advanced-topics">Advanced Topics</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#architecture-design-decisions">🏗️ <strong>Architecture &amp; Design Decisions</strong></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#decision-records-adrs">Decision Records (ADRs)</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#developer-documentation">💻 <strong>Developer Documentation</strong></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#extension-vs-code">Extension (VS Code)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#cli-python">CLI (Python)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#contributing">Contributing</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#examples-tutorials">📚 <strong>Examples &amp; Tutorials</strong></a></li>
-<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#external-resources">🔗 <strong>External Resources</strong></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#related-technologies">Related Technologies</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#community-support">Community &amp; Support</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#version-specific-documentation">📋 <strong>Version-Specific Documentation</strong></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#current-version-v0-16-1">Current Version (v0.16.1)</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#quick-navigation-by-use-case">🎯 <strong>Quick Navigation by Use Case</strong></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#i-m-new-to-strata">“I’m new to strata”</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#i-m-using-the-cli">“I’m using the CLI”</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#i-m-using-the-vs-code-extension">“I’m using the VS Code Extension”</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#i-want-to-contribute">“I want to contribute”</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#i-have-a-question-or-issue">“I have a question or issue”</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#i-need-to-integrate-with-strata">“I need to integrate with strata”</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#file-structure">📄 <strong>File Structure</strong></a></li>
-<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#search-tips">🔍 <strong>Search Tips</strong></a></li>
-<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#support-feedback">📞 <strong>Support &amp; Feedback</strong></a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../GLOSSARY.html">Strata Glossary</a><ul>
@@ -641,6 +598,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#sln-update"><code class="docutils literal notranslate"><span class="pre">sln</span> <span class="pre">update</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#sln-clean"><code class="docutils literal notranslate"><span class="pre">sln</span> <span class="pre">clean</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#sln-status"><code class="docutils literal notranslate"><span class="pre">sln</span> <span class="pre">status</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#sln-doctor"><code class="docutils literal notranslate"><span class="pre">sln</span> <span class="pre">doctor</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#sln-export"><code class="docutils literal notranslate"><span class="pre">sln</span> <span class="pre">export</span></code></a></li>
 </ul>
 </li>
@@ -729,6 +687,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-plan"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">plan</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-history"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">history</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-health"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">health</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-status"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">status</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-output"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">output</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-lock"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">lock</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="../platform/commands.html#deploy-lock-status"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">lock</span> <span class="pre">status</span></code></a></li>
@@ -738,13 +697,8 @@
 </li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#env"><code class="docutils literal notranslate"><span class="pre">env</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#env-info"><code class="docutils literal notranslate"><span class="pre">env</span> <span class="pre">info</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#env-output"><code class="docutils literal notranslate"><span class="pre">env</span> <span class="pre">output</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#env-show"><code class="docutils literal notranslate"><span class="pre">env</span> <span class="pre">show</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#env-status"><code class="docutils literal notranslate"><span class="pre">env</span> <span class="pre">status</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#env-drift"><code class="docutils literal notranslate"><span class="pre">env</span> <span class="pre">drift</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#env-doctor"><code class="docutils literal notranslate"><span class="pre">env</span> <span class="pre">doctor</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#rollout"><code class="docutils literal notranslate"><span class="pre">rollout</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#rollout-status"><code class="docutils literal notranslate"><span class="pre">rollout</span> <span class="pre">status</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#audit"><code class="docutils literal notranslate"><span class="pre">audit</span></code></a><ul>
@@ -777,7 +731,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#values-resolve"><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#version"><code class="docutils literal notranslate"><span class="pre">version</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#version-v"><code class="docutils literal notranslate"><span class="pre">--version</span></code> / <code class="docutils literal notranslate"><span class="pre">-v</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#help"><code class="docutils literal notranslate"><span class="pre">help</span></code></a></li>
 </ul>
 </li>
@@ -835,7 +789,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../platform/workflow.html#outputs-plan-details-and-history">7.6 Outputs, plan details, and history</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/workflow.html#health-checks">7.7 Health checks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/workflow.html#execution-history">7.8 Execution history</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/workflow.html#declare-approval-metadata">7.9 Declare approval metadata</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/workflow.html#declare-or-enforce-hand-off-gates">7.9 Declare or enforce hand-off gates</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/workflow.html#phase-8-inspect-and-debug">Phase 8 — Inspect and Debug</a></li>
@@ -1740,7 +1694,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#workspace-reference">Workspace Reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#environments">Environments</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#configurations">Configurations</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#features-variables-secrets">Features, Variables &amp; Secrets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#versions-gates-and-stage-secrets">Versions, Gates, and Stage Secrets</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#configuration-merge-order">Configuration Merge Order</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#examples">Examples</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#use-cases">Use Cases</a></li>
@@ -1748,7 +1702,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#stages">Stages</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../config/deployment.html#provisioner-vs-topology"><code class="docutils literal notranslate"><span class="pre">provisioner</span></code> vs <code class="docutils literal notranslate"><span class="pre">topology</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../config/deployment.html#scope-stage-filtering"><code class="docutils literal notranslate"><span class="pre">scope</span></code> — stage filtering</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../config/deployment.html#steps">Steps</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#cross-stage-outputs">Cross-Stage Outputs</a><ul>
@@ -2178,63 +2131,62 @@
 <li class="toctree-l2"><a class="reference internal" href="deploying.html#see-also">See Also</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="environment-command-group.html">Environment Command Group — Inspecting Deployments</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="environment-command-group.html#what-is-strata-env">What is <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">env</span></code>?</a></li>
-<li class="toctree-l2"><a class="reference internal" href="environment-command-group.html#env-info-workspace-context">env info — Workspace Context</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#use-cases">Use cases</a></li>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#scripting">Scripting</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deployment-inspection.html">Inspecting Deployments — status, output, show, drift, and doctor</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="deployment-inspection.html#sln-status-workspace-context">sln status — Workspace Context</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#scripting">Scripting</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="environment-command-group.html#env-output-terraform-outputs">env output — Terraform Outputs</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#list-all-outputs">List all outputs</a></li>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#get-a-single-output-value">Get a single output value</a></li>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#get-output-for-a-specific-provisioner">Get output for a specific provisioner</a></li>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#raw-output-for-scripts">Raw output (for scripts)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#machine-readable-output">Machine-readable output</a></li>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#id1">Use cases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="deployment-inspection.html#deploy-output-terraform-outputs">deploy output — Terraform Outputs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#list-all-outputs-from-cache">List all outputs (from cache)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#refresh-from-the-live-backend">Refresh from the live backend</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#get-a-single-output-value">Get a single output value</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#get-output-for-a-specific-provisioner">Get output for a specific provisioner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#raw-output-for-scripts">Raw output (for scripts)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#machine-readable-output">Machine-readable output</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#use-cases">Use cases</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="environment-command-group.html#env-show-full-resolved-environment">env show — Full Resolved Environment</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#filter-by-stage">Filter by stage</a></li>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#id2">Machine-readable output</a></li>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#id3">Use cases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="deployment-inspection.html#deploy-show-full-resolved-configuration">deploy show — Full Resolved Configuration</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#filter-by-stage">Filter by stage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#id1">Machine-readable output</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#id2">Use cases</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="environment-command-group.html#env-status-infrastructure-status">env status — Infrastructure Status</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#single-deployment-status-live-backend-query">Single deployment status (live backend query)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#multiple-deployments-status-path-or-all">Multiple deployments status (path or all)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#id4">Filter by stage</a></li>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#offline-mode-no-backend-queries">Offline mode (no backend queries)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#id5">Use cases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="deployment-inspection.html#deploy-status-live-infrastructure-status">deploy status — Live Infrastructure Status</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#id3">Filter by stage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#offline-mode-no-backend-queries">Offline mode (no backend queries)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#id4">Use cases</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="environment-command-group.html#env-drift-detect-infrastructure-drift">env drift — Detect Infrastructure Drift</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#detect-and-report-specific-resources">Detect and report specific resources</a></li>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#id6">Machine-readable output</a></li>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#id7">Use cases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="deployment-inspection.html#rollout-status-fleet-wide-summary">rollout status — Fleet-Wide Summary</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#id5">Use cases</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="environment-command-group.html#env-doctor-diagnose-connectivity-issues">env doctor — Diagnose Connectivity Issues</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#check-specific-integration">Check specific integration</a></li>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#id8">Machine-readable output</a></li>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#id9">Use cases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="deployment-inspection.html#deploy-drift-detect-infrastructure-drift">deploy drift — Detect Infrastructure Drift</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#id6">Machine-readable output</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#id7">Use cases</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="environment-command-group.html#common-workflows">Common Workflows</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#workflow-1-pre-deployment-checklist">Workflow 1: Pre-deployment checklist</a></li>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#workflow-2-post-deployment-verification">Workflow 2: Post-deployment verification</a></li>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#workflow-3-troubleshooting-a-stalled-deployment">Workflow 3: Troubleshooting a stalled deployment</a></li>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#workflow-4-ci-cd-monitoring">Workflow 4: CI/CD monitoring</a></li>
+<li class="toctree-l2"><a class="reference internal" href="deployment-inspection.html#sln-doctor-diagnose-connectivity-issues">sln doctor — Diagnose Connectivity Issues</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#check-a-specific-category">Check a specific category</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#ai-explanation-of-failures">AI explanation of failures</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#id8">Machine-readable output</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#id9">Use cases</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="environment-command-group.html#tips-and-tricks">Tips and Tricks</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#extract-all-outputs-to-environment-variables">Extract all outputs to environment variables</a></li>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#monitor-infrastructure-with-prometheus">Monitor infrastructure with Prometheus</a></li>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#compare-environments">Compare environments</a></li>
-<li class="toctree-l3"><a class="reference internal" href="environment-command-group.html#automated-health-check-in-monitoring-tools">Automated health check in monitoring tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="deployment-inspection.html#common-workflows">Common Workflows</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#workflow-1-pre-deployment-checklist">Workflow 1: Pre-deployment checklist</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#workflow-2-post-deployment-verification">Workflow 2: Post-deployment verification</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#workflow-3-troubleshooting-a-stalled-deployment">Workflow 3: Troubleshooting a stalled deployment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#workflow-4-ci-cd-fleet-monitoring">Workflow 4: CI/CD fleet monitoring</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="environment-command-group.html#see-also">See Also</a></li>
+<li class="toctree-l2"><a class="reference internal" href="deployment-inspection.html#tips-and-tricks">Tips and Tricks</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#extract-all-outputs-to-environment-variables">Extract all outputs to environment variables</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment-inspection.html#compare-environments">Compare environments</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="deployment-inspection.html#see-also">See Also</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="multi-repo-setup.html">Multi-Repository Setup</a><ul>
@@ -2680,6 +2632,20 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="cookbook-add-environment.html#checklist">Checklist</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cookbook-add-environment.html#common-mistakes">Common mistakes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="cookbook-hash-secret-before-storage.html">Cookbook: Hash a Secret Before Storing It</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="cookbook-hash-secret-before-storage.html#when-to-use-this">When to use this</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook-hash-secret-before-storage.html#the-recipe">The recipe</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cookbook-hash-secret-before-storage.html#powershell">PowerShell</a></li>
+<li class="toctree-l3"><a class="reference internal" href="cookbook-hash-secret-before-storage.html#bash">bash</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook-hash-secret-before-storage.html#required-yaml">Required YAML</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook-hash-secret-before-storage.html#why-this-is-a-documented-recipe-not-a-built-in-feature">Why this is a documented recipe, not a built-in feature</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook-hash-secret-before-storage.html#security-notes">Security notes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook-hash-secret-before-storage.html#verify-before-you-rely-on-it">Verify before you rely on it</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook-hash-secret-before-storage.html#checklist">Checklist</a></li>
 </ul>
 </li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Environment Composition</a><ul>
@@ -3318,6 +3284,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../skills/strata-onboarding.html#anti-patterns-to-avoid">Anti-Patterns to Avoid</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../skills/strata-onboarding.html#validation-and-fix-suggestions">Validation and Fix Suggestions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../skills/strata-onboarding.html#guided-onboarding">Guided Onboarding</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../skills/strata-onboarding.html#console-repl-interactive-onboarding">Console REPL (Interactive Onboarding)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../skills/strata-onboarding.html#reference-examples">Reference Examples</a></li>
 </ul>
 </li>
@@ -3349,6 +3316,9 @@
              
   <section id="environment-composition">
 <h1>Environment Composition<a class="headerlink" href="#environment-composition" title="Link to this heading"></a></h1>
+<blockquote>
+<div><p>📐 <strong>Design rationale:</strong> <span class="xref myst">ADR-0024 — Environment composition: complete flat-merge and provenance tracking</span></p>
+</div></blockquote>
 <p>Compose environments from multiple files to separate shared baseline settings from
 environment-specific overrides — without repeating yourself.</p>
 <hr class="docutils" />
@@ -3680,7 +3650,7 @@ are still rejected (enforced by model validators) — the last-wins rule only ap
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="cookbook-add-environment.html" class="btn btn-neutral float-left" title="Cookbook: Add a New Environment" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="cookbook-hash-secret-before-storage.html" class="btn btn-neutral float-left" title="Cookbook: Hash a Secret Before Storing It" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="pattern-cross-env-changes.html" class="btn btn-neutral float-right" title="Pattern: Change a Value Across All Environments" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 

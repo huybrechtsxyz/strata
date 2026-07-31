@@ -1,5 +1,7 @@
 # Deployment Manifests Guide
 
+> 📐 **Design rationale:** [ADR-0021 — Deployment manifests as first-class build artifacts](../decisions/0021-deployment-manifests-as-first-class-build-artifacts.md)
+
 Learn how to enable, interpret, and use deployment manifests for compliance, auditing, and operational visibility.
 
 ---
@@ -554,16 +556,10 @@ strata deploy run -f prod.yaml
 
 ```bash
 # Export all deployment logs plus associated manifests
-strata audit export --output-dir ./audit_export --include-manifests
+strata audit export --include-manifests --out ./audit_export.json
 
 # Result:
-# audit_export/
-#   deploy_logs/
-#     log_001.json
-#     log_002.json
-#   manifests/
-#     manifest_001.json
-#     manifest_002.json
+# audit_export.json (contains audit events + embedded manifests)
 ```
 
 ---
@@ -637,13 +633,13 @@ strata build run -f deploy.yaml
 
 ### Key Differences from Deploy Manifests
 
-| Aspect | Build | Deploy |
-|--------|-------|--------|
-| **Trigger** | `strata build run` | `strata deploy run` |
-| **Stages** | None | Multiple (infrastructure, configure, etc.) |
-| **Outputs** | SBOM, policy results | Stage outputs, resource IDs, IPs |
-| **Errors** | Build/validation errors | Provisioner errors |
-| **Purpose** | Gate before deploying | Record what was deployed |
+| Aspect      | Build                   | Deploy                                     |
+| ----------- | ----------------------- | ------------------------------------------ |
+| **Trigger** | `strata build run`      | `strata deploy run`                        |
+| **Stages**  | None                    | Multiple (infrastructure, configure, etc.) |
+| **Outputs** | SBOM, policy results    | Stage outputs, resource IDs, IPs           |
+| **Errors**  | Build/validation errors | Provisioner errors                         |
+| **Purpose** | Gate before deploying   | Record what was deployed                   |
 
 ### Querying Build Manifests
 

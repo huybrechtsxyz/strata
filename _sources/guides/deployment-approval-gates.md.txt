@@ -6,13 +6,21 @@ Deployment gates are decision points in the pipeline that pause the deployment u
 
 ## Overview
 
-Gates are declared in the **environment configuration** (`spec.gates`) and are evaluated at specific phases during `strata deploy run`:
+Gates are declared in the **deployment configuration** (`spec.gates`, next to
+`stages`) and are evaluated at specific phases during `strata deploy run`:
 
 1. **Pre-plan gates** (`approval`, `scheduled`) — block before Terraform plan
 2. **Post-plan gates** (`cost_review`, `security_review`) — block after plan, with cost and CVE data available
 3. **Post-apply gates** (`verify`, `cab`, `incident`) — block after infrastructure is deployed
 
-When a gate blocks, `strata deploy run`:
+Each gate also has a **mode**:
+
+- `mode: enforce` (default) — strata creates a real work item, pauses the deploy, and requires `--resume` (exit code 5).
+- `mode: declare` — strata only records the gate in the audit trail; it never blocks. Use this when enforcement already happens externally (Azure DevOps environment approvals, GitHub Actions protection rules, etc.).
+
+And a **scope** — which stage(s) the gate applies to: a list of stage names, or `"all"` (default).
+
+When an `enforce` gate blocks, `strata deploy run`:
 
 - Creates a **work item** (stored locally or in a backend: S3, Azure Blob, GCS, etc.)
 - **Pauses** the deployment
@@ -25,46 +33,64 @@ To resume, the operator approves/rejects the work item, then runs `strata deploy
 
 ## Declaring Gates
 
-Gates are defined in the environment YAML under `spec.gates`:
+Gates are defined in the deployment YAML under `spec.gates`, next to `spec.stages`:
 
 ```yaml
 apiVersion: strata.huybrechts.xyz/v1
-kind: environment
+kind: deployment
 meta:
   name: production
 spec:
   gates:
-    # Human approval for all production deploys (pre-plan)
-    - type: approval
+    # Human approval for all production deploys (pre-plan, enforced)
+    - name: prod-approval
+      type: approval
+      mode: enforce
+      scope: [production]
       when: always
-      approvers: [ops-team]
+      approvers:
+        ops-team:
+          type: github-team
+          value: "org/ops-team"
       timeout_minutes: 60
 
-    # Cost review when monthly delta exceeds $1,000 (post-plan)
-    - type: cost_review
+    # Cost review when monthly delta exceeds $1,000 (post-plan, applies to all stages)
+    - name: cost-guard
+      type: cost_review
       when:
         cost_delta_monthly: ">= 1000"
-      approvers: [finance]
+      approvers:
+        finance:
+          type: user
+          value: "finance@example.com"
       timeout_minutes: 240
 
-    # Security team review when critical CVEs found (post-plan)
-    - type: security_review
+    # Security team review when critical CVEs found — audit only, external SOC handles it
+    - name: sbom-audit
+      type: security_review
+      mode: declare
       when:
         cve_critical: ">= 1"
-      approvers: [security-team]
-      timeout_minutes: 480
 
     # Only allow deploys during maintenance window (pre-plan, auto-resolves)
-    - type: scheduled
+    - name: maintenance-window
+      type: scheduled
       when:
         time_utc: "02:00-04:00"
       auto_resolve: true
 
     # Manual verification after deploy applied (post-apply)
-    - type: verify
+    - name: post-deploy-verify
+      type: verify
       when: always
       timeout_minutes: 30
       description: "Verify application health and smoke tests pass in prod"
+
+  stages:
+    - name: staging
+      provisioner: platform_iac
+    - name: production
+      provisioner: platform_iac
 ```
 
 ---
@@ -277,20 +303,32 @@ See `docs/guides/siem-audit-forwarding.md` for SIEM integration (Sentinel, Splun
 spec:
   gates:
     # 1. Pre-plan: Human approval
-    - type: approval
+    - name: ops-signoff
+      type: approval
       when: always
-      approvers: [ops-lead]
+      approvers:
+        ops-lead:
+          type: user
+          value: "ops-lead@example.com"
       timeout_minutes: 30
 
     # 2. Post-plan: Cost review (if significant delta)
-    - type: cost_review
+    - name: cost-review
+      type: cost_review
       when:
         cost_delta_monthly: ">= 5000"
-      approvers: [cfo, vp-engineering]
+      approvers:
+        cfo:
+          type: user
+          value: "cfo@example.com"
+        vp-engineering:
+          type: user
+          value: "vpe@example.com"
       timeout_minutes: 240
 
     # 3. Post-apply: Smoke test verification
-    - type: verify
+    - name: smoke-test-verify
+      type: verify
       when: always
       timeout_minutes: 15
       description: "Run prod smoke tests; confirm no alerts spike"
@@ -307,7 +345,8 @@ Deployment pauses at each gate:
 ```yaml
 spec:
   gates:
-    - type: scheduled
+    - name: maintenance-window
+      type: scheduled
       when:
         time_utc: "22:00-06:00"  # Only between 10 PM and 6 AM UTC
       auto_resolve: true         # Auto-resume outside window? Or block?
@@ -321,18 +360,26 @@ If `auto_resolve: true`, deployment auto-starts within the window. If `false`, o
 spec:
   gates:
     # Block if any critical CVEs
-    - type: security_review
+    - name: critical-cve-gate
+      type: security_review
       when:
         cve_critical: ">= 1"
-      approvers: [security-team]
+      approvers:
+        security-team:
+          type: github-team
+          value: "org/security-team"
       timeout_minutes: 480
       description: "Critical CVE(s) detected — security team review required"
 
     # Block if AI risk is moderate or higher
-    - type: security_review
+    - name: ai-risk-gate
+      type: security_review
       when:
         ai_risk: ">= medium"
-      approvers: [security-team]
+      approvers:
+        security-team:
+          type: github-team
+          value: "org/security-team"
       timeout_minutes: 240
       description: "Elevated AI risk score — security review required"
 ```

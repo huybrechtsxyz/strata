@@ -361,8 +361,8 @@ Rollback plan:
   1. Revert deployment file to v1.2.2 (from git):
      git checkout v1.2.2 -- deploy/deploy-prod.yaml
 
-  2. Validate the reverted file:
-     strata validate deploy/deploy-prod.yaml
+    2. Validate the reverted file:
+      strata validate run -f deploy/deploy-prod.yaml
 
   3. Run the deployment:
      strata deploy run -f deploy/deploy-prod.yaml --stage services

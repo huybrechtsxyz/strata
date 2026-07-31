@@ -157,4 +157,4 @@ is in the file.
 
 1. The terminal is visible (you can see its output)
 2. Try pressing Enter or Ctrl+C to recover
-3. Check `strata audit list --last` for the command that ran
+3. Check `strata log list --last` for the command that ran
