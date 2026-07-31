@@ -178,7 +178,7 @@ def output(self) -> Tuple[bool, Dict[str, Any], List[str]]:
 
 Query current live infrastructure state.  Default returns an empty dict and an "not implemented" message.
 
-Override to support `strata deploy status` and `strata env status`:
+Override to support `strata deploy health` (which calls `status()` alongside `output()` to assess live infrastructure state; note this is *not* called by `strata deploy status` or `strata env status`, despite the similar naming — those read Terraform state/output directly rather than this generic protocol method):
 
 ```python
 def status(self) -> Tuple[bool, Dict[str, Any], List[str]]:

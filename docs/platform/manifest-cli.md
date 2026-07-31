@@ -180,7 +180,7 @@ strata manifest export [OPTIONS]
 
 | Flag                 | Type   | Description                                              |
 | -------------------- | ------ | -------------------------------------------------------- |
-| `--output-dir PATH`  | string | Output directory (required)                              |
+| `--out PATH`         | string | Output directory (required)                              |
 | `--include-sbom`     | flag   | Include SBOM files alongside manifests                   |
 | `--include-platform` | flag   | Include platform.json artifacts alongside manifests      |
 | `--work-path PATH`   | string | Workspace root (default: auto-detect)                    |
@@ -253,18 +253,18 @@ compliance_package/
 
 ```bash
 # Basic export (manifests only)
-strata manifest export --output-dir ./compliance
+strata manifest export --out ./compliance
 
 # Export with SBOMs for supply chain review
-strata manifest export --output-dir ./compliance --include-sbom
+strata manifest export --out ./compliance --include-sbom
 
 # Full export for compliance audit
-strata manifest export --output-dir ./compliance \
+strata manifest export --out ./compliance \
   --include-sbom \
   --include-platform
 
 # Compress for archival
-strata manifest export --output-dir ./temp_compliance && \
+strata manifest export --out ./temp_compliance && \
   zip -r compliance-$(date +%Y-%m-%d).zip ./temp_compliance && \
   rm -rf ./temp_compliance
 ```
@@ -276,14 +276,11 @@ strata manifest export --output-dir ./temp_compliance && \
 The `strata audit export` command now supports manifests:
 
 ```bash
-# Export deploy logs plus manifests
-strata audit export --output-dir ./evidence --include-manifests
+# Export deploy logs plus manifests into one JSON file
+strata audit export --include-manifests --out ./evidence.json
 
-# Result:
-# evidence/
-#   deploy_logs/          ← existing deploy logs
-#   manifests/            ← NEW: all manifests associated with deployments
-#   summary.json
+# Or newline-delimited JSON for log pipelines
+strata audit export --include-manifests --format ndjson --out ./evidence.ndjson
 ```
 
 ---
@@ -319,7 +316,7 @@ diff <(jq '.spec.artifacts.repositories' build.json) \
 ```bash
 # Gather all manifests, SBOMs, and configs
 strata manifest export \
-  --output-dir ./compliance-evidence-2024-q2 \
+  --out ./compliance-evidence-2024-q2 \
   --include-sbom \
   --include-platform
 
@@ -388,7 +385,7 @@ jq . .strata/build/prod/manifest.json
 mkdir -p ./compliance_package
 
 # Export with explicit path
-strata manifest export --output-dir ./compliance_package
+strata manifest export --out ./compliance_package
 ```
 
 ---

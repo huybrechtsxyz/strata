@@ -1,12 +1,28 @@
-"""Gate configuration models for deployment workflow orchestration — ADR-0057."""
+"""Gate configuration models for deployment workflow orchestration — ADR-0057 / ADR-0059."""
 
 from __future__ import annotations
 
-from typing import List, Literal, Optional, Union
+from enum import Enum
+from typing import Dict, List, Literal, Optional, Union
 
 from pydantic import Field
 
 from strata.models.common_models import PlatformBaseModel
+
+
+class ApproverType(str, Enum):
+    """Supported approver identity types."""
+
+    GITHUB_TEAM = "github-team"
+    ADO_GROUP = "ado-group"
+    USER = "user"
+
+
+class ApproverRef(PlatformBaseModel):
+    """A single named approver entry."""
+
+    type: ApproverType = Field(description="Approver identity type: github-team | ado-group | user")
+    value: str = Field(description="Approver identifier — team slug, group name, or user address")
 
 
 class GateWhenConditionsModel(PlatformBaseModel):
@@ -44,21 +60,46 @@ class GateWhenConditionsModel(PlatformBaseModel):
 
 
 class DeploymentGateModel(PlatformBaseModel):
-    """A single hand-off gate declared in an environment's spec.gates list."""
+    """A single hand-off gate declared in a deployment's ``spec.gates`` list.
 
+    Absorbs both ADR-0057's enforcing gate mechanism and the old ``spec.approvals``
+    audit-only metadata (ADR-0059) into one schema — see ``mode`` below.
+    """
+
+    name: str = Field(
+        description="Unique gate name within this deployment's spec.gates list. "
+        "Used as the merge key when a child deployment's `extends` overrides a base "
+        "deployment's gate — identical semantics to `stages[].name`.",
+        examples=["prod-approval", "cost-guard"],
+    )
     type: str = Field(
         description="Gate type: approval | cost_review | security_review | verify | scheduled | incident | cab",
         examples=["approval", "cost_review", "security_review", "verify", "scheduled"],
+    )
+    mode: Literal["declare", "enforce"] = Field(
+        default="enforce",
+        description=(
+            "'enforce' — strata creates a real WorkItem, pauses the deploy, and requires "
+            "--resume (exit code 5). 'declare' — strata only records this gate in the audit "
+            "trail; it never blocks. Use 'declare' when enforcement already happens "
+            "externally (e.g. Azure DevOps environment approvals, GitHub Actions protection rules)."
+        ),
+    )
+    scope: Union[Literal["all"], List[str]] = Field(
+        default="all",
+        description="Which stage(s) this gate applies to: a list of stage names, or 'all'.",
+        examples=["all", ["production"]],
     )
     when: Union[Literal["always"], GateWhenConditionsModel] = Field(
         default="always",
         description='Condition to trigger the gate: "always" or a conditions object.',
         examples=["always", {"cost_delta_monthly": ">= 1000"}],
     )
-    approvers: Optional[List[str]] = Field(
+    approvers: Optional[Dict[str, ApproverRef]] = Field(
         None,
-        description="List of approver groups, emails, or git usernames required to resolve this gate.",
-        examples=[["ops-team"], ["alice@example.com", "security-team"]],
+        description="Named approver entries required to resolve this gate. Key is a short "
+        "identifier (e.g. used in audit logs); value is a typed approver reference.",
+        examples=[{"ops-team": {"type": "github-team", "value": "org/ops-team"}}],
     )
     min_approvals: int = Field(
         default=1,

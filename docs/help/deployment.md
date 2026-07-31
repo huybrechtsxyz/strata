@@ -31,9 +31,13 @@ spec:
     - name: verify
       type: manual_verification
   gates:
-    - type: approval
+    - name: prod-approval
+      type: approval
       when: always
-      approvers: [ops-team]
+      approvers:
+        ops-team:
+          type: github-team
+          value: "org/ops-team"
 ```
 
 ---
@@ -54,7 +58,8 @@ strata build run -f deploy-prd.yaml              # build artifacts
 strata build run -f deploy-prd.yaml --dry-run    # preview changes
 strata deploy run -f deploy-prd.yaml --dry-run   # dry-run provisioning
 strata deploy run -f deploy-prd.yaml --force     # apply infrastructure
-strata deploy status -f deploy-prd.yaml          # check status
+strata deploy output -f deploy-prd.yaml          # check outputs (cached, or --refresh for live)
+strata deploy status -f deploy-prd.yaml          # check live infra status
 ```
 
 ---

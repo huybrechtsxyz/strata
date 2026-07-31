@@ -8,23 +8,9 @@ them against the zone-to-region mapping on ``ConfigurationService.model.spec.zon
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
-
-try:
-    from strata.models.policy_model import PolicyModel
-    from strata.validators.policies.base_policy import PolicyContext, PolicyResult
-    from strata.validators.policies.tenant_zone_policy import TenantZonePolicy
-
-    IMPL_MISSING = False
-except ImportError:
-    TenantZonePolicy = None  # type: ignore[assignment,misc]
-    PolicyContext = None  # type: ignore[assignment,misc]
-    PolicyResult = None  # type: ignore[assignment,misc]
-    PolicyModel = None  # type: ignore[assignment,misc]
-    IMPL_MISSING = True
-
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="TenantZonePolicy not yet implemented")
-
+from strata.models.policy_model import PolicyModel
+from strata.validators.policies.base_policy import PolicyContext
+from strata.validators.policies.tenant_zone_policy import TenantZonePolicy
 
 # ---------------------------------------------------------------------------
 # Sample plan data fixtures
@@ -108,8 +94,6 @@ def _make_policy(**kwargs) -> "PolicyModel":
         "phase": "plan",
     }
     defaults.update(kwargs)
-    if IMPL_MISSING:
-        return MagicMock()
     return PolicyModel(**defaults)
 
 
@@ -144,8 +128,6 @@ def _make_context(plan_data=None, zone_map=None) -> "PolicyContext":
     config_service = MagicMock()
     config_service.model = config_model
 
-    if IMPL_MISSING:
-        return MagicMock()
     return PolicyContext(
         phase="plan",
         work_path=Path("/tmp"),

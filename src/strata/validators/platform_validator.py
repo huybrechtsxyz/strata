@@ -31,6 +31,7 @@ from strata.services.tenant_service import TenantService
 from strata.services.version_lock_service import VersionLockService
 from strata.services.version_manifest_service import VersionManifestService
 from strata.services.workspace_service import WorkspaceService
+from strata.utils.system import get_pkg_templates_path
 from strata.validators.base_validator import BaseValidator
 
 # ConfigurationService is intentionally excluded: it is a path-less singleton
@@ -84,6 +85,34 @@ class PlatformValidator(BaseValidator):
     def service(self) -> Optional[BaseService]:
         return self._service
 
+    def _is_template_source(self, work_path: Path) -> bool:
+        """Return True when the file lives inside a recognized templates directory.
+
+        Covers the workspace-local ``.strata/templates/`` directory and the
+        package-bundled template directory used by ``strata new``. Files here
+        are Jinja2 sources (e.g. ``meta.name: {{ customer-code }}``) that are
+        never meant to be validated in place — they're rendered into concrete
+        documents first.
+        """
+        try:
+            resolved = self._file_path.resolve()
+        except OSError:
+            resolved = self._file_path
+
+        candidates = [work_path / ".strata" / "templates"]
+        try:
+            candidates.append(get_pkg_templates_path() / "solution" / "dot.strata" / "templates")
+        except Exception:
+            pass
+
+        for base in candidates:
+            try:
+                if resolved.is_relative_to(base.resolve()):
+                    return True
+            except OSError:
+                continue
+        return False
+
     def before_validate(self, work_path: Path) -> bool:
         """Verify file exists, parse YAML, extract and validate ``kind``."""
         if not self._file_path.exists():
@@ -93,6 +122,20 @@ class PlatformValidator(BaseValidator):
                 context={"path": str(self._file_path)},
             )
             self.logger.warning("File not found", path=str(self._file_path))
+            return False
+
+        if self._is_template_source(work_path):
+            self.add_validation_error(
+                "TEMPLATE_SOURCE_SKIPPED",
+                f"'{self._file_path}' is a template source file (under .strata/templates/) — "
+                "it is not validated as a concrete document. Run 'strata new' to render a "
+                "real file from it first.",
+                context={"path": str(self._file_path)},
+            )
+            self.logger.info(
+                "Skipping validation for template source file",
+                path=str(self._file_path),
+            )
             return False
 
         try:

@@ -1,24 +1,15 @@
 """Tests for strata.utils.datetime_utils."""
 
+import click
 import pytest
 
-try:
-    import click
-
-    from strata.utils.datetime_utils import (
-        coerce_to_utc,
-        format_display_timestamp,
-        now_utc,
-        parse_iso_timestamp,
-        to_wire_timestamp,
-    )
-
-    IMPL_MISSING = False
-except ImportError:
-    IMPL_MISSING = True
-
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="datetime_utils not available")
-
+from strata.utils.datetime_utils import (
+    coerce_to_utc,
+    format_display_timestamp,
+    now_utc,
+    parse_iso_timestamp,
+    to_wire_timestamp,
+)
 
 # ===========================================================================
 # now_utc

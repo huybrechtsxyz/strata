@@ -7,6 +7,48 @@ User: Vincent Huybrechts. Stack: Python 3.13, uv, Click, Pydantic v2, structlog,
 
 ## Learnings
 
+### 2026-07-28 — Global review pass 2 (cont.): D1/D2 verdicts, ADR-0061 filed
+
+- D1 🟡 (`deploy_log_path` genuinely lacks a remote backend, but SIEM forwarding
+  and the gitops manifest already cover the real cross-machine needs — real but
+  low-priority, doc-only follow-up added to `_todo.md`). D2 🔴 (4 subprocess
+  execution implementations, not 3 — `format=script` builder has no timeout at
+  all, live hang risk; `run_command()`'s buffered/default path lacks the
+  SIGTERM registration its streaming path has; filed ADR-0061 recommending
+  fixing the buffered path first, then migrating the other two call sites,
+  with the timeout fix shippable independently and immediately).
+
+### 2026-07-28 — Global review pass 2 (cont.): C4/C5/C6 verdicts, ADR-0060 filed
+
+- C4 🟡 (kind-catalog docs sprawl — 4 hand-maintained "valid kinds" lists, 3 wrong;
+  code itself is fine via `PlatformKind` enum; added to `_todo.md`). C5 🟢
+  (ADR-0044's dependency-graph/parallel-execution and drift-detection gaps
+  re-verified against current code — still accurate, no priority shift). C6 🔴
+  (not 2 but 4 overlapping "is it deployed" commands — `deploy status` deprecated
+  but not `hidden=True`, its own deprecation messages split across two different
+  replacements; filed ADR-0060 recommending `hidden=True` + doc fixes now, full
+  removal deferred, mega-command consolidation rejected).
+
+### 2026-07-28 — Global review pass 2: C1/C2 verdicts, ADR-0059 filed, stale ADR index removed
+
+- C1 🟢 (54%-proposed stat was itself sourced from a stale `docs/decisions/README.md` index table, now removed — real rate is ~70% shipped). C2 🟡 (three overlapping "approval" concepts — `spec.approvals`, ADR-0032, ADR-0057 — filed ADR-0059 recommending docs-only clarification now, rejecting removal/rename, flagging an `enforce:` bridge as the unscheduled future direction).
+
+### 2026-07-28 — Global good/meh/ugly review, pass 1: contributed Concept + Design items to `_lesson.md`
+
+- Scanned ADR coherence and architecture layering for the global audit Vincent kicked off; contributed Concept (C1–C6) and Design (D1–D7) items to the new root-level `_lesson.md` tracker. Collection only — no verdicts assigned yet.
+
+### 2026-07-28 — ADR 0058 published: cross-deployment dependency gating via `spec.requires`
+
+- Formalized the earlier discussion (below) into `docs/decisions/0058-cross-deployment-dependency-gating.md` (Status: Proposed) and added it to the ADR index. Records the `spec.requires: Optional[List[str]]` field decision, backed by the gitops-manifest status signal with `env status` as a live-state fallback.
+
+### 2026-07-28 — Cross-deployment dependency gating: no built-in mechanism; recommend `spec.requires` over ADR-0057 gates
+
+- Assessed whether strata can gate a lower deployment layer (zone) on an upper layer (landscape) succeeding first, across separate `kind: deployment` files. No built-in mechanism exists — `stages[].depends_on` is intra-file only, `spec.inputs.from` is unimplemented. Initially proposed an ADR-0057 `type: dependency` gate, but revised after Linus showed gates are environment-scoped/human-decision-oriented — concurred a new `spec.requires` field is the better fit. Flagged open, not actioned.
+
+### 2026-07-28 — Secret post_generate/derive feature request: recommend docs recipe now, `derive:` spec as fallback
+
+- Assessed a request to derive a secret from a generated one via a transform. Verdict: narrow use case — recommend Option D (documented CLI recipe: `secret put --generate` → `secret get --unmask` → `secret put --value`) now, zero new code. Recommend Option C (`derive:` spec on the secret store model) only if the pattern recurs. Option A (`post_generate` hook) is discouraged — unsafe in unattended build/deploy paths.
+
 ### 2026-07-11 — Naming: "promotion" verdict + verb/noun asymmetry rule
 
 **Requested by:** Vincent Huybrechts (ADR 0011 name gut-check).

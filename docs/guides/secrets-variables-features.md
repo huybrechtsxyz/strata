@@ -463,6 +463,9 @@ On first `strata build`, strata will:
 
 Subsequent builds reuse the same secret (no re-generation).
 
+> Need to store a *transformed* value (e.g. a hash) while keeping the raw generated secret
+> retrievable separately? See [Cookbook: Hash a Secret Before Storing It](cookbook-hash-secret-before-storage.md).
+
 ---
 
 ## Troubleshooting

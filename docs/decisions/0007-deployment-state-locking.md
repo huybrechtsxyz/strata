@@ -690,3 +690,8 @@ Calls `backend.history()`, renders as table or JSON.
 | 13   | Docs + schema                 | docs         | 8          | 0         |
 
 Steps 1–8 = Phase 1 (MVP).  Steps 9–12 = Phase 2 (remote backends).  Step 13 spans both.
+
+## Related
+
+- [How Deployment Locking Works](../guides/how-deployment-locking-works.md) — user-facing
+  walkthrough of what locking protects and how to manage stuck locks

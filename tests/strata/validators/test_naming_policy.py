@@ -7,23 +7,9 @@ coverage to deployment stages, workspace topologies, resources, etc.
 
 from unittest.mock import MagicMock
 
-import pytest
-
-try:
-    from strata.models.policy_model import PolicyModel
-    from strata.validators.policies.base_policy import PolicyContext, PolicyResult
-    from strata.validators.policies.naming_policy import _ALL_TARGETS, NamingPolicy
-
-    IMPL_MISSING = False
-except ImportError:
-    NamingPolicy = None  # type: ignore[assignment,misc]
-    PolicyContext = None  # type: ignore[assignment,misc]
-    PolicyResult = None  # type: ignore[assignment,misc]
-    PolicyModel = None  # type: ignore[assignment,misc]
-    _ALL_TARGETS = set()  # type: ignore[assignment]
-    IMPL_MISSING = True
-
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="NamingPolicy not yet implemented")
+from strata.models.policy_model import PolicyModel
+from strata.validators.policies.base_policy import PolicyContext
+from strata.validators.policies.naming_policy import _ALL_TARGETS, NamingPolicy
 
 # ---------------------------------------------------------------------------
 # Helpers

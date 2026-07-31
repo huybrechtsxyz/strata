@@ -390,7 +390,9 @@ After reloading your shell, `strata <TAB>` completes commands and `--<TAB>` comp
 - [Workflow Guide](workflow.md) — full lifecycle walkthrough with real repo examples
 - [CLI Reference](commands.md) — every command and flag documented
 - [Configuration Format](../config/configuration.md) — YAML schema reference
+- [Strata Onboarding Skill](../skills/strata-onboarding.md) — drop this file into your AI
+  agent's skill/instructions folder for strata-aware YAML help before you even have a workspace
 
 > **Tip:** Use `strata new --list` to see all built-in config file templates, then
-> `strata new namespace my-ns` (or any other kind) to scaffold a new YAML file with
+> `strata new my-ns --template namespace` (or any other kind) to scaffold a new YAML file with
 > `meta.name` pre-filled and all spec fields as editable placeholders.

@@ -63,7 +63,7 @@ strata deploy run -f deploy/deploy-prd.yaml   # plan + apply
 
 Drift detection
 ```
-strata deploy drift -f deploy/deploy-prd.yaml  # runs az deployment group what-if
+strata deploy drift run -f deploy/deploy-prd.yaml  # runs az deployment group what-if
 ```
 
 Comparison to Terraform

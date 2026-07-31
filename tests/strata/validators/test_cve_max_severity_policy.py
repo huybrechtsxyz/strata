@@ -1,24 +1,9 @@
 """Tests for CveMaxSeverityPolicy — CVE threshold enforcement."""
 
-import pytest
-
-try:
-    from strata.models.policy_model import PolicyModel
-    from strata.models.sbom_model import CveAuditResultModel, CveFindingModel
-    from strata.validators.policies.base_policy import PolicyContext
-    from strata.validators.policies.cve_max_severity_policy import CveMaxSeverityPolicy
-
-    IMPL_MISSING = False
-except ImportError:
-    CveMaxSeverityPolicy = None  # type: ignore[assignment,misc]
-    PolicyContext = None  # type: ignore[assignment,misc]
-    PolicyModel = None  # type: ignore[assignment,misc]
-    CveAuditResultModel = None  # type: ignore[assignment,misc]
-    CveFindingModel = None  # type: ignore[assignment,misc]
-    IMPL_MISSING = True
-
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="CveMaxSeverityPolicy not yet implemented")
-
+from strata.models.policy_model import PolicyModel
+from strata.models.sbom_model import CveAuditResultModel, CveFindingModel
+from strata.validators.policies.base_policy import PolicyContext
+from strata.validators.policies.cve_max_severity_policy import CveMaxSeverityPolicy
 
 # ---------------------------------------------------------------------------
 # Helpers

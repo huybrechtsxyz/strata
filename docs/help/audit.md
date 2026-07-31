@@ -74,7 +74,7 @@ spec:
 ```bash
 strata audit changes                    # List recent deployments
 strata audit changes --last 20 --ai     # Summarise trends
-strata log list                         # Show execution log entries
+strata audit export --last 20 --format ndjson --out deploy-log.ndjson  # Export deploy-log records
 ```
 
 ---

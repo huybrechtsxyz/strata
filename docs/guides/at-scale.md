@@ -1,6 +1,10 @@
 # Operating Strata at Scale — Multi-Tenant Design
 
-> **Status:** Design draft — not yet implemented.  
+> 🚧 **DESIGN DRAFT — NOT YET IMPLEMENTED**
+> This guide describes a proposed design, not a shipped feature. Nothing
+> described below can be run with the current CLI — treat it as a reference
+> architecture for planning, not a how-to.
+>
 > **Context:** A company using strata to manage 100+ tenants across multiple regions with shared infrastructure and dedicated application resources.
 
 ---

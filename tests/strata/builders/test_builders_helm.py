@@ -1,31 +1,16 @@
-"""Unit tests for HelmBuilder.
-
-NOTE: `src/strata/builders/helm_builder.py` may not exist yet.
-These tests are written from the design spec and will be collected
-once the implementation is in place.
-"""
+"""Unit tests for HelmBuilder."""
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 import yaml
 
-try:
-    from strata.builders.helm_builder import HelmBuilder
-
-    IMPL_MISSING = False
-except ImportError:
-    HelmBuilder = None  # type: ignore[assignment,misc]
-    IMPL_MISSING = True
-
+from strata.builders.helm_builder import HelmBuilder
 from strata.models.common_models import ServiceDeployerType
 from strata.models.module_model import (
     ModuleMountModel,
     ModuleServiceEnvironmentModel,
     ModuleServiceModel,
 )
-
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="HelmBuilder not yet implemented")
 
 # ---------------------------------------------------------------------------
 # Helpers — mirror test_builders_compose.py conventions exactly

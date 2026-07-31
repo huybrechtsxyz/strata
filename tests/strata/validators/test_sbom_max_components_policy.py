@@ -4,24 +4,10 @@ The policy runs at the ``build`` phase and enforces upper bounds on total SBOM
 component count and per-collector limits.
 """
 
-import pytest
-
-try:
-    from strata.models.policy_model import PolicyModel
-    from strata.models.sbom_model import SbomComponentModel
-    from strata.validators.policies.base_policy import PolicyContext
-    from strata.validators.policies.sbom_max_components_policy import SbomMaxComponentsPolicy
-
-    IMPL_MISSING = False
-except ImportError:
-    SbomMaxComponentsPolicy = None  # type: ignore[assignment,misc]
-    PolicyContext = None  # type: ignore[assignment,misc]
-    PolicyModel = None  # type: ignore[assignment,misc]
-    SbomComponentModel = None  # type: ignore[assignment,misc]
-    IMPL_MISSING = True
-
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="SbomMaxComponentsPolicy not yet implemented")
-
+from strata.models.policy_model import PolicyModel
+from strata.models.sbom_model import SbomComponentModel
+from strata.validators.policies.base_policy import PolicyContext
+from strata.validators.policies.sbom_max_components_policy import SbomMaxComponentsPolicy
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -2,6 +2,8 @@
 
 > **Audience:** DevOps engineers and platform teams who want to understand the
 > monthly cost of infrastructure before deploying it.
+>
+> 📐 **Design rationale:** [ADR-0031 — Cost estimation and visibility](../decisions/0031-cost-estimation-and-visibility.md)
 
 ---
 

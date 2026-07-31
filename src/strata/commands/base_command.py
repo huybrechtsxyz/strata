@@ -21,7 +21,7 @@ from strata.utils.config import (
     get_audit_log_path,
     get_logs_dir,
 )
-from strata.utils.system import generate_uuid, resolve_path, resolve_work_path
+from strata.utils.system import generate_uuid, redact_argv, resolve_path, resolve_work_path
 from strata.utils.version import get_version
 
 
@@ -190,7 +190,7 @@ class BaseCommand:
         click.echo("─" * 80)
         click.echo("Automates workspace preparation, configuration, and deployment.")
         click.echo(f"⏱️   Timestamp       : {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC")
-        click.echo(f"📜  Entry point     : {' '.join(sys.argv)}")
+        click.echo(f"📜  Entry point     : {' '.join(redact_argv(sys.argv))}")
         click.echo(f"📂  Current dir     : {os.getcwd()}")
         if work_path:
             click.echo(f"📁  Work path       : {work_path}")
@@ -566,7 +566,7 @@ class BaseCommand:
         audit(
             f"command.{self.OPERATION}",
             outcome="success" if success else "failure",
-            target=" ".join(sys.argv[1:]) if len(sys.argv) > 1 else self.OPERATION,
+            target=" ".join(redact_argv(sys.argv[1:])) if len(sys.argv) > 1 else self.OPERATION,
             detail={
                 "execution_id": self._execution_id,
                 "duration_ms": round(duration.total_seconds() * 1000),

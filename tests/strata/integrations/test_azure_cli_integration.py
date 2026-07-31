@@ -2,19 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-try:
-    from strata.integrations.azure_cli import AzureCLIIntegration
-    from strata.models.integration_model import IntegrationModel
-
-    IMPL_MISSING = False
-except ImportError:
-    AzureCLIIntegration = None  # type: ignore[assignment,misc]
-    IMPL_MISSING = True
-
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="AzureCLIIntegration not available")
-
+from strata.integrations.azure_cli import AzureCLIIntegration
+from strata.models.integration_model import IntegrationModel
 
 # ===========================================================================
 # Helpers

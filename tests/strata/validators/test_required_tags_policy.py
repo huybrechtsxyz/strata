@@ -6,23 +6,9 @@ platform artifact carries all configured required labels.
 
 from unittest.mock import MagicMock
 
-import pytest
-
-try:
-    from strata.models.policy_model import PolicyModel
-    from strata.validators.policies.base_policy import PolicyContext, PolicyResult
-    from strata.validators.policies.required_tags_policy import RequiredTagsPolicy
-
-    IMPL_MISSING = False
-except ImportError:
-    RequiredTagsPolicy = None  # type: ignore[assignment,misc]
-    PolicyContext = None  # type: ignore[assignment,misc]
-    PolicyResult = None  # type: ignore[assignment,misc]
-    PolicyModel = None  # type: ignore[assignment,misc]
-    IMPL_MISSING = True
-
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="RequiredTagsPolicy not yet implemented")
-
+from strata.models.policy_model import PolicyModel
+from strata.validators.policies.base_policy import PolicyContext
+from strata.validators.policies.required_tags_policy import RequiredTagsPolicy
 
 # ---------------------------------------------------------------------------
 # Helpers

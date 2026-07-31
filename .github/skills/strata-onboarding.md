@@ -19,20 +19,20 @@ Files form a dependency tree. Create them in this order:
 configuration → environments → workspaces → resources/namespaces/modules → deployments
 ```
 
-| Kind | Purpose | References |
-|------|---------|------------|
-| `configuration` | Hub: provisioners, providers, remotes, policies, stores | — (root) |
-| `environment` | Region/env-specific overrides, variables, secrets | configuration (implicit) |
-| `workspace` | Groups resources + namespaces + modules into a deployable unit | resources, namespaces, modules |
-| `resource` | Infrastructure primitive (AKS cluster, storage account, etc.) | provider |
-| `namespace` | Logical grouping of modules (e.g. "platform-services") | modules |
-| `module` | Application unit with services, files, environment | — |
-| `deployment` | Ties workspace + environments + stages into a deployable manifest | workspace, environments |
-| `provider` | Cloud provider config (Azure, AWS, GCP) | — |
-| `tenant` | Multi-tenancy isolation unit | — |
-| `firewall` | Network firewall rules | — |
-| `network` | Subnet definitions | — |
-| `dns` | DNS zones and records | — |
+| Kind            | Purpose                                                           | References                     |
+| --------------- | ----------------------------------------------------------------- | ------------------------------ |
+| `configuration` | Hub: provisioners, providers, remotes, policies, stores           | — (root)                       |
+| `environment`   | Region/env-specific overrides, variables, secrets                 | configuration (implicit)       |
+| `workspace`     | Groups resources + namespaces + modules into a deployable unit    | resources, namespaces, modules |
+| `resource`      | Infrastructure primitive (AKS cluster, storage account, etc.)     | provider                       |
+| `namespace`     | Logical grouping of modules (e.g. "platform-services")            | modules                        |
+| `module`        | Application unit with services, files, environment                | —                              |
+| `deployment`    | Ties workspace + environments + stages into a deployable manifest | workspace, environments        |
+| `provider`      | Cloud provider config (Azure, AWS, GCP)                           | —                              |
+| `tenant`        | Multi-tenancy isolation unit                                      | —                              |
+| `firewall`      | Network firewall rules                                            | —                              |
+| `network`       | Subnet definitions                                                | —                              |
+| `dns`           | DNS zones and records                                             | —                              |
 
 ---
 
@@ -70,17 +70,18 @@ strata new --list
 strata sln init --list
 
 # 3. Scaffold individual files
-strata new configuration my-platform --path config/
-strata new environment dev --path envs/
-strata new workspace my-platform --path stack/
-strata new deployment my-platform-dev --path deploy/
+strata new my-platform --template configuration --output-file config/
+strata new dev --template environment --output-file envs/
+strata new my-platform --template workspace --output-file stack/
+strata new my-platform-dev --template deployment --output-file deploy/
 
 # 4. Validate files
 strata validate run -f config/my-platform-config.yaml
 strata validate run -f deploy/my-platform-dev-deploy.yaml --explain
 
-# 5. Interactive onboarding session
-strata console
+# 5. Two ways to fast-track onboarding — pick one:
+strata sln init --guided      # cold-start wizard: answers questions, scaffolds a connected workspace
+strata console                # interactive REPL: guided next-steps, validate/scaffold/graph from one session
 
 # 6. Build artifacts (dry-run)
 strata build plan -f deploy/my-platform-dev-deploy.yaml
@@ -202,15 +203,15 @@ spec:
 
 ## Anti-Patterns to Avoid
 
-| Wrong | Right | Why |
-|-------|-------|-----|
+| Wrong                            | Right                       | Why                                                  |
+| -------------------------------- | --------------------------- | ---------------------------------------------------- |
 | `type: infrastructure` on stages | `provisioner: platform_iac` | `type` is not a valid field — fails `extra="forbid"` |
-| `type: terraform` on stages | `provisioner: platform_iac` | Same — use provisioner name |
-| Plain-text secrets in YAML | `secret: KEY_NAME` | Never commit secrets |
-| Missing `apiVersion` | Always include it | Required envelope field |
-| `kind: customer` | `kind: tenant` | Renamed in v0.11.0 |
-| Spaces in `meta.name` | Use underscores/hyphens | Must match `^[a-z][a-z0-9_-]*$` |
-| `${var}` syntax in templates | `{{ var }}` (Jinja2) | Template engine uses Jinja2 |
+| `type: terraform` on stages      | `provisioner: platform_iac` | Same — use provisioner name                          |
+| Plain-text secrets in YAML       | `secret: KEY_NAME`          | Never commit secrets                                 |
+| Missing `apiVersion`             | Always include it           | Required envelope field                              |
+| `kind: customer`                 | `kind: tenant`              | Renamed in v0.11.0                                   |
+| Spaces in `meta.name`            | Use underscores/hyphens     | Must match `^[a-z][a-z0-9_-]*$`                      |
+| `${var}` syntax in templates     | `{{ var }}` (Jinja2)        | Template engine uses Jinja2                          |
 
 ---
 
@@ -224,7 +225,10 @@ strata validate run -f <file.yaml>
 strata validate run -f <file.yaml> --explain
 
 # Validate all deployment manifests
-strata validate run --path "deployments/**"
+strata validate run --pattern "deployments/**"
+
+# Visualize workspace dependency graph
+strata validate graph
 
 # Exit code 3 = validation failed — read the suggestions
 ```
@@ -237,6 +241,29 @@ Use `strata schema get <kind>` to inspect the full field reference for any kind.
 
 ---
 
+## Guided Onboarding
+
+**Cold-start wizard** — asks a few questions and scaffolds a complete connected workspace:
+
+```bash
+strata sln init --guided
+```
+
+**Dependency scaffolding** — after creating a file, automatically scaffold missing referenced files:
+
+```bash
+strata new my-platform --template deployment --scaffold-deps
+```
+
+**Workspace readiness checklist** — shows the 8-phase onboarding progress and next action:
+
+```bash
+strata guide
+strata guide -f deploy/my-platform.yaml   # file-mode analysis
+```
+
+---
+
 ## Console REPL (Interactive Onboarding)
 
 ```bash
@@ -245,20 +272,20 @@ strata console
 
 Commands inside the REPL:
 
-| Command | What it does |
-|---------|-------------|
-| `status` | 8-phase workspace readiness checklist |
-| `next` | Show the next step to take |
-| `do` | Execute the suggested next-step command |
-| `check <file>` | Validate a specific file |
-| `new <kind> [name]` | Scaffold a new YAML file |
-| `validate [file]` | Run validation |
-| `graph` | Show dependency graph |
-| `templates` | List available templates |
-| `tools` | Check external tool availability |
-| `open <file>` | Open file in editor |
-| `reload` | Re-evaluate workspace state |
-| `help` | Show all commands |
+| Command             | What it does                            |
+| ------------------- | --------------------------------------- |
+| `status`            | 8-phase workspace readiness checklist   |
+| `next`              | Show the next step to take              |
+| `do`                | Execute the suggested next-step command |
+| `check <file>`      | Validate a specific file                |
+| `new <kind> [name]` | Scaffold a new YAML file                |
+| `validate [file]`   | Run validation                          |
+| `graph`             | Show dependency graph                   |
+| `templates`         | List available templates                |
+| `tools`             | Check external tool availability        |
+| `open <file>`       | Open file in editor                     |
+| `reload`            | Re-evaluate workspace state             |
+| `help`              | Show all commands                       |
 
 ---
 

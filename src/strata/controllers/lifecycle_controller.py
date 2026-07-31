@@ -3,7 +3,6 @@
 import os
 import platform
 import shutil
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -16,6 +15,7 @@ from strata.models.common_models import (
 )
 from strata.services.base_service import BaseService
 from strata.services.configuration_service import ConfigurationService
+from strata.utils.system import run_command
 
 
 class LifecycleController(BaseController):
@@ -385,16 +385,25 @@ class LifecycleController(BaseController):
 
         try:
             cmd = self._build_command(script_to_execute or script_path)
-            result = subprocess.run(
+            result = run_command(
                 cmd,
-                cwd=work_path,
-                capture_output=True,
-                text=True,
+                cwd=str(work_path),
                 env=env,
                 timeout=300,
             )
 
-            if result.returncode == 0:
+            if result.timed_out:
+                error_msg = f"Lifecycle script timed out: {script_file} (phase: {phase_name})"
+                self.logger.error(
+                    "Lifecycle script timed out",
+                    phase=phase_name,
+                    script=str(script_file),
+                    timeout=300,
+                )
+                self._errors.append(error_msg)
+                return False
+
+            if result.is_successful:
                 self.logger.info(
                     "Lifecycle script completed successfully",
                     phase=phase_name,
@@ -421,31 +430,6 @@ class LifecycleController(BaseController):
                 return_code=result.returncode,
                 stderr=result.stderr,
                 stdout=result.stdout,
-            )
-            self._errors.append(error_msg)
-            return False
-
-        except subprocess.TimeoutExpired:
-            error_msg = f"Lifecycle script timed out: {script_file} (phase: {phase_name})"
-            self.logger.error(
-                "Lifecycle script timed out",
-                phase=phase_name,
-                script=str(script_file),
-                timeout=300,
-                exc_info=True,
-            )
-            self._errors.append(error_msg)
-            return False
-
-        except Exception as e:
-            error_msg = f"Failed to execute lifecycle script: {script_file} — {str(e)}"
-            self.logger.error(
-                "Failed to execute lifecycle script",
-                phase=phase_name,
-                script=str(script_file),
-                error_type=type(e).__name__,
-                error=str(e),
-                exc_info=True,
             )
             self._errors.append(error_msg)
             return False

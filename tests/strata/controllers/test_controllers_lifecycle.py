@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from strata.controllers.lifecycle_controller import LifecycleController
 from strata.models.common_models import CommonLifecycleModel
+from strata.utils.system import CommandResult
 
 # ---------------------------------------------------------------------------
 # Helpers: lightweight lifecycle model wrappers
@@ -169,12 +170,10 @@ class TestLifecycleControllerExecuteScript:
         script_file.write_text("#!/bin/sh\necho hello\n", encoding="utf-8")
 
         ctrl = LifecycleController(enable_templating=False)
-        with patch("subprocess.run") as mock_run:
-            mock_result = MagicMock()
-            mock_result.returncode = 0
-            mock_result.stdout = "hello\n"
-            mock_result.stderr = ""
-            mock_run.return_value = mock_result
+        mock_result = CommandResult(
+            returncode=0, stdout="hello\n", stderr="", command="sh test_script.sh", duration_ms=0.0
+        )
+        with patch("strata.controllers.lifecycle_controller.run_command", return_value=mock_result):
             result = ctrl._execute_script(
                 phase_name="test",
                 script_file=Path("test_script.sh"),
@@ -189,12 +188,10 @@ class TestLifecycleControllerExecuteScript:
         script_file.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
 
         ctrl = LifecycleController(enable_templating=False)
-        with patch("subprocess.run") as mock_run:
-            mock_result = MagicMock()
-            mock_result.returncode = 1
-            mock_result.stdout = ""
-            mock_result.stderr = "error output"
-            mock_run.return_value = mock_result
+        mock_result = CommandResult(
+            returncode=1, stdout="", stderr="error output", command="sh fail.sh", duration_ms=0.0
+        )
+        with patch("strata.controllers.lifecycle_controller.run_command", return_value=mock_result):
             result = ctrl._execute_script(
                 phase_name="test",
                 script_file=Path("fail.sh"),
@@ -215,7 +212,7 @@ class TestLifecycleControllerExecuteScript:
         assert result is False
         assert ctrl.has_errors()
 
-    def test_strata_env_vars_injected(self, tmp_path):
+    def test_strata_env_vars_injected(self, tmp_path: Path) -> None:
         """STRATA_PHASE and standard STRATA_* vars must be present in subprocess env."""
         script_file = tmp_path / "probe.sh"
         script_file.write_text("#!/bin/sh\necho ok\n", encoding="utf-8")
@@ -225,13 +222,15 @@ class TestLifecycleControllerExecuteScript:
 
         def _capture(cmd, **kwargs):
             captured_env.update(kwargs.get("env", {}))
-            result = MagicMock()
-            result.returncode = 0
-            result.stdout = ""
-            result.stderr = ""
-            return result
+            return CommandResult(
+                returncode=0,
+                stdout="",
+                stderr="",
+                command=" ".join(cmd) if isinstance(cmd, list) else cmd,
+                duration_ms=0.0,
+            )
 
-        with patch("subprocess.run", side_effect=_capture):
+        with patch("strata.controllers.lifecycle_controller.run_command", side_effect=_capture):
             ctrl._execute_script(
                 phase_name="deploy_apply_before",
                 script_file=Path("probe.sh"),

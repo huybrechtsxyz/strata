@@ -1,29 +1,34 @@
-"""Command to report live Terraform outputs and saved plan details for a deployment."""
+"""Command to report the live infrastructure status of a single deployment."""
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from __future__ import annotations
+
+import json
+from typing import Any, Dict, List, Optional
 
 import click
 
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
+from strata.deployers.factory import DeployerFactory
+from strata.deployers.terraform_deployer import TerraformDeployer
 from strata.models.deployment_model import DeploymentStageModel
 
 
 class StatusDeployCommand(BaseDeployCommand):
-    """Report deployment status for a deployment definition.
+    """Show the live status of a single deployment.
 
-    Two modes (select with flags; default = live outputs):
+    Per stage, queries the remote backend and reports:
+      - Resource count (from ``terraform show -json``)
+      - Output count and keys
+      - Last apply serial number
+      - Cached output freshness (from ``.tf-outputs.json``)
+      - Overall reachability (can we talk to the backend?)
 
-    Default (no flags)
-        For each stage: runs ``terraform output -json`` → prints live
-        infrastructure outputs from the remote backend.
+    Non-terraform stages report limited info (provisioner type, reachability).
 
-    ``--plan``
-        Reads the last saved ``.tfplan`` file produced by
-        ``deploy run --dry-run`` and shows a human-readable change summary
-        (``terraform show -json <plan>``).  No network calls to the backend.
+    ``--offline`` reports cached data only — no backend calls.
 
-    For execution history use ``strata deploy history``.
+    For plan-diffing (what would change) use ``strata deploy plan``. For
+    fleet-wide, multi-deployment scanning use ``strata rollout status``.
     """
 
     OPERATION = "deploy_status"
@@ -33,7 +38,7 @@ class StatusDeployCommand(BaseDeployCommand):
         file: Optional[str] = None,
         work_path: Optional[str] = None,
         stage: Optional[str] = None,
-        show_plan: bool = False,
+        offline: bool = False,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -46,230 +51,201 @@ class StatusDeployCommand(BaseDeployCommand):
             quiet=quiet,
         )
         self._stage = stage
-        self._show_plan = show_plan
+        self._offline = offline
 
-    # -------------------------------------------------------------------------
+    def get_required_integrations(self) -> Dict[str, str]:
+        # Offline mode only reads the build cache — no terraform call needed.
+        if self._offline:
+            return {}
+        return {"terraform": "querying live infrastructure state"}
+
+    # ------------------------------------------------------------------
     # Core logic
-    # -------------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def _execute(self) -> bool:
-        if self._show_plan:
-            click.echo(
-                "⚠  DEPRECATED: 'strata deploy status --plan' is deprecated. Use 'strata deploy plan -f FILE' instead.",
-                err=True,
-            )
-        return self._run_plan_status() if self._show_plan else self._run_live_outputs()
-
-    # -------------------------------------------------------------------------
-    # Mode: live outputs
-    # -------------------------------------------------------------------------
-
-    def _run_live_outputs(self) -> bool:
-        click.echo(
-            "⚠  DEPRECATED: 'strata deploy status' (live outputs) is deprecated. "
-            "Use 'strata env output -f FILE' instead.",
-            err=True,
-        )
         if self._deployment_service is None:
             self._errors.append("Deployment service not loaded")
             return False
-        spec = self._deployment_service.model.spec  # type: ignore[union-attr]
+
+        deployment_model = self._deployment_service.model
+        if deployment_model is None:
+            self._errors.append("Deployment model not loaded")
+            return False
+
+        spec = deployment_model.spec
         all_stages: List[DeploymentStageModel] = spec.stages or []
 
         stages = [s for s in all_stages if s.name == self._stage] if self._stage else all_stages
         if self._stage and not stages:
-            self._errors.append(f"Stage '{self._stage}' not found. Available: {[s.name for s in all_stages]}")
+            self._errors.append(f"Stage '{self._stage}' not found. Available: {[str(s.name) for s in all_stages]}")
             return False
 
         if self._is_console_output():
-            click.echo(f"\n📡  Live outputs for {len(stages)} stage(s)…\n")
+            mode = "offline (cached)" if self._offline else "live"
+            click.echo(f"\n📊  Deployment status ({mode}) — {deployment_model.meta.name}")
+            click.echo(f"    {len(stages)} stage(s)\n")
 
-        all_outputs: Dict[str, Any] = {}
-        any_failed = False
+        stage_results: List[Dict[str, Any]] = []
 
         for stage in stages:
-            ok, outputs, msgs = self._fetch_stage_outputs(stage)
-            self._messages.extend(msgs)
-            all_outputs[str(stage.name)] = outputs if ok else {"error": "output fetch failed"}
-            if not ok:
-                any_failed = True
+            result = self._query_stage_state(stage)
+            stage_results.append(result)
             if self._is_console_output():
-                self._print_stage_outputs(str(stage.name), ok, outputs, msgs)
+                self._print_stage_state(result)
 
         self._output_data = {
             "file": str(self._file_path),
-            "mode": "live_outputs",
-            "stages": all_outputs,
+            "deployment": str(deployment_model.meta.name),
+            "mode": "offline" if self._offline else "live",
+            "stages": stage_results,
         }
-        return not any_failed
 
-    def _fetch_stage_outputs(self, stage: DeploymentStageModel) -> Tuple[bool, Dict[str, Any], List[str]]:
+        return True  # status query is best-effort; unreachable stages don't fail the command
+
+    # ------------------------------------------------------------------
+    # Per-stage state query
+    # ------------------------------------------------------------------
+
+    def _query_stage_state(self, stage: DeploymentStageModel) -> Dict[str, Any]:
+        """Query the state for a single stage."""
+        result: Dict[str, Any] = {
+            "name": str(stage.name),
+            "provisioner": stage.provisioner or "terraform",
+            "scope": stage.scope or None,
+            "reachable": False,
+            "resources": None,
+            "outputs": None,
+            "serial": None,
+            "cache": None,
+        }
+
+        # Check cached output file
+        cache_info = self._read_output_cache(stage)
+        if cache_info:
+            result["cache"] = cache_info
+
+        if self._offline:
+            # Offline mode: only report cached data
+            result["reachable"] = cache_info is not None
+            if cache_info:
+                result["outputs"] = cache_info.get("output_count")
+            return result
+
+        # Resolve provisioner type
+        assert self._deployment_service is not None
+        resolved_type, _ = DeployerFactory.resolve_type(stage, self._deployment_service)
+        if resolved_type != "terraform":
+            # Non-terraform: limited info (reachability via cache)
+            result["reachable"] = cache_info is not None
+            return result
+
+        # Terraform: query live state
         deployer = self._create_deployer(stage)
         if deployer is None:
-            return False, {}, [f"Stage '{stage.name}': unsupported provisioner type."]
+            return result
 
+        # Validate workspace + environment (needed for init)
         for validate_fn in (deployer.validate_workspace, deployer.validate_environment):
             ok, msgs = validate_fn()
             if not ok:
-                return False, {}, msgs
+                self._messages.extend(msgs)
+                return result
 
-        # setup (init) so output can reach the backend
-        if self._is_ndjson_output():
-            self.emit_ndjson(
-                {
-                    "event": "step_start",
-                    "step": "setup",
-                    "stage": str(stage.name),
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }
-            )
-        setup_cb = (
-            self.make_ndjson_line_callback(step="setup", stage=str(stage.name)) if self._is_ndjson_output() else None
-        )
-        ok, msgs = deployer.setup(line_callback=setup_cb)
-        if self._is_ndjson_output():
-            self.emit_ndjson(
-                {
-                    "event": "step_end",
-                    "step": "setup",
-                    "stage": str(stage.name),
-                    "success": ok,
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }
-            )
+        # Setup (terraform init) to reach backend
+        ok, msgs = deployer.setup()
         if not ok:
-            return False, {}, msgs
-
-        if self._is_ndjson_output():
-            self.emit_ndjson(
-                {
-                    "event": "step_start",
-                    "step": "output",
-                    "stage": str(stage.name),
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }
-            )
-        ok, outputs, msgs = deployer.output()
-        if self._is_ndjson_output():
-            self.emit_ndjson(
-                {
-                    "event": "step_end",
-                    "step": "output",
-                    "stage": str(stage.name),
-                    "success": ok,
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                }
-            )
-        return ok, outputs, msgs
-
-    def _print_stage_outputs(
-        self,
-        stage_name: str,
-        ok: bool,
-        outputs: Dict[str, Any],
-        msgs: List[str],
-    ) -> None:
-        icon = "✅" if ok else "❌"
-        click.echo(f"  {icon}  Stage: {stage_name}")
-        if not ok:
-            for m in msgs:
-                click.echo(f"       ⚠  {m}")
-        elif outputs:
-            for k, v in outputs.items():
-                click.echo(f"       • {k}: {v}")
-        else:
-            click.echo("       (no outputs defined)")
-        click.echo()
-
-    # -------------------------------------------------------------------------
-    # Mode: plan details
-    # -------------------------------------------------------------------------
-
-    def _run_plan_status(self) -> bool:
-        if self._deployment_service is None:
-            self._errors.append("Deployment service not loaded")
-            return False
-        spec = self._deployment_service.model.spec  # type: ignore[union-attr]
-        all_stages: List[DeploymentStageModel] = spec.stages or []
-
-        stages = [s for s in all_stages if s.name == self._stage] if self._stage else all_stages
-        if self._stage and not stages:
-            self._errors.append(f"Stage '{self._stage}' not found. Available: {[s.name for s in all_stages]}")
-            return False
-
-        if self._is_console_output():
-            click.echo(f"\n📋  Last saved plan for {len(stages)} stage(s)…\n")
-
-        all_plans: Dict[str, Any] = {}
-        any_failed = False
-
-        for stage in stages:
-            ok, plan_data, msgs = self._fetch_stage_plan(stage)
-            all_plans[str(stage.name)] = plan_data if ok else {"error": "plan read failed"}
             self._messages.extend(msgs)
-            if not ok:
-                any_failed = True
-            if self._is_console_output():
-                self._print_stage_plan(str(stage.name), ok, plan_data, msgs)
+            return result
 
-        self._output_data = {
-            "file": str(self._file_path),
-            "mode": "plan",
-            "stages": all_plans,
-        }
-        return not any_failed
+        # Query state via terraform show -json (no plan file = current state)
+        state_data = self._fetch_terraform_state(deployer)
+        if state_data:
+            result["reachable"] = True
+            resources = state_data.get("values", {}).get("root_module", {}).get("resources", [])
+            child_modules = state_data.get("values", {}).get("root_module", {}).get("child_modules", [])
+            for child in child_modules:
+                resources.extend(child.get("resources", []))
+            result["resources"] = len(resources)
+            result["serial"] = state_data.get("serial")
 
-    def _fetch_stage_plan(self, stage: DeploymentStageModel) -> Tuple[bool, Dict[str, Any], List[str]]:
-        deployer = self._create_deployer(stage)
-        if deployer is None:
-            return False, {}, [f"Stage '{stage.name}': unsupported provisioner type."]
+            ok, outputs, _ = deployer.output()
+            if ok:
+                result["outputs"] = len(outputs)
+                result["output_keys"] = list(outputs.keys())
 
-        ok, msgs = deployer.validate_workspace()
-        if not ok:
-            return False, {}, msgs
+        return result
 
-        ok, msgs = deployer.validate_environment()
-        if not ok:
-            return False, {}, msgs
+    def _fetch_terraform_state(self, deployer: TerraformDeployer) -> Optional[Dict[str, Any]]:
+        """Run ``terraform show -json`` (current state) and return parsed data."""
+        try:
+            assert deployer._working_dir is not None
+            assert deployer._tf is not None
+            tf_result = deployer._tf.show(
+                str(deployer._working_dir),
+                plan_file=None,
+                json_format=True,
+            )
+            if tf_result.returncode != 0:
+                return None
+            return json.loads(tf_result.stdout or "{}")
+        except (RuntimeError, ValueError, json.JSONDecodeError):
+            return None
 
-        ok, plan_data, msgs = deployer.show_plan()
-        return ok, plan_data, msgs
+    def _read_output_cache(self, stage: DeploymentStageModel) -> Optional[Dict[str, Any]]:
+        """Read the cached ``.tf-outputs.json`` for a stage model."""
+        return self._read_output_cache_by_name(str(stage.name))
 
-    def _print_stage_plan(
-        self,
-        stage_name: str,
-        ok: bool,
-        plan_data: Dict[str, Any],
-        msgs: List[str],
-    ) -> None:
-        icon = "✅" if ok else "❌"
-        click.echo(f"  {icon}  Stage: {stage_name}")
-        if not ok:
-            for m in msgs:
-                click.echo(f"       ⚠  {m}")
-            click.echo()
-            return
+    def _read_output_cache_by_name(self, stage_name: str) -> Optional[Dict[str, Any]]:
+        """Read the cached ``.tf-outputs.json`` for a stage given by name."""
+        cache_file = self._build_path / f"{stage_name}.tf-outputs.json"
+        if not cache_file.exists():
+            return None
+        try:
+            with open(cache_file, encoding="utf-8") as fh:
+                data = json.load(fh)
+            refreshed = data.get("refreshed_at")
+            outputs = data.get("outputs", {})
+            return {
+                "refreshed_at": refreshed,
+                "output_count": len(outputs),
+                "output_keys": list(outputs.keys()),
+            }
+        except (OSError, json.JSONDecodeError):
+            return None
 
-        # Summarise resource changes from the plan
-        changes = plan_data.get("resource_changes", [])
-        if not changes:
-            click.echo("       (no resource changes in saved plan)")
-            click.echo()
-            return
+    # ------------------------------------------------------------------
+    # Console output
+    # ------------------------------------------------------------------
 
-        counts: Dict[str, int] = {}
-        for rc in changes:
-            actions = rc.get("change", {}).get("actions", [])
-            for action in actions:
-                counts[action] = counts.get(action, 0) + 1
+    def _print_stage_state(self, result: Dict[str, Any]) -> None:
+        name = result["name"]
+        provisioner = result["provisioner"]
+        reachable = result["reachable"]
 
-        summary_parts = [f"{v} {k}" for k, v in sorted(counts.items())]
-        click.echo(f"       Changes: {', '.join(summary_parts)}")
+        icon = "✅" if reachable else "⚠️ "
+        click.echo(f"  {icon} {name}  ({provisioner})")
 
-        if self._is_verbose():
-            for rc in changes:
-                addr = rc.get("address", "?")
-                actions = rc.get("change", {}).get("actions", [])
-                click.echo(f"         {addr}  [{', '.join(actions)}]")
+        if result.get("scope"):
+            click.echo(f"       Scope: {result['scope']}")
+
+        if result.get("resources") is not None:
+            click.echo(f"       Resources: {result['resources']}")
+
+        if result.get("outputs") is not None:
+            click.echo(f"       Outputs: {result['outputs']}")
+            if self._is_verbose() and result.get("output_keys"):
+                for key in result["output_keys"]:
+                    click.echo(f"         • {key}")
+
+        if result.get("serial") is not None:
+            click.echo(f"       State serial: {result['serial']}")
+
+        cache = result.get("cache")
+        if cache:
+            refreshed = cache.get("refreshed_at", "unknown")
+            click.echo(f"       Cache: refreshed {refreshed}")
+        elif not reachable:
+            click.echo("       Cache: none (no prior deploy output cached)")
 
         click.echo()

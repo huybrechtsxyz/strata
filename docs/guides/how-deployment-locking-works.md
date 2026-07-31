@@ -2,6 +2,8 @@
 
 > A plain-language walkthrough of strata's deployment state locking — what it protects,
 > how it behaves across different backends, and how to manage stuck locks.
+>
+> 📐 **Design rationale:** [ADR-0007 — Deployment state locking](../decisions/0007-deployment-state-locking.md)
 
 ---
 
@@ -52,11 +54,11 @@ spec:
     wait_timeout: "5m"        # how long to poll before giving up
 ```
 
-| Field          | Default | Description                                                                                                                        |
-| -------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `enabled`      | `false` | Set to `true` to activate locking                                                                                                  |
+| Field          | Default | Description                                                                                                                         |
+| -------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled`      | `false` | Set to `true` to activate locking                                                                                                   |
 | `strategy`     | `wrap`  | `wrap` = strata manages the lock; `delegate` = trust the backend's own locking (e.g. TFC run queue) and skip strata's lock entirely |
-| `wait_timeout` | `"5m"`  | Duration to wait for a held lock before aborting. Accepts `s`, `m`, `h` (e.g. `"90s"`, `"2m"`, `"1h"`)                             |
+| `wait_timeout` | `"5m"`  | Duration to wait for a held lock before aborting. Accepts `s`, `m`, `h` (e.g. `"90s"`, `"2m"`, `"1h"`)                              |
 
 ---
 
@@ -191,7 +193,7 @@ If the process is **killed hard** (OOM kill, node reboot):
 ### Check who holds the lock
 
 ```bash
-strata deploy lock status --deployment xyz-production
+strata deploy lock status --file deployments/deploy-prd.yaml
 ```
 
 ```
@@ -209,7 +211,7 @@ Returns exit code 0 if locked, 3 if not.
 ### Force-release a stuck lock
 
 ```bash
-strata deploy lock release --deployment xyz-production --force
+strata deploy lock release --file deployments/deploy-prd.yaml --force
 ```
 
 Use this when a pipeline died and left the lock held.  The command writes an audit entry
@@ -218,7 +220,7 @@ to the history file before breaking the lock.
 ### View the audit trail
 
 ```bash
-strata deploy lock history --deployment xyz-production --last 10
+strata deploy lock history --file deployments/deploy-prd.yaml --last 10
 ```
 
 Reads `.strata/locks/{backend}-{deployment}.lock.history` (NDJSON) and prints the most

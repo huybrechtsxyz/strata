@@ -378,7 +378,7 @@ combined result. Two files may each be valid independently but create overlaps w
 Create a new network configuration file from the built-in template:
 
 ```bash
-strata new network my-networks --path config/networks/
+strata new my-networks --template network --output-file config/networks/
 ```
 
 ## Best Practices

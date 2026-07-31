@@ -197,42 +197,50 @@ The `script` type can run at any phase — set `phase` to whichever phase you wa
 
 ### `ref_convention`
 
-Evaluates at the `validate` phase. Checks that remote references (git tags, branches, or commit SHAs) in deployments and environments follow declared naming conventions.
+Evaluates at the `validate` phase. Checks that remote references (git tags, branches, or commit SHAs) in deployments and environments follow the naming conventions declared on each remote itself.
 
 Useful for enforcing that production environments only pin to semantic version tags (e.g., `v1.2.0`), not branch names like `main` or raw commit SHAs. Works in tandem with [ADR 0017 (tag-based release workflows)](../decisions/0017-tag-based-release-workflow-option-c.md) to validate release discipline and detect accidental manual pins.
 
-Skipped gracefully when no deployments/environments are found, or when no remote patterns are configured.
+This policy is config-free. Patterns are declared once, on the remote itself, via `spec.remotes[].conventions` — never duplicated inside the policy:
 
 ```yaml
-- name: release_tag_conventions
-  type: ref_convention
-  phase: validate
-  enforcement: warn
-  configuration:
-    remotes:
-      - name: my-service
-        release_pattern: "^v\\d+\\.\\d+\\.\\d+$"     # semver only
-        quality_pattern: "^tested(-\\d+)?$"           # quality gate tags
-      - name: tf-landscape
+spec:
+  remotes:
+    - name: my-service
+      repository: https://github.com/acme/my-service
+      reference: main
+      conventions:
+        release_pattern: "^v\\d+\\.\\d+\\.\\d+$"    # semver only
+        quality_pattern: "^tested(-\\d+)?$"          # quality gate tags
+    - name: tf-landscape
+      repository: https://github.com/acme/tf-landscape
+      reference: main
+      conventions:
         release_pattern: "^v\\d+\\.\\d+\\.\\d+$"
+
+  policies:
+    - name: release_tag_conventions
+      type: ref_convention
+      phase: validate
+      enforcement: warn
 ```
 
-**Configuration fields:**
+**`RemoteConventionsModel` fields** (on `spec.remotes[].conventions`):
 
-| Field                       | Type   | Description                                                                 |
-| --------------------------- | ------ | --------------------------------------------------------------------------- |
-| `remotes`                   | list   | List of remote repository configurations                                    |
-| `remotes[].name`            | string | Remote repository name (from `solution.remotes`)                            |
-| `remotes[].release_pattern` | string | Regex pattern for release tags (e.g., `"^v\\d+\\.\\d+\\.\\d+$"` for semver) |
-| `remotes[].quality_pattern` | string | Regex pattern for quality-gate tags (e.g., `"^tested(-\\d+)?$"`)            |
+| Field             | Type   | Description                                                                    |
+| ----------------- | ------ | ------------------------------------------------------------------------------ |
+| `release_pattern` | string | Full-match regex for release tags (e.g., `"^v\\d+\\.\\d+\\.\\d+$"` for semver) |
+| `quality_pattern` | string | Full-match regex for quality-gate tags (e.g., `"^tested(-\\d+)?$"`)            |
 
-At least one pattern (`release_pattern` or `quality_pattern`) must be configured per remote.
+At least one pattern must be set for a remote to be checked. Remotes without `conventions` are skipped entirely — no default/implicit pattern is ever assumed.
+
+Skipped gracefully when no deployments/environments are found, or when no remotes declare `conventions`.
 
 **Validation logic:**
 
 1. For each deployment and environment in the workspace
 2. For each `spec.overrides.remotes[]` reference
-3. If the remote is configured in the policy, check its reference against the declared patterns
+3. Look up the remote by name in `configuration.spec.remotes[]`; if it has `conventions`, check the reference against them
 4. Report a violation if the reference matches neither pattern
 
 **Example violations:**

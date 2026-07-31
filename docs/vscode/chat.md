@@ -229,7 +229,7 @@ Response includes:
 Based on your workspace (Phase 5/8), here's how to set up a new deployment:
 
 1. Scaffold a deployment file:
-   strata new deployment --name my-deployment
+   strata new my-deployment --template deployment
 
 2. Reference your configuration:
    kind: deployment
@@ -240,7 +240,7 @@ Based on your workspace (Phase 5/8), here's how to set up a new deployment:
            source: @infra/my-infrastructure
    
 3. Validate it:
-   strata validate deploy/my-deployment.yaml
+   strata validate -f deploy/my-deployment.yaml
    
 4. Build to preview:
    strata build run -f deploy/my-deployment.yaml --dry-run
@@ -263,7 +263,7 @@ Response:
 | Issues    | 1 validation error in deploy/main.yaml |
 
 Next step: Fix deployment validation errors
-Hint: strata validate deploy/main.yaml
+Hint: strata validate -f deploy/main.yaml
 ```
 
 ### "Check this file for me"

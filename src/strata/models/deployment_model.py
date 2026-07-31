@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Pydantic model for deployment configuration validation."""
 
-from enum import Enum
 from typing import Annotated, Any, Dict, List, Literal, Optional
 
 from pydantic import (
@@ -20,6 +19,7 @@ from strata.models.common_models import (
     ScriptsModel,
     check_unique_names,
 )
+from strata.models.gate_model import DeploymentGateModel
 from strata.models.promotion_model import DeploymentPromotionModel
 
 
@@ -118,43 +118,6 @@ class DeploymentWorkspaceModel(DeploymentFileReference):
     """Model for deployment workspace file reference."""
 
     pass
-
-
-class ApproverType(str, Enum):
-    """Supported approver identity types."""
-
-    GITHUB_TEAM = "github-team"
-    ADO_GROUP = "ado-group"
-    USER = "user"
-
-
-class ApproverRef(PlatformBaseModel):
-    """A single named approver entry."""
-
-    type: ApproverType = Field(description="Approver identity type: github-team | ado-group | user")
-    value: str = Field(description="Approver identifier — team slug, group name, or user address")
-
-
-class DeploymentApprovalModel(PlatformBaseModel):
-    """Deployment-level approval metadata.
-
-    Presence of this block signals that approvals are declared for this deployment.
-    An empty ``approvers`` dict is silently treated as no gate.
-    The CLI emits this metadata for audit; enforcement is done by the CI/CD system.
-    """
-
-    approvers: Dict[str, ApproverRef] = Field(
-        default_factory=dict,
-        description="Named approver entries. Key is a short identifier used as a cross-reference from stage overrides.",
-    )
-
-
-class DeploymentStageApprovalModel(PlatformBaseModel):
-    """Per-stage approval override: restricts which spec-level approvers apply to this stage."""
-
-    approvers: List[str] = Field(
-        description="List of approver keys from spec.approvals.approvers that apply to this stage"
-    )
 
 
 class HealthCheckModel(PlatformBaseModel):
@@ -291,7 +254,7 @@ class DeploymentStageModel(PlatformBaseModel):
     - 'topology':    name of a workspace topology entry; derives the provisioner
                      type from the topology definition and filters to its resources
 
-    Stages do NOT define environments or approvals - those are deployment-level.
+    Stages do NOT define environments or gates - those are deployment-level.
     Stages do NOT affect artifact paths - use deployment.spec.deployment for layering.
     """
 
@@ -345,11 +308,6 @@ class DeploymentStageModel(PlatformBaseModel):
     health_checks: Optional[List[HealthCheckModel]] = Field(
         None,
         description="Health checks to run against this stage after provisioning.",
-    )
-    approval: Optional[DeploymentStageApprovalModel] = Field(
-        None,
-        description="Per-stage approval override: list of approver keys from spec.approvals.approvers. "
-        "Absent means no stage-level restriction — spec-level approvers apply as-is.",
     )
     timeouts: Optional[DeploymentStageTimeoutsModel] = Field(
         None,
@@ -516,7 +474,6 @@ class DeploymentSpecModel(PlatformBaseModel):
             return [{"file": item} if isinstance(item, str) else item for item in v]
         return v
 
-    approvals: Optional[DeploymentApprovalModel] = Field(None, description="Approval configuration for this deployment")
     locking: Optional[DeploymentLockingModel] = Field(
         None, description="Pipeline locking behaviour for concurrent deploy protection"
     )
@@ -528,12 +485,20 @@ class DeploymentSpecModel(PlatformBaseModel):
         None,
         description="Optional deployment stages for multi-step execution (if not specified, single-step execution)",
     )
+    gates: Optional[List[DeploymentGateModel]] = Field(
+        None,
+        description="Hand-off gates for this deployment (approval, cost_review, security_review, verify, "
+        "scheduled, incident, cab). See ADR-0057/ADR-0059.",
+    )
 
     @model_validator(mode="after")
     def validate_unique_names(self) -> "DeploymentSpecModel":
-        """Validate that stage and configuration names are unique."""
+        """Validate that stage, gate, and configuration names are unique."""
         if self.stages:
             check_unique_names([stage.name for stage in self.stages], "stage names")
+
+        if self.gates:
+            check_unique_names([gate.name for gate in self.gates], "gate names")
 
         if self.configurations:
             check_unique_names([config.name for config in self.configurations], "configuration names")
@@ -541,19 +506,20 @@ class DeploymentSpecModel(PlatformBaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_stage_approval_refs(self) -> "DeploymentSpecModel":
-        """Validate that stage approval keys reference declared spec-level approvers."""
-        if not self.stages:
+    def validate_gate_scope_refs(self) -> "DeploymentSpecModel":
+        """Validate that a gate's scope references declared stage names."""
+        if not self.gates:
             return self
-        known_keys: set[str] = set(self.approvals.approvers.keys()) if self.approvals else set()
-        for stage in self.stages:
-            if stage.approval:
-                for key in stage.approval.approvers:
-                    if key not in known_keys:
-                        raise ValueError(
-                            f"Stage '{stage.name}' references unknown approver key '{key}'. "
-                            f"Known keys: {sorted(known_keys) or '(none — spec.approvals not declared)'}"
-                        )
+        known_stages: set[str] = {stage.name for stage in self.stages} if self.stages else set()
+        for gate in self.gates:
+            if gate.scope == "all":
+                continue
+            for stage_name in gate.scope:
+                if stage_name not in known_stages:
+                    raise ValueError(
+                        f"Gate '{gate.name}' scope references unknown stage '{stage_name}'. "
+                        f"Known stages: {sorted(known_stages) or '(none declared)'}"
+                    )
         return self
 
     @model_validator(mode="after")

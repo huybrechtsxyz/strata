@@ -4,20 +4,9 @@ import json
 from pathlib import Path
 from typing import Optional
 
-import pytest
-
-try:
-    from strata.commands.cli_console import console_command
-
-    IMPL_MISSING = False
-except ImportError:
-    console_command = None  # type: ignore[assignment]
-    IMPL_MISSING = True
-
 from click.testing import CliRunner
 
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="console command not yet implemented")
-
+from strata.commands.cli_console import console_command
 
 # ---------------------------------------------------------------------------
 # Factories

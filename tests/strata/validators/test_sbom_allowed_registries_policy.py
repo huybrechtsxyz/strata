@@ -4,24 +4,10 @@ The policy runs at the ``build`` phase and verifies that container image SBOM
 components originate only from explicitly allowed registry prefixes.
 """
 
-import pytest
-
-try:
-    from strata.models.policy_model import PolicyModel
-    from strata.models.sbom_model import SbomComponentModel
-    from strata.validators.policies.base_policy import PolicyContext
-    from strata.validators.policies.sbom_allowed_registries_policy import SbomAllowedRegistriesPolicy
-
-    IMPL_MISSING = False
-except ImportError:
-    SbomAllowedRegistriesPolicy = None  # type: ignore[assignment,misc]
-    PolicyContext = None  # type: ignore[assignment,misc]
-    PolicyModel = None  # type: ignore[assignment,misc]
-    SbomComponentModel = None  # type: ignore[assignment,misc]
-    IMPL_MISSING = True
-
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="SbomAllowedRegistriesPolicy not yet implemented")
-
+from strata.models.policy_model import PolicyModel
+from strata.models.sbom_model import SbomComponentModel
+from strata.validators.policies.base_policy import PolicyContext
+from strata.validators.policies.sbom_allowed_registries_policy import SbomAllowedRegistriesPolicy
 
 # ---------------------------------------------------------------------------
 # Helpers

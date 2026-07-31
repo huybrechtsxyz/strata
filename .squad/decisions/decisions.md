@@ -193,3 +193,17 @@ Project-level overrides are shallow-merged: scalar keys replace scalars directly
 **Date:** 2026-06-10 | **Author:** Livingston | **Status:** INFO
 
 `IMPL_MISSING` guard (try/except ImportError + pytestmark skipif) used for all 26 tests until implementation lands. Real files over mocking — tests write actual `solution.json` and YAML fixtures to `tmp_path`. JSON shape assertions use `json.loads(result.output)` directly. Local repos identified by `url: ""` + `type: "local"`. `.strata/guide.yaml` override format: `phases: {6: {hint: "..."}}`. File mode `next_steps` entries must have `action` and `hint` keys.
+
+---
+
+## OPEN: `strata new --list` "Scaffold bundles" header wording is misleading
+
+**Date:** 2026-07-28 | **Author:** Linus | **Status:** OPEN (flagged, not a decision)
+
+The `strata new --list` "Scaffold bundles (strata sln init --template <name>):"
+section header is misleading — solution-level templates (`solution.json`
+`spec.templates[]`) now correctly appear in this section too (fixed
+2026-07-28), but they are invoked via `strata new <name> <NAME>`, not
+`strata sln init --template <name>`. Consider updating the header wording in
+a future pass. Discovered while fixing the `--list` visibility bug. Not yet
+actioned.

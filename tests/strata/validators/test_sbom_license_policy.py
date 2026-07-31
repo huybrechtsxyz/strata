@@ -4,24 +4,10 @@ The policy runs at the ``build`` phase and checks each component's
 ``strata:license`` property against configurable allow and deny lists.
 """
 
-import pytest
-
-try:
-    from strata.models.policy_model import PolicyModel
-    from strata.models.sbom_model import SbomComponentModel
-    from strata.validators.policies.base_policy import PolicyContext
-    from strata.validators.policies.sbom_license_policy import SbomLicensePolicy
-
-    IMPL_MISSING = False
-except ImportError:
-    SbomLicensePolicy = None  # type: ignore[assignment,misc]
-    PolicyContext = None  # type: ignore[assignment,misc]
-    PolicyModel = None  # type: ignore[assignment,misc]
-    SbomComponentModel = None  # type: ignore[assignment,misc]
-    IMPL_MISSING = True
-
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="SbomLicensePolicy not yet implemented")
-
+from strata.models.policy_model import PolicyModel
+from strata.models.sbom_model import SbomComponentModel
+from strata.validators.policies.base_policy import PolicyContext
+from strata.validators.policies.sbom_license_policy import SbomLicensePolicy
 
 # ---------------------------------------------------------------------------
 # Helpers

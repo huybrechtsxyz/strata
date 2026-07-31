@@ -10,7 +10,7 @@ from strata.models.deployment_model import DeploymentModel
 from strata.services.deployment_service import DeploymentService
 
 
-def _make_config_with_integrations(integrations=None, remotes=None):
+def _make_config_with_integrations(integrations: list | None = None, remotes: list | None = None) -> ConfigurationModel:
     """Build a ConfigurationModel with the given integrations and remotes."""
     spec: dict = {}
     if integrations:

@@ -95,7 +95,17 @@ uv run python -m mypy ./src ./tests
 if ($LASTEXITCODE -ne 0) { $failed += "mypy" }
 Write-Host ""
 
-# ── 4. Smoke test ───────────────────────────────────────────────────────────
+# ── 4. Pytest + coverage ─────────────────────────────────────────────────────
+# Run the full test suite with coverage reporting. No hard --cov-fail-under
+# threshold yet — this step exists to surface untested code paths in the
+# standard check flow (see T1: a 5-command coverage gap went unnoticed for a
+# long time because nothing here ever ran pytest).
+Write-Host "[*] Pytest + coverage..." -ForegroundColor Blue
+uv run python -m pytest -q --cov=src/strata --cov-report=term-missing
+if ($LASTEXITCODE -ne 0) { $failed += "pytest" }
+Write-Host ""
+
+# ── 5. Smoke test ───────────────────────────────────────────────────────────
 # Verify the CLI is importable and basic commands run without crashing.
 # These run without a workspace — no deployment file required.
 Write-Host "[*] Smoke test..." -ForegroundColor Blue
@@ -105,9 +115,9 @@ uv run python -m strata --help | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Host "    [!] strata --help exited $LASTEXITCODE" -ForegroundColor Red; $smokeOk = $false }
 else { Write-Host "    [+] strata --help" -ForegroundColor Green }
 
-uv run python -m strata version | Out-Null
-if ($LASTEXITCODE -ne 0) { Write-Host "    [!] strata version exited $LASTEXITCODE" -ForegroundColor Red; $smokeOk = $false }
-else { Write-Host "    [+] strata version" -ForegroundColor Green }
+uv run python -m strata --version | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Host "    [!] strata --version exited $LASTEXITCODE" -ForegroundColor Red; $smokeOk = $false }
+else { Write-Host "    [+] strata --version" -ForegroundColor Green }
 
 uv run python -m strata tools status | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Host "    [!] strata tools status exited $LASTEXITCODE" -ForegroundColor Red; $smokeOk = $false }
@@ -115,7 +125,7 @@ else { Write-Host "    [+] strata tools status" -ForegroundColor Green }
 
 if (-not $smokeOk) { $failed += "smoke test" }
 Write-Host ""
-# ── 5. Docs index coverage ──────────────────────────────────────────────────────────
+# ── 6. Docs index coverage ──────────────────────────────────────────────────────────
 # Verify every .md file under docs/ is referenced in index.rst.
 # Excludes _build/, _static/, and underscore-prefixed files (temp/scratch docs).
 Write-Host "[*] Docs index coverage..." -ForegroundColor Blue
@@ -151,7 +161,7 @@ else {
 }
 Write-Host ""
 
-# ── 6. Sphinx docs build ─────────────────────────────────────────────────────────────
+# ── 7. Sphinx docs build ─────────────────────────────────────────────────────────────
 # Build the Sphinx HTML docs to catch broken references and missing pages.
 # Pass -SkipDocsBuild to skip this step (e.g. when doc dependencies are not
 # installed or in environments where the build is handled separately).
@@ -179,7 +189,7 @@ else {
     }
 }
 Write-Host ""
-# ── 7. ADR 0030 migration guards ─────────────────────────────────────────────
+# ── 8. ADR 0030 migration guards ─────────────────────────────────────────────
 # Regression guards for the BaseCommand lifecycle migration (ADR 0030 Option D).
 # These patterns were deliberately eliminated; a failure here means a regression.
 Write-Host "[*] ADR 0030 migration guards..." -ForegroundColor Blue
@@ -222,6 +232,95 @@ else {
 }
 
 if (-not $guardOk) { $failed += "ADR 0030 migration guards" }
+Write-Host ""
+
+# ── 9. Kind docs coverage ────────────────────────────────────────────────────
+# Several docs hand-copy the list of valid `kind:` values instead of deriving it
+# from PlatformKind. Verify each hand-typed list still matches reality, using
+# `strata schema list --output json` (backed by PlatformKind/INTERNAL_KINDS in
+# common_models.py) as the single source of truth.
+Write-Host "[*] Kind docs coverage..." -ForegroundColor Blue
+$kindDocsOk = $true
+$schemaListJson = uv run strata schema list --output json 2>$null | ConvertFrom-Json
+$allKinds = $schemaListJson.data.kinds | ForEach-Object { $_.kind }
+$userKinds = $schemaListJson.data.kinds | Where-Object { -not $_.internal } | ForEach-Object { $_.kind } | Sort-Object
+
+# Docs that must list EXACTLY the user-authorable kinds (no more, no less).
+$exactMatchDocs = @(
+    "docs\platform\commands.md",
+    ".squad\templates\platform.instructions.md",
+    ".github\copilot-instructions.md",
+    ".github\instructions\strata.instructions.md"
+)
+foreach ($docPath in $exactMatchDocs) {
+    $fullPath = Join-Path $projectRoot $docPath
+    if (-not (Test-Path $fullPath)) { continue }
+    $content = Get-Content $fullPath -Raw
+    $lineMatch = [regex]::Match($content, 'Valid kinds:\s*\**\s*(.+)')
+    if (-not $lineMatch.Success) {
+        Write-Host "    [!] No 'Valid kinds' line found in $docPath" -ForegroundColor Red
+        $kindDocsOk = $false
+        continue
+    }
+    $tokens = [regex]::Matches($lineMatch.Groups[1].Value, '`([a-z0-9_-]+)`') | ForEach-Object { $_.Groups[1].Value } | Sort-Object
+    $missing = $userKinds | Where-Object { $_ -notin $tokens }
+    $extra = $tokens | Where-Object { $_ -notin $userKinds }
+    if ($missing -or $extra) {
+        Write-Host "    [!] $docPath 'Valid kinds' drifted from PlatformKind:" -ForegroundColor Red
+        if ($missing) { Write-Host "        missing: $($missing -join ', ')" -ForegroundColor Yellow }
+        if ($extra) { Write-Host "        unknown/internal: $($extra -join ', ')" -ForegroundColor Yellow }
+        $kindDocsOk = $false
+    }
+}
+
+# docs/GLOSSARY.md intentionally lists a broader set (including some internal
+# kinds) — only check that every token it mentions is a REAL kind, catching
+# invented ones (e.g. a since-removed `workflow`/`datacenter` typo).
+$glossaryPath = Join-Path $projectRoot "docs\GLOSSARY.md"
+if (Test-Path $glossaryPath) {
+    $glossaryContent = Get-Content $glossaryPath -Raw
+    $glossaryMatch = [regex]::Match($glossaryContent, 'Valid kinds:\s*(.+?)(?:\r?\n\r?\n|$)', 'Singleline')
+    if ($glossaryMatch.Success) {
+        $glossaryTokens = [regex]::Matches($glossaryMatch.Groups[1].Value, '`([a-z0-9_-]+)`') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
+        $unknownTokens = $glossaryTokens | Where-Object { $_ -notin $allKinds }
+        if ($unknownTokens) {
+            Write-Host "    [!] docs\GLOSSARY.md lists kind(s) that don't exist in PlatformKind:" -ForegroundColor Red
+            Write-Host "        $($unknownTokens -join ', ')" -ForegroundColor Yellow
+            $kindDocsOk = $false
+        }
+    }
+}
+
+if ($kindDocsOk) {
+    Write-Host "    [+] All 'Valid kinds' doc lists match PlatformKind" -ForegroundColor Green
+}
+else {
+    $failed += "kind docs coverage"
+}
+Write-Host ""
+# ── 10. strata-onboarding.md duplication drift ───────────────────────────────
+# docs/skills/strata-onboarding.md (canonical, per ADR-0014) and
+# .github/skills/strata-onboarding.md (Copilot-discoverable copy — the actual
+# runtime location Copilot's skill-discovery reads) must stay byte-identical.
+# They can't be a symlink (fragile on a Windows dev machine without git
+# symlink support enabled) or a generated-at-build-time file (.github/skills/
+# needs real content checked into git, not a build artifact), so this check
+# is the enforcement mechanism instead. The third copy under
+# src/strata/templates/solution/dot.github/skills/ is a scaffold template
+# stamped into new user workspaces — intentionally a point-in-time snapshot,
+# not kept in sync, and excluded from this check.
+Write-Host "[*] strata-onboarding.md duplication drift..." -ForegroundColor Blue
+$onboardingCanonical = Join-Path $projectRoot "docs\skills\strata-onboarding.md"
+$onboardingCopy = Join-Path $projectRoot ".github\skills\strata-onboarding.md"
+$onboardingDiff = Compare-Object (Get-Content $onboardingCanonical) (Get-Content $onboardingCopy)
+if (-not $onboardingDiff) {
+    Write-Host "    [+] docs/skills/ and .github/skills/ copies are identical" -ForegroundColor Green
+}
+else {
+    Write-Host "    [!] docs/skills/strata-onboarding.md and .github/skills/strata-onboarding.md have diverged:" -ForegroundColor Red
+    Write-Host "        Copy docs/skills/strata-onboarding.md over .github/skills/strata-onboarding.md (or vice versa) to resync." -ForegroundColor Yellow
+    $failed += "strata-onboarding.md duplication drift"
+}
 Write-Host ""
 # ── Summary ─────────────────────────────────────────────────────────────────
 # Restore the original index strategy

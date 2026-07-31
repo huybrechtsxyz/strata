@@ -3,6 +3,14 @@
 - Status: implemented
 - Date: 2026-07-27
 
+> **Update 2026-07-29:** [ADR-0059](0059-approval-metadata-and-gate-streamlining.md)
+> extends this design — `spec.gates` moves from the environment to the deployment
+> (next to `stages`, merged by `name` via `extends` the same way stages already are),
+> gains a `mode: declare | enforce` field, and reuses `spec.approvals`' richer
+> `Dict[str, ApproverRef]` approver shape in place of the plain `List[str]` below.
+> `spec.approvals`/`DeploymentApprovalModel` and ADR-0032 are absorbed into this single
+> gate mechanism. See ADR-0059's "Unified Schema" addendum for the full design.
+
 ## Context and Problem Statement
 
 Infrastructure deployments are not always fully automated. At key points in the

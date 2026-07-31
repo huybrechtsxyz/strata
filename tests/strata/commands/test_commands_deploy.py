@@ -482,7 +482,7 @@ class TestLockingWiring:
             patch.object(cmd, "_should_lock", return_value=True),
             patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
             patch.object(cmd, "_execute_stage_provisioning", return_value=True),
-            patch.object(cmd, "_check_approvals", return_value=True),
+            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
         ):
             stage = _make_stage()
             # Call directly via the helper
@@ -513,7 +513,7 @@ class TestLockingWiring:
             patch.object(cmd, "_should_lock", return_value=True),
             patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
             patch.object(cmd, "_execute_stage_provisioning", return_value=True),
-            patch.object(cmd, "_check_approvals", return_value=True),
+            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
         ):
             cmd._execute_provisioning()  # type: ignore[call-arg]
 
@@ -543,7 +543,7 @@ class TestLockingWiring:
             patch.object(cmd, "_should_lock", return_value=True),
             patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
             patch.object(cmd, "_execute_stage_provisioning", return_value=False),
-            patch.object(cmd, "_check_approvals", return_value=True),
+            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
         ):
             result = cmd._execute_provisioning()  # type: ignore[call-arg]
 
@@ -560,7 +560,7 @@ class TestLockingWiring:
         with (
             patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
             patch.object(cmd, "_execute_stage_provisioning", return_value=True),
-            patch.object(cmd, "_check_approvals", return_value=True),
+            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
         ):
             cmd._execute_provisioning()  # type: ignore[call-arg]
 
@@ -582,7 +582,7 @@ class TestLockingWiring:
         with (
             patch.object(cmd, "_should_lock", return_value=True),
             patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
-            patch.object(cmd, "_check_approvals", return_value=True),
+            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
         ):
             result = cmd._execute_provisioning()  # type: ignore[call-arg]
 
@@ -758,7 +758,7 @@ class TestRunHierarchyLifecyclePhase:
         ):
             assert cmd._run_hierarchy_lifecycle_phase("deploy_stage_before") is True
 
-    def test_all_levels_called_in_order(self, tmp_path):
+    def test_all_levels_called_in_order(self, tmp_path: Path) -> None:
         cmd = self._make_command(tmp_path)
         ns_svc = _make_service_mock("NamespaceService")
         prov_svc = _make_service_mock("ProviderService")
@@ -844,7 +844,7 @@ class TestRunHierarchyLifecyclePhase:
         # workspace level was called once (for the workspace itself)
         assert lc.execute_workspace_phase.call_count == 1
 
-    def test_context_enriched_per_level(self, tmp_path):
+    def test_context_enriched_per_level(self, tmp_path: Path) -> None:
         cmd = self._make_command(tmp_path)
         ns_svc = _make_service_mock("NamespaceService")
         ds, ws_svc = self._make_deployment_service(namespaces={"production": ns_svc})

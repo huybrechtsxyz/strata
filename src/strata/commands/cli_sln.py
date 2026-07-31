@@ -13,6 +13,7 @@ from strata.commands.cli_common import (
 from strata.commands.cli_init import init_command
 from strata.commands.cli_status import status_command
 from strata.commands.sln.add_deployment_command import AddDeploymentCommand
+from strata.commands.sln.doctor_sln_command import DoctorSlnCommand
 from strata.commands.sln.export_template_command import export_command
 from strata.commands.sln.list_deployments_command import ListDeploymentsCommand
 from strata.commands.sln.remove_deployment_command import RemoveDeploymentCommand
@@ -30,6 +31,64 @@ sln_group.add_command(update_command, name="update")
 sln_group.add_command(clean_command, name="clean")
 sln_group.add_command(status_command, name="status")
 sln_group.add_command(export_command, name="export")
+
+
+@sln_group.command(name="doctor", help="Run a workspace health check: runtime, tools, config, and auth.")
+@click.option(
+    "--file",
+    "-f",
+    default=None,
+    envvar="STRATA_FILE",
+    metavar="PATH",
+    help="Deployment file — enables requirement-level derivation for tools. [env: STRATA_FILE]",
+)
+@click_work_path
+@click.option(
+    "--category",
+    default=None,
+    type=click.Choice(["runtime", "workspace", "tools", "config", "auth"], case_sensitive=False),
+    metavar="NAME",
+    help="Run only a specific check category.",
+)
+@click.option(
+    "--deep",
+    is_flag=True,
+    default=False,
+    help="Run slow checks: backend reachability and auth validation.",
+)
+@click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help="Run AI analysis of failed checks (requires an ai_agent integration).",
+)
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def sln_doctor(
+    file=None,
+    work_path=None,
+    category=None,
+    deep: bool = False,
+    ai: bool = False,
+    output=None,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> None:
+    """Run a workspace health check across runtime, workspace, tools, config, and auth."""
+    command = DoctorSlnCommand(
+        file=file,
+        work_path=work_path,
+        category=category,
+        deep=deep,
+        ai=ai,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
 
 
 # ---------------------------------------------------------------------------

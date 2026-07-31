@@ -6,19 +6,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-try:
-    from strata.integrations.aws_cli import AWSCLIIntegration
-    from strata.models.integration_model import IntegrationModel
-    from strata.utils.aws_script_base import AWSScript
-
-    IMPL_MISSING = False
-except ImportError:
-    AWSCLIIntegration = None  # type: ignore[assignment,misc]
-    AWSScript = None  # type: ignore[assignment,misc]
-    IMPL_MISSING = True
-
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="AWS CLI integration not available")
-
+from strata.integrations.aws_cli import AWSCLIIntegration
+from strata.models.integration_model import IntegrationModel
+from strata.utils.aws_script_base import AWSScript
 
 # ===========================================================================
 # Helpers

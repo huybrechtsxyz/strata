@@ -8,6 +8,22 @@ Key paths: `src/strata/integrations/`, `models/deployment_model.py`.
 
 ## Learnings
 
+### 2026-07-28 — Global good/meh/ugly review, pass 1: contributed integration/subprocess items to `_lesson.md`
+
+- Scanned integrations and subprocess-execution patterns for the global audit; contributed Design/Implementation items (subprocess duplication, `BaseIntegration` drift, remote-backend maturity) to the new root-level `_lesson.md` tracker. Collection only — no verdicts assigned yet.
+
+### 2026-07-28 — Cross-deployment dependency gating: `deploy history` success field is the reliable DIY signal, not status/health
+
+- Verified a `deploy_run_before` lifecycle-script hook works today as a DIY precondition check across separate deployment files. `deploy status` is deprecated/unreliable (live terraform outputs only); `deploy health` silently passes (`no_checks_defined`) when no health checks configured — footgun. `deploy history --output json`'s per-execution `success` boolean is the reliable signal; CI must persist/share `.strata/logs/` across ephemeral checkouts between layers.
+
+### 2026-07-28 — Follow-up: gitops manifest push is the genuinely remote cross-machine signal; "deploy status" doesn't exist
+
+- Corrected earlier naming: `strata deploy status` isn't a real command — the live-state query is `strata env status` (queries real Terraform remote backend). Also found `manifest: { type: gitops, push_manifest: true }` already does a real git commit+push of deployment status after every deploy — no shared filesystem needed; only gap is no `pull_from_remote()` downstream. Ranked this above shared `deploy_log_path` as the preferred backing store for future `spec.requires`.
+
+### 2026-07-28 — Audit log redaction gap: full argv (incl. `--value` secrets) logged unredacted
+
+- Confirmed Option D (docs-only secret-derive recipe) works today with existing CLI, no code needed. Independently found: `base_command.py` (~line 565-570) audits every command with `target=" ".join(sys.argv[1:])` — full unredacted argv, so `strata secret put KEY --value <plaintext>` writes the plaintext into `.strata/deploy-log/*.json` (and possibly `audit resend`). Option-independent, pre-existing issue; flagged in decisions.md as an open finding, not yet fixed.
+
 ### 2026-06-15 — Policy template blocks in config/data files
 - `xyz-config.yaml` has no top-level `lifecycle:` or `security:` section in `spec:` — policies block was appended after the `topologies:` section (end of file).
 - `src/strata/data/configuration.yaml` is the scaffold template for `strata new configuration` — it is minimal (only a `configuration:` sub-key). Policies block was appended after the existing `configuration:` block.

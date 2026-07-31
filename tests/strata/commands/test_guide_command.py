@@ -1,29 +1,12 @@
-"""Tests for the `guide` command.
-
-NOTE: ``src/strata/commands/cli_guide.py`` and
-      ``src/strata/commands/guide/show_guide_command.py`` may not exist yet.
-      These tests are written from the design spec and will be collected once
-      the implementation is in place.  CI will skip gracefully until then.
-"""
+"""Tests for the `guide` command."""
 
 import json
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
-try:
-    from strata.commands.cli_guide import guide_command
-
-    IMPL_MISSING = False
-except ImportError:
-    guide_command = None  # type: ignore[assignment]
-    IMPL_MISSING = True
-
 from click.testing import CliRunner
 
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="guide command not yet implemented")
-
+from strata.commands.cli_guide import guide_command
 
 # ---------------------------------------------------------------------------
 # Factories / helpers

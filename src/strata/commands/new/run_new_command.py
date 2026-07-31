@@ -1,28 +1,23 @@
 """Command to create a new platform configuration file from a template."""
 
 import os
-import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import click
-import yaml
 
 from strata.commands.base_command import BaseCommand
 from strata.logger import get_logger
-from strata.models.solution_model import SolutionTemplateModel
-from strata.utils.system import get_pkg_templates_path
+from strata.models.solution_model import SolutionSpecModel, SolutionTemplateModel
+from strata.services.template_resolver import (
+    collect_available_templates,
+    collect_dep_candidates,
+    collect_templates_with_descriptions,
+    extract_jinja_vars,
+    resolve_new_template_path,
+    resolve_solution_template,
+)
 from strata.utils.templater import TemplateProcessor
-
-_JINJA_VAR_RE = re.compile(r"\{\{\s*(\w+)\s*\}\}")
-
-
-def _extract_jinja_vars(paths: List[str]) -> set:
-    """Return all undeclared variable names found in the given Jinja2 path strings."""
-    found: set = set()
-    for path in paths:
-        found.update(_JINJA_VAR_RE.findall(path))
-    return found
 
 
 def _prompt_missing_vars(required: set, context: Dict[str, str]) -> Optional[Dict[str, str]]:
@@ -43,237 +38,6 @@ def _prompt_missing_vars(required: set, context: Dict[str, str]) -> Optional[Dic
         click.echo("\n⚠️  Cancelled.")
         return None
     return result
-
-
-def _resolve_solution_template(name: str, solution_spec) -> Optional["SolutionTemplateModel"]:
-    """Return the first template entry in *solution_spec* whose name matches *name*."""
-    if solution_spec is None or not solution_spec.templates:
-        return None
-    for tpl in solution_spec.templates:
-        if tpl.name == name:
-            return tpl
-    return None
-
-
-def _collect_available_templates(work_path: Optional[Path]) -> list[str]:
-    """Collect template stems from workspace and package directories.
-
-    Workspace templates (`.strata/templates/`) take precedence but both
-    sources contribute to the *available* list shown to the user.  A template
-    may be either a single YAML file (``namespace.yaml``) or a bundle
-    directory (``tenant/``).
-
-    Args:
-        work_path: Root of the current workspace, or None.
-
-    Returns:
-        Sorted, deduplicated list of template stems (e.g. ``["namespace", "provider"]``).
-    """
-    stems: set[str] = set()
-
-    # Package-bundled templates
-    pkg_dir = get_pkg_templates_path() / "solution" / "dot.strata" / "templates"
-    if pkg_dir.exists() and pkg_dir.is_dir():
-        for f in pkg_dir.iterdir():
-            if f.is_file() and f.suffix == ".yaml":
-                stems.add(f.stem)
-            elif f.is_dir():
-                stems.add(f.name)
-
-    # Workspace-local templates (may override package ones)
-    if work_path is not None:
-        ws_dir = work_path / ".strata" / "templates"
-        if ws_dir.exists() and ws_dir.is_dir():
-            for f in ws_dir.iterdir():
-                if f.is_file() and f.suffix == ".yaml":
-                    stems.add(f.stem)
-                elif f.is_dir():
-                    stems.add(f.name)
-
-    return sorted(stems)
-
-
-def _collect_templates_with_descriptions(work_path: Optional[Path]) -> List[Dict[str, str]]:
-    """Collect all templates with descriptions from all sources.
-
-    Scans:
-    1. Package single-file templates (``.strata/templates/*.yaml``)
-    2. Package bundle templates (``templates/examples/``)
-    3. Workspace single-file templates
-    4. Workspace bundle templates
-
-    Returns a sorted list of dicts with keys: ``name``, ``description``, ``type``.
-    """
-    templates: Dict[str, Dict[str, str]] = {}
-
-    # Package single-file templates
-    pkg_dir = get_pkg_templates_path() / "solution" / "dot.strata" / "templates"
-    if pkg_dir.exists() and pkg_dir.is_dir():
-        for f in pkg_dir.iterdir():
-            if f.is_file() and f.suffix == ".yaml":
-                templates[f.stem] = {
-                    "name": f.stem,
-                    "description": f"Single-file {f.stem} template",
-                    "type": "file",
-                }
-            elif f.is_dir():
-                desc = _read_bundle_description(f)
-                templates[f.name] = {
-                    "name": f.name,
-                    "description": desc or f"Bundle template: {f.name}",
-                    "type": "bundle",
-                }
-
-    # Package scaffold templates (examples/)
-    examples_dir = get_pkg_templates_path() / "examples"
-    if examples_dir.is_dir():
-        for p in examples_dir.iterdir():
-            if p.is_dir():
-                desc = _read_bundle_description(p)
-                templates[p.name] = {
-                    "name": p.name,
-                    "description": desc or f"Scaffold template: {p.name}",
-                    "type": "scaffold",
-                }
-
-    # Workspace-local templates — directories take priority over same-named YAML files
-    if work_path is not None:
-        ws_dir = work_path / ".strata" / "templates"
-        if ws_dir.is_dir():
-            # Pass 1: single-file templates
-            for f in ws_dir.iterdir():
-                if f.is_file() and f.suffix == ".yaml":
-                    templates[f.stem] = {
-                        "name": f.stem,
-                        "description": f"Workspace {f.stem} template",
-                        "type": "file (workspace)",
-                    }
-            # Pass 2: bundle directories (overrides same-named file entry)
-            for f in ws_dir.iterdir():
-                if f.is_dir():
-                    desc = _read_bundle_description(f)
-                    tpl_type = "scaffold (workspace)" if (f / "scaffold").is_dir() else "bundle (workspace)"
-                    templates[f.name] = {
-                        "name": f.name,
-                        "description": desc or f"Workspace template: {f.name}",
-                        "type": tpl_type,
-                    }
-
-    return sorted(templates.values(), key=lambda t: t["name"])
-
-
-def _read_bundle_description(bundle_dir: Path) -> str:
-    """Read description from template.yaml manifest if present."""
-    manifest_path = bundle_dir / "template.yaml"
-    if not manifest_path.exists():
-        return ""
-    try:
-        data = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
-        if isinstance(data, dict):
-            return data.get("description", "")
-    except Exception:
-        pass
-    return ""
-
-
-def _resolve_at_repo_path(identifier: str, repo_map: Dict[str, str]) -> Optional[Path]:
-    """Resolve a ``@repo_name/relative/path`` reference to an absolute ``Path``.
-
-    Returns ``None`` if the repo is not registered or the identifier is malformed.
-    """
-    if not identifier.startswith("@"):
-        return None
-    rest = identifier[1:]
-    if "/" not in rest:
-        return None
-    repo_name, rel_path = rest.split("/", 1)
-    if repo_name not in repo_map:
-        return None
-    return Path(repo_map[repo_name]) / rel_path
-
-
-def _collect_dep_candidates(
-    graph_result,
-    work_path: Path,
-    repo_map: Dict[str, str],
-) -> List[Tuple[str, str, Path]]:
-    """Return ``(kind, name, resolved_path)`` tuples for unresolved dependencies.
-
-    Covers two node statuses from the graph:
-
-    - ``"missing"``: local relative path that does not exist on disk.
-    - ``"external"``: ``@repo/...`` reference; resolved via *repo_map* and
-      checked for existence — only included when the resolved file is absent.
-
-    Nodes that are already present on disk are silently skipped.
-    """
-    seen: set[str] = set()
-    candidates: List[Tuple[str, str, Path]] = []
-
-    for node in graph_result.nodes:
-        if node.status not in ("missing", "external"):
-            continue
-        if node.identifier in seen:
-            continue
-        seen.add(node.identifier)
-
-        kind = node.kind if node.kind not in ("unknown", "") else None
-        if not kind:
-            continue
-
-        if node.identifier.startswith("@"):
-            resolved = _resolve_at_repo_path(node.identifier, repo_map)
-            if resolved is None:
-                continue  # Repo not registered — cannot scaffold
-            if resolved.exists():
-                continue
-        else:
-            resolved = work_path / node.identifier
-            if resolved.exists():
-                continue
-
-        candidates.append((kind, resolved.stem, resolved))
-
-    return candidates
-
-
-def _resolve_template_path(template: str, work_path: Optional[Path]) -> Optional[Path]:
-    """Resolve the template for *template*, preferring workspace over package.
-
-    Resolution order (first match wins):
-
-    1. Workspace bundle directory  (``.strata/templates/<name>/``)
-    2. Workspace single YAML file  (``.strata/templates/<name>.yaml``)
-    3. Package bundle directory
-    4. Package single YAML file
-
-    Args:
-        template: Template stem (e.g. ``"namespace"`` or ``"Tenant"``).
-        work_path: Root of the current workspace, or None.
-
-    Returns:
-        Path to the template file or bundle directory, or None when not found.
-    """
-    pkg_base = get_pkg_templates_path() / "solution" / "dot.strata" / "templates"
-
-    # 1 & 2 — workspace
-    if work_path is not None:
-        ws_bundle = work_path / ".strata" / "templates" / template
-        if ws_bundle.exists() and ws_bundle.is_dir():
-            return ws_bundle
-        ws_file = work_path / ".strata" / "templates" / f"{template}.yaml"
-        if ws_file.exists():
-            return ws_file
-
-    # 3 & 4 — package
-    pkg_bundle = pkg_base / template
-    if pkg_bundle.exists() and pkg_bundle.is_dir():
-        return pkg_bundle
-    pkg_file = pkg_base / f"{template}.yaml"
-    if pkg_file.exists():
-        return pkg_file
-
-    return None
 
 
 class NewCommand(BaseCommand):
@@ -331,10 +95,29 @@ class NewCommand(BaseCommand):
     def _before_execute(self) -> bool:
         return super()._before_execute()
 
+    def _load_solution_spec(self) -> Optional[SolutionSpecModel]:
+        """Best-effort load of solution.json.
+
+        Returns the solution spec, or ``None`` when no workspace/solution.json
+        is present or loading fails for any reason (silent, by design).
+        """
+        try:
+            ok, _errors = self._solution_controller.load()
+            if ok and self._solution_controller._solution is not None:
+                return self._solution_controller._solution.spec
+        except Exception:
+            pass  # No workspace — skip silently
+        return None
+
     def _execute(self) -> bool:
+        # Best-effort: load solution.json for team context and solution templates.
+        # Hoisted above the --list branch so both branches can see solution_spec.
+        solution_spec = self._load_solution_spec()
+
         # --list: show available templates and exit cleanly
         if self._list_templates:
-            templates = _collect_templates_with_descriptions(self._work_path)
+            solution_templates = solution_spec.templates if solution_spec else None
+            templates = collect_templates_with_descriptions(self._work_path, solution_templates=solution_templates)
             available = [t["name"] for t in templates]
             self._output_data = {"templates": templates}
             if self._is_console_output():
@@ -370,16 +153,8 @@ class NewCommand(BaseCommand):
 
         # 1. Build substitution context (shared by all tiers)
         context: Dict[str, str] = {"name": self._name}
-
-        # Best-effort: load solution.json for team context and solution templates
-        solution_spec = None
-        try:
-            ok, _errors = self._solution_controller.load()
-            if ok and self._solution_controller._solution is not None:
-                solution_spec = self._solution_controller._solution.spec
-                context.update(solution_spec.context or {})
-        except Exception:
-            pass  # No workspace — skip silently
+        if solution_spec is not None:
+            context.update(solution_spec.context or {})
 
         # Apply --set overrides (CLI wins over solution context)
         for kv in self._set_values:
@@ -390,10 +165,10 @@ class NewCommand(BaseCommand):
                 self.logger.warning("Ignoring malformed --set value (expected KEY=VALUE)", value=kv)
 
         # 2. Tier-0: solution.json spec.templates[]
-        solution_tpl = _resolve_solution_template(self._template, solution_spec)
+        solution_tpl = resolve_solution_template(self._template, solution_spec)
         if solution_tpl is not None:
             all_paths = [entry.path for entry in solution_tpl.bundle]
-            required_vars = _extract_jinja_vars(all_paths)
+            required_vars = extract_jinja_vars(all_paths)
             prompted = _prompt_missing_vars(required_vars, context)
             if prompted is None:
                 return False
@@ -401,9 +176,12 @@ class NewCommand(BaseCommand):
             result = self._run_solution_bundle_execution(solution_tpl, context)
         else:
             # 3. Tiers 1-4: file-system resolution (workspace bundle/file → package bundle/file)
-            template_path = _resolve_template_path(self._template, self._work_path)
+            template_path = resolve_new_template_path(self._template, self._work_path)
             if template_path is None:
-                available = _collect_available_templates(self._work_path)
+                available = collect_available_templates(
+                    self._work_path,
+                    solution_templates=solution_spec.templates if solution_spec else None,
+                )
                 self._errors.append(
                     f"Template '{self._template}' not found. Available: {', '.join(available) if available else '(none)'}"
                 )
@@ -557,7 +335,7 @@ class NewCommand(BaseCommand):
             dest_dir = output_root / TemplateProcessor.render(entry.path, context)
 
             # Resolve source template
-            source_path = _resolve_template_path(entry.name, self._work_path)
+            source_path = resolve_new_template_path(entry.name, self._work_path)
             if source_path is None:
                 self._errors.append(
                     f"Bundle entry '{entry.name}' not found. "
@@ -687,7 +465,7 @@ class NewCommand(BaseCommand):
             gc = GraphController(work_path, entry=entry_rel, no_validate=True)
             graph_result = gc.build_file_graph()
 
-            for kind, name, resolved in _collect_dep_candidates(graph_result, work_path, repo_map):
+            for kind, name, resolved in collect_dep_candidates(graph_result, work_path, repo_map):
                 key = str(resolved)
                 if key not in seen_paths:
                     seen_paths.add(key)
@@ -731,7 +509,7 @@ class NewCommand(BaseCommand):
         with a warning — they require explicit path decisions that cannot be
         inferred automatically.
         """
-        template_path = _resolve_template_path(kind, self._work_path)
+        template_path = resolve_new_template_path(kind, self._work_path)
         if template_path is None:
             click.echo(f"  ⚠  No template for kind '{kind}' \u2014 skipping")
             return False
@@ -793,6 +571,15 @@ class NewCommand(BaseCommand):
         if not paths:
             return True
 
+        # Resolve repo map for @repo/ references (same pattern as _scaffold_missing_deps)
+        repo_map: Dict[str, str] = {}
+        try:
+            ok, _ = self._solution_controller.load()
+            if ok:
+                repo_map = self._solution_controller.get_repo_map()
+        except Exception:
+            pass
+
         all_ok = True
         for path_str in paths:
             file_path = Path(path_str)
@@ -800,7 +587,7 @@ class NewCommand(BaseCommand):
                 validator = PlatformValidator(
                     file_path=file_path,
                     configuration_service=None,
-                    repo_map=None,
+                    repo_map=repo_map,
                     verify_digests=False,
                 )
                 for phase_fn in (validator.before_validate, validator.validate, validator.after_validate):

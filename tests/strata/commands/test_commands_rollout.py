@@ -1,4 +1,4 @@
-"""Tests for the ``env`` command group."""
+"""Tests for the ``rollout`` command group."""
 
 import json
 from pathlib import Path
@@ -7,59 +7,39 @@ from unittest.mock import patch
 import yaml
 from click.testing import CliRunner
 
-from strata.commands.cli_env import env_group
-from strata.commands.envs.status_env_command import StatusEnvCommand
+from strata.commands.cli_rollout import rollout_group
+from strata.commands.rollout.status_rollout_command import StatusRolloutCommand
 
 # ---------------------------------------------------------------------------
-# CLI wiring — env status
+# CLI wiring — rollout status
 # ---------------------------------------------------------------------------
 
 
-class TestEnvStatusCli:
+class TestRolloutStatusCli:
     def test_status_all_flag(self, tmp_path):
         runner = CliRunner()
-        with patch("strata.commands.envs.status_env_command.StatusEnvCommand.execute", return_value=True):
-            result = runner.invoke(env_group, ["status", "--all", "--work-path", str(tmp_path)])
+        with patch("strata.commands.rollout.status_rollout_command.StatusRolloutCommand.execute", return_value=True):
+            result = runner.invoke(rollout_group, ["status", "--all", "--work-path", str(tmp_path)])
         assert result.exit_code == 0
 
     def test_status_path_option(self, tmp_path):
         runner = CliRunner()
-        with patch("strata.commands.envs.status_env_command.StatusEnvCommand.execute", return_value=True):
-            result = runner.invoke(env_group, ["status", "--path", str(tmp_path), "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_status_with_file(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.envs.status_env_command.StatusEnvCommand.execute", return_value=True):
-            result = runner.invoke(env_group, ["status", "--file", "deploy.yaml", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_status_offline_flag(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.envs.status_env_command.StatusEnvCommand.execute", return_value=True):
-            result = runner.invoke(env_group, ["status", "--offline", "--work-path", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_status_stage_option(self, tmp_path):
-        runner = CliRunner()
-        with patch("strata.commands.envs.status_env_command.StatusEnvCommand.execute", return_value=True):
-            result = runner.invoke(env_group, ["status", "--stage", "production", "--work-path", str(tmp_path)])
+        with patch("strata.commands.rollout.status_rollout_command.StatusRolloutCommand.execute", return_value=True):
+            result = runner.invoke(rollout_group, ["status", "--path", str(tmp_path), "--work-path", str(tmp_path)])
         assert result.exit_code == 0
 
     def test_status_execute_false_returns_nonzero(self, tmp_path):
         runner = CliRunner()
-        with patch("strata.commands.envs.status_env_command.StatusEnvCommand.execute", return_value=False):
-            result = runner.invoke(env_group, ["status", "--all", "--work-path", str(tmp_path)])
+        with patch("strata.commands.rollout.status_rollout_command.StatusRolloutCommand.execute", return_value=False):
+            result = runner.invoke(rollout_group, ["status", "--all", "--work-path", str(tmp_path)])
         assert result.exit_code != 0
 
     def test_status_help(self, tmp_path):
         runner = CliRunner()
-        result = runner.invoke(env_group, ["status", "--help"])
+        result = runner.invoke(rollout_group, ["status", "--help"])
         assert result.exit_code == 0
         assert "--all" in result.output
         assert "--path" in result.output
-        assert "--offline" in result.output
-        assert "--stage" in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -68,8 +48,8 @@ class TestEnvStatusCli:
 
 
 class TestExtractDeploymentStatus:
-    def _make_cmd(self, tmp_path: Path) -> StatusEnvCommand:
-        return StatusEnvCommand(work_path=str(tmp_path), all_deployments=True)
+    def _make_cmd(self, tmp_path: Path) -> StatusRolloutCommand:
+        return StatusRolloutCommand(work_path=str(tmp_path), all_deployments=True)
 
     def test_valid_deployment_yaml(self, tmp_path):
         yaml_file = tmp_path / "deploy.yaml"
@@ -181,8 +161,8 @@ class TestExtractDeploymentStatus:
 
 
 class TestReadOutputCacheByName:
-    def _make_cmd(self, tmp_path: Path) -> StatusEnvCommand:
-        return StatusEnvCommand(work_path=str(tmp_path))
+    def _make_cmd(self, tmp_path: Path) -> StatusRolloutCommand:
+        return StatusRolloutCommand(work_path=str(tmp_path))
 
     def test_returns_none_when_file_missing(self, tmp_path):
         cmd = self._make_cmd(tmp_path)
@@ -210,11 +190,11 @@ class TestReadOutputCacheByName:
 
 
 # ---------------------------------------------------------------------------
-# Unit tests — _run_multi
+# Unit tests — _execute (scanning)
 # ---------------------------------------------------------------------------
 
 
-class TestRunMulti:
+class TestRolloutStatusExecute:
     def _make_deploy_yaml(self, path: Path, name: str, stages: list) -> Path:
         content = {
             "apiVersion": "strata.huybrechts.xyz/v1",
@@ -226,66 +206,62 @@ class TestRunMulti:
         f.write_text(yaml.dump(content))
         return f
 
-    def test_run_multi_empty_dir(self, tmp_path):
-        cmd = StatusEnvCommand(work_path=str(tmp_path), all_deployments=True)
-        ok = cmd._run_multi()
+    def test_empty_dir(self, tmp_path):
+        cmd = StatusRolloutCommand(work_path=str(tmp_path), all_deployments=True)
+        ok = cmd._execute()
         assert ok is True
         assert cmd._output_data["deployments"] == []
 
-    def test_run_multi_finds_deployments(self, tmp_path):
+    def test_finds_deployments(self, tmp_path):
         self._make_deploy_yaml(tmp_path, "deploy_prd", ["infra", "services"])
         self._make_deploy_yaml(tmp_path, "deploy_stg", ["infra"])
         (tmp_path / "workspace.yaml").write_text("kind: workspace\nmeta:\n  name: ws\n")
 
-        cmd = StatusEnvCommand(work_path=str(tmp_path), all_deployments=True)
-        ok = cmd._run_multi()
+        cmd = StatusRolloutCommand(work_path=str(tmp_path), all_deployments=True)
+        ok = cmd._execute()
         assert ok is True
         deployments = cmd._output_data["deployments"]
         assert len(deployments) == 2
         names = {d["name"] for d in deployments}
         assert names == {"deploy_prd", "deploy_stg"}
 
-    def test_run_multi_with_path(self, tmp_path):
+    def test_with_path(self, tmp_path):
         sub = tmp_path / "deploy"
         sub.mkdir()
         self._make_deploy_yaml(sub, "deploy_prd", ["infra"])
 
-        cmd = StatusEnvCommand(work_path=str(tmp_path), path=str(sub))
-        ok = cmd._run_multi()
+        cmd = StatusRolloutCommand(work_path=str(tmp_path), path=str(sub))
+        ok = cmd._execute()
         assert ok is True
         assert len(cmd._output_data["deployments"]) == 1
 
-    def test_run_multi_invalid_path_returns_false(self, tmp_path):
-        cmd = StatusEnvCommand(work_path=str(tmp_path), path=str(tmp_path / "nonexistent"))
-        ok = cmd._run_multi()
+    def test_invalid_path_returns_false(self, tmp_path):
+        cmd = StatusRolloutCommand(work_path=str(tmp_path), path=str(tmp_path / "nonexistent"))
+        ok = cmd._execute()
         assert ok is False
         assert any("does not exist" in e for e in cmd._errors)
 
-    def test_run_multi_scans_subdirectories(self, tmp_path):
+    def test_scans_subdirectories(self, tmp_path):
         sub = tmp_path / "sub" / "deep"
         sub.mkdir(parents=True)
         self._make_deploy_yaml(sub, "nested_deploy", ["infra"])
 
-        cmd = StatusEnvCommand(work_path=str(tmp_path), all_deployments=True)
-        ok = cmd._run_multi()
+        cmd = StatusRolloutCommand(work_path=str(tmp_path), all_deployments=True)
+        ok = cmd._execute()
         assert ok is True
         names = [d["name"] for d in cmd._output_data["deployments"]]
         assert "nested_deploy" in names
 
-    def test_run_multi_output_data_has_scan_path(self, tmp_path):
-        cmd = StatusEnvCommand(work_path=str(tmp_path), all_deployments=True)
-        cmd._run_multi()
+    def test_output_data_has_scan_path(self, tmp_path):
+        cmd = StatusRolloutCommand(work_path=str(tmp_path), all_deployments=True)
+        cmd._execute()
         assert "scan_path" in cmd._output_data
         assert str(tmp_path) in cmd._output_data["scan_path"]
 
-    def test_run_multi_get_required_integrations_empty(self, tmp_path):
-        cmd = StatusEnvCommand(work_path=str(tmp_path), all_deployments=True)
+    def test_get_required_integrations_always_empty(self, tmp_path):
+        cmd = StatusRolloutCommand(work_path=str(tmp_path), all_deployments=True)
         assert cmd.get_required_integrations() == {}
 
-    def test_run_multi_offline_get_required_integrations_empty(self, tmp_path):
-        cmd = StatusEnvCommand(work_path=str(tmp_path), offline=True)
-        assert cmd.get_required_integrations() == {}
-
-    def test_run_single_get_required_integrations_requires_terraform(self, tmp_path):
-        cmd = StatusEnvCommand(work_path=str(tmp_path))
-        assert "terraform" in cmd.get_required_integrations()
+    def test_before_execute_skips_file_validation(self, tmp_path):
+        cmd = StatusRolloutCommand(work_path=str(tmp_path))
+        assert cmd._before_execute() is True

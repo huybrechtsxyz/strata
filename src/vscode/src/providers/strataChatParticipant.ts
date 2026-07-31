@@ -946,8 +946,16 @@ export class StrataChatParticipant implements vscode.Disposable {
                 const riskIcon = ctx.ai_risk === 'critical' ? '🔴' : ctx.ai_risk === 'high' ? '🟠' : '🟡';
                 response.markdown(`**AI Risk:** ${riskIcon} ${String(ctx.ai_risk).toUpperCase()}\n\n`);
             }
-            if (ctx.approvers && Array.isArray(ctx.approvers)) {
-                response.markdown(`**Approvers:** ${(ctx.approvers as string[]).join(', ')}\n\n`);
+            // ADR-0059: approvers is now a dict of named ApproverRef entries
+            // ({ key: { type, value } }), not a flat string array.
+            if (ctx.approvers && typeof ctx.approvers === 'object' && !Array.isArray(ctx.approvers)) {
+                const approversDict = ctx.approvers as Record<string, { type?: string; value?: string }>;
+                const rendered = Object.entries(approversDict)
+                    .map(([key, ref]) => (ref?.type && ref?.value ? `${key} (${ref.type}: ${ref.value})` : key))
+                    .join(', ');
+                if (rendered) {
+                    response.markdown(`**Approvers:** ${rendered}\n\n`);
+                }
             }
 
             response.button({ title: `✅ Approve`, command: 'strata.approveWorkItem', arguments: [{ workItem: item }] });

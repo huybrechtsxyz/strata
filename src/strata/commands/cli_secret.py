@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Optional
 
 import click
@@ -13,10 +12,10 @@ from strata.commands.cli_common import (
     click_work_path,
     handle_command_exit,
 )
-from strata.commands.secret.generate_secret_command import generate_secret
+from strata.commands.secret.generate_secret_command import GenerateSecretCommand
 from strata.commands.secret.get_secret_command import GetSecretCommand
 from strata.commands.secret.list_secret_command import ListSecretCommand
-from strata.commands.secret.mask_secret_command import mask_secret
+from strata.commands.secret.mask_secret_command import MaskSecretCommand
 from strata.commands.secret.put_secret_command import PutSecretCommand
 from strata.commands.secret.rotate_secret_command import RotateSecretCommand
 from strata.commands.secret.status_secret_command import StatusSecretCommand
@@ -32,8 +31,6 @@ _FORMAT_HELP = (
     "uuid4 = random UUID v4;  "
     "uuid7 = time-ordered UUID v7 (--length ignored for UUID formats)."
 )
-
-_UUID_FORMATS = {"uuid4", "uuid7"}
 
 
 @click.group(name="secret", help="Generate and manage secret values.")
@@ -72,20 +69,9 @@ def generate_secret_command(
     length: int,
 ) -> None:
     """Generate a cryptographically secure secret and print it to stdout."""
-    try:
-        value = generate_secret(fmt, length)
-    except ValueError as exc:
-        raise click.UsageError(str(exc)) from exc
-
-    if output == "json":
-        data: dict = {"secret": value, "format": fmt}
-        if fmt not in _UUID_FORMATS:
-            data["length"] = length
-        click.echo(json.dumps(data))
-        return
-
-    # text or console — just the bare value so it can be piped directly
-    click.echo(value)
+    cmd = GenerateSecretCommand(fmt=fmt, length=length, output=output)
+    success = cmd.execute()
+    handle_command_exit(cmd, success)
 
 
 @secret_group.command(name="mask", help="Mask a secret value for safe display in logs or output.")
@@ -111,16 +97,9 @@ def mask_secret_command(
     char: str,
 ) -> None:
     """Mask VALUE, keeping the first --show characters and replacing the rest with --char."""
-    if len(char) != 1:
-        raise click.UsageError("--char must be exactly one character.")
-
-    masked = mask_secret(value, show=show, char=char)
-
-    if output == "json":
-        click.echo(json.dumps({"masked": masked, "show": show, "char": char}))
-        return
-
-    click.echo(masked)
+    cmd = MaskSecretCommand(value=value, show=show, char=char, output=output)
+    success = cmd.execute()
+    handle_command_exit(cmd, success)
 
 
 # ---------- Deployment-aware commands (require --file / -f) ----------

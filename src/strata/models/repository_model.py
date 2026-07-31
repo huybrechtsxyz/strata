@@ -30,6 +30,24 @@ class RemoteType(str, Enum):
     CONTAINER = "container"
 
 
+class RemoteConventionsModel(PlatformBaseModel):
+    """Naming conventions for references (tags) pinned to this remote.
+
+    This is the single source of truth for what a valid release or
+    quality-gate tag looks like for this remote. Declared once, here,
+    alongside the remote itself — never duplicated in policy configuration.
+    """
+
+    release_pattern: Optional[str] = Field(
+        None,
+        description="Full-match regex for release tags, e.g. '^v\\d+\\.\\d+\\.\\d+$'",
+    )
+    quality_pattern: Optional[str] = Field(
+        None,
+        description="Full-match regex for quality-gate tags, e.g. '^tested(-\\d+)?$'",
+    )
+
+
 # Model for remote configuration.
 class RemoteModel(PlatformBaseModel):
     """
@@ -75,6 +93,11 @@ class RemoteModel(PlatformBaseModel):
         description="Path to the module configuration or script (not applicable for container type)",
     )
     deploy_path: Optional[str] = Field(None, description="Path to deployment artifacts (if applicable)")
+    conventions: Optional[RemoteConventionsModel] = Field(
+        None,
+        description="Optional reference naming conventions for this remote (used by the ref_convention policy "
+        "and by 'strata repo status' tag classification when a local repo's remote URL matches this one)",
+    )
 
     @staticmethod
     def _validate_relative_path(v: str, field_name: str) -> str:

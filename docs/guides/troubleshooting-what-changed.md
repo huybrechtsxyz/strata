@@ -11,7 +11,7 @@ When something breaks, run through these steps in order:
 ### 1. Check current drift
 
 ```bash
-strata deploy drift -f deploy/deploy-prd.yaml
+strata deploy drift run -f deploy/deploy-prd.yaml
 ```
 
 This runs a non-destructive `terraform plan` for each stage and classifies any changes

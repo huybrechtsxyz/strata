@@ -32,7 +32,6 @@ from strata.commands.cli_config import config_group
 from strata.commands.cli_console import console_command
 from strata.commands.cli_cost import cost_group
 from strata.commands.cli_deploy import deploy as deploy_group
-from strata.commands.cli_env import env_group
 from strata.commands.cli_guide import guide_command
 from strata.commands.cli_help import help_command
 from strata.commands.cli_log import log_group
@@ -44,6 +43,7 @@ from strata.commands.cli_profile import profile_group
 from strata.commands.cli_promote import promote_group
 from strata.commands.cli_ref import ref_group
 from strata.commands.cli_repo import repo_group
+from strata.commands.cli_rollout import rollout_group
 from strata.commands.cli_schema import schema_group
 from strata.commands.cli_secret import secret_group
 from strata.commands.cli_service import service_group
@@ -52,7 +52,6 @@ from strata.commands.cli_tools import tools_group
 from strata.commands.cli_validate import validate_command
 from strata.commands.cli_values import values_group
 from strata.commands.cli_vars import vars_group
-from strata.commands.cli_version import version_command
 from strata.commands.cli_versions import versions_group
 from strata.commands.cli_workitem import workitem_group
 from strata.controllers.configuration_controller import ConfigurationController
@@ -60,7 +59,7 @@ from strata.logger import configure_logging, get_logger, shutdown_logging
 from strata.utils import system
 from strata.utils.integration_loader import load_workspace_integrations
 from strata.utils.policy_loader import load_workspace_policies
-from strata.utils.system import resolve_work_path
+from strata.utils.system import redact_argv, resolve_work_path
 
 logger = get_logger(__name__)
 
@@ -131,9 +130,9 @@ def _build_default_map(command: click.Command, defaults: dict) -> dict:
 _HELP_SECTIONS: list[tuple[str, list[str]]] = [
     ("Workspace Setup", ["sln", "profile", "new"]),
     ("Configuration", ["config", "ref", "repo", "vars", "values"]),
-    ("Build & Deploy", ["build", "deploy", "workitem", "cost", "env", "service", "versions"]),
+    ("Build & Deploy", ["build", "deploy", "rollout", "workitem", "cost", "service", "versions"]),
     ("Inspection & Validation", ["guide", "validate", "schema", "policy", "tools"]),
-    ("Utility", ["secret", "version", "help", "log", "completion", "mcp"]),
+    ("Utility", ["secret", "help", "log", "completion", "mcp"]),
 ]
 
 
@@ -283,7 +282,6 @@ def main(ctx: click.Context, no_color: bool = False) -> None:
 # Register command groups so they're available when module is imported
 #
 
-main.add_command(version_command, name="version")
 main.add_command(completion_command, name="completion")
 main.add_command(help_command, name="help")
 main.add_command(sln_group, name="sln")
@@ -301,8 +299,8 @@ main.add_command(schema_group, name="schema")
 main.add_command(policy_group, name="policy")
 main.add_command(build_group, name="build")
 main.add_command(deploy_group, name="deploy")
+main.add_command(rollout_group, name="rollout")
 main.add_command(cost_group, name="cost")
-main.add_command(env_group, name="env")
 main.add_command(values_group, name="values")
 main.add_command(versions_group, name="versions")
 main.add_command(promote_group, name="promote")
@@ -342,7 +340,7 @@ if __name__ == "__main__":
         else:
             click.echo(
                 f"❌ Unexpected error: {e}\n"
-                f"   Command: {' '.join(sys.argv)}\n"
+                f"   Command: {' '.join(redact_argv(sys.argv))}\n"
                 f"   Version: {get_version()}\n"
                 f"   Please report at: {SUPPORT_URL}",
                 err=True,

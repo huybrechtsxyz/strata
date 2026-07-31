@@ -1,5 +1,7 @@
 """Tests for the ``new`` command."""
 
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
@@ -21,7 +23,7 @@ class TestNewCommand:
         with patch("strata.commands.new.run_new_command.NewCommand.execute", return_value=True):
             result = runner.invoke(
                 new_command,
-                ["namespace", "myapp", "--work-path", str(tmp_path)],
+                ["myapp", "--template", "namespace", "--work-path", str(tmp_path)],
             )
         assert result.exit_code == 0
 
@@ -30,7 +32,7 @@ class TestNewCommand:
         with patch("strata.commands.new.run_new_command.NewCommand.execute", return_value=True):
             result = runner.invoke(
                 new_command,
-                ["namespace", "myapp", "--overwrite", "--work-path", str(tmp_path)],
+                ["myapp", "--template", "namespace", "--overwrite", "--work-path", str(tmp_path)],
             )
         assert result.exit_code == 0
 
@@ -39,7 +41,7 @@ class TestNewCommand:
         with patch("strata.commands.new.run_new_command.NewCommand.execute", return_value=True):
             result = runner.invoke(
                 new_command,
-                ["namespace", "myapp", "--output-file", str(tmp_path), "--work-path", str(tmp_path)],
+                ["myapp", "--template", "namespace", "--output-file", str(tmp_path), "--work-path", str(tmp_path)],
             )
         assert result.exit_code == 0
 
@@ -48,7 +50,7 @@ class TestNewCommand:
         with patch("strata.commands.new.run_new_command.NewCommand.execute", return_value=True):
             result = runner.invoke(
                 new_command,
-                ["namespace", "myapp", "--set", "owner=myteam", "--work-path", str(tmp_path)],
+                ["myapp", "--template", "namespace", "--set", "owner=myteam", "--work-path", str(tmp_path)],
             )
         assert result.exit_code == 0
 
@@ -90,19 +92,19 @@ class TestNewCommand:
 
     def test_missing_template_exits_2(self, tmp_path):
         runner = CliRunner()
-        result = runner.invoke(new_command, ["--work-path", str(tmp_path)])
+        result = runner.invoke(new_command, ["myapp", "--work-path", str(tmp_path)])
         assert result.exit_code == 2
 
     def test_missing_name_exits_2(self, tmp_path):
         runner = CliRunner()
-        result = runner.invoke(new_command, ["namespace", "--work-path", str(tmp_path)])
+        result = runner.invoke(new_command, ["--template", "namespace", "--work-path", str(tmp_path)])
         assert result.exit_code == 2
 
     def test_unknown_template_exits_1(self, tmp_path):
         runner = CliRunner()
         result = runner.invoke(
             new_command,
-            ["nonexistent_xyz_template", "myapp", "--work-path", str(tmp_path)],
+            ["myapp", "--template", "nonexistent_xyz_template", "--work-path", str(tmp_path)],
         )
         assert result.exit_code == 1
 
@@ -112,8 +114,9 @@ class TestNewCommand:
         result = runner.invoke(
             new_command,
             [
-                "namespace",
                 "myapp",
+                "--template",
+                "namespace",
                 "--output-file",
                 str(tmp_path),
                 "--work-path",
@@ -132,12 +135,12 @@ class TestNewCommand:
         # First write succeeds
         runner.invoke(
             new_command,
-            ["namespace", "myapp", "--output-file", str(tmp_path), "--work-path", str(tmp_path)],
+            ["myapp", "--template", "namespace", "--output-file", str(tmp_path), "--work-path", str(tmp_path)],
         )
         # Second write without --overwrite must fail
         result = runner.invoke(
             new_command,
-            ["namespace", "myapp", "--output-file", str(tmp_path), "--work-path", str(tmp_path)],
+            ["myapp", "--template", "namespace", "--output-file", str(tmp_path), "--work-path", str(tmp_path)],
         )
         assert result.exit_code == 1
 
@@ -146,13 +149,14 @@ class TestNewCommand:
         runner = CliRunner()
         runner.invoke(
             new_command,
-            ["namespace", "myapp", "--output-file", str(tmp_path), "--work-path", str(tmp_path)],
+            ["myapp", "--template", "namespace", "--output-file", str(tmp_path), "--work-path", str(tmp_path)],
         )
         result = runner.invoke(
             new_command,
             [
-                "namespace",
                 "myapp",
+                "--template",
+                "namespace",
                 "--output-file",
                 str(tmp_path),
                 "--overwrite",
@@ -166,7 +170,7 @@ class TestNewCommand:
 class TestNewCommandContextSubstitution:
     """Unit-level tests for context variable substitution in NewCommand."""
 
-    def test_context_substitution(self, tmp_path):
+    def test_context_substitution(self, tmp_path: Path) -> None:
         """Team context from solution.json is merged into the render context."""
         mock_solution = MagicMock()
         mock_solution.spec.context = {"owner": "acme", "version": "2.0.0"}
@@ -199,6 +203,64 @@ class TestNewCommandContextSubstitution:
         assert rendered_context["owner"] == "acme"
         assert rendered_context["version"] == "3.0.0"  # --set overrides context
 
+    def test_list_includes_solution_level_template(self, tmp_path):
+        """--list surfaces solution-level templates declared in solution.json's spec.templates[]."""
+        bundle_entry = SimpleNamespace(path="{{ name }}.yaml", name="namespace")
+        solution_tpl = MagicMock()
+        solution_tpl.name = "onboard-customer"
+        solution_tpl.bundle = [bundle_entry]
+
+        mock_solution = MagicMock()
+        mock_solution.spec.templates = [solution_tpl]
+        mock_solution.spec.context = {}
+
+        cmd = NewCommand(
+            template=None,
+            name=None,
+            list_templates=True,
+            work_path=str(tmp_path),
+        )
+
+        def _fake_load() -> tuple:
+            cmd._solution_controller._solution = mock_solution
+            return True, []
+
+        with patch.object(cmd._solution_controller, "load", side_effect=_fake_load):
+            result = cmd.execute()
+
+        assert result is True
+        names = [t["name"] for t in cmd._output_data["templates"]]
+        assert "onboard-customer" in names
+        matched = next(t for t in cmd._output_data["templates"] if t["name"] == "onboard-customer")
+        assert matched["type"] == "bundle (solution)"
+
+    def test_template_not_found_lists_solution_level_template(self, tmp_path):
+        """The 'template not found' error's Available list includes solution-level templates."""
+        bundle_entry = SimpleNamespace(path="{{ name }}.yaml", name="namespace")
+        solution_tpl = MagicMock()
+        solution_tpl.name = "onboard-customer"
+        solution_tpl.bundle = [bundle_entry]
+
+        mock_solution = MagicMock()
+        mock_solution.spec.templates = [solution_tpl]
+        mock_solution.spec.context = {}
+
+        cmd = NewCommand(
+            template="nonexistent_xyz_template",
+            name="myapp",
+            work_path=str(tmp_path),
+        )
+
+        def _fake_load() -> tuple:
+            cmd._solution_controller._solution = mock_solution
+            return True, []
+
+        with patch.object(cmd._solution_controller, "load", side_effect=_fake_load):
+            result = cmd.execute()
+
+        assert result is False
+        assert any("onboard-customer" in e for e in cmd.get_errors())
+
 
 class TestNewCommandBundle:
     """Tests for directory bundle templates (multi-file scaffolding)."""
@@ -218,7 +280,7 @@ class TestNewCommandBundle:
         runner = CliRunner()
         result = runner.invoke(
             new_command,
-            ["widget", "acme", "--output-file", str(out), "--work-path", str(tmp_path)],
+            ["acme", "--template", "widget", "--output-file", str(out), "--work-path", str(tmp_path)],
         )
         assert result.exit_code == 0, result.output
         assert (out / "acme.yaml").exists()
@@ -233,8 +295,9 @@ class TestNewCommandBundle:
         result = runner.invoke(
             new_command,
             [
-                "widget",
                 "acme",
+                "--template",
+                "widget",
                 "--output-file",
                 str(out),
                 "--set",
@@ -261,7 +324,7 @@ class TestNewCommandBundle:
         runner = CliRunner()
         result = runner.invoke(
             new_command,
-            ["widget", "acme", "--output-file", str(out), "--work-path", str(tmp_path)],
+            ["acme", "--template", "widget", "--output-file", str(out), "--work-path", str(tmp_path)],
         )
         assert result.exit_code == 0, result.output
         assert (out / "acme" / "deployment.yaml").exists()
@@ -278,7 +341,7 @@ class TestNewCommandBundle:
         runner = CliRunner()
         result = runner.invoke(
             new_command,
-            ["widget", "globex", "--output-file", str(out), "--work-path", str(tmp_path)],
+            ["globex", "--template", "widget", "--output-file", str(out), "--work-path", str(tmp_path)],
         )
         assert result.exit_code == 0, result.output
         assert (out / "envs" / "globex" / "globex-dev.yaml").exists()
@@ -290,8 +353,12 @@ class TestNewCommandBundle:
 
         out = tmp_path / "out"
         runner = CliRunner()
-        runner.invoke(new_command, ["widget", "acme", "--output-file", str(out), "--work-path", str(tmp_path)])
-        result = runner.invoke(new_command, ["widget", "acme", "--output-file", str(out), "--work-path", str(tmp_path)])
+        runner.invoke(
+            new_command, ["acme", "--template", "widget", "--output-file", str(out), "--work-path", str(tmp_path)]
+        )
+        result = runner.invoke(
+            new_command, ["acme", "--template", "widget", "--output-file", str(out), "--work-path", str(tmp_path)]
+        )
         assert result.exit_code == 1
 
     def test_bundle_overwrite_flag(self, tmp_path):
@@ -301,10 +368,12 @@ class TestNewCommandBundle:
 
         out = tmp_path / "out"
         runner = CliRunner()
-        runner.invoke(new_command, ["widget", "acme", "--output-file", str(out), "--work-path", str(tmp_path)])
+        runner.invoke(
+            new_command, ["acme", "--template", "widget", "--output-file", str(out), "--work-path", str(tmp_path)]
+        )
         result = runner.invoke(
             new_command,
-            ["widget", "acme", "--output-file", str(out), "--overwrite", "--work-path", str(tmp_path)],
+            ["acme", "--template", "widget", "--output-file", str(out), "--overwrite", "--work-path", str(tmp_path)],
         )
         assert result.exit_code == 0, result.output
 
@@ -329,7 +398,7 @@ class TestNewCommandBundle:
         runner = CliRunner()
         result = runner.invoke(
             new_command,
-            ["namespace", "myapp", "--output-file", str(out), "--work-path", str(tmp_path)],
+            ["myapp", "--template", "namespace", "--output-file", str(out), "--work-path", str(tmp_path)],
         )
         assert result.exit_code == 0, result.output
         # Bundle output file (not the single-file default name)
@@ -341,24 +410,24 @@ class TestScaffoldDepsHelpers:
     """Unit tests for the module-level helpers used by --scaffold-deps."""
 
     def test_resolve_at_repo_path_basic(self, tmp_path):
-        from strata.commands.new.run_new_command import _resolve_at_repo_path
+        from strata.services.template_resolver import resolve_at_repo_path as _resolve_at_repo_path
 
         repo_map = {"myrepo": str(tmp_path)}
         result = _resolve_at_repo_path("@myrepo/stack/ws.yaml", repo_map)
         assert result == tmp_path / "stack" / "ws.yaml"
 
     def test_resolve_at_repo_path_unknown_repo(self):
-        from strata.commands.new.run_new_command import _resolve_at_repo_path
+        from strata.services.template_resolver import resolve_at_repo_path as _resolve_at_repo_path
 
         assert _resolve_at_repo_path("@unknown/path.yaml", {}) is None
 
     def test_resolve_at_repo_path_non_at_ref(self, tmp_path):
-        from strata.commands.new.run_new_command import _resolve_at_repo_path
+        from strata.services.template_resolver import resolve_at_repo_path as _resolve_at_repo_path
 
         assert _resolve_at_repo_path("stack/ws.yaml", {"myrepo": str(tmp_path)}) is None
 
     def test_collect_dep_candidates_missing_local(self, tmp_path):
-        from strata.commands.new.run_new_command import _collect_dep_candidates
+        from strata.services.template_resolver import collect_dep_candidates as _collect_dep_candidates
         from strata.utils.graph import GraphEdge, GraphNode, GraphResult
 
         result = GraphResult(mode="files")
@@ -379,7 +448,7 @@ class TestScaffoldDepsHelpers:
         assert all(str(c[2]).startswith(str(tmp_path)) for c in candidates)
 
     def test_collect_dep_candidates_skips_existing(self, tmp_path):
-        from strata.commands.new.run_new_command import _collect_dep_candidates
+        from strata.services.template_resolver import collect_dep_candidates as _collect_dep_candidates
         from strata.utils.graph import GraphNode, GraphResult
 
         existing = tmp_path / "stack" / "ws.yaml"
@@ -395,7 +464,7 @@ class TestScaffoldDepsHelpers:
         assert _collect_dep_candidates(result, tmp_path, {}) == []
 
     def test_collect_dep_candidates_external_ref_resolved(self, tmp_path):
-        from strata.commands.new.run_new_command import _collect_dep_candidates
+        from strata.services.template_resolver import collect_dep_candidates as _collect_dep_candidates
         from strata.utils.graph import GraphEdge, GraphNode, GraphResult
 
         repo_root = tmp_path / "myrepo"
@@ -420,7 +489,7 @@ class TestScaffoldDepsHelpers:
         assert resolved == repo_root / "stack" / "ws.yaml"
 
     def test_collect_dep_candidates_external_ref_unresolvable(self, tmp_path):
-        from strata.commands.new.run_new_command import _collect_dep_candidates
+        from strata.services.template_resolver import collect_dep_candidates as _collect_dep_candidates
         from strata.utils.graph import GraphNode, GraphResult
 
         result = GraphResult(mode="files")
@@ -452,7 +521,16 @@ class TestScaffoldDepsCommand:
         runner = CliRunner()
         result = runner.invoke(
             new_command,
-            ["namespace", "myapp", "--output-file", str(out), "--scaffold-deps", "--work-path", str(tmp_path)],
+            [
+                "myapp",
+                "--template",
+                "namespace",
+                "--output-file",
+                str(out),
+                "--scaffold-deps",
+                "--work-path",
+                str(tmp_path),
+            ],
         )
         assert result.exit_code == 0
         assert "Scaffold missing files?" not in result.output
@@ -477,7 +555,16 @@ class TestScaffoldDepsCommand:
         runner = CliRunner()
         result = runner.invoke(
             new_command,
-            ["deployment", "prd", "--output-file", str(deploy_out), "--scaffold-deps", "--work-path", str(tmp_path)],
+            [
+                "prd",
+                "--template",
+                "deployment",
+                "--output-file",
+                str(deploy_out),
+                "--scaffold-deps",
+                "--work-path",
+                str(tmp_path),
+            ],
             input="y\n",
         )
 
@@ -508,7 +595,16 @@ class TestScaffoldDepsCommand:
         runner = CliRunner()
         result = runner.invoke(
             new_command,
-            ["deployment", "prd", "--output-file", str(deploy_out), "--scaffold-deps", "--work-path", str(tmp_path)],
+            [
+                "prd",
+                "--template",
+                "deployment",
+                "--output-file",
+                str(deploy_out),
+                "--scaffold-deps",
+                "--work-path",
+                str(tmp_path),
+            ],
             input="n\n",
         )
 

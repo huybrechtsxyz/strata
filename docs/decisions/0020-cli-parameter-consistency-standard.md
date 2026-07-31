@@ -1,9 +1,10 @@
 # CLI Parameter Consistency Standard for all 80+ strata Subcommands
 
-- Status: completed
+- Status: completed (standard established and adopted for new commands; retroactive migration of existing commands is incremental per Phase 4, not 100% complete — see 2026-07-29 note below)
 - Date: 2026-07-11
 - Completed: 2026-07-20
 - Squad Review: danny (DevOps), basher (Automation) — YELLOW/B assessments with critical follow-on work identified
+- **2026-07-29 update:** A repo audit found `strata new` — this ADR's own worked example for the template-vs-name convention — actually shipped with `TEMPLATE` and `NAME` both positional (template first), the literal opposite of the documented standard (`--template TEMPLATE` flag + positional `NAME`). Fixed: `cli_new.py` now matches this ADR's own reference entry exactly (`strata new NAME --template TEMPLATE`). This was a genuine, real breaking CLI change made post-1.0 (v1.5.0) — accepted deliberately given a limited, guidable user base; not a case of "pre-1.0, free to break" as this ADR's own migration strategy originally assumed. **This fix does not mean the standard is now retroactively complete across all 80+ commands** — it resolves the one flagged instance; other commands may still have undiscovered drift and should be spot-checked individually, not assumed conformant because the status says "completed."
 
 ## Context and Problem Statement
 

@@ -1,21 +1,8 @@
 """Tests for ResourceTypeRestrictionsPolicy — allow/deny list on Terraform resource types."""
 
-import pytest
-
-try:
-    from strata.models.policy_model import PolicyModel
-    from strata.validators.policies.base_policy import PolicyContext
-    from strata.validators.policies.resource_type_restrictions_policy import ResourceTypeRestrictionsPolicy
-
-    IMPL_MISSING = False
-except ImportError:
-    ResourceTypeRestrictionsPolicy = None  # type: ignore[assignment,misc]
-    PolicyContext = None  # type: ignore[assignment,misc]
-    PolicyModel = None  # type: ignore[assignment,misc]
-    IMPL_MISSING = True
-
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="ResourceTypeRestrictionsPolicy not yet implemented")
-
+from strata.models.policy_model import PolicyModel
+from strata.validators.policies.base_policy import PolicyContext
+from strata.validators.policies.resource_type_restrictions_policy import ResourceTypeRestrictionsPolicy
 
 # ---------------------------------------------------------------------------
 # Helpers

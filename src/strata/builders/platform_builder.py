@@ -562,7 +562,7 @@ class PlatformBuilder(BaseBuilder):
             deployment=deployment_model.spec.layers,
             artifact_path=artifact_path,
             stages=deployment_model.spec.stages,
-            approvals=deployment_model.spec.approvals,
+            gates=deployment_model.spec.gates,
             lifecycle=lifecycle_model,
             properties={
                 **(platform_tenant.properties or {} if platform_tenant and platform_tenant.properties else {}),

@@ -8,6 +8,7 @@ import click
 
 from strata.commands.base_command import BaseCommand
 from strata.controllers.guide_controller import GuideController
+from strata.utils.version import get_version
 
 
 class StatusCommand(BaseCommand):
@@ -142,6 +143,7 @@ class StatusCommand(BaseCommand):
             "profiles": profiles_data,
             "repositories": repos_data,
             "integrations": integrations_status,
+            "version": get_version(),
         }
         return True
 
@@ -187,6 +189,7 @@ class StatusCommand(BaseCommand):
         click.echo(f"  Name      : {sol['name']}")
         click.echo(f"  ID        : {sol['id']}")
         click.echo(f"  Work path : {sol['work_path']}")
+        click.echo(f"  Version   : strata v{self._output_data['version']}")
         click.echo("")
 
         # ── Profiles ──────────────────────────────────────────────────

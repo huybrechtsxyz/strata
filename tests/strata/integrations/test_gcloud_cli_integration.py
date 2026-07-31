@@ -5,19 +5,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-try:
-    from strata.integrations.gcloud_cli import GCloudCLIIntegration
-    from strata.models.integration_model import IntegrationModel
-    from strata.utils.gcloud_script_base import GCloudScript
-
-    IMPL_MISSING = False
-except ImportError:
-    GCloudCLIIntegration = None  # type: ignore[assignment,misc]
-    GCloudScript = None  # type: ignore[assignment,misc]
-    IMPL_MISSING = True
-
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="GCloudCLI integration not available")
-
+from strata.integrations.gcloud_cli import GCloudCLIIntegration
+from strata.models.integration_model import IntegrationModel
+from strata.utils.gcloud_script_base import GCloudScript
 
 # ===========================================================================
 # Helpers

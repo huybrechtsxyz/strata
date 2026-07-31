@@ -121,7 +121,11 @@ spec:
         value: "devops@company.com"
 ```
 
-> **Note:** `spec.approvals` in a workspace template is metadata only — it declares default approvers for deployments initialized from this template. Enforcement is handled by your CI/CD system. See §7.9 for the full approvals schema.
+> **Note:** `spec.gates` in a workspace template is metadata only until a gate's
+> `mode` is `enforce` — use `mode: declare` to declare default approvers for
+> deployments initialized from this template without strata blocking anything
+> itself (enforcement then happens externally, e.g. your CI/CD system). See
+> §7.9 for the full gates schema.
 
 - `--template` accepts any local path (absolute or relative to `--work-path`).
 - Remote / `@repo-name/...` template references are **not** supported — the file must be on disk before `init` runs.
@@ -316,22 +320,22 @@ network definitions, and other config files to your repo.
 strata new --list
 
 # Create a namespace config file in the current directory
-strata new namespace my-app
+strata new my-app --template namespace
 
 # Create a module config, written to a specific folder
-strata new module my-api --output-file repos/xyz-config/stack/
+strata new my-api --template module --output-file repos/xyz-config/stack/
 
 # Create a provider definition with a variable override
-strata new provider azure --output-file repos/xyz-config/config/ --set owner=myteam
+strata new azure --template provider --output-file repos/xyz-config/config/ --set owner=myteam
 
 # Create a DNS zones file
-strata new dns my-zones --output-file repos/xyz-config/dns/
+strata new my-zones --template dns --output-file repos/xyz-config/dns/
 
 # Create a network topology file
-strata new network my-networks --output-file repos/xyz-config/network/
+strata new my-networks --template network --output-file repos/xyz-config/network/
 
 # Create a tenant config across multiple files
-strata new tenant newcorp --output-file repos/xyz-config/ --set zone=eu --set tier=standard
+strata new newcorp --template tenant --output-file repos/xyz-config/ --set zone=eu --set tier=standard
 ```
 
 Each command writes a ready-to-edit YAML file with `meta.name` pre-filled and
@@ -348,7 +352,7 @@ file content and path segments. This is the primary way to scaffold multiple rel
 **Example: Tenant bundle** — Creates a complete multi-environment tenant structure with one command:
 
 ```bash
-strata new tenant contoso --output-file tenants/
+strata new contoso --template tenant --output-file tenants/
 # Generates:
 #   tenants/contoso/contoso.yaml
 #   tenants/contoso/environments/{dev,qa,prd}.yaml
@@ -534,14 +538,14 @@ strata deploy destroy -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yam
 ### 7.6 Outputs, plan details, and history
 
 ```bash
-# Live infrastructure outputs per stage (queries the Terraform backend)
-strata env output -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+# Terraform outputs per stage (cached by default; --refresh to query the backend live)
+strata deploy output -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --refresh
 
 # Single stage only
-strata env output -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --provisioner xyz-dc-eu-fr
+strata deploy output -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --provisioner xyz-dc-eu-fr
 
 # Single output value — bare, for shell scripting
-IP=$(strata env output -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --name endpoint --raw)
+IP=$(strata deploy output -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --key endpoint --raw)
 
 # Decode the last saved .tfplan — no backend call, instant
 strata deploy plan -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
@@ -551,7 +555,7 @@ strata deploy history
 strata deploy history --lines 20
 ```
 
-- `env output`: runs `terraform output -json` per stage — shows live endpoint URLs, resource IDs, etc.
+- `deploy output --refresh`: runs `terraform output -json` per stage — shows live endpoint URLs, resource IDs, etc. Without `--refresh`, reads the local cache instead (no network call).
 - `deploy plan`: reads the `.tfplan` written by the last `deploy run --dry-run`. Shows resource add/change/destroy counts. No network required.
 
 For execution history use `strata deploy history`.
@@ -621,46 +625,57 @@ strata deploy history --verbose
 - No deployment file required — reads workspace logs only.
 - Exit code `0` even when the history is empty.
 
-### 7.9 Declare approval metadata
+### 7.9 Declare or enforce hand-off gates
 
-Approvals are **metadata declared in the deployment YAML** — the CLI logs which
-approvers apply per stage, but enforcement is done by the CI/CD system
-(Azure DevOps environment gate, GitHub Actions environment protection rule, etc.).
+Gates are declared in the **deployment YAML**, next to `stages` (ADR-0057 /
+ADR-0059). Each gate has a `mode`: `declare` only logs it to the audit trail
+(enforcement happens externally — Azure DevOps environment gate, GitHub
+Actions environment protection rule, etc.); `enforce` (default) makes strata
+itself pause the deploy and require `--resume`.
 
-**Deployment YAML — add `approvals` to the spec:**
+**Deployment YAML — add `gates` to the spec:**
 
 ```yaml
 spec:
-  approvals:
-    approvers:
-      platform-team:
-        type: github-team       # github-team | ado-group | user
-        value: "org/platform-team"
-      devops-lead:
-        type: user
-        value: "vhuybrec@company.com"
-      ado-approvers:
-        type: ado-group
-        value: "Platform-Approvers"
+  gates:
+    - name: staging-declare
+      type: approval
+      mode: declare        # audit only — enforcement happens in CI/CD
+      scope: [xyz-dc-eu-fr]
+      approvers:
+        platform-team:
+          type: github-team       # github-team | ado-group | user
+          value: "org/platform-team"
+        devops-lead:
+          type: user
+          value: "vhuybrec@company.com"
+
+    - name: prod-approval
+      type: approval
+      mode: enforce         # strata itself pauses the deploy (exit code 5)
+      scope: [xyz-dc-eu-prod]
+      approvers:
+        platform-team:
+          type: github-team
+          value: "org/platform-team"
+        ado-approvers:
+          type: ado-group
+          value: "Platform-Approvers"
+      min_approvals: 1
+      timeout_minutes: 60
 
   stages:
     - name: xyz-dc-eu-fr
-      type: infrastructure
-      # no approval field → all spec-level approvers apply
+      provisioner: platform_iac
 
     - name: xyz-dc-eu-prod
-      type: infrastructure
-      approval:
-        approvers:
-          - platform-team       # keys from spec.approvals.approvers
-          - ado-approvers
+      provisioner: platform_iac
 ```
 
-- `spec.approvals` absent → no gate declared, deploy proceeds.
-- `spec.approvals.approvers` empty dict → silently treated as no gate.
-- Stage without `approval` field → no stage-level restriction.
-- Stage `approval.approvers` lists keys from `spec.approvals.approvers`; unknown keys are a validation error.
+- `spec.gates` absent → no gate declared, deploy proceeds.
+- A gate's `scope` (a list of stage names, or `"all"`) determines which stage(s) it applies to; referencing an unknown stage name is a validation error.
 - Approver types: `github-team`, `ado-group`, `user`.
+- `mode: declare` never blocks; `mode: enforce` creates a real work item and requires `strata deploy run ... --resume <id>` to proceed.
 
 ---
 
@@ -779,7 +794,7 @@ strata log list --last
 | `strata sln status`                             | Show workspace health and integration availability                               |
 | `strata sln update`                             | Refresh package-owned files (schemas, templates, devcontainer) after upgrade     |
 | `strata sln clean [--dry-run]`                  | Remove logs and temp artifacts                                                   |
-| `strata version`                                | Print CLI version                                                                |
+| `strata --version` / `-v`                       | Print CLI version                                                                |
 | `strata help [--topic NAME]`                    | Show workflow guidance topics                                                    |
 
 ### Configuration
@@ -857,14 +872,15 @@ All `ref` subgroups (`env`, `config`, `data`, `secret`) share:
 
 ### Deploy
 
-| Command                                                           | Description                                                          |
-| ----------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `strata deploy run -f FILE [--stage S] [--force] [--dry-run]`     | Execute the deploy pipeline                                          |
-| `strata deploy destroy -f FILE [--stage S] [--force] [--dry-run]` | Tear down infrastructure; `--dry-run` plans, `--force` auto-approves |
-| `strata deploy plan -f FILE [--stage S]`                          | Saved `.tfplan` change summary (offline, no backend)                 |
-| `strata env output -f FILE [--name N] [--raw]`                    | Live Terraform outputs per stage                                     |
-| `strata deploy history [--lines N] [--operation run\|destroy]`    | Execution history from workspace logs                                |
-| `strata deploy health -f FILE [--stage S]`                        | Run `health_checks` defined in the deployment YAML                   |
+| Command                                                           | Description                                                           |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `strata deploy run -f FILE [--stage S] [--force] [--dry-run]`     | Execute the deploy pipeline                                           |
+| `strata deploy destroy -f FILE [--stage S] [--force] [--dry-run]` | Tear down infrastructure; `--dry-run` plans, `--force` auto-approves  |
+| `strata deploy plan -f FILE [--stage S]`                          | Saved `.tfplan` change summary (offline, no backend)                  |
+| `strata deploy output -f FILE [--key K] [--raw] [--refresh]`      | Terraform outputs per stage (cached by default, `--refresh` for live) |
+| `strata deploy status -f FILE [--stage S] [--offline]`            | Live infrastructure status: resources, outputs, serial, cache         |
+| `strata deploy history [--lines N] [--operation run\|destroy]`    | Execution history from workspace logs                                 |
+| `strata deploy health -f FILE [--stage S]`                        | Run `health_checks` defined in the deployment YAML                    |
 
 ### Values
 

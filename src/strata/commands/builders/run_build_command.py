@@ -1,6 +1,5 @@
 """Command to execute the platform build pipeline."""
 
-import hashlib
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +15,11 @@ from strata.builders.sbom_builder import SbomBuilder
 from strata.builders.sync_builder import SyncBuilder
 from strata.builders.terraform_builder import TerraformBuilder
 from strata.commands.builders.base_build_command import BaseBuildCommand
+from strata.services.manifest_artifact_collector import (
+    collect_platform_artifact,
+    collect_provider_info,
+    collect_repository_info,
+)
 
 
 class RunBuildCommand(BaseBuildCommand):
@@ -785,104 +789,12 @@ class RunBuildCommand(BaseBuildCommand):
 
     def _collect_platform_artifact(self):
         """Compute SHA-256 of platform.json and embed its content."""
-        from strata.models.deployment_manifest_model import ManifestPlatformModel
-
-        if self._deployment_service is None:
-            return ManifestPlatformModel(hash="unknown")
-
-        platform_path = self._deployment_service.get_build_path(self._build_path) / "platform.json"
-        if not platform_path.exists():
-            return ManifestPlatformModel(hash="unknown")
-
-        import json as _json
-
-        content_bytes = platform_path.read_bytes()
-        digest = hashlib.sha256(content_bytes).hexdigest()
-        rel_path = str(platform_path.relative_to(self._work_path))
-        try:
-            content = _json.loads(content_bytes.decode("utf-8"))
-        except Exception:
-            content = None
-
-        return ManifestPlatformModel(hash=f"sha256:{digest}", path=rel_path, content=content)
+        return collect_platform_artifact(self._deployment_service, self._build_path, self._work_path)
 
     def _collect_repository_info(self) -> Optional[Dict[str, Any]]:
         """Walk solution repositories and collect URL/ref/commit info."""
-        from strata.models.deployment_manifest_model import ManifestRepositoryModel
-
-        if self._solution_controller is None or self._solution_controller.solution is None:
-            return None
-
-        solution = self._solution_controller.solution
-        repos = solution.spec.repositories or []
-        if not repos:
-            return None
-
-        result: Dict[str, ManifestRepositoryModel] = {}
-        for repo in repos:
-            name = str(repo.name)
-            url = getattr(repo, "url", None)
-            ref = getattr(repo, "ref", None)
-            commit: Optional[str] = None
-
-            repo_map = self._solution_controller.get_repo_map()
-            if repo_map and name in repo_map:
-                repo_path = Path(repo_map[name])
-                head_file = repo_path / ".git" / "HEAD"
-                if head_file.exists():
-                    try:
-                        head_content = head_file.read_text(encoding="utf-8").strip()
-                        if head_content.startswith("ref:"):
-                            ref_path = repo_path / ".git" / head_content[5:]
-                            if ref_path.exists():
-                                commit = ref_path.read_text(encoding="utf-8").strip()
-                        else:
-                            commit = head_content
-                    except OSError:
-                        pass
-
-            result[name] = ManifestRepositoryModel(
-                url=str(url) if url else None,
-                ref=str(ref) if ref else None,
-                commit=commit,
-            )
-
-        return result if result else None
+        return collect_repository_info(self._solution_controller)
 
     def _collect_provider_info(self) -> Optional[List[Any]]:
         """Collect provisioner metadata from the workspace model."""
-        from strata.models.deployment_manifest_model import ManifestArtifactProviderModel
-
-        if self._deployment_service is None:
-            return None
-        workspace_service = self._deployment_service.get_workspace_service()
-        if workspace_service is None or workspace_service.model is None:
-            return None
-
-        provisioners = getattr(workspace_service.model.spec, "provisioners", None) or []
-        if not provisioners:
-            return None
-
-        result: List[ManifestArtifactProviderModel] = []
-        for prov in provisioners:
-            backend_dict: Optional[Dict[str, Any]] = None
-            if getattr(prov, "backend", None) is not None:
-                backend_dict = {
-                    "type": prov.backend.type,
-                    "configuration": prov.backend.configuration,
-                }
-
-            details: Optional[Dict[str, Any]] = None
-            if getattr(prov, "properties", None) is not None:
-                details = prov.properties.model_dump(exclude_none=True)
-
-            result.append(
-                ManifestArtifactProviderModel(
-                    name=str(prov.name),
-                    type=prov.provisioner,
-                    backend=backend_dict,
-                    details=details,
-                )
-            )
-
-        return result if result else None
+        return collect_provider_info(self._deployment_service)

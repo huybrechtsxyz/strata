@@ -392,17 +392,20 @@ def deploy_status(
     file: str,
     work_path: Optional[str] = None,
     stage: Optional[str] = None,
+    offline: bool = False,
 ) -> Dict[str, Any]:
-    """Return live infrastructure outputs (Terraform) for a deployment.
+    """Return the live infrastructure status for a single deployment.
 
-    Runs ``terraform output -json`` for each provisioned stage and returns the
-    current infrastructure state. Use this to inspect what is deployed, not to
-    check execution history (use ``deploy_history`` for that).
+    Per stage, queries the remote Terraform backend and returns resource
+    count, output count/keys, the last apply serial number, and cached
+    output freshness. Use ``deploy_history`` for execution history, and
+    ``deploy_output`` to read Terraform output values themselves.
 
     Args:
         file: Path to the deployment YAML file.
         work_path: Workspace root. Defaults to CWD.
-        stage: Limit output to a specific stage name.
+        stage: Limit the query to a specific stage name.
+        offline: Use cached data only — do not contact remote backends.
     """
     from strata.commands.deploy.status_deploy_command import StatusDeployCommand
 
@@ -410,6 +413,7 @@ def deploy_status(
         file=file,
         work_path=_work_path(work_path),
         stage=stage,
+        offline=offline,
         output="json",
         quiet=True,
     )

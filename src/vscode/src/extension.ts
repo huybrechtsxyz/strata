@@ -523,14 +523,14 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand('strata.envStatus', (filePath?: string) => {
             const target = _resolveTarget(filePath);
             if (!target) { void vscode.window.showWarningMessage('No deployment selected or file open.'); return; }
-            _client?.runInTerminal(['env', 'status', '-f', target, '--offline'], 'strata env status');
+            _client?.runInTerminal(['deploy', 'status', '-f', target, '--offline'], 'strata deploy status');
         }),
 
         vscode.commands.registerCommand('strata.envDrift', (filePath?: string) => {
             const target = _resolveTarget(filePath);
             if (!target) { void vscode.window.showWarningMessage('No deployment selected or file open.'); return; }
             _lastDriftTarget = target;
-            _client?.runInTerminal(['env', 'drift', '-f', target], 'strata env drift');
+            _client?.runInTerminal(['deploy', 'drift', 'run', '-f', target], 'strata deploy drift run');
         }),
 
         vscode.commands.registerCommand('strata.envDoctor', async () => {
@@ -547,7 +547,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     if (warnings > 0) parts.push(`${warnings} warning${warnings !== 1 ? 's' : ''}`);
                     if (failed > 0) parts.push(`${failed} failed`);
                     void vscode.window.showWarningMessage(`Strata Doctor: ${parts.join(' · ')}`, ...(failed > 0 ? ['Show Details'] : [])).then(v => {
-                        if (v === 'Show Details') _client?.runInTerminal(['env', 'doctor'], 'strata env doctor');
+                        if (v === 'Show Details') _client?.runInTerminal(['sln', 'doctor'], 'strata sln doctor');
                     });
                 }
             } catch (err) {
@@ -558,9 +558,7 @@ export function activate(context: vscode.ExtensionContext): void {
         // ── Audit commands ─────────────────────────────────────────────────────
 
         vscode.commands.registerCommand('strata.auditChanges', (filePath?: string) => {
-            const target = filePath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
-            if (!target) { _client?.runInTerminal(['audit', 'changes'], 'strata audit changes'); return; }
-            _client?.runInTerminal(['audit', 'changes', '-f', target], 'strata audit changes');
+            _client?.runInTerminal(['audit', 'changes'], 'strata audit changes');
         }),
 
         vscode.commands.registerCommand('strata.auditResend', () => {
@@ -913,7 +911,7 @@ export function activate(context: vscode.ExtensionContext): void {
                             } catch { /* health check unavailable */ }
                         })();
                         void vscode.window.showInformationMessage('Strata: Deploy completed successfully.', 'View Outputs').then(v => {
-                            if (v === 'View Outputs') _client?.runInTerminal(['env', 'output', '-f', deployTarget], 'strata env output');
+                            if (v === 'View Outputs') _client?.runInTerminal(['deploy', 'output', '-f', deployTarget], 'strata deploy output');
                         });
                     } else {
                         void vscode.window.showInformationMessage(`Strata: ${action} completed successfully.`);
@@ -923,7 +921,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 }
                 void _refreshAll();
             }
-            if (name === 'strata env drift') {
+            if (name === 'strata deploy drift run') {
                 const exitCode = terminal.exitStatus?.code;
                 const target = _lastDriftTarget;
                 _lastDriftTarget = undefined;

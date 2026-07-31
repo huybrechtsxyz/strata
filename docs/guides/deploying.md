@@ -439,7 +439,7 @@ strata validate -f deployments/deploy-prd.yaml
 strata validate -f deployments/deploy-prd.yaml --deep
 
 # 3. Check if all required secrets exist
-strata env show -f deployments/deploy-prd.yaml | grep "status: required"
+strata deploy show -f deployments/deploy-prd.yaml | grep "status: required"
 
 # 4. Dry-run to see what will change
 strata deploy run -f deployments/deploy-prd.yaml --dry-run

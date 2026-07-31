@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any, Dict, Optional
 
 import click
@@ -109,9 +108,7 @@ class PutSecretCommand(BaseCommand):
         }
         self._output_data = result
 
-        if self._output_format == "json":
-            click.echo(json.dumps(result, indent=2))
-        elif self._is_console_output() and not self._output_quiet:
+        if self._is_console_output() and not self._output_quiet:
             if written:
                 click.echo(f"  ✓  Secret '{item.key}' written to {item.store.value} ({source}).")
             else:

@@ -9,23 +9,9 @@ import json
 import subprocess
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-try:
-    from strata.models.policy_model import PolicyModel
-    from strata.validators.policies.base_policy import PolicyContext, PolicyResult
-    from strata.validators.policies.script_policy import ScriptPolicy
-
-    IMPL_MISSING = False
-except ImportError:
-    ScriptPolicy = None  # type: ignore[assignment,misc]
-    PolicyContext = None  # type: ignore[assignment,misc]
-    PolicyResult = None  # type: ignore[assignment,misc]
-    PolicyModel = None  # type: ignore[assignment,misc]
-    IMPL_MISSING = True
-
-pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="ScriptPolicy not yet implemented")
-
+from strata.models.policy_model import PolicyModel
+from strata.validators.policies.base_policy import PolicyContext
+from strata.validators.policies.script_policy import ScriptPolicy
 
 # ---------------------------------------------------------------------------
 # Helpers

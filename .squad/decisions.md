@@ -171,6 +171,23 @@
 - **Rationale:** Repository verification confirmed the normal deploy flow writes the deploy-log but does not automatically invoke `AuditController.enrich_with_pr_data()`, `AuditController.push_to_remote()`, or `AuditController.forward_to_siem()` end-to-end. The ADR also describes a future `strata audit diff` capability that is not present in this repository, and Layer 1 PR-template process evidence appears to live outside this repo, so it cannot be verified here.
 - **Implications:** Keep the ADR narrative intact, but preserve the explicit status downgrade and the short "What Still Needs To Be Done" checklist until the deploy-path wiring, CLI surface, and any external process boundaries are either implemented or the ADR scope is narrowed.
 
+### 2026-07-28 — [FIXED] Audit log recorded unredacted secret values via full argv logging
+- **By:** Basher (DevOps Integrations); fix applied same day.
+- **Status:** Fixed. `redact_argv()` added to `strata.utils.system` and wired into all three plaintext-argv leak points: the audit log `target` in `base_command.py`, the console header "Entry point" echo in `base_command.py`, and the unhandled-error banner in `cli.py`. Values following known-sensitive flags (`--value`, `--password`, `--secret`, `--token`, `--api-key`, `--apikey`, `--credential`, `--client-secret`, `--private-key`) are now masked as `***REDACTED***`, in both `--flag value` and `--flag=value` forms, before the argv is persisted or echoed.
+- **Original finding:** `base_command.py` logged full argv (including `--value` secret content) to the audit log via `target=" ".join(sys.argv[1:])`. Also affected `.strata/deploy-log/` persistence and console/stderr echoes.
+- **Context:** Discovered during secret post_generate/derive feature discussion, 2026-07-28. Was option-independent — affected the existing `--value` flag regardless of any secret-transform feature.
+- **Tests:** `tests/strata/utils/test_utils_system.py::TestRedactArgv` covers two-token and `=`-joined forms, non-sensitive passthrough, custom masks, non-mutation, and a trailing flag with no value.
+- **Follow-up (not yet actioned):** `strata audit resend` may still forward previously-written, unredacted historical entries in `.strata/deploy-log/*.json` from before this fix — those old files are not retroactively scrubbed.
+
+### 2026-07-28 — [OPEN] No cross-deployment-file dependency gating (e.g. zone requires landscape deployed first)
+- **By:** Danny (Lead/Architect), with Basher (DevOps Integrations) and Linus (Python/CLI Dev)
+- **Status:** Flagged open finding — not yet actioned. Discussion only, no code or docs written.
+- **Finding:** No built-in mechanism exists for gating a lower deployment layer (e.g. zone) on an upper layer (e.g. landscape) having already succeeded, where each layer is a separate `kind: deployment` file. The only existing dependency primitive, `stages[].depends_on`, is intra-file only. `spec.inputs.from` (drafted in `docs/guides/at-scale.md`) is unimplemented. Raised for a partner team's layered tenant/landscape/zone/zone-tenant/zone-tenant-environment hierarchy.
+- **Recommended future fix:** New `spec.requires: Optional[List[str]]` field on `DeploymentModel`, checked against `DeploymentManifestModel.spec.status` (`success|partial|failed`, ADR-0021) at deploy pre-flight (and optionally `validate --deep`). Explicitly **not** via ADR-0057 gates — those are environment-scoped and human-decision-oriented (approvals, `WorkItem`, exit code 5), the wrong fit for a binary, disk-checkable precondition with no human decision involved.
+- **Interim recipe (not yet authored as docs):** Lifecycle script hooked at `deploy_run_before`, checking `strata deploy history --output json`'s per-execution `success` field for the upstream deployment file. `deploy status` (deprecated/unreliable) and `deploy health` (silently passes via `no_checks_defined` when unconfigured) were both rejected as check signals. Requires CI to persist/share `.strata/logs/` across ephemeral checkouts between the two layers' pipeline jobs.
+- **Scoped out:** Reverse-direction "prevent destroying a zone while tenants still exist" — depends on ADR-0038 Gap 3 (fleet-level visibility), not yet built.
+- **Update 2026-07-28:** recommended backing store for `spec.requires` is the existing `manifest: { type: gitops, push_manifest: true }` mechanism (already implemented, genuinely remote via git push) plus `strata env status` as a live-Terraform-backend fallback check. Correction: the command is `strata env status`, not `strata deploy status` (which does not exist).
+
 ## Governance
 
 - All meaningful architectural changes require a decision entry here

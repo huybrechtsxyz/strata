@@ -875,18 +875,19 @@ class RunDeployCommand(BaseDeployCommand):
         """Return the current HEAD commit SHA, or 'unknown' on failure."""
         return self._get_git_field("rev-parse", "HEAD") or "unknown"
 
-    def _evaluate_environment_gates(self):
-        """Evaluate spec.gates from the environment model — pre-provisioning.
+    def _evaluate_deployment_gates(self, stages_to_run: List[DeploymentStageModel]):
+        """Evaluate spec.gates from the deployment model — pre-provisioning.
 
         Handles gates with `when: always` (approval) and `type: scheduled`.
         Condition-based gates (cost_review, security_review) run post-plan via
         _evaluate_condition_gates_post_plan(). Verify gates run post-apply.
-        Returns a WorkItem if a gate is triggered, else None.
+        `mode: declare` gates never create a work item — they're logged via the
+        gate evaluator itself (see gate_controller.evaluate_and_create).
+        Returns a WorkItem if an enforcing gate is triggered, else None.
         """
         try:
-            env_svc = getattr(self._deployment_service, "_environment_service", None)
-            env_model = env_svc.model if env_svc else None
-            gates = (env_model.spec.gates or []) if (env_model and env_model.spec) else []
+            deployment_model = self._deployment_service.model if self._deployment_service else None  # type: ignore[union-attr]
+            gates = (deployment_model.spec.gates or []) if (deployment_model and deployment_model.spec) else []
             if not gates:
                 return None
             # Only pre-provisioning gate types: approval, scheduled, cab, incident
@@ -903,18 +904,18 @@ class RunDeployCommand(BaseDeployCommand):
         controller = WorkItemGateController(WorkItemController.from_config(self._work_path))
         deployment_path = str(self._file_path) if self._file_path else ""
         commit = self._get_current_commit()
+        scope_stages = [s.name for s in stages_to_run]
 
-        result = controller.evaluate_and_create(pre_gates, deployment_path, commit, context)
+        result = controller.evaluate_and_create(pre_gates, deployment_path, commit, context, scope_stages=scope_stages)
         # Scheduled block sentinel means "blocked by window, no work item needed"
         if result is _SCHEDULED_BLOCK_SENTINEL:
-            env_svc = getattr(self._deployment_service, "_environment_service", None)
-            env_model = env_svc.model if env_svc else None
-            gates = (env_model.spec.gates or []) if (env_model and env_model.spec) else []
+            from strata.models.gate_model import GateWhenConditionsModel
+
             window = next(
                 (
                     g.when.time_utc
                     for g in gates
-                    if g.type == "scheduled" and hasattr(g.when, "time_utc") and g.when.time_utc
+                    if g.type == "scheduled" and isinstance(g.when, GateWhenConditionsModel) and g.when.time_utc
                 ),
                 "configured window",
             )
@@ -946,9 +947,8 @@ class RunDeployCommand(BaseDeployCommand):
         Returns True if provisioning should continue, False if a gate triggered.
         """
         try:
-            env_svc = getattr(self._deployment_service, "_environment_service", None)
-            env_model = env_svc.model if env_svc else None
-            gates = (env_model.spec.gates or []) if (env_model and env_model.spec) else []
+            deployment_model = self._deployment_service.model if self._deployment_service else None  # type: ignore[union-attr]
+            gates = (deployment_model.spec.gates or []) if (deployment_model and deployment_model.spec) else []
             condition_gates = [g for g in gates if g.type in ("cost_review", "security_review")]
             if not condition_gates:
                 return True
@@ -970,7 +970,9 @@ class RunDeployCommand(BaseDeployCommand):
         deployment_path = str(self._file_path) if self._file_path else ""
         commit = self._get_current_commit()
 
-        work_item = controller.evaluate_and_create(condition_gates, deployment_path, commit, context)
+        work_item = controller.evaluate_and_create(
+            condition_gates, deployment_path, commit, context, scope_stages=[str(stage.name)]
+        )
         if work_item is None:
             return True
 
@@ -1012,9 +1014,8 @@ class RunDeployCommand(BaseDeployCommand):
         is functioning correctly. Returns True to continue, False to pause.
         """
         try:
-            env_svc = getattr(self._deployment_service, "_environment_service", None)
-            env_model = env_svc.model if env_svc else None
-            gates = (env_model.spec.gates or []) if (env_model and env_model.spec) else []
+            deployment_model = self._deployment_service.model if self._deployment_service else None  # type: ignore[union-attr]
+            gates = (deployment_model.spec.gates or []) if (deployment_model and deployment_model.spec) else []
             verify_gates = [g for g in gates if g.type == "verify"]
             if not verify_gates:
                 return True
@@ -1034,7 +1035,7 @@ class RunDeployCommand(BaseDeployCommand):
         commit = self._get_current_commit()
 
         work_item = controller.evaluate_and_create(
-            verify_gates, deployment_path, commit, context, gate_type_filter="verify"
+            verify_gates, deployment_path, commit, context, gate_type_filter="verify", scope_stages=[str(stage.name)]
         )
         if work_item is None:
             return True
@@ -1271,20 +1272,17 @@ class RunDeployCommand(BaseDeployCommand):
 
         # Check approval gates before any provisioning
         if not self._dry_run:
-            if not self._check_approvals(stages_to_run):
-                return False
-
-            # Evaluate environment spec.gates (ADR-0057 Phase 2/4)
+            # Evaluate deployment spec.gates (ADR-0057/ADR-0059)
             if self._resume_id:
                 if not self._verify_gate_resume():
                     return False
             else:
                 from strata.controllers.gate_controller import _SCHEDULED_BLOCK_SENTINEL
 
-                work_item = self._evaluate_environment_gates()
+                work_item = self._evaluate_deployment_gates(stages_to_run)
                 if work_item is not None:
                     if work_item is _SCHEDULED_BLOCK_SENTINEL:
-                        return False  # error already recorded in _evaluate_environment_gates
+                        return False  # error already recorded in _evaluate_deployment_gates
                     self._hand_off_required = True
                     if self._is_console_output():
                         click.echo("\n⏸️  Deployment paused — gate work item created:")
@@ -1825,41 +1823,3 @@ class RunDeployCommand(BaseDeployCommand):
                     elif result.enforcement == "audit" and self._is_verbose():
                         click.echo(f"    \u00b7  Policy '{result.policy_name}' audit: {v}")
         return not denied
-
-    def _check_approvals(self, stages_to_run: List[DeploymentStageModel]) -> bool:
-        """Log approval metadata declared in spec.approvals before executing stages.
-
-        Approvals are metadata-only — enforcement is delegated to the CI/CD system
-        (ADO environment gate, GitHub Actions environment, etc.).  The CLI logs
-        which approvers apply per stage so the audit trail is clear.
-
-        Empty approvers dict → no gate (treated as absent).
-        Stage without an approval override → all spec-level approvers apply.
-        """
-        if self._deployment_service is None:
-            return True
-        spec = self._deployment_service.model.spec  # type: ignore[union-attr]
-        approvals = getattr(spec, "approvals", None)
-
-        if not approvals or not approvals.approvers:
-            return True
-
-        for stage in stages_to_run:
-            if stage.approval:
-                active_keys = stage.approval.approvers
-            else:
-                active_keys = list(approvals.approvers.keys())
-
-            if active_keys:
-                active_approvers = [
-                    f"{approvals.approvers[k].type}:{approvals.approvers[k].value}"
-                    for k in active_keys
-                    if k in approvals.approvers
-                ]
-                self.logger.info(
-                    "Approval gate declared",
-                    stage=stage.name,
-                    approvers=active_approvers,
-                )
-
-        return True

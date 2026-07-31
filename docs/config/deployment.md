@@ -10,7 +10,7 @@ Top-level orchestration files combining workspace definitions, environments, and
 | **Environment** | HOW to customize | Environment-specific overrides                       |
 | **Deployment**  | ACTUAL INSTANCE  | Combines workspace + environment(s) + configurations |
 
-**Deployment = Workspace + Environment(s) + Configuration(s) + Deployment Overrides**
+**Deployment = Workspace + Environment(s) + Configuration(s) + Orchestration Controls**
 
 ## Schema
 
@@ -24,27 +24,31 @@ meta:
   labels:
     version: "<version>"
 spec:
-  properties: {}               # Deployment metadata
-  custom: {}                   # Organizational metadata
-  workspace:                   # Required: infrastructure blueprint
+  partial: false               # Optional: reusable base fragment, not directly deployable
+  extends: <@repo/path.yaml>   # Optional: inherit from another deployment file
+  tenant: <tenant_code>        # Optional: tenant ownership reference
+  layers: {}                   # Optional: layer values
+  properties: {}               # Optional deployment metadata
+  custom: {}                   # Optional organizational metadata
+  workspace:                   # Required for non-partial deployments
     name: <workspace_name>
+    file: <path/to/workspace.yaml>
     description: <description>
-    source:
-      type: <source_type>      # local, gitops, image, script
-      repository: <repository>
-      reference: <reference>
-      source_path: <path>
-  environments: []             # Environment configs (applied in order)
-    - name: <environment_name>
-      description: <description>
-      source: {}
-  configurations: []           # Additional config layers (optional)
+  environments: []             # Optional list of env file refs (applied in order)
+    - <path/to/environment.yaml>
+    - file: <path/to/environment.yaml>
+      scope: shared
+  configurations: []           # Optional additional config refs
     - name: <configuration_name>
+      file: <path/to/configuration.yaml>
       description: <description>
-      source: {}
-  features: {}                 # Deployment-specific feature flags
-  variables: []                # Deployment variables (highest precedence)
-  secrets: []                  # Deployment secrets (highest precedence)
+  versions: []                 # Optional version file refs (applied in list order)
+    - <path/to/version-or-lock.yaml>
+  locking: {}                  # Optional concurrent deploy protection
+  promotion: {}                # Optional promotion wave assignment
+  stages: []                   # Optional staged execution graph
+  gates: []                    # Optional hand-off gates
+  lifecycle: {}                # Optional deploy lifecycle hooks
 ```
 
 ## Properties & Custom
@@ -74,11 +78,8 @@ Required reference to infrastructure blueprint:
 ```yaml
 workspace:
   name: platform_workspace
-  source:
-    type: local # local, gitops, image, script
-    repository: /
-    reference: /
-    source_path: config/workspaces/platform.yaml
+  file: config/workspaces/platform.yaml
+  description: Platform workspace blueprint
 ```
 
 ## Environments
@@ -87,18 +88,9 @@ Environment configs applied in order (later overrides earlier):
 
 ```yaml
 environments:
-  - name: production
-    source:
-      type: local
-      repository: /
-      reference: /
-      source_path: config/environments/production.yaml
-  - name: regional_us_east # Overrides production
-    source:
-      type: local
-      repository: /
-      reference: /
-      source_path: config/environments/us-east.yaml
+  - config/environments/production.yaml
+  - file: config/environments/us-east.yaml # Overrides production
+    scope: regional
 ```
 
 **Multiple environments enable layered configuration composition.**
@@ -110,65 +102,39 @@ Additional configuration layers (optional):
 ```yaml
 configurations:
   - name: tenant_config
-    source:
-      type: local
-      repository: /
-      reference: /
-      source_path: config/configurations/tenant-a.yaml
+    file: config/configurations/tenant-a.yaml
 ```
 
 _Use for: application-specific settings, tenant configs, compliance requirements_
 
-## Features, Variables & Secrets
+## Versions, Gates, and Stage Secrets
 
-**Features** - Deployment-specific flags (highest precedence):
-
-```yaml
-features:
-  premium_features: true
-  advanced_analytics: true
-```
-
-**Variables** - Deployment variables (highest precedence):
+**Versions** are optional deployment-level references used by the version resolver:
 
 ```yaml
-variables:
-  - key: DEPLOYMENT_ID
-    source: constant
-    value: prod-tenant-001
+versions:
+  - versions/prd.manifest.yaml
+  - versions/prd.yaml
 ```
 
-**Secrets** - Deployment secrets (highest precedence):
+**Gates** are optional deployment-level hand-off requirements before selected stages.
 
-```yaml
-secrets:
-  - key: TENANT_API_KEY
-    source: bitwarden
-    value: tenant-api-key-id
-```
+**Stage secrets** are declared per stage (`spec.stages[].secrets`) and control which
+sensitive values may be injected into that stage.
+
+Deployment-level `features`, `variables`, and `secrets` are not part of the current
+deployment schema. Define those in environment files instead.
 
 ## Configuration Merge Order
 
 Precedence from lowest to highest:
 
 1. Workspace defaults (base)
-2. Environment 1
-3. Environment 2…N (in order)
-4. Configuration 1
-5. Configuration 2…N (in order)
-6. **Deployment overrides** (highest precedence)
+2. Environment files in listed order (later files override earlier ones)
+3. Deployment orchestration fields (`stages`, `gates`, `locking`, `promotion`, `versions`)
 
-**Per-section merge rules when multiple environment files are listed:**
-
-| Section                                         | Strategy                                                                 |
-| ----------------------------------------------- | ------------------------------------------------------------------------ |
-| `variables` / `secrets`                         | Last-wins by `key`                                                       |
-| `features`                                      | Last-wins by `key` (each flag merged independently)                      |
-| `properties` / `custom`                         | Shallow `dict.update()` — earlier keys preserved if absent in later file |
-| `lifecycle` / `audit`                           | Last-wins (wholesale)                                                    |
-| `overrides.resources` / `providers` / `remotes` | Last-wins by name                                                        |
-| `overrides.modules`                             | Last-wins by `(module, resource, namespace, slot_type)`                  |
-| `overrides.includes` / `output_files`           | Additive (deduplicated)                                                  |
+Use environment files for variable/secret/feature data layering. Use deployment spec
+for orchestration and references.
 
 To trace which file contributed each resolved value:
 
@@ -193,18 +159,9 @@ spec:
     environment: production
   workspace:
     name: platform_workspace
-    source:
-      type: local
-      repository: /
-      reference: /
-      source_path: config/workspaces/platform.yaml
+    file: config/workspaces/platform.yaml
   environments:
-    - name: production_env
-      source:
-        type: local
-        repository: /
-        reference: /
-        source_path: config/environments/production.yaml
+    - config/environments/production.yaml
 ```
 
 **Multi-Layer:**
@@ -224,42 +181,17 @@ spec:
     sla: "99.99%"
   workspace:
     name: saas_workspace
-    source:
-      type: gitops
-      repository: https://github.com/org/workspaces.git
-      reference: v1.5.0
-      source_path: workspaces/saas-platform.yaml
+    file: "@config/workspaces/saas-platform.yaml"
   environments:
-    - name: base_production
-      source:
-        type: local
-        repository: /
-        reference: /
-        source_path: config/environments/production.yaml
-    - name: regional_us_east
-      source:
-        type: local
-        repository: /
-        reference: /
-        source_path: config/environments/us-east.yaml
+    - "@config/environments/production.yaml"
+    - file: "@config/environments/us-east.yaml"
+      scope: regional
   configurations:
     - name: tenant_a_config
-      source:
-        type: local
-        repository: /
-        reference: /
-        source_path: config/configurations/tenant-a.yaml
-  features:
-    premium_features: true
-    advanced_analytics: true
-  variables:
-    - key: DEPLOYMENT_ID
-      source: constant
-      value: prod-tenant-a-001
-  secrets:
-    - key: TENANT_API_KEY
-      source: bitwarden
-      value: tenant-a-api-key-id
+      file: "@config/configurations/tenant-a.yaml"
+  versions:
+    - versions/prd.manifest.yaml
+    - versions/prd.yaml
 ```
 
 **GitOps:**
@@ -270,18 +202,9 @@ meta:
 spec:
   workspace:
     name: infrastructure
-    source:
-      type: gitops
-      repository: https://github.com/org/infrastructure.git
-      reference: v2.3.0
-      source_path: workspaces/main.yaml
+    file: "@infra/workspaces/main.yaml"
   environments:
-    - name: production
-      source:
-        type: gitops
-        repository: https://github.com/org/environments.git
-        reference: main
-        source_path: production/us-east-1.yaml
+    - "@env/environments/production/us-east-1.yaml"
 ```
 
 ## Use Cases
@@ -311,17 +234,15 @@ deployments/
 ```yaml
 # Blue (current)
 blue-deployment.yaml:
-  variables:
-    - key: DEPLOYMENT_COLOR
-      value: blue
+  versions:
+    - versions/blue.manifest.yaml
+    - versions/blue.yaml
 
 # Green (new version)
 green-deployment.yaml:
-  variables:
-    - key: DEPLOYMENT_COLOR
-      value: green
-    - key: APP_VERSION
-      value: v2.0.0
+  versions:
+    - versions/green.manifest.yaml
+    - versions/green.yaml
 ```
 
 **Staged rollout:**
@@ -329,28 +250,27 @@ green-deployment.yaml:
 ```yaml
 # Canary (1%)
 canary-deployment.yaml:
-  environments: [production.yaml, canary.yaml]
-  features:
-    traffic_percentage: 1
+  environments:
+    - environments/production.yaml
+    - environments/canary-1pct.yaml
 
 # Beta (20%)
 beta-deployment.yaml:
-  environments: [production.yaml, beta.yaml]
-  features:
-    traffic_percentage: 20
+  environments:
+    - environments/production.yaml
+    - environments/beta-20pct.yaml
 
 # Full (100%)
 production-deployment.yaml:
-  environments: [production.yaml]
-  features:
-    traffic_percentage: 100
+  environments:
+    - environments/production.yaml
 ```
 
 ## Deployment Workflow
 
 1. Load deployment → Parse config
-2. Resolve sources → Fetch workspace/environment/config files
-3. Merge configurations → Apply merge order
+2. Resolve file references → Load workspace/environment/config files
+3. Merge environment layers → Apply list-order overrides
 4. Validate → Validate merged config
 5. Generate artifacts → Create Terraform/manifests/Helm values
 6. Execute lifecycle → Run workspace phases
@@ -371,11 +291,6 @@ stages:
     # scope: infra        # Optional label for --scope CLI filtering (see deploy run --scope)
     secrets:               # Allowlist of secrets this stage may access (default-deny)
       - hetzner_api_token
-    steps:                 # Which steps to run (default: all supported steps)
-      - setup
-      - check
-      - plan
-      - apply
     timeouts:              # Per-step overrides (seconds)
       setup: 120
       plan: 600
@@ -391,34 +306,19 @@ Exactly one of `provisioner` or `topology` must be set (or omitted when the work
 | `provisioner` | Matches a provisioner entry in `workspace.spec.provisioners` by **name**. Direct, explicit.                                                                                                                                                               |
 | `topology`    | Looks up a topology entry in `workspace.spec.topology` by name, reads its `provisioner` type, then finds the matching provisioner. Use when stages should be expressed in logical terms (e.g. "kubernetes") rather than tooling names (e.g. "my_aks_tf"). |
 
-If both are set, `provisioner` takes precedence. If neither is set and the workspace has a single provisioner, that one is used as a fallback.
+If both are set, validation fails. If neither is set and the workspace has a single provisioner, that one is used as a runtime fallback.
 
 ### `scope` — stage filtering
 
 `scope` is an optional free-form label. Assign the same label to stages that belong to the same logical group, then use `--scope <label>` on the CLI to run only that group:
 
 ```bash
-strata deploy run  --scope infra   # only stages with scope: infra
-strata deploy run  --scope apps    # only stages with scope: apps
-strata deploy run                  # all stages (no scope filter)
+strata deploy run -f deploy/deploy-prd.yaml --scope infra   # only stages with scope: infra
+strata deploy run -f deploy/deploy-prd.yaml --scope apps    # only stages with scope: apps
+strata deploy run -f deploy/deploy-prd.yaml                 # all stages (no scope filter)
 ```
 
 Stages without a `scope` field are skipped when `--scope` is set. This is intentional — unlabelled stages are treated as "always run" only when no filter is active.
-
-### Steps
-
-Each step name maps directly to a deployer method. When `steps` is omitted the deployer's default set is used.
-
-| Step           | Deployer method  | Typical purpose                         |
-| -------------- | ---------------- | --------------------------------------- |
-| `setup`        | `setup()`        | Initialise tool (e.g. `terraform init`) |
-| `check`        | `check()`        | Validate configuration                  |
-| `plan`         | `plan()`         | Preview changes                         |
-| `apply`        | `apply()`        | Apply changes                           |
-| `destroy`      | `destroy()`      | Tear down resources                     |
-| `plan_destroy` | `plan_destroy()` | Preview destroy                         |
-| `output`       | `output()`       | Emit infrastructure outputs             |
-| `show_plan`    | `show_plan()`    | Display saved plan                      |
 
 ---
 
@@ -622,10 +522,8 @@ spec:
 
 
 
-**Local:** Files in current repository (`type: local`)  
-**GitOps:** External Git repos (`type: gitops`)  
-**Image:** Packaged in containers (`type: image`)  
-**Script:** Generated by scripts (`type: script`)
+**Local refs:** Relative paths like `config/workspaces/platform.yaml`  
+**Cross-repo refs:** `@repo_name/path/to/file.yaml` (resolved from configured remotes)
 
 ## Best Practices
 
@@ -634,7 +532,7 @@ spec:
 - **Immutable references:** Use specific versions for workspace/environment
 - **Layered config:** Environments for reusable, configurations for one-offs
 - **Secret management:** Use appropriate secret managers
-- **Feature flags:** Gradual rollouts and A/B testing
+- **Feature flags:** Keep feature toggles in environment files for controlled rollouts
 - **Documentation:** Document purpose in annotations
 - **Validation:** Validate before applying
 - **Testing:** Test in lower environments first
@@ -740,17 +638,18 @@ Platform validates:
 
 - Valid deployment name (lowercase, alphanumeric, underscores)
 - Required workspace reference
-- Valid source configurations
-- Unique environment/configuration/variable/secret names
-- Resolvable source paths
+- Valid file references (`workspace.file`, `environments[*].file`, `configurations[*].file`)
+- Unique stage/gate/configuration names where declared
+- Gate scope references only declared stage names
+- Stage dependency graph has valid references and no cycles
 
 ## Troubleshooting
 
-**Validation failed:** Check workspace reference, verify source paths resolvable, ensure unique names  
-**Source resolution failed:** Verify source type, check repository URL/path exists, confirm reference exists, validate source_path  
-**Merge conflicts:** Review merge order/precedence, check conflicting keys, validate environment/configuration order  
-**Feature flags not working:** Verify names match implementation, check merge order, deployment features have highest precedence  
-**Instance not unique:** Ensure unique deployment name, check properties uniqueness, review deployment ID
+**Validation failed:** Check workspace/environment/configuration file references and stage/gate validation errors  
+**File resolution failed:** Verify local paths and `@repo/path` references resolve under current workspace/remotes  
+**Merge conflicts:** Review environment list order and section-level overrides in environment files  
+**Version pin mismatch:** Validate `spec.versions` files exist and hashes are current when lock files are used  
+**Instance not unique:** Ensure unique deployment name and review conflicting metadata
 
 ## Summary
 

@@ -16,6 +16,7 @@ import pytest
 
 from strata.utils.system import (
     CommandResult,
+    redact_argv,
     run_command,
 )
 
@@ -224,3 +225,57 @@ class TestCommandIntegration:
         assert "echo" in result_str.lower()
         assert "ms" in result_str.lower()  # duration
         assert any(word in result_str for word in ["SUCCESS", "FAILED"])
+
+
+# ============================================================================
+# redact_argv Tests
+# ============================================================================
+
+
+class TestRedactArgv:
+    """Test redact_argv masks sensitive CLI flag values before logging/echoing."""
+
+    def test_redacts_two_token_value_flag(self):
+        """`--value <secret>` — the token after the flag must be masked."""
+        argv = ["secret", "put", "KEY", "--value", "super-secret-plaintext"]
+        result = redact_argv(argv)
+        assert "super-secret-plaintext" not in result
+        assert result == ["secret", "put", "KEY", "--value", "***REDACTED***"]
+
+    def test_redacts_equals_form_value_flag(self):
+        """`--value=<secret>` — a single '=' joined token must be masked."""
+        argv = ["secret", "put", "KEY", "--value=super-secret-plaintext"]
+        result = redact_argv(argv)
+        assert "super-secret-plaintext" not in " ".join(result)
+        assert result == ["secret", "put", "KEY", "--value=***REDACTED***"]
+
+    def test_redacts_password_and_token_flags(self):
+        """Other known-sensitive flags (--password, --token) are also masked."""
+        argv = ["login", "--password", "hunter2", "--token", "abc123"]
+        result = redact_argv(argv)
+        assert "hunter2" not in result
+        assert "abc123" not in result
+
+    def test_leaves_non_sensitive_argv_untouched(self):
+        """Ordinary flags/positional args pass through unchanged."""
+        argv = ["deploy", "run", "-f", "deploy-prd.yaml", "--force"]
+        assert redact_argv(argv) == argv
+
+    def test_custom_mask_is_applied(self):
+        """A caller-supplied mask replaces the default placeholder."""
+        argv = ["secret", "put", "KEY", "--value", "plaintext"]
+        result = redact_argv(argv, mask="<hidden>")
+        assert result[-1] == "<hidden>"
+
+    def test_does_not_mutate_input_list(self):
+        """redact_argv returns a new list and does not mutate the original."""
+        argv = ["secret", "put", "KEY", "--value", "plaintext"]
+        original = list(argv)
+        redact_argv(argv)
+        assert argv == original
+
+    def test_trailing_sensitive_flag_without_value(self):
+        """A sensitive flag with no following token does not raise or leak."""
+        argv = ["secret", "put", "KEY", "--value"]
+        result = redact_argv(argv)
+        assert result == ["secret", "put", "KEY", "--value"]
