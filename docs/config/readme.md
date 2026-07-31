@@ -8,7 +8,7 @@ strata uses YAML configuration files to define infrastructure, environments, and
 
 - [workspace.md](workspace.md) - Infrastructure blueprint (topology, components)
 - [environment.md](environment.md) - Environment customization (overrides)
-- [deployment.md](deployment.md) - Deployment instance (target, approval)
+- [deployment.md](deployment.md) - Deployment instance (target, stages, gates)
 
 **Platform:**
 
@@ -52,6 +52,6 @@ namespaces/      frontend.yaml, backend.yaml
 2. Define resources (VMs, firewalls)
 3. Create workspace (topology, components)
 4. Create environment (overrides)
-5. Create deployment (target)
+5. Create deployment (workspace and environment references, optional stages/gates)
 
 See individual files for detailed schemas and examples.

@@ -12,7 +12,7 @@ CI/CD approval step, or the clock.
 ## CLI Commands
 
 ```bash
-strata workitem list [--status STATUS] [--type TYPE] [--deployment FILE]
+strata workitem list [--status STATUS] [--type TYPE] [-f FILE]
 strata workitem show <id>
 strata workitem approve <id> [--note TEXT] [--as IDENTITY]
 strata workitem reject <id> [--reason TEXT] [--as IDENTITY]

@@ -556,16 +556,10 @@ strata deploy run -f prod.yaml
 
 ```bash
 # Export all deployment logs plus associated manifests
-strata audit export --output-dir ./audit_export --include-manifests
+strata audit export --include-manifests --out ./audit_export.json
 
 # Result:
-# audit_export/
-#   deploy_logs/
-#     log_001.json
-#     log_002.json
-#   manifests/
-#     manifest_001.json
-#     manifest_002.json
+# audit_export.json (contains audit events + embedded manifests)
 ```
 
 ---

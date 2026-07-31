@@ -32,7 +32,7 @@ Sentinel, etc.) for compliance and monitoring.
 Show a chronological list of recent deployments and their changes.
 
 ```bash
-strata audit changes -f deployments/deploy-prd.yaml
+strata audit changes
 ```
 
 Output:
@@ -72,20 +72,20 @@ Deployment Changes: xyz-deploy-prd
 ### Filter by time range
 
 ```bash
-# Last 7 days
-strata audit changes -f deploy-prd.yaml --since 7d
+# Since a date (UTC midnight)
+strata audit changes --since 2026-07-01
 
-# Specific date range
-strata audit changes -f deploy-prd.yaml --since 2026-07-01 --until 2026-07-21
+# Since an exact timestamp
+strata audit changes --since 2026-07-01T00:00:00Z
 
 # Last 10 deployments
-strata audit changes -f deploy-prd.yaml --limit 10
+strata audit changes --last 10
 ```
 
 ### Machine-readable output
 
 ```bash
-strata audit changes -f deploy-prd.yaml --output json
+strata audit changes --output json
 ```
 
 Returns:
@@ -122,10 +122,10 @@ Show what changed between two specific deployments.
 
 ```bash
 # What changed between last two deployments?
-strata audit diff -f deployments/deploy-prd.yaml --since 1
+strata audit changes --last 2 --output json
 
 # Compare specific deployments by timestamp
-strata audit diff -f deploy-prd.yaml --deployment-id abc123def456 --previous
+strata audit diff <from-execution-id> <to-execution-id>
 ```
 
 Output:
@@ -165,9 +165,7 @@ Cost Impact (estimated):
 ### Compare to production
 
 ```bash
-strata audit diff -f deploy-prd.yaml \
-  --deployment-id <staging-deployment> \
-  --compare-to <prod-deployment>
+strata audit diff <staging-execution-id> <prod-execution-id>
 ```
 
 Shows differences between staging and production deployments (useful for promotion gates).
@@ -175,7 +173,7 @@ Shows differences between staging and production deployments (useful for promoti
 ### Machine-readable output
 
 ```bash
-strata audit diff -f deploy-prd.yaml --output json --since 1 --previous
+strata audit diff <from-execution-id> <to-execution-id> --output json
 ```
 
 Returns detailed diff in JSON format for automation.
@@ -197,43 +195,40 @@ Export audit trail to external compliance systems (SIEM, audit logs, etc.).
 
 ```bash
 # Export last 30 days to a file
-strata audit export -f deployments/deploy-prd.yaml \
-  --since 30d \
+strata audit export \
+  --since 2026-06-21T00:00:00Z \
   --format json \
-  --output-file audit-export-2026-07-21.json
+  --out audit-export-2026-07-21.json
 ```
 
 ### Export to SIEM (Splunk, ELK, Azure Sentinel)
 
 **Splunk:**
 ```bash
-strata audit export -f deploy-prd.yaml \
-  --sink splunk \
-  --splunk-hec-url https://splunk.example.com:8088 \
-  --splunk-hec-token <token>
+strata audit export \
+  --siem splunk_hec \
+  --last 30 \
+  --out audit-backup.json
 ```
 
 **Azure Sentinel:**
 ```bash
-strata audit export -f deploy-prd.yaml \
-  --sink azure-sentinel \
-  --workspace-id <workspace-id> \
-  --shared-key <workspace-key> \
-  --log-type StratAudit
+strata audit export \
+  --siem sentinel \
+  --since 2026-06-01T00:00:00Z
 ```
 
 **ELK Stack:**
 ```bash
-strata audit export -f deploy-prd.yaml \
-  --sink elasticsearch \
-  --elasticsearch-url https://elasticsearch.example.com:9200 \
-  --elasticsearch-index strata-audit
+strata audit export \
+  --siem elk \
+  --last 50
 ```
 
 ### Machine-readable output
 
 ```bash
-strata audit export -f deploy-prd.yaml --output json
+strata audit export --output json
 ```
 
 Returns audit events in JSON format for custom integrations.
@@ -253,16 +248,13 @@ If an export to a SIEM failed, resend the events without redeploying.
 
 ```bash
 # Resend last export attempt
-strata audit resend -f deployments/deploy-prd.yaml --sink splunk
+strata audit resend --last 5
 
-# Resend specific date range
-strata audit resend -f deploy-prd.yaml \
-  --sink azure-sentinel \
-  --since 2026-07-20 \
-  --until 2026-07-21
+# Resend since a timestamp
+strata audit resend --since 2026-07-20T00:00:00Z
 
 # Resend with verbose output (see what's being sent)
-strata audit resend -f deploy-prd.yaml --sink splunk --verbose
+strata audit resend --last 5 --verbose
 ```
 
 Output:
@@ -298,10 +290,10 @@ Prepare a report of all deployments for a compliance audit (SOC2, ISO 27001, etc
 
 ```bash
 # Export all deployments from the past 12 months
-strata audit export -f deployments/deploy-prd.yaml \
-  --since 365d \
+strata audit export \
+  --since 2025-07-21T00:00:00Z \
   --format json \
-  --output-file compliance-report-2026.json
+  --out compliance-report-2026.json
 
 # Generate summary
 jq -r '.events[] | "\(.timestamp) | \(.user) | \(.action) | \(.status)"' \
@@ -318,13 +310,13 @@ A service is failing. Find out what changed recently.
 
 ```bash
 # See recent deployments
-strata audit changes -f deploy-prd.yaml --limit 5
+strata audit changes --last 5
 
-# Compare last two deployments
-strata audit diff -f deploy-prd.yaml --since 1 --previous
+# Compare two specific deployments
+strata audit diff <from-execution-id> <to-execution-id>
 
 # Export details for deep analysis
-strata audit export -f deploy-prd.yaml --output-file audit-details.json
+strata audit export --out audit-details.json
 jq '.events[] | select(.status != "success")' audit-details.json
 ```
 
@@ -344,17 +336,15 @@ jobs:
         displayName: Deploy to Production
 
       - script: |
-          strata audit export -f deployments/deploy-prd.yaml \
-            --sink splunk \
-            --splunk-hec-url $(SPLUNK_HEC_URL) \
-            --splunk-hec-token $(SPLUNK_HEC_TOKEN) \
-            --since 10m
+          strata audit export \
+            --siem splunk_hec \
+            --since 2026-07-21T00:00:00Z
         displayName: Export audit trail to Splunk
         condition: succeeded()
 
       - script: |
           # If export failed, alert on-call engineer
-          strata audit resend -f deployments/deploy-prd.yaml --sink splunk
+          strata audit resend --last 10
         displayName: Retry export if failed
         condition: failed()
 ```
@@ -365,15 +355,12 @@ An incident occurred at 2026-07-21 14:30. What changed?
 
 ```bash
 # Find deployments around that time
-strata audit changes -f deploy-prd.yaml \
-  --since 2026-07-21T12:00:00Z \
-  --until 2026-07-21T16:00:00Z
+strata audit changes --since 2026-07-21T12:00:00Z
 
 # Export detailed events
-strata audit export -f deploy-prd.yaml \
+strata audit export \
   --since 2026-07-21T12:00:00Z \
-  --until 2026-07-21T16:00:00Z \
-  --output-file incident-analysis.json
+  --out incident-analysis.json
 
 # Analyze
 jq -r '.events[] | select(.timestamp > "2026-07-21T14:00:00Z") | 
@@ -387,16 +374,15 @@ Monitor infrastructure changes and their cost impact.
 
 ```bash
 # Weekly cost report
-strata audit diff -f deploy-prd.yaml \
-  --since 7d \
+strata audit diff <from-execution-id> <to-execution-id> \
   --output json | \
   jq '.cost_impact'
 
 # Export to spreadsheet
-strata audit export -f deploy-prd.yaml \
-  --since 30d \
-  --format csv \
-  --output-file monthly-deployments.csv
+strata audit export \
+  --since 2026-07-01T00:00:00Z \
+  --format json \
+  --out monthly-deployments.json
 ```
 
 ---

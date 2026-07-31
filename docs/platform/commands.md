@@ -305,19 +305,19 @@ Manage and inspect external tool integrations (Terraform, Docker, kubectl, Helm,
 
 ### `tools status` options
 
-| Option              | Description                                                                                   |
-| ------------------- | --------------------------------------------------------------------------------------------- |
-| `--deployment FILE` | Load a deployment file to add a **Requirement** column (`required` / `optional` / `—`)        |
-| `--required`        | Show only integrations marked `required` by the deployment (requires `--deployment`)          |
-| `--optional`        | Show only integrations marked `optional` by the deployment (requires `--deployment`)          |
-| `--available`       | Show only integrations that are installed and available                                       |
-| `--missing`         | Show only integrations that are not available. Exits **3** if any `required` ones are missing |
+| Option        | Description                                                                                   |
+| ------------- | --------------------------------------------------------------------------------------------- |
+| `--file FILE` | Load a deployment file to add a **Requirement** column (`required` / `optional` / `—`)        |
+| `--required`  | Show only integrations marked `required` by the deployment (requires `--file`)                |
+| `--optional`  | Show only integrations marked `optional` by the deployment (requires `--file`)                |
+| `--available` | Show only integrations that are installed and available                                       |
+| `--missing`   | Show only integrations that are not available. Exits **3** if any `required` ones are missing |
 
 ```bash
 strata tools status
 strata tools status --output json
-strata tools status --deployment deployment.yaml
-strata tools status --deployment deployment.yaml --required --missing
+strata tools status --file deployment.yaml
+strata tools status --file deployment.yaml --required --missing
 strata tools check terraform
 strata tools install terraform
 strata tools install terraform --env-file .env.template
@@ -897,8 +897,8 @@ strata validate run -f FILE_PATH [--deep] [--explain] [standard options]
 
 | Option             | Description                                                                                                                                               |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `-f / --file PATH` | File to validate. Required (unless `--path` glob is used).                                                                                                |
-| `--path GLOB`      | Validate multiple files matching a glob. Requires an initialized workspace with an active profile.                                                        |
+| `-f / --file PATH` | File to validate. Required (unless `--pattern` glob is used).                                                                                             |
+| `--pattern GLOB`   | Validate multiple files matching a glob. Requires an initialized workspace with an active profile.                                                        |
 | `--deep`           | Enable Phase 2 (cross-reference) validation against the active profile's configuration sources. Requires an initialized workspace with an active profile. |
 | `--explain`        | After validation, emit a plain-English summary of what the file describes.                                                                                |
 
@@ -907,7 +907,7 @@ strata validate run -f FILE_PATH [--deep] [--explain] [standard options]
 ```bash
 strata validate run -f config/xyz-config.yaml
 strata validate run -f config/xyz-ws-platform.yaml --deep
-strata validate run --path "deployments/**"
+strata validate run --pattern "deployments/**"
 strata validate -f config/xyz-config.yaml        # backward compat
 ```
 
@@ -2006,20 +2006,18 @@ strata manifest list --last 20 --output json
 ### `manifest show`
 
 ```
-strata manifest show [--deployment NAME] [--last 1] [standard options]
+strata manifest show MANIFEST_PATH [standard options]
 ```
 
-Display the full content of a deployment manifest (build or deploy). By default shows the most recent manifest; use `--deployment` and `--last` to select a specific one.
+Display the full content of a deployment manifest file.
 
-| Option              | Description                                      |
-| ------------------- | ------------------------------------------------ |
-| `--deployment NAME` | Show manifest for this deployment (required)     |
-| `--last N`          | Show the Nth most recent manifest (default: `1`) |
+| Argument        | Description                         |
+| --------------- | ----------------------------------- |
+| `MANIFEST_PATH` | Path to a manifest file to inspect. |
 
 ```bash
-strata manifest show --deployment xyz-deploy-prd
-strata manifest show --deployment xyz-deploy-prd --last 5
-strata manifest show --deployment xyz-deploy-prd --output json
+strata manifest show .strata/build/xyz-deploy-prd/manifest.json
+strata manifest show .strata/deploy/xyz-deploy-prd_20260731T101500Z.json --output json
 ```
 
 **Displayed fields:** `kind`, `apiVersion`, `meta` (name, timestamp), `spec` (deployment name, action, status, configuration snapshot, SBOM, policy results, stages, commit hash).
@@ -2027,22 +2025,23 @@ strata manifest show --deployment xyz-deploy-prd --output json
 ### `manifest export`
 
 ```
-strata manifest export [--deployment NAME] [--last N] [--format json|csv] [--out PATH] [standard options]
+strata manifest export [--deployment NAME] [--last N] [--include-sbom] [--include-platform] --out DIR [standard options]
 ```
 
-Export manifests to a file for compliance, audit, or external tooling. Supports JSON and CSV formats.
+Export manifests as a compliance evidence package directory.
 
-| Option              | Description                                     |
-| ------------------- | ----------------------------------------------- |
-| `--deployment NAME` | Export manifests for this deployment (required) |
-| `--last N`          | Export only the last N manifests                |
-| `--format`          | Output format: `json` (default) or `csv`        |
-| `--out PATH`        | Write to this file (default: stdout)            |
+| Option               | Description                                  |
+| -------------------- | -------------------------------------------- |
+| `--deployment NAME`  | Filter exported manifests by deployment name |
+| `--last N`           | Export only the last N manifests             |
+| `--include-sbom`     | Include referenced SBOM files                |
+| `--include-platform` | Include platform.json artifacts              |
+| `--out DIR`          | Output directory for the evidence package    |
 
 ```bash
-strata manifest export --deployment xyz-deploy-prd
-strata manifest export --deployment xyz-deploy-prd --last 30 --format csv --out manifests.csv
-strata manifest export --deployment xyz-deploy-prd --format json --out manifests.json
+strata manifest export --deployment xyz-deploy-prd --out manifests-package
+strata manifest export --deployment xyz-deploy-prd --last 30 --include-sbom --out manifests-with-sbom
+strata manifest export --deployment xyz-deploy-prd --include-sbom --include-platform --out full-evidence
 ```
 
 ---

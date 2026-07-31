@@ -180,7 +180,7 @@ strata deploy history  --file deploy/deploy-prd.yaml   # deployment history
 strata deploy health   --file deploy/deploy-prd.yaml   # run health checks
 strata deploy output   --file deploy/deploy-prd.yaml   # print infrastructure outputs (cached, or --refresh for live)
 strata deploy destroy  --file deploy/deploy-prd.yaml   # tear down (with confirmation)
-strata deploy lock     --file deploy/deploy-prd.yaml   # acquire deployment lock
+strata deploy lock status --file deploy/deploy-prd.yaml # inspect deployment lock state
 ```
 
 ---
@@ -188,8 +188,8 @@ strata deploy lock     --file deploy/deploy-prd.yaml   # acquire deployment lock
 ## Version management — pin and lock chart/image versions
 
 ```bash
-strata versions init   --file deploy/deploy-prd.yaml   # scaffold a starter version manifest
-strata versions add    --file versions/v1.yaml          # create a new snapshot
+strata versions init   --ring prd --out versions/prd.yaml  # scaffold a starter version manifest
+strata versions add    --ring prd --out versions/v1.yaml    # create a new snapshot
 strata versions refresh --file versions/v1.yaml        # sync pins against versionable targets
 strata versions apply  --file versions/v1.yaml          # convert manifest → version-lock file
 strata versions lock   --file versions/v1.yaml          # compute + store a SHA-256 hash of pins
@@ -209,11 +209,11 @@ and provisioners read them directly, no lookups required.
 strata promote --ring prd --file versions/v2.yaml --promotion canary
 
 # Check promotion status and history
-strata promote status  --ring prd
+strata promote status
 strata promote history --ring prd
 
-# Roll back to the previous ring state
-strata promote rollback --ring prd
+# Roll back the previous promotion for a target in a ring
+strata promote rollback --remote xyz-config --to prd
 
 # View the version matrix across all rings
 strata promote matrix
@@ -228,12 +228,15 @@ Rollback restores the previous pointer; no manual file edits needed.
 ## Deployment locking
 
 Before applying, strata can acquire a lease on your state backend to prevent concurrent deploys.
-Set `locking: true` in your deployment YAML or pass `--lock` on the CLI. Backed by the same
-mechanism as your Terraform backend (Azure Blob lease, S3 DynamoDB lock, etc.).
+Set `locking: true` in your deployment YAML. There is no `--lock` flag on `deploy run`.
+Backed by the same mechanism as your Terraform backend (Azure Blob lease, S3 DynamoDB lock, etc.).
 
 ```bash
-strata deploy lock    --file deploy/deploy-prd.yaml      # acquire lock
-strata deploy run     --file deploy/deploy-prd.yaml      # fails if another lock is held
+strata deploy lock status  --file deploy/deploy-prd.yaml           # inspect current lock holder/state
+strata deploy lock history --file deploy/deploy-prd.yaml --last 20 # recent lock events
+strata deploy run          --file deploy/deploy-prd.yaml           # acquires lock during execution
+strata deploy run          --file deploy/deploy-prd.yaml --force-lock # force-release stale lock, then run
+strata deploy lock release --file deploy/deploy-prd.yaml --force   # manual recovery (last resort)
 ```
 
 ---
@@ -344,7 +347,7 @@ running the full build:
 
 ```bash
 strata values list --file deploy/deploy-prd.yaml
-strata values get  --file deploy/deploy-prd.yaml --key DB_PASSWORD
+strata values get  --file deploy/deploy-prd.yaml DB_PASSWORD
 ```
 
 Secrets are masked in output unless you pass `--reveal`. Useful for debugging "why is the wrong
@@ -357,8 +360,8 @@ value being used?"
 ```bash
 strata tools status             # show all external tools and their versions
 strata tools status --missing   # show only tools not on PATH
-strata tools check              # exit non-zero if any required tool is absent
-strata tools install            # attempt to install missing tools
+strata tools check terraform    # deep-check one integration
+strata tools install terraform  # setup guidance for one integration
 ```
 
 Covers: Terraform, OpenTofu, Ansible, Docker, Helm, Azure CLI, kubectl, Bitwarden CLI, Vault CLI,
@@ -449,11 +452,11 @@ manual Phase 1–4 setup for standard layouts.
 ## Create config files from templates
 
 ```bash
-strata new workspace
-strata new environment
-strata new deployment
-strata new provider
-strata new resource
+strata new my-workspace --template workspace
+strata new dev --template environment
+strata new deploy-prd --template deployment
+strata new azure-prd --template provider
+strata new vm-prd --template resource
 ```
 
 Scaffolds a valid YAML skeleton for the chosen kind. Faster than looking up the schema.

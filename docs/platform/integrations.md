@@ -6,39 +6,39 @@ Integrations connect the platform to external tools and services (git, terraform
 
 **Available integrations:**
 
-| Class                       | Module                          | Type string        | Capabilities                                 |
-| --------------------------- | ------------------------------- | ------------------ | -------------------------------------------- |
-| `GitIntegration`            | `integrations.git`              | `git`              | `IRepositoryTool`                            |
-| `TerraformIntegration`      | `integrations.terraform`        | `terraform`        | `IInfrastructureTool`                        |
-| `OpenTofuIntegration`       | `integrations.opentofu`         | `opentofu`         | `IInfrastructureTool`                        |
-| `AnsibleIntegration`        | `integrations.ansible`          | `ansible`          | `IInfrastructureTool`                        |
-| `DockerIntegration`         | `integrations.docker`           | `docker`           | `IContainerTool`                             |
-| `HelmIntegration`           | `integrations.helm`             | `helm`             | `IInfrastructureTool`                        |
-| `BitwardenIntegration`      | `integrations.bitwarden`        | `bitwarden`        | `ISecretStore`                               |
+| Class                       | Module                          | Type string        | Capabilities                                                  |
+| --------------------------- | ------------------------------- | ------------------ | ------------------------------------------------------------- |
+| `GitIntegration`            | `integrations.git`              | `git`              | `IRepositoryTool`                                             |
+| `TerraformIntegration`      | `integrations.terraform`        | `terraform`        | `IInfrastructureTool`                                         |
+| `OpenTofuIntegration`       | `integrations.opentofu`         | `opentofu`         | `IInfrastructureTool`                                         |
+| `AnsibleIntegration`        | `integrations.ansible`          | `ansible`          | `IInfrastructureTool`                                         |
+| `DockerIntegration`         | `integrations.docker`           | `docker`           | `IContainerTool`                                              |
+| `HelmIntegration`           | `integrations.helm`             | `helm`             | `IInfrastructureTool`                                         |
+| `BitwardenIntegration`      | `integrations.bitwarden`        | `bitwarden`        | `ISecretStore`                                                |
 | `VaultIntegration`          | `integrations.hashicorp_vault`  | `hashicorp_vault`  | `IVariableStore`, `ISecretStore`, `IKVStore`, `IFeatureStore` |
 | `OpenBaoIntegration`        | `integrations.openbao`          | `openbao`          | `IVariableStore`, `ISecretStore`, `IKVStore`                  |
 | `ConsulIntegration`         | `integrations.hashicorp_consul` | `hashicorp_consul` | `IVariableStore`, `IKVStore`, `IFeatureStore`                 |
-| `AzureKeyVaultIntegration`  | `integrations.azure_keyvault`   | `azure_keyvault`   | `ISecretStore`                               |
-| `AzureAppConfigIntegration` | `integrations.azure_appconfig`  | `azure_appconfig`  | `IVariableStore`, `IFeatureStore`            |
-| `InfisicalIntegration`      | `integrations.infisical`        | `infisical`        | `ISecretStore`, `IVariableStore`             |
-| `EtcdIntegration`           | `integrations.etcd`             | `etcd`             | `IVariableStore`, `IKVStore`                 |
+| `AzureKeyVaultIntegration`  | `integrations.azure_keyvault`   | `azure_keyvault`   | `ISecretStore`                                                |
+| `AzureAppConfigIntegration` | `integrations.azure_appconfig`  | `azure_appconfig`  | `IVariableStore`, `IFeatureStore`                             |
+| `InfisicalIntegration`      | `integrations.infisical`        | `infisical`        | `ISecretStore`, `IVariableStore`                              |
+| `EtcdIntegration`           | `integrations.etcd`             | `etcd`             | `IVariableStore`, `IKVStore`                                  |
 | `FlagsmithIntegration`      | `integrations.flagsmith`        | `flagsmith`        | `IFeatureStore`, `IVariableStore`                             |
 
 **SIEM / audit sink integrations** (implement `ISiemSink`, used by `AuditController`):
 
-| Class | Module | Type string | Backend |
-|-------|--------|-------------|---------|
-| `SplunkSiemIntegration` | `integrations.siem.splunk_siem_integration` | `splunk` | Splunk HTTP Event Collector (HEC) |
-| `SentinelIntegration` | `integrations.siem.sentinel_integration` | `sentinel` | Azure Monitor / Sentinel (DCR Logs Ingestion API) |
-| `ElkSiemIntegration` | `integrations.siem.elk_siem_integration` | `elk` | Logstash (TCP) or Elasticsearch (HTTP Bulk API) |
-| `OtelSiemIntegration` | `integrations.siem.otel_siem_integration` | `otel` | Any OTLP/HTTP backend (Grafana, Datadog, Sumo Logic, etc.) |
+| Class                   | Module                                      | Type string | Backend                                                    |
+| ----------------------- | ------------------------------------------- | ----------- | ---------------------------------------------------------- |
+| `SplunkSiemIntegration` | `integrations.siem.splunk_siem_integration` | `splunk`    | Splunk HTTP Event Collector (HEC)                          |
+| `SentinelIntegration`   | `integrations.siem.sentinel_integration`    | `sentinel`  | Azure Monitor / Sentinel (DCR Logs Ingestion API)          |
+| `ElkSiemIntegration`    | `integrations.siem.elk_siem_integration`    | `elk`       | Logstash (TCP) or Elasticsearch (HTTP Bulk API)            |
+| `OtelSiemIntegration`   | `integrations.siem.otel_siem_integration`   | `otel`      | Any OTLP/HTTP backend (Grafana, Datadog, Sumo Logic, etc.) |
 
 SIEM integrations are HTTP-based — they have no CLI command and are not included in `strata tools status`. Use `strata tools check <name>` to probe connectivity. See [SIEM Audit Forwarding Guide](../guides/siem-audit-forwarding.md) for configuration examples.
 
 **Security & Scanning integrations** (implement `ICveScanner`, used by `RunBuildCommand`):
 
-| Class | Module | Type string | Backend | Auto-detect |
-|-------|--------|-------------|---------|------------|
+| Class                   | Module                     | Type string   | Backend                  | Auto-detect           |
+| ----------------------- | -------------------------- | ------------- | ------------------------ | --------------------- |
 | `CveScannerIntegration` | `integrations.cve_scanner` | `cve_scanner` | Trivy (default) or Grype | Yes (first available) |
 
 CVE scanner is optional and used with `strata build run --audit`. It auto-detects the first available backend (Trivy preferred, Grype fallback). See [CVE Vulnerability Scanning Guide](../guides/cve-vulnerability-scanning.md) for configuration and usage examples.
@@ -143,7 +143,7 @@ if isinstance(integration, ISecretStore):
 | ---------------------- | --------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
 | `variables`            | `IVariableStore`      | `get_variable`, `set_variable`, `list_variables` | Consul, Azure App Configuration, Vault, Flagsmith (identity traits)                                                         |
 | `secrets`              | `ISecretStore`        | `get_secret`, `set_secret`, `list_secrets`       | Vault, Azure KeyVault, Bitwarden, Infisical — **`github` and `environment` are built-in resolvers, not integrations**       |
-| `features`             | `IFeatureStore`       | `get_feature`, `set_feature`, `list_features`    | Azure App Configuration, Flagsmith, Vault (KV prefix), Consul (KV prefix)                                                  |
+| `features`             | `IFeatureStore`       | `get_feature`, `set_feature`, `list_features`    | Azure App Configuration, Flagsmith, Vault (KV prefix), Consul (KV prefix)                                                   |
 | `keyvalue`             | `IKVStore`            | `get_kv`, `set_kv`                               | Consul, Vault KV, etcd                                                                                                      |
 | `repository`           | `IRepositoryTool`     | `clone`, `pull`, `get_current_branch`            | Git, Mercurial                                                                                                              |
 | `infrastructure`       | `IInfrastructureTool` | `init`, `plan`, `apply`, `destroy`               | Terraform, OpenTofu, **Ansible**, **Helm**, Pulumi *(umbrella for all IaC + config-management tools — not `configuration`)* |
@@ -161,11 +161,11 @@ if isinstance(integration, ISecretStore):
 Neither Vault nor Consul has a native feature flag concept. `IFeatureStore` is implemented by
 mapping flag names to KV entries under a configurable path prefix (default: `features/`).
 
-| Method | KV path |
-|--------|---------|
-| `get_feature("dark-mode")` | `features/dark-mode` |
+| Method                           | KV path                                 |
+| -------------------------------- | --------------------------------------- |
+| `get_feature("dark-mode")`       | `features/dark-mode`                    |
 | `set_feature("dark-mode", True)` | writes `"true"` to `features/dark-mode` |
-| `list_features("")` | lists all keys under `features/` |
+| `list_features("")`              | lists all keys under `features/`        |
 
 The prefix is controlled by the `features_path` keyword argument (default `"features"`).
 This separation keeps feature data organised alongside — but distinct from — other KV entries.
@@ -179,11 +179,11 @@ already exists the write is skipped and the existing value is returned. This ens
 Flagsmith has no native key/value store. `IVariableStore` is implemented using Flagsmith's
 **identity traits** API — key/value pairs attached to a named identity.
 
-| Method | Flagsmith API |
-|--------|--------------|
-| `get_variable("theme")` | `GET /api/v1/identities/?identifier=<identity>` |
+| Method                           | Flagsmith API                                   |
+| -------------------------------- | ----------------------------------------------- |
+| `get_variable("theme")`          | `GET /api/v1/identities/?identifier=<identity>` |
 | `set_variable("theme", "light")` | `POST /api/v1/traits/` with `X-Environment-Key` |
-| `list_variables("")` | returns all trait keys for the identity |
+| `list_variables("")`             | returns all trait keys for the identity         |
 
 The `identity` kwarg (default `"default"`) scopes traits to a specific Flagsmith identity.
 **Required env var:** `FLAGSMITH_ENVIRONMENT_KEY` must be a **server-side** (not client-side)
@@ -230,8 +230,8 @@ Use `strata tools` to inspect integrations at runtime without reading config fil
 
 ```
 strata tools status                                        # table of all 8 built-in integrations
-strata tools status --deployment deployment.yaml           # adds Requirement column (required/optional/—)
-strata tools status --deployment deployment.yaml --required --missing  # CI gate: exit 3 if any required are absent
+strata tools status --file deployment.yaml                 # adds Requirement column (required/optional/—)
+strata tools status --file deployment.yaml --required --missing  # CI gate: exit 3 if any required are absent
 strata tools check terraform                               # deep-check: availability, env vars, auth
 ```
 
