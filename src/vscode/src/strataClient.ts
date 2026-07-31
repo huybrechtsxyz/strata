@@ -673,12 +673,12 @@ export class StrataClient {
     // ── Env ───────────────────────────────────────────────────────────────────
 
     /**
-     * Run `strata env doctor --output json` and return the doctor result.
+     * Run `strata sln doctor --output json` and return the doctor result.
      * Pass a `filePath` to limit tool checks to those referenced by that deployment.
      * Exit code 3 (some checks failed) is handled — the envelope is still returned.
      */
     async runEnvDoctor(filePath?: string): Promise<EnvDoctorData> {
-        const args: string[] = ['env', 'doctor', '--output', 'json'];
+        const args: string[] = ['sln', 'doctor', '--output', 'json'];
         if (filePath) {
             args.push('-f', filePath);
         }
@@ -696,12 +696,11 @@ export class StrataClient {
     }
 
     /**
-     * Run `strata env status --all --output json` and return per-deployment
-     * cache status.  Fast and offline — reads build cache files only.
+     * Run `strata sln status --output json` and return workspace state.
      */
     async getEnvStatus(): Promise<EnvStatusData> {
         const resp = await this._run<EnvStatusData>([
-            'env', 'status', '--all', '--output', 'json',
+            'sln', 'status', '--output', 'json',
         ]);
         return resp.data;
     }
@@ -807,12 +806,12 @@ export class StrataClient {
         return resp.data.entries;
     }
 
-    // ── Env Output ────────────────────────────────────────────────────────────
+    // ── Deploy Output ─────────────────────────────────────────────────────────
 
-    /** Run `strata env output -f <filePath> --output json`. */
+    /** Run `strata deploy output -f <filePath> --output json`. */
     async getEnvOutput(filePath: string): Promise<EnvOutputData> {
         const resp = await this._run<EnvOutputData>([
-            'env', 'output', '-f', filePath, '--output', 'json',
+            'deploy', 'output', '-f', filePath, '--output', 'json',
         ]);
         return resp.data;
     }
