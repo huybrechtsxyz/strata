@@ -9,6 +9,43 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ---
 
+## [1.6.0] - 2026-07-31
+
+### Breaking Changes
+
+- **CLI consolidation — `env` dissolves into `deploy`, `rollout`, `sln` — ADR-0062 (implemented)**
+  - `env` command group deleted outright (`cli_env.py`, `src/strata/commands/envs/*`) — no deprecation window, no hidden alias
+  - `deploy show` absorbs `env show`'s meta/properties/values/overrides/stage payload plus its `--stage NAME` secret-visibility filter
+  - `deploy output` absorbs `env output`'s always-live scripting flags: `--name`, `--provisioner`, `--raw`, `--json`; `--refresh` is the equivalent of `env output`'s unconditional live query
+  - `deploy status` revived (`StatusDeployCommand`, re-registered in `cli_deploy.py`) with corrected live-state behavior — no longer reuses the old plan-diff `--plan` mode (that stays with `deploy plan`)
+  - New `strata rollout status` command (`src/strata/commands/rollout/status_rollout_command.py`) absorbs `env status --all`/`--path` fleet-wide scanning
+  - `env info` folded into `sln status`; `env doctor` moved to new `sln doctor` command (`doctor_sln_command.py`)
+  - `src/strata/mcp/server.py` — `env_*` MCP tools repointed/removed to match the new command surface
+  - All internal call sites (docs, scripts, tests) updated in the same change — grepped for `env info`/`env output`/`env show`/`env status`/`env drift`/`env doctor`
+
+- **Unified `spec.gates` schema — ADR-0059 (implemented)**
+  - `spec.approvals`/`spec.approvers` (`DeploymentApprovalModel`, `DeploymentStageApprovalModel`) removed; superseded by a single deployment-level `spec.gates` list reusing ADR-0057's gate framework
+  - Approver shape standardized on typed refs (`Dict[str, ApproverRef]` — `github-team`/`user`/`ado-group`) instead of `spec.approvals`'s informal shape and `spec.gates`'s plain `List[str]`
+  - `run_deploy_command.py`: `_check_approvals()` deleted; its audit-only logging is absorbed into the gate evaluator's `mode: declare` branch; all 3 gate-evaluation phases (pre-plan/post-plan/post-apply) now read `deployment.spec.gates` instead of `environment.spec.gates`
+  - No migration shim — existing `spec.approvals` or environment-level `spec.gates` YAML fails validation and must be rewritten to the unified shape
+
+### Fixed
+
+- **`ref_convention` policy / `strata repo status` design drift — ADR-0017**
+  - Tag naming conventions now live only in `spec.remotes[].conventions` (`RemoteConventionsModel`) — no longer duplicated inside the policy's own `configuration.remotes[]`
+  - `repo status` links a local repo to its configured remote by comparing normalized git remote URLs, and only classifies release/quality tags when that remote declares `conventions` — no more hardcoded name-prefix guessing
+  - No backward compatibility with the old policy-level shape (never released/documented before this fix)
+
+### Changed
+
+- **Subprocess execution consolidation — ADR-0061 (implemented)**
+  - All subprocess call sites (builders, deployers, controllers) now go through a single `run_command()` path in `strata.utils.system`
+  - Consistent SIGTERM propagation and `timeout` handling regardless of caller — `script_deployer.py`, `lifecycle_controller.py`, `terraform_builder.py` migrated off ad-hoc `subprocess.run`/`Popen` usage
+  - Buffered `Popen` path added for callers that previously bypassed the shared helper
+
+- **Command lifecycle migration completed — ADR-0030**
+  - Remaining utility commands (`secret generate`, `secret mask`) converted from free functions to `BaseCommand` subclasses for consistent `--output`/`--work-path` handling and testability
+
 ## [1.5.0] - 2026-07-27
 
 ### Added
