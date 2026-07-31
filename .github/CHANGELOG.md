@@ -8,11 +8,22 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+---
+
+## [1.6.0] - 2026-07-31
+
+### Breaking Changes
+
+- **`env` command group removed (ADR-0062)** — its six commands are redistributed: `env show`/`env output`/`env drift` merge into the existing `deploy` equivalents, `deploy status` is revived with corrected live-state behavior, `env status --all/--path` becomes the new `rollout status` group, and `env info`/`env doctor` move to `sln status`/`sln doctor`. No deprecation shim — update any `strata env ...` usage in scripts, pipelines, or MCP tool calls.
+- **Unified `spec.gates` schema (ADR-0059)** — `spec.approvals`/`approvers` and the separate ADR-0057 `spec.gates` block are merged into a single deployment-level `spec.gates` list with typed approver refs (`github-team`/`user`/`ado-group`). Existing YAML using either old shape fails validation; see ADR-0059 for the field-by-field migration mapping.
+
 ### Fixed
 
 - **`ref_convention` policy / `strata repo status` design drift (ADR-0017)** — tag naming conventions now live in one place, `spec.remotes[].conventions` (`RemoteConventionsModel`), instead of being duplicated inside the policy's own config. `repo status` no longer guesses release/quality tags from hardcoded name prefixes — it links a local repo to its configured remote by comparing normalized git remote URLs and only classifies tags when that remote declares `conventions`. No backward compatibility with the old policy-level `configuration.remotes[]` shape (never released/documented before this fix).
 
----
+### Changed
+
+- Subprocess execution consolidated onto a single `run_command()` path with consistent SIGTERM handling and timeout parity across builders, deployers, and controllers (ADR-0061).
 
 ## [1.5.0] - 2026-07-27
 
