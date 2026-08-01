@@ -73,12 +73,27 @@ class BaseDeployCommand(BaseCommand):
         self._lock_ref: Optional[ManifestLockReferenceModel] = None
         self._audit_log_path: Optional[str] = None
         self._lock_conflict: bool = False
+        # True when the deployment file loaded but failed schema/cross-reference
+        # validation (exit 3) — as opposed to a usage error (missing/unresolvable
+        # file, exit 2, raised as click.UsageError) or a system/execution error
+        # (exit 1, the default for any other failure). See ADR-0004.
+        self._validation_failed: bool = False
         # Subclasses override these before calling _execute_provisioning.
         self._dry_run: bool = False
         self._force_lock: bool = False
 
     def get_required_integrations(self):
         return {}
+
+    def has_validation_errors(self) -> bool:
+        """True when the deployment file failed schema/cross-reference validation.
+
+        Checked by ``handle_command_exit`` to emit exit code 3 instead of 1.
+        Only set by the validation steps in ``_before_execute`` — execution-phase
+        failures (provisioning, lifecycle hooks, etc.) never set this flag and
+        correctly fall through to the generic exit code 1.
+        """
+        return self._validation_failed
 
     def has_lock_conflict(self) -> bool:
         """True when the last execute() failed due to a deployment lock conflict.
@@ -340,8 +355,7 @@ class BaseDeployCommand(BaseCommand):
         DeployerFactory.load_plugins(self._work_path)
 
         if not self._file_path:
-            self._errors.append("No deployment file specified. Use --file.")
-            return False
+            raise click.UsageError("No deployment file specified. Use --file.")
 
         # Resolve to absolute path, supporting @repo-name/... references
         from strata.utils.system import resolve_path
@@ -353,12 +367,10 @@ class BaseDeployCommand(BaseCommand):
         try:
             candidate = resolve_path(str(self._work_path), self._raw_file, repo_map=repo_map)
         except ValueError as e:
-            self._errors.append(f"Deployment file reference error: {e}")
-            return False
+            raise click.UsageError(f"Deployment file reference error: {e}") from e
 
         if not candidate.exists():
-            self._errors.append(f"Deployment file not found: {candidate}")
-            return False
+            raise click.UsageError(f"Deployment file not found: {candidate}")
         self._file_path = candidate
         self.logger.info("Using deployment file", file=str(self._file_path))
 
@@ -378,6 +390,7 @@ class BaseDeployCommand(BaseCommand):
                 merged_data = resolver.resolve(self._file_path)
             except (ValueError, FileNotFoundError) as exc:
                 self._errors.append(f"Deployment extends resolution failed: {exc}")
+                self._validation_failed = True
                 return False
             deployment_service = DeploymentService(path=str(self._file_path), data=merged_data)
             deployment_service.validate()
@@ -386,6 +399,7 @@ class BaseDeployCommand(BaseCommand):
 
         if not deployment_service.is_validated():
             self._errors.extend(deployment_service.get_validation_errors())
+            self._validation_failed = True
             return False
 
         # Pre-flight: reject partial deployments before any infrastructure operation.
@@ -394,6 +408,7 @@ class BaseDeployCommand(BaseCommand):
                 f"'{self._file_path.name}' is a partial deployment (spec.partial: true) "
                 "and cannot be deployed. A leaf deployment file that extends this base is required."
             )
+            self._validation_failed = True
             return False
 
         # Phase 2: cross-validate against configuration
@@ -405,17 +420,20 @@ class BaseDeployCommand(BaseCommand):
         )
         if not ok:
             self._errors.extend(errors)
+            self._validation_failed = True
             return False
 
         # Load related services (workspace, environment, providers, resources, ...)
         if not deployment_service.load_deploy_services(str(self._work_path), repo_map=repo_map):
             self._errors.extend(deployment_service.get_validation_errors())
+            self._validation_failed = True
             return False
 
         # Cross-validate related services
         ok, errors = deployment_service.validate_related_services()
         if not ok:
             self._errors.extend(errors)
+            self._validation_failed = True
             return False
 
         # Apply environment overrides
@@ -424,6 +442,7 @@ class BaseDeployCommand(BaseCommand):
             critical = [e for e in errors if "skipped" not in e.lower()]
             if critical:
                 self._errors.extend(critical)
+                self._validation_failed = True
                 return False
             self._messages.extend(errors)  # non-critical warnings
 

@@ -65,9 +65,18 @@ class CheckPolicyCommand(BaseCommand):
         self._results: List[Dict[str, Any]] = []
         self._notes: List[Dict[str, str]] = []
         self._denied: bool = False
+        # True when the deployment file itself failed schema validation (as opposed
+        # to a deny-enforcement policy denial, which also maps to exit 3 via _denied).
+        self._validation_failed: bool = False
 
     def get_required_integrations(self) -> Dict[str, str]:
         return {}
+
+    def has_validation_errors(self) -> bool:
+        """True for exit code 3: either the deployment file failed validation, or
+        one or more deny-enforcement policies were violated (see class docstring).
+        """
+        return self._denied or self._validation_failed
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -492,18 +501,17 @@ class CheckPolicyCommand(BaseCommand):
         try:
             resolved = resolve_path(str(self._work_path), self._raw_file, repo_map=repo_map)
         except ValueError as exc:
-            self._errors.append(f"Deployment file reference error: {exc}")
-            return False
+            raise click.UsageError(f"Deployment file reference error: {exc}") from exc
 
         if not resolved.exists():
-            self._errors.append(f"Deployment file not found: {resolved}")
-            return False
+            raise click.UsageError(f"Deployment file not found: {resolved}")
 
         self._file_path = resolved
         try:
             svc = DeploymentService.load(str(self._file_path), validate=True)
             if not svc.is_validated():
-                self._errors.extend(svc.get_errors())
+                self._errors.extend(svc.get_validation_errors())
+                self._validation_failed = True
                 return False
             self._deployment_service = svc
             return True

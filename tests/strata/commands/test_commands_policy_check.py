@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
 
 from strata.commands.cli_policy import policy_group
@@ -398,6 +399,59 @@ class TestCheckPolicyCommandRunExecution:
         plan_notes = [n for n in cmd._notes if n["phase"] == "plan"]
         assert len(plan_notes) == 1
         assert "strata deploy run --dry-run" in plan_notes[0]["message"]
+
+
+# ---------------------------------------------------------------------------
+# Exit-code classification bug fix: has_validation_errors() must return True
+# for a deny-enforcement denial (docstring already promised exit 3) AND for a
+# genuinely invalid deployment file — previously both fell through to exit 1.
+# ---------------------------------------------------------------------------
+
+
+class TestCheckPolicyCommandExitCodeClassification:
+    def test_has_validation_errors_false_by_default(self, tmp_path):
+        cmd = _make_command(tmp_path, file="deploy.yaml")
+        assert cmd.has_validation_errors() is False
+
+    def test_has_validation_errors_true_when_denied(self, tmp_path):
+        pm = _make_policy_model("zone_check", "plan", enforcement="deny", type_="tenant_zone")
+        pr = _make_policy_result("zone_check", "deny", passed=False, violations=["not allowed"])
+        cmd = TestCheckPolicyCommandRunExecution()._run_with_policies(tmp_path, [pm], [pr])
+        assert cmd.has_validation_errors() is True
+
+    def test_has_validation_errors_false_when_all_policies_pass(self, tmp_path):
+        pm = _make_policy_model("naming_check", "validate")
+        pr = _make_policy_result("naming_check", "deny", passed=True)
+        cmd = TestCheckPolicyCommandRunExecution()._run_with_policies(tmp_path, [pm], [pr])
+        assert cmd.has_validation_errors() is False
+
+    def test_has_validation_errors_true_when_deployment_file_invalid(self, tmp_path):
+        cmd = _make_command(tmp_path, file="deploy.yaml")
+        cmd._raw_file = "deploy.yaml"
+        (tmp_path / "deploy.yaml").write_text("kind: deployment\n", encoding="utf-8")
+
+        fake_svc = MagicMock()
+        fake_svc.is_validated.return_value = False
+        fake_svc.get_validation_errors.return_value = ["spec.workspace is required"]
+
+        with patch(
+            "strata.commands.policies.check_policy_command.DeploymentService.load",
+            return_value=fake_svc,
+        ):
+            result = cmd._load_deployment_service()
+
+        assert result is False
+        assert cmd.has_validation_errors() is True
+
+    def test_missing_deployment_file_raises_usage_error(self, tmp_path):
+        import click
+
+        cmd = _make_command(tmp_path, file="deploy.yaml")
+        cmd._raw_file = "deploy.yaml"
+
+        with pytest.raises(click.UsageError, match="not found"):
+            cmd._load_deployment_service()
+        assert cmd.has_validation_errors() is False
 
 
 # ---------------------------------------------------------------------------
