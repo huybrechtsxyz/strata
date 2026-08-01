@@ -56,11 +56,7 @@ class BaseBuildCommand(BaseCommand):
             from strata.controllers.cache_controller import CacheController
 
             controller = CacheController(self._work_path)
-            name = (
-                self._deployment_service.model.meta.name
-                if self._deployment_service.model
-                else str(self._file_path)
-            )
+            name = self._deployment_service.model.meta.name if self._deployment_service.model else str(self._file_path)
             input_paths = controller.collect_input_paths(self._deployment_service)
             cache_key = controller.cache.compute_cache_key(input_paths)
             if cache_key is None:
