@@ -697,3 +697,55 @@ class TestBuildRunNdjsonStreaming:
             cmd.execute()
 
         cmd.emit_ndjson.assert_not_called()
+
+
+class TestWarmModelCache:
+    """ADR-0026: RunBuildCommand._warm_model_cache() is best-effort and never raises."""
+
+    def _make_cmd(self, tmp_path: Path):
+        from strata.commands.builders.run_build_command import RunBuildCommand
+
+        cmd = RunBuildCommand(work_path=str(tmp_path), dry_run=False)
+        cmd._work_path = tmp_path
+        cmd._file_path = tmp_path / "deploy.yaml"
+        cmd._deployment_service = MagicMock()
+        cmd._deployment_service.model.meta.name = "demo"
+        cmd._platform_model = MagicMock()
+        cmd._platform_model.model_dump.return_value = {"meta": {"name": "demo"}}
+        return cmd
+
+    def test_noop_when_no_platform_model(self, tmp_path):
+        cmd = self._make_cmd(tmp_path)
+        cmd._platform_model = None
+        with patch("strata.controllers.cache_controller.CacheController") as mock_controller_cls:
+            cmd._warm_model_cache()
+        mock_controller_cls.assert_not_called()
+
+    def test_warms_cache_with_built_model(self, tmp_path):
+        cmd = self._make_cmd(tmp_path)
+        mock_controller = MagicMock()
+        mock_controller.collect_input_paths.return_value = ["/a/deploy.yaml"]
+        mock_controller.cache.compute_cache_key.return_value = "abc123"
+
+        with patch("strata.controllers.cache_controller.CacheController", return_value=mock_controller):
+            cmd._warm_model_cache()
+
+        mock_controller.cache.warm.assert_called_once_with(
+            "demo", "deployment", "abc123", {"meta": {"name": "demo"}}, ["/a/deploy.yaml"]
+        )
+
+    def test_never_raises_when_cache_controller_fails(self, tmp_path):
+        cmd = self._make_cmd(tmp_path)
+        with patch("strata.controllers.cache_controller.CacheController", side_effect=RuntimeError("boom")):
+            cmd._warm_model_cache()  # must not raise
+
+    def test_skipped_when_cache_key_cannot_be_computed(self, tmp_path):
+        cmd = self._make_cmd(tmp_path)
+        mock_controller = MagicMock()
+        mock_controller.collect_input_paths.return_value = ["/missing.yaml"]
+        mock_controller.cache.compute_cache_key.return_value = None
+
+        with patch("strata.controllers.cache_controller.CacheController", return_value=mock_controller):
+            cmd._warm_model_cache()
+
+        mock_controller.cache.warm.assert_not_called()

@@ -315,7 +315,10 @@ same `production.yaml` referenced by 50 deployments is loaded once per run).
 
 **Proposed: Option A** — SQLite database at `.strata/cache.db`.
 
-In-process memoization (Option D) is implemented as a complementary optimization.
+In-process memoization (Option D) is implemented as a complementary optimization. It
+already exists in the codebase today as `strata.utils.service_cache` (a process-lifetime
+dict cache keyed by service class + path, used by `BaseService.load()`) — this ADR does
+not introduce L1, only L2.
 
 ### Flag convention
 
@@ -407,7 +410,39 @@ runs `promote matrix` in the terminal, the cache is already warm from the last s
 - Neutral: Schema migration on `cache_version` bump is a `DELETE FROM cache` — all entries
   regenerate on next use. No data loss risk; transient performance impact on first run
   after a CLI upgrade.
+- Neutral: Design is forward-compatible with a future long-running strata server without
+  any rework — see "Future compatibility" below.
 - Bad: Binary format reduces direct inspectability. Mitigated by `strata cache export`.
+
+### Future compatibility: a long-running strata server
+
+This ADR was reviewed against a hypothetical future strata server (a long-running daemon,
+as opposed to today's one-process-per-invocation CLI). Conclusion: **no change needed now
+(YAGNI)** — the design already generalizes.
+
+The cache is two layers, and only one of them is process-scoped:
+
+| Layer | What it is | Lifetime | Introduced by |
+| ----- | ---------- | -------- | -------------- |
+| L1 — ephemeral | `strata.utils.service_cache` in-process dict memoization | One CLI invocation | Already shipped, predates this ADR |
+| L2 — fixed | SQLite `.strata/cache.db` (this ADR) | Survives process exit; shared across processes | This ADR |
+
+A future server does not change L2 at all — it is simply another client calling
+`CacheService.get()`, exactly like the CLI and the VS Code extension already do
+concurrently today (which is why WAL mode is in this design in the first place). The only
+difference a server introduces is that its **L1** keeps living for the server's uptime
+instead of dying at the end of one command — that is a longer-lived instance of the same
+in-process memoization pattern, not a new mechanism. On server restart, L1 is empty and
+it falls back to L2, same cold-start path a CLI process hits today.
+
+The one shift a server would motivate is push-based invalidation (a file watcher
+proactively invalidating/re-warming rows) instead of today's pull-based lazy hash-check on
+read. That is not new either — it is exactly what Phase 3 (VS Code extension background
+warmer) already does. A future daemon is effectively "the VS Code extension's warmer,
+extracted to run standalone," reusing the same `cache_inputs`-driven invalidation query.
+
+No action item follows from this — it is recorded here so a future server ADR does not
+need to revisit or re-justify the L2 cache design.
 
 ## Open Questions
 

@@ -26,6 +26,7 @@ import click
 
 from strata.commands.cli_audit import audit_group
 from strata.commands.cli_builders import build as build_group
+from strata.commands.cli_cache import cache_group
 from strata.commands.cli_common import apply_standard_epilog
 from strata.commands.cli_completion import completion_command
 from strata.commands.cli_config import config_group
@@ -132,7 +133,7 @@ _HELP_SECTIONS: list[tuple[str, list[str]]] = [
     ("Configuration", ["config", "ref", "repo", "vars", "values"]),
     ("Build & Deploy", ["build", "deploy", "rollout", "workitem", "cost", "service", "versions"]),
     ("Inspection & Validation", ["guide", "validate", "schema", "policy", "tools"]),
-    ("Utility", ["secret", "help", "log", "completion", "mcp"]),
+    ("Utility", ["secret", "help", "log", "completion", "mcp", "cache"]),
 ]
 
 
@@ -311,6 +312,7 @@ main.add_command(audit_group, name="audit")
 main.add_command(manifest_group, name="manifest")
 main.add_command(mcp_group, name="mcp")
 main.add_command(workitem_group, name="workitem")
+main.add_command(cache_group, name="cache")
 
 # Apply the standard exit-code epilog to every leaf command that doesn't
 # already define its own (deploy run / deploy destroy / validate run carry

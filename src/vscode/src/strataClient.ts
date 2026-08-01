@@ -291,6 +291,25 @@ export interface ValuesData {
 }
 
 // ---------------------------------------------------------------------------
+// Cache types (ADR-0026)
+// ---------------------------------------------------------------------------
+
+/** One row from `cache status --output json` (no -f: full listing) */
+export interface CacheStatusEntry {
+    name: string;
+    kind?: string;
+    status?: string;
+    written_at?: string;
+    size_bytes?: number;
+    strata_version?: string;
+}
+
+/** Matches `cache status --output json` data */
+export interface CacheStatusData {
+    entries: CacheStatusEntry[];
+}
+
+// ---------------------------------------------------------------------------
 // SBOM types
 // ---------------------------------------------------------------------------
 
@@ -894,6 +913,30 @@ export class StrataClient {
             // Non-fatal — return empty history
             return { deployment: filePath, snapshots: [], count: 0 };
         }
+    }
+
+    // ── Cache (ADR-0026) ──────────────────────────────────────────────────────
+
+    /**
+     * Run `strata cache warm --all` (or `-f <filePath>` for a single deployment).
+     * Used by the background cache warmer — failures are non-fatal by design
+     * (CacheService already treats a failed warm as "stays cold", never an error
+     * surfaced to the user).
+     */
+    async warmCache(filePath?: string): Promise<void> {
+        const args = ['cache', 'warm', '--output', 'json'];
+        if (filePath) {
+            args.push('-f', filePath);
+        } else {
+            args.push('--all');
+        }
+        await this._run<Record<string, unknown>>(args, 120_000);
+    }
+
+    /** Run `strata cache status --output json` and return cache entry rows. */
+    async getCacheStatus(): Promise<CacheStatusData> {
+        const resp = await this._run<CacheStatusData>(['cache', 'status', '--output', 'json']);
+        return resp.data;
     }
 
     // ── Refs ──────────────────────────────────────────────────────────────────

@@ -81,6 +81,14 @@ def build():
     default=False,
     help="Run AI CVE analysis after --audit (requires an ai_agent integration). Only active when --audit is set.",
 )
+@click.option(
+    "--no-cache-warm",
+    "no_cache_warm",
+    is_flag=True,
+    default=False,
+    envvar="STRATA_NO_CACHE_WARM",
+    help="Skip warming the resolved-model cache after a successful build (ADR-0026). [env: STRATA_NO_CACHE_WARM]",
+)
 def build_run(
     file: Optional[str] = None,
     work_path: Optional[str] = None,
@@ -91,6 +99,7 @@ def build_run(
     audit_report: Optional[str] = None,
     require_lock: bool = False,
     ai: bool = False,
+    no_cache_warm: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -106,6 +115,7 @@ def build_run(
         audit_report=audit_report,
         require_lock=require_lock,
         ai=ai,
+        no_cache_warm=no_cache_warm,
         output=output,
         verbose=verbose,
         quiet=quiet,

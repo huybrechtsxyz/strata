@@ -59,6 +59,10 @@ SOLUTION_COST_CACHE_DIR: str = "cache/cost"
 SOLUTION_AI_CACHE_DIR: str = "cache/ai"
 SOLUTION_PROMPTS_DIR: str = "prompts"
 
+# Resolved-model cache (ADR-0026)
+SOLUTION_MODEL_CACHE_DIR: str = "cache/model"
+SOLUTION_MODEL_CACHE_DB_FILE: str = "cache.db"
+
 
 # ---------------------------------------------------------------------------
 # Workspace path builders — canonical fallback; one source of truth.
@@ -204,3 +208,13 @@ def get_ai_cache_dir(work_path: Path) -> Path:
 def get_ai_prompts_dir(work_path: Path) -> Path:
     """Return the path to ``.strata/prompts/`` (operator prompt overrides)."""
     return work_path / SOLUTION_DIR / SOLUTION_PROMPTS_DIR
+
+
+def get_model_cache_dir(work_path: Path) -> Path:
+    """Return the path to ``.strata/cache/model/`` (resolved-model cache, ADR-0026)."""
+    return work_path / SOLUTION_DIR / SOLUTION_MODEL_CACHE_DIR
+
+
+def get_model_cache_db_path(work_path: Path) -> Path:
+    """Return the path to ``.strata/cache/model/cache.db`` (ADR-0026)."""
+    return get_model_cache_dir(work_path) / SOLUTION_MODEL_CACHE_DB_FILE
