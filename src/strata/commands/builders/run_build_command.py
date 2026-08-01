@@ -185,25 +185,6 @@ class RunBuildCommand(BaseBuildCommand):
         """Services are already loaded by BaseBuildCommand._before_execute."""
         return True
 
-    def _warm_model_cache(self) -> None:
-        """Best-effort cache warm (ADR-0026). Never raises — logged and skipped on failure."""
-        if self._deployment_service is None or self._platform_model is None:
-            return
-        try:
-            from strata.controllers.cache_controller import CacheController
-
-            controller = CacheController(self._work_path)
-            name = self._deployment_service.model.meta.name if self._deployment_service.model else str(self._file_path)
-            input_paths = controller.collect_input_paths(self._deployment_service)
-            cache_key = controller.cache.compute_cache_key(input_paths)
-            if cache_key is None:
-                return
-            controller.cache.warm(
-                name, "deployment", cache_key, self._platform_model.model_dump(mode="json"), input_paths
-            )
-        except Exception as exc:
-            self.logger.debug("Cache warm after build skipped (non-fatal)", error=str(exc))
-
     # ------------------------------------------------------------------
     # AI CVE analysis
     # ------------------------------------------------------------------

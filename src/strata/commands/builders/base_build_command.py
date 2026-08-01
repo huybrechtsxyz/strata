@@ -1,7 +1,7 @@
 """Base class for build commands."""
 
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from strata.commands.base_command import BaseCommand
 from strata.controllers.repository_controller import RepositoryController
@@ -36,9 +36,40 @@ class BaseBuildCommand(BaseCommand):
         self._configuration_service: Optional[ConfigurationService] = None
         self._build_path: Path = self._work_path / "build"
         self._resolved_remote_refs: Dict[str, str] = {}
+        # Set by subclasses once a PlatformBuilder has produced a model (ADR-0026
+        # cache warm reuses this instead of re-resolving); None until then.
+        self._platform_model: Optional[Any] = None
 
     def get_required_integrations(self):
         return {}
+
+    def _warm_model_cache(self) -> None:
+        """Best-effort cache warm (ADR-0026). Never raises — logged and skipped on failure.
+
+        Reuses ``self._platform_model`` (already built by a ``PlatformBuilder`` call
+        earlier in the command) rather than re-resolving, so this is cheap: only a
+        cache-key hash + SQLite write, no re-parsing of YAML.
+        """
+        if self._deployment_service is None or self._platform_model is None:
+            return
+        try:
+            from strata.controllers.cache_controller import CacheController
+
+            controller = CacheController(self._work_path)
+            name = (
+                self._deployment_service.model.meta.name
+                if self._deployment_service.model
+                else str(self._file_path)
+            )
+            input_paths = controller.collect_input_paths(self._deployment_service)
+            cache_key = controller.cache.compute_cache_key(input_paths)
+            if cache_key is None:
+                return
+            controller.cache.warm(
+                name, "deployment", cache_key, self._platform_model.model_dump(mode="json"), input_paths
+            )
+        except Exception as exc:
+            self.logger.debug("Cache warm after build skipped (non-fatal)", error=str(exc))
 
     def _before_execute(self) -> bool:
         """Load and validate the deployment file + configuration service."""

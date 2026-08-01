@@ -413,6 +413,8 @@ def _make_plan_cmd(tmp_path):
     cmd._artifacts_only = False
     cmd._ai = False
     cmd._strict_ai_review = None
+    cmd._no_cache_warm = True
+    cmd._platform_model = None
     cmd._errors = []
     cmd._messages = []
     cmd._output_data = {}
@@ -579,6 +581,54 @@ class TestPlanBuildValueStatus:
 
         assert "values" in cmd._output_data
         assert len(cmd._output_data["values"]) == 1
+
+
+class TestPlanBuildCacheWarm:
+    """ADR-0026: PlanBuildCommand warms the cache after a successful plan build."""
+
+    def _cmd(self, tmp_path):
+        from unittest.mock import MagicMock
+
+        cmd = _make_plan_cmd(tmp_path)
+        svc = MagicMock()
+        svc.model.meta.name = "test-deploy"
+        svc.get_build_path.return_value = tmp_path / "build"
+        svc.get_environment_service.return_value = None
+        cmd._deployment_service = svc
+        cmd._artifacts_only = True
+        return cmd
+
+    def test_warms_cache_when_not_disabled(self, tmp_path):
+        from unittest.mock import patch
+
+        cmd = self._cmd(tmp_path)
+        cmd._no_cache_warm = False
+
+        with (
+            patch.object(cmd, "_build_to_temp", return_value=True),
+            patch.object(cmd, "_compute_artifact_diff", return_value=[]),
+            patch.object(cmd, "_print_console"),
+            patch.object(cmd, "_warm_model_cache") as mock_warm,
+        ):
+            cmd._run_plan()
+
+        mock_warm.assert_called_once()
+
+    def test_skips_warm_when_no_cache_warm_set(self, tmp_path):
+        from unittest.mock import patch
+
+        cmd = self._cmd(tmp_path)
+        cmd._no_cache_warm = True
+
+        with (
+            patch.object(cmd, "_build_to_temp", return_value=True),
+            patch.object(cmd, "_compute_artifact_diff", return_value=[]),
+            patch.object(cmd, "_print_console"),
+            patch.object(cmd, "_warm_model_cache") as mock_warm,
+        ):
+            cmd._run_plan()
+
+        mock_warm.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

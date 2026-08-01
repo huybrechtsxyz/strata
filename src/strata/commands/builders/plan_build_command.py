@@ -44,6 +44,7 @@ class PlanBuildCommand(BaseBuildCommand):
         artifacts_only: bool = False,
         ai: bool = False,
         strict_ai_review: Optional[str] = None,
+        no_cache_warm: bool = False,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -59,6 +60,7 @@ class PlanBuildCommand(BaseBuildCommand):
         self._artifacts_only = artifacts_only
         self._ai = ai
         self._strict_ai_review: Optional[str] = strict_ai_review.lower() if strict_ai_review else None
+        self._no_cache_warm = no_cache_warm
 
     # ------------------------------------------------------------------
     # Core logic
@@ -99,6 +101,12 @@ class PlanBuildCommand(BaseBuildCommand):
             # Layer 1: build artifacts into temp dir
             if not self._build_to_temp(tmp_build_path):
                 return False
+
+            # ADR-0026: warm the resolved-model cache with the model we just built.
+            # Best-effort only — never fails the plan. self._platform_model is set by
+            # _build_to_temp(). Skipped when --no-cache-warm is set.
+            if not self._no_cache_warm:
+                self._warm_model_cache()
 
             tmp_deployment_path = self._deployment_service.get_build_path(tmp_build_path)
 
@@ -172,6 +180,7 @@ class PlanBuildCommand(BaseBuildCommand):
             return False
 
         platform_model = pb._last_platform_model
+        self._platform_model = platform_model
 
         ok = pb.after_build(
             deployment_service=self._deployment_service,

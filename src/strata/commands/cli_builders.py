@@ -187,6 +187,14 @@ def build_clean(
     default=None,
     help="Fail (exit 3) when AI risk ≥ THRESHOLD without prompting. THRESHOLD: low|medium|high|critical (default: high). Implies --ai.",
 )
+@click.option(
+    "--no-cache-warm",
+    "no_cache_warm",
+    is_flag=True,
+    default=False,
+    envvar="STRATA_NO_CACHE_WARM",
+    help="Skip warming the resolved-model cache after a successful plan build (ADR-0026). [env: STRATA_NO_CACHE_WARM]",
+)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -197,6 +205,7 @@ def build_plan(
     artifacts_only: bool = False,
     ai: bool = False,
     strict_ai_review: Optional[str] = None,
+    no_cache_warm: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -214,6 +223,7 @@ def build_plan(
         artifacts_only=artifacts_only,
         ai=ai,
         strict_ai_review=strict_ai_review,
+        no_cache_warm=no_cache_warm,
         output=output,
         verbose=verbose,
         quiet=quiet,
