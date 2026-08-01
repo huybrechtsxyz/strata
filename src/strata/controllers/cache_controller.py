@@ -7,11 +7,13 @@ the ``strata cache`` command group and (in a follow-up) individual commands
 such as ``build run``.
 
 Cache-key scope: the deployment file, its workspace file, its top-level
-environment files, and every file the workspace itself references directly
-(providers, resources, modules, namespaces, firewalls, DNS zones, networks).
-Not yet covered: files referenced *by* those files in turn (e.g. a module file
-that itself references another file) and tenant/configuration files. Tracked
-as a follow-up; ``--refresh-cache`` remains the escape hatch for any gap here.
+environment files, its deployment-level configuration file references, its tenant
+file (``tenants/<code>.yaml``, if any), and every file the workspace itself
+references directly (providers, resources, modules, namespaces, firewalls, DNS
+zones, networks) plus one level of recursion into namespace files' own
+``spec.modules[].file`` references. Not covered: module ``source`` paths (app
+code/templates, often a directory or glob — out of scope for hash-based cache-key
+purposes). ``--refresh-cache`` remains the escape hatch for any gap here.
 """
 
 from pathlib import Path
@@ -24,6 +26,7 @@ from strata.controllers.solution_controller import SolutionController
 from strata.services.cache_service import CacheService, CacheStatus
 from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_service import DeploymentService
+from strata.services.namespace_service import NamespaceService
 from strata.services.workspace_service import WorkspaceService
 from strata.utils.config import DEFAULT_BUILD_PATH
 from strata.utils.system import resolve_path
@@ -250,6 +253,20 @@ class CacheController(BaseController):
             except Exception as exc:
                 self.logger.debug("Could not resolve environment file for cache key", file=ref.file, error=str(exc))
 
+        configurations = getattr(spec, "configurations", None) if spec else None
+        for cfg in configurations or []:
+            try:
+                resolved = resolve_path(str(self._work_path), cfg.file, repo_map=repo_map)
+                paths.append(str(Path(resolved).resolve()))
+            except Exception as exc:
+                self.logger.debug("Could not resolve configuration file for cache key", file=cfg.file, error=str(exc))
+
+        tenant_code = getattr(spec, "tenant", None) if spec else None
+        if tenant_code:
+            tenant_path = self._work_path / "tenants" / f"{tenant_code}.yaml"
+            if tenant_path.exists():
+                paths.append(str(tenant_path.resolve()))
+
         if workspace_path is not None:
             paths.extend(self._collect_workspace_input_paths(workspace_path, repo_map))
 
@@ -278,14 +295,16 @@ class CacheController(BaseController):
         if spec is None:
             return paths
 
-        def _add(file_ref: Optional[str]) -> None:
+        def _add(file_ref: Optional[str]) -> Optional[Path]:
             if not file_ref:
-                return
+                return None
             try:
-                resolved = resolve_path(str(self._work_path), file_ref, repo_map=repo_map)
-                paths.append(str(Path(resolved).resolve()))
+                resolved = Path(resolve_path(str(self._work_path), file_ref, repo_map=repo_map)).resolve()
+                paths.append(str(resolved))
+                return resolved
             except Exception as exc:
                 self.logger.debug("Could not resolve workspace-referenced file", file=file_ref, error=str(exc))
+                return None
 
         for provider in spec.providers or []:
             _add(getattr(provider, "file", None))
@@ -294,13 +313,50 @@ class CacheController(BaseController):
             for mod in getattr(resource, "modules", None) or []:
                 _add(getattr(mod, "file", None))
         for namespace in spec.namespaces or []:
-            _add(getattr(namespace, "file", None))
+            namespace_path = _add(getattr(namespace, "file", None))
+            if namespace_path is not None:
+                paths.extend(self._collect_namespace_input_paths(namespace_path, repo_map))
         for firewall in spec.firewalls or []:
             _add(getattr(firewall, "file", None))
         for dns_zone in spec.dns_zones or []:
             _add(getattr(dns_zone, "file", None))
         for network in spec.networks or []:
             _add(getattr(network, "file", None))
+
+        return paths
+
+    def _collect_namespace_input_paths(self, namespace_path: Path, repo_map: Dict[str, str]) -> List[str]:
+        """Resolve every file a namespace itself references (``spec.modules[].file``).
+
+        This is the one genuine "file referenced by a referenced file" case in the
+        schema today — provider/resource/module/firewall/DNS/network models have no
+        further nested file references of their own (module ``source`` points at app
+        code/templates, often a directory or glob, which is out of scope for cache-key
+        hashing). Best-effort, same Phase-1-only pattern as ``_collect_workspace_input_paths``.
+        """
+        paths: List[str] = []
+        try:
+            namespace_service = NamespaceService.load(str(namespace_path), validate=True)
+        except Exception as exc:
+            self.logger.debug("Could not load namespace file for cache key", file=str(namespace_path), error=str(exc))
+            return paths
+
+        if not namespace_service.is_validated():
+            return paths
+
+        spec = getattr(namespace_service.model, "spec", None)
+        if spec is None:
+            return paths
+
+        for mod in getattr(spec, "modules", None) or []:
+            file_ref = getattr(mod, "file", None)
+            if not file_ref:
+                continue
+            try:
+                resolved = Path(resolve_path(str(self._work_path), file_ref, repo_map=repo_map)).resolve()
+                paths.append(str(resolved))
+            except Exception as exc:
+                self.logger.debug("Could not resolve namespace-referenced module file", file=file_ref, error=str(exc))
 
         return paths
 

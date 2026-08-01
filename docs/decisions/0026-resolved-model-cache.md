@@ -244,6 +244,24 @@ strings — see OQ-2). This means every file that contributes to the resolved mo
 covered: the deployment file, the workspace blueprint it references, the environment
 files, and all the provider/resource/module files the workspace pulls in.
 
+**Implementation status (post-implementation).** `CacheController._collect_input_paths`
+implements the above plus the two items originally flagged as "not yet covered":
+
+- Deployment-level `spec.configurations[].file` references
+- The deployment's tenant file (`tenants/<code>.yaml`, resolved by convention — not
+  via `repo_map` — when `spec.tenant` is set and the file exists on disk)
+- One level of recursion into namespace files' own `spec.modules[].file` references —
+  the only genuine "file referenced by a referenced file" case found in the schema
+  (provider/resource/module/firewall/DNS/network models have no further nested file
+  references of their own)
+
+Deliberately still out of scope: module `source` paths (app code/templates — often a
+directory or glob, e.g. `@infra/services/traefik/*`) are not hashed. Hashing an entire
+app source tree on every cache-key computation would be expensive and is arguably a
+different concern (app code changes are tracked by the module's own version/digest
+mechanism elsewhere, not this cache). `--refresh-cache` remains the escape hatch for
+this and any other gap.
+
 The `cache_inputs` table stores every resolved local path that contributed to a given
 entry. This enables efficient bulk invalidation: when `strata repo sync` fetches a new
 version of a remote, every deployment whose workspace or environment files came from that

@@ -90,6 +90,75 @@ class TestCacheControllerInputPathCollection:
         assert "namespace-standard.yaml" in names
         assert "firewall-standard.yaml" in names
 
+    def test_collect_input_paths_includes_deployment_configuration_files(self) -> None:
+        """Gap-closure: deployment-level spec.configurations[].file must be included."""
+        repo_root = _repo_root()
+        deployment_file = repo_root / "tests" / "data" / "deployments" / "deployment-standard.yaml"
+
+        controller = CacheController(repo_root)
+        ok, deployment_service = controller._load_deployment(str(deployment_file))
+        assert ok is True
+        assert deployment_service is not None
+
+        paths = controller._collect_input_paths(deployment_service)
+        names = {Path(p).name for p in paths}
+
+        assert "configuration-standard.yaml" in names
+
+    def test_collect_input_paths_includes_tenant_file_when_present(self, tmp_path: Path) -> None:
+        """Gap-closure: spec.tenant (tenants/<code>.yaml) must be included when set."""
+        from unittest.mock import MagicMock
+
+        tenants_dir = tmp_path / "tenants"
+        tenants_dir.mkdir()
+        tenant_file = tenants_dir / "acme.yaml"
+        tenant_file.write_text("apiVersion: strata.huybrechts.xyz/v1\nkind: tenant\n", encoding="utf-8")
+
+        controller = CacheController(tmp_path)
+        deployment_service = MagicMock()
+        deployment_service.path = str(tmp_path / "deploy.yaml")
+        deployment_service.model.spec.workspace = None
+        deployment_service.model.spec.environments = []
+        deployment_service.model.spec.configurations = []
+        deployment_service.model.spec.tenant = "acme"
+        deployment_service._merged_repo_map.return_value = {}
+
+        paths = controller._collect_input_paths(deployment_service)
+        names = {Path(p).name for p in paths}
+
+        assert "acme.yaml" in names
+
+    def test_collect_input_paths_skips_tenant_file_when_missing_on_disk(self, tmp_path: Path) -> None:
+        """A declared tenant whose file doesn't exist yet is skipped, not an error."""
+        from unittest.mock import MagicMock
+
+        controller = CacheController(tmp_path)
+        deployment_service = MagicMock()
+        deployment_service.path = str(tmp_path / "deploy.yaml")
+        deployment_service.model.spec.workspace = None
+        deployment_service.model.spec.environments = []
+        deployment_service.model.spec.configurations = []
+        deployment_service.model.spec.tenant = "does-not-exist"
+        deployment_service._merged_repo_map.return_value = {}
+
+        paths = controller._collect_input_paths(deployment_service)
+        names = {Path(p).name for p in paths}
+
+        assert "does-not-exist.yaml" not in names
+
+    def test_collect_workspace_input_paths_recurses_into_namespace_modules(self) -> None:
+        """Gap-closure: a namespace file's own spec.modules[].file must be included
+        (the one real 'file referenced by a referenced file' case in the schema)."""
+        repo_root = _repo_root()
+        workspace_path = repo_root / "tests" / "data" / "workspaces" / "workspace-standard.yaml"
+
+        controller = CacheController(repo_root)
+        paths = controller._collect_workspace_input_paths(workspace_path, repo_map={})
+        names = {Path(p).name for p in paths}
+
+        # namespace-standard.yaml's own spec.modules[] references module-standard.yaml
+        assert "module-standard.yaml" in names
+
     def test_cache_key_changes_when_module_file_changes(self, tmp_path: Path) -> None:
         """Gap-closure: a transitively-referenced module file must affect the cache key."""
         repo_root = _repo_root()
