@@ -148,7 +148,9 @@ class CacheController(BaseController):
             self._add_error(f"Unexpected error loading configuration: {exc}")
             return None
 
-    def _load_deployment_full(self, file_path: str, sync_remotes: bool = True) -> Tuple[bool, Optional[DeploymentService]]:
+    def _load_deployment_full(
+        self, file_path: str, sync_remotes: bool = True
+    ) -> Tuple[bool, Optional[DeploymentService]]:
         """Load a deployment and its related services (workspace, environments).
 
         This is the same pipeline ``build run``/``build plan`` use before calling
@@ -231,7 +233,9 @@ class CacheController(BaseController):
         workspace_path: Optional[Path] = None
         if workspace_ref is not None and getattr(workspace_ref, "file", None):
             try:
-                workspace_path = Path(resolve_path(str(self._work_path), workspace_ref.file, repo_map=repo_map)).resolve()
+                workspace_path = Path(
+                    resolve_path(str(self._work_path), workspace_ref.file, repo_map=repo_map)
+                ).resolve()
                 paths.append(str(workspace_path))
             except Exception as exc:
                 self.logger.debug(
@@ -323,7 +327,9 @@ class CacheController(BaseController):
     # Public operations
     # ------------------------------------------------------------------
 
-    def warm(self, file_path: str, refresh_cache: bool = True, sync_remotes: bool = True) -> Tuple[bool, str, List[str]]:
+    def warm(
+        self, file_path: str, refresh_cache: bool = True, sync_remotes: bool = True
+    ) -> Tuple[bool, str, List[str]]:
         """Resolve *file_path* and store the result in the cache.
 
         *sync_remotes* controls whether gitops remotes are checked out to their

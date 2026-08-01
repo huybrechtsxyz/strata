@@ -60,7 +60,9 @@ class WarmCacheCommand(BaseCommand):
             self._has_errors = not ok
             return ok
 
-        ok, indicator, errors = controller.warm(self._deployment_file, refresh_cache=True, sync_remotes=self._sync_remotes)
+        ok, indicator, errors = controller.warm(
+            self._deployment_file, refresh_cache=True, sync_remotes=self._sync_remotes
+        )
         self._errors.extend(errors)
         self._output_data["name"] = self._deployment_file
         self._output_data["indicator"] = indicator
