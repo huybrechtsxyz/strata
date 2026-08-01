@@ -100,6 +100,17 @@ def list_policy_command(
     default=False,
     help="Run AI explanation of policy violations (requires an ai_agent integration).",
 )
+@click.option(
+    "--no-cache-warm",
+    "no_cache_warm",
+    is_flag=True,
+    default=False,
+    envvar="STRATA_NO_CACHE_WARM",
+    help=(
+        "Skip warming the resolved-model cache from the platform.json read during this "
+        "check (ADR-0026). [env: STRATA_NO_CACHE_WARM]"
+    ),
+)
 def check_policy_command(
     file: str,
     phase: Tuple[str, ...] = (),
@@ -109,6 +120,7 @@ def check_policy_command(
     verbose: bool = False,
     quiet: bool = False,
     ai: bool = False,
+    no_cache_warm: bool = False,
 ) -> None:
     """Evaluate policies against a deployment without running a deploy.
 
@@ -128,6 +140,7 @@ def check_policy_command(
         phase=phase if phase else None,
         plan_file=plan_file,
         ai=ai,
+        no_cache_warm=no_cache_warm,
         work_path=work_path,
         output=output,
         verbose=verbose,

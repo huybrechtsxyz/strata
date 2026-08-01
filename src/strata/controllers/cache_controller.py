@@ -429,3 +429,34 @@ class CacheController(BaseController):
             self._add_error(f"Failed to write export file '{output_path}': {exc}")
             return False, self.get_errors()
         return True, []
+
+
+def warm_platform_model_best_effort(
+    work_path: Path,
+    deployment_service: Optional[DeploymentService],
+    platform_model: Optional[Any],
+    logger: Optional[Any] = None,
+) -> None:
+    """Warm the resolved-model cache with a ``PlatformArtifactModel`` a caller already
+    has in memory (or just read off disk) — no re-resolution, no YAML re-parsing.
+
+    Shared by any command that happens to already hold both a loaded
+    ``DeploymentService`` and a ``PlatformArtifactModel`` (``build run``, ``build plan``
+    via ``BaseBuildCommand._warm_model_cache``, and ``policy check`` which reads an
+    existing ``platform.json`` off disk). Never raises — failures are logged at debug
+    and otherwise swallowed, matching the ADR's "cache is a performance optimisation,
+    never a source of truth" contract.
+    """
+    if deployment_service is None or platform_model is None:
+        return
+    try:
+        controller = CacheController(work_path)
+        name = deployment_service.model.meta.name if deployment_service.model else str(deployment_service.path)
+        input_paths = controller.collect_input_paths(deployment_service)
+        cache_key = controller.cache.compute_cache_key(input_paths)
+        if cache_key is None:
+            return
+        controller.cache.warm(name, "deployment", cache_key, platform_model.model_dump(mode="json"), input_paths)
+    except Exception as exc:
+        if logger is not None:
+            logger.debug("Cache warm skipped (non-fatal)", error=str(exc))

@@ -50,22 +50,9 @@ class BaseBuildCommand(BaseCommand):
         earlier in the command) rather than re-resolving, so this is cheap: only a
         cache-key hash + SQLite write, no re-parsing of YAML.
         """
-        if self._deployment_service is None or self._platform_model is None:
-            return
-        try:
-            from strata.controllers.cache_controller import CacheController
+        from strata.controllers.cache_controller import warm_platform_model_best_effort
 
-            controller = CacheController(self._work_path)
-            name = self._deployment_service.model.meta.name if self._deployment_service.model else str(self._file_path)
-            input_paths = controller.collect_input_paths(self._deployment_service)
-            cache_key = controller.cache.compute_cache_key(input_paths)
-            if cache_key is None:
-                return
-            controller.cache.warm(
-                name, "deployment", cache_key, self._platform_model.model_dump(mode="json"), input_paths
-            )
-        except Exception as exc:
-            self.logger.debug("Cache warm after build skipped (non-fatal)", error=str(exc))
+        warm_platform_model_best_effort(self._work_path, self._deployment_service, self._platform_model, self.logger)
 
     def _before_execute(self) -> bool:
         """Load and validate the deployment file + configuration service."""

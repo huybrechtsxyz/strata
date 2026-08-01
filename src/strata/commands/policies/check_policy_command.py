@@ -39,6 +39,7 @@ class CheckPolicyCommand(BaseCommand):
         phase: Optional[Tuple[str, ...]] = None,
         plan_file: Optional[str] = None,
         ai: bool = False,
+        no_cache_warm: bool = False,
         work_path: Optional[str] = None,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
@@ -55,6 +56,7 @@ class CheckPolicyCommand(BaseCommand):
         self._requested_phases: Tuple[str, ...] = phase if phase else _ALL_PHASES
         self._raw_plan_file: Optional[str] = plan_file
         self._ai: bool = ai
+        self._no_cache_warm: bool = no_cache_warm
 
         self._configuration_service: Optional[ConfigurationService] = None
         self._deployment_service: Optional[DeploymentService] = None
@@ -115,6 +117,12 @@ class CheckPolicyCommand(BaseCommand):
         if plan_note:
             self._notes.append({"phase": "plan", "message": plan_note})
 
+        # ADR-0026: opportunistically warm the resolved-model cache with the
+        # platform.json we just read off disk. Cheap (no re-resolution — the file
+        # was already loaded above) and best-effort; never fails the policy check.
+        if platform_artifact is not None and not self._no_cache_warm:
+            self._warm_model_cache(platform_artifact)
+
         # --- Evaluate per phase ---
         for phase in _ALL_PHASES:
             if phase not in self._requested_phases:
@@ -162,6 +170,12 @@ class CheckPolicyCommand(BaseCommand):
     # ------------------------------------------------------------------
     # Artifact loaders
     # ------------------------------------------------------------------
+
+    def _warm_model_cache(self, platform_artifact: Any) -> None:
+        """Best-effort cache warm (ADR-0026) using the platform.json already read from disk."""
+        from strata.controllers.cache_controller import warm_platform_model_best_effort
+
+        warm_platform_model_best_effort(self._work_path, self._deployment_service, platform_artifact, self.logger)
 
     def _load_platform_artifact(self, build_path: Path) -> Tuple[Optional[Any], Optional[str]]:
         """Try to load platform.json from the deployment build directory.
