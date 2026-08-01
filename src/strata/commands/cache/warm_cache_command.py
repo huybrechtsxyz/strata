@@ -20,6 +20,7 @@ class WarmCacheCommand(BaseCommand):
         self,
         deployment_file: Optional[str] = None,
         warm_all: bool = False,
+        sync_remotes: bool = True,
         work_path: Optional[str] = None,
         output: Optional[str] = None,
         verbose: bool = False,
@@ -28,6 +29,7 @@ class WarmCacheCommand(BaseCommand):
         super().__init__(work_path=work_path, output=output, verbose=verbose, quiet=quiet)
         self._deployment_file = deployment_file
         self._warm_all = warm_all
+        self._sync_remotes = sync_remotes
         self._has_errors = False
 
     def has_validation_errors(self) -> bool:
@@ -45,7 +47,7 @@ class WarmCacheCommand(BaseCommand):
         controller = CacheController(self._work_path)
 
         if self._warm_all:
-            ok, rows, errors = controller.warm_all()
+            ok, rows, errors = controller.warm_all(sync_remotes=self._sync_remotes)
             self._errors.extend(errors)
             self._output_data["entries"] = rows
             if self._is_console_output():
@@ -58,7 +60,7 @@ class WarmCacheCommand(BaseCommand):
             self._has_errors = not ok
             return ok
 
-        ok, indicator, errors = controller.warm(self._deployment_file, refresh_cache=True)
+        ok, indicator, errors = controller.warm(self._deployment_file, refresh_cache=True, sync_remotes=self._sync_remotes)
         self._errors.extend(errors)
         self._output_data["name"] = self._deployment_file
         self._output_data["indicator"] = indicator

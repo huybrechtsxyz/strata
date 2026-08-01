@@ -210,7 +210,9 @@ class CacheService:
         try:
             payload = zlib.compress(json.dumps(resolved).encode("utf-8"))
         except (TypeError, ValueError) as exc:
-            self.logger.warning("Cache warm skipped: resolved model is not JSON-serialisable", name=name, error=str(exc))
+            self.logger.warning(
+                "Cache warm skipped: resolved model is not JSON-serialisable", name=name, error=str(exc)
+            )
             return False
 
         written_at = datetime.now(timezone.utc).isoformat()
@@ -266,8 +268,7 @@ class CacheService:
             with closing(self._connect()) as conn:
                 with conn:
                     cur = conn.execute(
-                        "DELETE FROM cache WHERE name IN "
-                        "(SELECT name FROM cache_inputs WHERE file_path LIKE ?)",
+                        "DELETE FROM cache WHERE name IN (SELECT name FROM cache_inputs WHERE file_path LIKE ?)",
                         (f"{path_prefix}%",),
                     )
                     return cur.rowcount

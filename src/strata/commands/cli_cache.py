@@ -30,7 +30,19 @@ def cache_group():
 @click_output_verbose
 @click_output_quiet
 @click_file
-@click.option("--all", "warm_all", is_flag=True, default=False, help="Warm every deployment registered in the solution.")
+@click.option(
+    "--all", "warm_all", is_flag=True, default=False, help="Warm every deployment registered in the solution."
+)
+@click.option(
+    "--no-sync-remotes",
+    "no_sync_remotes",
+    is_flag=True,
+    default=False,
+    help=(
+        "Skip checking out gitops remotes to their configured reference before resolving. "
+        "Use for silent/background warms that must not perform git operations."
+    ),
+)
 def cache_warm(
     work_path: Optional[str] = None,
     output: Optional[str] = None,
@@ -38,10 +50,12 @@ def cache_warm(
     quiet: bool = False,
     file: Optional[str] = None,
     warm_all: bool = False,
+    no_sync_remotes: bool = False,
 ) -> None:
     command = WarmCacheCommand(
         deployment_file=file,
         warm_all=warm_all,
+        sync_remotes=not no_sync_remotes,
         work_path=work_path,
         output=output,
         verbose=verbose,
@@ -104,6 +118,8 @@ def cache_export(
     quiet: bool = False,
     output_path: str = "cache-export.json",
 ) -> None:
-    command = ExportCacheCommand(output_path=output_path, work_path=work_path, output=output, verbose=verbose, quiet=quiet)
+    command = ExportCacheCommand(
+        output_path=output_path, work_path=work_path, output=output, verbose=verbose, quiet=quiet
+    )
     success = command.execute()
     handle_command_exit(command, success)

@@ -422,10 +422,10 @@ as opposed to today's one-process-per-invocation CLI). Conclusion: **no change n
 
 The cache is two layers, and only one of them is process-scoped:
 
-| Layer | What it is | Lifetime | Introduced by |
-| ----- | ---------- | -------- | -------------- |
-| L1 — ephemeral | `strata.utils.service_cache` in-process dict memoization | One CLI invocation | Already shipped, predates this ADR |
-| L2 — fixed | SQLite `.strata/cache.db` (this ADR) | Survives process exit; shared across processes | This ADR |
+| Layer          | What it is                                               | Lifetime                                       | Introduced by                      |
+| -------------- | -------------------------------------------------------- | ---------------------------------------------- | ---------------------------------- |
+| L1 — ephemeral | `strata.utils.service_cache` in-process dict memoization | One CLI invocation                             | Already shipped, predates this ADR |
+| L2 — fixed     | SQLite `.strata/cache.db` (this ADR)                     | Survives process exit; shared across processes | This ADR                           |
 
 A future server does not change L2 at all — it is simply another client calling
 `CacheService.get()`, exactly like the CLI and the VS Code extension already do
@@ -577,14 +577,14 @@ need to revisit or re-justify the L2 cache design.
 
    **Benefits in full:**
 
-   | Benefit | Description |
-   |---|---|
-   | **Resilience to store outages** | `build run` and `deploy run` succeed even when Bitwarden / Vault is unreachable. Without a value cache, an unavailable secret store blocks every deployment, including ones whose secrets haven't changed. |
-   | **CI pipeline speed** | A pipeline that runs validate → build → deploy → policy check resolves the same secrets four times. With a warm value cache, each step after the first is a local read. On a fleet of 50 deployments running in a matrix this compounds: 50 × 4 = 200 store round-trips reduced to 50. |
-   | **Rate-limit protection** | Bitwarden, Azure Key Vault, and Vault all have API rate limits. Fleet-wide commands (`promote matrix`, `drift run --all`) that resolve values for every deployment can hit these limits on larger fleets. A value cache collapses N resolutions to 1 per TTL window. |
-   | **Predictable build times** | External store latency is variable (network conditions, Vault lease renewal, MFA prompts). Caching removes the store from the critical path of routine builds, making CI timings consistent. |
-   | **Air-gapped / offline deploys** | Once values are cached, a deployment can be built and applied without any network path to the secret store. Useful for regulated environments where the deployment target is network-isolated but the operator has previously fetched the required values. |
-   | **Audit snapshot** | A cached value entry records *what value was used at what time* — a lightweight audit trail for variables and features that complements the build artifact. Useful for drift analysis: "did this variable's effective value change between the last two builds?" |
+   | Benefit                          | Description                                                                                                                                                                                                                                                                            |
+   | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | **Resilience to store outages**  | `build run` and `deploy run` succeed even when Bitwarden / Vault is unreachable. Without a value cache, an unavailable secret store blocks every deployment, including ones whose secrets haven't changed.                                                                             |
+   | **CI pipeline speed**            | A pipeline that runs validate → build → deploy → policy check resolves the same secrets four times. With a warm value cache, each step after the first is a local read. On a fleet of 50 deployments running in a matrix this compounds: 50 × 4 = 200 store round-trips reduced to 50. |
+   | **Rate-limit protection**        | Bitwarden, Azure Key Vault, and Vault all have API rate limits. Fleet-wide commands (`promote matrix`, `drift run --all`) that resolve values for every deployment can hit these limits on larger fleets. A value cache collapses N resolutions to 1 per TTL window.                   |
+   | **Predictable build times**      | External store latency is variable (network conditions, Vault lease renewal, MFA prompts). Caching removes the store from the critical path of routine builds, making CI timings consistent.                                                                                           |
+   | **Air-gapped / offline deploys** | Once values are cached, a deployment can be built and applied without any network path to the secret store. Useful for regulated environments where the deployment target is network-isolated but the operator has previously fetched the required values.                             |
+   | **Audit snapshot**               | A cached value entry records *what value was used at what time* — a lightweight audit trail for variables and features that complements the build artifact. Useful for drift analysis: "did this variable's effective value change between the last two builds?"                       |
 
    The benefits are real and meaningful. The reason store value caching is deferred is
    not that the benefits are weak — it is that **the two problems below make a correct
@@ -609,13 +609,13 @@ need to revisit or re-justify the L2 cache design.
 
    The acceptable TTL depends on the store type:
 
-   | Source | Typical rotation cadence | Suggested max TTL |
-   |---|---|---|
-   | `constant` | Never | Indefinite (but YAML hash covers it — no store cache needed) |
-   | `env` | Session / pipeline | 0 — do not cache; always resolve live |
-   | `bitwarden` | Hours–weeks | 1–4 hours |
-   | `vault` | Minutes–hours (lease-based) | Match Vault lease TTL; do not exceed |
-   | `azure_keyvault` | Hours–days | 1–4 hours |
+   | Source           | Typical rotation cadence    | Suggested max TTL                                            |
+   | ---------------- | --------------------------- | ------------------------------------------------------------ |
+   | `constant`       | Never                       | Indefinite (but YAML hash covers it — no store cache needed) |
+   | `env`            | Session / pipeline          | 0 — do not cache; always resolve live                        |
+   | `bitwarden`      | Hours–weeks                 | 1–4 hours                                                    |
+   | `vault`          | Minutes–hours (lease-based) | Match Vault lease TTL; do not exceed                         |
+   | `azure_keyvault` | Hours–days                  | 1–4 hours                                                    |
 
    `env` source values must never be cached: they are pipeline-scoped and can differ
    between invocations of the same deployment in the same build system.
@@ -658,11 +658,11 @@ need to revisit or re-justify the L2 cache design.
 
    The VS Code extension and a manual CLI trigger carry this responsibility in practice:
 
-   | Mechanism | How it works |
-   |---|---|
+   | Mechanism                        | How it works                                                                                                                                                                                                                                                                                                                                                                 |
+   | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
    | **Extension background refresh** | The extension's background job (already warming the model cache on save) also refreshes store values on a TTL-aware schedule. Each source type has a configured refresh interval (see TTL table above). The extension calls `strata cache warm --values` in the background; the operator sees a status indicator (green = fresh, yellow = expiring soon, grey = stale/cold). |
-   | **Manual refresh trigger** | A VS Code command palette action (`Strata: Refresh store values`) and `strata cache warm --values [-f deployment]` let the operator force a live fetch at any time — before a deploy, after a secret rotation, or when the extension indicator shows stale. |
-   | **Key auto-generation** | On first use, strata generates `.strata/.cache.key`. As long as this file exists and `STRATA_CACHE_KEY` is not overridden, the same key is used across sessions. The operator does not need to manage the key manually. |
+   | **Manual refresh trigger**       | A VS Code command palette action (`Strata: Refresh store values`) and `strata cache warm --values [-f deployment]` let the operator force a live fetch at any time — before a deploy, after a secret rotation, or when the extension indicator shows stale.                                                                                                                  |
+   | **Key auto-generation**          | On first use, strata generates `.strata/.cache.key`. As long as this file exists and `STRATA_CACHE_KEY` is not overridden, the same key is used across sessions. The operator does not need to manage the key manually.                                                                                                                                                      |
 
    In CI the pattern is the same as the model cache (OQ-1 Pattern B/C): warm values
    explicitly at pipeline start, use them across steps. The pipeline is responsible for

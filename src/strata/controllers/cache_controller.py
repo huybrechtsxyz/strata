@@ -6,11 +6,12 @@ clear, and export cache entries.  This is the integration point used by both
 the ``strata cache`` command group and (in a follow-up) individual commands
 such as ``build run``.
 
-Cache-key scope (v1): the deployment file, its workspace file, and its
-top-level environment files. Nested files pulled in transitively by the
-workspace (provider/resource/module files) are not yet included in the hash —
-tracked as a follow-up; until then, editing one of those files may require
-``--refresh-cache`` to see the change reflected.
+Cache-key scope: the deployment file, its workspace file, its top-level
+environment files, and every file the workspace itself references directly
+(providers, resources, modules, namespaces, firewalls, DNS zones, networks).
+Not yet covered: files referenced *by* those files in turn (e.g. a module file
+that itself references another file) and tenant/configuration files. Tracked
+as a follow-up; ``--refresh-cache`` remains the escape hatch for any gap here.
 """
 
 from pathlib import Path
@@ -18,24 +19,27 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from strata.builders.platform_builder import PlatformBuilder
 from strata.controllers.base_controller import BaseController
+from strata.controllers.repository_controller import RepositoryController
 from strata.controllers.solution_controller import SolutionController
 from strata.services.cache_service import CacheService, CacheStatus
 from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_service import DeploymentService
+from strata.services.workspace_service import WorkspaceService
 from strata.utils.config import DEFAULT_BUILD_PATH
 from strata.utils.system import resolve_path
 
-# NOTE on scope (v1): a full resolve (warm) requires the same ConfigurationService
+# NOTE on scope: a full resolve (warm) requires the same ConfigurationService
 # (active profile's configfile_paths) that 'build run'/'build plan' require —
 # load_deploy_services() depends on ConfigurationService.get_instance() being
 # initialised and validated. This mirrors BaseBuildCommand._load_configuration_service.
-# The remote-checkout step (RepositoryController.ensure_remote_refs) that build
-# commands run before load_deploy_services() is intentionally NOT replicated here —
-# it is a network/git side effect that a cache warm/status call should not trigger
-# implicitly. Deployments whose environment/workspace files live on a remote that
-# has not yet been checked out locally will fail to resolve until 'build run' (or
-# 'strata repo sync') has run at least once. 'strata build run' remains authoritative
-# and always does its own full-fidelity resolve regardless of cache state.
+#
+# Remote checkout (RepositoryController.ensure_remote_refs) IS replicated in
+# _load_deployment_full, gated by sync_remotes (default True) — matching build run's
+# fidelity for explicit 'strata cache warm' invocations. It performs a real
+# 'git checkout --detach <ref>' on gitops remotes, so callers that warm silently in
+# the background (e.g. the VS Code extension's auto-warm-on-save) should pass
+# sync_remotes=False to avoid surprising git operations outside of an explicit
+# operator action.
 
 
 class CacheController(BaseController):
@@ -83,7 +87,11 @@ class CacheController(BaseController):
             return False, None
 
         if not deployment_service.is_validated():
-            errors = deployment_service.get_validation_errors() if hasattr(deployment_service, "get_validation_errors") else []
+            errors = (
+                deployment_service.get_validation_errors()
+                if hasattr(deployment_service, "get_validation_errors")
+                else []
+            )
             self._add_error(f"Deployment '{file_path}' failed validation: {'; '.join(errors) or 'unknown error'}")
             return False, None
 
@@ -140,12 +148,15 @@ class CacheController(BaseController):
             self._add_error(f"Unexpected error loading configuration: {exc}")
             return None
 
-    def _load_deployment_full(self, file_path: str) -> Tuple[bool, Optional[DeploymentService]]:
+    def _load_deployment_full(self, file_path: str, sync_remotes: bool = True) -> Tuple[bool, Optional[DeploymentService]]:
         """Load a deployment and its related services (workspace, environments).
 
         This is the same pipeline ``build run``/``build plan`` use before calling
-        ``PlatformBuilder.build()``, minus the remote-checkout step (see module-level
-        NOTE on scope).
+        ``PlatformBuilder.build()``. When *sync_remotes* is True (default), also
+        replicates ``BaseBuildCommand``'s remote-checkout step
+        (``RepositoryController.ensure_remote_refs``) so a warm has the same fidelity
+        as a real build. Set ``sync_remotes=False`` for callers that must not perform
+        git operations implicitly (see module-level NOTE on scope).
         """
         ok, deployment_service = self._load_deployment(file_path)
         if not ok or deployment_service is None:
@@ -159,7 +170,9 @@ class CacheController(BaseController):
 
         repo_map = self._solution_controller.get_repo_map()
 
-        ok, errors = deployment_service.validate(configuration_model=config_model, work_path=str(self._work_path), repo_map=repo_map)
+        ok, errors = deployment_service.validate(
+            configuration_model=config_model, work_path=str(self._work_path), repo_map=repo_map
+        )
         if not ok:
             self._errors.extend(errors)
             return False, None
@@ -180,15 +193,25 @@ class CacheController(BaseController):
                 self._errors.extend(critical)
                 return False, None
 
+        if sync_remotes:
+            repo_controller = RepositoryController()
+            checkout_ok, _resolved_refs = repo_controller.ensure_remote_refs(
+                config_service=config_service,
+                work_path=self._work_path,
+                repo_map=repo_map,
+            )
+            if not checkout_ok:
+                self._errors.extend(repo_controller.get_errors())
+                return False, None
+
         return True, deployment_service
 
     def _collect_input_paths(self, deployment_service: DeploymentService) -> List[str]:
         """Best-effort collection of files that contributed to the resolved model.
 
-        See module docstring for current scope (deployment + workspace + top-level
-        environment files). Reads paths directly off the Phase-1 model — does not
-        require workspace/environment services to be loaded, so this also works from
-        ``_load_deployment`` alone (cheap path used by ``status``).
+        See module docstring for current scope. Reads paths directly off the Phase-1
+        model — does not require workspace/environment services to be loaded, so this
+        also works from ``_load_deployment`` alone (cheap path used by ``status``).
         """
         paths: List[str] = []
 
@@ -205,12 +228,15 @@ class CacheController(BaseController):
         spec = getattr(model, "spec", None) if model else None
 
         workspace_ref = getattr(spec, "workspace", None) if spec else None
+        workspace_path: Optional[Path] = None
         if workspace_ref is not None and getattr(workspace_ref, "file", None):
             try:
-                resolved = resolve_path(str(self._work_path), workspace_ref.file, repo_map=repo_map)
-                paths.append(str(Path(resolved).resolve()))
+                workspace_path = Path(resolve_path(str(self._work_path), workspace_ref.file, repo_map=repo_map)).resolve()
+                paths.append(str(workspace_path))
             except Exception as exc:
-                self.logger.debug("Could not resolve workspace file for cache key", file=workspace_ref.file, error=str(exc))
+                self.logger.debug(
+                    "Could not resolve workspace file for cache key", file=workspace_ref.file, error=str(exc)
+                )
 
         environments = getattr(spec, "environments", None) if spec else None
         for ref in environments or []:
@@ -219,6 +245,58 @@ class CacheController(BaseController):
                 paths.append(str(Path(resolved).resolve()))
             except Exception as exc:
                 self.logger.debug("Could not resolve environment file for cache key", file=ref.file, error=str(exc))
+
+        if workspace_path is not None:
+            paths.extend(self._collect_workspace_input_paths(workspace_path, repo_map))
+
+        return paths
+
+    def _collect_workspace_input_paths(self, workspace_path: Path, repo_map: Dict[str, str]) -> List[str]:
+        """Resolve every file a workspace directly references (providers, resources,
+        modules, namespaces, firewalls, DNS zones, networks).
+
+        Best-effort: a Phase-1-only load of the workspace file (no ConfigurationService
+        needed), so this works even from the cheap ``status`` path. Any single
+        unresolvable reference is skipped (logged at debug) rather than failing the
+        whole collection.
+        """
+        paths: List[str] = []
+        try:
+            workspace_service = WorkspaceService.load(str(workspace_path), validate=True)
+        except Exception as exc:
+            self.logger.debug("Could not load workspace file for cache key", file=str(workspace_path), error=str(exc))
+            return paths
+
+        if not workspace_service.is_validated():
+            return paths
+
+        spec = getattr(workspace_service.model, "spec", None)
+        if spec is None:
+            return paths
+
+        def _add(file_ref: Optional[str]) -> None:
+            if not file_ref:
+                return
+            try:
+                resolved = resolve_path(str(self._work_path), file_ref, repo_map=repo_map)
+                paths.append(str(Path(resolved).resolve()))
+            except Exception as exc:
+                self.logger.debug("Could not resolve workspace-referenced file", file=file_ref, error=str(exc))
+
+        for provider in spec.providers or []:
+            _add(getattr(provider, "file", None))
+        for resource in spec.resources or []:
+            _add(getattr(resource, "file", None))
+            for mod in getattr(resource, "modules", None) or []:
+                _add(getattr(mod, "file", None))
+        for namespace in spec.namespaces or []:
+            _add(getattr(namespace, "file", None))
+        for firewall in spec.firewalls or []:
+            _add(getattr(firewall, "file", None))
+        for dns_zone in spec.dns_zones or []:
+            _add(getattr(dns_zone, "file", None))
+        for network in spec.networks or []:
+            _add(getattr(network, "file", None))
 
         return paths
 
@@ -245,13 +323,18 @@ class CacheController(BaseController):
     # Public operations
     # ------------------------------------------------------------------
 
-    def warm(self, file_path: str, refresh_cache: bool = True) -> Tuple[bool, str, List[str]]:
+    def warm(self, file_path: str, refresh_cache: bool = True, sync_remotes: bool = True) -> Tuple[bool, str, List[str]]:
         """Resolve *file_path* and store the result in the cache.
+
+        *sync_remotes* controls whether gitops remotes are checked out to their
+        configured reference before resolving (matches ``build run`` fidelity when
+        True). Set to False for silent/background warms that must not perform git
+        operations (see module-level NOTE on scope).
 
         Returns ``(success, indicator, errors)`` where indicator is
         ``"cached"`` / ``"refreshed"`` / ``"no-cache"``.
         """
-        ok, deployment_service = self._load_deployment_full(file_path)
+        ok, deployment_service = self._load_deployment_full(file_path, sync_remotes=sync_remotes)
         if not ok or deployment_service is None:
             return False, "error", self.get_errors()
 
@@ -273,7 +356,7 @@ class CacheController(BaseController):
 
         return True, indicator, []
 
-    def warm_all(self) -> Tuple[bool, List[Dict[str, str]], List[str]]:
+    def warm_all(self, sync_remotes: bool = True) -> Tuple[bool, List[Dict[str, str]], List[str]]:
         """Warm every deployment registered in the solution.
 
         Returns ``(success, rows, errors)`` where each row is
@@ -287,7 +370,7 @@ class CacheController(BaseController):
         rows: List[Dict[str, str]] = []
         overall_ok = True
         for entry in deployments:
-            ok, indicator, warm_errors = self.warm(entry.path, refresh_cache=True)
+            ok, indicator, warm_errors = self.warm(entry.path, refresh_cache=True, sync_remotes=sync_remotes)
             rows.append({"name": entry.name, "indicator": indicator if ok else "error"})
             if not ok:
                 overall_ok = False

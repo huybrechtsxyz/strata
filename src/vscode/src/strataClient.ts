@@ -922,9 +922,16 @@ export class StrataClient {
      * Used by the background cache warmer — failures are non-fatal by design
      * (CacheService already treats a failed warm as "stays cold", never an error
      * surfaced to the user).
+     *
+     * Always passes `--no-sync-remotes`: this call can fire silently in the
+     * background on every debounced save, and a full-fidelity warm would perform
+     * a real `git checkout --detach <ref>` on gitops remotes — a surprising side
+     * effect for an ambient feature the operator did not explicitly invoke. Use
+     * the CLI directly (`strata cache warm --all`) for a full-fidelity warm that
+     * also syncs remotes.
      */
     async warmCache(filePath?: string): Promise<void> {
-        const args = ['cache', 'warm', '--output', 'json'];
+        const args = ['cache', 'warm', '--no-sync-remotes', '--output', 'json'];
         if (filePath) {
             args.push('-f', filePath);
         } else {

@@ -11,6 +11,9 @@
  * - Warming is entirely best-effort: failures are swallowed (logged to the
  *   output channel only) and never surfaced as error popups. A cold/stale
  *   cache is not a user-facing problem — commands auto-warm transparently.
+ * - Calls `StrataClient.warmCache()`, which always passes `--no-sync-remotes`
+ *   (see its docstring) — this provider never triggers a git checkout; it only
+ *   warms deployments whose remotes are already checked out locally.
  * - `--all` (not per-file) because CacheController currently only exposes
  *   whole-fleet or single-deployment warming, and mapping "which deployment(s)
  *   reference this saved file" would require loading every registered

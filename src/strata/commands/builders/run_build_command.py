@@ -193,16 +193,14 @@ class RunBuildCommand(BaseBuildCommand):
             from strata.controllers.cache_controller import CacheController
 
             controller = CacheController(self._work_path)
-            name = (
-                self._deployment_service.model.meta.name
-                if self._deployment_service.model
-                else str(self._file_path)
-            )
+            name = self._deployment_service.model.meta.name if self._deployment_service.model else str(self._file_path)
             input_paths = controller.collect_input_paths(self._deployment_service)
             cache_key = controller.cache.compute_cache_key(input_paths)
             if cache_key is None:
                 return
-            controller.cache.warm(name, "deployment", cache_key, self._platform_model.model_dump(mode="json"), input_paths)
+            controller.cache.warm(
+                name, "deployment", cache_key, self._platform_model.model_dump(mode="json"), input_paths
+            )
         except Exception as exc:
             self.logger.debug("Cache warm after build skipped (non-fatal)", error=str(exc))
 

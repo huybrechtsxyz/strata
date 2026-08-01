@@ -170,7 +170,9 @@ class TestCacheServiceHighLevelApi:
             return {"v": calls["count"]}
 
         cache.get_or_resolve("demo", "deployment", [str(input_file)], resolve_fn)
-        resolved, indicator = cache.get_or_resolve("demo", "deployment", [str(input_file)], resolve_fn, refresh_cache=True)
+        resolved, indicator = cache.get_or_resolve(
+            "demo", "deployment", [str(input_file)], resolve_fn, refresh_cache=True
+        )
         assert indicator == "refreshed"
         assert resolved == {"v": 2}
         assert calls["count"] == 2
