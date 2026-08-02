@@ -542,6 +542,7 @@ class TestLockingWiring:
         with (
             patch.object(cmd, "_should_lock", return_value=True),
             patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
+            patch.object(cmd, "_preflight_check_provisioners", return_value=[]),
             patch.object(cmd, "_execute_stage_provisioning", return_value=False),
             patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
         ):
@@ -588,6 +589,167 @@ class TestLockingWiring:
 
         assert result is False
         assert len(cmd._errors) > 0
+
+
+# ---------------------------------------------------------------------------
+# Pre-flight provisioner validation — every stage's tool/auth must be checked
+# BEFORE any stage runs (and before the deployment lock is acquired), so a
+# later stage's missing tool can't be discovered only after an earlier stage
+# already made real infrastructure changes.
+# ---------------------------------------------------------------------------
+
+
+class TestPreflightCheckProvisioners:
+    def _deployer_mock(self, workspace_ok=True, workspace_msgs=None, env_ok=True, env_msgs=None) -> MagicMock:
+        deployer = MagicMock()
+        deployer.validate_workspace.return_value = (workspace_ok, workspace_msgs or [])
+        deployer.validate_environment.return_value = (env_ok, env_msgs or [])
+        return deployer
+
+    def test_no_errors_when_all_stages_pass(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        stage = _make_stage("infra")
+        deployer = self._deployer_mock()
+
+        with patch.object(cmd, "_create_deployer", return_value=deployer):
+            errors = cmd._preflight_check_provisioners([stage])
+
+        assert errors == []
+        deployer.validate_workspace.assert_called_once()
+        deployer.validate_environment.assert_called_once()
+
+    def test_stop_stage_failure_is_fatal(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        stage = _make_stage("infra")
+        stage.on_failure = "stop"
+        deployer = self._deployer_mock(env_ok=False, env_msgs=["terraform binary not found on PATH"])
+
+        with patch.object(cmd, "_create_deployer", return_value=deployer):
+            errors = cmd._preflight_check_provisioners([stage])
+
+        assert len(errors) == 1
+        assert "infra" in errors[0]
+        assert "terraform binary not found on PATH" in errors[0]
+
+    def test_continue_stage_failure_is_downgraded_to_warning(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        stage = _make_stage("optional-stage")
+        stage.on_failure = "continue"
+        deployer = self._deployer_mock(env_ok=False, env_msgs=["ansible not found"])
+
+        with patch.object(cmd, "_create_deployer", return_value=deployer):
+            errors = cmd._preflight_check_provisioners([stage])
+
+        assert errors == []
+        assert any("ansible not found" in m for m in cmd._messages)
+
+    def test_rollback_stage_failure_is_fatal_like_stop(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        stage = _make_stage("infra")
+        stage.on_failure = "rollback"
+        deployer = self._deployer_mock(workspace_ok=False, workspace_msgs=["no *.tf files found"])
+
+        with patch.object(cmd, "_create_deployer", return_value=deployer):
+            errors = cmd._preflight_check_provisioners([stage])
+
+        assert len(errors) == 1
+        assert "no *.tf files found" in errors[0]
+
+    def test_deployer_creation_failure_is_fatal_for_stop_stage(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        stage = _make_stage("infra")
+        stage.on_failure = "stop"
+
+        def _fail_create(_stage):
+            cmd._errors.append("Stage 'infra': no provisioner or topology declared.")
+            return None
+
+        with patch.object(cmd, "_create_deployer", side_effect=_fail_create):
+            errors = cmd._preflight_check_provisioners([stage])
+
+        assert len(errors) == 1
+        assert "no provisioner or topology declared" in errors[0]
+        # The error reclaimed from _create_deployer must not leak into
+        # self._errors directly — only into the returned fatal_errors list.
+        assert cmd._errors == []
+
+    def test_deployer_creation_failure_is_warning_for_continue_stage(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        stage = _make_stage("optional-stage")
+        stage.on_failure = "continue"
+
+        def _fail_create(_stage):
+            cmd._errors.append("Stage 'optional-stage': no provisioner or topology declared.")
+            return None
+
+        with patch.object(cmd, "_create_deployer", side_effect=_fail_create):
+            errors = cmd._preflight_check_provisioners([stage])
+
+        assert errors == []
+        assert cmd._errors == []
+        assert any("no provisioner or topology declared" in m for m in cmd._messages)
+
+    def test_only_first_failing_check_recorded_per_stage(self, tmp_path):
+        """workspace check fails -> environment check is skipped for that stage."""
+        cmd = _make_run_command(tmp_path)
+        stage = _make_stage("infra")
+        stage.on_failure = "stop"
+        deployer = self._deployer_mock(workspace_ok=False, workspace_msgs=["workspace broken"])
+
+        with patch.object(cmd, "_create_deployer", return_value=deployer):
+            errors = cmd._preflight_check_provisioners([stage])
+
+        assert len(errors) == 1
+        assert "workspace broken" in errors[0]
+        deployer.validate_environment.assert_not_called()
+
+    def test_multiple_stages_all_checked_and_errors_aggregated(self, tmp_path):
+        stage1 = _make_stage("infra")
+        stage1.on_failure = "stop"
+        stage2 = _make_stage("configure")
+        stage2.on_failure = "stop"
+
+        cmd = _make_run_command(tmp_path)
+        good_deployer = self._deployer_mock()
+        bad_deployer = self._deployer_mock(env_ok=False, env_msgs=["ansible not found"])
+
+        def _create(stage):
+            return good_deployer if stage.name == "infra" else bad_deployer
+
+        with patch.object(cmd, "_create_deployer", side_effect=_create):
+            errors = cmd._preflight_check_provisioners([stage1, stage2])
+
+        assert len(errors) == 1
+        assert "configure" in errors[0]
+        assert "ansible not found" in errors[0]
+
+    def test_execute_provisioning_aborts_before_lock_on_preflight_failure(self, tmp_path):
+        """End-to-end: a failing stop-stage aborts _execute_provisioning() before
+        the deployment lock is ever acquired."""
+        cmd = _make_run_command(tmp_path)
+        cmd._dry_run = False
+        cmd._output_format = "json"
+        stage = _make_stage("infra")
+        stage.on_failure = "stop"
+        spec = _make_locking_spec(enabled=True)
+        spec.stages = [stage]
+        svc = MagicMock()
+        svc.model.spec = spec
+        svc.model.meta.name = "my-deploy"
+        cmd._deployment_service = svc
+
+        backend_mock = MagicMock()
+
+        with (
+            patch.object(cmd, "_should_lock", return_value=True),
+            patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
+            patch.object(cmd, "_preflight_check_provisioners", return_value=["Stage 'infra': terraform not found"]),
+        ):
+            result = cmd._execute_provisioning()  # type: ignore[call-arg]
+
+        assert result is False
+        backend_mock.acquire.assert_not_called()
+        assert any("terraform not found" in e for e in cmd._errors)
 
 
 class TestDeployList:
