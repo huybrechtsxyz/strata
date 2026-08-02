@@ -3,6 +3,9 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from strata.exceptions import SecretStoreUnavailableError
 from strata.integrations.azure_keyvault import AzureKeyVaultIntegration
 from strata.integrations.base_integration import BaseIntegration
 from strata.integrations.capabilities import ISecretStore
@@ -73,15 +76,84 @@ class TestAzureKeyVaultGetSecret:
     def setup_method(self):
         BaseIntegration._instances.clear()
 
-    def test_get_secret_no_url_returns_none(self):
+    def test_get_secret_no_url_raises(self):
+        """Misconfiguration (no vault URL / no CLI) must raise, not silently return None."""
         i = AzureKeyVaultIntegration(_cfg())
-        result = i.get_secret("my-secret")
-        assert result is None
+        with pytest.raises(SecretStoreUnavailableError):
+            i.get_secret("my-secret")
 
     def test_list_secrets_no_url_returns_empty(self):
         i = AzureKeyVaultIntegration(_cfg())
         result = i.list_secrets()
         assert result == []
+
+
+class TestAzureKeyVaultGetSecretFallbackChain:
+    """ADR security fix: get_secret() tries CLI -> API(cli-token) -> API(client-creds),
+    treating each failure as 'try the next method' and only raising once every
+    method is exhausted without a confirmed 404."""
+
+    def setup_method(self):
+        BaseIntegration._instances.clear()
+
+    def _make(self):
+        i = AzureKeyVaultIntegration(_cfg(address="https://vault.vault.azure.net"))
+        return i
+
+    def test_raises_when_all_methods_fail(self):
+        i = self._make()
+        with (
+            patch.object(i, "ensure_available", return_value=(True, "")),
+            patch.object(i, "_get_secret_via_cli", return_value=None),
+            patch.object(i, "_get_secret_via_api", side_effect=SecretStoreUnavailableError("keyvault", "boom")),
+        ):
+            with pytest.raises(SecretStoreUnavailableError):
+                i.get_secret("my-secret")
+
+    def test_confirmed_404_returns_none_without_exhausting_all_methods(self):
+        i = self._make()
+        calls = []
+
+        def fake_api(secret_name, use_cli_token=False):
+            calls.append(use_cli_token)
+            return None  # confirmed not found
+
+        with (
+            patch.object(i, "ensure_available", return_value=(True, "")),
+            patch.object(i, "_get_secret_via_cli", return_value=None),
+            patch.object(i, "_get_secret_via_api", side_effect=fake_api),
+        ):
+            result = i.get_secret("my-secret")
+
+        assert result is None
+        # Only the first API attempt (CLI-token) should have run before stopping.
+        assert calls == [True]
+
+    def test_falls_through_to_api_when_cli_fails(self):
+        i = self._make()
+        with (
+            patch.object(i, "ensure_available", return_value=(True, "")),
+            patch.object(i, "_get_secret_via_cli", return_value=None),
+            patch.object(i, "_get_secret_via_api", return_value="s3cr3t"),
+        ):
+            result = i.get_secret("my-secret")
+        assert result == "s3cr3t"
+
+    def test_recovers_when_first_api_method_fails_but_second_succeeds(self):
+        i = self._make()
+
+        def fake_api(secret_name, use_cli_token=False):
+            if use_cli_token:
+                raise SecretStoreUnavailableError("keyvault", "cli token auth failed")
+            return "s3cr3t"
+
+        with (
+            patch.object(i, "ensure_available", return_value=(True, "")),
+            patch.object(i, "_get_secret_via_cli", return_value=None),
+            patch.object(i, "_get_secret_via_api", side_effect=fake_api),
+        ):
+            result = i.get_secret("my-secret")
+        assert result == "s3cr3t"
 
 
 class TestAzureKeyVaultCliLogin:

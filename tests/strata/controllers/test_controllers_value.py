@@ -3,6 +3,8 @@
 import os
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from strata.controllers.value_controller import (
     ResolvedValues,
     ValueController,
@@ -397,6 +399,214 @@ class TestValueControllerResolveValues:
         assert ok is True
         assert resolved.is_empty() is True
         assert errors == []
+
+
+# ---------------------------------------------------------------------------
+# Store-unavailable handling — bug fix: a store being unreachable/unauthenticated
+# must always abort resolution (success=False), even in non-strict mode, and
+# must never be conflated with "key genuinely not found" (which would trigger
+# unsafe generate-on-missing secret creation).
+# ---------------------------------------------------------------------------
+
+
+class TestValueControllerStoreUnavailable:
+    def _env_service_with(self, variables=(), secrets=(), features=()):
+        env_svc = MagicMock()
+        env_svc.get_variables.return_value = list(variables)
+        env_svc.get_secrets.return_value = list(secrets)
+        env_svc.get_features.return_value = list(features)
+        return env_svc
+
+    def _deployment_service_with(self, env_svc):
+        dep_svc = MagicMock()
+        dep_svc.get_environment_service.return_value = env_svc
+        dep_svc.get_merge_provenance.return_value = None
+        return dep_svc
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    @patch("strata.controllers.value_controller.ValueController._get_integration_by_type")
+    def test_secret_store_unavailable_never_triggers_generate(self, mock_get_integration, _mock_init):
+        """The core vulnerability: a store-unavailable error on get_secret() must
+        NOT be treated as 'missing' — set_secret() (generate-on-missing) must
+        never be called."""
+        from strata.exceptions import SecretStoreUnavailableError
+        from strata.models.store_models import SecretGenerateSpec, SecretGenerateType, SecretStoreModel, SecretStoreType
+
+        mock_integration = MagicMock()
+        mock_integration.get_secret.side_effect = SecretStoreUnavailableError("infisical", "auth failed")
+        mock_get_integration.return_value = mock_integration
+
+        item = SecretStoreModel(
+            key="DB_PASSWORD",
+            store=SecretStoreType.INFISICAL,
+            value="myapp-db-password",
+            generate=SecretGenerateSpec(type=SecretGenerateType.PASSWORD, length=16),
+        )
+
+        ctrl = ValueController()
+        with pytest.raises(SecretStoreUnavailableError):
+            ctrl._resolve_secret(item)
+
+        mock_integration.set_secret.assert_not_called()
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    @patch("strata.controllers.value_controller.ValueController._get_integration_by_type")
+    def test_resolve_values_fails_on_store_unavailable_even_when_not_strict(self, mock_get_integration, _mock_init):
+        """resolve_values(strict=False) must still return success=False and
+        populate store_unavailable_errors when a store is unreachable."""
+        from strata.exceptions import SecretStoreUnavailableError
+        from strata.models.store_models import SecretStoreModel, SecretStoreType
+
+        mock_integration = MagicMock()
+        mock_integration.ensure_available.return_value = (True, "")
+        mock_integration.get_secret.side_effect = SecretStoreUnavailableError("infisical", "auth failed")
+        mock_get_integration.return_value = mock_integration
+
+        item = SecretStoreModel(key="DB_PASSWORD", store=SecretStoreType.INFISICAL, value="myapp-db-password")
+        env_svc = self._env_service_with(secrets=[item])
+        dep_svc = self._deployment_service_with(env_svc)
+
+        ctrl = ValueController()
+        ok, resolved, errors = ctrl.resolve_values(dep_svc, strict=False)
+
+        assert ok is False
+        assert len(resolved.store_unavailable_errors) == 1
+        assert "DB_PASSWORD" in resolved.store_unavailable_errors[0]
+        assert resolved.secrets == {}
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    @patch("strata.controllers.value_controller.ValueController._get_integration_by_type")
+    def test_resolve_values_succeeds_when_store_available(self, mock_get_integration, _mock_init):
+        """Control case: a working store still resolves normally."""
+        from strata.models.store_models import SecretStoreModel, SecretStoreType
+
+        mock_integration = MagicMock()
+        mock_integration.ensure_available.return_value = (True, "")
+        mock_integration.get_secret.return_value = "s3cr3t"
+        mock_get_integration.return_value = mock_integration
+
+        item = SecretStoreModel(key="DB_PASSWORD", store=SecretStoreType.INFISICAL, value="myapp-db-password")
+        env_svc = self._env_service_with(secrets=[item])
+        dep_svc = self._deployment_service_with(env_svc)
+
+        ctrl = ValueController()
+        ok, resolved, errors = ctrl.resolve_values(dep_svc, strict=False)
+
+        assert ok is True
+        assert resolved.store_unavailable_errors == []
+        assert resolved.secrets["DB_PASSWORD"] == "s3cr3t"
+
+
+# ---------------------------------------------------------------------------
+# Preflight check — every distinct store referenced by the deployment must be
+# confirmed available BEFORE any individual variable/secret/feature is
+# resolved. This fails fast with one deduplicated check per store instead of
+# discovering the same outage once per item (or after some items already
+# resolved / secrets already generated).
+# ---------------------------------------------------------------------------
+
+
+class TestValueControllerPreflight:
+    def _env_service_with(self, variables=(), secrets=(), features=()):
+        env_svc = MagicMock()
+        env_svc.get_variables.return_value = list(variables)
+        env_svc.get_secrets.return_value = list(secrets)
+        env_svc.get_features.return_value = list(features)
+        return env_svc
+
+    def _deployment_service_with(self, env_svc):
+        dep_svc = MagicMock()
+        dep_svc.get_environment_service.return_value = env_svc
+        dep_svc.get_merge_provenance.return_value = None
+        return dep_svc
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    @patch("strata.controllers.value_controller.ValueController._get_integration_by_type")
+    def test_unavailable_store_short_circuits_before_any_item_resolved(self, mock_get_integration, _mock_init):
+        """When the store is down, resolve_values must stop at the preflight
+        check — get_secret() must never even be called."""
+        from strata.models.store_models import SecretStoreModel, SecretStoreType
+
+        mock_integration = MagicMock()
+        mock_integration.ensure_available.return_value = (False, "connection refused")
+        mock_get_integration.return_value = mock_integration
+
+        item = SecretStoreModel(key="DB_PASSWORD", store=SecretStoreType.INFISICAL, value="myapp-db-password")
+        env_svc = self._env_service_with(secrets=[item])
+        dep_svc = self._deployment_service_with(env_svc)
+
+        ctrl = ValueController()
+        ok, resolved, errors = ctrl.resolve_values(dep_svc, strict=False)
+
+        assert ok is False
+        assert len(resolved.store_unavailable_errors) == 1
+        assert "infisical" in resolved.store_unavailable_errors[0]
+        assert "connection refused" in resolved.store_unavailable_errors[0]
+        mock_integration.get_secret.assert_not_called()
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    @patch("strata.controllers.value_controller.ValueController._get_integration_by_type")
+    def test_distinct_store_checked_only_once_for_many_items(self, mock_get_integration, _mock_init):
+        """Ten items from the same store must only trigger one ensure_available() call."""
+        from strata.models.store_models import SecretStoreModel, SecretStoreType
+
+        mock_integration = MagicMock()
+        mock_integration.ensure_available.return_value = (True, "")
+        mock_integration.get_secret.return_value = "s3cr3t"
+        mock_get_integration.return_value = mock_integration
+
+        items = [
+            SecretStoreModel(key=f"SECRET_{i}", store=SecretStoreType.INFISICAL, value=f"path/{i}") for i in range(10)
+        ]
+        env_svc = self._env_service_with(secrets=items)
+        dep_svc = self._deployment_service_with(env_svc)
+
+        ctrl = ValueController()
+        ok, resolved, errors = ctrl.resolve_values(dep_svc, strict=False)
+
+        assert ok is True
+        assert mock_integration.ensure_available.call_count == 1
+        assert len(resolved.secrets) == 10
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    def test_constant_and_environment_stores_skip_preflight(self, _mock_init):
+        """constant/environment/github stores need no integration — preflight
+        must not attempt to look one up for them."""
+        from strata.models.store_models import SecretStoreModel, SecretStoreType, VariableStoreModel, VariableStoreType
+
+        var_item = VariableStoreModel(key="APP_ENV", store=VariableStoreType.CONSTANT, value="production")
+        secret_item = SecretStoreModel(key="TOKEN", store=SecretStoreType.ENVIRONMENT, value="MY_TOKEN")
+        env_svc = self._env_service_with(variables=[var_item], secrets=[secret_item])
+        dep_svc = self._deployment_service_with(env_svc)
+
+        with patch.dict(os.environ, {"MY_TOKEN": "tok123"}):
+            ctrl = ValueController()
+            ok, resolved, errors = ctrl.resolve_values(dep_svc, strict=False)
+
+        assert ok is True
+        assert resolved.store_unavailable_errors == []
+        assert resolved.variables["APP_ENV"] == "production"
+        assert resolved.secrets["TOKEN"] == "tok123"
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    @patch("strata.controllers.value_controller.ValueController._get_integration_by_type")
+    def test_unregistered_store_not_treated_as_unavailable(self, mock_get_integration, _mock_init):
+        """A store type with no registered integration is a config error, not an
+        availability failure — preflight must not add it to store_unavailable_errors
+        (existing per-item 'not registered' error path handles it, respects strict)."""
+        from strata.models.store_models import SecretStoreModel, SecretStoreType
+
+        mock_get_integration.return_value = None
+
+        item = SecretStoreModel(key="DB_PASSWORD", store=SecretStoreType.INFISICAL, value="myapp-db-password")
+        env_svc = self._env_service_with(secrets=[item])
+        dep_svc = self._deployment_service_with(env_svc)
+
+        ctrl = ValueController()
+        ok, resolved, errors = ctrl.resolve_values(dep_svc, strict=False)
+
+        assert resolved.store_unavailable_errors == []
+        assert any("no integration registered" in e for e in resolved.errors)
 
 
 # ---------------------------------------------------------------------------

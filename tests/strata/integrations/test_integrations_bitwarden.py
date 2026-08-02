@@ -3,6 +3,9 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from strata.exceptions import SecretStoreUnavailableError
 from strata.integrations.base_integration import BaseIntegration
 from strata.integrations.bitwarden import BitwardenIntegration
 from strata.integrations.capabilities import ISecretStore
@@ -95,16 +98,24 @@ class TestBitwardenGetSecret:
             result = i.get_secret("secret-id")
         assert result == "my_secret"
 
-    def test_get_secret_no_token_returns_none(self):
+    def test_get_secret_unavailable_raises(self):
+        """Misconfiguration (no CLI, no token) must raise, not silently return None."""
         i = BitwardenIntegration(_cfg())
-        result = i.get_secret("secret-id")
-        assert result is None
+        with pytest.raises(SecretStoreUnavailableError):
+            i.get_secret("secret-id")
 
-    def test_get_secret_command_failure_returns_none(self, monkeypatch):
+    def test_get_secret_command_failure_raises(self, monkeypatch):
+        """A non-zero bws CLI exit must raise — bws has no reliable way to
+        distinguish 'secret not found' from an auth/network failure, so any
+        failure is treated as unavailable rather than risking generate-on-missing.
+        """
         monkeypatch.setenv("BWS_ACCESS_TOKEN", "tok123")
         BaseIntegration._instances.clear()
         i = BitwardenIntegration(_cfg(token_var="BWS_ACCESS_TOKEN"))
         mock_result = MagicMock(returncode=1, stdout="", stderr="error")
-        with patch.object(i, "_run_integration", return_value=mock_result):
-            result = i.get_secret("secret-id")
-        assert result is None
+        with (
+            patch.object(i, "ensure_available", return_value=(True, "")),
+            patch.object(i, "_run_integration", return_value=mock_result),
+        ):
+            with pytest.raises(SecretStoreUnavailableError):
+                i.get_secret("secret-id")

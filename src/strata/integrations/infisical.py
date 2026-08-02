@@ -2,11 +2,13 @@
 
 import json
 import re
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+from strata.exceptions import SecretStoreUnavailableError
 from strata.integrations.capabilities import ISecretStore, IVariableStore
 from strata.integrations.store_integration import StoreIntegration
 from strata.logger import get_logger
@@ -107,13 +109,27 @@ class InfisicalIntegration(StoreIntegration):
         return None
 
     def _get_access_token(self) -> Optional[str]:
-        """Return a valid bearer token (service token or cached universal-auth token)."""
+        """Return a valid bearer token (service token or cached universal-auth token).
+
+        Raises:
+            SecretStoreUnavailableError: universal-auth credentials are present
+                but the login attempt failed (bad credentials, wrong project,
+                network error, wrong endpoints.address). This is distinct from
+                "no credentials configured" (returns ``None``, handled upstream
+                by ``ensure_available()``).
+        """
         if self.infisical_token:
             return self.infisical_token
         if self._access_token:
             return self._access_token
         if self.client_id and self.client_secret:
-            self._access_token = self._login_via_universal_auth()
+            token = self._login_via_universal_auth()
+            if token is None:
+                raise SecretStoreUnavailableError(
+                    self.integration_name,
+                    "universal-auth login failed (see logs for details)",
+                )
+            self._access_token = token
         return self._access_token
 
     def _login_via_universal_auth(self) -> Optional[str]:
@@ -209,6 +225,12 @@ class InfisicalIntegration(StoreIntegration):
         """
         Ensure Infisical is configured with project ID and authentication.
 
+        For universal-auth (client id/secret), this also performs a real login
+        attempt so a bad credential/network problem is caught here rather than
+        surfacing later as an ambiguous "secret not found". Service-token auth
+        is presence-checked only — there is no cheap way to verify a bare token
+        without also resolving a specific secret.
+
         Returns:
             Tuple of (success, error_message)
         """
@@ -224,6 +246,13 @@ class InfisicalIntegration(StoreIntegration):
                 f"{self.integration_name} authentication not configured. "
                 "Set INFISICAL_TOKEN or INFISICAL_CLIENT_ID + INFISICAL_CLIENT_SECRET.",
             )
+
+        if auth == "universal-auth":
+            try:
+                self._get_access_token()
+            except SecretStoreUnavailableError as exc:
+                self._info = f"{self.integration_name} login check failed."
+                return False, f"{self.integration_name} authentication check failed: {exc}"
 
         self._info = f"{self.integration_name} is configured ({auth})"
         logger.debug("Infisical is available", name=self.integration_name, auth_method=auth)
@@ -251,7 +280,12 @@ class InfisicalIntegration(StoreIntegration):
             **kwargs: project_id, environment, secret_path, prefer_cli, timeout
 
         Returns:
-            Secret value if found, None otherwise
+            Secret value, or ``None`` if the key does not exist in the store.
+
+        Raises:
+            SecretStoreUnavailableError: Infisical is not configured, or the
+                store cannot be reached/authenticated. Never returns ``None``
+                for this case — see the ``ISecretStore`` Protocol contract.
         """
         project_id: str = kwargs.get("project_id") or self.project_id or ""
         environment: str = kwargs.get("environment") or self.environment or ""
@@ -261,12 +295,7 @@ class InfisicalIntegration(StoreIntegration):
 
         available, error = self.ensure_available()
         if not available:
-            logger.warning(
-                "Cannot retrieve secret from Infisical",
-                error=error,
-                name=self.integration_name,
-            )
-            return None
+            raise SecretStoreUnavailableError(self.integration_name, error)
 
         logger.debug(
             "Retrieving secret from Infisical",
@@ -447,9 +476,17 @@ class InfisicalIntegration(StoreIntegration):
         environment: str,
         secret_path: str,
     ) -> Optional[str]:
-        token = self._get_access_token()
+        """Fetch *key* via the Infisical REST API.
+
+        Returns ``None`` only for a confirmed HTTP 404 (key genuinely not
+        found). Any other failure (auth, network, non-404 HTTP status) raises
+        ``SecretStoreUnavailableError`` — see the ``ISecretStore`` contract.
+        """
+        token = self._get_access_token()  # may raise SecretStoreUnavailableError
         if not token:
-            return None
+            # No credentials at all. ensure_available() should already have
+            # caught this in get_secret(); guarded defensively here too.
+            raise SecretStoreUnavailableError(self.integration_name, "no authentication credentials available")
         try:
             params: Dict[str, str] = {"environment": environment, "secretPath": secret_path}
             if project_id:
@@ -461,14 +498,26 @@ class InfisicalIntegration(StoreIntegration):
             with urllib.request.urlopen(req, timeout=10) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 return data.get("secret", {}).get("secretValue")
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return None  # confirmed: key does not exist
+            logger.warning(
+                "Infisical API secret retrieval failed",
+                key=key,
+                http_status=e.code,
+                name=self.integration_name,
+            )
+            raise SecretStoreUnavailableError(
+                self.integration_name, f"HTTP {e.code} from Infisical API", cause=e
+            ) from e
         except Exception as e:
-            logger.debug(
+            logger.warning(
                 "Infisical API secret retrieval failed",
                 key=key,
                 error_type=type(e).__name__,
                 name=self.integration_name,
             )
-            return None
+            raise SecretStoreUnavailableError(self.integration_name, f"{type(e).__name__}: {e}", cause=e) from e
 
     def _set_secret_via_api(
         self,

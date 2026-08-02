@@ -3,6 +3,9 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from strata.exceptions import SecretStoreUnavailableError
 from strata.integrations.base_integration import BaseIntegration
 from strata.integrations.capabilities import ISecretStore, IVariableStore
 from strata.integrations.infisical import InfisicalIntegration
@@ -135,9 +138,13 @@ class TestInfisicalGetSecret:
     def setup_method(self):
         BaseIntegration._instances.clear()
 
-    def test_get_secret_no_project_returns_none(self):
+    def test_get_secret_no_project_raises_unavailable(self):
+        """Misconfiguration (no project ID) must raise, not silently return None —
+        ValueController relies on this to avoid treating "unavailable" as "missing"
+        and triggering generate-on-missing secret creation."""
         i = InfisicalIntegration(_cfg())
-        assert i.get_secret("DB_PASSWORD") is None
+        with pytest.raises(SecretStoreUnavailableError):
+            i.get_secret("DB_PASSWORD")
 
     def test_get_secret_via_cli(self, monkeypatch):
         monkeypatch.setenv("INFISICAL_PROJECT_ID", "proj-123")

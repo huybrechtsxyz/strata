@@ -1397,6 +1397,43 @@ class TestDeployRunSeedNotes:
 
 
 # ---------------------------------------------------------------------------
+# TestResolveValuesStoreUnavailable — bug fix: RunDeployCommand._resolve_values()
+# must abort the deploy (return False) when a store is unreachable/unauthenticated,
+# even in non-strict mode, instead of silently continuing.
+# ---------------------------------------------------------------------------
+
+
+class TestResolveValuesStoreUnavailable:
+    def _run_resolve(self, tmp_path, store_unavailable_errors, ok=False, errors=None):
+        from unittest.mock import MagicMock, patch
+
+        from strata.utils.resolved_values import ResolvedValues
+
+        cmd = _make_run_cmd(tmp_path)
+        resolved = ResolvedValues(store_unavailable_errors=list(store_unavailable_errors))
+        value_ctrl = MagicMock()
+        value_ctrl.resolve_values.return_value = (ok, resolved, errors or [])
+        with patch("strata.commands.deploy.run_deploy_command.ValueController", return_value=value_ctrl):
+            with patch("click.echo"):
+                result = cmd._resolve_values()
+        return cmd, result
+
+    def test_returns_false_when_store_unavailable(self, tmp_path):
+        cmd, result = self._run_resolve(tmp_path, ["Secret 'DB_PASSWORD': Store 'infisical' unavailable: auth failed"])
+        assert result is False
+
+    def test_store_unavailable_errors_added_to_command_errors(self, tmp_path):
+        msg = "Secret 'DB_PASSWORD': Store 'infisical' unavailable: auth failed"
+        cmd, result = self._run_resolve(tmp_path, [msg])
+        assert msg in cmd._errors
+
+    def test_no_store_unavailable_errors_returns_true(self, tmp_path):
+        cmd, result = self._run_resolve(tmp_path, [], ok=True)
+        assert result is True
+        assert cmd._errors == []
+
+
+# ---------------------------------------------------------------------------
 # TestDestroyNdjsonStreaming — NDJSON event emission in _execute_stage_destroy
 # ---------------------------------------------------------------------------
 

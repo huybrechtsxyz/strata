@@ -6,6 +6,7 @@ import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+from strata.exceptions import SecretStoreUnavailableError
 from strata.integrations.capabilities import ISecretStore
 from strata.integrations.store_integration import StoreIntegration
 from strata.logger import get_logger
@@ -218,56 +219,59 @@ class BitwardenIntegration(StoreIntegration):
             **kwargs: Additional arguments (ignored)
 
         Returns:
-            The secret value if found, None otherwise
+            The secret value. Never returns ``None`` — the ``bws`` CLI does not
+            expose a reliable way to distinguish "secret ID not found" from an
+            auth/network failure (unlike an HTTP API with a clean 404), so any
+            non-success outcome is treated as unavailable rather than risking
+            an ambiguous ``None`` triggering generate-on-missing elsewhere.
+
+        Raises:
+            SecretStoreUnavailableError: Bitwarden is not configured, the CLI
+                call failed, or its output could not be parsed.
         """
         available, error = self.ensure_available()
         if not available:
-            logger.warning("Cannot retrieve secret", name=self.integration_name, error=error)
-            return None
+            raise SecretStoreUnavailableError(self.integration_name, error)
+
+        logger.debug("Retrieving secret from Bitwarden", name=self.integration_name, secret_id=key)
+
+        # Set up environment with access token
+        env = {**os.environ}
+        if self.access_token:
+            env[self._get_token_var_name()] = self.access_token
 
         try:
-            logger.debug("Retrieving secret from Bitwarden", name=self.integration_name, secret_id=key)
-
-            # Set up environment with access token
-            env = {**os.environ}
-            if self.access_token:
-                env[self._get_token_var_name()] = self.access_token
-
             result = self._run_integration(args=["secret", "get", key], timeout=timeout, env=env)
+        except Exception as e:
+            logger.warning(
+                "Error retrieving secret from Bitwarden",
+                name=self.integration_name,
+                secret_id=key,
+                error_type=type(e).__name__,
+            )
+            raise SecretStoreUnavailableError(self.integration_name, f"{type(e).__name__}: {e}", cause=e) from e
 
-            if result.returncode == 0 and result.stdout:
-                # Parse JSON output
-                data = json.loads(result.stdout)
-                logger.info("Secret retrieved from Bitwarden", name=self.integration_name, secret_id=key)
-                return data.get("value")
-
-            logger.error(
+        if result.returncode != 0 or not result.stdout:
+            logger.warning(
                 "Failed to get secret from Bitwarden",
                 name=self.integration_name,
                 secret_id=key,
                 stderr=result.stderr,
             )
-            return None
+            raise SecretStoreUnavailableError(
+                self.integration_name, f"bws CLI exited {result.returncode}: {result.stderr.strip() or '(no output)'}"
+            )
 
+        try:
+            data = json.loads(result.stdout)
         except json.JSONDecodeError as e:
-            logger.error(
-                "Failed to parse secret JSON from Bitwarden",
-                name=self.integration_name,
-                secret_id=key,
-                error=str(e),
-                exc_info=True,
+            logger.warning(
+                "Failed to parse secret JSON from Bitwarden", name=self.integration_name, secret_id=key, error=str(e)
             )
-            return None
+            raise SecretStoreUnavailableError(self.integration_name, f"invalid JSON from bws CLI: {e}", cause=e) from e
 
-        except Exception as e:
-            logger.error(
-                "Error retrieving secret from Bitwarden",
-                name=self.integration_name,
-                secret_id=key,
-                error_type=type(e).__name__,
-                exc_info=True,
-            )
-            return None
+        logger.info("Secret retrieved from Bitwarden", name=self.integration_name, secret_id=key)
+        return data.get("value")
 
     def _list_secrets_full(self, timeout: int = 60) -> Optional[List[Dict[str, Any]]]:
         """

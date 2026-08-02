@@ -48,7 +48,15 @@ class IVariableStore(Protocol):
     """
 
     def get_variable(self, key: str, **kwargs) -> Optional[Any]:
-        """Get a variable value from the store."""
+        """Get a variable value from the store.
+
+        Returns:
+            The value, or ``None`` if the key does not exist.
+
+        Raises:
+            SecretStoreUnavailableError: if the store cannot be reached or
+                authentication fails. Never return ``None`` for this case.
+        """
         ...
 
     def set_variable(self, key: str, value: Any, **kwargs) -> bool:
@@ -72,7 +80,17 @@ class ISecretStore(Protocol):
     """
 
     def get_secret(self, key: str, **kwargs) -> Optional[str]:
-        """Get a secret value from the store."""
+        """Get a secret value from the store.
+
+        Returns:
+            The secret value, or ``None`` if the key does not exist.
+
+        Raises:
+            SecretStoreUnavailableError: if the store cannot be reached or
+                authentication fails. Never return ``None`` for this case —
+                callers (e.g. ``ValueController``) rely on the distinction to
+                avoid unsafe fallback behaviour such as generate-on-missing.
+        """
         ...
 
     def set_secret(self, key: str, value: str, **kwargs) -> bool:
@@ -104,7 +122,15 @@ class IFeatureStore(Protocol):
     """
 
     def get_feature(self, key: str, **kwargs) -> Optional[bool]:
-        """Get a feature flag value from the store."""
+        """Get a feature flag value from the store.
+
+        Returns:
+            The value, or ``None`` if the key does not exist.
+
+        Raises:
+            SecretStoreUnavailableError: if the store cannot be reached or
+                authentication fails. Never return ``None`` for this case.
+        """
         ...
 
     def set_feature(self, key: str, value: bool, **kwargs) -> bool:

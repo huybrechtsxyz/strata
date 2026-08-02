@@ -1162,8 +1162,11 @@ class RunDeployCommand(BaseDeployCommand):
         Populates ``self._resolved_values`` which is later passed to the
         deployer so it can inject TF_VAR_* env vars around each terraform step.
 
-        Non-strict mode: resolution warnings are logged but do not abort the
-        deploy (missing optional values may be handled by Terraform defaults).
+        Non-strict mode: resolution warnings (a declared value genuinely absent,
+        with no default) are logged but do not abort the deploy. A store being
+        unreachable/unauthenticated is a DIFFERENT, always-fatal category — see
+        ``ValueController.resolve_values()`` — since continuing past it risks
+        silently generating/overwriting secrets or deploying with blank values.
         """
         controller = ValueController()
         ok, resolved, errors = controller.resolve_values(
@@ -1172,6 +1175,19 @@ class RunDeployCommand(BaseDeployCommand):
         )
 
         self._resolved_values = resolved
+
+        if resolved.store_unavailable_errors:
+            for err in resolved.store_unavailable_errors:
+                self.logger.error("Value resolution aborted — store unavailable: %s", err)
+            if self._is_console_output():
+                click.echo(
+                    f"\n\u274c  {len(resolved.store_unavailable_errors)} store(s) unreachable/unauthenticated — "
+                    "aborting deploy rather than risk generating or overwriting secrets:"
+                )
+                for err in resolved.store_unavailable_errors:
+                    click.echo(f"     • {err}")
+            self._errors.extend(resolved.store_unavailable_errors)
+            return False
 
         if errors:
             for err in errors:
