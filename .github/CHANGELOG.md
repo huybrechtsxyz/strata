@@ -8,6 +8,18 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+---
+
+## [1.6.1] - 2026-08-03
+
+### Added
+
+- **SQLite-backed resolved-model cache — `strata cache` (ADR-0026)** — deployments' resolved model is now cached keyed by a hash of its source YAML files, so `build run`/`build plan`/`policy check` don't need to re-resolve unchanged deployments. New `strata cache warm/status/clear/export` commands; the affected build/policy commands auto-warm on success (`--no-cache-warm` to opt out). The VS Code extension warms the cache in the background on save and startup. See ADR-0026.
+
+### Fixed
+
+- **`deploy run`/`deploy destroy` exit codes for invalid deployments** — a deployment file that fails schema/cross-reference validation now correctly exits 3 (was 1); a missing/unresolvable deployment file now exits 2. See ADR-0004.
+
 ### Security
 
 - **Secret/variable/feature store outages no longer conflated with "not found"** — integrations (Infisical, HashiCorp Vault/OpenBao, Bitwarden, Azure Key Vault) now raise a new `SecretStoreUnavailableError` on connectivity/auth failures instead of returning `None`. Previously a transient outage could be mistaken for a missing secret, triggering silent auto-generation of a fresh value (for `generate:` secrets) or letting a deploy proceed with a blank value. `deploy run` now aborts instead of continuing when a store is unavailable.
