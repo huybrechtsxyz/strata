@@ -100,17 +100,17 @@ jobs:
 
       # Install yq (used to extract values from YAML deployment files)
       - name: Setup YQ
-        uses: huybrechtsxyz/strata/.github/actions/setup-yq@deployment-bugs
+        uses: huybrechtsxyz/strata/.github/actions/setup-yq@v1
 
       # Install uv / python and strata
       - name: Setup Strata
-        uses: huybrechtsxyz/strata/.github/actions/setup-strata@deployment-bugs
+        uses: huybrechtsxyz/strata/.github/actions/setup-strata@v1
         with:
           python-version: "3.13"
 
       # Validate the deployment file structure and schema
       - name: Validate Deployment
-        uses: huybrechtsxyz/strata/.github/actions/validate-deployment@deployment-bugs
+        uses: huybrechtsxyz/strata/.github/actions/validate-deployment@v1
         with:
           deployment_file: ${{ inputs.deployment_file }}
 
@@ -118,14 +118,14 @@ jobs:
       # downstream steps and step summaries.
       - name: Get Deployment Info
         id: get_name
-        uses: huybrechtsxyz/strata/.github/actions/get-deployment-info@deployment-bugs
+        uses: huybrechtsxyz/strata/.github/actions/get-deployment-info@v1
         with:
           deployment_file: ${{ inputs.deployment_file }}
 
       # Authenticate with Azure (OIDC or client secret — mode is auto-detected).
       # Must run before Verify Integrations so the az CLI session is active.
       - name: Azure Login
-        uses: huybrechtsxyz/strata/.github/actions/azure-login@deployment-bugs
+        uses: huybrechtsxyz/strata/.github/actions/azure-login@v1
         with:
           azure_tenant_id: ${{ inputs.azure_tenant_id }}
           azure_subscription_id: ${{ inputs.azure_subscription_id }}
@@ -134,7 +134,7 @@ jobs:
 
       # Verify all configured store integrations are reachable before proceeding
       - name: Verify Integrations
-        uses: huybrechtsxyz/strata/.github/actions/verify-integrations@deployment-bugs
+        uses: huybrechtsxyz/strata/.github/actions/verify-integrations@v1
         with:
           bitwarden_token: ${{ secrets.bitwarden_token }}
           azure_tenant_id: ${{ inputs.azure_tenant_id }}
@@ -150,14 +150,14 @@ jobs:
       # The .strata/ directory is uploaded as artifact strata-build-{name} for
       # debugging and audit purposes (available even when deploy fails).
       - name: Build
-        uses: huybrechtsxyz/strata/.github/actions/build-deployment@deployment-bugs
+        uses: huybrechtsxyz/strata/.github/actions/build-deployment@v1
         with:
           deployment_file: ${{ inputs.deployment_file }}
           deployment_name: ${{ steps.get_name.outputs.name }}
 
       # dry_run=true (default) → plan only. dry_run=false → full deploy.
       - name: Deploy
-        uses: huybrechtsxyz/strata/.github/actions/run-deployment@deployment-bugs
+        uses: huybrechtsxyz/strata/.github/actions/run-deployment@v1
         with:
           deployment_file: ${{ inputs.deployment_file }}
           deployment_name: ${{ steps.get_name.outputs.name }}
