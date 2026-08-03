@@ -7,6 +7,34 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Security
+
+- **Secret/variable/feature store outage vs "not found" conflation**
+  - Previously `get_secret()`/`get_variable()`/`get_feature()` returned `None` both when a key genuinely didn't exist and when the store was unreachable or misauthenticated (network outage, expired token, etc.) — `ValueController` treats `None` as "missing" and, for secrets with a `generate:` spec, would call `generate_secret()` + `integration.set_secret()`, so a transient outage could silently overwrite a real secret with a freshly generated value, or a deploy could silently proceed with a blank value
+  - New exception `SecretStoreUnavailableError` (`src/strata/exceptions/integration_exception.py`)
+  - Protocol contract updated in `src/strata/integrations/capabilities.py` (`ISecretStore`/`IVariableStore`/`IFeatureStore`) — `None` now means ONLY "confirmed not found"; any connectivity/auth failure MUST raise `SecretStoreUnavailableError`
+  - `src/strata/integrations/infisical.py` — `_get_access_token()` raises on universal-auth login failure; `ensure_available()` does a live login check for universal-auth mode; `_get_secret_via_api()` distinguishes HTTP 404 (returns `None`) from any other HTTP/network error (raises)
+  - `src/strata/integrations/hashicorp_vault.py` (also covers `openbao.py`, which subclasses it) — `_get_secretvalue()`/`_get_secret_via_api()` follow the same 404-vs-raise contract; CLI fallback and per-auth-method token-getters (AppRole, Kubernetes) remain best-effort/unchanged so the auth-method chain can still try the next method
+  - `src/strata/integrations/bitwarden.py` — `get_secret()` now raises on ANY non-success `bws` CLI outcome; deliberate conservative choice since the `bws` CLI has no reliable signal to distinguish "secret ID not found" from an auth/network failure (unlike the others' clean HTTP 404s) — trades "a genuinely-missing secret with `generate:` now blocks instead of auto-generating" for safety
+  - `src/strata/integrations/azure_keyvault.py` — `get_secret()` rewritten as a loop over its existing 3-way fallback chain (CLI → API-with-cli-token → API-with-client-credentials, or reversed when `prefer_cli=False`): catches `SecretStoreUnavailableError` per attempt and tries the next method, short-circuits immediately on a confirmed 404 from an API attempt (authoritative), only re-raises once every method in the chain is exhausted without a confirmed not-found
+  - `src/strata/controllers/value_controller.py` — `resolve_values()` wraps each variable/secret/feature resolution call in `try/except SecretStoreUnavailableError`, collecting messages into a new `ResolvedValues.store_unavailable_errors` list (`src/strata/utils/resolved_values.py`); always fatal (`success=False`), overriding the `strict` parameter in both directions — a store outage is a different, always-fatal category from "optional value missing, has a default"
+  - `src/strata/commands/deploy/run_deploy_command.py` — `_resolve_values()` now checks `resolved.store_unavailable_errors` and aborts the deploy (`return False`) instead of the previous behavior of unconditionally returning `True` regardless of errors in non-strict mode; this is the line that actually closes the vulnerability
+
+- **Pre-flight store availability check (fail fast, before resolving anything)**
+  - `value_controller.py` gained `_preflight_check_stores()`, called at the very start of `resolve_values()` before any variable/secret/feature is resolved
+  - Collects the distinct set of integration-backed store types actually referenced by the deployment (skipping `constant`/`environment`/`github`, which need no integration) and calls `ensure_available()` exactly once per distinct store — instead of discovering the same outage once per item (e.g. 10 secrets from a down Infisical previously meant 10 separate failures)
+  - If any referenced, registered store is unavailable, resolution aborts immediately before touching any item
+  - A store type with no registered integration at all is left to the existing per-item "not registered" error (a config error, not an availability one)
+
+- **Pre-flight provisioner availability check (terraform/ansible/etc., before the deploy lock)**
+  - `run_deploy_command.py` gained `_preflight_check_provisioners()`, called at the top of `_execute_provisioning()` — after stage/scope filtering but before the approval-gate check and before the deployment lock is acquired
+  - For every stage that will actually run, it creates the deployer and runs the same `validate_workspace()`/`validate_environment()` checks (terraform/ansible/helm/bicep/compose binary presence + cloud CLI auth) that previously only ran per-stage, mid-loop, after the lock was already held
+  - Previously, a missing tool on stage 3 of a 3-stage deploy was only discovered after stages 1-2 had already made real infrastructure changes
+  - `on_failure: stop` (default) or `on_failure: rollback` → any failure aborts the whole deploy immediately, before the lock or any stage runs
+  - `on_failure: continue` → failure is downgraded to a warning message instead (that stage would just be skipped once reached anyway) — does not block the deploy, preserving existing tolerance semantics
+
+- Test coverage: full suite at 5106 passed / 16 skipped after these changes, including new test classes `TestValueControllerStoreUnavailable`, `TestValueControllerPreflight` (value controller), `TestResolveValuesStoreUnavailable`, `TestPreflightCheckProvisioners` (deploy command), plus updated integration tests for infisical/hashicorp_vault/openbao/bitwarden/azure_keyvault
+
 ---
 
 ## [1.6.0] - 2026-07-31
