@@ -2,11 +2,13 @@
 
 import json
 import re
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+from strata.exceptions import SecretStoreUnavailableError
 from strata.integrations.capabilities import ISecretStore
 from strata.integrations.store_integration import StoreIntegration
 from strata.logger import get_logger
@@ -276,6 +278,13 @@ class AzureKeyVaultIntegration(StoreIntegration):
 
         Implements the unified store interface from StoreIntegration.
 
+        Tries up to three methods in order (CLI, API with CLI token, API with
+        client credentials — or the reverse when ``prefer_cli`` is False). Each
+        method that fails with a real problem (auth, network, non-404 HTTP
+        status) is treated as "try the next method", not as a final answer —
+        only when every method has been exhausted without confirming a 404 is
+        the last error re-raised.
+
         Args:
             key: The name of the secret in Key Vault (secret_name)
             prefer_cli: If True, try CLI first; if False, try API first
@@ -283,12 +292,16 @@ class AzureKeyVaultIntegration(StoreIntegration):
             **kwargs: Additional arguments (ignored)
 
         Returns:
-            The secret value if found, None otherwise
+            The secret value, or ``None`` only when an API attempt confirmed
+            the secret does not exist (HTTP 404).
+
+        Raises:
+            SecretStoreUnavailableError: Key Vault is not configured, or every
+                attempted method failed without confirming "not found".
         """
         available, error = self.ensure_available()
         if not available:
-            logger.warning("Cannot retrieve secret from Azure Key Vault", name=self.integration_name, error=error)
-            return None
+            raise SecretStoreUnavailableError(self.integration_name, error)
 
         logger.debug(
             "Retrieving secret from Azure Key Vault",
@@ -298,61 +311,40 @@ class AzureKeyVaultIntegration(StoreIntegration):
         )
 
         if prefer_cli:
-            # Try Azure CLI first
-            result = self._get_secret_via_cli(key, timeout)
-            if result:
-                logger.info(
-                    "Secret retrieved from Azure Key Vault via CLI", name=self.integration_name, secret_name=key
-                )
-                return result
-
-            # Fall back to API with CLI token
-            result = self._get_secret_via_api(key, use_cli_token=True)
-            if result:
-                logger.info(
-                    "Secret retrieved from Azure Key Vault via API (CLI token)",
-                    name=self.integration_name,
-                    secret_name=key,
-                )
-                return result
-
-            # Fall back to API with client credentials
-            result = self._get_secret_via_api(key, use_cli_token=False)
-            if result:
-                logger.info(
-                    "Secret retrieved from Azure Key Vault via API (client credentials)",
-                    name=self.integration_name,
-                    secret_name=key,
-                )
-            return result
+            attempts: List[Tuple[str, Any]] = [
+                ("CLI", lambda: self._get_secret_via_cli(key, timeout)),
+                ("API (CLI token)", lambda: self._get_secret_via_api(key, use_cli_token=True)),
+                ("API (client credentials)", lambda: self._get_secret_via_api(key, use_cli_token=False)),
+            ]
         else:
-            # Try API with client credentials first
-            result = self._get_secret_via_api(key, use_cli_token=False)
+            attempts = [
+                ("API (client credentials)", lambda: self._get_secret_via_api(key, use_cli_token=False)),
+                ("API (CLI token)", lambda: self._get_secret_via_api(key, use_cli_token=True)),
+                ("CLI", lambda: self._get_secret_via_cli(key, timeout)),
+            ]
+
+        last_error: Optional[SecretStoreUnavailableError] = None
+        for label, attempt in attempts:
+            try:
+                result = attempt()
+            except SecretStoreUnavailableError as exc:
+                last_error = exc
+                continue
             if result:
                 logger.info(
-                    "Secret retrieved from Azure Key Vault via API (client credentials)",
-                    name=self.integration_name,
-                    secret_name=key,
+                    f"Secret retrieved from Azure Key Vault via {label}", name=self.integration_name, secret_name=key
                 )
                 return result
-
-            # Fall back to API with CLI token
-            result = self._get_secret_via_api(key, use_cli_token=True)
-            if result:
-                logger.info(
-                    "Secret retrieved from Azure Key Vault via API (CLI token)",
-                    name=self.integration_name,
-                    secret_name=key,
-                )
+            if label != "CLI":
+                # An API attempt returning falsy/None is a confirmed 404 — the
+                # CLI attempt's None is ambiguous (best-effort) and never hits
+                # this branch since `label == "CLI"` there.
                 return result
 
-            # Fall back to Azure CLI
-            result = self._get_secret_via_cli(key, timeout)
-            if result:
-                logger.info(
-                    "Secret retrieved from Azure Key Vault via CLI", name=self.integration_name, secret_name=key
-                )
-            return result
+        # Every method failed without confirming "not found".
+        if last_error is not None:
+            raise last_error
+        return None
 
     def list_secrets(self, prefix: str = "", **kwargs) -> List[str]:
         """
@@ -783,28 +775,50 @@ class AzureKeyVaultIntegration(StoreIntegration):
             use_cli_token: If True, get token via Azure CLI; if False, use client credentials
 
         Returns:
-            The secret value if found, None otherwise
+            The secret value, or ``None`` only for a confirmed HTTP 404 (secret
+            genuinely not found).
+
+        Raises:
+            SecretStoreUnavailableError: no access token could be obtained via
+                this specific method, or any other failure (network, non-404
+                HTTP status) occurred. The caller (``get_secret``) treats this
+                as "try the next method", not a final answer.
         """
+        access_token = self._get_access_token_via_cli() if use_cli_token else self._get_access_token_via_api()
+        if not access_token:
+            raise SecretStoreUnavailableError(
+                self.integration_name,
+                f"could not obtain access token via {'Azure CLI' if use_cli_token else 'client credentials'}",
+            )
+
+        secret_url = f"{self.keyvault_url}secrets/{secret_name}?api-version=7.4"
         try:
-            # Get access token
-            if use_cli_token:
-                access_token = self._get_access_token_via_cli()
-            else:
-                access_token = self._get_access_token_via_api()
-
-            if not access_token:
-                return None
-
-            # Call Key Vault API
-            secret_url = f"{self.keyvault_url}secrets/{secret_name}?api-version=7.4"
             req = urllib.request.Request(secret_url)
             req.add_header("Authorization", f"Bearer {access_token}")
 
             with urllib.request.urlopen(req, timeout=10) as response:
                 secret_data = json.loads(response.read().decode("utf-8"))
                 return secret_data.get("value")
-        except Exception:
-            return None
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return None  # confirmed: secret does not exist
+            logger.warning(
+                "Azure Key Vault API secret retrieval failed",
+                secret_name=secret_name,
+                http_status=e.code,
+                name=self.integration_name,
+            )
+            raise SecretStoreUnavailableError(
+                self.integration_name, f"HTTP {e.code} from Key Vault API", cause=e
+            ) from e
+        except Exception as e:
+            logger.warning(
+                "Azure Key Vault API secret retrieval failed",
+                secret_name=secret_name,
+                error_type=type(e).__name__,
+                name=self.integration_name,
+            )
+            raise SecretStoreUnavailableError(self.integration_name, f"{type(e).__name__}: {e}", cause=e) from e
 
     def _list_secrets_via_cli(self, timeout: int = 60) -> List[str]:
         """

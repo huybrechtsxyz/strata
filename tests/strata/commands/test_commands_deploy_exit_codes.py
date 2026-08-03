@@ -8,6 +8,8 @@ Covers ADR-0004 Implementation Plan — three scenarios:
 Also verifies the LockConflictError / LockTimeoutError class hierarchy.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 from click.exceptions import Exit
 
@@ -106,3 +108,84 @@ class TestHandleCommandExit:
         with pytest.raises(Exit) as exc_info:
             handle_command_exit(cmd, success=True)
         assert exc_info.value.exit_code == 3
+
+
+# ---------------------------------------------------------------------------
+# BaseDeployCommand._before_execute — exit-code classification bug fix
+#
+# Previously: deploy run/show, values list/get/resolve (all via BaseDeployCommand)
+# never implemented has_validation_errors(), so a real schema/cross-ref validation
+# failure fell through to generic exit 1 instead of exit 3, and a missing/unresolvable
+# file was also exit 1 instead of the documented exit 2 (usage error).
+# ---------------------------------------------------------------------------
+
+
+class TestBaseDeployCommandExitCodeClassification:
+    def _make_cmd(self, tmp_path, file=None):
+        from strata.commands.deploy.run_deploy_command import RunDeployCommand
+
+        return RunDeployCommand(work_path=str(tmp_path), file=file)
+
+    def test_has_validation_errors_false_by_default(self, tmp_path):
+        cmd = self._make_cmd(tmp_path, file="deploy.yaml")
+        assert cmd.has_validation_errors() is False
+
+    def test_missing_file_raises_usage_error(self, tmp_path):
+        import click
+
+        cmd = self._make_cmd(tmp_path, file=None)
+        with (
+            patch("strata.commands.base_command.BaseCommand._before_execute", return_value=True),
+            patch("strata.deployers.factory.DeployerFactory.load_plugins"),
+        ):
+            with pytest.raises(click.UsageError):
+                cmd._before_execute()
+        # A usage error, not a validation error — has_validation_errors() stays False.
+        assert cmd.has_validation_errors() is False
+
+    def test_file_not_found_raises_usage_error(self, tmp_path):
+        import click
+
+        missing = tmp_path / "does-not-exist.yaml"
+        cmd = self._make_cmd(tmp_path, file=str(missing))
+        with (
+            patch("strata.commands.base_command.BaseCommand._before_execute", return_value=True),
+            patch("strata.deployers.factory.DeployerFactory.load_plugins"),
+        ):
+            with pytest.raises(click.UsageError, match="not found"):
+                cmd._before_execute()
+        assert cmd.has_validation_errors() is False
+
+    def test_validation_failed_flag_set_when_schema_invalid(self, tmp_path):
+        """A deployment file that loads but fails Pydantic/cross-ref validation
+        must set has_validation_errors() True (exit 3), not fall through to exit 1."""
+        deploy_file = tmp_path / "deploy.yaml"
+        deploy_file.write_text("apiVersion: strata.huybrechts.xyz/v1\nkind: deployment\n", encoding="utf-8")
+
+        cmd = self._make_cmd(tmp_path, file=str(deploy_file))
+
+        fake_deployment_service = MagicMock()
+        fake_deployment_service.is_validated.return_value = False
+        fake_deployment_service.get_validation_errors.return_value = ["spec.workspace is required"]
+
+        fake_resolver = MagicMock()
+        fake_resolver.needs_resolution.return_value = False
+
+        with (
+            patch("strata.commands.base_command.BaseCommand._before_execute", return_value=True),
+            patch("strata.deployers.factory.DeployerFactory.load_plugins"),
+            patch.object(cmd, "_load_configuration_service", return_value=MagicMock()),
+            patch.object(cmd, "_get_build_path", return_value=tmp_path / "build"),
+            patch(
+                "strata.services.deployment_extension_resolver.DeploymentExtensionResolver",
+                return_value=fake_resolver,
+            ),
+            patch(
+                "strata.commands.deploy.base_deploy_command.DeploymentService.load",
+                return_value=fake_deployment_service,
+            ),
+        ):
+            result = cmd._before_execute()
+
+        assert result is False
+        assert cmd.has_validation_errors() is True

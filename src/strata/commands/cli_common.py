@@ -230,3 +230,26 @@ def click_profile(func):
         help="Profile name. Defaults to the currently active profile.",
     )(func)
     return func
+
+
+# --no-cache -> Bypass the resolved-model cache for this invocation (ADR-0026)
+def click_no_cache(func):
+    func = click.option(
+        "--no-cache",
+        "no_cache",
+        is_flag=True,
+        envvar="STRATA_NO_CACHE",
+        help="Bypass the resolved-model cache: no read, no write, no warm. [env: STRATA_NO_CACHE]",
+    )(func)
+    return func
+
+
+# --refresh-cache -> Force re-warm even if the cache entry is fresh (ADR-0026)
+def click_refresh_cache(func):
+    func = click.option(
+        "--refresh-cache",
+        "refresh_cache",
+        is_flag=True,
+        help="Force re-warm the resolved-model cache even if it is still fresh.",
+    )(func)
+    return func

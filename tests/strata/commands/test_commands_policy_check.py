@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
 
 from strata.commands.cli_policy import policy_group
@@ -398,3 +399,121 @@ class TestCheckPolicyCommandRunExecution:
         plan_notes = [n for n in cmd._notes if n["phase"] == "plan"]
         assert len(plan_notes) == 1
         assert "strata deploy run --dry-run" in plan_notes[0]["message"]
+
+
+# ---------------------------------------------------------------------------
+# Exit-code classification bug fix: has_validation_errors() must return True
+# for a deny-enforcement denial (docstring already promised exit 3) AND for a
+# genuinely invalid deployment file — previously both fell through to exit 1.
+# ---------------------------------------------------------------------------
+
+
+class TestCheckPolicyCommandExitCodeClassification:
+    def test_has_validation_errors_false_by_default(self, tmp_path):
+        cmd = _make_command(tmp_path, file="deploy.yaml")
+        assert cmd.has_validation_errors() is False
+
+    def test_has_validation_errors_true_when_denied(self, tmp_path):
+        pm = _make_policy_model("zone_check", "plan", enforcement="deny", type_="tenant_zone")
+        pr = _make_policy_result("zone_check", "deny", passed=False, violations=["not allowed"])
+        cmd = TestCheckPolicyCommandRunExecution()._run_with_policies(tmp_path, [pm], [pr])
+        assert cmd.has_validation_errors() is True
+
+    def test_has_validation_errors_false_when_all_policies_pass(self, tmp_path):
+        pm = _make_policy_model("naming_check", "validate")
+        pr = _make_policy_result("naming_check", "deny", passed=True)
+        cmd = TestCheckPolicyCommandRunExecution()._run_with_policies(tmp_path, [pm], [pr])
+        assert cmd.has_validation_errors() is False
+
+    def test_has_validation_errors_true_when_deployment_file_invalid(self, tmp_path):
+        cmd = _make_command(tmp_path, file="deploy.yaml")
+        cmd._raw_file = "deploy.yaml"
+        (tmp_path / "deploy.yaml").write_text("kind: deployment\n", encoding="utf-8")
+
+        fake_svc = MagicMock()
+        fake_svc.is_validated.return_value = False
+        fake_svc.get_validation_errors.return_value = ["spec.workspace is required"]
+
+        with patch(
+            "strata.commands.policies.check_policy_command.DeploymentService.load",
+            return_value=fake_svc,
+        ):
+            result = cmd._load_deployment_service()
+
+        assert result is False
+        assert cmd.has_validation_errors() is True
+
+    def test_missing_deployment_file_raises_usage_error(self, tmp_path):
+        import click
+
+        cmd = _make_command(tmp_path, file="deploy.yaml")
+        cmd._raw_file = "deploy.yaml"
+
+        with pytest.raises(click.UsageError, match="not found"):
+            cmd._load_deployment_service()
+        assert cmd.has_validation_errors() is False
+
+
+# ---------------------------------------------------------------------------
+# ADR-0026: opportunistic cache warm from platform.json already read
+# ---------------------------------------------------------------------------
+
+
+class TestCheckPolicyCommandCacheWarm:
+    def _run(self, tmp_path, no_cache_warm, platform_artifact):
+        """Same shape as TestCheckPolicyCommandRunExecution._run_with_policies, plus
+        a mocked _load_platform_artifact / _warm_model_cache."""
+        pm = _make_policy_model("naming_check", "build")
+        pr = _make_policy_result("naming_check", "deny", passed=True)
+
+        cmd = _make_command(tmp_path, file="deploy.yaml")
+        cmd._no_cache_warm = no_cache_warm
+
+        cfg_svc = MagicMock()
+        cfg_svc.model.spec.policies = [pm]
+        cmd._configuration_service = cfg_svc
+        cmd._raw_file = "deploy.yaml"
+
+        dep_svc = _stub_deployment_service()
+
+        with (
+            patch.object(cmd, "_load_configuration_service", return_value=cfg_svc),
+            patch.object(
+                cmd,
+                "_load_deployment_service",
+                side_effect=lambda: setattr(cmd, "_deployment_service", dep_svc) or True,
+            ),
+            patch.object(cmd, "_load_platform_artifact", return_value=(platform_artifact, None)),
+            patch.object(cmd, "_warm_model_cache") as mock_warm,
+            patch("strata.validators.policies.policy_engine.PolicyEngine") as mock_engine,
+        ):
+            engine_instance = MagicMock()
+            engine_instance.evaluate.return_value = [pr]
+            mock_engine.return_value = engine_instance
+            cmd._run_execution()
+
+        return cmd, mock_warm
+
+    def test_warms_cache_when_platform_artifact_available(self, tmp_path):
+        fake_artifact = MagicMock()
+        cmd, mock_warm = self._run(tmp_path, no_cache_warm=False, platform_artifact=fake_artifact)
+        mock_warm.assert_called_once_with(fake_artifact)
+
+    def test_skips_warm_when_no_cache_warm_flag_set(self, tmp_path):
+        fake_artifact = MagicMock()
+        cmd, mock_warm = self._run(tmp_path, no_cache_warm=True, platform_artifact=fake_artifact)
+        mock_warm.assert_not_called()
+
+    def test_skips_warm_when_no_platform_artifact_available(self, tmp_path):
+        cmd, mock_warm = self._run(tmp_path, no_cache_warm=False, platform_artifact=None)
+        mock_warm.assert_not_called()
+
+    def test_warm_model_cache_delegates_to_shared_helper(self, tmp_path):
+        cmd = _make_command(tmp_path, file="deploy.yaml")
+        cmd._deployment_service = _stub_deployment_service()
+        fake_artifact = MagicMock()
+
+        with patch("strata.controllers.cache_controller.warm_platform_model_best_effort") as mock_helper:
+            cmd._warm_model_cache(fake_artifact)
+
+        mock_helper.assert_called_once_with(cmd._work_path, cmd._deployment_service, fake_artifact, cmd.logger)

@@ -34,6 +34,7 @@ import { PromotionsViewProvider } from './providers/promotionsViewProvider';
 import { IntegrationHelpProvider } from './providers/integrationHelpProvider';
 import { HelpViewProvider } from './providers/helpViewProvider';
 import { WorkItemsViewProvider } from './providers/workItemsViewProvider';
+import { CacheWarmerProvider } from './providers/cacheWarmerProvider';
 
 // ---------------------------------------------------------------------------
 // Extension state (singleton per VS Code window)
@@ -59,6 +60,7 @@ let _promotionsView: PromotionsViewProvider | undefined;
 let _integrationHelp: IntegrationHelpProvider | undefined;
 let _helpView: HelpViewProvider | undefined;
 let _workItemsView: WorkItemsViewProvider | undefined;
+let _cacheWarmer: CacheWarmerProvider | undefined;
 let _lastStatus: import('./strataClient').WorkspaceStatus | undefined;
 let _lastDriftTarget: string | undefined;
 let _lastDeployTarget: string | undefined;
@@ -179,6 +181,9 @@ export function activate(context: vscode.ExtensionContext): void {
     _workItemsView.setClient(_client);
     _workItemsView.setWorkPath(workPath);
 
+    _cacheWarmer = new CacheWarmerProvider();
+    _cacheWarmer.setClient(_client);
+
     // Propagate deployment context changes to status bar
     context.subscriptions.push(
         _deployCtx.onDidChange((filePath) => {
@@ -244,6 +249,7 @@ export function activate(context: vscode.ExtensionContext): void {
     _chatParticipant.register(context);
     _helpView.register(context);
     _statusBar.show();
+    _cacheWarmer.register(context);
 
     // ── Register commands ──────────────────────────────────────────────────────
 
@@ -949,7 +955,7 @@ export function activate(context: vscode.ExtensionContext): void {
         _statusBar, _workspaceHealth, _deploymentExplorer, _operationsView,
         _deployCtx, _diagnostics, _codeLens, _guideView, _crossRef, _snippets,
         _taskProvider, _fileDecorations, _chatParticipant, solutionWatcher,
-        _auditView!, _valuesView!,
+        _auditView!, _valuesView!, _cacheWarmer,
     );
 
     // ── Context key ────────────────────────────────────────────────────────────

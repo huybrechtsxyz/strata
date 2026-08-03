@@ -41,6 +41,7 @@ class RunBuildCommand(BaseBuildCommand):
         audit_report: Optional[str] = None,
         require_lock: bool = False,
         ai: bool = False,
+        no_cache_warm: bool = False,
     ):
         super().__init__(
             file=file,
@@ -56,6 +57,7 @@ class RunBuildCommand(BaseBuildCommand):
         self._audit_report = audit_report
         self._require_lock = require_lock
         self._ai = ai
+        self._no_cache_warm = no_cache_warm
         self._build_started_at: Optional[str] = None
         self._sbom_reference = None
         self._policy_results: List[Dict[str, Any]] = []
@@ -373,6 +375,13 @@ class RunBuildCommand(BaseBuildCommand):
 
         # Store assembled model so terraform builder can reuse it in dry-run
         self._platform_model = builder._last_platform_model
+
+        # ADR-0026: warm the resolved-model cache with the model we just built.
+        # Best-effort only — never fails the build. Skipped on --dry-run (no
+        # authoritative artifact was written) and when --no-cache-warm is set
+        # (e.g. CI pipelines that intentionally don't want a local cache.db).
+        if not self._dry_run and not self._no_cache_warm:
+            self._warm_model_cache()
 
         ok = builder.after_build(
             deployment_service=self._deployment_service,

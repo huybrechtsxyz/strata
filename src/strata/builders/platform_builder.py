@@ -50,6 +50,15 @@ class PlatformBuilder(BaseBuilder):
         self.configuration_service = configuration_service
         self._last_platform_model: Optional[PlatformArtifactModel] = None
 
+    @property
+    def last_platform_model(self) -> Optional[PlatformArtifactModel]:
+        """The assembled platform model from the most recent ``build()`` call, if any.
+
+        Populated even when ``dry_run=True`` — used by :class:`CacheController`
+        (ADR-0026) to obtain a resolved model in memory without writing files.
+        """
+        return self._last_platform_model
+
     # ------------------------------------------------------------------
     # BaseBuilder interface
     # ------------------------------------------------------------------

@@ -13,6 +13,9 @@ workitems/
 # Build output — generated artifacts, never committed
 build/
 
+# Derived caches (model, cost, ai) — rebuildable from committed YAML, never commit
+cache/
+
 # Log output
 logs/
 *.log

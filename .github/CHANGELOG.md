@@ -8,6 +8,11 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Security
+
+- **Secret/variable/feature store outages no longer conflated with "not found"** — integrations (Infisical, HashiCorp Vault/OpenBao, Bitwarden, Azure Key Vault) now raise a new `SecretStoreUnavailableError` on connectivity/auth failures instead of returning `None`. Previously a transient outage could be mistaken for a missing secret, triggering silent auto-generation of a fresh value (for `generate:` secrets) or letting a deploy proceed with a blank value. `deploy run` now aborts instead of continuing when a store is unavailable.
+- **Pre-flight availability checks for secret stores and provisioners** — `deploy run` now verifies all referenced secret/variable/feature stores and required provisioner tools (terraform, ansible, etc.) are reachable before resolving any values or acquiring the deployment lock, failing fast instead of partway through a multi-stage deploy.
+
 ---
 
 ## [1.6.0] - 2026-07-31

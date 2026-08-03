@@ -1,7 +1,14 @@
 # Resolved-model cache for fleet-wide command performance
 
-- Status: proposed
+- Status: partially implemented
 - Date: 2026-07-08
+
+## Implementation status
+
+Phases 1–3 (CacheService/SQLite backend, `strata cache` CLI group, VS Code background
+warmer) are implemented. Command integration (originally "Phase 2") is intentionally
+narrower than first planned — see "Implementation reality check" below for what's wired
+and why the rest is deferred, not merely unfinished.
 
 ## Context and Problem Statement
 
@@ -74,6 +81,49 @@ pre-warmed cache each step after the first is near-instantaneous for the load ph
 `audit`, `log`, `guide`, `version`, `help`, `completion`, `console` — these operate
 on solution state, CLI config, schemas, or external systems rather than on the
 resolved deployment model. The cache is not consulted for these commands.
+
+#### Implementation reality check (post-implementation survey)
+
+The single-deployment table above was written before implementation and assumed every
+listed command loads (or could load) a generic "resolved model" that the cache could
+serve directly. A code survey done after Phase 1–3 shipped found this assumption does
+not hold for most of them, and corrects the plan accordingly:
+
+**What the cache actually stores.** `CacheService`/`CacheController` cache a
+`PlatformArtifactModel` — the same object `PlatformBuilder` assembles for
+`build run`/`build plan` and writes to `platform.json`. It does **not** cache the live
+`DeploymentService`/`EnvironmentService`/`WorkspaceService` object graph (variables,
+secrets, features, stage config) that most of the commands below actually need — that
+graph is not JSON-serialisable data, it's behaviour-bearing service objects.
+
+**The real bottleneck is `load_deploy_services()`, not `PlatformBuilder`.** For every
+command that needs the live service graph (to execute provisioners, read resolved
+variables, evaluate stages, etc.), the expensive YAML-parse-and-merge step happens
+*before* — and independently of — whether a `PlatformArtifactModel` is ever built.
+Caching the platform.json-shaped output does nothing to avoid that step for these
+commands; it only helps commands that were going to build a `PlatformArtifactModel`
+anyway.
+
+| Command                                                            | Loads `DeploymentService`?                                                                                | Builds/reads `PlatformArtifactModel`?                             | Cache wiring done?                                                                                                                                                                                                                                                                                                |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `strata build run -f`                                              | Yes (via `BaseBuildCommand`)                                                                              | Builds one (`PlatformBuilder`)                                    | **Yes** — auto-warms from the model already built after a successful run. `--no-cache-warm` to opt out.                                                                                                                                                                                                           |
+| `strata build plan -f`                                             | Yes                                                                                                       | Builds one (into a temp dir for diffing)                          | **Yes** — same auto-warm pattern, same flag.                                                                                                                                                                                                                                                                      |
+| `strata policy check -f`                                           | Yes (own direct `DeploymentService.load()` call)                                                          | **Reads** an existing `platform.json` off disk (never builds one) | **Yes** — opportunistic warm using the artifact it already read. `--no-cache-warm` to opt out.                                                                                                                                                                                                                    |
+| `strata deploy run -f`                                             | Yes                                                                                                       | No — executes provisioners directly off the live service graph    | **No.** Needs the live graph to provision infrastructure; a cached platform.json can't replace that, and there's no `PlatformArtifactModel` in memory to warm from.                                                                                                                                               |
+| `strata deploy show -f`                                            | Yes                                                                                                       | No                                                                | **No.** Same reason — no model built here to warm the cache with; skipping `load_deploy_services()` to serve straight from a cached dict would require rewriting its data access from typed service accessors (`get_variables()`, `get_secrets()`, …) to reading a plain dict. Out of scope as a "quick wire-in". |
+| `strata values list/get/resolve -f`                                | Yes                                                                                                       | No                                                                | **No.** Same reason as `deploy show`.                                                                                                                                                                                                                                                                             |
+| `strata validate run -f`                                           | **No** — uses `PlatformValidator` directly over the raw YAML dict, never loads `DeploymentService` at all | No                                                                | **N/A.** The cache is irrelevant to this command's actual implementation.                                                                                                                                                                                                                                         |
+| `strata deploy destroy/output/drift/plan -f`, `env show/status -f` | Not yet implemented as of this writing                                                                    | —                                                                 | Deferred until the commands exist.                                                                                                                                                                                                                                                                                |
+| `strata deploy list`, `strata manifest list`                       | **No** — both do a cheap direct filesystem/JSON scan, no `DeploymentService` load at all                  | No                                                                | **N/A.** Already cheap; not the "Full load ×N" the fleet-wide table assumed.                                                                                                                                                                                                                                      |
+
+**Revised conclusion:** of the originally-listed single-deployment commands, only the
+ones that build or read a `PlatformArtifactModel` as part of their existing work
+(`build run`, `build plan`, `policy check`) get a safe, real cache benefit today. Giving
+the rest (`deploy run/show`, `values list/get/resolve`) genuine cache benefit would
+require a second cache concept — a cached, serialisable "resolved deployment" (variables/
+secrets/features/stage config) distinct from `PlatformArtifactModel` — plus rewriting
+each command to read from it instead of the live service graph. Tracked as a follow-up,
+not implemented.
 
 ## Decision Drivers
 
@@ -193,6 +243,24 @@ All input file contents are hashed at their **resolved local paths** (not `@remo
 strings — see OQ-2). This means every file that contributes to the resolved model is
 covered: the deployment file, the workspace blueprint it references, the environment
 files, and all the provider/resource/module files the workspace pulls in.
+
+**Implementation status (post-implementation).** `CacheController._collect_input_paths`
+implements the above plus the two items originally flagged as "not yet covered":
+
+- Deployment-level `spec.configurations[].file` references
+- The deployment's tenant file (`tenants/<code>.yaml`, resolved by convention — not
+  via `repo_map` — when `spec.tenant` is set and the file exists on disk)
+- One level of recursion into namespace files' own `spec.modules[].file` references —
+  the only genuine "file referenced by a referenced file" case found in the schema
+  (provider/resource/module/firewall/DNS/network models have no further nested file
+  references of their own)
+
+Deliberately still out of scope: module `source` paths (app code/templates — often a
+directory or glob, e.g. `@infra/services/traefik/*`) are not hashed. Hashing an entire
+app source tree on every cache-key computation would be expensive and is arguably a
+different concern (app code changes are tracked by the module's own version/digest
+mechanism elsewhere, not this cache). `--refresh-cache` remains the escape hatch for
+this and any other gap.
 
 The `cache_inputs` table stores every resolved local path that contributed to a given
 entry. This enables efficient bulk invalidation: when `strata repo sync` fetches a new
@@ -315,7 +383,10 @@ same `production.yaml` referenced by 50 deployments is loaded once per run).
 
 **Proposed: Option A** — SQLite database at `.strata/cache.db`.
 
-In-process memoization (Option D) is implemented as a complementary optimization.
+In-process memoization (Option D) is implemented as a complementary optimization. It
+already exists in the codebase today as `strata.utils.service_cache` (a process-lifetime
+dict cache keyed by service class + path, used by `BaseService.load()`) — this ADR does
+not introduce L1, only L2.
 
 ### Flag convention
 
@@ -407,7 +478,39 @@ runs `promote matrix` in the terminal, the cache is already warm from the last s
 - Neutral: Schema migration on `cache_version` bump is a `DELETE FROM cache` — all entries
   regenerate on next use. No data loss risk; transient performance impact on first run
   after a CLI upgrade.
+- Neutral: Design is forward-compatible with a future long-running strata server without
+  any rework — see "Future compatibility" below.
 - Bad: Binary format reduces direct inspectability. Mitigated by `strata cache export`.
+
+### Future compatibility: a long-running strata server
+
+This ADR was reviewed against a hypothetical future strata server (a long-running daemon,
+as opposed to today's one-process-per-invocation CLI). Conclusion: **no change needed now
+(YAGNI)** — the design already generalizes.
+
+The cache is two layers, and only one of them is process-scoped:
+
+| Layer          | What it is                                               | Lifetime                                       | Introduced by                      |
+| -------------- | -------------------------------------------------------- | ---------------------------------------------- | ---------------------------------- |
+| L1 — ephemeral | `strata.utils.service_cache` in-process dict memoization | One CLI invocation                             | Already shipped, predates this ADR |
+| L2 — fixed     | SQLite `.strata/cache.db` (this ADR)                     | Survives process exit; shared across processes | This ADR                           |
+
+A future server does not change L2 at all — it is simply another client calling
+`CacheService.get()`, exactly like the CLI and the VS Code extension already do
+concurrently today (which is why WAL mode is in this design in the first place). The only
+difference a server introduces is that its **L1** keeps living for the server's uptime
+instead of dying at the end of one command — that is a longer-lived instance of the same
+in-process memoization pattern, not a new mechanism. On server restart, L1 is empty and
+it falls back to L2, same cold-start path a CLI process hits today.
+
+The one shift a server would motivate is push-based invalidation (a file watcher
+proactively invalidating/re-warming rows) instead of today's pull-based lazy hash-check on
+read. That is not new either — it is exactly what Phase 3 (VS Code extension background
+warmer) already does. A future daemon is effectively "the VS Code extension's warmer,
+extracted to run standalone," reusing the same `cache_inputs`-driven invalidation query.
+
+No action item follows from this — it is recorded here so a future server ADR does not
+need to revisit or re-justify the L2 cache design.
 
 ## Open Questions
 
@@ -542,14 +645,14 @@ runs `promote matrix` in the terminal, the cache is already warm from the last s
 
    **Benefits in full:**
 
-   | Benefit | Description |
-   |---|---|
-   | **Resilience to store outages** | `build run` and `deploy run` succeed even when Bitwarden / Vault is unreachable. Without a value cache, an unavailable secret store blocks every deployment, including ones whose secrets haven't changed. |
-   | **CI pipeline speed** | A pipeline that runs validate → build → deploy → policy check resolves the same secrets four times. With a warm value cache, each step after the first is a local read. On a fleet of 50 deployments running in a matrix this compounds: 50 × 4 = 200 store round-trips reduced to 50. |
-   | **Rate-limit protection** | Bitwarden, Azure Key Vault, and Vault all have API rate limits. Fleet-wide commands (`promote matrix`, `drift run --all`) that resolve values for every deployment can hit these limits on larger fleets. A value cache collapses N resolutions to 1 per TTL window. |
-   | **Predictable build times** | External store latency is variable (network conditions, Vault lease renewal, MFA prompts). Caching removes the store from the critical path of routine builds, making CI timings consistent. |
-   | **Air-gapped / offline deploys** | Once values are cached, a deployment can be built and applied without any network path to the secret store. Useful for regulated environments where the deployment target is network-isolated but the operator has previously fetched the required values. |
-   | **Audit snapshot** | A cached value entry records *what value was used at what time* — a lightweight audit trail for variables and features that complements the build artifact. Useful for drift analysis: "did this variable's effective value change between the last two builds?" |
+   | Benefit                          | Description                                                                                                                                                                                                                                                                            |
+   | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | **Resilience to store outages**  | `build run` and `deploy run` succeed even when Bitwarden / Vault is unreachable. Without a value cache, an unavailable secret store blocks every deployment, including ones whose secrets haven't changed.                                                                             |
+   | **CI pipeline speed**            | A pipeline that runs validate → build → deploy → policy check resolves the same secrets four times. With a warm value cache, each step after the first is a local read. On a fleet of 50 deployments running in a matrix this compounds: 50 × 4 = 200 store round-trips reduced to 50. |
+   | **Rate-limit protection**        | Bitwarden, Azure Key Vault, and Vault all have API rate limits. Fleet-wide commands (`promote matrix`, `drift run --all`) that resolve values for every deployment can hit these limits on larger fleets. A value cache collapses N resolutions to 1 per TTL window.                   |
+   | **Predictable build times**      | External store latency is variable (network conditions, Vault lease renewal, MFA prompts). Caching removes the store from the critical path of routine builds, making CI timings consistent.                                                                                           |
+   | **Air-gapped / offline deploys** | Once values are cached, a deployment can be built and applied without any network path to the secret store. Useful for regulated environments where the deployment target is network-isolated but the operator has previously fetched the required values.                             |
+   | **Audit snapshot**               | A cached value entry records *what value was used at what time* — a lightweight audit trail for variables and features that complements the build artifact. Useful for drift analysis: "did this variable's effective value change between the last two builds?"                       |
 
    The benefits are real and meaningful. The reason store value caching is deferred is
    not that the benefits are weak — it is that **the two problems below make a correct
@@ -574,13 +677,13 @@ runs `promote matrix` in the terminal, the cache is already warm from the last s
 
    The acceptable TTL depends on the store type:
 
-   | Source | Typical rotation cadence | Suggested max TTL |
-   |---|---|---|
-   | `constant` | Never | Indefinite (but YAML hash covers it — no store cache needed) |
-   | `env` | Session / pipeline | 0 — do not cache; always resolve live |
-   | `bitwarden` | Hours–weeks | 1–4 hours |
-   | `vault` | Minutes–hours (lease-based) | Match Vault lease TTL; do not exceed |
-   | `azure_keyvault` | Hours–days | 1–4 hours |
+   | Source           | Typical rotation cadence    | Suggested max TTL                                            |
+   | ---------------- | --------------------------- | ------------------------------------------------------------ |
+   | `constant`       | Never                       | Indefinite (but YAML hash covers it — no store cache needed) |
+   | `env`            | Session / pipeline          | 0 — do not cache; always resolve live                        |
+   | `bitwarden`      | Hours–weeks                 | 1–4 hours                                                    |
+   | `vault`          | Minutes–hours (lease-based) | Match Vault lease TTL; do not exceed                         |
+   | `azure_keyvault` | Hours–days                  | 1–4 hours                                                    |
 
    `env` source values must never be cached: they are pipeline-scoped and can differ
    between invocations of the same deployment in the same build system.
@@ -623,11 +726,11 @@ runs `promote matrix` in the terminal, the cache is already warm from the last s
 
    The VS Code extension and a manual CLI trigger carry this responsibility in practice:
 
-   | Mechanism | How it works |
-   |---|---|
+   | Mechanism                        | How it works                                                                                                                                                                                                                                                                                                                                                                 |
+   | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
    | **Extension background refresh** | The extension's background job (already warming the model cache on save) also refreshes store values on a TTL-aware schedule. Each source type has a configured refresh interval (see TTL table above). The extension calls `strata cache warm --values` in the background; the operator sees a status indicator (green = fresh, yellow = expiring soon, grey = stale/cold). |
-   | **Manual refresh trigger** | A VS Code command palette action (`Strata: Refresh store values`) and `strata cache warm --values [-f deployment]` let the operator force a live fetch at any time — before a deploy, after a secret rotation, or when the extension indicator shows stale. |
-   | **Key auto-generation** | On first use, strata generates `.strata/.cache.key`. As long as this file exists and `STRATA_CACHE_KEY` is not overridden, the same key is used across sessions. The operator does not need to manage the key manually. |
+   | **Manual refresh trigger**       | A VS Code command palette action (`Strata: Refresh store values`) and `strata cache warm --values [-f deployment]` let the operator force a live fetch at any time — before a deploy, after a secret rotation, or when the extension indicator shows stale.                                                                                                                  |
+   | **Key auto-generation**          | On first use, strata generates `.strata/.cache.key`. As long as this file exists and `STRATA_CACHE_KEY` is not overridden, the same key is used across sessions. The operator does not need to manage the key manually.                                                                                                                                                      |
 
    In CI the pattern is the same as the model cache (OQ-1 Pattern B/C): warm values
    explicitly at pipeline start, use them across steps. The pipeline is responsible for

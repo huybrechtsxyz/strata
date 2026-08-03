@@ -1162,8 +1162,11 @@ class RunDeployCommand(BaseDeployCommand):
         Populates ``self._resolved_values`` which is later passed to the
         deployer so it can inject TF_VAR_* env vars around each terraform step.
 
-        Non-strict mode: resolution warnings are logged but do not abort the
-        deploy (missing optional values may be handled by Terraform defaults).
+        Non-strict mode: resolution warnings (a declared value genuinely absent,
+        with no default) are logged but do not abort the deploy. A store being
+        unreachable/unauthenticated is a DIFFERENT, always-fatal category — see
+        ``ValueController.resolve_values()`` — since continuing past it risks
+        silently generating/overwriting secrets or deploying with blank values.
         """
         controller = ValueController()
         ok, resolved, errors = controller.resolve_values(
@@ -1172,6 +1175,19 @@ class RunDeployCommand(BaseDeployCommand):
         )
 
         self._resolved_values = resolved
+
+        if resolved.store_unavailable_errors:
+            for err in resolved.store_unavailable_errors:
+                self.logger.error("Value resolution aborted — store unavailable: %s", err)
+            if self._is_console_output():
+                click.echo(
+                    f"\n\u274c  {len(resolved.store_unavailable_errors)} store(s) unreachable/unauthenticated — "
+                    "aborting deploy rather than risk generating or overwriting secrets:"
+                )
+                for err in resolved.store_unavailable_errors:
+                    click.echo(f"     • {err}")
+            self._errors.extend(resolved.store_unavailable_errors)
+            return False
 
         if errors:
             for err in errors:
@@ -1270,6 +1286,25 @@ class RunDeployCommand(BaseDeployCommand):
         if self._is_console_output():
             click.echo(f"\n🚀  Deploying {len(stages_to_run)} stage(s)…")
 
+        # Pre-flight: validate every stage's provisioner environment (tool binary
+        # + auth) BEFORE acquiring the deployment lock or running any stage. This
+        # fails fast so a later stage's missing tool can't be discovered only
+        # after an earlier stage has already made real infrastructure changes.
+        # Stages with on_failure=continue are still checked (for visibility) but
+        # a failure there is downgraded to a warning, consistent with how it's
+        # already tolerated once execution actually reaches that stage.
+        preflight_errors = self._preflight_check_provisioners(stages_to_run)
+        if preflight_errors:
+            self._errors.extend(preflight_errors)
+            if self._is_console_output():
+                click.echo(
+                    f"\n❌  {len(preflight_errors)} stage(s) failed pre-flight validation "
+                    "— aborting before any provisioning:"
+                )
+                for err in preflight_errors:
+                    click.echo(f"     • {err}")
+            return False
+
         # Check approval gates before any provisioning
         if not self._dry_run:
             # Evaluate deployment spec.gates (ADR-0057/ADR-0059)
@@ -1366,6 +1401,67 @@ class RunDeployCommand(BaseDeployCommand):
                 return _run_stages()
         finally:
             coordinator.deactivate()
+
+    def _preflight_check_provisioners(self, stages_to_run: List[DeploymentStageModel]) -> List[str]:
+        """Validate every stage's provisioner environment before any stage runs.
+
+        For each stage, creates the deployer and runs the same
+        ``validate_workspace()`` / ``validate_environment()`` checks that
+        ``_execute_stage_provisioning`` runs later — but up front, before the
+        deployment lock is acquired and before stage 1 has made any real
+        infrastructure changes.
+
+        A failure on a stage configured with ``on_failure: continue`` is
+        downgraded to a warning message (that stage would be skipped, not
+        fatal, once execution actually reached it) rather than aborting the
+        whole deploy. Any other stage (``stop`` — the default — or
+        ``rollback``) is fatal here, matching how ``_run_stages`` already
+        treats it once discovered mid-loop.
+
+        Returns:
+            List of fatal error messages (empty when every ``stop``/``rollback``
+            stage's provisioner environment is confirmed ready).
+        """
+        fatal_errors: List[str] = []
+
+        for stage in stages_to_run:
+            errors_before = len(self._errors)
+            deployer = self._create_deployer(stage)
+            # _create_deployer() appends failures straight to self._errors —
+            # reclaim them here so on_failure semantics can be applied instead
+            # of letting them leak through regardless of that setting.
+            own_errors = self._errors[errors_before:]
+            del self._errors[errors_before:]
+
+            if deployer is None:
+                messages = own_errors or [f"Stage '{stage.name}': failed to create deployer for pre-flight check."]
+                for msg in messages:
+                    self._record_preflight_issue(stage, msg, fatal_errors)
+                continue
+
+            for _label, validate_fn in (
+                ("workspace", deployer.validate_workspace),
+                ("environment", deployer.validate_environment),
+            ):
+                ok, msgs = validate_fn()
+                if not ok:
+                    for msg in msgs or [f"Stage '{stage.name}': pre-flight validation failed."]:
+                        self._record_preflight_issue(stage, msg, fatal_errors)
+                    break  # no point running the next check for an already-failed stage
+
+        return fatal_errors
+
+    def _record_preflight_issue(self, stage: "DeploymentStageModel", message: str, fatal_errors: List[str]) -> None:
+        """Route a single pre-flight finding to either a warning or a fatal error.
+
+        ``on_failure: continue`` stages are recorded as warnings (visible, but
+        non-blocking) — anything else is added to ``fatal_errors``.
+        """
+        full_message = f"Stage '{stage.name}': {message}"
+        if stage.on_failure == "continue":
+            self._messages.append(f"⚠️  Pre-flight: {full_message} (on_failure=continue — skipped when reached)")
+        else:
+            fatal_errors.append(full_message)
 
     def _execute_stage_provisioning(self, stage: DeploymentStageModel) -> bool:
         """Instantiate the deployer for *stage*, validate, then run the step sequence.

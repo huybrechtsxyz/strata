@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, List, Optional, Tuple
 
 from strata.controllers.base_controller import BaseController
+from strata.exceptions import SecretStoreUnavailableError
 from strata.logger import get_logger
 from strata.models.store_models import (
     FeatureStoreModel,
@@ -53,7 +54,11 @@ class ValueController(BaseController):
                                 an error and success=False is returned.
 
         Returns:
-            (success, ResolvedValues, error_messages)
+            (success, ResolvedValues, error_messages). ``success`` is always
+            False when any store was unreachable/unauthenticated
+            (``resolved.store_unavailable_errors``), regardless of ``strict`` —
+            proceeding on an ambiguous store failure risks silently generating
+            or overwriting secrets, or deploying with blank values.
         """
         resolved = ResolvedValues()
 
@@ -73,9 +78,30 @@ class ValueController(BaseController):
         # Lazy-init integrations once (idempotent; no-op if already done).
         self._ensure_integrations_initialized()
 
+        # Preflight: confirm every store integration actually referenced by this
+        # deployment is reachable/authenticated BEFORE resolving any individual
+        # value. This fails fast on a single, deduplicated check per store
+        # instead of discovering the same outage once per item (and potentially
+        # after other items already resolved / secrets already generated).
+        preflight_errors = self._preflight_check_stores(environment_service)
+        if preflight_errors:
+            resolved.errors.extend(preflight_errors)
+            resolved.store_unavailable_errors.extend(preflight_errors)
+            logger.error(
+                "Aborting value resolution — required store(s) unavailable",
+                errors=preflight_errors,
+            )
+            return False, resolved, resolved.errors
+
         # --- variables ---
         for item in environment_service.get_variables():
-            val, err, note = self._resolve_variable(item)
+            try:
+                val, err, note = self._resolve_variable(item)
+            except SecretStoreUnavailableError as exc:
+                msg = f"Variable '{item.key}': {exc}"
+                resolved.errors.append(msg)
+                resolved.store_unavailable_errors.append(msg)
+                continue
             if err:
                 resolved.errors.append(err)
                 if strict:
@@ -87,7 +113,13 @@ class ValueController(BaseController):
 
         # --- secrets ---
         for secret_item in environment_service.get_secrets():
-            val, err, note = self._resolve_secret(secret_item)
+            try:
+                val, err, note = self._resolve_secret(secret_item)
+            except SecretStoreUnavailableError as exc:
+                msg = f"Secret '{secret_item.key}': {exc}"
+                resolved.errors.append(msg)
+                resolved.store_unavailable_errors.append(msg)
+                continue
             if err:
                 resolved.errors.append(err)
                 if strict:
@@ -99,7 +131,13 @@ class ValueController(BaseController):
 
         # --- features ---
         for feature_item in environment_service.get_features():
-            val, err, note = self._resolve_feature(feature_item)
+            try:
+                val, err, note = self._resolve_feature(feature_item)
+            except SecretStoreUnavailableError as exc:
+                msg = f"Feature '{feature_item.key}': {exc}"
+                resolved.errors.append(msg)
+                resolved.store_unavailable_errors.append(msg)
+                continue
             if err:
                 resolved.errors.append(err)
                 if strict:
@@ -115,9 +153,14 @@ class ValueController(BaseController):
             secrets=len(resolved.secrets),
             features=len(resolved.features),
             errors=len(resolved.errors),
+            store_unavailable=len(resolved.store_unavailable_errors),
         )
 
-        success = len(resolved.errors) == 0 if strict else True
+        # A store-unavailable failure is always fatal — proceeding with a deploy
+        # when a secret store could not be confirmed reachable risks silently
+        # generating/overwriting secrets or deploying with blank values. This
+        # overrides `strict` in both directions: never downgraded to a warning.
+        success = (len(resolved.errors) == 0 if strict else True) and not resolved.store_unavailable_errors
         return success, resolved, resolved.errors
 
     # Per-type resolvers
@@ -347,6 +390,44 @@ class ValueController(BaseController):
         return val, None, None
 
     # Helpers
+
+    def _preflight_check_stores(self, environment_service) -> List[str]:
+        """Confirm availability of every distinct integration-backed store
+        referenced by this deployment's variables/secrets/features.
+
+        Stores that don't need an integration (``constant``, ``environment``,
+        ``github``) are skipped. Each distinct, registered store type is
+        checked exactly once via ``ensure_available()`` regardless of how many
+        items reference it. Stores that aren't registered at all are left for
+        the existing per-item resolution to report (a configuration error, not
+        an availability one — respects ``strict`` as before).
+
+        Returns:
+            List of error messages for any referenced store confirmed
+            unavailable (empty if all referenced, registered stores are up).
+        """
+        store_types: set = set()
+        for item in environment_service.get_variables():
+            if item.store not in (VariableStoreType.CONSTANT, VariableStoreType.ENVIRONMENT):
+                store_types.add(item.store.value)
+        for item in environment_service.get_secrets():
+            if item.store not in (SecretStoreType.CONSTANT, SecretStoreType.ENVIRONMENT, SecretStoreType.GITHUB):
+                store_types.add(item.store.value)
+        for item in environment_service.get_features():
+            if item.store not in (FeatureStoreType.CONSTANT, FeatureStoreType.ENVIRONMENT):
+                store_types.add(item.store.value)
+
+        errors: List[str] = []
+        for store_type in sorted(store_types):
+            integration = self._get_integration_by_type(store_type)
+            if integration is None:
+                # Not registered at all — surfaced per-item later as a
+                # configuration error, not an "unavailable" one.
+                continue
+            available, reason = integration.ensure_available()
+            if not available:
+                errors.append(f"Store '{store_type}' required by this deployment is unavailable: {reason}")
+        return errors
 
     @staticmethod
     def _ensure_integrations_initialized() -> None:

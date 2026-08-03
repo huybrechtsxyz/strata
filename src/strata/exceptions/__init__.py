@@ -8,6 +8,7 @@ from .base_exception import (
     PlatformStateError,
     PlatformValidationError,
 )
+from .integration_exception import SecretStoreUnavailableError
 from .model_exception import (
     InvalidReferenceError,
     ModelValidationError,
@@ -48,4 +49,6 @@ __all__ = [
     "ServiceLoadError",
     "PlatformFileNotFoundError",
     "PathValidationError",
+    # Integration exceptions
+    "SecretStoreUnavailableError",
 ]

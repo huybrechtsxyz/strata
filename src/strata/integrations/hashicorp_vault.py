@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import urllib.error
 import urllib.request
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
@@ -12,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 if TYPE_CHECKING:
     from strata.utils.secret_metadata import SecretMetadata
 
+from strata.exceptions import SecretStoreUnavailableError
 from strata.integrations.capabilities import (
     IFeatureStore,
     IKVStore,
@@ -699,16 +701,17 @@ class VaultIntegration(StoreIntegration):
             timeout: Command timeout in seconds
 
         Returns:
-            The secret value if found, None otherwise
+            The secret value, or ``None`` if confirmed not found in the store.
+
+        Raises:
+            SecretStoreUnavailableError: Vault is not configured, or every
+                attempted retrieval path (CLI and API) failed for a reason
+                other than a confirmed "not found". Never returns ``None`` for
+                this case — see the ``ISecretStore`` Protocol contract.
         """
         available, error = self.ensure_available()
         if not available:
-            logger.warning(
-                "Cannot retrieve secret from HashiCorp Vault",
-                error=error,
-                name=self.integration_name,
-            )
-            return None
+            raise SecretStoreUnavailableError(self.integration_name, error)
 
         logger.debug(
             "Retrieving secret from HashiCorp Vault",
@@ -719,7 +722,8 @@ class VaultIntegration(StoreIntegration):
         )
 
         if prefer_cli:
-            # Try Vault CLI first
+            # Try Vault CLI first — best-effort, never raises (the CLI cannot
+            # cleanly distinguish "not found" from an auth/network problem).
             result = self._get_secret_via_cli(secret_path, field, timeout)
             if result is not None:
                 logger.info(
@@ -729,7 +733,7 @@ class VaultIntegration(StoreIntegration):
                 )
                 return result
 
-            # Fall back to API
+            # Authoritative: the API path distinguishes 404 from real errors.
             result = self._get_secret_via_api(secret_path, field)
             if result is not None:
                 logger.info(
@@ -739,7 +743,8 @@ class VaultIntegration(StoreIntegration):
                 )
             return result
         else:
-            # Try API first
+            # Authoritative first — if this raises, we stop here rather than
+            # masking a real store problem behind a CLI fallback.
             result = self._get_secret_via_api(secret_path, field)
             if result is not None:
                 logger.info(
@@ -749,7 +754,7 @@ class VaultIntegration(StoreIntegration):
                 )
                 return result
 
-            # Fall back to Vault CLI
+            # API confirmed "not found" — CLI double-check is harmless.
             result = self._get_secret_via_cli(secret_path, field, timeout)
             if result is not None:
                 logger.info(
@@ -807,24 +812,31 @@ class VaultIntegration(StoreIntegration):
             field: Optional field name to extract from the secret
 
         Returns:
-            The secret value if found, None otherwise
+            The secret value, or ``None`` only for a confirmed HTTP 404 (path
+            genuinely not found).
+
+        Raises:
+            SecretStoreUnavailableError: no auth token could be obtained via
+                any method, or any other failure (auth, network, non-404 HTTP
+                status) occurred.
         """
+        token = self._get_token()
+        if not token:
+            raise SecretStoreUnavailableError(
+                self.integration_name, "no Vault token available (token/AppRole/Kubernetes auth all failed)"
+            )
+
+        # Build secret URL
+        # Handle both KV v1 and v2 paths
+        if "/data/" not in secret_path and not secret_path.startswith("secret/data/"):
+            # Assume KV v2 and insert /data/ if not present
+            parts = secret_path.split("/", 1)
+            if len(parts) == 2:
+                secret_path = f"{parts[0]}/data/{parts[1]}"
+
+        secret_url = f"{self.vault_addr}/v1/{secret_path}"
+
         try:
-            # Get authentication token
-            token = self._get_token()
-            if not token:
-                return None
-
-            # Build secret URL
-            # Handle both KV v1 and v2 paths
-            if "/data/" not in secret_path and not secret_path.startswith("secret/data/"):
-                # Assume KV v2 and insert /data/ if not present
-                parts = secret_path.split("/", 1)
-                if len(parts) == 2:
-                    secret_path = f"{parts[0]}/data/{parts[1]}"
-
-            secret_url = f"{self.vault_addr}/v1/{secret_path}"
-
             req = urllib.request.Request(secret_url)
             req.add_header("X-Vault-Token", token)
             if self.vault_namespace:
@@ -840,8 +852,24 @@ class VaultIntegration(StoreIntegration):
                 else:
                     # Return all data as dict
                     return secret_data
-        except Exception:
-            return None
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return None  # confirmed: path does not exist
+            logger.warning(
+                "Vault API secret retrieval failed",
+                secret_path=secret_path,
+                http_status=e.code,
+                name=self.integration_name,
+            )
+            raise SecretStoreUnavailableError(self.integration_name, f"HTTP {e.code} from Vault API", cause=e) from e
+        except Exception as e:
+            logger.warning(
+                "Vault API secret retrieval failed",
+                secret_path=secret_path,
+                error_type=type(e).__name__,
+                name=self.integration_name,
+            )
+            raise SecretStoreUnavailableError(self.integration_name, f"{type(e).__name__}: {e}", cause=e) from e
 
     # List secrets methods
 

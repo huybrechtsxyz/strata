@@ -413,6 +413,8 @@ def _make_plan_cmd(tmp_path):
     cmd._artifacts_only = False
     cmd._ai = False
     cmd._strict_ai_review = None
+    cmd._no_cache_warm = True
+    cmd._platform_model = None
     cmd._errors = []
     cmd._messages = []
     cmd._output_data = {}
@@ -581,6 +583,54 @@ class TestPlanBuildValueStatus:
         assert len(cmd._output_data["values"]) == 1
 
 
+class TestPlanBuildCacheWarm:
+    """ADR-0026: PlanBuildCommand warms the cache after a successful plan build."""
+
+    def _cmd(self, tmp_path):
+        from unittest.mock import MagicMock
+
+        cmd = _make_plan_cmd(tmp_path)
+        svc = MagicMock()
+        svc.model.meta.name = "test-deploy"
+        svc.get_build_path.return_value = tmp_path / "build"
+        svc.get_environment_service.return_value = None
+        cmd._deployment_service = svc
+        cmd._artifacts_only = True
+        return cmd
+
+    def test_warms_cache_when_not_disabled(self, tmp_path):
+        from unittest.mock import patch
+
+        cmd = self._cmd(tmp_path)
+        cmd._no_cache_warm = False
+
+        with (
+            patch.object(cmd, "_build_to_temp", return_value=True),
+            patch.object(cmd, "_compute_artifact_diff", return_value=[]),
+            patch.object(cmd, "_print_console"),
+            patch.object(cmd, "_warm_model_cache") as mock_warm,
+        ):
+            cmd._run_plan()
+
+        mock_warm.assert_called_once()
+
+    def test_skips_warm_when_no_cache_warm_set(self, tmp_path):
+        from unittest.mock import patch
+
+        cmd = self._cmd(tmp_path)
+        cmd._no_cache_warm = True
+
+        with (
+            patch.object(cmd, "_build_to_temp", return_value=True),
+            patch.object(cmd, "_compute_artifact_diff", return_value=[]),
+            patch.object(cmd, "_print_console"),
+            patch.object(cmd, "_warm_model_cache") as mock_warm,
+        ):
+            cmd._run_plan()
+
+        mock_warm.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # TestBuildRunNdjsonStreaming — NDJSON stage events emitted per build phase
 # ---------------------------------------------------------------------------
@@ -697,3 +747,55 @@ class TestBuildRunNdjsonStreaming:
             cmd.execute()
 
         cmd.emit_ndjson.assert_not_called()
+
+
+class TestWarmModelCache:
+    """ADR-0026: RunBuildCommand._warm_model_cache() is best-effort and never raises."""
+
+    def _make_cmd(self, tmp_path: Path):
+        from strata.commands.builders.run_build_command import RunBuildCommand
+
+        cmd = RunBuildCommand(work_path=str(tmp_path), dry_run=False)
+        cmd._work_path = tmp_path
+        cmd._file_path = tmp_path / "deploy.yaml"
+        cmd._deployment_service = MagicMock()
+        cmd._deployment_service.model.meta.name = "demo"
+        cmd._platform_model = MagicMock()
+        cmd._platform_model.model_dump.return_value = {"meta": {"name": "demo"}}
+        return cmd
+
+    def test_noop_when_no_platform_model(self, tmp_path):
+        cmd = self._make_cmd(tmp_path)
+        cmd._platform_model = None
+        with patch("strata.controllers.cache_controller.CacheController") as mock_controller_cls:
+            cmd._warm_model_cache()
+        mock_controller_cls.assert_not_called()
+
+    def test_warms_cache_with_built_model(self, tmp_path):
+        cmd = self._make_cmd(tmp_path)
+        mock_controller = MagicMock()
+        mock_controller.collect_input_paths.return_value = ["/a/deploy.yaml"]
+        mock_controller.cache.compute_cache_key.return_value = "abc123"
+
+        with patch("strata.controllers.cache_controller.CacheController", return_value=mock_controller):
+            cmd._warm_model_cache()
+
+        mock_controller.cache.warm.assert_called_once_with(
+            "demo", "deployment", "abc123", {"meta": {"name": "demo"}}, ["/a/deploy.yaml"]
+        )
+
+    def test_never_raises_when_cache_controller_fails(self, tmp_path):
+        cmd = self._make_cmd(tmp_path)
+        with patch("strata.controllers.cache_controller.CacheController", side_effect=RuntimeError("boom")):
+            cmd._warm_model_cache()  # must not raise
+
+    def test_skipped_when_cache_key_cannot_be_computed(self, tmp_path):
+        cmd = self._make_cmd(tmp_path)
+        mock_controller = MagicMock()
+        mock_controller.collect_input_paths.return_value = ["/missing.yaml"]
+        mock_controller.cache.compute_cache_key.return_value = None
+
+        with patch("strata.controllers.cache_controller.CacheController", return_value=mock_controller):
+            cmd._warm_model_cache()
+
+        mock_controller.cache.warm.assert_not_called()

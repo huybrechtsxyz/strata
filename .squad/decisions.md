@@ -2,6 +2,18 @@
 
 ## Active Decisions
 
+### 2026-08-03 — Security-fix changelog entry placed in `[Unreleased]`
+- **By:** Reuben (Docs / Technical Writer)
+- **Decision:** Documented the store-outage-vs-not-found security fix (new `SecretStoreUnavailableError`,
+  preflight checks for stores and provisioners) in both `.github/CHANGELOG.md` (terse, `### Security`,
+  2 bullets) and `.github/HISTORY.md` (detailed, `### Security`, file/method-level nested bullets),
+  inside the existing empty `## [Unreleased]` section of both files. No new version heading was
+  created — no release/version decision has been made yet. No ADR number was fabricated; this was a
+  direct bug-report fix, not an ADR-tracked feature.
+- **Rationale:** Matches the repo's existing changelog split convention (terse CHANGELOG vs detailed
+  HISTORY, see repo memory `changelog-conventions.md`) and keeps unreleased work correctly
+  un-versioned until Vincent decides on a release.
+
 ### 2026-05-19 — Separate VS Code task sets for SDK vs config repos
 - **Decision:** VS Code `tasks.json` in configuration/operator repos must NOT include SDK development tasks (`Check: lint + format + types`, `uv run strata`). Operator repos contain only `strata` CLI tasks: `strata: validate`, `strata: deploy run`, `strata: build run`, and a generic `strata` fallback.
 - **Rationale:** Config repo users are operators, not SDK developers. The platform SDK's `tasks.template.json` is for SDK dev workspaces and correctly retains SDK tasks.

@@ -29,6 +29,12 @@ class ResolvedValues:
                                                            Available internally but never injected
                                                            into subprocess environments.
         errors                 (List[str]):               Resolution errors / warnings.
+        store_unavailable_errors (List[str]):              Subset of resolution failures caused
+                                                           by a store being unreachable/unauthenticated
+                                                           (as opposed to a key genuinely not
+                                                           existing). Always treated as fatal by
+                                                           ``ValueController.resolve_values()``,
+                                                           regardless of ``strict``.
     """
 
     variables: Dict[str, Any] = field(default_factory=dict)
@@ -37,6 +43,9 @@ class ResolvedValues:
     stage_outputs: Dict[str, Any] = field(default_factory=dict)
     stage_outputs_sensitive: Dict[str, Any] = field(default_factory=dict)
     errors: List[str] = field(default_factory=list)
+    # Store/connectivity failures (as opposed to "key genuinely not found") —
+    # ALWAYS fatal regardless of strict mode; see ValueController.resolve_values().
+    store_unavailable_errors: List[str] = field(default_factory=list)
     variable_notes: Dict[str, str] = field(default_factory=dict)
     secret_notes: Dict[str, str] = field(default_factory=dict)
     feature_notes: Dict[str, str] = field(default_factory=dict)
