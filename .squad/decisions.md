@@ -2,6 +2,20 @@
 
 ## Active Decisions
 
+### 2026-08-03 — v1.6.1 changelog release-cut
+- **By:** Reuben (Docs / Technical Writer)
+- **Decision:** Turned `## [Unreleased]` into `## [1.6.1] - 2026-08-03` in both `.github/CHANGELOG.md`
+  and `.github/HISTORY.md`, adding two previously-undocumented items alongside the existing Security
+  content: (1) the ADR-0026 SQLite-backed resolved-model cache (`strata cache` command group,
+  auto-warm on `build run`/`build plan`/`policy check`, VS Code background warmer) and (2) the
+  `deploy run`/`deploy destroy` exit-code fix (schema validation failures now exit 3, missing files
+  exit 2, per ADR-0004). Category order used: Added, Fixed, Security. Restored a fresh empty
+  `## [Unreleased]` heading above the new release in both files.
+- **Rationale:** The `[Unreleased]` section only had the Security entry documented, but the same work
+  session (per session memory) also shipped the ADR-0026 cache feature and the exit-code fix — both
+  implemented and verified but never added to the changelog. Cross-checked against session memory
+  before writing to keep HISTORY.md's file/method-level detail accurate.
+
 ### 2026-08-03 — Security-fix changelog entry placed in `[Unreleased]`
 - **By:** Reuben (Docs / Technical Writer)
 - **Decision:** Documented the store-outage-vs-not-found security fix (new `SecretStoreUnavailableError`,

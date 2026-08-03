@@ -7,6 +7,31 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+---
+
+## [1.6.1] - 2026-08-03
+
+### Added
+
+- **SQLite-backed resolved-model cache — ADR-0026**
+  - `CacheService` (`src/strata/services/cache_service.py`) — SQLite-backed cache (WAL mode) at `.strata/cache/model/cache.db`, `cache`/`cache_inputs` tables; `get()`, `warm()`, `status()`, `invalidate()`/`invalidate_by_path_prefix()`/`invalidate_all()`, `export()`
+  - Cache key: SHA-256 hash of every input file's contents (`compute_cache_key()`) plus a schema version, so any edit to a source YAML automatically invalidates the entry — no manual busting needed
+  - `CacheController` (`src/strata/controllers/cache_controller.py`) — collects the full transitive set of input files for a deployment: deployment/environment/workspace files, `spec.providers[]/resources[]/modules[]/namespaces[]/firewalls[]/dns_zones[]/networks[].file`, one level of namespace→module recursion, `spec.configurations[].file`, and `spec.tenant` (when present on disk); deliberately excludes module `source` paths (app code, often a glob), documented as a permanent exclusion
+  - New CLI group `strata cache` (`src/strata/commands/cli_cache.py`): `warm [-f deployment | --all]`, `status [-f deployment]`, `clear`, `export [path]`
+  - `strata build run`/`strata build plan` auto-warm the cache from the `PlatformArtifactModel` they already built, after a successful (non-dry-run) run — no re-resolution needed; `strata policy check` auto-warms opportunistically from the `platform.json` it reads off disk (it never builds a fresh model). New `--no-cache-warm` flag (env `STRATA_NO_CACHE_WARM`) added to all three
+  - Deliberately NOT wired into `deploy run/show`, `values list/get/resolve` — those commands need the live `DeploymentService`/`EnvironmentService` object graph (variables/secrets/features/stage config), not the cached JSON-serialisable artifact, so caching the `platform.json` shape doesn't save them work; tracked as a follow-up in ADR-0026, not implemented
+  - `strata cache warm` (explicit CLI invocation) also syncs git remote refs before resolving, matching `build run` fidelity; `--no-sync-remotes` to skip
+  - VS Code extension: `src/vscode/src/providers/cacheWarmerProvider.ts` (new) — file watcher on `**/*.yaml` debounced 500ms, plus a startup warm; calls `strata cache warm --all --no-sync-remotes`/`strata cache status` under the hood (always passes `--no-sync-remotes` so an ambient auto-warm-on-save never mutates git state); status bar indicator (warm/stale/cold), best-effort only, logs to a "Strata Cache" output channel instead of showing error popups
+  - `strataClient.ts` — added `warmCache()`/`getCacheStatus()` + `CacheStatusData`/`CacheStatusEntry` types; `package.json` — new `strata.cache.backgroundWarm` setting (default true) and `strata.refreshCache` command; wired into `extension.ts` (instantiate, register, dispose)
+  - Tests: new suites for `cache_service`, `cache_controller`, CLI cache commands, and build-run/build-plan/policy-check auto-warm integration
+
+### Fixed
+
+- **`deploy run`/`deploy destroy` wrong exit code on validation failure — ADR-0004**
+  - `BaseDeployCommand` (`src/strata/commands/deploy/base_deploy_command.py`) gained `self._validation_failed`/`has_validation_errors()`, so `handle_command_exit()` now correctly returns exit code 3 for schema/cross-reference validation failures instead of falling through to the generic exit code 1
+  - Missing/unresolvable deployment file arguments now raise `click.UsageError` (exit code 2) instead of silently appending to `self._errors` and returning `False` (which incorrectly produced exit code 1)
+  - Scope limited to `src/strata/commands/deploy/` — `build`/`validate` commands already had correct exit-code handling, not touched
+
 ### Security
 
 - **Secret/variable/feature store outage vs "not found" conflation**
