@@ -75,6 +75,7 @@ class TestCacheServiceInvalidation:
     def test_invalidate_removes_entry(self, work_path: Path, input_file: Path) -> None:
         cache = CacheService(work_path)
         key = cache.compute_cache_key([str(input_file)])
+        assert key is not None
         cache.warm("demo", "deployment", key, {"v": 1}, [str(input_file)])
         cache.invalidate("demo")
         assert cache.get("demo", key) is None
@@ -82,6 +83,7 @@ class TestCacheServiceInvalidation:
     def test_invalidate_all_clears_every_entry(self, work_path: Path, input_file: Path) -> None:
         cache = CacheService(work_path)
         key = cache.compute_cache_key([str(input_file)])
+        assert key is not None
         cache.warm("a", "deployment", key, {"v": 1}, [str(input_file)])
         cache.warm("b", "deployment", key, {"v": 2}, [str(input_file)])
         cache.invalidate_all()
@@ -98,6 +100,8 @@ class TestCacheServiceInvalidation:
         cache = CacheService(work_path)
         key_a = cache.compute_cache_key([str(f)])
         key_b = cache.compute_cache_key([str(other)])
+        assert key_a is not None
+        assert key_b is not None
         cache.warm("a", "deployment", key_a, {"v": 1}, [str(f)])
         cache.warm("b", "deployment", key_b, {"v": 2}, [str(other)])
 
@@ -111,6 +115,7 @@ class TestCacheServiceListingAndExport:
     def test_list_entries_metadata_only(self, work_path: Path, input_file: Path) -> None:
         cache = CacheService(work_path)
         key = cache.compute_cache_key([str(input_file)])
+        assert key is not None
         cache.warm("demo", "deployment", key, {"v": 1}, [str(input_file)])
 
         entries = cache.list_entries()
@@ -122,6 +127,7 @@ class TestCacheServiceListingAndExport:
     def test_export_json_round_trips_resolved_payload(self, work_path: Path, input_file: Path) -> None:
         cache = CacheService(work_path)
         key = cache.compute_cache_key([str(input_file)])
+        assert key is not None
         resolved = {"meta": {"name": "demo"}}
         cache.warm("demo", "deployment", key, resolved, [str(input_file)])
 

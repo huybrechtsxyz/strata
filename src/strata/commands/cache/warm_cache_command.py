@@ -60,6 +60,10 @@ class WarmCacheCommand(BaseCommand):
             self._has_errors = not ok
             return ok
 
+        # Reached only when `self._deployment_file` is set (the guard above
+        # returns early unless --file or --all was given, and --all is handled
+        # by the branch above this one).
+        assert self._deployment_file is not None
         ok, indicator, errors = controller.warm(
             self._deployment_file, refresh_cache=True, sync_remotes=self._sync_remotes
         )
