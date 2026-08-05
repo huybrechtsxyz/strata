@@ -1,10 +1,9 @@
 ---
-description: Strata YAML schema, valid kinds, fields, constraints, and anti-patterns
-applyTo: "**/*.yaml"
-confidence: high
+name: strata-yaml-schema-and-kinds
+description: 'Strata YAML schema, the 12 valid kinds, universal envelope rules, cross-file references, and anti-patterns. Use before writing or reviewing any strata YAML file.'
 ---
 
-# Strata YAML Schema & Kinds — AI Skill File
+# Strata YAML Schema & Kinds
 
 ## Universal YAML Envelope (Every File)
 
@@ -25,21 +24,21 @@ spec:
 
 **Rules:**
 - `apiVersion: strata.huybrechts.xyz/v1` — always this value, never change
-- `kind` — one of the 13 valid kinds listed below
-- `meta.name` — **MUST match `^[a-z][a-z0-9_-]*$`** (lowercase, starts with letter, no spaces, no uppercase)
+- `kind` — one of the 12 valid kinds listed below
+- `meta.name` — **MUST match `^[a-z0-9][a-z0-9_-]*$`** (lowercase, starts with a letter or digit, no spaces, no uppercase)
 - `meta.annotations.description` — optional but recommended
 - `meta.labels` — optional, for user-defined metadata
 - `spec` — kind-specific content (structure varies per kind)
 
-**Critical constraint:** Models use `extra="forbid"` — **any unknown field causes validation error 3**. Only use fields documented in the schema.
+**Critical constraint:** Models use `extra="forbid"` — **any unknown field causes validation error 3**. Only use fields documented in the schema. Run `strata schema get <kind>` to see the authoritative field list for any kind.
 
 ---
 
-## The 13 Valid Kinds
+## The 12 Valid Kinds
 
 ### Root & Cross-Cutting
 
-#### `configuration` — Hub for provisioners, providers, remotes, policies
+#### `configuration` — Hub for provisioners, providers, remotes, policies, integrations
 
 ```yaml
 apiVersion: strata.huybrechts.xyz/v1
@@ -59,19 +58,17 @@ spec:
     - name: my-infra
       type: git
       url: https://github.com/org/my-infra
-  policies:
-    - name: cost-limit
-      budget: 5000 # USD/month
-  stores:
-    - name: default
-      type: azure-keyvault
-      location: "https://..."
+  integrations:
+    - name: infisical
+      type: infisical
+      required: true
+      enabled: true
 ```
 
 **Agent rules:**
 - One configuration per solution
 - Reference it implicitly (environments, workspaces inherit from it)
-- Define providers, provisioners, and remotes here FIRST
+- Define providers, provisioners, remotes, and integrations here FIRST
 
 ---
 
@@ -83,23 +80,20 @@ kind: environment
 meta:
   name: dev
 spec:
-  configuration: my-platform
-  overrides:
-    environment:
-      AZ_SUBSCRIPTION_ID: "..."
-      REGION: eastus
-    secrets:
-      - key: db-password
-        source: azure-keyvault
-        value: dev-db-secret
   variables:
-    cluster_size: "small"
+    - key: REGION
+      store: constant
+      value: eastus
+  secrets:
+    - key: db_password
+      store: azure-keyvault
+      value: dev-db-secret
 ```
 
 **Agent rules:**
 - One per environment (dev, staging, prod, etc.)
 - Overrides are merged, not replaced
-- Secrets reference keys in the store, never plain values
+- `store:`/`value:` reference a secret/variable — see the `strata-secret-resolution-patterns` skill for the full schema, generate/rotate specs, and stage-secret scoping
 
 ---
 
@@ -188,19 +182,15 @@ spec:
       port: 8080
       targetPort: 3000
   environment:
-    - name: LOG_LEVEL
+    - key: LOG_LEVEL
       value: info
-    - name: DB_PASSWORD
-      source: secret
-      value: db-secret-key
-  files:
-    - source: "@config/templates/nginx.conf"
-      destination: /etc/nginx/nginx.conf
+    - key: DB_PASSWORD
+      secret: db_password       # references environment.spec.secrets[].key
 ```
 
 **Agent rules:**
 - Modules are deployed units (containers, processes, etc.)
-- Never put secrets as plain values — use `source: secret` + `value: <key>`
+- Never put secrets as plain values — use `secret: <key-name>`, never a literal value
 - Files referenced with `@remote/path` syntax
 
 ---
@@ -222,20 +212,20 @@ spec:
     - name: infrastructure
       provisioner: terraform
       scope: all
-      on_failure: stop
+      on_failure: stop        # stop | rollback | continue
+      secrets: [db_password]  # only these secrets reach this stage
     - name: configuration
       provisioner: ansible
       scope: all
       on_failure: stop
-  options:
-    dry_run: false
-    auto_approve: false
+      secrets: ['*']
 ```
 
 **Agent rules:**
 - Deployment orchestrates the FULL lifecycle
 - Stages execute in order — each can fail independently
-- `on_failure` controls whether subsequent stages run
+- `on_failure` controls whether subsequent stages run (`stop`/`rollback` halt the deploy; `continue` proceeds)
+- `secrets:` on each stage is an allowlist — a value resolving successfully does NOT mean every stage receives it (see `strata-secret-resolution-patterns` skill)
 
 ---
 
@@ -404,29 +394,18 @@ resources:
 
 ## Secret Handling (Critical!)
 
-**NEVER write plain secret values in YAML:**
+**NEVER write plain secret values in YAML.** See the `strata-secret-resolution-patterns` skill for the full `store:`/`value:`/`generate:`/`rotate:` schema and stage-secret allowlisting. Quick reference:
 
 ```yaml
 # ❌ WRONG
 environment:
-  - name: DB_PASSWORD
+  - key: DB_PASSWORD
     value: "super-secret-123"
 
 # ✅ CORRECT
 environment:
-  - name: DB_PASSWORD
-    source: secret
-    value: db-password-key  # Name of the key in the secret store
-```
-
-**SSH key pattern in Ansible provisioner:**
-
-```yaml
-provisioners:
-  - name: configure
-    provisioner: ansible
-    configuration:
-      ssh_private_key_secret: haven_ssh_key  # References a key in the store
+  - key: DB_PASSWORD
+    secret: db_password  # name of the key in environment.spec.secrets[]
 ```
 
 ---
@@ -434,23 +413,25 @@ provisioners:
 ## Validation Checklist Before Saving
 
 1. **Envelope:** `apiVersion`, `kind`, `meta.name` present?
-2. **Name format:** `meta.name` matches `^[a-z][a-z0-9_-]*$`?
-3. **No unknown fields:** Only use fields from the schema?
-4. **No plain secrets:** All sensitive values use `source: secret` reference?
+2. **Name format:** `meta.name` matches `^[a-z0-9][a-z0-9_-]*$`?
+3. **No unknown fields:** Only use fields from the schema (`strata schema get <kind>`)?
+4. **No plain secrets:** All sensitive values use `secret: <key-name>` references?
 5. **Cross-refs valid:** All `@remote/path.yaml` references exist?
-6. **Provisioner names match:** Provisioners referenced in deployment exist in configuration?
+6. **Provisioner names match:** Provisioners referenced in a deployment stage exist in configuration?
+7. **Stage secrets declared:** Does each stage's `secrets:` allowlist include every key its provisioner actually needs?
 
 ---
 
 ## Common Anti-Patterns
 
-| Anti-Pattern                                           | Problem                | Fix                                        |
-| ------------------------------------------------------ | ---------------------- | ------------------------------------------ |
-| `meta.name: My-Workspace`                              | Uppercase not allowed  | Use lowercase: `my-workspace`              |
-| `spec: { unknown_field: value }`                       | Extra forbid violation | Remove the field; check schema             |
-| `value: "plain-password"`                              | Secret in plain text   | Use `source: secret` + `value: key-name`   |
-| `file: config/module.yaml`                             | Missing `@` prefix     | Use `file: "@repo/config/module.yaml"`     |
-| `provisioner: my_provisioner` but not in configuration | Undefined provisioner  | Add to configuration's `spec.provisioners` |
+| Anti-Pattern                                           | Problem                | Fix                                                |
+| -------------------------------------------------------- | ------------------------- | ------------------------------------------------------ |
+| `meta.name: My-Workspace`                              | Uppercase not allowed  | Use lowercase: `my-workspace`                         |
+| `spec: { unknown_field: value }`                        | Extra forbid violation | Remove the field; check `strata schema get <kind>`   |
+| `value: "plain-password"` on a secret                   | Secret in plain text   | Use `secret: <key-name>` referencing a stored value   |
+| `file: config/module.yaml`                              | Missing `@` prefix     | Use `file: "@repo/config/module.yaml"`               |
+| `provisioner: my_provisioner` but not in configuration  | Undefined provisioner  | Add to configuration's `spec.provisioners`           |
+| Stage uses a secret but omits it from `stage.secrets`   | Value silently dropped for that stage | Add the key to that stage's `secrets:` list (or `['*']`) |
 
 ---
 
@@ -458,5 +439,5 @@ provisioners:
 
 1. **Before writing:** Run `strata schema get <kind>` to see valid fields
 2. **While writing:** Follow the envelope + kind-specific sections above
-3. **Before saving:** Validate with `strata validate <file> --output json`
+3. **Before saving:** Validate with `strata validate -f <file> --output json`
 4. **On error:** Read `errors` array to see which fields failed

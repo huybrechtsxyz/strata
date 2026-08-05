@@ -1,20 +1,20 @@
 ---
-description: "Strata provisioner integration: Terraform for IaC, Ansible for post-provisioning configuration, stage orchestration"
-applyTo: "**/*.yaml"
+name: strata-terraform-ansible-provisioning
+description: 'Strata provisioner integration: Terraform for IaC, Ansible for post-provisioning configuration, Helm/Compose, stage orchestration, and stage-scoped secrets. Use when configuring or debugging a deployment stage.'
 ---
 
-# Strata Terraform and Ansible Provisioning — AI Skill File
+# Strata Terraform and Ansible Provisioning
 
 ## Provisioners in strata
 
 Provisioners are deployment execution engines. Strata supports:
 
 | Provisioner      | Purpose                                          | When to Use                                      |
-| ---------------- | ------------------------------------------------ | ------------------------------------------------ |
+| ---------------- | ---------------------------------------------------- | ---------------------------------------------------- |
 | `terraform`      | Infrastructure-as-Code (cloud resources)         | Provision clusters, networks, storage, VMs       |
 | `ansible`        | Post-provisioning configuration (apps, services) | Configure servers, install packages, deploy apps |
-| `helm`           | Kubernetes Helm charts                           | Deploy applications to Kubernetes                |
-| `docker_compose` | Docker Compose stacks                            | Dev/test environments, multi-container apps      |
+| `helm`           | Kubernetes Helm charts                            | Deploy applications to Kubernetes                |
+| `docker_compose` | Docker Compose stacks                             | Dev/test environments, multi-container apps      |
 
 ---
 
@@ -53,7 +53,8 @@ spec:
     - name: infrastructure
       provisioner: terraform
       scope: all                      # all resources or specific names
-      on_failure: stop                # stop or continue on error
+      on_failure: stop                # stop | rollback | continue
+      secrets: [db_password]          # allowlist — only these keys reach this stage
       before_scripts: []              # optional: run before Terraform
       after_scripts: []               # optional: run after Terraform
 ```
@@ -90,29 +91,21 @@ backend:
 **Check state:**
 
 ```bash
-strata values get terraform_state --output json
+strata values get -f deploy.yaml terraform_state --output json
 ```
 
 ### Terraform Provider Variables
 
 Environment variables injected during `terraform apply`:
 
-| Variable            | Content                                                        |
-| ------------------- | -------------------------------------------------------------- |
-| `TF_VAR_*`          | Variables from `environment.spec.variables` (prefixed TF_VAR_) |
-| `TF_WORKSPACE`      | Current Terraform workspace name                               |
-| `STRATA_PHASE`      | Current deployment stage                                       |
-| `STRATA_BUILD_PATH` | Path to generated artifacts                                    |
+| Variable            | Content                                                          |
+| ---------------------- | -------------------------------------------------------------------- |
+| `TF_VAR_*`          | Variables resolved for this deployment (prefixed `TF_VAR_`)      |
+| `TF_WORKSPACE`      | Current Terraform workspace name                                  |
+| `STRATA_PHASE`      | Current deployment stage                                           |
+| `STRATA_BUILD_PATH` | Path to generated artifacts                                       |
 
-**Example environment:**
-
-```yaml
-spec:
-  variables:
-    region: eastus
-    environment: prod
-    # Becomes TF_VAR_region=eastus, TF_VAR_environment=prod
-```
+Only variables/secrets in the stage's `secrets:` allowlist (see below) become `TF_VAR_*` for that stage's Terraform run.
 
 ### Common Terraform Patterns
 
@@ -169,7 +162,8 @@ stages:
   - name: configuration
     provisioner: ansible
     scope: all
-    on_failure: continue  # optional: continue even if playbook fails
+    on_failure: continue  # if this playbook fails, log and move to next stage
+    secrets: [ssh_key_prod]  # must include the SSH key (and any other secret the playbook needs)
     before_scripts: []
     after_scripts: []
 ```
@@ -189,8 +183,8 @@ configuration:
 spec:
   secrets:
     - key: ssh_key_prod
-      source: bitwarden
-      item_id: ssh-key-item-123
+      store: bitwarden
+      value: ssh-key-item-123
       # Item contains full PEM-formatted private key
 ```
 
@@ -200,6 +194,8 @@ spec:
 3. Pass to Ansible via `--private-key` flag
 4. Delete temp file immediately after Ansible completes
 5. **Key never appears in logs or artifact files**
+
+**Agent rule:** the stage running this Ansible playbook must include `ssh_key_prod` in its `secrets:` allowlist — a value resolving at the environment level doesn't automatically flow to a stage that never asked for it.
 
 ### Ansible Inventory
 
@@ -333,6 +329,7 @@ spec:
       provisioner: terraform
       scope: all
       on_failure: stop  # if Terraform fails, stop entirely
+      secrets: [db_password]
       before_scripts: []
       after_scripts:
         - bash: "echo 'Infrastructure provisioned'"
@@ -342,6 +339,7 @@ spec:
       provisioner: ansible
       scope: all
       on_failure: continue  # if Ansible fails, log but continue
+      secrets: [ssh_key_prod]
       before_scripts:
         - bash: "echo 'Starting configuration...'"
       after_scripts: []
@@ -397,7 +395,7 @@ extra_vars:
 
 ## Error Handling in Stages
 
-### on_failure: stop
+### on_failure: stop (default)
 
 Halts entire deployment if stage fails:
 
@@ -408,6 +406,10 @@ Halts entire deployment if stage fails:
 ```
 
 **Use for:** Critical stages (infrastructure provisioning, security setup)
+
+### on_failure: rollback
+
+Same halt behavior as `stop` — the deploy aborts and subsequent stages don't run. Use this value where you want to explicitly signal intent to roll back (strata itself does not auto-rollback; see the `strata-deployment-lifecycle` skill for manual rollback patterns).
 
 ### on_failure: continue
 
@@ -442,11 +444,11 @@ stages:
 Available in provisioner configs:
 
 | Variable                | Content                                              |
-| ----------------------- | ---------------------------------------------------- |
+| --------------------------- | -------------------------------------------------------- |
 | `STRATA_PHASE`          | Stage name (e.g., `infrastructure`, `configuration`) |
 | `STRATA_WORKSPACE_PATH` | Path to workspace root                               |
 | `STRATA_BUILD_PATH`     | Path to generated artifacts                          |
-| `STRATA_OBJECT_PATH`    | Path to built objects                                |
+| `STRATA_OBJECT_PATH`    | Path to built objects                                 |
 | `TF_*`                  | Terraform variables (for Terraform provisioner)      |
 | `ANSIBLE_*`             | Ansible variables (for Ansible provisioner)          |
 
@@ -477,19 +479,21 @@ Available in provisioner configs:
 1. **Separate infrastructure and configuration** — different stages
 2. **Fail fast** — use `on_failure: stop` for critical stages
 3. **Document stages** — clear purpose for each stage
-4. **Use lifecycle scripts** — pre/post stage actions
-5. **Monitor deployment** — health checks after each stage
-6. **Keep stages atomic** — independently retryable
-7. **Log everything** — audit trail for debugging
+4. **Declare `secrets:` explicitly on every stage** — don't assume a resolved value reaches the provisioner
+5. **Use lifecycle scripts** — pre/post stage actions
+6. **Monitor deployment** — health checks after each stage
+7. **Keep stages atomic** — independently retryable
+8. **Log everything** — audit trail for debugging
 
 ---
 
 ## Troubleshooting
 
-| Problem                   | Cause                                 | Fix                                                    |
-| ------------------------- | ------------------------------------- | ------------------------------------------------------ |
-| Terraform state locked    | Previous deploy didn't complete       | Check `strata deploy status`, manually unlock if stuck |
-| SSH key permission denied | Key not 600 permissions               | Verify SSH key in secret store is valid PEM            |
-| Ansible unreachable       | Hosts not in inventory or SSH failed  | Check inventory config, SSH key, network connectivity  |
-| Terraform drift           | Infrastructure changed outside strata | Run `strata deploy plan` to detect, re-apply or import |
-| Ansible idempotency       | Task runs every time (not idempotent) | Use Ansible modules (apt, yum, copy) instead of shell  |
+| Problem                     | Cause                                    | Fix                                                        |
+| -------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------- |
+| Terraform state locked      | Previous deploy didn't complete           | Check `strata deploy status`, manually unlock if stuck    |
+| SSH key permission denied   | Key not 600 permissions                    | Verify SSH key in secret store is valid PEM                |
+| Ansible unreachable          | Hosts not in inventory or SSH failed       | Check inventory config, SSH key, network connectivity      |
+| Terraform drift              | Infrastructure changed outside strata      | Run `strata build plan` to detect, re-apply or import      |
+| Ansible idempotency          | Task runs every time (not idempotent)      | Use Ansible modules (apt, yum, copy) instead of shell       |
+| "No value for required variable" | Value resolved but stage's `secrets:` allowlist omits it | Add the key to that stage's `secrets:` list       |

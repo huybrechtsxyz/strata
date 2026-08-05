@@ -1,10 +1,9 @@
 ---
-description: "DevOps CI/CD patterns, GitHub Actions workflows, approval gates, testing pipelines, and deployment automation"
-applyTo: "**"
-confidence: high
+name: devops-ci-cd-workflows
+description: 'DevOps CI/CD patterns: GitHub Actions workflows, approval gates, testing pipelines, and deployment automation. Supporting context for the strata-specific skills — use when wiring strata commands into a CI/CD pipeline.'
 ---
 
-# DevOps CI/CD Workflows — AI Skill File
+# DevOps CI/CD Workflows
 
 ## What is CI/CD?
 
@@ -63,25 +62,22 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      
+      - uses: actions/checkout@v7
+
       - name: Validate YAML
-        run: strata validate config/prod.yaml --output json
-      
-      - name: Check formatting
-        run: strata validate config/prod.yaml --format-check
+        run: strata validate -f config/prod.yaml --output json
 
   build:
     needs: validate          # only runs if 'validate' job succeeds
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      
+      - uses: actions/checkout@v7
+
       - name: Build artifacts
-        run: strata build run -f deploy/prod.yaml
-      
+        run: strata build run -f deploy/prod.yaml --output json
+
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
           path: build/
@@ -91,13 +87,13 @@ jobs:
     runs-on: ubuntu-latest
     environment: development  # approval gate
     steps:
-      - uses: actions/checkout@v3
-      
+      - uses: actions/checkout@v7
+
       - name: Deploy to Dev
-        run: strata deploy run -f deploy/dev.yaml --force
-      
+        run: strata deploy run -f deploy/dev.yaml --force --output json
+
       - name: Health check
-        run: strata deploy health -f deploy/dev.yaml
+        run: strata deploy health -f deploy/dev.yaml --output json
 
   deploy-prod:
     needs: deploy-dev
@@ -105,25 +101,25 @@ jobs:
     environment: production    # requires approval
     if: github.ref == 'refs/heads/main'  # only on main branch
     steps:
-      - uses: actions/checkout@v3
-      
+      - uses: actions/checkout@v7
+
       - name: Deploy to Production
-        run: strata deploy run -f deploy/prod.yaml --force
-      
+        run: strata deploy run -f deploy/prod.yaml --force --output json
+
       - name: Verify deployment
-        run: strata deploy health -f deploy/prod.yaml
+        run: strata deploy health -f deploy/prod.yaml --output json
 ```
 {% endraw %}
 
 ### Trigger Events
 
-| Event               | When                     | Use Case                      |
-| ------------------- | ------------------------ | ----------------------------- |
-| `push`              | Code pushed to branch    | Run tests on every commit     |
-| `pull_request`      | PR opened or updated     | Validate changes before merge |
-| `schedule`          | Cron expression          | Daily/weekly automated checks |
-| `workflow_dispatch` | Manual trigger           | On-demand deployments         |
-| `release`           | GitHub release published | Production deployment         |
+| Event                 | When                       | Use Case                        |
+| ------------------------ | ------------------------------ | ------------------------------------ |
+| `push`                 | Code pushed to branch       | Run tests on every commit          |
+| `pull_request`         | PR opened or updated         | Validate changes before merge       |
+| `schedule`              | Cron expression              | Daily/weekly automated checks       |
+| `workflow_dispatch`    | Manual trigger                | On-demand deployments               |
+| `release`               | GitHub release published    | Production deployment               |
 
 ### Approval Gates (Environments)
 
@@ -145,6 +141,8 @@ deploy-prod:
 - Reviewer must click "Review deployments" in GitHub
 - Deployment proceeds only after approval
 
+Strata also has its own deployment-level approval gates (`spec.gates`) that don't require a GitHub environment — see the `strata-deployment-lifecycle` skill and ADR-0059 for the `strata workitem`/`deploy run --resume` hand-off flow (exit code 5).
+
 ---
 
 ## CI/CD Patterns for Infrastructure
@@ -161,8 +159,8 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - run: strata validate deploy/prod.yaml --output json
+      - uses: actions/checkout@v7
+      - run: strata validate -f deploy/prod.yaml --output json
       - run: strata build plan -f deploy/prod.yaml --output json
 ```
 
@@ -170,7 +168,7 @@ jobs:
 {% raw %}
 ```yaml
   - name: Comment plan on PR
-    uses: actions/github-script@v6
+    uses: actions/github-script@v7
     with:
       script: |
         const fs = require('fs');
@@ -195,13 +193,13 @@ jobs:
   deploy-dev:
     runs-on: ubuntu-latest
     steps:
-      - run: strata deploy run -f deploy/dev.yaml --force
-  
+      - run: strata deploy run -f deploy/dev.yaml --force --output json
+
   deploy-prod:
     needs: deploy-dev
     environment: production
     steps:
-      - run: strata deploy run -f deploy/prod.yaml --force
+      - run: strata deploy run -f deploy/prod.yaml --force --output json
 ```
 {% endraw %}
 
@@ -223,27 +221,27 @@ jobs:
   drift-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      
+      - uses: actions/checkout@v7
+
       - name: Check for drift
         run: strata build plan -f deploy/prod.yaml --output json > plan.json
-      
+
       - name: Report drift
         if: failure()
         run: |
           echo "Infrastructure drift detected!"
           cat plan.json
-      
+
       - name: Create issue if drift found
         if: failure()
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: 'Infrastructure Drift Detected',
-              body: 'Run `strata deploy run -f deploy/prod.yaml` to reconcile'
+              body: 'Run `strata deploy run -f deploy/prod.yaml --force` to reconcile'
             });
 ```
 {% endraw %}
@@ -275,10 +273,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment }}
     steps:
-      - uses: actions/checkout@v3
-      
+      - uses: actions/checkout@v7
+
       - name: Deploy to ${{ github.event.inputs.environment }}
-        run: strata deploy run -f deploy/${{ github.event.inputs.environment }}.yaml --force
+        run: strata deploy run -f deploy/${{ github.event.inputs.environment }}.yaml --force --output json
 ```
 {% endraw %}
 
@@ -310,39 +308,39 @@ jobs:
   deploy-dev:
     runs-on: ubuntu-latest
     steps:
-      - run: strata deploy run -f deploy/dev.yaml --force
-  
+      - run: strata deploy run -f deploy/dev.yaml --force --output json
+
   test-dev:
     needs: deploy-dev
     runs-on: ubuntu-latest
     steps:
       - run: bash scripts/test-dev.sh
-  
+
   deploy-staging:
     needs: test-dev
     environment: staging
     runs-on: ubuntu-latest
     steps:
-      - run: strata deploy run -f deploy/staging.yaml --force
-  
+      - run: strata deploy run -f deploy/staging.yaml --force --output json
+
   test-staging:
     needs: deploy-staging
     runs-on: ubuntu-latest
     steps:
       - run: bash scripts/test-staging.sh
-  
+
   deploy-prod:
     needs: test-staging
     environment: production
     runs-on: ubuntu-latest
     steps:
-      - run: strata deploy run -f deploy/prod.yaml --force
-      
+      - run: strata deploy run -f deploy/prod.yaml --force --output json
+
   verify-prod:
     needs: deploy-prod
     runs-on: ubuntu-latest
     steps:
-      - run: strata deploy health -f deploy/prod.yaml
+      - run: strata deploy health -f deploy/prod.yaml --output json
       - run: bash scripts/smoke-tests.sh
 ```
 {% endraw %}
@@ -381,10 +379,9 @@ Store credentials in GitHub Secrets, never in code:
 # ✅ RIGHT — use GitHub Secrets
 env:
   AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
-  TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
 
 steps:
-  - run: strata deploy run -f deploy/prod.yaml --force
+  - run: strata deploy run -f deploy/prod.yaml --force --output json
 ```
 {% endraw %}
 
@@ -393,9 +390,11 @@ steps:
 ```yaml
 # ❌ WRONG — hardcoded secrets
 env:
-  TF_VAR_db_password: "my-secret-password-123"
+  DB_PASSWORD: "my-secret-password-123"
 ```
 {% endraw %}
+
+Strata itself resolves secrets from an integration-backed store (Infisical/Vault/Bitwarden/Azure Key Vault) at deploy time — see the `strata-secret-resolution-patterns` skill. GitHub Secrets are only needed for credentials strata's own integrations use to reach those stores (e.g. `INFISICAL_CLIENT_ID`/`INFISICAL_CLIENT_SECRET`).
 
 ### Notifications & Alerts
 
@@ -405,7 +404,7 @@ Alert on deployment success/failure:
 ```yaml
 - name: Notify Slack on success
   if: success()
-  uses: slackapi/slack-github-action@v1.24.0
+  uses: slackapi/slack-github-action@v2
   with:
     webhook-url: ${{ secrets.SLACK_WEBHOOK }}
     payload: |
@@ -415,7 +414,7 @@ Alert on deployment success/failure:
 
 - name: Notify Slack on failure
   if: failure()
-  uses: slackapi/slack-github-action@v1.24.0
+  uses: slackapi/slack-github-action@v2
   with:
     webhook-url: ${{ secrets.SLACK_WEBHOOK }}
     payload: |
@@ -439,14 +438,7 @@ git push origin main
 ```
 {% endraw %}
 
-**Or use version pinning:**
-{% raw %}
-```yaml
-deploy-prod:
-  steps:
-    - run: strata deploy run -f deploy/prod.yaml --version 1.2.0 --force
-```
-{% endraw %}
+Strata itself does not auto-rollback — see the `strata-deployment-lifecycle` skill for provisioner-specific rollback (Terraform destroy/re-apply, Ansible rollback playbooks).
 
 ---
 
@@ -458,7 +450,7 @@ deploy-prod:
 ```yaml
 validate:
   steps:
-    - run: strata validate config/ --output json
+    - run: strata validate -f deploy/prod.yaml --output json
     - run: strata build plan -f deploy/prod.yaml --output json
 ```
 {% endraw %}
@@ -487,21 +479,6 @@ integration-test:
 ```
 {% endraw %}
 
-### Compliance Checks
-
-{% raw %}
-```yaml
-compliance:
-  steps:
-    - run: |
-        # Check if all resources have tags
-        cat deploy/prod.yaml | grep -E "tags:" || exit 1
-    - run: |
-        # Check RBAC compliance
-        strata audit list --last | grep "APPROVED"
-```
-{% endraw %}
-
 ---
 
 ## Workflow Best Practices
@@ -515,19 +492,20 @@ compliance:
 7. **Timeout protection** — prevent workflows from running forever
 8. **Rollback ready** — have a documented rollback procedure
 9. **Notifications** — alert the team on success/failure
-10. **Audit trail** — GitHub Actions logs everything (who, when, what)
+10. **Audit trail** — GitHub Actions logs everything (who, when, what); strata's own `audit list` complements it
 
 ---
 
 ## Troubleshooting
 
-| Problem                                   | Cause                        | Fix                                                      |
-| ----------------------------------------- | ---------------------------- | -------------------------------------------------------- |
-| Workflow doesn't trigger                  | Wrong branch filter          | Check `on: push: branches:` matches your workflow branch |
-| Approval stuck                            | Reviewer didn't notice       | Set up Slack notifications for pending approvals         |
-| Secrets not available                     | Secret not defined in GitHub | Add secret in Settings → Secrets and variables → Actions |
-| Deployment failed in CI but works locally | Environment difference       | Check STRATA_WORK_PATH, .strata/ config differences      |
-| Slow validation                           | Too many checks              | Run critical checks on PR, full checks on main branch    |
+| Problem                                     | Cause                          | Fix                                                          |
+| ------------------------------------------------ | ---------------------------------- | ------------------------------------------------------------------ |
+| Workflow doesn't trigger                       | Wrong branch filter              | Check `on: push: branches:` matches your workflow branch          |
+| Approval stuck                                  | Reviewer didn't notice            | Set up Slack notifications for pending approvals                   |
+| Secrets not available                           | Secret not defined in GitHub      | Add secret in Settings → Secrets and variables → Actions           |
+| Deployment failed in CI but works locally      | Environment difference            | Check `STRATA_WORK_PATH`, `.strata/` config differences            |
+| Slow validation                                 | Too many checks                    | Run critical checks on PR, full checks on main branch              |
+| "Required integration not available" for a store that clearly works | CLI-presence check unrelated to the auth mode actually used (e.g. an API-token-based integration with no CLI installed) — non-fatal, just noisy | Confirm the deploy itself succeeded/failed on a *different* line before chasing this warning |
 
 ---
 
