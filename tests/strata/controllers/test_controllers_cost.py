@@ -151,9 +151,12 @@ class TestResolveProvisionerPath:
 class TestGetEstimator:
     def test_returns_none_when_no_cost_integrations(self):
         ctrl = CostController()
+        mock_service = MagicMock()
+        mock_service.is_initialized.return_value = True
+        mock_service.get_integrations_with_capability.return_value = []
         with patch(
-            "strata.integrations.factory.IntegrationFactory.get_known_types",
-            return_value=[],
+            "strata.services.integration_service.IntegrationService.get_instance",
+            return_value=mock_service,
         ):
             assert ctrl._get_estimator() is None
 
@@ -162,34 +165,46 @@ class TestGetEstimator:
 
         mock_estimator = MagicMock(spec=ICostEstimator)
         ctrl = CostController()
-        with (
-            patch(
-                "strata.integrations.factory.IntegrationFactory.get_known_types",
-                return_value=["infracost"],
-            ),
-            patch(
-                "strata.integrations.factory.IntegrationFactory.create_by_type",
-                return_value=mock_estimator,
-            ),
+        mock_service = MagicMock()
+        mock_service.is_initialized.return_value = True
+        mock_service.get_integrations_with_capability.return_value = ["infracost"]
+        mock_service.get_integration.return_value = mock_estimator
+        with patch(
+            "strata.services.integration_service.IntegrationService.get_instance",
+            return_value=mock_service,
         ):
             result = ctrl._get_estimator()
         assert result is mock_estimator
 
     def test_skips_non_cost_integrations(self):
-        non_cost = MagicMock()
         ctrl = CostController()
-        with (
-            patch(
-                "strata.integrations.factory.IntegrationFactory.get_known_types",
-                return_value=["git"],
-            ),
-            patch(
-                "strata.integrations.factory.IntegrationFactory.create_by_type",
-                return_value=non_cost,
-            ),
+        mock_service = MagicMock()
+        mock_service.is_initialized.return_value = True
+        mock_service.get_integrations_with_capability.return_value = []
+        with patch(
+            "strata.services.integration_service.IntegrationService.get_instance",
+            return_value=mock_service,
         ):
             result = ctrl._get_estimator()
         assert result is None
+
+    def test_returns_none_and_does_not_probe_binaries_when_not_declared(self):
+        """Regression: _get_estimator() must never fall back to probing for an
+        installed binary that isn't declared in spec.integrations."""
+        ctrl = CostController()
+        mock_service = MagicMock()
+        mock_service.is_initialized.return_value = True
+        mock_service.get_integrations_with_capability.return_value = []
+        with (
+            patch(
+                "strata.services.integration_service.IntegrationService.get_instance",
+                return_value=mock_service,
+            ),
+            patch("strata.integrations.factory.IntegrationFactory.create_by_type") as mock_create_by_type,
+        ):
+            result = ctrl._get_estimator()
+        assert result is None
+        mock_create_by_type.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -204,13 +219,13 @@ class TestIsAutoDiffEnabled:
         ctrl = CostController()
         mock_service = MagicMock()
         mock_service.is_initialized.return_value = True
-        mock_service.get_integration_with_capability.return_value = None
+        mock_service.get_integrations_with_capability.return_value = []
         with patch(
             "strata.services.integration_service.IntegrationService.get_instance",
             return_value=mock_service,
         ):
             assert ctrl.is_auto_diff_enabled() is False
-        mock_service.get_integration_with_capability.assert_called_once()
+        mock_service.get_integrations_with_capability.assert_called_once()
 
     def test_true_when_cost_integration_declared_and_enabled(self):
         from strata.integrations.capabilities import ICostEstimator
@@ -218,7 +233,8 @@ class TestIsAutoDiffEnabled:
         ctrl = CostController()
         mock_service = MagicMock()
         mock_service.is_initialized.return_value = True
-        mock_service.get_integration_with_capability.return_value = MagicMock(spec=ICostEstimator)
+        mock_service.get_integrations_with_capability.return_value = ["infracost"]
+        mock_service.get_integration.return_value = MagicMock(spec=ICostEstimator)
         with patch(
             "strata.services.integration_service.IntegrationService.get_instance",
             return_value=mock_service,
@@ -227,12 +243,12 @@ class TestIsAutoDiffEnabled:
 
     def test_false_when_integration_declared_but_disabled(self):
         """A declared-but-disabled (enabled: false) integration never reaches
-        the registry, so get_integration_with_capability returns None — same
-        outcome as not declaring it at all."""
+        the registry, so get_integrations_with_capability returns an empty
+        list — same outcome as not declaring it at all."""
         ctrl = CostController()
         mock_service = MagicMock()
         mock_service.is_initialized.return_value = True
-        mock_service.get_integration_with_capability.return_value = None
+        mock_service.get_integrations_with_capability.return_value = []
         with patch(
             "strata.services.integration_service.IntegrationService.get_instance",
             return_value=mock_service,
@@ -243,7 +259,7 @@ class TestIsAutoDiffEnabled:
         ctrl = CostController()
         mock_service = MagicMock()
         mock_service.is_initialized.return_value = False
-        mock_service.get_integration_with_capability.return_value = None
+        mock_service.get_integrations_with_capability.return_value = []
         with patch(
             "strata.services.integration_service.IntegrationService.get_instance",
             return_value=mock_service,
@@ -255,7 +271,7 @@ class TestIsAutoDiffEnabled:
         ctrl = CostController()
         mock_service = MagicMock()
         mock_service.is_initialized.return_value = True
-        mock_service.get_integration_with_capability.return_value = None
+        mock_service.get_integrations_with_capability.return_value = []
         with patch(
             "strata.services.integration_service.IntegrationService.get_instance",
             return_value=mock_service,

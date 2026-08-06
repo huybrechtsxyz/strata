@@ -148,6 +148,28 @@ class FeatureStoreType(str, Enum):
     FLAGSMITH = "flagsmith"
 
 
+# Enumeration of supported variable value types for typed emission.
+class VariableValueType(str, Enum):
+    """Declared HCL type for Terraform variable emission.
+
+    When set on a VariableStoreModel, controls how the value is serialized
+    in .auto.tfvars.json:
+    - STRING: emit as JSON string (default, backward compatible)
+    - NUMBER: emit as bare numeric literal
+    - BOOL: emit as true/false
+    - OBJECT: emit as JSON object
+    - LIST: emit as JSON array
+    - MAP: emit as JSON object (string keys)
+    """
+
+    STRING = "string"
+    NUMBER = "number"
+    BOOL = "bool"
+    OBJECT = "object"
+    LIST = "list"
+    MAP = "map"
+
+
 def _validate_field_not_on_builtin(
     *,
     kind_noun: str,
@@ -271,6 +293,14 @@ class VariableStoreModel(BaseModel):
     value: Any = Field(
         description="Variable identifier: literal value for constant, env var name for environment, config path/key for integration stores"
     )
+    type: Optional[VariableValueType] = Field(
+        None,
+        description=(
+            "Declared HCL type for Terraform emission. When set, strata emits the value "
+            "as a native HCL literal in .auto.tfvars.json. When omitted (default), values "
+            "are emitted as strings for backward compatibility."
+        ),
+    )
     version: Optional[str] = Field(
         None,
         description="Optional version for store-based variables (supported by some integrations)",
@@ -280,6 +310,26 @@ class VariableStoreModel(BaseModel):
         None,
         description="Seed the store with this value when the key is missing (integration-backed stores only)",
     )
+
+    @model_validator(mode="after")
+    def validate_type_value_consistency(self) -> "VariableStoreModel":
+        """Validate that value type matches declared type when type is set."""
+        if self.type is None:
+            return self
+        # Only validate for constant store — other stores resolve values at deploy-time
+        if self.store != VariableStoreType.CONSTANT:
+            return self
+        if self.type == VariableValueType.OBJECT and not isinstance(self.value, dict):
+            raise ValueError(f"Variable '{self.key}': type=object requires a mapping value")
+        if self.type == VariableValueType.LIST and not isinstance(self.value, list):
+            raise ValueError(f"Variable '{self.key}': type=list requires a sequence value")
+        if self.type == VariableValueType.MAP and not isinstance(self.value, dict):
+            raise ValueError(f"Variable '{self.key}': type=map requires a mapping value")
+        if self.type == VariableValueType.NUMBER and not isinstance(self.value, (int, float)):
+            raise ValueError(f"Variable '{self.key}': type=number requires a numeric value")
+        if self.type == VariableValueType.BOOL and not isinstance(self.value, bool):
+            raise ValueError(f"Variable '{self.key}': type=bool requires a boolean value")
+        return self
 
     @model_validator(mode="after")
     def validate_default_not_on_builtin(self) -> "VariableStoreModel":

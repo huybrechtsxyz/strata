@@ -22,6 +22,9 @@ class DiffCostCommand(BaseDeployCommand):
         terraform -chdir=build/.../terraform show -json plan.tfplan > plan.json
         strata cost diff -f deploy/prd.yaml --plan-file plan.json
 
+    Requires a cost estimator (e.g. Infracost) declared in ``spec.integrations``
+    (``type: infracost``, ``capabilities: [cost]``) and its binary installed.
+
     Exit codes:
       0  — diff produced successfully
       1  — system error (infracost missing, credentials invalid, etc.)

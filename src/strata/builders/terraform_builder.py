@@ -842,6 +842,11 @@ class TerraformBuilder(BaseBuilder):
         """Resolve constant/environment-store variables for build-time emission.
 
         Returns a flat ``{key: value}`` dict suitable for ``variables.auto.tfvars.json``.
+
+        When a variable declares a ``type`` field (VariableValueType), the value is
+        emitted as its native Python type (dict, list, int, float, bool) which serializes
+        to the corresponding JSON type. Without ``type``, values are emitted as-is for
+        backward compatibility (strings remain strings, but dicts/lists also pass through).
         """
         from strata.models.store_models import VariableStoreType
 
@@ -851,12 +856,35 @@ class TerraformBuilder(BaseBuilder):
         result: Dict[str, Any] = {}
         for var in env_service.get_variables():
             if var.store == VariableStoreType.CONSTANT:
-                result[var.key] = var.value
+                result[var.key] = self._emit_variable_value(var)
             elif var.store == VariableStoreType.ENVIRONMENT:
                 env_val = os.environ.get(str(var.value))
                 if env_val is not None:
                     result[var.key] = env_val
         return result
+
+    @staticmethod
+    def _emit_variable_value(var) -> Any:
+        """Convert a variable's value to the JSON-serializable form for tfvars emission.
+
+        When ``var.type`` is set, the value passes through as its native Python type
+        (Pydantic validation already ensured type-value consistency).
+        When ``var.type`` is None (default), the value is emitted as-is for backward
+        compatibility — string values remain strings, complex values (dict/list) also
+        pass through since JSON supports them natively.
+        """
+        from strata.models.store_models import VariableValueType
+
+        if var.type is None:
+            # Backward compatible: emit value as-is
+            return var.value
+
+        # Typed emission: ensure correct Python type mapping
+        if var.type == VariableValueType.STRING:
+            return str(var.value) if var.value is not None else None
+        # For number, bool, object, list, map — value is already the correct Python type
+        # after Pydantic validation
+        return var.value
 
     def _resolve_merged_properties(
         self,
@@ -1437,9 +1465,7 @@ class TerraformBuilder(BaseBuilder):
             dest_dir=str(dest_dir),
         )
         if not ok:
-            return False, (
-                f"Failed to extract source at ref '{ref}' for provisioner '{provisioner_name}': {msg}"
-            )
+            return False, (f"Failed to extract source at ref '{ref}' for provisioner '{provisioner_name}': {msg}")
         return True, msg
 
     # ------------------------------------------------------------------
