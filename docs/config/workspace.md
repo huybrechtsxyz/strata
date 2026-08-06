@@ -257,6 +257,60 @@ Cycles are detected at build time and cause an error.
 | `terraform` | Terraform CLI    | `TerraformDeployer` | `infrastructure`, `terraform`        |
 | `ansible`   | ansible-playbook | `AnsibleDeployer`   | `configure`, `initialize`, `ansible` |
 
+## Resources
+
+Workspace-level resource references that participate in topology wiring. Each resource either points to a resource configuration file or is marked as provisioner-managed (resource details defined entirely in Terraform/Ansible).
+
+```yaml
+resources:
+  # Traditional: strata loads and validates a resource spec file
+  - name: <resource_name>
+    file: <resource_path>              # Path to resource configuration YAML
+    description: "Optional documentation"
+    enabled: true                      # Optional: default true
+    condition: "{{ environment }} == production"  # Optional: conditional inclusion
+    role: manager                      # Optional: role name (e.g. manager, worker, api)
+    count: 1                           # Optional: number of instances (1-100, default 1)
+    depends_on: []                     # Optional: resource names this depends on
+    references: {}                     # Optional: cross-resource value references
+    firewalls: []                      # Optional: firewall names to attach
+    subnet: network_name/subnet_name   # Optional: subnet reference
+    configuration: {}                  # Optional: workspace-specific config overrides
+    custom: {}                         # Optional: custom key-value data
+    modules: []                        # Optional: code/app references
+    labels: {}                         # Optional: classification key-value pairs
+    tags: []                           # Optional: categorization tags
+
+  # New: provisioner-managed resource (no file required)
+  - name: <resource_name>
+    managed_by: provisioner            # Indicates provisioner fully manages this resource
+    description: "Optional documentation"
+    enabled: true                      # Optional: default true
+    role: manager                      # Optional: role name
+    count: 1                           # Optional: number of instances
+```
+
+**`managed_by` values:**
+
+| Value         | Meaning                                                                              |
+| ------------- | ------------------------------------------------------------------------------------ |
+| (not set)     | Resource definition must be in `file:`; strata loads and validates the resource spec |
+| `provisioner` | Provisioner (Terraform/Ansible) fully defines the resource; no resource file needed  |
+
+**Validation rules:**
+
+- **XOR constraint:** A resource must have either a `file` reference OR `managed_by` set, but never both.
+- **Constraint violation examples:**
+  - ❌ No file and no `managed_by` → validation error: "must either specify a 'file' path or set 'managed_by: provisioner'"
+  - ❌ Both `file` and `managed_by` → validation error: "cannot both specify a 'file' and 'managed_by'"
+  - ✅ `file: @config/resources/vm.yaml` → valid (traditional approach)
+  - ✅ `managed_by: provisioner` → valid (provisioner-managed)
+
+**Use cases:**
+
+- **Provisioner-managed resources** are ideal for multi-tenant IaC deployments where infrastructure details (VMs, databases, networks) are entirely defined in Terraform/Ansible modules. The workspace YAML only needs to declare the resource name for topology participation, without duplicating resource specs.
+- **File-based resources** are useful when strata needs to validate resource properties, count cross-references, or when resources are portable across multiple provisioners.
+
 ## Topology
 
 Defines infrastructure clusters and components:

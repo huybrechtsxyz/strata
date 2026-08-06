@@ -291,7 +291,15 @@ class WorkspaceResourceModel(PlatformBaseModel):
     """Model for workspace resource definition (gluing layer)."""
 
     name: PlatformName = Field(description="Unique resource name")
-    file: str = Field(description="Path to the resource configuration file")
+    file: Optional[str] = Field(
+        None,
+        description="Path to the resource configuration file. Required unless managed_by is set.",
+    )
+    managed_by: Optional[Literal["provisioner"]] = Field(
+        default=None,
+        description="Indicates the resource is fully managed externally and no resource file is needed. "
+        "Currently supported: 'provisioner' (resource details defined in Terraform/Ansible).",
+    )
     description: Optional[str] = Field(
         None,
         description="Optional description of the resource for documentation purposes",
@@ -366,6 +374,21 @@ class WorkspaceResourceModel(PlatformBaseModel):
         description="Optional labels (key-value pairs for classification/filtering)",
     )
     tags: Optional[List[Any]] = Field(None, description="Optional tags (list of values for categorization)")
+
+    @model_validator(mode="after")
+    def validate_file_or_managed_by(self) -> "WorkspaceResourceModel":
+        """Ensure resource has either a file reference or a managed_by declaration."""
+        if not self.file and not self.managed_by:
+            raise ValueError(
+                f"Resource '{self.name}' must either specify a 'file' path or set 'managed_by: provisioner'. "
+                "If the provisioner (Terraform/Ansible) fully manages this resource, set managed_by: provisioner."
+            )
+        if self.file and self.managed_by:
+            raise ValueError(
+                f"Resource '{self.name}' cannot both specify a 'file' and 'managed_by'. "
+                "Remove the file reference or remove managed_by."
+            )
+        return self
 
 
 class WorkspaceIacBackendModel(PlatformBaseModel):

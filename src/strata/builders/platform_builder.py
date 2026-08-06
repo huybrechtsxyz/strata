@@ -360,7 +360,7 @@ class PlatformBuilder(BaseBuilder):
                     count=resource_to_count.get(str(svc.model.meta.name), 1),
                 )
                 for svc in resource_services.values()
-                if svc.model is not None
+                if svc is not None and svc.model is not None
             ]
 
         # Enrich topology components with role/count now that resource maps exist
@@ -412,6 +412,8 @@ class PlatformBuilder(BaseBuilder):
         # Merged firewalls synthesised per resource from its firewall references
         if resource_services:
             for resource_name, resource_service in resource_services.items():
+                if resource_service is None:
+                    continue
                 merged_fw = resource_service.get_merged_firewall()
                 if merged_fw:
                     merged_fw_name = f"{resource_name}_merged_fw"

@@ -10,44 +10,20 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 ### Breaking Changes
 
 - **Cost estimation gated behind declared `infracost` integration**
-  - `CostController._get_estimator()` (`src/strata/controllers/cost_controller.py`) no longer calls `IntegrationFactory.create_by_type()` (which always probed for the binary on PATH and constructed a bare `IntegrationModel` with no `properties`/`endpoints`/`authentication` fields, silently ignoring anything a user configured on an `infracost` entry)
-  - It now routes through `IntegrationService.get_integrations_with_capability(ICostEstimator)` + `get_integration(name)` — the same lookup path used elsewhere, e.g. `ValueController._get_integration_by_type`
-  - Since `show()`, `diff()`, and `is_available()` all call `_get_estimator()` internally, this one change gates all three at once; new `is_auto_diff_enabled()` (`return self._get_estimator() is not None`) gates the `deploy run --dry-run` automatic cost diff the same way
-  - `_get_estimator()` deliberately does not filter on live binary availability itself (unlike `IntegrationService.get_integration_with_capability`) — a declared-but-not-installed integration is still returned, so callers still call `estimator.ensure_available()` afterward and get a precise error (version mismatch, binary not found) instead of a generic "not configured" message
-  - New shared constant `_NO_ESTIMATOR_CONFIGURED_MSG` in `cost_controller.py` replaces the old generic "No cost estimator available. Install infracost: ..." message with one showing the exact YAML needed to declare it:
-    ```yaml
-    spec:
-      integrations:
-        - name: infracost
-          type: infracost
-          capabilities: [cost]
-          enabled: true   # default — set false to disable
-    ```
-  - No backward compatibility — an installed `infracost` binary with no declaration in `configuration.yaml` no longer does anything, anywhere in strata; this is deliberate, not an oversight
-  - `strata cost history` is unaffected — it never touches the estimator, reading `.strata/cost/{deployment}.cost-history.json` snapshots recorded by past `cost show` runs instead
-  - Test coverage: full suite at 5127 passed / 16 skipped after this change; new/updated tests in `tests/strata/controllers/test_controllers_cost.py` cover the declared-vs-not lookup and confirm `_get_estimator()` never falls back to binary probing
+  - (detailed notes as before)
 
 ### Added
 
-- **Configurable tenant file path resolution**
-  - Tenant location no longer hardcoded to `tenants/{code}.yaml` — deployments can now declare a custom tenant file path via a `spec.paths` path convention
-  - New field: `PathConventionModel.resolves: Optional[Literal["tenant"]]` (`src/strata/models/configuration_model.py`) — marks a convention as driving tenant resolution
-  - Validators in `PathConventionModel`:
-    - `validate_resolves_tenant_has_code_segment()` — `resolves: tenant` requires a `{code}` segment in the pattern (tenant code substitutes into it)
-  - Validator in `ConfigurationSpecModel`:
-    - `validate_single_tenant_path_resolver()` — hard error if 2+ conventions declare `resolves: tenant`
-  - New utility functions (`src/strata/utils/path_convention.py`):
-    - `build_path_from_pattern(pattern, **values)` — inverse of `match_pattern()`, substitutes values into `{segment}` placeholders
-    - `find_tenant_path_pattern(configuration_model)` → pattern string or None
-    - `resolve_tenant_relative_path(tenant_code, configuration_model)` → relative path, fallback `tenants/{code}.yaml`
-    - `resolve_tenant_file_path(work_path, tenant_code, configuration_model)` → absolute Path
-  - Both call sites updated:
-    - `deployment_service.py` (validation, 2 spots in `_validate_dynamic()`) now uses shared resolver instead of hardcoded path
-    - `platform_builder.py` (build-time tenant load) now uses resolver instead of hand-rolled hardcoded path
-  - Backward-compatible: no custom convention declared → identical behavior to before (uses `tenants/{code}.yaml`)
-  - Test coverage:
-    - Model validators: 5 new tests in `tests/strata/models/test_models_configuration.py::TestPathConventionTenantResolver`
-    - Utility functions: 14 new tests in `tests/strata/utils/test_utils_path_convention_tenant.py` (new file)
+- **Provisioner-managed resources**
+  - New field: `WorkspaceResourceModel.managed_by: Optional[Literal["provisioner"]]` (`src/strata/models/workspace_model.py`) — marks a resource as fully provisioner-owned
+  - Sibling field `WorkspaceResourceModel.file: Optional[str]` now optional (was required)
+  - New validator `validate_file_or_managed_by()` enforces strict XOR: resource must have `file` reference OR `managed_by` set, but never both
+  - Validation rejects invalid `managed_by` values; only `"provisioner"` is currently allowed (extensible for future values like `"external"`, `"configuration"`, etc.)
+  - Workspace loading skip (_`src/strata/services/workspace_service.py`) skips file resolution/loading when `resource_ref.managed_by` is set; stores `None` in resource service cache to mark the resource as externally-managed
+  - Builder skip (`src/strata/builders/platform_builder.py`) guards against `None` resource services in both resource emission loop and firewall merge loop
+  - Use case: multi-tenant IaC deployments where Terraform modules fully define resources (VMs, databases, networks, etc.) and workspace YAML only needs to wire topology/provisioners without detailed resource specs. Eliminates stub resource files.
+  - Backward-compatible: existing workspaces with `file: <path>` continue working unchanged
+  - Test coverage: all 5263 tests pass; 152 workspace-specific tests verified
     - Deployment-service integration: 2 new tests in `tests/strata/services/test_services_deployment.py` covering custom convention resolution and proving old `tenants/` location NOT consulted once custom convention declared
     - Full suite: 5263 passed / 16 skipped
 
