@@ -623,19 +623,8 @@ class WorkspaceSpecModel(PlatformBaseModel):
 
         # Cycle detection via topological sort (Kahn's algorithm)
         if not errors:
-            in_degree = {node: 0 for node in graph}
-            for node, deps in graph.items():
-                for dep in deps:
-                    if dep in in_degree:
-                        in_degree[dep] = in_degree.get(dep, 0)  # ensure exists
-
-            # Count incoming edges
-            in_degree = {node: 0 for node in graph}
-            for node, deps in graph.items():
-                for dep in deps:
-                    # dep is depended ON by node; in_degree tracks how many depend on it
-                    pass
-            # Reverse: for cycle detection we need "who blocks whom"
+            # reverse_in tracks, per node, how many other nodes it is depended on by
+            # (i.e. how many nodes must be processed before this one can be considered "free").
             reverse_in: dict = {node: 0 for node in graph}
             for node, deps in graph.items():
                 reverse_in[node] = len(deps)

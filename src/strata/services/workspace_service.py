@@ -540,10 +540,18 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
                 # Skip externally-managed resources (no file to load)
                 if resource_ref.managed_by:
                     resource_key = resource_ref.name
-                    services["resources"][resource_key] = None
+                    # Managed resources have no backing service (no file to load) — the
+                    # dict is declared as Dict[str, BaseService] but this sentinel case
+                    # is handled by callers via .get()/len() only, never by iterating
+                    # and calling methods on the value.
+                    services["resources"][resource_key] = None  # type: ignore[assignment]
                     self.logger.debug(
                         "Skipping managed resource", name=resource_key, managed_by=resource_ref.managed_by
                     )
+                    continue
+                if resource_ref.file is None:
+                    # Unreachable in practice: WorkspaceResourceModel validation enforces
+                    # that exactly one of `file` or `managed_by` is set.
                     continue
                 resource_path = self._resolve_file_path(resource_ref.file, objects_path, repo_map)
                 resource_key = resource_ref.name

@@ -32,7 +32,7 @@ class DeploymentOutputsModel(PlatformBaseModel):
     ``sensitive_keys`` but their values are omitted by default.
     """
 
-    apiVersion: PlatformVersion = Field(default="strata.huybrechts.xyz/v1")
+    apiVersion: PlatformVersion = Field(default=PlatformVersion.v1)
     kind: Literal["deployment-outputs"] = "deployment-outputs"
     meta: DeploymentOutputsMetaModel = Field(description="Deployment metadata")
     outputs: Dict[str, Dict[str, Any]] = Field(
