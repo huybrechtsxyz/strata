@@ -66,7 +66,7 @@ class DiffCostCommand(BaseDeployCommand):
             self._errors.append("No plan file specified. Use --plan-file.")
             return False
 
-        controller = CostController()
+        controller = CostController(work_path=self._work_path)
         success, result = controller.diff(
             deployment_service=self._deployment_service,
             build_path=self._build_path,

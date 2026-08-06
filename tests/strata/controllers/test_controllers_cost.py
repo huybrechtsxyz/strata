@@ -406,6 +406,29 @@ class TestCostControllerCache:
         key_usd = ctrl._compute_cache_key(tf_path, "USD")
         assert key_eur != key_usd
 
+    def test_compute_cache_key_changes_on_same_size_edit(self, tmp_path):
+        """Regression: name+size alone missed a same-byte-count content edit —
+        mtime is now part of the hash so this no longer silently reuses a stale
+        cache entry."""
+        import os
+        import time
+
+        tf_path = tmp_path / "terraform"
+        tf_path.mkdir()
+        f = tf_path / "main.tf"
+        f.write_text("resource {a}")  # same length as the edit below
+        ctrl = CostController(work_path=tmp_path)
+        key_before = ctrl._compute_cache_key(tf_path, "EUR")
+
+        # Rewrite with different content but identical byte length, and force
+        # a distinct mtime (some filesystems have coarse mtime resolution).
+        f.write_text("resource {b}")
+        future = time.time() + 5
+        os.utime(f, (future, future))
+
+        key_after = ctrl._compute_cache_key(tf_path, "EUR")
+        assert key_before != key_after
+
     def test_read_cache_returns_none_when_no_work_path(self):
         ctrl = CostController()
         assert ctrl._read_cache("somekey") is None

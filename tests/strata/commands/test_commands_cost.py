@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for the `cost` command group (show / diff)."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
 
@@ -284,6 +284,39 @@ class TestCostDiff:
         assert captured.get("plan_file") == str(plan)
         assert captured.get("currency") == "EUR"
         assert captured.get("provisioner") == "infra"
+
+
+# ---------------------------------------------------------------------------
+# cost diff — internal wiring (regression: work_path must reach CostController)
+# ---------------------------------------------------------------------------
+
+
+class TestDiffCostCommandControllerWiring:
+    def test_diff_passes_work_path_to_cost_controller(self, tmp_path):
+        """Regression test: DiffCostCommand previously constructed CostController()
+        without work_path, unlike ShowCostCommand — harmless today (diff() doesn't
+        use cache/history) but inconsistent and a latent bug if that ever changes."""
+        from strata.commands.cost.diff_cost_command import DiffCostCommand
+        from strata.commands.deploy.base_deploy_command import BaseDeployCommand
+
+        with patch.object(BaseDeployCommand, "_initialize", return_value=None):
+            cmd = DiffCostCommand(work_path=str(tmp_path), file="deploy.yaml", plan_file="plan.json")
+        cmd._work_path = tmp_path
+        cmd._deployment_service = MagicMock()
+        cmd._build_path = tmp_path / "build"
+        cmd._solution_controller = MagicMock()
+
+        mock_instance = MagicMock()
+        mock_instance.diff.return_value = (True, {})
+        mock_instance.get_messages.return_value = []
+        mock_instance.get_errors.return_value = []
+
+        with patch(
+            "strata.commands.cost.diff_cost_command.CostController", return_value=mock_instance
+        ) as mock_controller_cls:
+            cmd._execute()
+
+        mock_controller_cls.assert_called_once_with(work_path=tmp_path)
 
 
 # ---------------------------------------------------------------------------

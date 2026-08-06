@@ -258,7 +258,13 @@ class CostController(BaseController):
     # ------------------------------------------------------------------
 
     def _get_estimator(self) -> Optional[ICostEstimator]:
-        """Return the first available ICostEstimator integration, or None."""
+        """Return the first available ICostEstimator integration, or None.
+
+        ``IntegrationFactory.get_known_types()`` returns types in sorted
+        (alphabetical) order, so this is deterministic across runs even if
+        more than one ``ICostEstimator``-capable integration is ever
+        registered. Today only Infracost implements this capability.
+        """
         from strata.integrations.factory import IntegrationFactory
 
         for type_str in IntegrationFactory.get_known_types():
@@ -347,15 +353,19 @@ class CostController(BaseController):
     def _compute_cache_key(self, terraform_path: Path, currency: Optional[str]) -> str:
         """Compute a cache key from terraform directory content hash + currency.
 
-        Hash is computed from file names + sizes (fast, avoids reading all content).
-        Adding currency ensures separate cache entries per currency.
+        Hash is computed from file names + sizes + mtimes (fast, avoids reading
+        all file content) — including mtime catches same-byte-count edits that
+        name+size alone would miss. Adding currency ensures separate cache
+        entries per currency.
         """
         h = hashlib.sha256()
         try:
             for f in sorted(terraform_path.rglob("*")):
                 if f.is_file() and ".terraform" not in f.parts:
+                    stat = f.stat()
                     h.update(f.name.encode())
-                    h.update(str(f.stat().st_size).encode())
+                    h.update(str(stat.st_size).encode())
+                    h.update(str(stat.st_mtime_ns).encode())
         except OSError:
             pass
         h.update((currency or "USD").encode())
