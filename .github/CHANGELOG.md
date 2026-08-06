@@ -16,6 +16,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 - **Git ref pinning on `SourceModel` (ADR-0063, Gap 1)** — Provisioner sources now accept an optional `reference` field (branch, tag, or commit SHA) that overrides the workspace-level remote default. This allows two provisioners referencing the same remote to pin different versions (e.g., platform baseline on `v1.4.0` and VCT module on `main`). Resolution priority: `source.reference` → environment remote override → remote default. When a ref is pinned, `git archive` extracts the subtree without mutating the working tree.
 - **Structured variable types (ADR-0063, Gap 2)** — `VariableStoreModel` now accepts an optional `type` field (`string`, `number`, `bool`, `object`, `list`, `map`) that declares the intended HCL type. When set, strata validates that the YAML value matches the declared type and emits it as a native JSON type in `.auto.tfvars.json` instead of always stringifying. Complex values can now be authored as native YAML mappings/sequences instead of JSON-in-string.
+- **Terraform input validation (ADR-0063, Gap 3)** — `strata build run` now cross-checks declared variable/feature/secret keys from environment YAML against the module's `variables.tf` declarations. Undeclared inputs (typos) are errors that block the build with fuzzy-match suggestions. Unsupplied required variables (no default) are reported as warnings. Eliminates a class of silent deployment failures where misspelled variable names were silently dropped by Terraform.
 
 ---
 

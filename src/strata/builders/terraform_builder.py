@@ -9,7 +9,7 @@ import os
 import shutil
 from glob import glob
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 from strata.builders.base_builder import BaseBuilder
 from strata.models.environment_model import IncludeMergeStrategy
@@ -194,6 +194,15 @@ class TerraformBuilder(BaseBuilder):
                 solution_controller=solution_controller,
             )
             if not include_ok:
+                return False
+
+            # Validate declared inputs against module variables.tf
+            inputs_ok = self._validate_inputs(
+                deployment_service=deployment_service,
+                build_path=build_path,
+                solution_controller=solution_controller,
+            )
+            if not inputs_ok:
                 return False
 
             return True
@@ -1308,6 +1317,130 @@ class TerraformBuilder(BaseBuilder):
 
     def _write_json(self, path: Path, payload: Dict[str, Any]) -> None:
         path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    # ------------------------------------------------------------------
+    # Input validation against module variables.tf
+    # ------------------------------------------------------------------
+
+    def _validate_inputs(
+        self,
+        deployment_service: DeploymentService,
+        build_path: Path,
+        solution_controller: Optional["SolutionController"] = None,
+    ) -> bool:
+        """Validate declared variable/feature keys against the module's variables.tf.
+
+        Runs after source copy, so the provisioner's .tf files are available in the
+        build directory. Collects all declared input keys (variables + features from
+        environment YAML) and cross-checks against parsed variable declarations.
+
+        Undeclared inputs are errors (blocks build). Unsupplied required variables
+        are warnings (informational, does not block).
+
+        Returns:
+            True if no undeclared-input errors found, False otherwise.
+        """
+        from strata.validators.terraform_input_validator import (
+            STRATA_INJECTED_KEYS,
+            check_inputs,
+            parse_variables_tf,
+        )
+
+        workspace_service = deployment_service.get_workspace_service()
+        if workspace_service is None or workspace_service.model is None:
+            return True
+
+        provisioners = workspace_service.model.spec.provisioners or []
+        has_errors = False
+
+        for prov in provisioners:
+            if prov.provisioner != "terraform":
+                continue
+
+            # Determine the build directory where .tf files were copied
+            prov_build_dir = (
+                solution_controller.get_provisioner_path(deployment_service, build_path, prov)
+                if solution_controller is not None
+                else deployment_service.get_build_path(build_path)
+                / (prov.source.target_path or prov.source.source_path if prov.source else "terraform")
+            )
+
+            if not prov_build_dir.exists():
+                continue
+
+            # Parse module variable declarations
+            module_vars = parse_variables_tf(prov_build_dir)
+            if not module_vars:
+                # No variables.tf found or no variables declared — skip
+                continue
+
+            # Collect all declared input keys for this provisioner
+            declared_keys = self._collect_declared_input_keys(deployment_service)
+
+            # Also include keys from the platform structural output (resource categories, etc.)
+            # These are emitted by the builder itself and should be excluded from checks.
+            excluded = set(STRATA_INJECTED_KEYS)
+            # Add resource-category keys emitted by _build_resources_by_category
+            excluded.update(self._collect_platform_emitted_keys(deployment_service))
+
+            # Run the cross-check
+            result = check_inputs(declared_keys, module_vars, excluded_keys=excluded)
+
+            # Report results
+            for error in result.errors:
+                self._errors.append(f"[{prov.name}] {error}")
+            for warning in result.warnings:
+                self._messages.append(f"⚠ [{prov.name}] {warning}")
+
+            if result.has_errors:
+                has_errors = True
+
+        return not has_errors
+
+    def _collect_declared_input_keys(self, deployment_service: DeploymentService) -> Set[str]:
+        """Collect all variable and feature keys declared in the environment YAML.
+
+        These are the keys that will be emitted to tfvars files (either at build-time
+        for constant/env stores, or at deploy-time for integration stores).
+        """
+        keys: Set[str] = set()
+
+        env_service = deployment_service.get_environment_service()
+        if env_service is None or env_service.model is None:
+            return keys
+
+        # Variables
+        for var in env_service.get_variables():
+            keys.add(var.key)
+
+        # Features
+        for feat in env_service.get_features():
+            keys.add(feat.key)
+
+        # Secrets (injected as TF_VAR_* at deploy-time)
+        if env_service.model.spec and env_service.model.spec.secrets:
+            for secret in env_service.model.spec.secrets:
+                keys.add(secret.key)
+
+        return keys
+
+    def _collect_platform_emitted_keys(self, deployment_service: DeploymentService) -> Set[str]:
+        """Collect keys emitted by the platform builder that should be excluded from checks.
+
+        These are structural keys like resource category variable names that the builder
+        emits regardless of what the environment declares.
+        """
+        keys: Set[str] = set()
+
+        # Resource category keys (e.g. "databases", "caches") from workspace resources
+        workspace_service = deployment_service.get_workspace_service()
+        if workspace_service and workspace_service.model and workspace_service.model.spec.resources:
+            # The builder groups resources by their role/category into tfvars
+            for resource in workspace_service.model.spec.resources:
+                if resource.role:
+                    keys.add(str(resource.role))
+
+        return keys
 
     # ------------------------------------------------------------------
     # Terraform provisioner source copy
