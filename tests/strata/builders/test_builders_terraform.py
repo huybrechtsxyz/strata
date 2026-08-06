@@ -426,3 +426,78 @@ class TestCopyProvisionerSourceSingleRepo:
         assert result is True
         messages = "\n".join(builder.get_messages())
         assert str(src_dir) in messages
+
+
+def _make_provisioner_with_ref(source_path: str, repository: str | None = None, reference: str | None = None) -> WorkspaceIacModel:
+    """Build a WorkspaceIacModel with a terraform provisioner and optional ref pinning."""
+    source = SourceModel(source_path=source_path, repository=repository, reference=reference)
+    return WorkspaceIacModel(name="platform_iac", provisioner=ProvisionerType.TERRAFORM, source=source)
+
+
+class TestCopyProvisionerSourceRefPinning:
+    """_copy_provisioner_source handles source.reference for ref-pinned extraction."""
+
+    def test_dry_run_with_reference_reports_ref(self, tmp_path):
+        """In dry-run mode, when source.reference is set, message mentions the ref."""
+        build_path = tmp_path / "build"
+        build_path.mkdir()
+
+        prov = _make_provisioner_with_ref(source_path="terraform", repository="my_repo", reference="v1.4.0")
+        depl_svc = _make_deployment_svc(prov, build_path)
+
+        repo_root = tmp_path / "my-repo"
+        repo_root.mkdir()
+
+        builder = TerraformBuilder()
+        with patch.object(builder, "_build_template_context", return_value={}):
+            result = builder._copy_provisioner_source(
+                depl_svc, build_path, tmp_path, repo_map={"my_repo": str(repo_root)}, dry_run=True
+            )
+
+        assert result is True
+        messages = "\n".join(builder.get_messages())
+        assert "v1.4.0" in messages
+        assert "DRY-RUN" in messages
+
+    def test_no_reference_uses_standard_copy(self, tmp_path):
+        """Without source.reference, standard working-tree copy is used."""
+        src_dir = tmp_path / "terraform"
+        src_dir.mkdir()
+        (src_dir / "main.tf").write_text("resource {}")
+        build_path = tmp_path / "build"
+        build_path.mkdir()
+
+        prov = _make_provisioner_with_ref(source_path="terraform", reference=None)
+        depl_svc = _make_deployment_svc(prov, build_path)
+
+        builder = TerraformBuilder()
+        with patch.object(builder, "_build_template_context", return_value={}):
+            result = builder._copy_provisioner_source(
+                depl_svc, build_path, tmp_path, repo_map={}, dry_run=False
+            )
+
+        assert result is True
+        assert (build_path / "terraform" / "main.tf").exists()
+
+    def test_reference_on_non_git_dir_falls_back_to_copy(self, tmp_path):
+        """When source.reference is set but repo_root has no .git, falls back to tree copy."""
+        repo_root = tmp_path / "my-repo"
+        src_dir = repo_root / "terraform"
+        src_dir.mkdir(parents=True)
+        (src_dir / "main.tf").write_text("resource {}")
+        build_path = tmp_path / "build"
+        build_path.mkdir()
+
+        prov = _make_provisioner_with_ref(source_path="terraform", repository="my_repo", reference="v1.0.0")
+        depl_svc = _make_deployment_svc(prov, build_path)
+
+        builder = TerraformBuilder()
+        with patch.object(builder, "_build_template_context", return_value={}):
+            result = builder._copy_provisioner_source(
+                depl_svc, build_path, tmp_path, repo_map={"my_repo": str(repo_root)}, dry_run=False
+            )
+
+        assert result is True
+        assert (build_path / "terraform" / "main.tf").exists()
+        messages = "\n".join(builder.get_messages())
+        assert "not a git repository" in messages
