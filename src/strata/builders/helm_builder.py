@@ -302,6 +302,16 @@ class HelmBuilder(BaseBuilder):
                     values_doc = {}
                 values_doc.update(module.spec.configuration)
 
+            # Validate configuration keys against chart's default values.yaml
+            # (local charts only — registry charts aren't available at build time).
+            if module.spec.configuration and not source.chart_repository and source.source_path:
+                self._validate_helm_values(
+                    configuration=module.spec.configuration,
+                    chart_source_dir=src_dir,
+                    namespace_name=namespace_name,
+                    module_name=module_name,
+                )
+
             if dry_run:
                 if self.verbose:
                     if values_doc is not None:
@@ -480,3 +490,39 @@ class HelmBuilder(BaseBuilder):
         }
 
         return values_doc, meta_doc
+
+    def _validate_helm_values(
+        self,
+        configuration: Dict[str, Any],
+        chart_source_dir: Path,
+        namespace_name: str,
+        module_name: str,
+    ) -> None:
+        """Validate configuration keys against the chart's default values.yaml.
+
+        Compares top-level and one-level-deep keys from module.spec.configuration
+        against the chart's default values. Undeclared keys are reported as errors
+        with fuzzy-match suggestions. Does not block the build — warnings only.
+
+        Args:
+            configuration: The module.spec.configuration dict to validate.
+            chart_source_dir: Path to the chart source directory.
+            namespace_name: Namespace name for error messages.
+            module_name: Module name for error messages.
+        """
+        from strata.validators.helm_input_validator import (
+            check_helm_values,
+            parse_chart_values,
+        )
+
+        chart_values = parse_chart_values(chart_source_dir)
+        if not chart_values:
+            return  # No default values.yaml — nothing to validate against
+
+        module_label = f"{namespace_name}/{module_name}"
+        errors, warnings = check_helm_values(configuration, chart_values, module_label)
+
+        for error in errors:
+            self._messages.append(f"⚠ {error}")
+        for warning in warnings:
+            self._messages.append(f"⚠ {warning}")
