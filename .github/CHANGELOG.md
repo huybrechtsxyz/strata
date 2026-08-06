@@ -8,9 +8,14 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- **Cost estimation now requires an `infracost` integration declaration** — `strata cost show`, `strata cost diff`, and the automatic post-plan cost diff in `deploy run --dry-run` previously worked off of any `infracost` binary found on PATH, regardless of `configuration.yaml`. They now require an explicit `infracost` entry under `spec.integrations` (with `capabilities: [cost]`, `enabled: true`), matching how every other integration (secret stores, provisioners) is gated. An installed binary with no declaration no longer does anything. `strata cost history` is unaffected — it reads past `cost show` snapshots and needs no estimator.
+
 ### Added
 
 - **Git ref pinning on `SourceModel` (ADR-0063, Gap 1)** — Provisioner sources now accept an optional `reference` field (branch, tag, or commit SHA) that overrides the workspace-level remote default. This allows two provisioners referencing the same remote to pin different versions (e.g., platform baseline on `v1.4.0` and VCT module on `main`). Resolution priority: `source.reference` → environment remote override → remote default. When a ref is pinned, `git archive` extracts the subtree without mutating the working tree.
+- **Structured variable types (ADR-0063, Gap 2)** — `VariableStoreModel` now accepts an optional `type` field (`string`, `number`, `bool`, `object`, `list`, `map`) that declares the intended HCL type. When set, strata validates that the YAML value matches the declared type and emits it as a native JSON type in `.auto.tfvars.json` instead of always stringifying. Complex values can now be authored as native YAML mappings/sequences instead of JSON-in-string.
 
 ---
 

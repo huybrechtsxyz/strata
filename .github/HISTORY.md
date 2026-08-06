@@ -7,6 +7,26 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- **Cost estimation gated behind declared `infracost` integration**
+  - `CostController._get_estimator()` (`src/strata/controllers/cost_controller.py`) no longer calls `IntegrationFactory.create_by_type()` (which always probed for the binary on PATH and constructed a bare `IntegrationModel` with no `properties`/`endpoints`/`authentication` fields, silently ignoring anything a user configured on an `infracost` entry)
+  - It now routes through `IntegrationService.get_integrations_with_capability(ICostEstimator)` + `get_integration(name)` — the same lookup path used elsewhere, e.g. `ValueController._get_integration_by_type`
+  - Since `show()`, `diff()`, and `is_available()` all call `_get_estimator()` internally, this one change gates all three at once; new `is_auto_diff_enabled()` (`return self._get_estimator() is not None`) gates the `deploy run --dry-run` automatic cost diff the same way
+  - `_get_estimator()` deliberately does not filter on live binary availability itself (unlike `IntegrationService.get_integration_with_capability`) — a declared-but-not-installed integration is still returned, so callers still call `estimator.ensure_available()` afterward and get a precise error (version mismatch, binary not found) instead of a generic "not configured" message
+  - New shared constant `_NO_ESTIMATOR_CONFIGURED_MSG` in `cost_controller.py` replaces the old generic "No cost estimator available. Install infracost: ..." message with one showing the exact YAML needed to declare it:
+    ```yaml
+    spec:
+      integrations:
+        - name: infracost
+          type: infracost
+          capabilities: [cost]
+          enabled: true   # default — set false to disable
+    ```
+  - No backward compatibility — an installed `infracost` binary with no declaration in `configuration.yaml` no longer does anything, anywhere in strata; this is deliberate, not an oversight
+  - `strata cost history` is unaffected — it never touches the estimator, reading `.strata/cost/{deployment}.cost-history.json` snapshots recorded by past `cost show` runs instead
+  - Test coverage: full suite at 5127 passed / 16 skipped after this change; new/updated tests in `tests/strata/controllers/test_controllers_cost.py` cover the declared-vs-not lookup and confirm `_get_estimator()` never falls back to binary probing
+
 ---
 
 ## [1.6.1] - 2026-08-03
