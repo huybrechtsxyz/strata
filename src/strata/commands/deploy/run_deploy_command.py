@@ -202,6 +202,21 @@ class RunDeployCommand(BaseDeployCommand):
             if manifest_path and self._is_console_output():
                 click.echo(f"\n📋  Deployment manifest: {manifest_path}")
 
+            # Write combined outputs artifact for registry consumption
+            if not self._dry_run and self._stage_results:
+                combined_results = [
+                    {
+                        "name": str(sr.name),
+                        "status": sr.status,
+                        "outputs": sr.outputs,
+                        "sensitive_outputs": {},  # sensitive tracked via _write_outputs_artifact per stage
+                    }
+                    for sr in self._stage_results
+                ]
+                combined_path = self._write_combined_outputs_artifact(combined_results)
+                if combined_path and self._is_console_output():
+                    click.echo(f"📦  Combined outputs: {combined_path}")
+
             if self._ai and not self._dry_run:
                 self._run_ai_deployment_summary()
 

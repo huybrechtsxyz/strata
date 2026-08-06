@@ -843,6 +843,100 @@ class BaseDeployCommand(BaseCommand):
             self.logger.warning("Failed to write outputs artifact", stage=stage_name, error=str(exc))
             return None
 
+    def _write_combined_outputs_artifact(
+        self,
+        stage_results: list,
+    ) -> Optional[Path]:
+        """Write a combined deployment-outputs.json merging all stages' outputs.
+
+        Produces a single registry-consumable artifact with outputs keyed by
+        stage name.  Written to the build directory alongside the manifest.
+        Non-fatal: failures are logged as warnings.
+
+        Args:
+            stage_results: List of dicts with keys: name, status, outputs, sensitive_outputs.
+
+        Returns:
+            Path written, or None when skipped/failed.
+        """
+        from strata.models.deployment_outputs_model import (
+            DeploymentOutputsMetaModel,
+            DeploymentOutputsModel,
+        )
+
+        if self._deployment_service is None:
+            return None
+
+        try:
+            deploy_meta = self._deployment_service.model.meta  # type: ignore[union-attr]
+            deployment_name = str(deploy_meta.name)
+            labels = deploy_meta.labels or {}
+            version = str(labels.get("version", "unknown"))
+
+            ws_service = self._deployment_service.get_workspace_service()
+            workspace_name = str(ws_service.model.meta.name) if ws_service and ws_service.model else deployment_name
+
+            env_service = self._deployment_service.get_environment_service()
+            environment_name = None
+            tenant_code = None
+            if env_service and env_service.model and env_service.model.meta:
+                env_labels = env_service.model.meta.labels or {}
+                environment_name = env_labels.get("environment")
+                tenant_code = env_labels.get("tenant")
+
+            outputs: Dict[str, Dict[str, Any]] = {}
+            sensitive_keys: List[str] = []
+            completed_stages: List[str] = []
+
+            for result in stage_results:
+                if result.get("status") != "success":
+                    continue
+                stage_name = result.get("name", "unknown")
+                completed_stages.append(stage_name)
+
+                stage_outputs = result.get("outputs") or {}
+                outputs[stage_name] = dict(stage_outputs)
+
+                for key in (result.get("sensitive_outputs") or {}).keys():
+                    sensitive_keys.append(f"{stage_name}.{key}")
+
+            if not outputs:
+                return None  # No successful stages with outputs
+
+            artifact = DeploymentOutputsModel(
+                meta=DeploymentOutputsMetaModel(
+                    name=deployment_name,
+                    deployment=deployment_name,
+                    version=version,
+                    deployed_at=datetime.now(timezone.utc).isoformat(),
+                    workspace=workspace_name,
+                    environment=environment_name,
+                    tenant=tenant_code,
+                ),
+                outputs=outputs,
+                sensitive_keys=sensitive_keys,
+                provenance={
+                    "stages_completed": completed_stages,
+                },
+            )
+
+            output_path = self._deployment_service.get_build_path(self._build_path) / "deployment-outputs.json"
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+
+            with open(output_path, "w", encoding="utf-8") as fh:
+                json.dump(artifact.model_dump(exclude_none=True), fh, indent=2, default=str)
+
+            self.logger.info(
+                "Combined outputs artifact written",
+                path=str(output_path),
+                stage_count=len(completed_stages),
+            )
+            return output_path
+
+        except Exception as exc:
+            self.logger.warning("Failed to write combined outputs artifact", error=str(exc))
+            return None
+
     def _collect_artifacts(self) -> ManifestArtifactsModel:
         """Assemble the full artifact BOM from available runtime data."""
         return ManifestArtifactsModel(
