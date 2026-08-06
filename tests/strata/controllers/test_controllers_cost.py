@@ -193,6 +193,78 @@ class TestGetEstimator:
 
 
 # ---------------------------------------------------------------------------
+# is_auto_diff_enabled — gates deploy run --dry-run's automatic cost diff on
+# whether a cost estimator is DECLARED in spec.integrations, unlike
+# _get_estimator() which probes for any installed binary regardless of config.
+# ---------------------------------------------------------------------------
+
+
+class TestIsAutoDiffEnabled:
+    def test_false_when_no_cost_integration_declared(self):
+        ctrl = CostController()
+        mock_service = MagicMock()
+        mock_service.is_initialized.return_value = True
+        mock_service.get_integration_with_capability.return_value = None
+        with patch(
+            "strata.services.integration_service.IntegrationService.get_instance",
+            return_value=mock_service,
+        ):
+            assert ctrl.is_auto_diff_enabled() is False
+        mock_service.get_integration_with_capability.assert_called_once()
+
+    def test_true_when_cost_integration_declared_and_enabled(self):
+        from strata.integrations.capabilities import ICostEstimator
+
+        ctrl = CostController()
+        mock_service = MagicMock()
+        mock_service.is_initialized.return_value = True
+        mock_service.get_integration_with_capability.return_value = MagicMock(spec=ICostEstimator)
+        with patch(
+            "strata.services.integration_service.IntegrationService.get_instance",
+            return_value=mock_service,
+        ):
+            assert ctrl.is_auto_diff_enabled() is True
+
+    def test_false_when_integration_declared_but_disabled(self):
+        """A declared-but-disabled (enabled: false) integration never reaches
+        the registry, so get_integration_with_capability returns None — same
+        outcome as not declaring it at all."""
+        ctrl = CostController()
+        mock_service = MagicMock()
+        mock_service.is_initialized.return_value = True
+        mock_service.get_integration_with_capability.return_value = None
+        with patch(
+            "strata.services.integration_service.IntegrationService.get_instance",
+            return_value=mock_service,
+        ):
+            assert ctrl.is_auto_diff_enabled() is False
+
+    def test_initializes_integrations_if_not_already_done(self):
+        ctrl = CostController()
+        mock_service = MagicMock()
+        mock_service.is_initialized.return_value = False
+        mock_service.get_integration_with_capability.return_value = None
+        with patch(
+            "strata.services.integration_service.IntegrationService.get_instance",
+            return_value=mock_service,
+        ):
+            ctrl.is_auto_diff_enabled()
+        mock_service.initialize_integrations.assert_called_once()
+
+    def test_does_not_reinitialize_if_already_initialized(self):
+        ctrl = CostController()
+        mock_service = MagicMock()
+        mock_service.is_initialized.return_value = True
+        mock_service.get_integration_with_capability.return_value = None
+        with patch(
+            "strata.services.integration_service.IntegrationService.get_instance",
+            return_value=mock_service,
+        ):
+            ctrl.is_auto_diff_enabled()
+        mock_service.initialize_integrations.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # show()
 # ---------------------------------------------------------------------------
 

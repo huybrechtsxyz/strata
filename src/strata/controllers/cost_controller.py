@@ -41,6 +41,33 @@ class CostController(BaseController):
     # Public API
     # ------------------------------------------------------------------
 
+    def is_auto_diff_enabled(self) -> bool:
+        """Return True if a cost estimator is declared in ``spec.integrations``.
+
+        Gates the automatic cost diff that ``deploy run --dry-run`` runs after
+        each stage's plan. Unlike :meth:`is_available` (used by the explicit
+        ``strata cost show``/``strata cost diff`` commands today), this
+        requires the integration to be explicitly declared — e.g.::
+
+            spec:
+              integrations:
+                - name: infracost
+                  type: infracost
+                  capabilities: [cost]
+                  enabled: true   # default; set false to disable
+
+        An installed ``infracost`` binary alone is no longer enough to trigger
+        the automatic dry-run diff — it must be declared, consistent with how
+        every other integration (secret stores, provisioners, etc.) is gated
+        by declaration rather than by probing for installed binaries.
+        """
+        from strata.services.integration_service import IntegrationService
+
+        svc = IntegrationService.get_instance()
+        if not svc.is_initialized():
+            svc.initialize_integrations()
+        return svc.get_integration_with_capability(ICostEstimator) is not None
+
     def show(
         self,
         deployment_service: "DeploymentService",

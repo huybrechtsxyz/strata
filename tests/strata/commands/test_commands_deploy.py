@@ -1608,6 +1608,74 @@ def _make_destroy_stage(name: str = "infra"):
     return stage
 
 
+# ---------------------------------------------------------------------------
+# _run_cost_diff_for_stage — gated on CostController.is_auto_diff_enabled()
+# (i.e. a cost estimator declared in spec.integrations), not just on whether
+# an estimator binary happens to be installed.
+# ---------------------------------------------------------------------------
+
+
+class TestRunCostDiffForStage:
+    def _make_stage(self, provisioner: str = "terraform"):
+        stage = MagicMock()
+        stage.name = "infra"
+        stage.provisioner = provisioner
+        return stage
+
+    def test_skips_when_auto_diff_not_enabled(self, tmp_path):
+        """Not declared in spec.integrations -> never even checks is_available()
+        or attempts a diff, regardless of whether the binary is installed."""
+        cmd = _make_run_command(tmp_path)
+        cmd._deployment_service = MagicMock()
+        stage = self._make_stage()
+
+        mock_controller = MagicMock()
+        mock_controller.is_auto_diff_enabled.return_value = False
+
+        with patch("strata.controllers.cost_controller.CostController", return_value=mock_controller):
+            cmd._run_cost_diff_for_stage(stage, tmp_path / "plan.json")
+
+        mock_controller.is_auto_diff_enabled.assert_called_once()
+        mock_controller.is_available.assert_not_called()
+        mock_controller.diff.assert_not_called()
+
+    def test_proceeds_when_auto_diff_enabled_and_available(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        cmd._deployment_service = MagicMock()
+        cmd._output_format = "json"  # suppress console rendering
+        stage = self._make_stage()
+
+        mock_controller = MagicMock()
+        mock_controller.is_auto_diff_enabled.return_value = True
+        mock_controller.is_available.return_value = True
+        mock_controller.diff.return_value = (True, {"diff": {}, "totalMonthlyCost": "0", "pastTotalMonthlyCost": "0"})
+        mock_controller.get_messages.return_value = []
+        mock_controller.get_errors.return_value = []
+
+        with patch("strata.controllers.cost_controller.CostController", return_value=mock_controller):
+            cmd._run_cost_diff_for_stage(stage, tmp_path / "plan.json")
+
+        mock_controller.is_auto_diff_enabled.assert_called_once()
+        mock_controller.is_available.assert_called_once()
+        mock_controller.diff.assert_called_once()
+
+    def test_skips_when_enabled_but_binary_not_available(self, tmp_path):
+        """Declared in spec.integrations but the binary itself isn't installed
+        -> still skips silently (non-fatal), same as before this change."""
+        cmd = _make_run_command(tmp_path)
+        cmd._deployment_service = MagicMock()
+        stage = self._make_stage()
+
+        mock_controller = MagicMock()
+        mock_controller.is_auto_diff_enabled.return_value = True
+        mock_controller.is_available.return_value = False
+
+        with patch("strata.controllers.cost_controller.CostController", return_value=mock_controller):
+            cmd._run_cost_diff_for_stage(stage, tmp_path / "plan.json")
+
+        mock_controller.diff.assert_not_called()
+
+
 def _make_mock_deployer(step_names=("setup", "destroy")):
     deployer = MagicMock()
     deployer.get_deployer_name.return_value = "terraform"

@@ -439,7 +439,10 @@ class RunDeployCommand(BaseDeployCommand):
         """Run infracost diff after plan in dry-run mode. Non-fatal — cost errors never block deploy.
 
         Displays cost impact (before/after/delta) in console output.
-        Skips silently if Infracost is not installed or not available.
+        Requires a cost estimator (e.g. Infracost) to be declared in
+        ``spec.integrations`` — an installed binary alone is not enough (see
+        ``CostController.is_auto_diff_enabled``). Skips silently if not
+        declared, not installed, or otherwise unavailable.
         """
         if self._deployment_service is None:
             return
@@ -449,8 +452,11 @@ class RunDeployCommand(BaseDeployCommand):
 
             controller = CostController(work_path=self._work_path)
 
+            if not controller.is_auto_diff_enabled():
+                return  # No cost estimator declared in spec.integrations — skip silently
+
             if not controller.is_available():
-                return  # Infracost not installed — skip silently
+                return  # Declared but not installed/available — skip silently
 
             success, result = controller.diff(
                 deployment_service=self._deployment_service,
