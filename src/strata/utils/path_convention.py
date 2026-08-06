@@ -7,6 +7,12 @@ Provides:
   loaded ``ConfigurationModel`` and return the allowed value set.
 - ``evaluate_file_rule()`` — expand placeholder references in a file path template
   and check existence on disk.
+- ``build_path_from_pattern()`` — inverse of ``match_pattern()``: substitute named
+  segment values into a pattern to build a concrete path.
+- ``find_tenant_path_pattern()`` / ``resolve_tenant_file_path()`` — resolve a
+  tenant's on-disk file path, honoring a ``spec.paths`` convention marked
+  ``resolves: tenant`` if declared, else falling back to the built-in
+  ``tenants/{code}.yaml`` convention (ADR-0012).
 """
 
 import re
@@ -207,3 +213,84 @@ def evaluate_conventions(
                     )
 
     return violations
+
+
+# ---------------------------------------------------------------------------
+# Tenant file resolution — inverse direction (build a path FROM a pattern)
+# ---------------------------------------------------------------------------
+
+_BUILTIN_TENANT_PATTERN = "tenants/{code}.yaml"
+
+
+def build_path_from_pattern(pattern: str, **values: str) -> str:
+    """Build a concrete relative path from a ``{segment}`` pattern.
+
+    Inverse of :func:`match_pattern`: substitutes each named value into its
+    ``{segment}`` placeholder. Since every ``{segment}`` captures exactly one
+    literal path part (see :func:`match_pattern`), this is a direct
+    ``str.format()`` substitution — no additional parsing needed.
+
+    Example::
+
+        build_path_from_pattern("customers/{code}/customer.yaml", code="acme")
+        # -> "customers/acme/customer.yaml"
+
+    Raises:
+        ValueError: *pattern* references a segment not present in *values*.
+    """
+    try:
+        return pattern.format(**values)
+    except KeyError as exc:
+        raise ValueError(f"Pattern '{pattern}' requires segment {exc}, which was not provided") from exc
+
+
+def find_tenant_path_pattern(configuration_model) -> Optional[str]:
+    """Return the pattern of the ``spec.paths`` convention marked ``resolves: tenant``.
+
+    Returns ``None`` if *configuration_model* is ``None``, has no ``spec.paths``,
+    or none of its conventions declare ``resolves: tenant`` — callers should then
+    fall back to the built-in ``tenants/{code}.yaml`` convention. Model validation
+    already guarantees at most one such convention exists
+    (``ConfigurationSpecModel.validate_single_tenant_path_resolver``).
+    """
+    if configuration_model is None:
+        return None
+    paths = getattr(getattr(configuration_model, "spec", None), "paths", None)
+    if not paths:
+        return None
+    for conv in paths:
+        if getattr(conv, "resolves", None) == "tenant":
+            return conv.pattern
+    return None
+
+
+def resolve_tenant_relative_path(tenant_code: str, configuration_model=None) -> str:
+    """Return a tenant's file path, relative to the workspace root (not yet joined).
+
+    Uses the ``spec.paths`` convention marked ``resolves: tenant`` if declared
+    on *configuration_model*, else the built-in ``tenants/{code}.yaml``
+    convention (ADR-0012).
+    """
+    pattern = find_tenant_path_pattern(configuration_model) or _BUILTIN_TENANT_PATTERN
+    return build_path_from_pattern(pattern, code=tenant_code)
+
+
+def resolve_tenant_file_path(work_path: Path, tenant_code: str, configuration_model=None) -> Path:
+    """Resolve the on-disk (absolute) path to a tenant's YAML file.
+
+    Uses the ``spec.paths`` convention marked ``resolves: tenant`` if one is
+    declared on *configuration_model* (substituting *tenant_code* into its
+    ``{code}`` segment); otherwise falls back to the built-in
+    ``tenants/{code}.yaml`` convention (ADR-0012) — identical to strata's
+    behavior before this function existed, so workspaces that don't declare a
+    custom convention see no change at all.
+
+    Args:
+        work_path: Workspace root.
+        tenant_code: The deployment's ``spec.tenant`` value.
+        configuration_model: Optional loaded ``ConfigurationModel``.
+
+    Returns:
+        Absolute path to the tenant's YAML file (existence not checked here).
+    """
+    return Path(work_path) / resolve_tenant_relative_path(tenant_code, configuration_model)

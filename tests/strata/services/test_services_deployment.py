@@ -152,6 +152,99 @@ class TestDeploymentService:
         # workspace.yaml is still missing, but no tenant error
         assert not any("acme" in e for e in errors)
 
+    def test_tenant_file_resolved_via_custom_configured_convention(self, tmp_path):
+        """When configuration.spec.paths declares a resolves: tenant convention,
+        Phase 2 looks for the tenant file at that custom location instead of
+        the built-in tenants/{code}.yaml."""
+        from strata.models.configuration_model import ConfigurationModel
+
+        # Custom layout: customers/{code}/customer.yaml — NOT tenants/acme.yaml
+        customer_dir = tmp_path / "customers" / "acme"
+        customer_dir.mkdir(parents=True)
+        (customer_dir / "customer.yaml").write_text("# placeholder\n")
+        env_file = tmp_path / "env.yaml"
+        env_file.write_text("# placeholder\n")
+
+        config_model = ConfigurationModel.model_validate(
+            {
+                "apiVersion": "strata.huybrechts.xyz/v1",
+                "kind": "configuration",
+                "meta": {"name": "cfg"},
+                "spec": {
+                    "paths": [
+                        {
+                            "name": "tenant-location",
+                            "resolves": "tenant",
+                            "scope": "customers/**",
+                            "pattern": "customers/{code}/customer.yaml",
+                        }
+                    ]
+                },
+            }
+        )
+
+        data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "deployment",
+            "meta": {"name": "test_deploy"},
+            "spec": {
+                "workspace": {"name": "ws", "file": "workspace.yaml"},
+                "environments": ["env.yaml"],
+                "tenant": "acme",
+            },
+        }
+        svc = DeploymentService(data=data)
+        svc.validate()  # Phase 1
+        is_valid, errors = svc._validate_dynamic(work_path=str(tmp_path), configuration_model=config_model)
+        # The tenant file exists at the CUSTOM location, so no tenant-file error
+        assert not any("acme" in e for e in errors)
+
+    def test_tenant_file_missing_at_custom_configured_location_fails(self, tmp_path):
+        """Custom convention declared but the file isn't at that custom location
+        (e.g. it's still sitting at the old tenants/acme.yaml) -> Phase 2 fails,
+        proving the built-in path is no longer consulted once a custom
+        convention is declared."""
+        from strata.models.configuration_model import ConfigurationModel
+
+        # File left at the OLD built-in location — should NOT be found.
+        tenant_dir = tmp_path / "tenants"
+        tenant_dir.mkdir()
+        (tenant_dir / "acme.yaml").write_text("# placeholder\n")
+
+        config_model = ConfigurationModel.model_validate(
+            {
+                "apiVersion": "strata.huybrechts.xyz/v1",
+                "kind": "configuration",
+                "meta": {"name": "cfg"},
+                "spec": {
+                    "paths": [
+                        {
+                            "name": "tenant-location",
+                            "resolves": "tenant",
+                            "scope": "customers/**",
+                            "pattern": "customers/{code}/customer.yaml",
+                        }
+                    ]
+                },
+            }
+        )
+
+        data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "deployment",
+            "meta": {"name": "test_deploy"},
+            "spec": {
+                "workspace": {"name": "ws", "file": "workspace.yaml"},
+                "environments": ["env.yaml"],
+                "tenant": "acme",
+            },
+        }
+        svc = DeploymentService(data=data)
+        svc.validate()  # Phase 1
+        is_valid, errors = svc._validate_dynamic(work_path=str(tmp_path), configuration_model=config_model)
+        assert not is_valid
+        assert any("customers" in e and "acme" in e for e in errors)
+
 
 class TestValidateSyncStages:
     """Tests for _validate_sync_stages Phase-6 cross-reference validation."""

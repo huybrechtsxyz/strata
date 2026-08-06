@@ -2,7 +2,7 @@
 """Pydantic model for provider and resource configuration validation."""
 
 from enum import Enum
-from typing import Annotated, Any, Dict, List, Optional, Union
+from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
@@ -297,6 +297,16 @@ class PathConventionModel(PlatformBaseModel):
             "or a path template for file existence check."
         ),
     )
+    resolves: Optional[Literal["tenant"]] = Field(
+        None,
+        description=(
+            "When set to 'tenant', this convention ALSO drives tenant file resolution "
+            "(not just validation) — deployment_service/platform_builder substitute the "
+            "deployment's tenant code into this pattern's {code} segment instead of the "
+            "built-in tenants/{code}.yaml default. The pattern MUST contain a {code} segment. "
+            "At most one convention across spec.paths may declare resolves: tenant."
+        ),
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -314,6 +324,22 @@ class PathConventionModel(PlatformBaseModel):
                     f"Validation key '{key}' does not correspond to a {{segment}} "
                     f"in pattern '{self.pattern}'. Available segments: {sorted(pattern_segments)}"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def validate_resolves_tenant_has_code_segment(self) -> "PathConventionModel":
+        """A convention marked resolves: tenant must have a {code} segment in its pattern."""
+        if self.resolves != "tenant":
+            return self
+        import re as _re
+
+        pattern_segments = set(_re.findall(r"\{(\w+)\}", self.pattern))
+        if "code" not in pattern_segments:
+            raise ValueError(
+                f"Convention '{self.name}' declares resolves: tenant but its pattern "
+                f"'{self.pattern}' has no {{code}} segment. Tenant resolution substitutes "
+                "the deployment's spec.tenant value into a {code} segment."
+            )
         return self
 
 
@@ -607,6 +633,19 @@ class ConfigurationSpecModel(PlatformBaseModel):
         """Validate that all topology types are unique."""
         if self.topologies:
             check_unique_names([topo.type for topo in self.topologies], "topology types in configuration")
+        return self
+
+    @model_validator(mode="after")
+    def validate_single_tenant_path_resolver(self) -> "ConfigurationSpecModel":
+        """At most one spec.paths convention may declare resolves: tenant — ambiguous otherwise."""
+        if not self.paths:
+            return self
+        resolvers = [p.name for p in self.paths if p.resolves == "tenant"]
+        if len(resolvers) > 1:
+            raise ValueError(
+                f"Multiple spec.paths conventions declare resolves: tenant: {resolvers}. "
+                "Only one convention may resolve tenant file locations."
+            )
         return self
 
     @model_validator(mode="after")

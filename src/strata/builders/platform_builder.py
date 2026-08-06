@@ -484,7 +484,9 @@ class PlatformBuilder(BaseBuilder):
         # ------------------------------------------------------------------
         platform_tenant: Optional[PlatformTenantModel] = None
         if deployment_model.spec.tenant and work_path:
-            tenant_file = work_path / "tenants" / f"{deployment_model.spec.tenant}.yaml"
+            from strata.utils.path_convention import resolve_tenant_file_path
+
+            tenant_file = resolve_tenant_file_path(work_path, str(deployment_model.spec.tenant), configuration_model)
             if tenant_file.exists():
                 tenant_svc = TenantService(str(tenant_file))
                 is_valid, c_errors = tenant_svc.validate()

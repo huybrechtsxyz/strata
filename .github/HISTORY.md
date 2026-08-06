@@ -27,6 +27,32 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   - `strata cost history` is unaffected — it never touches the estimator, reading `.strata/cost/{deployment}.cost-history.json` snapshots recorded by past `cost show` runs instead
   - Test coverage: full suite at 5127 passed / 16 skipped after this change; new/updated tests in `tests/strata/controllers/test_controllers_cost.py` cover the declared-vs-not lookup and confirm `_get_estimator()` never falls back to binary probing
 
+### Added
+
+- **Configurable tenant file path resolution**
+  - Tenant location no longer hardcoded to `tenants/{code}.yaml` — deployments can now declare a custom tenant file path via a `spec.paths` path convention
+  - New field: `PathConventionModel.resolves: Optional[Literal["tenant"]]` (`src/strata/models/configuration_model.py`) — marks a convention as driving tenant resolution
+  - Validators in `PathConventionModel`:
+    - `validate_resolves_tenant_has_code_segment()` — `resolves: tenant` requires a `{code}` segment in the pattern (tenant code substitutes into it)
+  - Validator in `ConfigurationSpecModel`:
+    - `validate_single_tenant_path_resolver()` — hard error if 2+ conventions declare `resolves: tenant`
+  - New utility functions (`src/strata/utils/path_convention.py`):
+    - `build_path_from_pattern(pattern, **values)` — inverse of `match_pattern()`, substitutes values into `{segment}` placeholders
+    - `find_tenant_path_pattern(configuration_model)` → pattern string or None
+    - `resolve_tenant_relative_path(tenant_code, configuration_model)` → relative path, fallback `tenants/{code}.yaml`
+    - `resolve_tenant_file_path(work_path, tenant_code, configuration_model)` → absolute Path
+  - Both call sites updated:
+    - `deployment_service.py` (validation, 2 spots in `_validate_dynamic()`) now uses shared resolver instead of hardcoded path
+    - `platform_builder.py` (build-time tenant load) now uses resolver instead of hand-rolled hardcoded path
+  - Backward-compatible: no custom convention declared → identical behavior to before (uses `tenants/{code}.yaml`)
+  - Test coverage:
+    - Model validators: 5 new tests in `tests/strata/models/test_models_configuration.py::TestPathConventionTenantResolver`
+    - Utility functions: 14 new tests in `tests/strata/utils/test_utils_path_convention_tenant.py` (new file)
+    - Deployment-service integration: 2 new tests in `tests/strata/services/test_services_deployment.py` covering custom convention resolution and proving old `tenants/` location NOT consulted once custom convention declared
+    - Full suite: 5263 passed / 16 skipped
+
+- **Git ref pinning on `SourceModel` (ADR-0063, Gap 1)** — Provisioner sources now accept an optional `reference` field (branch, tag, or commit SHA) that overrides the workspace-level remote default. This allows two provisioners referencing the same remote to pin different versions (e.g., platform baseline on `v1.4.0` and team module on `main`). Resolution priority: `source.reference` → environment remote override → remote default. When a ref is pinned, `git archive` extracts the subtree without mutating the working tree.
+
 ---
 
 ## [1.6.1] - 2026-08-03

@@ -60,6 +60,61 @@ def test_configuration_yaml_invalid(yaml_path):
     assert model is None
 
 
+class TestPathConventionTenantResolver:
+    """Tests for PathConventionModel.resolves and the at-most-one-tenant-resolver rule."""
+
+    def test_resolves_tenant_requires_code_segment(self):
+        from strata.models.configuration_model import PathConventionModel
+
+        with pytest.raises(ValidationError, match=r"\{code\}"):
+            PathConventionModel(
+                name="tenant-location",
+                resolves="tenant",
+                scope="customers/**",
+                pattern="customers/{name}/customer.yaml",  # missing {code}
+            )
+
+    def test_resolves_tenant_with_code_segment_is_valid(self):
+        from strata.models.configuration_model import PathConventionModel
+
+        conv = PathConventionModel(
+            name="tenant-location",
+            resolves="tenant",
+            scope="customers/**",
+            pattern="customers/{code}/customer.yaml",
+        )
+        assert conv.resolves == "tenant"
+
+    def test_resolves_none_by_default(self):
+        from strata.models.configuration_model import PathConventionModel
+
+        conv = PathConventionModel(name="generic", scope="zones/**", pattern="zones/{zone}")
+        assert conv.resolves is None
+
+    def test_only_one_convention_may_resolve_tenant(self):
+        from strata.models.configuration_model import ConfigurationSpecModel, PathConventionModel
+
+        with pytest.raises(ValidationError, match="Multiple spec.paths conventions declare resolves: tenant"):
+            ConfigurationSpecModel(
+                paths=[
+                    PathConventionModel(name="a", resolves="tenant", scope="a/**", pattern="a/{code}.yaml"),
+                    PathConventionModel(name="b", resolves="tenant", scope="b/**", pattern="b/{code}.yaml"),
+                ]
+            )
+
+    def test_multiple_paths_with_only_one_tenant_resolver_is_valid(self):
+        from strata.models.configuration_model import ConfigurationSpecModel, PathConventionModel
+
+        spec = ConfigurationSpecModel(
+            paths=[
+                PathConventionModel(name="a", resolves="tenant", scope="a/**", pattern="a/{code}.yaml"),
+                PathConventionModel(name="b", scope="b/**", pattern="b/{zone}"),
+            ]
+        )
+        assert spec.paths is not None
+        assert len(spec.paths) == 2
+
+
 class TestConfigurationLifecycleModel:
     """Test lifecycle phase models in ConfigurationModel."""
 

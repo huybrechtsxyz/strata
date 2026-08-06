@@ -66,6 +66,8 @@ Both must be identical — validated at Phase 2. Convention is a short lowercase
 tenants/acme.yaml  →  meta.name: acme  →  spec.code: acme
 ```
 
+**Default location:** Tenant files are resolved from `tenants/{code}.yaml` by default. To use a custom location (e.g., `customers/{code}/customer.yaml`), declare a path convention in your configuration with `resolves: tenant`. See the [Configuration documentation](./configuration.md#custom-tenant-file-location) for details.
+
 ### `spec.zones`
 
 Restricts where this tenant's deployments may provision resources. Each zone must exist in `configuration.spec.zones`. At build time, every provider's resolved zone is checked against this list.
