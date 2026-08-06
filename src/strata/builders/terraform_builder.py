@@ -1377,6 +1377,12 @@ class TerraformBuilder(BaseBuilder):
             # Collect all declared input keys for this provisioner
             declared_keys = self._collect_declared_input_keys(deployment_service)
 
+            # Include keys that will be injected at deploy-time via inputs_from
+            if prov.inputs_from:
+                from strata.utils.resolved_values import collect_inputs_from_keys
+
+                declared_keys.update(collect_inputs_from_keys(prov.inputs_from))
+
             # Also include keys from the platform structural output (resource categories, etc.)
             # These are emitted by the builder itself and should be excluded from checks.
             excluded = set(STRATA_INJECTED_KEYS)

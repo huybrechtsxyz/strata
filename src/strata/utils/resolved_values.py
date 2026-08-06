@@ -252,3 +252,66 @@ def inject_tf_vars(resolved: ResolvedValues) -> Generator[None, None, None]:
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = original
+
+
+def apply_input_mapping(
+    upstream_outputs: Dict[str, Any],
+    mapping: Optional[Dict[str, str]] = None,
+    prefix: Optional[str] = None,
+    select: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Apply mapping/prefix/select to upstream outputs for downstream injection.
+
+    Args:
+        upstream_outputs: Raw outputs from the upstream provisioner.
+        mapping: Optional key rename map (upstream_name → downstream_name).
+        prefix: Optional prefix to add to all keys. Mutually exclusive with mapping.
+        select: Optional allowlist of output names to forward.
+
+    Returns:
+        Transformed output dict ready for injection.
+
+    Raises:
+        ValueError: When selected keys are missing from upstream outputs.
+    """
+    if select:
+        filtered = {k: v for k, v in upstream_outputs.items() if k in select}
+        missing = set(select) - set(upstream_outputs.keys())
+        if missing:
+            raise ValueError(f"Expected outputs not found in upstream: {sorted(missing)}")
+    else:
+        filtered = dict(upstream_outputs)
+
+    if mapping:
+        return {downstream: filtered[upstream] for upstream, downstream in mapping.items() if upstream in filtered}
+    elif prefix:
+        return {f"{prefix}{k}": v for k, v in filtered.items()}
+    else:
+        return filtered
+
+
+def collect_inputs_from_keys(inputs_from_list) -> set:
+    """Collect all downstream variable key names that inputs_from will provide.
+
+    Used by Gap 3 input validation to treat these keys as "supplied" even though
+    their values are not known at build time.
+
+    Args:
+        inputs_from_list: List of ProvisionerInputMappingModel instances.
+
+    Returns:
+        Set of downstream variable key names.
+    """
+    keys: set = set()
+    if not inputs_from_list:
+        return keys
+
+    for inp in inputs_from_list:
+        if inp.mapping:
+            keys.update(inp.mapping.values())
+        elif inp.select:
+            if inp.prefix:
+                keys.update(f"{inp.prefix}{k}" for k in inp.select)
+            else:
+                keys.update(inp.select)
+    return keys

@@ -400,6 +400,42 @@ class WorkspaceIacAnsiblePropertiesModel(PlatformBaseModel):
     )
 
 
+class ProvisionerInputMappingModel(PlatformBaseModel):
+    """Maps outputs from an upstream provisioner to inputs of this provisioner."""
+
+    provisioner: PlatformName = Field(description="Name of the upstream provisioner whose outputs to consume")
+    mapping: Optional[Dict[str, str]] = Field(
+        None,
+        description=(
+            "Optional output-to-input name mapping. Keys are upstream output names, "
+            "values are downstream variable names. When omitted, outputs are passed "
+            "through with their original names."
+        ),
+    )
+    prefix: Optional[str] = Field(
+        None,
+        description=(
+            "Optional prefix to add to all output names when injecting as inputs. "
+            "Mutually exclusive with 'mapping'. E.g., prefix='baseline_' turns "
+            "'vnet_id' into 'baseline_vnet_id'."
+        ),
+    )
+    select: Optional[List[str]] = Field(
+        None,
+        description=(
+            "Optional allowlist of output names to pass. When set, only these "
+            "outputs are forwarded. When omitted, all non-sensitive outputs pass."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate_mapping_prefix_exclusive(self) -> "ProvisionerInputMappingModel":
+        """Ensure mapping and prefix are not both set."""
+        if self.mapping and self.prefix:
+            raise ValueError("'mapping' and 'prefix' are mutually exclusive on inputs_from")
+        return self
+
+
 class WorkspaceIacModel(PlatformBaseModel):
     name: PlatformName
     description: Optional[str] = Field(
@@ -447,6 +483,13 @@ class WorkspaceIacModel(PlatformBaseModel):
             "Pinned tool version for this provisioner. "
             "Set by 'strata versions' when a type:tool pin targets this provisioner's name. "
             "Used by build/deploy to select the exact tool version (e.g. Terraform, Ansible)."
+        ),
+    )
+    inputs_from: Optional[List[ProvisionerInputMappingModel]] = Field(
+        None,
+        description=(
+            "Declare dependencies on other provisioners' outputs. Outputs from the "
+            "named provisioners are injected as variables into this provisioner at deploy time."
         ),
     )
 
@@ -525,6 +568,74 @@ class WorkspaceSpecModel(PlatformBaseModel):
         """Validate that all provisioner names are unique."""
         if self.provisioners:
             check_unique_names([prov.name for prov in self.provisioners], "provisioner names")
+        return self
+
+    # Validate inputs_from references, self-references, and cycles
+    @model_validator(mode="after")
+    def validate_inputs_from(self) -> "WorkspaceSpecModel":
+        """Validate inputs_from declarations across all provisioners."""
+        if not self.provisioners:
+            return self
+
+        provisioner_names = {p.name for p in self.provisioners}
+        errors: list = []
+
+        # Build dependency graph for cycle detection
+        graph: dict = {str(p.name): set() for p in self.provisioners}
+
+        for prov in self.provisioners:
+            if not prov.inputs_from:
+                continue
+            for inp in prov.inputs_from:
+                # Reference to unknown provisioner
+                if inp.provisioner not in provisioner_names:
+                    errors.append(
+                        f"Provisioner '{prov.name}': inputs_from references unknown provisioner '{inp.provisioner}'"
+                    )
+                # Self-reference
+                elif inp.provisioner == prov.name:
+                    errors.append(f"Provisioner '{prov.name}' cannot reference itself in inputs_from")
+                else:
+                    graph[str(prov.name)].add(str(inp.provisioner))
+
+        # Cycle detection via topological sort (Kahn's algorithm)
+        if not errors:
+            in_degree = {node: 0 for node in graph}
+            for node, deps in graph.items():
+                for dep in deps:
+                    if dep in in_degree:
+                        in_degree[dep] = in_degree.get(dep, 0)  # ensure exists
+
+            # Count incoming edges
+            in_degree = {node: 0 for node in graph}
+            for node, deps in graph.items():
+                for dep in deps:
+                    # dep is depended ON by node; in_degree tracks how many depend on it
+                    pass
+            # Reverse: for cycle detection we need "who blocks whom"
+            reverse_in: dict = {node: 0 for node in graph}
+            for node, deps in graph.items():
+                reverse_in[node] = len(deps)
+
+            queue = [n for n, d in reverse_in.items() if d == 0]
+            visited = 0
+            while queue:
+                current = queue.pop(0)
+                visited += 1
+                # Find nodes that depend on current and reduce their count
+                for node, deps in graph.items():
+                    if current in deps:
+                        reverse_in[node] -= 1
+                        if reverse_in[node] == 0:
+                            queue.append(node)
+
+            if visited < len(graph):
+                cycle_nodes = [n for n, d in reverse_in.items() if d > 0]
+                errors.append(f"Circular dependency in inputs_from: {' → '.join(sorted(cycle_nodes))}")
+
+        if errors:
+            raise ValueError("; ".join(errors))
+
         return self
 
     # Validate unique topology names
