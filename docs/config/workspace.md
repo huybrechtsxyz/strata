@@ -71,7 +71,9 @@ provisioners:
     source:
       repository: <repository_name>    # optional — omit for single-repo workspaces
       source_path: <path>              # path within the repo (or workspace root when repository is absent)
+      reference: <git_ref>             # optional: override workspace remote default (branch, tag, commit SHA)
       target_path: <path>              # optional: path in the build output
+    inputs_from: []                    # optional: output passing from upstream provisioners (see Output Dependencies)
     backend:                           # Terraform only — state storage
       type: terraform_cloud | azurerm | s3 | ...
       configuration: {}
@@ -178,6 +180,18 @@ output:
   script: scripts/build_tfvars.py   # script receives STRATA_PROVISIONER too
 ```
 
+**Git reference pinning** — override the workspace remote's default reference per provisioner:
+
+```yaml
+provisioners:
+  - name: platform_baseline
+    provisioner: terraform
+    source:
+      repository: platform-modules
+      source_path: terraform
+      reference: v1.4.0        # pins this provisioner to v1.4.0 (overrides remote default)
+```
+
 **Single-repo form** — when IaC lives inside the workspace itself, omit `repository` and
 use `source_path` alone. strata resolves the path relative to the workspace root:
 
@@ -199,6 +213,42 @@ provisioners:
       repository: platform-iac   # must match a repo registered via `strata repo add`
       source_path: deploy/terraform
 ```
+
+### Output Dependencies
+
+Team-owned provisioners can declare dependencies on outputs from upstream provisioners.
+This enables multi-team deployments where the platform baseline outputs are passed to team modules.
+
+```yaml
+provisioners:
+  - name: platform_baseline
+    provisioner: terraform
+    source:
+      repository: platform-modules
+      source_path: terraform/baseline
+      reference: v1.4.0
+
+  - name: team_module
+    provisioner: terraform
+    source:
+      repository: team-modules
+      source_path: terraform/team-features
+      reference: main
+    inputs_from:
+      - provisioner: platform_baseline  # explicit dependency
+        mode: prefix                     # prefix all outputs: "baseline_subnet_id", etc.
+```
+
+**`inputs_from` modes:**
+
+| Mode      | Behavior                                                                      |
+| --------- | ----------------------------------------------------------------------------- |
+| `mapping` | Rename specific outputs: `{ vpc_id: baseline_vpc_id, subnet_id: subnet }`     |
+| `prefix`  | Add prefix to all outputs: `baseline_` → `baseline_vpc_id`, `baseline_subnet` |
+| `select`  | Allowlist specific keys: `["vpc_id", "subnet_id"]` (others discarded)         |
+
+**Outputs are injected at deploy time** — the downstream provisioner receives them as Terraform variables.
+Cycles are detected at build time and cause an error.
 
 ### Provisioner types
 
