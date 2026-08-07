@@ -1,41 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
   <!--
-    Strata icon — isometric stack of equal-width slabs, one on top of the
-    other. Represents geological strata (horizontal rock layers) rather
-    than a tapering peak. Rendered as a mask in the VS Code activity bar,
-    so only currentColor + opacity are used here. See strata-color.svg for
-    the full-color brand mark.
+    Strata icon — bold "S" built from four offset, overlapping copies,
+    darkest/furthest in back and full-opacity in front. Rendered as a mask
+    in the VS Code activity bar, so only currentColor + opacity are used
+    here. See strata-color.svg for the full-color brand mark.
   -->
-
-  <!-- Layer 1 (bottom) -->
-  <!-- Top face -->
-  <polygon points="12,18.1 22,20.3 12,22.5 2,20.3" fill="currentColor" opacity="0.35"/>
-  <!-- Left face -->
-  <polygon points="2,20.3 12,22.5 12,23.9 2,21.7" fill="currentColor" opacity="0.3"/>
-  <!-- Right face -->
-  <polygon points="22,20.3 12,22.5 12,23.9 22,21.7" fill="currentColor" opacity="0.25"/>
-
-  <!-- Layer 2 -->
-  <!-- Top face -->
-  <polygon points="12,12.1 22,14.3 12,16.5 2,14.3" fill="currentColor" opacity="0.55"/>
-  <!-- Left face -->
-  <polygon points="2,14.3 12,16.5 12,17.9 2,15.7" fill="currentColor" opacity="0.5"/>
-  <!-- Right face -->
-  <polygon points="22,14.3 12,16.5 12,17.9 22,15.7" fill="currentColor" opacity="0.45"/>
-
-  <!-- Layer 3 -->
-  <!-- Top face -->
-  <polygon points="12,6.1 22,8.3 12,10.5 2,8.3" fill="currentColor" opacity="0.75"/>
-  <!-- Left face -->
-  <polygon points="2,8.3 12,10.5 12,11.9 2,9.7" fill="currentColor" opacity="0.7"/>
-  <!-- Right face -->
-  <polygon points="22,8.3 12,10.5 12,11.9 22,9.7" fill="currentColor" opacity="0.65"/>
-
-  <!-- Layer 4 (top) -->
-  <!-- Top face -->
-  <polygon points="12,0.1 22,2.3 12,4.5 2,2.3" fill="currentColor" opacity="1"/>
-  <!-- Left face -->
-  <polygon points="2,2.3 12,4.5 12,5.9 2,3.7" fill="currentColor" opacity="0.95"/>
-  <!-- Right face -->
-  <polygon points="22,2.3 12,4.5 12,5.9 22,3.7" fill="currentColor" opacity="0.9"/>
+  <g font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="15" text-anchor="middle">
+    <text x="11.6" y="17.0" transform="translate(-1.2,-1.2)" fill="currentColor" opacity="0.35">S</text>
+    <text x="11.6" y="17.0" transform="translate(-0.8,-0.8)" fill="currentColor" opacity="0.55">S</text>
+    <text x="11.6" y="17.0" transform="translate(-0.4,-0.4)" fill="currentColor" opacity="0.75">S</text>
+    <text x="11.6" y="17.0" fill="currentColor" opacity="1">S</text>
+  </g>
 </svg>

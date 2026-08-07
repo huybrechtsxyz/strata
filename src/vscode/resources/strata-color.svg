@@ -1,29 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
   <!--
-    Strata brand mark — isometric stack of equal-width slabs (no taper),
-    colored bottom-to-top from deep navy (foundation) to bright teal (surface).
-    Use this version wherever full color is supported (marketplace icon,
-    docs, README, social/og images). For monochrome contexts (VS Code
-    activity bar, which masks icons to a single theme color) use strata.svg.
+    Strata brand mark — bold "S" built from four offset, overlapping
+    copies (deep navy in back, bright teal in front), evoking stacked
+    layers without a tapering peak. Use wherever full color is supported
+    (marketplace icon, docs, README, social/og images). For monochrome
+    contexts (VS Code activity bar, which masks icons to a single theme
+    color) use strata.svg.
   -->
-
-  <!-- Layer 1 (bottom) — foundation -->
-  <polygon points="12,18.1 22,20.3 12,22.5 2,20.3" fill="#234669"/>
-  <polygon points="2,20.3 12,22.5 12,23.9 2,21.7" fill="#1B3752"/>
-  <polygon points="22,20.3 12,22.5 12,23.9 22,21.7" fill="#14283C"/>
-
-  <!-- Layer 2 -->
-  <polygon points="12,12.1 22,14.3 12,16.5 2,14.3" fill="#1C6693"/>
-  <polygon points="2,14.3 12,16.5 12,17.9 2,15.7" fill="#155078"/>
-  <polygon points="22,14.3 12,16.5 12,17.9 22,15.7" fill="#0F3B5A"/>
-
-  <!-- Layer 3 -->
-  <polygon points="12,6.1 22,8.3 12,10.5 2,8.3" fill="#1E93A8"/>
-  <polygon points="2,8.3 12,10.5 12,11.9 2,9.7" fill="#177387"/>
-  <polygon points="22,8.3 12,10.5 12,11.9 22,9.7" fill="#115765"/>
-
-  <!-- Layer 4 (top) — surface -->
-  <polygon points="12,0.1 22,2.3 12,4.5 2,2.3" fill="#35C7B8"/>
-  <polygon points="2,2.3 12,4.5 12,5.9 2,3.7" fill="#299E92"/>
-  <polygon points="22,2.3 12,4.5 12,5.9 22,3.7" fill="#1E766D"/>
+  <rect x="1" y="1" width="22" height="22" rx="5" fill="#122030"/>
+  <g font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="15" text-anchor="middle">
+    <text x="11.6" y="17.0" transform="translate(-1.2,-1.2)" fill="#14283C">S</text>
+    <text x="11.6" y="17.0" transform="translate(-0.8,-0.8)" fill="#1C6693">S</text>
+    <text x="11.6" y="17.0" transform="translate(-0.4,-0.4)" fill="#1E93A8">S</text>
+    <text x="11.6" y="17.0" fill="#35C7B8">S</text>
+  </g>
 </svg>
+
