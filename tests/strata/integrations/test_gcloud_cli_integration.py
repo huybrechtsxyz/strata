@@ -177,6 +177,50 @@ class TestGetAccessToken:
             assert gz.get_access_token() is None
 
 
+class TestGetIdentityToken:
+    def setup_method(self):
+        GCloudCLIIntegration._identity_token_cache = {}
+
+    def test_returns_token_for_audience(self):
+        gz = _make()
+        with patch.object(gz, "_run_integration", return_value=_ok("eyFakeIdToken\n")) as mock:
+            token = gz.get_identity_token(audience="abc123")
+        assert token == "eyFakeIdToken"
+        mock.assert_called_once_with(["auth", "print-identity-token", "--audiences=abc123"], timeout=30)
+
+    def test_cached_per_audience(self):
+        gz = _make()
+        with patch.object(gz, "_run_integration", return_value=_ok("eyFakeIdToken")) as mock:
+            gz.get_identity_token(audience="abc123")
+            gz.get_identity_token(audience="abc123")
+        assert mock.call_count == 1
+
+    def test_different_audiences_not_cross_cached(self):
+        gz = _make()
+        with patch.object(gz, "_run_integration", return_value=_ok("eyFakeIdToken")) as mock:
+            gz.get_identity_token(audience="abc123")
+            gz.get_identity_token(audience="def456")
+        assert mock.call_count == 2
+
+    def test_clear_token_cache_clears_identity_tokens_too(self):
+        gz = _make()
+        with patch.object(gz, "_run_integration", return_value=_ok("eyFakeIdToken")) as mock:
+            gz.get_identity_token(audience="abc123")
+            gz.clear_token_cache()
+            gz.get_identity_token(audience="abc123")
+        assert mock.call_count == 2
+
+    def test_returns_none_on_failure(self):
+        gz = _make()
+        with patch.object(gz, "_run_integration", return_value=_fail()):
+            assert gz.get_identity_token(audience="abc123") is None
+
+    def test_returns_none_on_exception(self):
+        gz = _make()
+        with patch.object(gz, "_run_integration", side_effect=RuntimeError("boom")):
+            assert gz.get_identity_token(audience="abc123") is None
+
+
 class TestRunGcloud:
     def test_passes_args(self):
         gz = _make()

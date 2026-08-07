@@ -43,6 +43,7 @@ class GCloudCLIIntegration(BaseIntegration):
 
     # Token cache: process-scoped, cleared when project/account changes
     _token_cache: Optional[str] = None
+    _identity_token_cache: Dict[str, str] = {}
     _token_lock = threading.Lock()
 
     def get_version_command(self):
@@ -197,9 +198,38 @@ class GCloudCLIIntegration(BaseIntegration):
             return None
 
     def clear_token_cache(self) -> None:
-        """Clear the in-process token cache (call after ``gcloud auth login`` or project switch)."""
+        """Clear the in-process token caches (call after ``gcloud auth login`` or project switch)."""
         with self._token_lock:
             self.__class__._token_cache = None
+            self.__class__._identity_token_cache = {}
+
+    def get_identity_token(self, audience: str) -> Optional[str]:
+        """Return a cached OIDC ID token scoped to *audience*, from ``gcloud auth print-identity-token``.
+
+        Unlike ``get_access_token()`` (an opaque bearer token for Google Cloud APIs),
+        this returns a signed OIDC ID token whose ``aud`` claim is *audience* — usable
+        to authenticate to any service that accepts Google-signed ID tokens (e.g. Cloud
+        Run, IAP, or a strata control plane configured with Google as an identity
+        provider; see ``GoogleIdentityIntegration``, ADR-0067).
+
+        Cached per audience, in-process, until ``clear_token_cache()`` is called.
+        """
+        with self._token_lock:
+            cached = self.__class__._identity_token_cache.get(audience)
+            if cached:
+                return cached
+
+        try:
+            result = self._run_integration(["auth", "print-identity-token", f"--audiences={audience}"], timeout=30)
+            if result.returncode != 0 or not result.stdout.strip():
+                return None
+            token = result.stdout.strip()
+            with self._token_lock:
+                self.__class__._identity_token_cache[audience] = token
+            return token
+        except Exception as exc:
+            logger.debug("gcloud_get_identity_token_failed", audience=audience, error=str(exc))
+            return None
 
     # ------------------------------------------------------------------
     # Convenience: run arbitrary gcloud subcommands
