@@ -65,6 +65,10 @@ class IntegrationFactory:
             "strata.integrations.identity.google_identity_integration",
             "GoogleIdentityIntegration",
         ),
+        "aws_identity_center": (
+            "strata.integrations.identity.aws_identity_integration",
+            "AwsIdentityIntegration",
+        ),
         # AI agent (ADR-0025)
         "ai_agent": ("strata.integrations.ai.ai_integration", "AiAgentIntegration"),
         # SIEM / audit sinks
