@@ -800,7 +800,9 @@ class RunBuildCommand(BaseBuildCommand):
 
     def _collect_repository_info(self) -> Optional[Dict[str, Any]]:
         """Walk solution repositories and collect URL/ref/commit info."""
-        return collect_repository_info(self._solution_controller)
+        if self._solution_controller is None:
+            return None
+        return collect_repository_info(self._solution_controller.solution, self._solution_controller.get_repo_map())
 
     def _collect_provider_info(self) -> Optional[List[Any]]:
         """Collect provisioner metadata from the workspace model."""
