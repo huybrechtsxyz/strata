@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
 
+from strata.controllers.actor_controller import resolve_actor
 from strata.integrations.workitem.base_workitem_backend import (
     WORKITEM_STATUS_APPROVED,
     WORKITEM_STATUS_CANCELLED,
@@ -26,14 +26,8 @@ logger = get_logger(__name__)
 
 
 def _get_identity() -> str:
-    """Resolve the current operator identity — mirrors the pattern used in deploy commands."""
-    return (
-        os.environ.get("CI_ACTOR")
-        or os.environ.get("GITHUB_ACTOR")
-        or os.environ.get("USER")
-        or os.environ.get("USERNAME")
-        or "unknown"
-    )
+    """Resolve the current operator identity — delegates to the shared actor-resolution chain."""
+    return resolve_actor()
 
 
 class WorkItemController:

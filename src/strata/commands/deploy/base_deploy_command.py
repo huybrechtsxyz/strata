@@ -1,7 +1,6 @@
 """Base class for deploy commands."""
 
 import json
-import os
 import socket
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,6 +9,7 @@ from typing import Any, Dict, List, Optional
 import click
 
 from strata.commands.base_command import BaseCommand
+from strata.controllers.actor_controller import resolve_actor
 from strata.integrations.lock.base_lock_backend import (
     BaseLockBackend,
     LockBackendError,
@@ -163,7 +163,7 @@ class BaseDeployCommand(BaseCommand):
         locking = getattr(spec, "locking", None)
         wait_timeout: str = getattr(locking, "wait_timeout", "30m") if locking else "30m"
         timeout_seconds = parse_duration(wait_timeout)
-        holder = os.environ.get("GITHUB_ACTOR") or os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
+        holder = resolve_actor()
 
         # Force-release a held lock when --force-lock is set.
         if self._force_lock:
@@ -672,9 +672,7 @@ class BaseDeployCommand(BaseCommand):
             version = labels.get("version")
 
             # Actor
-            deployed_by = (
-                os.environ.get("GITHUB_ACTOR") or os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
-            )
+            deployed_by = resolve_actor()
 
             # Full artifact BOM
             artifacts = self._collect_artifacts()

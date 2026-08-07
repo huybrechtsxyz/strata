@@ -1,6 +1,5 @@
 """Command to execute the platform build pipeline."""
 
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -15,6 +14,7 @@ from strata.builders.sbom_builder import SbomBuilder
 from strata.builders.sync_builder import SyncBuilder
 from strata.builders.terraform_builder import TerraformBuilder
 from strata.commands.builders.base_build_command import BaseBuildCommand
+from strata.controllers.actor_controller import resolve_actor
 from strata.services.manifest_artifact_collector import (
     collect_platform_artifact,
     collect_provider_info,
@@ -711,9 +711,7 @@ class RunBuildCommand(BaseBuildCommand):
             version = labels.get("version")
 
             # Actor
-            built_by = (
-                os.environ.get("GITHUB_ACTOR") or os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
-            )
+            built_by = resolve_actor()
 
             # Artifact BOM
             artifacts = ManifestArtifactsModel(
