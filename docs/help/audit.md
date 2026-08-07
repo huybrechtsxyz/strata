@@ -12,32 +12,72 @@ See ADR-0018 for deploy-log design; ADR-0057 for work-item events.
 
 ## Configured Under `spec.audit`
 
+The deploy-log is always written locally (`.strata/deploy-log/` by default) — that is not a
+sink. Use `deploy_log_path` and `structure` to control it. Sinks are where events are
+*additionally* forwarded, and come in two flavours.
+
+**Built-in sinks** carry their own settings under `type:` — `stdout`, `ndjson`, `syslog`,
+and `webhook` are the only valid values:
+
 ```yaml
 spec:
   audit:
-    # Deploy-log storage
     sinks:
       - name: local
-        type: local
-        # Entries written to .strata/deploy-log/
-      - name: sentinel
-        type: azure_sentinel
-        endpoints:
-          address: https://dce-xxx.westeurope-1.ingest.monitor.azure.com
-        properties:
-          data_collection_rule_id: dcr-xxx
-          stream_name: Custom-DeployAudit_CL
-        authentication:
-          method: azure_cli
+        type: ndjson
+        path: .strata/audit.ndjson
 
-      - name: splunk
-        type: splunk
-        endpoints:
-          address: https://splunk.example.com:8088
-        authentication:
-          method: api_key
-          api_key: SPLUNK_HEC_TOKEN
+      - name: alert_hook
+        type: webhook
+        url: https://hooks.example.com/strata
+        headers:
+          Authorization: "Bearer ${WEBHOOK_TOKEN}"
+        events: [policy_violation]    # optional filter; omit for all events
 ```
+
+**Integration-backed sinks** (Splunk, Sentinel, ELK, OTel) are declared once in
+`configuration.spec.integrations` and referenced by name with `integration:`:
+
+```yaml
+# configuration.yaml
+spec:
+  integrations:
+    - name: sentinel
+      type: sentinel
+      capabilities: [audit]
+      endpoints:
+        address: https://dce-xxx.westeurope-1.ingest.monitor.azure.com
+      authentication:
+        method: managed_identity
+      properties:
+        data_collection_rule_id: dcr-xxx
+        stream_name: Custom-DeployAudit_CL
+
+    - name: splunk
+      type: splunk
+      capabilities: [audit]
+      endpoints:
+        address: https://splunk.example.com:8088
+      authentication:
+        method: api_key
+        api_key:
+          api_key: SPLUNK_HEC_TOKEN     # env var name holding the token
+```
+
+```yaml
+# environment YAML
+spec:
+  audit:
+    sinks:
+      - name: sentinel
+        integration: sentinel
+      - name: splunk
+        integration: splunk
+```
+
+A sink must specify **either** `type` **or** `integration`, never both. Integration-backed
+sinks must not carry `endpoints`, `authentication`, or `properties` — those belong to the
+integration declaration.
 
 ---
 

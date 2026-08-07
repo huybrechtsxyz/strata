@@ -1874,19 +1874,18 @@ spec:
   audit:
     sinks:
       - name: sentinel
-        type: integration
         integration: sentinel-audit
         enabled: true
         events: [deploy_audit]
       - name: elk
-        type: integration
         integration: elk-audit
         enabled: true
       - name: otel
-        type: integration
         integration: otel-audit
         enabled: true
 ```
+
+A sink specifies **either** `type` (built-in) **or** `integration` (integration-backed) — never both.
 
 **Non-blocking design:** SIEM delivery failures are always logged at `WARNING` level but never fail a deployment. The deploy-log JSON on disk is the primary source of truth; SIEM sinks are best-effort secondary delivery.
 

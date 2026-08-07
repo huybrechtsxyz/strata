@@ -15,6 +15,11 @@ from pydantic import Field, model_validator
 
 from strata.models.common_models import PlatformBaseModel, PlatformName
 
+# Built-in sink types handled directly by AuditController.forward_to_siem().
+# SIEM destinations (splunk, sentinel, elk, otel) are *not* listed here — they are
+# integrations, referenced via AuditSinkModel.integration.
+BUILTIN_SINK_TYPES: tuple = ("stdout", "ndjson", "syslog", "webhook")
+
 
 class AuditPolicyModel(PlatformBaseModel):
     """Which event types are active. Configured in environment YAML under spec.audit.policy."""
@@ -93,6 +98,14 @@ class AuditSinkModel(PlatformBaseModel):
                     raise ValueError("webhook sink requires 'url'")
                 if any([self.path, self.address, self.format]):
                     raise ValueError("webhook sink only accepts 'url' and 'headers'")
+            case _:
+                raise ValueError(
+                    f"Unknown sink type '{self.type}'. "
+                    f"Built-in types are: {', '.join(BUILTIN_SINK_TYPES)}. "
+                    "SIEM destinations (splunk, sentinel, elk, otel) are integrations — "
+                    "declare them in configuration.spec.integrations and reference them "
+                    "with 'integration: <name>' instead of 'type'."
+                )
         return self
 
 

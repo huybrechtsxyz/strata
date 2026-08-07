@@ -75,6 +75,40 @@ class TestAuditSinkModelFormat:
 
 
 # ---------------------------------------------------------------------------
+# AuditSinkModel: unknown built-in sink types are rejected
+# ---------------------------------------------------------------------------
+
+
+class TestAuditSinkModelUnknownType:
+    @pytest.mark.parametrize("siem_type", ["splunk", "sentinel", "elk", "otel"])
+    def test_siem_names_are_not_builtin_types(self, siem_type: str) -> None:
+        """SIEM destinations are integrations — using them as 'type' must not pass silently."""
+        with pytest.raises(Exception, match="Unknown sink type"):
+            AuditSinkModel(name="s", type=siem_type)
+
+    def test_unknown_type_error_points_at_integration(self) -> None:
+        with pytest.raises(Exception, match="integration: <name>"):
+            AuditSinkModel(name="s", type="splunk")
+
+    def test_arbitrary_unknown_type_rejected(self) -> None:
+        with pytest.raises(Exception, match="Unknown sink type"):
+            AuditSinkModel(name="s", type="local")
+
+    @pytest.mark.parametrize(
+        ("sink_type", "extra"),
+        [
+            ("stdout", {}),
+            ("ndjson", {"path": "/tmp/out.ndjson"}),
+            ("syslog", {"address": "127.0.0.1:514"}),
+            ("webhook", {"url": "https://hook.example.com"}),
+        ],
+    )
+    def test_builtin_types_still_accepted(self, sink_type: str, extra: dict) -> None:
+        sink = AuditSinkModel(name="s", type=sink_type, **extra)
+        assert sink.type == sink_type
+
+
+# ---------------------------------------------------------------------------
 # strata audit export --siem
 # ---------------------------------------------------------------------------
 
