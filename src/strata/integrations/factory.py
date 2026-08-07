@@ -57,6 +57,10 @@ class IntegrationFactory:
             "strata.integrations.identity.generic_oidc_identity_integration",
             "GenericOidcIdentityIntegration",
         ),
+        "azure_ad": (
+            "strata.integrations.identity.azure_identity_integration",
+            "AzureIdentityIntegration",
+        ),
         # AI agent (ADR-0025)
         "ai_agent": ("strata.integrations.ai.ai_integration", "AiAgentIntegration"),
         # SIEM / audit sinks
