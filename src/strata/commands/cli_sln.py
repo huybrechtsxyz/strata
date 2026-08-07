@@ -57,6 +57,13 @@ sln_group.add_command(export_command, name="export")
     help="Run slow checks: backend reachability and auth validation.",
 )
 @click.option(
+    "--login",
+    "login",
+    is_flag=True,
+    default=False,
+    help="Actively drive login for identity-capable integrations that support it (implies --deep).",
+)
+@click.option(
     "--ai",
     "ai",
     is_flag=True,
@@ -71,6 +78,7 @@ def sln_doctor(
     work_path=None,
     category=None,
     deep: bool = False,
+    login: bool = False,
     ai: bool = False,
     output=None,
     verbose: bool = False,
@@ -81,7 +89,8 @@ def sln_doctor(
         file=file,
         work_path=work_path,
         category=category,
-        deep=deep,
+        deep=deep or login,
+        login=login,
         ai=ai,
         output=output,
         verbose=verbose,

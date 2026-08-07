@@ -20,6 +20,7 @@ __all__ = [
     "IAzureTool",
     "IAWSTool",
     "IGCloudTool",
+    "IIdentityProvider",
     # Registry and mapping
     "CAPABILITY_REGISTRY",
     "CAPABILITY_MAP",
@@ -377,6 +378,51 @@ class IAzureTool(Protocol):
 
 
 @runtime_checkable
+class IIdentityProvider(Protocol):
+    """
+    Capability: Integration authenticates a human or service to an OIDC/OAuth2-protected
+    system via the strata CLI itself (device-code / Authorization Code flow), rather than
+    delegating to an already-authenticated external tool.
+
+    This is distinct from ``IAWSTool``/``IAzureTool``/``IGCloudTool``, whose
+    ``ensure_available()`` only *checks* whether an external CLI (``az``/``aws``/``gcloud``)
+    is already logged in. An ``IIdentityProvider`` integration has no external tool to
+    delegate to — strata itself must drive the login and persist the resulting session.
+
+    Not restricted to any single service: a workspace may declare more than one
+    ``identity``-capable integration (e.g. one for a strata control plane, another for
+    some unrelated OIDC-protected service the CLI needs to call).
+
+    Picked up automatically by ``strata sln doctor --deep`` (via ``check_auth()``) and
+    ``strata sln doctor --login`` (via ``login()``) — see ADR-0067.
+
+    Examples: generic OIDC provider (device-code grant), Auth0, GitHub OAuth App
+    """
+
+    def check_auth(self) -> tuple:
+        """Check whether a cached session is valid, refreshing it silently if possible.
+
+        Returns:
+            (True, detail) if a valid session exists (after silent refresh if needed).
+            (False, detail) if not authenticated or refresh failed — detail should name
+            the fix (e.g. "run with --login to sign in").
+        """
+        ...
+
+    def login(self) -> tuple:
+        """Drive an interactive login (e.g. OIDC device-code flow) and cache the result.
+
+        Returns:
+            (True, detail) on success, (False, error) otherwise.
+        """
+        ...
+
+    def get_access_token(self):
+        """Return the current cached bearer token, or None if not authenticated."""
+        ...
+
+
+@runtime_checkable
 class IIacSecurityScanner(Protocol):
     """
     Capability: Integration supports IaC static security analysis.
@@ -507,6 +553,11 @@ CAPABILITY_REGISTRY = {
         "methods": ["ensure_available", "get_project", "get_access_token"],
         "examples": ["Google Cloud CLI (gcloud)"],
     },
+    "IIdentityProvider": {
+        "description": "OIDC/OAuth2 login for the CLI itself: session check, interactive login, bearer token",
+        "methods": ["check_auth", "login", "get_access_token"],
+        "examples": ["Generic OIDC provider", "Auth0", "GitHub OAuth App"],
+    },
 }
 
 
@@ -526,6 +577,7 @@ CAPABILITY_MAP = {
     "azure": IAzureTool,
     "aws": IAWSTool,
     "gcloud": IGCloudTool,
+    "identity": IIdentityProvider,
 }
 
 

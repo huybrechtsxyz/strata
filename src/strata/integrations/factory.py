@@ -52,6 +52,11 @@ class IntegrationFactory:
         "azure_cli": ("strata.integrations.azure_cli", "AzureCLIIntegration"),
         "aws_cli": ("strata.integrations.aws_cli", "AWSCLIIntegration"),
         "gcloud_cli": ("strata.integrations.gcloud_cli", "GCloudCLIIntegration"),
+        # Identity providers — CLI-side OIDC/OAuth2 login (ADR-0067)
+        "generic_oidc": (
+            "strata.integrations.identity.generic_oidc_identity_integration",
+            "GenericOidcIdentityIntegration",
+        ),
         # AI agent (ADR-0025)
         "ai_agent": ("strata.integrations.ai.ai_integration", "AiAgentIntegration"),
         # SIEM / audit sinks
