@@ -69,6 +69,14 @@ class IntegrationFactory:
             "strata.integrations.identity.aws_identity_integration",
             "AwsIdentityIntegration",
         ),
+        "auth0": (
+            "strata.integrations.identity.auth0_identity_integration",
+            "Auth0IdentityIntegration",
+        ),
+        "github_oauth": (
+            "strata.integrations.identity.github_oauth_identity_integration",
+            "GitHubOAuthIdentityIntegration",
+        ),
         # AI agent (ADR-0025)
         "ai_agent": ("strata.integrations.ai.ai_integration", "AiAgentIntegration"),
         # SIEM / audit sinks

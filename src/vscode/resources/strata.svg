@@ -1,47 +1,41 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
   <!--
-    Strata icon — isometric geological cross-section with stacked layers,
-    each progressively smaller (stepped back), bottom is full width.
-    Like a terrain cutaway showing exposed strata.
+    Strata icon — isometric stack of equal-width slabs, one on top of the
+    other. Represents geological strata (horizontal rock layers) rather
+    than a tapering peak. Rendered as a mask in the VS Code activity bar,
+    so only currentColor + opacity are used here. See strata-color.svg for
+    the full-color brand mark.
   -->
 
-  <!-- Layer 5 (bottom) — bedrock, full block -->
+  <!-- Layer 1 (bottom) -->
   <!-- Top face -->
-  <polygon points="12,14 22,19 12,24 2,19" fill="currentColor" opacity="0.35"/>
+  <polygon points="12,18.1 22,20.3 12,22.5 2,20.3" fill="currentColor" opacity="0.35"/>
   <!-- Left face -->
-  <polygon points="2,19 12,24 12,22 2,17" fill="currentColor" opacity="0.3"/>
+  <polygon points="2,20.3 12,22.5 12,23.9 2,21.7" fill="currentColor" opacity="0.3"/>
   <!-- Right face -->
-  <polygon points="22,19 12,24 12,22 22,17" fill="currentColor" opacity="0.25"/>
+  <polygon points="22,20.3 12,22.5 12,23.9 22,21.7" fill="currentColor" opacity="0.25"/>
 
-  <!-- Layer 4 — deep rock, slightly smaller -->
+  <!-- Layer 2 -->
   <!-- Top face -->
-  <polygon points="12,10.5 20,15 12,19.5 4,15" fill="currentColor" opacity="0.5"/>
+  <polygon points="12,12.1 22,14.3 12,16.5 2,14.3" fill="currentColor" opacity="0.55"/>
   <!-- Left face -->
-  <polygon points="4,15 12,19.5 12,17.5 4,13" fill="currentColor" opacity="0.45"/>
+  <polygon points="2,14.3 12,16.5 12,17.9 2,15.7" fill="currentColor" opacity="0.5"/>
   <!-- Right face -->
-  <polygon points="20,15 12,19.5 12,17.5 20,13" fill="currentColor" opacity="0.4"/>
+  <polygon points="22,14.3 12,16.5 12,17.9 22,15.7" fill="currentColor" opacity="0.45"/>
 
-  <!-- Layer 3 — aggregate/rock, smaller -->
+  <!-- Layer 3 -->
   <!-- Top face -->
-  <polygon points="12,7.5 18,11.5 12,15.5 6,11.5" fill="currentColor" opacity="0.65"/>
+  <polygon points="12,6.1 22,8.3 12,10.5 2,8.3" fill="currentColor" opacity="0.75"/>
   <!-- Left face -->
-  <polygon points="6,11.5 12,15.5 12,13.5 6,9.5" fill="currentColor" opacity="0.6"/>
+  <polygon points="2,8.3 12,10.5 12,11.9 2,9.7" fill="currentColor" opacity="0.7"/>
   <!-- Right face -->
-  <polygon points="18,11.5 12,15.5 12,13.5 18,9.5" fill="currentColor" opacity="0.55"/>
+  <polygon points="22,8.3 12,10.5 12,11.9 22,9.7" fill="currentColor" opacity="0.65"/>
 
-  <!-- Layer 2 — subsoil, smaller still -->
+  <!-- Layer 4 (top) -->
   <!-- Top face -->
-  <polygon points="12,5 16,8 12,11 8,8" fill="currentColor" opacity="0.8"/>
+  <polygon points="12,0.1 22,2.3 12,4.5 2,2.3" fill="currentColor" opacity="1"/>
   <!-- Left face -->
-  <polygon points="8,8 12,11 12,9.5 8,6.5" fill="currentColor" opacity="0.75"/>
+  <polygon points="2,2.3 12,4.5 12,5.9 2,3.7" fill="currentColor" opacity="0.95"/>
   <!-- Right face -->
-  <polygon points="16,8 12,11 12,9.5 16,6.5" fill="currentColor" opacity="0.7"/>
-
-  <!-- Layer 1 (top) — surface/topsoil, smallest -->
-  <!-- Top face -->
-  <polygon points="12,2.5 14.5,4 12,5.5 9.5,4" fill="currentColor" opacity="1"/>
-  <!-- Left face -->
-  <polygon points="9.5,4 12,5.5 12,4.5 9.5,3" fill="currentColor" opacity="0.95"/>
-  <!-- Right face -->
-  <polygon points="14.5,4 12,5.5 12,4.5 14.5,3" fill="currentColor" opacity="0.9"/>
+  <polygon points="22,2.3 12,4.5 12,5.9 22,3.7" fill="currentColor" opacity="0.9"/>
 </svg>
