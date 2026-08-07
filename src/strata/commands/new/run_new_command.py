@@ -563,6 +563,7 @@ class NewCommand(BaseCommand):
         errors are appended to ``self._errors`` but the generated files are
         *not* rolled back — the operator may edit and re-validate manually.
         """
+        from strata.controllers.lifecycle_controller import LifecycleController
         from strata.validators.platform_validator import PlatformValidator
 
         data = self._output_data or {}
@@ -589,6 +590,7 @@ class NewCommand(BaseCommand):
                     configuration_service=None,
                     repo_map=repo_map,
                     verify_digests=False,
+                    lifecycle_controller=LifecycleController(),
                 )
                 for phase_fn in (validator.before_validate, validator.validate, validator.after_validate):
                     if not phase_fn(self._work_path):

@@ -407,10 +407,11 @@ class GraphController(BaseController):
 
     def _validate_file(self, file_path: Path) -> tuple[str, list[str]]:
         """Validate a file and return (status, errors)."""
+        from strata.controllers.lifecycle_controller import LifecycleController
         from strata.validators.platform_validator import PlatformValidator
 
         try:
-            validator = PlatformValidator(file_path=file_path)
+            validator = PlatformValidator(file_path=file_path, lifecycle_controller=LifecycleController())
             if not validator.before_validate(self._work_path):
                 return "invalid", validator.get_errors()
             if not validator.validate(self._work_path):

@@ -8,6 +8,7 @@ import click
 import yaml
 
 from strata.commands.base_command import BaseCommand
+from strata.controllers.lifecycle_controller import LifecycleController
 from strata.validators.platform_validator import PlatformValidator
 
 
@@ -183,6 +184,7 @@ class ValidateCommand(BaseCommand):
             configuration_service=config_svc,
             repo_map=solution_repo_map,
             verify_digests=self._verify_digests,
+            lifecycle_controller=LifecycleController(),
         )
 
         work_path = self._work_path
