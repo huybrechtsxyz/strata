@@ -3,7 +3,7 @@
 import json
 
 from strata.models.sbom_model import CveAuditResultModel, CveFindingModel
-from strata.utils.audit_report import write_sarif, write_vex
+from strata.services.audit_report import write_sarif, write_vex
 
 # ---------------------------------------------------------------------------
 # Helpers

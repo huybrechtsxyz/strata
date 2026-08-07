@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from strata.integrations.base_integration import BaseIntegration
-from strata.integrations.capabilities import IIdentityProvider
 from strata.integrations.identity.aws_identity_integration import AwsIdentityIntegration
+from strata.models.capabilities import IIdentityProvider
 from strata.models.integration_model import IntegrationEndpointsSpecModel, IntegrationModel
 from strata.utils import identity_token_cache as cache
 
@@ -72,25 +72,18 @@ class TestConfig:
         monkeypatch.delenv("AWS_DEFAULT_REGION", raising=False)
         aws_cli = MagicMock()
         aws_cli.get_region.return_value = "eu-west-1"
-        svc = MagicMock()
-        svc.is_initialized.return_value = True
-        svc.get_integrations_with_capability.return_value = ["aws"]
-        svc.get_integration.return_value = aws_cli
 
         i = AwsIdentityIntegration(_cfg())
-        with patch("strata.services.integration_service.IntegrationService.get_instance", return_value=svc):
-            assert i._region == "eu-west-1"
+        i.set_sibling_resolver(lambda capability: aws_cli)
+        assert i._region == "eu-west-1"
 
     def test_no_region_available_raises(self, monkeypatch):
         monkeypatch.delenv("AWS_DEFAULT_REGION", raising=False)
-        svc = MagicMock()
-        svc.is_initialized.return_value = True
-        svc.get_integrations_with_capability.return_value = []
 
         i = AwsIdentityIntegration(_cfg())
-        with patch("strata.services.integration_service.IntegrationService.get_instance", return_value=svc):
-            with pytest.raises(ValueError):
-                _ = i._region
+        i.set_sibling_resolver(lambda capability: None)
+        with pytest.raises(ValueError):
+            _ = i._region
 
 
 class TestCheckAuthNoSession:

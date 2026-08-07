@@ -37,8 +37,8 @@ email``) is sufficient for authenticating a human for `actor` resolution. Add an
 than just an authenticated identity.
 """
 
-from strata.integrations.capabilities import IIdentityProvider
 from strata.integrations.identity.generic_oidc_identity_integration import GenericOidcIdentityIntegration
+from strata.models.capabilities import IIdentityProvider
 
 
 class Auth0IdentityIntegration(GenericOidcIdentityIntegration):

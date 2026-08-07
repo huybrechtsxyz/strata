@@ -8,9 +8,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from strata.integrations.base_integration import BaseIntegration
-from strata.integrations.capabilities import IIdentityProvider
 from strata.integrations.identity.github_oauth_identity_integration import GitHubOAuthIdentityIntegration
 from strata.models.auth_models import AuthenticationModel, OAuth2AuthenticationModel
+from strata.models.capabilities import IIdentityProvider
 from strata.models.integration_model import IntegrationEndpointsSpecModel, IntegrationModel
 from strata.utils import identity_token_cache as cache
 

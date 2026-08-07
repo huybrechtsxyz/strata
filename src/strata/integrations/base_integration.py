@@ -3,7 +3,7 @@
 import os
 import threading
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from packaging import version
 
@@ -99,6 +99,7 @@ class BaseIntegration(ABC):
         self._is_available: Optional[bool] = None
         self._version: Optional[str] = None
         self._info: Optional[str] = None
+        self._sibling_resolver: Optional[Callable[[type], Optional[Any]]] = None
         self._initialized = True
 
         logger.debug(
@@ -106,6 +107,18 @@ class BaseIntegration(ABC):
             integration_name=self.integration_name,
             type=self.integration_type,
         )
+
+    def set_sibling_resolver(self, resolver: Callable[[type], Optional[Any]]) -> None:
+        """Inject a callback that finds another available, capability-implementing integration.
+
+        Used by identity-provider integrations to reuse an already-authenticated
+        sibling integration's session (e.g. ``azure_cli``, ``gcloud_cli``) without this
+        ``integrations/`` module importing ``services/`` directly — per ADR-0003,
+        ``integrations/`` must not depend on ``services/``. The resolver itself
+        (``find_available_integration_with_capability``) lives in ``controllers/`` and
+        is injected by ``IdentityController``.
+        """
+        self._sibling_resolver = resolver
 
     @classmethod
     def _get_instance_key_static(cls, class_ref, *args, **kwargs) -> str:

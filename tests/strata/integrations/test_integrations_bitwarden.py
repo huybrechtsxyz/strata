@@ -8,8 +8,8 @@ import pytest
 from strata.exceptions import SecretStoreUnavailableError
 from strata.integrations.base_integration import BaseIntegration
 from strata.integrations.bitwarden import BitwardenIntegration
-from strata.integrations.capabilities import ISecretStore
 from strata.models.auth_models import AuthenticationModel
+from strata.models.capabilities import ISecretStore
 from strata.models.integration_model import IntegrationModel
 
 

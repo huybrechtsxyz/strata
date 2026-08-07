@@ -3,8 +3,8 @@
 from unittest.mock import patch
 
 from strata.integrations.base_integration import BaseIntegration
-from strata.integrations.capabilities import IContainerTool
 from strata.integrations.docker import DockerIntegration
+from strata.models.capabilities import IContainerTool
 from strata.models.integration_model import IntegrationModel
 
 

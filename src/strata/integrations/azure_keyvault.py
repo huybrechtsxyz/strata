@@ -9,9 +9,9 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from strata.exceptions import SecretStoreUnavailableError
-from strata.integrations.capabilities import ISecretStore
 from strata.integrations.store_integration import StoreIntegration
 from strata.logger import get_logger
+from strata.models.capabilities import ISecretStore
 from strata.models.integration_model import IntegrationModel
 from strata.utils.secret_metadata import SecretMetadata
 

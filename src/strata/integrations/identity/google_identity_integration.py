@@ -32,9 +32,9 @@ extra beyond a ``gcloud_cli`` integration already existing in the same workspace
 
 from typing import Any, Dict, Optional, Tuple
 
-from strata.integrations.capabilities import IGCloudTool, IIdentityProvider
 from strata.integrations.identity.generic_oidc_identity_integration import GenericOidcIdentityIntegration
 from strata.logger import get_logger
+from strata.models.capabilities import IGCloudTool, IIdentityProvider
 from strata.utils.jwt_utils import decode_payload_unverified
 
 logger = get_logger(__name__)
@@ -59,23 +59,19 @@ class GoogleIdentityIntegration(GenericOidcIdentityIntegration):
     # ------------------------------------------------------------------
 
     def _find_authenticated_gcloud_cli(self):
-        """Return an already-configured, authenticated `gcloud_cli` integration, or None."""
-        try:
-            from strata.services.integration_service import IntegrationService
+        """Return an already-configured, authenticated `gcloud_cli` integration, or None.
 
-            svc = IntegrationService.get_instance()
-            if not svc.is_initialized():
-                svc.initialize_integrations()
-            for name in svc.get_integrations_with_capability(IGCloudTool):
-                integration = svc.get_integration(name)
-                if integration is None:
-                    continue
-                ok, _ = integration.ensure_available()
-                if ok:
-                    return integration
+        Uses the resolver injected by `IdentityController` (see `set_sibling_resolver`)
+        rather than looking up `IntegrationService` directly — this module must not
+        depend on `services/` (ADR-0003).
+        """
+        if self._sibling_resolver is None:
+            return None
+        try:
+            return self._sibling_resolver(IGCloudTool)
         except Exception as exc:
             logger.debug("google_identity_cli_reuse_lookup_failed", error=str(exc))
-        return None
+            return None
 
     def _reuse_identity_token(self) -> Optional[str]:
         gcloud_cli = self._find_authenticated_gcloud_cli()

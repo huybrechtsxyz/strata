@@ -5,8 +5,8 @@ import re
 from typing import Any, Dict, List, Tuple
 
 from strata.integrations.base_integration import BaseIntegration
-from strata.integrations.capabilities import ICostEstimator
 from strata.logger import get_logger
+from strata.models.capabilities import ICostEstimator
 from strata.models.integration_model import IntegrationModel
 from strata.utils.system import run_command
 

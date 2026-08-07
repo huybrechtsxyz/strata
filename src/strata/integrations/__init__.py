@@ -7,15 +7,6 @@ from strata.integrations.base_integration import BaseIntegration
 
 # Concrete integrations
 from strata.integrations.bitwarden import BitwardenIntegration
-from strata.integrations.capabilities import (
-    IContainerTool,
-    IFeatureStore,
-    IInfrastructureTool,
-    IKVStore,
-    IRepositoryTool,
-    ISecretStore,
-    IVariableStore,
-)
 from strata.integrations.docker import DockerIntegration
 from strata.integrations.etcd import EtcdIntegration
 from strata.integrations.factory import IntegrationFactory
@@ -30,6 +21,15 @@ from strata.integrations.opentofu import OpenTofuIntegration
 from strata.integrations.registry import IntegrationRegistry
 from strata.integrations.store_integration import StoreIntegration
 from strata.integrations.terraform import TerraformIntegration
+from strata.models.capabilities import (
+    IContainerTool,
+    IFeatureStore,
+    IInfrastructureTool,
+    IKVStore,
+    IRepositoryTool,
+    ISecretStore,
+    IVariableStore,
+)
 
 __all__ = [
     # Base classes

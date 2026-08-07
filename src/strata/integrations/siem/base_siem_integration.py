@@ -21,8 +21,8 @@ except ImportError:  # pragma: no cover
     requests = None  # type: ignore[assignment]
 
 from strata.integrations.base_integration import BaseIntegration
-from strata.integrations.capabilities import ISiemSink
 from strata.logger import get_logger
+from strata.models.capabilities import ISiemSink
 
 logger = get_logger(__name__)
 

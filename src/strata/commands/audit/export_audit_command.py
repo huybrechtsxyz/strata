@@ -133,8 +133,8 @@ class ExportAuditCommand(SchemaBaseCommand):
 
     def _forward_to_siem(self) -> bool:
         from strata.builders.sbom.deps_collector import DependencyFileCollector
-        from strata.integrations.capabilities import ISiemSink
         from strata.integrations.factory import IntegrationFactory
+        from strata.models.capabilities import ISiemSink
 
         integration_model = self._find_integration_model(self._siem_name)
         if not integration_model:

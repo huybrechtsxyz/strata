@@ -71,28 +71,20 @@ def _resolve_control_plane_identity() -> Optional[str]:
 def _resolve_cloud_cli_identity() -> Optional[str]:
     """Step 1 — whichever configured cloud CLI is authenticated, checked azure/aws/gcloud."""
     try:
-        from strata.integrations.capabilities import IAWSTool, IAzureTool, IGCloudTool
-        from strata.services.integration_service import IntegrationService
-
-        svc = IntegrationService.get_instance()
-        if not svc.is_initialized():
-            svc.initialize_integrations()
+        from strata.controllers.integration_lookup import find_available_integration_with_capability
+        from strata.models.capabilities import IAWSTool, IAzureTool, IGCloudTool
 
         for capability, extractor in (
             (IAzureTool, _extract_azure_identity),
             (IAWSTool, _extract_aws_identity),
             (IGCloudTool, _extract_gcloud_identity),
         ):
-            for name in svc.get_integrations_with_capability(capability):
-                integration = svc.get_integration(name)
-                if integration is None:
-                    continue
-                ok, _ = integration.ensure_available()
-                if not ok:
-                    continue
-                identity = extractor(integration)
-                if identity:
-                    return identity
+            integration = find_available_integration_with_capability(capability)
+            if integration is None:
+                continue
+            identity = extractor(integration)
+            if identity:
+                return identity
     except Exception as exc:
         logger.debug("actor_cloud_cli_resolution_failed", error=str(exc))
     return None

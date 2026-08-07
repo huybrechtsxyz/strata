@@ -5,14 +5,14 @@ from strata.integrations.azure_appconfig import AzureAppConfigIntegration
 from strata.integrations.azure_keyvault import AzureKeyVaultIntegration
 from strata.integrations.base_integration import BaseIntegration
 from strata.integrations.bitwarden import BitwardenIntegration
-from strata.integrations.capabilities import (
+from strata.integrations.hashicorp_consul import ConsulIntegration
+from strata.integrations.hashicorp_vault import VaultIntegration
+from strata.models.capabilities import (
     IFeatureStore,
     IKVStore,
     ISecretStore,
     IVariableStore,
 )
-from strata.integrations.hashicorp_consul import ConsulIntegration
-from strata.integrations.hashicorp_vault import VaultIntegration
 from strata.models.integration_model import IntegrationEndpointsSpecModel, IntegrationModel
 
 

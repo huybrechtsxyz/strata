@@ -8,7 +8,7 @@ import pytest
 from strata.exceptions import SecretStoreUnavailableError
 from strata.integrations.azure_keyvault import AzureKeyVaultIntegration
 from strata.integrations.base_integration import BaseIntegration
-from strata.integrations.capabilities import ISecretStore
+from strata.models.capabilities import ISecretStore
 from strata.models.integration_model import IntegrationEndpointsSpecModel, IntegrationModel
 
 

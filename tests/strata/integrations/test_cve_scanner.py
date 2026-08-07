@@ -311,7 +311,7 @@ class TestParseVersion:
 
 class TestCveScannerCapability:
     def test_icve_scanner_in_capabilities(self) -> None:
-        from strata.integrations.capabilities import ICveScanner
+        from strata.models.capabilities import ICveScanner
 
         caps = CveScannerIntegration.CAPABILITIES
         assert ICveScanner in caps, "CveScannerIntegration.CAPABILITIES must include ICveScanner"

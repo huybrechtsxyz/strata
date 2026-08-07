@@ -4,8 +4,8 @@
 from unittest.mock import MagicMock, patch
 
 from strata.integrations.base_integration import BaseIntegration
-from strata.integrations.capabilities import IKVStore, IVariableStore
 from strata.integrations.etcd import EtcdIntegration
+from strata.models.capabilities import IKVStore, IVariableStore
 from strata.models.integration_model import IntegrationEndpointsSpecModel, IntegrationModel
 
 

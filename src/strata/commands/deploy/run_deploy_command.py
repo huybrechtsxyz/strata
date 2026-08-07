@@ -1149,8 +1149,8 @@ class RunDeployCommand(BaseDeployCommand):
         integration_models = getattr(getattr(self._configuration_service.model, "spec", None), "integrations", []) or []
         integration_map = {m.name: m for m in integration_models}
 
-        from strata.integrations.capabilities import ISiemSink
         from strata.integrations.factory import IntegrationFactory
+        from strata.models.capabilities import ISiemSink
 
         for sink in audit_config.sinks:
             if not sink.enabled or not sink.integration:

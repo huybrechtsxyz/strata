@@ -205,6 +205,7 @@ ignore_missing_imports = true
 
 [tool.importlinter]
 root_package = "strata"
+exclude_type_checking_imports = "True"
 
 [[tool.importlinter.contracts]]
 name = "Layered architecture (ADR-0003)"
@@ -212,9 +213,11 @@ type = "layers"
 layers = [
     "strata.commands",
     "strata.controllers",
-    "strata.validators | strata.builders | strata.deployers",
+    "strata.builders | strata.deployers",
+    "strata.validators",
     "strata.services",
-    "strata.integrations | strata.models",
+    "strata.integrations",
+    "strata.models",
     "strata.utils",
 ]
 

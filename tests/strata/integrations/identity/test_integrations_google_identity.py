@@ -3,7 +3,7 @@
 
 import base64
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -41,14 +41,9 @@ def _isolate(tmp_path, monkeypatch):
     BaseIntegration._instances.clear()
 
 
-def _mock_service(gcloud_cli_integration=None):
-    if gcloud_cli_integration is not None:
-        gcloud_cli_integration.ensure_available.return_value = (True, "")
-    svc = MagicMock()
-    svc.is_initialized.return_value = True
-    svc.get_integrations_with_capability.return_value = ["gcloud"] if gcloud_cli_integration else []
-    svc.get_integration.return_value = gcloud_cli_integration
-    return svc
+def _resolver(gcloud_cli_integration=None):
+    """Simulate the `IdentityController`-injected sibling resolver (see azure identity tests)."""
+    return lambda capability: gcloud_cli_integration
 
 
 class TestIssuer:
@@ -62,10 +57,9 @@ class TestCheckAuthReuse:
         i = GoogleIdentityIntegration(_cfg())
         gcloud_cli = MagicMock()
         gcloud_cli.get_identity_token.return_value = _id_token()
-        svc = _mock_service(gcloud_cli_integration=gcloud_cli)
+        i.set_sibling_resolver(_resolver(gcloud_cli))
 
-        with patch("strata.services.integration_service.IntegrationService.get_instance", return_value=svc):
-            ok, detail = i.check_auth()
+        ok, detail = i.check_auth()
 
         assert ok is True
         assert "dev@example.com" in detail
@@ -73,28 +67,22 @@ class TestCheckAuthReuse:
 
     def test_falls_back_to_oidc_when_gcloud_cli_not_configured(self):
         i = GoogleIdentityIntegration(_cfg())
-        svc = _mock_service(gcloud_cli_integration=None)
+        i.set_sibling_resolver(_resolver(None))
 
-        with patch("strata.services.integration_service.IntegrationService.get_instance", return_value=svc):
-            ok, detail = i.check_auth()
+        ok, detail = i.check_auth()
 
         assert ok is False
         assert "--login" in detail
 
     def test_falls_back_when_gcloud_cli_not_authenticated(self):
         i = GoogleIdentityIntegration(_cfg())
-        gcloud_cli = MagicMock()
-        gcloud_cli.ensure_available.return_value = (False, "not logged in")
-        svc = MagicMock()
-        svc.is_initialized.return_value = True
-        svc.get_integrations_with_capability.return_value = ["gcloud"]
-        svc.get_integration.return_value = gcloud_cli
+        # The resolver only ever returns an *available* integration, so an unauthenticated
+        # gcloud_cli is indistinguishable from "not configured" — resolver returns None.
+        i.set_sibling_resolver(_resolver(None))
 
-        with patch("strata.services.integration_service.IntegrationService.get_instance", return_value=svc):
-            ok, _ = i.check_auth()
+        ok, _ = i.check_auth()
 
         assert ok is False
-        gcloud_cli.get_identity_token.assert_not_called()
 
 
 class TestLoginReuse:
@@ -102,10 +90,9 @@ class TestLoginReuse:
         i = GoogleIdentityIntegration(_cfg())
         gcloud_cli = MagicMock()
         gcloud_cli.get_identity_token.return_value = _id_token()
-        svc = _mock_service(gcloud_cli_integration=gcloud_cli)
+        i.set_sibling_resolver(_resolver(gcloud_cli))
 
-        with patch("strata.services.integration_service.IntegrationService.get_instance", return_value=svc):
-            ok, detail = i.login()
+        ok, detail = i.login()
 
         assert ok is True
         assert "Reused existing gcloud CLI login" in detail
@@ -117,20 +104,18 @@ class TestGetAccessTokenReuse:
         i = GoogleIdentityIntegration(_cfg())
         gcloud_cli = MagicMock()
         gcloud_cli.get_identity_token.return_value = _id_token()
-        svc = _mock_service(gcloud_cli_integration=gcloud_cli)
+        i.set_sibling_resolver(_resolver(gcloud_cli))
 
-        with patch("strata.services.integration_service.IntegrationService.get_instance", return_value=svc):
-            token = i.get_access_token()
+        token = i.get_access_token()
 
         assert token == _id_token()
 
     def test_falls_back_to_cached_oidc_token_when_no_reuse(self):
         i = GoogleIdentityIntegration(_cfg())
-        svc = _mock_service(gcloud_cli_integration=None)
+        i.set_sibling_resolver(_resolver(None))
         cache.save_token(i.integration_name, {"access_token": "oidc-token", "expires_at": 9999999999, "claims": {}})
 
-        with patch("strata.services.integration_service.IntegrationService.get_instance", return_value=svc):
-            assert i.get_access_token() == "oidc-token"
+        assert i.get_access_token() == "oidc-token"
 
 
 class TestGetIdentityClaimsReuse:
@@ -138,20 +123,18 @@ class TestGetIdentityClaimsReuse:
         i = GoogleIdentityIntegration(_cfg())
         gcloud_cli = MagicMock()
         gcloud_cli.get_identity_token.return_value = _id_token(email="dev@example.com", sub="u123")
-        svc = _mock_service(gcloud_cli_integration=gcloud_cli)
+        i.set_sibling_resolver(_resolver(gcloud_cli))
 
-        with patch("strata.services.integration_service.IntegrationService.get_instance", return_value=svc):
-            claims = i.get_identity_claims()
+        claims = i.get_identity_claims()
 
         assert claims == {"email": "dev@example.com", "preferred_username": "dev@example.com", "sub": "u123"}
 
     def test_falls_back_to_cached_claims_when_no_reuse(self):
         i = GoogleIdentityIntegration(_cfg())
-        svc = _mock_service(gcloud_cli_integration=None)
+        i.set_sibling_resolver(_resolver(None))
         cache.save_token(
             i.integration_name,
             {"access_token": "tok", "expires_at": 9999999999, "claims": {"sub": "u1"}},
         )
 
-        with patch("strata.services.integration_service.IntegrationService.get_instance", return_value=svc):
-            assert i.get_identity_claims() == {"sub": "u1"}
+        assert i.get_identity_claims() == {"sub": "u1"}

@@ -583,7 +583,7 @@ class DoctorSlnCommand(BaseCommand):
         results: List[CheckResult] = []
         try:
             from strata.controllers.solution_controller import SolutionController
-            from strata.integrations.capabilities import IIdentityProvider
+            from strata.models.capabilities import IIdentityProvider
             from strata.services.configuration_service import ConfigurationService
             from strata.services.integration_service import IntegrationService
 

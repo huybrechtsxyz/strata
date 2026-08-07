@@ -6,8 +6,8 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 
 from strata.integrations.base_integration import BaseIntegration
-from strata.integrations.capabilities import IRepositoryTool
 from strata.logger import get_logger
+from strata.models.capabilities import IRepositoryTool
 from strata.models.integration_model import IntegrationModel
 from strata.utils.system import CommandResult
 

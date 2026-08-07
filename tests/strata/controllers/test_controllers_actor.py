@@ -149,7 +149,7 @@ def _mock_integration_service(capability_map):
 
 class TestResolveCloudCliIdentity:
     def test_prefers_azure_over_aws_and_gcloud(self):
-        from strata.integrations.capabilities import IAWSTool, IAzureTool, IGCloudTool
+        from strata.models.capabilities import IAWSTool, IAzureTool, IGCloudTool
 
         azure = MagicMock()
         azure.ensure_available.return_value = (True, "")
@@ -170,7 +170,7 @@ class TestResolveCloudCliIdentity:
         aws.get_identity.assert_not_called()
 
     def test_falls_back_to_aws_when_azure_unavailable(self):
-        from strata.integrations.capabilities import IAWSTool, IAzureTool, IGCloudTool
+        from strata.models.capabilities import IAWSTool, IAzureTool, IGCloudTool
 
         azure = MagicMock()
         azure.ensure_available.return_value = (False, "not logged in")
@@ -190,7 +190,7 @@ class TestResolveCloudCliIdentity:
             assert _resolve_cloud_cli_identity() == "alice"
 
     def test_falls_back_to_gcloud_when_azure_and_aws_unavailable(self):
-        from strata.integrations.capabilities import IAWSTool, IAzureTool, IGCloudTool
+        from strata.models.capabilities import IAWSTool, IAzureTool, IGCloudTool
 
         aws = MagicMock()
         aws.ensure_available.return_value = (False, "")
@@ -210,23 +210,24 @@ class TestResolveCloudCliIdentity:
             assert _resolve_cloud_cli_identity() == "gcp-user@example.com"
 
     def test_returns_none_when_nothing_configured(self):
-        from strata.integrations.capabilities import IAWSTool, IAzureTool, IGCloudTool
+        from strata.models.capabilities import IAWSTool, IAzureTool, IGCloudTool
 
         svc = _mock_integration_service({IAzureTool: [], IAWSTool: [], IGCloudTool: []})
         with patch("strata.services.integration_service.IntegrationService.get_instance", return_value=svc):
             assert _resolve_cloud_cli_identity() is None
 
     def test_initializes_integrations_if_not_already(self):
-        from strata.integrations.capabilities import IAWSTool, IAzureTool, IGCloudTool
+        from strata.models.capabilities import IAWSTool, IAzureTool, IGCloudTool
 
         svc = _mock_integration_service({IAzureTool: [], IAWSTool: [], IGCloudTool: []})
         svc.is_initialized.return_value = False
         with patch("strata.services.integration_service.IntegrationService.get_instance", return_value=svc):
             _resolve_cloud_cli_identity()
-        svc.initialize_integrations.assert_called_once()
+        # Called once per capability lookup (azure/aws/gcloud) via the shared resolver helper.
+        svc.initialize_integrations.assert_called()
 
     def test_skips_integration_that_resolves_to_none_by_name(self):
-        from strata.integrations.capabilities import IAWSTool, IAzureTool, IGCloudTool
+        from strata.models.capabilities import IAWSTool, IAzureTool, IGCloudTool
 
         svc = _mock_integration_service({IAzureTool: [("azure_cli", None)], IAWSTool: [], IGCloudTool: []})
         with patch("strata.services.integration_service.IntegrationService.get_instance", return_value=svc):

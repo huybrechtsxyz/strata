@@ -161,7 +161,7 @@ class TestGetEstimator:
             assert ctrl._get_estimator() is None
 
     def test_returns_estimator_when_available(self):
-        from strata.integrations.capabilities import ICostEstimator
+        from strata.models.capabilities import ICostEstimator
 
         mock_estimator = MagicMock(spec=ICostEstimator)
         ctrl = CostController()
@@ -228,7 +228,7 @@ class TestIsAutoDiffEnabled:
         mock_service.get_integrations_with_capability.assert_called_once()
 
     def test_true_when_cost_integration_declared_and_enabled(self):
-        from strata.integrations.capabilities import ICostEstimator
+        from strata.models.capabilities import ICostEstimator
 
         ctrl = CostController()
         mock_service = MagicMock()

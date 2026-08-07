@@ -32,8 +32,8 @@ import urllib.request
 from typing import Any, Dict, Optional, Tuple
 
 from strata.integrations.base_integration import BaseIntegration
-from strata.integrations.capabilities import IIdentityProvider
 from strata.logger import get_logger
+from strata.models.capabilities import IIdentityProvider
 from strata.utils.identity_token_cache import clear_token, load_token, save_token
 
 logger = get_logger(__name__)

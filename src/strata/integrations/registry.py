@@ -3,7 +3,8 @@
 import threading
 from typing import Any, Dict, List, Optional, Set, Tuple, Type
 
-from strata.integrations.capabilities import (
+from strata.logger import get_logger
+from strata.models.capabilities import (
     CAPABILITY_REGISTRY,
     IContainerTool,
     ICveScanner,
@@ -16,7 +17,6 @@ from strata.integrations.capabilities import (
     IVariableStore,
     get_capability_name,
 )
-from strata.logger import get_logger
 
 logger = get_logger(__name__)
 

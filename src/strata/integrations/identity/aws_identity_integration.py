@@ -36,8 +36,8 @@ import urllib.request
 from typing import Any, Dict, Optional, Tuple
 
 from strata.integrations.base_integration import BaseIntegration
-from strata.integrations.capabilities import IAWSTool, IIdentityProvider
 from strata.logger import get_logger
+from strata.models.capabilities import IAWSTool, IIdentityProvider
 from strata.utils.identity_token_cache import clear_token, load_token, save_token
 
 logger = get_logger(__name__)
@@ -97,20 +97,15 @@ class AwsIdentityIntegration(BaseIntegration):
         if region:
             return region
 
-        try:
-            from strata.services.integration_service import IntegrationService
-
-            svc = IntegrationService.get_instance()
-            if not svc.is_initialized():
-                svc.initialize_integrations()
-            for name in svc.get_integrations_with_capability(IAWSTool):
-                integration = svc.get_integration(name)
+        if self._sibling_resolver is not None:
+            try:
+                integration = self._sibling_resolver(IAWSTool)
                 if integration is not None:
                     region = integration.get_region()
                     if region:
                         return region
-        except Exception as exc:
-            logger.debug("aws_identity_region_lookup_failed", error=str(exc))
+            except Exception as exc:
+                logger.debug("aws_identity_region_lookup_failed", error=str(exc))
 
         raise ValueError(
             f"'{self.integration_name}': could not resolve AWS region. "

@@ -393,7 +393,7 @@ class BaseBuildCommand(BaseCommand):
         # -- Write audit report files (VEX / SARIF) --------------------------
         audit_report_formats = getattr(self, "_audit_report", None)
         if audit_report_formats and sbom_path:
-            from strata.utils.audit_report import write_sarif, write_vex
+            from strata.services.audit_report import write_sarif, write_vex
 
             strata_version = self._get_strata_version()
             report_dir = sbom_path.parent

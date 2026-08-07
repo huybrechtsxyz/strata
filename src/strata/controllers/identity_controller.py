@@ -20,23 +20,27 @@ class IdentityController(BaseController):
 
     def _get_integration(self, name: Optional[str] = None):
         """Resolve an `identity`-capable integration by name, or the first one declared."""
-        from strata.integrations.capabilities import IIdentityProvider
+        from strata.controllers.integration_lookup import find_available_integration_with_capability
+        from strata.models.capabilities import IIdentityProvider
         from strata.services.integration_service import IntegrationService
 
         svc = IntegrationService.get_instance()
         if not svc.is_initialized():
             svc.initialize_integrations()
 
+        integration = None
         if name:
             integration = svc.get_integration(name)
-            return integration
+        else:
+            names = svc.get_integrations_with_capability(IIdentityProvider)
+            for candidate in names:
+                integration = svc.get_integration(candidate)
+                if integration is not None:
+                    break
 
-        names = svc.get_integrations_with_capability(IIdentityProvider)
-        for candidate in names:
-            integration = svc.get_integration(candidate)
-            if integration is not None:
-                return integration
-        return None
+        if integration is not None and hasattr(integration, "set_sibling_resolver"):
+            integration.set_sibling_resolver(find_available_integration_with_capability)
+        return integration
 
     def ensure_logged_in(self, name: Optional[str] = None) -> Tuple[bool, str]:
         """Check for a valid session and lazily log in if none exists.

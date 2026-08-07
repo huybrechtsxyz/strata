@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from strata.controllers.base_controller import BaseController
-from strata.integrations.capabilities import ICostEstimator
+from strata.models.capabilities import ICostEstimator
 from strata.models.common_models import ProvisionerType
 from strata.utils.config import get_cost_cache_dir
 
