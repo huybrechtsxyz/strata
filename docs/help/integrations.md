@@ -11,23 +11,24 @@ Each integration connects a strata workspace to an external system: a provisione
 
 ## Integration Types
 
-| Type                 | Purpose                    | Requires auth?                    |
-| -------------------- | -------------------------- | --------------------------------- |
-| `terraform`          | IaC provisioner            | Yes (cloud CLI or API key)        |
-| `ansible`            | Config management          | Yes (SSH key or password)         |
-| `docker`             | Container runtime          | Sometimes (Docker daemon)         |
-| `helm`               | Kubernetes package manager | Sometimes (kubeconfig)            |
-| `ai_agent`           | LLM for advisory analysis  | Yes (API key or azure_cli)        |
-| `azure_keyvault`     | Secret store (Azure)       | Yes (azure_cli)                   |
-| `aws_secretsmanager` | Secret store (AWS)         | Yes (aws_cli)                     |
-| `bitwarden`          | Secret store (self-hosted) | Yes (API token)                   |
-| `hashicorp_vault`    | Secret store (self-hosted) | Yes (JWT or token)                |
-| `sentinel`           | SIEM (audit sink)          | Yes (API key or managed identity) |
-| `splunk`             | SIEM (audit sink)          | Yes (API token)                   |
-| `elk`                | SIEM (audit sink)          | Yes (HTTP auth)                   |
-| `checkov`            | Policy-as-code scanner     | No                                |
-| `opa`                | Open Policy Agent          | Yes (API if remote)               |
-| `infracost`          | Cost estimation            | Yes (API key)                     |
+| Type                                                                                      | Purpose                                        | Requires auth?                    |
+| ----------------------------------------------------------------------------------------- | ---------------------------------------------- | --------------------------------- |
+| `terraform`                                                                               | IaC provisioner                                | Yes (cloud CLI or API key)        |
+| `ansible`                                                                                 | Config management                              | Yes (SSH key or password)         |
+| `docker`                                                                                  | Container runtime                              | Sometimes (Docker daemon)         |
+| `helm`                                                                                    | Kubernetes package manager                     | Sometimes (kubeconfig)            |
+| `ai_agent`                                                                                | LLM for advisory analysis                      | Yes (API key or azure_cli)        |
+| `azure_keyvault`                                                                          | Secret store (Azure)                           | Yes (azure_cli)                   |
+| `aws_secretsmanager`                                                                      | Secret store (AWS)                             | Yes (aws_cli)                     |
+| `bitwarden`                                                                               | Secret store (self-hosted)                     | Yes (API token)                   |
+| `hashicorp_vault`                                                                         | Secret store (self-hosted)                     | Yes (JWT or token)                |
+| `sentinel`                                                                                | SIEM (audit sink)                              | Yes (API key or managed identity) |
+| `splunk`                                                                                  | SIEM (audit sink)                              | Yes (API token)                   |
+| `elk`                                                                                     | SIEM (audit sink)                              | Yes (HTTP auth)                   |
+| `checkov`                                                                                 | Policy-as-code scanner                         | No                                |
+| `opa`                                                                                     | Open Policy Agent                              | Yes (API if remote)               |
+| `infracost`                                                                               | Cost estimation                                | Yes (API key)                     |
+| `azure_ad` / `google` / `aws_identity_center` / `auth0` / `github_oauth` / `generic_oidc` | Identity provider (control-plane / OIDC login) | Yes (OIDC/OAuth2 device flow)     |
 
 ---
 
@@ -78,4 +79,5 @@ spec:
 - `strata help --topic terraform` — Terraform provisioner
 - `strata help --topic ansible` — Ansible provisioner
 - `strata help --topic azure_keyvault` — Azure secret store
+- `strata help --topic identity` — CLI login to a control plane or any OIDC service
 - `strata help --topic bitwarden` — Bitwarden secret store

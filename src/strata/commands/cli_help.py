@@ -33,6 +33,10 @@ _TOPICS: dict[str, tuple[str, str]] = {
     "gates": ("Hand-off gates for approval, cost review, verification, scheduled deploys", "gates.md"),
     "audit": ("Deploy-log and SIEM integration (Sentinel, Splunk, ELK, OTel)", "audit.md"),
     "workitem": ("Work items: deployment hand-off gates, approvals, and the deploy+resume workflow", "workitem.md"),
+    "identity": (
+        "CLI login to a control plane or any OIDC service (Azure AD, Google, AWS, Auth0, GitHub, generic OIDC)",
+        "identity.md",
+    ),
     # Platform kinds
     "deployment": ("Orchestrates workspace + environments into a deployable unit", "deployment.md"),
     "environment": ("Configuration set for a specific deployment stage", "environment.md"),
