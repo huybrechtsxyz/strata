@@ -11,7 +11,15 @@ import click
 
 from strata.controllers.integration_controller import IntegrationController
 from strata.controllers.solution_controller import SolutionController
-from strata.logger import audit, configure_audit_log, get_logger, is_audit_configured, shutdown_audit
+from strata.logger import (
+    audit,
+    configure_audit_log,
+    get_audit_log_source,
+    get_configured_audit_log_path,
+    get_logger,
+    is_audit_configured,
+    shutdown_audit,
+)
 from strata.logger.context import set_context
 from strata.logger.logger import reconfigure_logging
 from strata.utils.config import (
@@ -325,6 +333,10 @@ class BaseCommand:
             # Load and merge configfile_paths from active profile
             self._load_config_sources()
 
+            # Phase 1: reconfigure the audit journal from spec.audit.journal now that
+            # configuration is loaded (ADR-0066). No-op if logging.yaml already claimed it.
+            self._apply_audit_journal_config()
+
             if show_header and self._is_console_output():
                 self.show_console_header()
 
@@ -394,6 +406,7 @@ class BaseCommand:
             self._start_session_operation()
             self._load_env_sources()
             self._load_config_sources()
+            self._apply_audit_journal_config()
 
             if show_header and self._is_console_output():
                 self.show_console_header()
@@ -904,6 +917,57 @@ class BaseCommand:
         except Exception as e:
             # Config loading must never block command execution
             self.logger.debug(f"Failed to load config sources: {e}")
+
+    def _apply_audit_journal_config(self) -> None:
+        """Reconfigure the audit journal from ``spec.audit.journal``, if present (ADR-0066).
+
+        This is the second of the two bootstrap phases: the first (in ``_initialize()``,
+        before configuration is loaded) opens the journal with built-in defaults so early
+        failures still produce a record. This phase runs once ``_load_config_sources()``
+        has populated ``ConfigurationService``, and re-opens the journal per
+        ``spec.audit.journal`` if one is declared.
+
+        A no-op when ``.strata/logging.yaml``'s ``audit:`` section already configured the
+        journal — that is a machine-local override and outranks the committed
+        ``spec.audit.journal`` (precedence: ``spec.audit.journal`` < ``logging.yaml`` <
+        built-in default). Never raises: a broken or absent audit config here should not
+        block the command, it should just leave the bootstrap defaults in place.
+        """
+        if get_audit_log_source() == "logging_yaml":
+            return
+        try:
+            from strata.services.configuration_service import ConfigurationService
+
+            config_model = ConfigurationService.get_instance().model
+            audit_cfg = getattr(getattr(config_model, "spec", None), "audit", None)
+            journal = audit_cfg.journal if audit_cfg else None
+        except Exception as e:
+            self.logger.debug(f"Failed to resolve spec.audit.journal (non-fatal): {e}")
+            return
+        if journal is None:
+            return
+
+        kwargs: Dict[str, Any] = {"source": "spec_audit"}
+        if journal.path is not None:
+            kwargs["log_path"] = str(resolve_path(str(self._work_path), journal.path))
+        else:
+            # Preserve the path already in effect from bootstrap phase — otherwise
+            # setting only e.g. `rotation` here would silently reset the path to
+            # configure_audit_log()'s own default (relative to CWD, not work_path).
+            kwargs["log_path"] = get_configured_audit_log_path() or str(get_audit_log_path(self._work_path))
+        if journal.rotation is not None:
+            kwargs["rotation"] = journal.rotation
+        if journal.max_bytes is not None:
+            kwargs["max_bytes"] = journal.max_bytes
+        if journal.backup_count is not None:
+            kwargs["backup_count"] = journal.backup_count
+        if journal.date_suffix is not None:
+            kwargs["date_suffix"] = journal.date_suffix
+
+        try:
+            configure_audit_log(**kwargs)
+        except Exception as e:
+            self.logger.debug(f"Failed to apply spec.audit.journal (non-fatal): {e}")
 
     # Validate declared integration requirements (e.g., check if 'git' is available for 'repository clone operations')
     def _validate_requirements(self) -> bool:

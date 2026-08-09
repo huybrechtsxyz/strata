@@ -8,6 +8,7 @@ from strata.commands.audit.changes_audit_command import ChangesAuditCommand
 from strata.commands.audit.diff_audit_command import DiffAuditCommand
 from strata.commands.audit.export_audit_command import ExportAuditCommand
 from strata.commands.audit.resend_audit_command import ResendAuditCommand
+from strata.commands.audit.status_audit_command import StatusAuditCommand
 from strata.commands.cli_common import (
     click_output_format,
     click_output_quiet,
@@ -121,6 +122,33 @@ def audit_resend(
     command = ResendAuditCommand(
         last=last,
         since=since,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+# ==============================================================================
+# strata audit status
+# ==============================================================================
+
+
+@audit_group.command(name="status", help="Show the effective audit journal, policy gate, and sink configuration.")
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def audit_status(
+    work_path: Optional[str],
+    output: Optional[str],
+    verbose: bool,
+    quiet: bool,
+) -> None:
+    """Report the effective, resolved audit configuration."""
+    command = StatusAuditCommand(
         work_path=work_path,
         output=output,
         verbose=verbose,

@@ -157,7 +157,7 @@ class ExportAuditCommand(SchemaBaseCommand):
             return False
 
         payloads = [e.model_dump(exclude_none=True) for e in self._entries]
-        ok = instance.send_batch("deploy_audit", payloads)
+        ok = instance.send_batch("deployment.completed", payloads)
         if not self._output_quiet:
             if ok:
                 click.echo(f"Forwarded {len(payloads)} entries to SIEM '{self._siem_name}'.")

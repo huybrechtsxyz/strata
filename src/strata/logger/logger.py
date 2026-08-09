@@ -259,7 +259,7 @@ def _configure_from_yaml(config_path: str) -> None:
                 kwargs["backup_count"] = audit_cfg["backup_count"]
             if "date_suffix" in audit_cfg:
                 kwargs["date_suffix"] = audit_cfg["date_suffix"]
-            configure_audit_log(**kwargs)
+            configure_audit_log(source="logging_yaml", **kwargs)
 
     except Exception as exc:
         logging.basicConfig(

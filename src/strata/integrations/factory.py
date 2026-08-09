@@ -84,6 +84,9 @@ class IntegrationFactory:
         "elk": ("strata.integrations.siem.elk_siem_integration", "ElkSiemIntegration"),
         "otel": ("strata.integrations.siem.otel_siem_integration", "OtelSiemIntegration"),
         "splunk": ("strata.integrations.siem.splunk_siem_integration", "SplunkSiemIntegration"),
+        # Was sink-only `type: webhook` / `type: syslog` — promoted to integrations (ADR-0066)
+        "webhook": ("strata.integrations.siem.webhook_siem_integration", "WebhookSiemIntegration"),
+        "syslog": ("strata.integrations.siem.syslog_siem_integration", "SyslogSiemIntegration"),
     }
 
     @classmethod

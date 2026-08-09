@@ -12,6 +12,8 @@ _audit_mod = importlib.import_module("strata.logger.audit")
 from strata.logger.audit import (
     audit,
     configure_audit_log,
+    get_audit_log_source,
+    get_configured_audit_log_path,
     is_audit_configured,
     shutdown_audit,
 )
@@ -154,6 +156,33 @@ class TestAudit:
         ts = entry["ts"]
         # UTC ISO format ends with +00:00
         assert "+" in ts or "Z" in ts
+
+
+class TestAuditLogProvenance:
+    """ADR-0066: which layer last configured the journal (two-phase bootstrap, 'audit status')."""
+
+    def test_defaults_to_bootstrap_source(self, tmp_path):
+        configure_audit_log(log_path=str(tmp_path / "audit.log"))
+        assert get_audit_log_source() == "bootstrap"
+
+    def test_explicit_source_is_recorded(self, tmp_path):
+        configure_audit_log(log_path=str(tmp_path / "audit.log"), source="spec_audit")
+        assert get_audit_log_source() == "spec_audit"
+
+    def test_path_is_recorded(self, tmp_path):
+        log_path = tmp_path / "audit.log"
+        configure_audit_log(log_path=str(log_path))
+        assert get_configured_audit_log_path() == str(log_path)
+
+    def test_shutdown_clears_provenance(self, tmp_path):
+        configure_audit_log(log_path=str(tmp_path / "audit.log"), source="logging_yaml")
+        shutdown_audit()
+        assert get_audit_log_source() is None
+        assert get_configured_audit_log_path() is None
+
+    def test_source_none_before_first_configure(self):
+        shutdown_audit()
+        assert get_audit_log_source() is None
 
 
 class TestShutdownAudit:

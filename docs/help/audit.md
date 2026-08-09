@@ -1,45 +1,109 @@
 # Audit Trail and SIEM Integration
 
-Record every deployment action and send events to security/compliance systems.
+Record every deployment action and route domain events to security/compliance systems.
 
-Every deployment execution (build, plan, apply, failure, gate, approval) is
-recorded in the deploy-log and forwarded to SIEM sinks (Azure Sentinel, Splunk,
-ELK) for compliance, alerting, and real-time dashboards.
+Every deployment execution (build, plan, apply, failure, gate, approval) is recorded
+locally in the deploy-log, and select events are additionally routed to configured
+SIEM sinks (Azure Sentinel, Splunk, ELK, or any custom integration with the `audit`
+capability) for compliance, alerting, and real-time dashboards.
 
-See ADR-0018 for deploy-log design; ADR-0057 for work-item events.
+See ADR-0066 for the audit event routing and policy model; ADR-0018 for deploy-log
+design; ADR-0057 for work-item events.
 
 ---
 
-## Configured Under `spec.audit`
+## `spec.audit` — one configuration location
 
-The deploy-log is always written locally (`.strata/deploy-log/` by default) — that is not a
-sink. Use `deploy_log_path` and `structure` to control it. Sinks are where events are
-*additionally* forwarded, and come in two flavours.
-
-**Built-in sinks** carry their own settings under `type:` — `stdout`, `ndjson`, `syslog`,
-and `webhook` are the only valid values:
+Everything audit-related is configured under `spec.audit` in `configuration.yaml`:
 
 ```yaml
 spec:
   audit:
-    sinks:
-      - name: local
-        type: ndjson
-        path: .strata/audit.ndjson
+    journal:
+      path: .strata/audit.log      # local NDJSON invocation log (who ran what, when)
+      rotation: size                # "size" (default) or "daily"
+      max_bytes: 5242880
+      backup_count: 3
 
-      - name: alert_hook
-        type: webhook
-        url: https://hooks.example.com/strata
-        headers:
-          Authorization: "Bearer ${WEBHOOK_TOKEN}"
-        events: [policy_violation]    # optional filter; omit for all events
+    deploy_log_path: .strata/deploy-log   # local deploy-log directory (ADR-0018)
+    structure: by-execution                # flat, by-stage, by-execution, by-date, ...
+
+    policy:
+      events:
+        command.executed: false     # off by default — high volume, no signal
+        secret.accessed: true
+
+    sinks:
+      - name: sentinel
+        integration: sentinel        # references configuration.spec.integrations[].name
+      - name: my-webhook
+        integration: my-webhook
+        events: [policy.violated, drift.detected]   # optional filter
 ```
 
-**Integration-backed sinks** (Splunk, Sentinel, ELK, OTel) are declared once in
-`configuration.spec.integrations` and referenced by name with `integration:`:
+There are three independent sub-sections:
+
+| Section   | Answers                                             |
+| --------- | --------------------------------------------------- |
+| `journal` | Where is the local CLI-invocation log written?      |
+| `policy`  | Which event types are audited at all (the gate)?    |
+| `sinks`   | Where do audited events get additionally forwarded? |
+
+`deploy_log_path`/`structure` configure the separate deploy-log (full deployment
+records, ADR-0018) — distinct from the `journal` (lightweight per-invocation entries).
+
+---
+
+## The journal — `spec.audit.journal`
+
+The journal is the NDJSON log every CLI invocation writes to via `logger.audit.audit()`.
+Its configuration is resolved with a fixed precedence, so exactly one place wins:
+
+```
+spec.audit.journal            (primary — shared, committed)
+      ↓ overridden by
+.strata/logging.yaml → audit: (machine-local escape hatch, e.g. a developer's own path)
+      ↓ falls back to
+built-in defaults              (.strata/audit.log, 5 MB × 3 backups)
+```
+
+Run `strata audit status` to see which layer is currently in effect.
+
+---
+
+## The policy gate — `spec.audit.policy.events`
+
+A closed set of event types, each with a class-aware default. Set explicitly to
+override; a type left unset keeps its default. An unrecognised key is a validation
+error naming the closest valid option — there is no silent typo.
+
+| Event type             | Default | Class      | CloudEvents `type` (wire)      |
+| ---------------------- | ------- | ---------- | ------------------------------ |
+| `command.executed`     | off     | Invocation | `…strata.command.executed`     |
+| `deployment.completed` | on      | Outcome    | `…strata.deployment.completed` |
+| `deployment.measured`  | on      | Outcome    | `…strata.deployment.measured`  |
+| `build.completed`      | off     | Outcome    | `…strata.build.completed`      |
+| `validation.completed` | off     | Outcome    | `…strata.validation.completed` |
+| `workitem.created`     | on      | Outcome    | `…strata.workitem.created`     |
+| `workitem.resumed`     | on      | Outcome    | `…strata.workitem.resumed`     |
+| `policy.violated`      | on      | Domain     | `…strata.policy.violated`      |
+| `secret.accessed`      | on      | Domain     | `…strata.secret.accessed`      |
+| `lock.acquired`        | off     | Domain     | `…strata.lock.acquired`        |
+| `lock.released`        | off     | Domain     | `…strata.lock.released`        |
+| `drift.detected`       | on      | Domain     | `…strata.drift.detected`       |
+
+A disabled event type reaches neither the journal-adjacent sink fan-out nor any sink —
+the gate is consulted before anything else in `AuditController.forward()`.
+
+---
+
+## Sinks — `spec.audit.sinks`
+
+A sink is only a *routing reference* to an integration. All transport configuration
+(endpoint, credentials, format) lives on the integration itself, declared once under
+`configuration.spec.integrations[]`:
 
 ```yaml
-# configuration.yaml
 spec:
   integrations:
     - name: sentinel
@@ -53,76 +117,119 @@ spec:
         data_collection_rule_id: dcr-xxx
         stream_name: Custom-DeployAudit_CL
 
-    - name: splunk
-      type: splunk
+    - name: my-webhook
+      type: webhook
       capabilities: [audit]
       endpoints:
-        address: https://splunk.example.com:8088
-      authentication:
-        method: api_key
-        api_key:
-          api_key: SPLUNK_HEC_TOKEN     # env var name holding the token
-```
+        address: https://hooks.example.com/strata
+      properties:
+        headers:
+          Authorization: "Bearer ${WEBHOOK_TOKEN}"
 
-```yaml
-# environment YAML
-spec:
+    - name: my-syslog
+      type: syslog
+      capabilities: [audit]
+      endpoints:
+        address: collector.example.com:6514
+      properties:
+        transport: tcp+tls   # udp, tcp, or tcp+tls (default: tcp)
+
   audit:
     sinks:
       - name: sentinel
         integration: sentinel
-      - name: splunk
-        integration: splunk
+      - name: my-webhook
+        integration: my-webhook
+        events: [policy.violated, drift.detected]   # optional filter
+      - name: my-syslog
+        integration: my-syslog
+        enabled: false
 ```
 
-A sink must specify **either** `type` **or** `integration`, never both. Integration-backed
-sinks must not carry `endpoints`, `authentication`, or `properties` — those belong to the
-integration declaration.
+`webhook` and `syslog` are built-in integration types — not sink types. There are no
+other built-in sink types; any SIEM/webhook/syslog target is an integration.
+
+A sink's `events` filter can only narrow further than the policy gate — it is a
+validation error to filter on an event type the gate has already disabled, since
+that would silently make the filter believe it re-enables something it cannot.
+
+### This is a clean break from pre-ADR-0066 configuration
+
+Old-shape sinks (`type: webhook`/`ndjson`/`stdout`/`syslog` with `path`/`address`/`url`/
+`headers`/`format` fields directly on the sink) and old event names (`deploy_audit`,
+`cli_action`, `policy_violation`, `secret_access`, `lock_event`, `validation_result`,
+`drift_alert`, `build_event`) are rejected at validation (exit code 3) with the exact
+replacement spelled out — there is no silent translation.
 
 ---
 
-## Event Types Emitted
+## The envelope — CloudEvents 1.0 + ECS
 
-| Event                   | When                                              | SIEM visibility                        |
-| ----------------------- | ------------------------------------------------- | -------------------------------------- |
-| `deploy_request`        | Deployment begins                                 | User initiates deploy                  |
-| `workitem.created`      | Gate triggered (approval, cost, security, verify) | Approval pending                       |
-| `workitem.approved`     | Approver signs off                                | Who approved, when                     |
-| `workitem.rejected`     | Approver rejects                                  | Who rejected, reason                   |
-| `deploy_apply_start`    | Provisioning begins                               | Infra changes starting                 |
-| `deploy_apply_complete` | Provisioning succeeds                             | Resources deployed, changes summary    |
-| `deploy_apply_failed`   | Provisioning fails                                | Error, root cause, affected stage      |
-| `deploy_rollback`       | Rollback triggered                                | What was rolled back, why              |
-| `policy_violation`      | Policy fails                                      | What violated, enforcement, suggestion |
+Every routed event is wrapped in a [CloudEvents 1.0](https://cloudevents.io/) envelope
+with [ECS](https://www.elastic.co/guide/en/ecs/current/index.html)-shaped `data`:
+
+```json
+{
+  "specversion": "1.0",
+  "type": "xyz.huybrechts.strata.deployment.completed",
+  "source": "/strata/haven-prd/haven",
+  "id": "63f43461-12cd-44c9-a902-77cade548ddd",
+  "time": "2026-08-07T09:12:58.041Z",
+  "datacontenttype": "application/json",
+  "subject": "haven",
+  "data": {
+    "event": {
+      "kind": "event",
+      "category": ["configuration"],
+      "action": "deployment-completed",
+      "outcome": "success",
+      "duration": 412000000000
+    },
+    "user":   { "name": "vhuybrec" },
+    "labels": {
+      "execution_id": "63f43461-12cd-44c9-a902-77cade548ddd",
+      "workspace": "haven-prd",
+      "environment": "production",
+      "deployment": "haven",
+      "tenant": "acme"
+    },
+    "strata": { }
+  }
+}
+```
+
+`event.kind` does real work: SIEMs route `alert` (policy violations, drift) differently
+from `event` (most types) and `metric` (`deployment.measured`). Everything strata-specific
+lives under `data.strata`, matching ECS's convention for custom fields.
 
 ---
 
-## SIEM Sinks
-
-| Type             | Service                       | Use case                       |
-| ---------------- | ----------------------------- | ------------------------------ |
-| `local`          | `.strata/deploy-log/`         | Development, auditing locally  |
-| `azure_sentinel` | Microsoft Sentinel            | Azure environments, compliance |
-| `splunk`         | Splunk                        | Enterprise SIEM, dashboards    |
-| `elk`            | Elasticsearch/Logstash/Kibana | Self-hosted, on-prem           |
-| `otel`           | OpenTelemetry                 | Cloud-agnostic observability   |
-
----
-
-## Querying the Deploy-Log
+## CLI commands
 
 ```bash
-strata audit changes                    # List recent deployments
-strata audit changes --last 20 --ai     # Summarise trends
-strata audit export --last 20 --format ndjson --out deploy-log.ndjson  # Export deploy-log records
+strata audit status                              # Effective journal/policy/sink configuration
+strata audit changes                              # List recent deployments from the deploy-log
+strata audit changes --last 20 --ai                # Summarise trends with an AI integration
+strata audit export --last 20 --format ndjson --out deploy-log.ndjson
+strata audit export --siem <integration_name>      # One-off forward to a named integration
+strata audit resend --last 50                      # Re-forward deploy-log entries to configured sinks
+strata audit diff <execution_id>                   # Diff two deployment executions
 ```
+
+`strata audit status` reports:
+
+- the journal's effective path/rotation and which layer supplied it,
+- every event type in the policy gate and whether it is currently admitted,
+- every configured sink, whether it is enabled, and whether its referenced
+  integration actually exists.
 
 ---
 
-## SIEM Events Enable
+## What this enables
 
-✅ Compliance audit trail (who deployed what, when, why)  
-✅ Real-time alerts (approval pending, deploy failed, cost spike)  
-✅ Dashboards (deployment success rate, approval latency, policy violations)  
-✅ Forensics (when did production change? who approved it? what changed?)  
-✅ Notifications (email, Teams, PagerDuty via SIEM alert rules)
+✅ Compliance audit trail (who deployed what, when, why)
+✅ Real-time alerts (policy violations, drift, deploy failures) routed as CloudEvents `alert`s
+✅ Dashboards (deployment success rate, approval latency, policy violations) via ECS fields
+✅ Forensics (when did production change? who approved it? what changed?)
+✅ One configuration location, one event vocabulary, one envelope shape across every sink
+

@@ -1,12 +1,17 @@
-"""Tests for AuditController Layer 4 — push_to_remote, enrich_with_pr_data, forward_to_siem, resend."""
+"""Tests for AuditController Layer 4 — push_to_remote, enrich_with_pr_data, forward, resend."""
 
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from strata.controllers.audit_controller import AuditController
+from strata.integrations.base_integration import BaseIntegration
+from strata.integrations.siem.webhook_siem_integration import WebhookSiemIntegration
 from strata.models.audit_config_model import AuditConfigModel, AuditSinkModel
 from strata.models.deploy_log_model import DeployLogModel
+from strata.models.integration_model import IntegrationEndpointsSpecModel, IntegrationModel
 
 
 def _sample_payload(**overrides) -> DeployLogModel:
@@ -142,199 +147,224 @@ class TestEnrichWithPrData:
         assert result.pull_request is None
 
 
-class TestForwardToSiem:
-    """Tests for AuditController.forward_to_siem()."""
+def _mock_integration_service(integrations: dict):
+    """integrations: {name: mock_instance_or_None}"""
+    svc = MagicMock()
+    svc.is_initialized.return_value = True
+    svc.get_integration.side_effect = lambda name: integrations.get(name)
+    return svc
+
+
+def _make_siem_integration(name: str = "webhook") -> WebhookSiemIntegration:
+    """A real, lightweight ISiemSink instance — a bare MagicMock does not satisfy
+    the runtime_checkable ISiemSink protocol's isinstance check even with matching
+    attributes, so tests use a real (cheap) integration instead (matches the existing
+    convention in test_commands_audit_siem.py).
+    """
+    BaseIntegration._instances.clear()
+    return WebhookSiemIntegration(
+        IntegrationModel(
+            name=name,
+            type="webhook",
+            endpoints=IntegrationEndpointsSpecModel(address="https://example.com/hook"),
+        )
+    )
+
+
+class TestForward:
+    """Tests for AuditController.forward() (ADR-0066) — journal, then sink fan-out."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_actor(self):
+        """forward() calls resolve_actor() to populate the envelope's ECS user.name —
+        mocked here so tests stay fast and deterministic rather than exercising the full
+        cloud-CLI/CI-env/OS-login precedence chain on every call.
+        """
+        with patch("strata.controllers.actor_controller.resolve_actor", return_value="test-user"):
+            yield
 
     def test_noop_when_no_config(self, tmp_path: Path) -> None:
         controller = AuditController(work_path=tmp_path)
-        payload = _sample_payload()
         # Should not raise
-        controller.forward_to_siem(payload, audit_config=None)
+        controller.forward("deployment.completed", {"a": 1}, audit_config=None)
 
     def test_noop_when_no_sinks(self, tmp_path: Path) -> None:
         config = AuditConfigModel(sinks=[])
         controller = AuditController(work_path=tmp_path)
-        controller.forward_to_siem(_sample_payload(), audit_config=config)
+        controller.forward("deployment.completed", {"a": 1}, audit_config=config)
 
-    def test_ndjson_sink_writes_file(self, tmp_path: Path) -> None:
-        ndjson_file = tmp_path / "audit.ndjson"
-        config = AuditConfigModel(sinks=[AuditSinkModel(name="log", type="ndjson", path=str(ndjson_file))])
-        controller = AuditController(work_path=tmp_path)
-        controller.forward_to_siem(_sample_payload(), audit_config=config)
+    def test_writes_to_journal(self, tmp_path: Path) -> None:
+        with patch("strata.logger.audit") as mock_journal:
+            controller = AuditController(work_path=tmp_path)
+            controller.forward("deployment.completed", {"a": 1}, audit_config=None)
+        mock_journal.assert_called_once()
+        args, kwargs = mock_journal.call_args
+        assert args[0] == "deployment.completed"
+        assert kwargs["outcome"] == "success"
+        envelope = kwargs["detail"]
+        assert envelope["type"] == "xyz.huybrechts.strata.deployment.completed"
+        assert envelope["data"]["strata"] == {"a": 1}
+        assert envelope["data"]["user"] == {"name": "test-user"}
 
-        assert ndjson_file.exists()
-        lines = ndjson_file.read_text().strip().split("\n")
-        assert len(lines) == 1
-        data = json.loads(lines[0])
-        assert data["deployment"] == "my_deploy"
+    def test_sends_to_enabled_sink(self, tmp_path: Path) -> None:
+        sink_integration = _make_siem_integration()
+        config = AuditConfigModel(sinks=[AuditSinkModel(name="splunk", integration="splunk-prod")])
+        svc = _mock_integration_service({"splunk-prod": sink_integration})
 
-    def test_ndjson_sink_appends(self, tmp_path: Path) -> None:
-        ndjson_file = tmp_path / "audit.ndjson"
-        config = AuditConfigModel(sinks=[AuditSinkModel(name="log", type="ndjson", path=str(ndjson_file))])
-        controller = AuditController(work_path=tmp_path)
-        controller.forward_to_siem(_sample_payload(execution_id="1"), audit_config=config)
-        controller.forward_to_siem(_sample_payload(execution_id="2"), audit_config=config)
+        with (
+            patch("strata.services.integration_service.IntegrationService.get_instance", return_value=svc),
+            patch.object(sink_integration, "send_event") as mock_send,
+        ):
+            controller = AuditController(work_path=tmp_path)
+            controller.forward("deployment.completed", {"a": 1}, audit_config=config)
 
-        lines = ndjson_file.read_text().strip().split("\n")
-        assert len(lines) == 2
+        mock_send.assert_called_once()
+        args = mock_send.call_args[0]
+        assert args[0] == "deployment.completed"
+        assert args[1]["data"]["strata"] == {"a": 1}
 
     def test_disabled_sink_skipped(self, tmp_path: Path) -> None:
-        ndjson_file = tmp_path / "audit.ndjson"
-        config = AuditConfigModel(
-            sinks=[AuditSinkModel(name="log", type="ndjson", path=str(ndjson_file), enabled=False)]
-        )
-        controller = AuditController(work_path=tmp_path)
-        controller.forward_to_siem(_sample_payload(), audit_config=config)
-        assert not ndjson_file.exists()
+        sink_integration = _make_siem_integration()
+        config = AuditConfigModel(sinks=[AuditSinkModel(name="splunk", integration="splunk-prod", enabled=False)])
+        svc = _mock_integration_service({"splunk-prod": sink_integration})
+
+        with (
+            patch("strata.services.integration_service.IntegrationService.get_instance", return_value=svc),
+            patch.object(sink_integration, "send_event") as mock_send,
+        ):
+            controller = AuditController(work_path=tmp_path)
+            controller.forward("deployment.completed", {"a": 1}, audit_config=config)
+
+        mock_send.assert_not_called()
 
     def test_event_filter_skips_non_matching(self, tmp_path: Path) -> None:
-        ndjson_file = tmp_path / "audit.ndjson"
+        sink_integration = _make_siem_integration()
         config = AuditConfigModel(
-            sinks=[AuditSinkModel(name="log", type="ndjson", path=str(ndjson_file), events=["cli_action"])]
+            sinks=[AuditSinkModel(name="splunk", integration="splunk-prod", events=["policy.violated"])]
         )
-        controller = AuditController(work_path=tmp_path)
-        controller.forward_to_siem(_sample_payload(), audit_config=config)
-        assert not ndjson_file.exists()
+        svc = _mock_integration_service({"splunk-prod": sink_integration})
 
-    @patch("urllib.request.urlopen")
-    def test_webhook_sink_sends_post(self, mock_urlopen, tmp_path: Path) -> None:
-        config = AuditConfigModel(sinks=[AuditSinkModel(name="hook", type="webhook", url="https://example.com/hook")])
-        mock_urlopen.return_value.__enter__ = MagicMock()
-        mock_urlopen.return_value.__exit__ = MagicMock(return_value=False)
+        with (
+            patch("strata.services.integration_service.IntegrationService.get_instance", return_value=svc),
+            patch.object(sink_integration, "send_event") as mock_send,
+        ):
+            controller = AuditController(work_path=tmp_path)
+            controller.forward("deployment.completed", {"a": 1}, audit_config=config)
 
-        controller = AuditController(work_path=tmp_path)
-        controller.forward_to_siem(_sample_payload(), audit_config=config)
+        mock_send.assert_not_called()
 
-        mock_urlopen.assert_called_once()
-        req = mock_urlopen.call_args[0][0]
-        assert req.full_url == "https://example.com/hook"
-        assert req.get_method() == "POST"
+    def test_event_filter_none_admits_everything(self, tmp_path: Path) -> None:
+        sink_integration = _make_siem_integration()
+        config = AuditConfigModel(sinks=[AuditSinkModel(name="splunk", integration="splunk-prod", events=None)])
+        svc = _mock_integration_service({"splunk-prod": sink_integration})
 
-    def test_syslog_sink_sends_json_by_default(self, tmp_path: Path) -> None:
-        config = AuditConfigModel(sinks=[AuditSinkModel(name="syslog_sink", type="syslog", address="127.0.0.1:514")])
-        controller = AuditController(work_path=tmp_path)
+        with (
+            patch("strata.services.integration_service.IntegrationService.get_instance", return_value=svc),
+            patch.object(sink_integration, "send_event") as mock_send,
+        ):
+            controller = AuditController(work_path=tmp_path)
+            controller.forward("deployment.completed", {"a": 1}, audit_config=config)
 
-        with patch.object(controller, "_send_syslog") as mock_syslog:
-            controller.forward_to_siem(_sample_payload(), audit_config=config)
-            mock_syslog.assert_called_once()
-            # fmt argument defaults to "json"
-            _, kwargs = mock_syslog.call_args if mock_syslog.call_args.kwargs else (mock_syslog.call_args[0], {})
-            fmt = (
-                mock_syslog.call_args[1].get("fmt") or mock_syslog.call_args[0][2]
-                if mock_syslog.call_args[0][2:]
-                else "json"
-            )
-            assert fmt == "json"
+        mock_send.assert_called_once()
 
-    def test_syslog_sink_passes_cef_format(self, tmp_path: Path) -> None:
+    def test_missing_integration_is_skipped_without_raising(self, tmp_path: Path) -> None:
+        config = AuditConfigModel(sinks=[AuditSinkModel(name="splunk", integration="does-not-exist")])
+        svc = _mock_integration_service({})
+
+        with patch("strata.services.integration_service.IntegrationService.get_instance", return_value=svc):
+            controller = AuditController(work_path=tmp_path)
+            controller.forward("deployment.completed", {"a": 1}, audit_config=config)  # must not raise
+
+    def test_sink_send_failure_does_not_raise(self, tmp_path: Path) -> None:
+        sink_integration = _make_siem_integration()
+        config = AuditConfigModel(sinks=[AuditSinkModel(name="splunk", integration="splunk-prod")])
+        svc = _mock_integration_service({"splunk-prod": sink_integration})
+
+        with (
+            patch("strata.services.integration_service.IntegrationService.get_instance", return_value=svc),
+            patch.object(sink_integration, "send_event", side_effect=RuntimeError("network down")),
+        ):
+            controller = AuditController(work_path=tmp_path)
+            controller.forward("deployment.completed", {"a": 1}, audit_config=config)  # must not raise
+
+    def test_initializes_integrations_if_not_already(self, tmp_path: Path) -> None:
+        config = AuditConfigModel(sinks=[AuditSinkModel(name="splunk", integration="splunk-prod")])
+        svc = _mock_integration_service({})
+        svc.is_initialized.return_value = False
+
+        with patch("strata.services.integration_service.IntegrationService.get_instance", return_value=svc):
+            controller = AuditController(work_path=tmp_path)
+            controller.forward("deployment.completed", {"a": 1}, audit_config=config)
+
+        svc.initialize_integrations.assert_called()
+
+    def test_gate_blocks_disabled_event_type(self, tmp_path: Path) -> None:
+        """ADR-0066 problem 1: policy.events is now consulted, not dead configuration."""
+        from strata.models.audit_config_model import AuditPolicyModel
+
+        sink_integration = _make_siem_integration()
         config = AuditConfigModel(
-            sinks=[AuditSinkModel(name="syslog_cef", type="syslog", address="127.0.0.1:514", format="cef")]
+            policy=AuditPolicyModel(),  # build.completed defaults to False
+            sinks=[AuditSinkModel(name="splunk", integration="splunk-prod")],
         )
-        controller = AuditController(work_path=tmp_path)
+        svc = _mock_integration_service({"splunk-prod": sink_integration})
 
-        with patch.object(controller, "_send_syslog") as mock_syslog:
-            controller.forward_to_siem(_sample_payload(), audit_config=config)
-            mock_syslog.assert_called_once()
-            call_fmt = mock_syslog.call_args[1].get("fmt")
-            assert call_fmt == "cef"
+        with (
+            patch("strata.services.integration_service.IntegrationService.get_instance", return_value=svc),
+            patch("strata.logger.audit") as mock_journal,
+            patch.object(sink_integration, "send_event") as mock_send,
+        ):
+            controller = AuditController(work_path=tmp_path)
+            controller.forward("build.completed", {"a": 1}, audit_config=config)
 
+        mock_journal.assert_not_called()
+        mock_send.assert_not_called()
 
-class TestFormatCef:
-    """Tests for AuditController._format_cef()."""
+    def test_gate_admits_enabled_event_type(self, tmp_path: Path) -> None:
+        from strata.models.audit_config_model import AuditPolicyModel
 
-    def test_cef_header_structure(self) -> None:
-        data = {
-            "execution_id": "exec-001",
-            "deployment": "prod",
-            "version": "2.0.0",
-            "success": True,
-            "timestamp": "2024-06-17T10:45:33Z",
-        }
-        result = AuditController._format_cef(data)
-        assert result.startswith("CEF:0|strata|strata-audit|")
-        assert "|deploy_audit|Deployment Audit Event|" in result
+        sink_integration = _make_siem_integration()
+        config = AuditConfigModel(
+            policy=AuditPolicyModel(events={"build.completed": True}),
+            sinks=[AuditSinkModel(name="splunk", integration="splunk-prod")],
+        )
+        svc = _mock_integration_service({"splunk-prod": sink_integration})
 
-    def test_cef_severity_low_on_success(self) -> None:
-        data = {"success": True, "deployment": "prod"}
-        result = AuditController._format_cef(data)
-        # Severity 3 = Low
-        assert "|3|" in result
+        with (
+            patch("strata.services.integration_service.IntegrationService.get_instance", return_value=svc),
+            patch("strata.logger.audit") as mock_journal,
+            patch.object(sink_integration, "send_event") as mock_send,
+        ):
+            controller = AuditController(work_path=tmp_path)
+            controller.forward("build.completed", {"a": 1}, audit_config=config)
 
-    def test_cef_severity_high_on_failure(self) -> None:
-        data = {"success": False, "deployment": "prod"}
-        result = AuditController._format_cef(data)
-        # Severity 7 = High
-        assert "|7|" in result
-
-    def test_cef_extension_contains_key_fields(self) -> None:
-        data = {
-            "success": True,
-            "deployment": "my_deploy",
-            "timestamp": "2024-01-01T00:00:00Z",
-            "execution_id": "abc-123",
-        }
-        result = AuditController._format_cef(data)
-        assert "dst=my_deploy" in result
-        assert "rt=2024-01-01T00:00:00Z" in result
-        assert "externalId=abc-123" in result
-        assert "act=success" in result
-
-    def test_cef_escapes_special_characters(self) -> None:
-        data = {"success": True, "deployment": "prod=abc", "timestamp": "", "execution_id": ""}
-        result = AuditController._format_cef(data)
-        assert "dst=prod\\=abc" in result
-
-    def test_send_syslog_cef_format(self, tmp_path: Path) -> None:
-        from unittest.mock import MagicMock, patch
-
-        controller = AuditController(work_path=tmp_path)
-        data = {"success": True, "deployment": "prod", "version": "1.0", "timestamp": "", "execution_id": ""}
-
-        mock_sock = MagicMock()
-        with patch("socket.socket", return_value=mock_sock):
-            controller._send_syslog(data, "127.0.0.1:514", fmt="cef")
-
-        sent_bytes = mock_sock.sendto.call_args[0][0]
-        sent_str = sent_bytes.decode("utf-8")
-        assert "CEF:0|strata|strata-audit|" in sent_str
-
-    def test_send_syslog_json_format(self, tmp_path: Path) -> None:
-        from unittest.mock import MagicMock, patch
-
-        controller = AuditController(work_path=tmp_path)
-        data = {"success": True, "deployment": "prod"}
-
-        mock_sock = MagicMock()
-        with patch("socket.socket", return_value=mock_sock):
-            controller._send_syslog(data, "127.0.0.1:514", fmt="json")
-
-        sent_bytes = mock_sock.sendto.call_args[0][0]
-        sent_str = sent_bytes.decode("utf-8")
-        assert "<14>" in sent_str
-        assert '"deployment": "prod"' in sent_str or '"deployment":"prod"' in sent_str
+        mock_journal.assert_called_once()
+        mock_send.assert_called_once()
 
 
 class TestResend:
     """Tests for AuditController.resend()."""
 
-    def test_resend_returns_counts(self, tmp_path: Path) -> None:
+    def test_resend_calls_forward_per_record(self, tmp_path: Path) -> None:
         log_dir = tmp_path / "logs"
         log_dir.mkdir()
-        # Write a sample entry
         exec_dir = log_dir / "exec1"
         exec_dir.mkdir()
         data = _sample_payload().model_dump(exclude_none=True)
         (exec_dir / "_execution.json").write_text(json.dumps(data, default=str))
 
-        ndjson_file = tmp_path / "resend.ndjson"
-        config = AuditConfigModel(sinks=[AuditSinkModel(name="resend_sink", type="ndjson", path=str(ndjson_file))])
-
+        config = AuditConfigModel(sinks=[AuditSinkModel(name="resend_sink", integration="splunk-prod")])
         controller = AuditController(work_path=tmp_path)
-        sent, failed = controller.resend(base_path=log_dir, audit_config=config)
+
+        with patch.object(controller, "forward") as mock_forward:
+            sent, failed = controller.resend(base_path=log_dir, audit_config=config)
 
         assert sent == 1
         assert failed == 0
-        assert ndjson_file.exists()
+        mock_forward.assert_called_once()
+        args = mock_forward.call_args[0]
+        assert args[0] == "deployment.completed"
+        assert args[1]["deployment"] == "my_deploy"
 
     def test_resend_empty_dir(self, tmp_path: Path) -> None:
         log_dir = tmp_path / "logs"
@@ -344,3 +374,20 @@ class TestResend:
         sent, failed = controller.resend(base_path=log_dir, audit_config=config)
         assert sent == 0
         assert failed == 0
+
+    def test_resend_counts_forward_failures(self, tmp_path: Path) -> None:
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+        exec_dir = log_dir / "exec1"
+        exec_dir.mkdir()
+        data = _sample_payload().model_dump(exclude_none=True)
+        (exec_dir / "_execution.json").write_text(json.dumps(data, default=str))
+
+        config = AuditConfigModel(sinks=[])
+        controller = AuditController(work_path=tmp_path)
+
+        with patch.object(controller, "forward", side_effect=RuntimeError("boom")):
+            sent, failed = controller.resend(base_path=log_dir, audit_config=config)
+
+        assert sent == 0
+        assert failed == 1

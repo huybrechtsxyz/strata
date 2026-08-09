@@ -1,112 +1,205 @@
 """Audit policy and sink configuration models.
 
 These models configure _what_ gets logged (event policy) and _where_ events
-are sent (sink routing).  They live under ``spec.audit`` in environment YAML
-and are merged across the deployment's ``environments[]`` array.
+are sent (sink routing). They live under ``spec.audit`` in configuration YAML.
 
-Sinks come in two flavours:
-- Built-in types (stdout, ndjson, syslog, webhook) — lightweight, no integration needed
-- Integration references — full SIEM integrations declared in configuration.spec.integrations
+A sink is a connection to another system (ADR-0066) — every sink is a reference
+to an integration declared under ``configuration.spec.integrations``. There are no
+built-in sink types: ``stdout``/``ndjson`` are removed (the local record is now the
+journal, ``logger/audit.py``); ``syslog``/``webhook`` are removed as sink types and
+promoted to integrations (``integrations/siem/syslog_siem_integration.py`` /
+``webhook_siem_integration.py``).
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from strata.models.common_models import PlatformBaseModel, PlatformName
 
-# Built-in sink types handled directly by AuditController.forward_to_siem().
-# SIEM destinations (splunk, sentinel, elk, otel) are *not* listed here — they are
-# integrations, referenced via AuditSinkModel.integration.
-BUILTIN_SINK_TYPES: tuple = ("stdout", "ndjson", "syslog", "webhook")
+# Renamed event types (ADR-0066) — old key -> new key. Detected explicitly so a typo'd
+# legacy name gets "use X" instead of the generic unknown-key list (see "This is a clean
+# break": backwards compatibility is not owed, a good error is).
+LEGACY_EVENT_TYPE_RENAMES: Dict[str, str] = {
+    "cli_action": "command.executed",
+    "deploy_audit": "deployment.completed",
+    "deployment_metrics": "deployment.measured",
+    "build_event": "build.completed",
+    "validation_result": "validation.completed",
+    "policy_violation": "policy.violated",
+    "secret_access": "secret.accessed",
+    "drift_alert": "drift.detected",
+    "lock_event": "lock.acquired' or 'lock.released",
+}
+
+# Legacy AuditSinkModel fields (ADR-0066) — sinks used to carry transport configuration
+# directly; they are now pure references to configuration.spec.integrations[]. Detected
+# explicitly so the error names the exact replacement shape.
+LEGACY_SINK_FIELDS = ("type", "path", "address", "url", "headers", "format")
+
+# Closed enum of event types (ADR-0066) — three classes:
+# - Invocation: who ran what (command.executed)
+# - Outcome: what a run did (deployment.*, build.completed, validation.completed, workitem.*)
+# - Domain: what happened to the system (policy.violated, secret.accessed, lock.*, drift.detected)
+#
+# Class-aware defaults, set by measurement (18,853-entry audit.log sample) rather than taste —
+# command.executed defaulting off alone removes ~95% of measured volume (VS Code polling,
+# pytest runs). workitem.created/resumed added alongside the ADR's original 8 declared types
+# since they are real, existing SIEM-forwarded lifecycle events (RunDeployCommand), not a new
+# producer — treated as Outcome-class, defaulting on like deployment.completed.
+AUDIT_EVENT_DEFAULTS: Dict[str, bool] = {
+    # Invocation
+    "command.executed": False,
+    # Outcome
+    "deployment.completed": True,
+    "deployment.measured": True,
+    "build.completed": False,
+    "validation.completed": False,
+    "workitem.created": True,
+    "workitem.resumed": True,
+    # Domain
+    "policy.violated": True,
+    "secret.accessed": True,
+    "lock.acquired": False,
+    "lock.released": False,
+    "drift.detected": True,
+}
+
+
+class AuditEventPolicyModel(PlatformBaseModel):
+    """Per-event-type policy. A bare ``bool`` in YAML is shorthand for ``{enabled: <bool>}``."""
+
+    enabled: bool = Field(default=True, description="Whether this event type is audited at all")
+    # Reserved — not read by any producer yet; commented out so `extra="forbid"` rejects them
+    # until one exists, keeping the surface honest rather than aspirational (ADR-0066):
+    # severity: Optional[str] = None        # override event.kind / SIEM alert routing
+    # sample: Optional[int] = None          # audit 1 in N (high-volume classes)
+    # retention_days: Optional[int] = None  # hint carried to sinks that honour it
+
+
+# Value accepted for each key in policy.events — a bare bool or the full object.
+AuditEventPolicy = Union[bool, AuditEventPolicyModel]
+
+
+def _default_event_policy() -> Dict[str, AuditEventPolicy]:
+    return {k: AuditEventPolicyModel(enabled=v) for k, v in AUDIT_EVENT_DEFAULTS.items()}
 
 
 class AuditPolicyModel(PlatformBaseModel):
-    """Which event types are active. Configured in environment YAML under spec.audit.policy."""
+    """Which event types are active — the global gate, consulted by ``AuditController.forward()``.
 
-    events: Dict[str, bool] = Field(
-        default_factory=lambda: {
-            "deploy_audit": True,
-            "cli_action": True,
-            "policy_violation": True,
-            "secret_access": True,
-            "lock_event": False,
-            "validation_result": False,
-            "drift_alert": False,
-            "build_event": False,
-        },
-        description="Map of event type → enabled flag",
+    Keys are validated against the closed set in ``AUDIT_EVENT_DEFAULTS``; a typo
+    (``policy.violations`` for ``policy.violated``) is a validation error at exit code 3
+    rather than a knob that silently never fires. Unlisted (but valid) keys fall back
+    to their class-aware default; a genuinely unrecognised event type consulted by
+    ``forward()`` at runtime (one not in this closed set at all) is never gated off —
+    the closed-set validation exists to catch operator typos in configured keys, not to
+    silently block producers this model doesn't yet know about.
+    """
+
+    events: Dict[str, AuditEventPolicy] = Field(
+        default_factory=_default_event_policy,
+        description="Map of event type → enabled flag or {enabled, ...} object",
     )
+
+    @field_validator("events", mode="before")
+    @classmethod
+    def _normalize_shorthand(cls, value: object) -> object:
+        """Merge class-aware defaults under explicit overrides, and normalise bare bools."""
+        if not isinstance(value, dict):
+            return value
+        merged: Dict[str, object] = dict(AUDIT_EVENT_DEFAULTS)
+        merged.update(value)
+        return {
+            key: (AuditEventPolicyModel(enabled=val) if isinstance(val, bool) else val) for key, val in merged.items()
+        }
+
+    @model_validator(mode="after")
+    def validate_known_event_types(self) -> "AuditPolicyModel":
+        unknown = sorted(set(self.events) - set(AUDIT_EVENT_DEFAULTS))
+        if unknown:
+            renamed = [key for key in unknown if key in LEGACY_EVENT_TYPE_RENAMES]
+            if renamed:
+                first = renamed[0]
+                raise ValueError(
+                    f"spec.audit.policy.events.{first}: '{first}' was renamed — use "
+                    f"'{LEGACY_EVENT_TYPE_RENAMES[first]}'."
+                )
+            valid = ", ".join(sorted(AUDIT_EVENT_DEFAULTS))
+            raise ValueError(
+                f"spec.audit.policy.events: unknown event type(s) {unknown}. Valid event types are: {valid}."
+            )
+        return self
+
+    def is_enabled(self, event_type: str) -> bool:
+        """Resolve whether *event_type* is admitted by the gate.
+
+        A recognised type always has a policy entry (defaults are merged in by the
+        ``events`` validator). A type outside the closed set — a producer this model
+        doesn't know about — is never gated off here; see the class docstring.
+        """
+        entry = self.events.get(event_type)
+        if entry is None:
+            return True
+        return entry.enabled if isinstance(entry, AuditEventPolicyModel) else bool(entry)
 
 
 class AuditSinkModel(PlatformBaseModel):
-    """A configured audit event sink — forwards events to a built-in type or integration."""
+    """A configured audit event sink — a routing reference to an integration (ADR-0066).
+
+    Sinks carry no transport configuration of their own: endpoint, credentials, and
+    format all live on the referenced ``configuration.spec.integrations[]`` entry.
+    """
 
     name: PlatformName = Field(description="Unique sink name")
-    type: Optional[str] = Field(default=None, description="Built-in sink type: stdout, ndjson, syslog, webhook")
-    integration: Optional[PlatformName] = Field(
-        default=None, description="References configuration.spec.integrations[].name"
-    )
+    integration: PlatformName = Field(description="References configuration.spec.integrations[].name")
     enabled: bool = Field(default=True, description="Whether this sink is active")
     events: Optional[List[str]] = Field(default=None, description="Event filter (None = all enabled events)")
 
-    # Type-specific fields (built-in sinks only):
-    path: Optional[str] = Field(default=None, description="Output path (ndjson only)")
-    address: Optional[str] = Field(default=None, description="Target address (syslog only)")
-    url: Optional[str] = Field(default=None, description="Target URL (webhook only)")
-    headers: Optional[Dict[str, str]] = Field(default=None, description="HTTP headers (webhook only)")
-    format: Optional[str] = Field(
-        default=None,
-        description="Payload format for syslog sink: 'json' (default) or 'cef' (Common Event Format)",
-    )
+    @model_validator(mode="before")
+    @classmethod
+    def reject_legacy_shape(cls, value: object) -> object:
+        """Old sinks carried transport config directly. Name the exact replacement (ADR-0066)."""
+        if not isinstance(value, dict):
+            return value
+        found = [key for key in LEGACY_SINK_FIELDS if key in value]
+        if not found:
+            return value
+        legacy_type = value.get("type", "<type>")
+        name = value.get("name", "<name>")
+        raise ValueError(
+            f"spec.audit.sinks: 'type: {legacy_type}' is no longer supported — sinks are now "
+            "references to spec.integrations[]. Replace with:\n\n"
+            "  integrations:\n"
+            f"    - name: {name}\n"
+            f"      type: {legacy_type}\n"
+            "      capabilities: [audit]\n"
+            "      endpoints:\n"
+            "        address: <the url/path that was here>\n\n"
+            "  audit:\n"
+            "    sinks:\n"
+            f"      - name: {name}\n"
+            f"        integration: {name}"
+        )
 
-    @model_validator(mode="after")
-    def validate_sink_target(self) -> "AuditSinkModel":
-        """Exactly one of 'type' or 'integration' must be set."""
-        if not self.type and not self.integration:
-            raise ValueError("Sink must specify either 'type' or 'integration'")
-        if self.type and self.integration:
-            raise ValueError("Sink cannot specify both 'type' and 'integration'")
-        return self
 
-    @model_validator(mode="after")
-    def validate_type_specific_fields(self) -> "AuditSinkModel":
-        """Validate that type-specific fields match the declared type."""
-        if self.integration:
-            if any([self.path, self.address, self.url, self.headers, self.format]):
-                raise ValueError("Integration-backed sinks must not have type-specific fields")
-            return self
+class AuditJournalModel(PlatformBaseModel):
+    """Local audit-trail journal (``logger/audit.py``) — who ran what, when.
 
-        match self.type:
-            case "stdout":
-                if any([self.path, self.address, self.url, self.headers, self.format]):
-                    raise ValueError("stdout sink takes no extra fields")
-            case "ndjson":
-                if not self.path:
-                    raise ValueError("ndjson sink requires 'path'")
-                if any([self.address, self.url, self.headers, self.format]):
-                    raise ValueError("ndjson sink only accepts 'path'")
-            case "syslog":
-                if not self.address:
-                    raise ValueError("syslog sink requires 'address'")
-                if any([self.path, self.url, self.headers]):
-                    raise ValueError("syslog sink only accepts 'address' and 'format'")
-                if self.format and self.format not in ("json", "cef"):
-                    raise ValueError("syslog sink 'format' must be 'json' or 'cef'")
-            case "webhook":
-                if not self.url:
-                    raise ValueError("webhook sink requires 'url'")
-                if any([self.path, self.address, self.format]):
-                    raise ValueError("webhook sink only accepts 'url' and 'headers'")
-            case _:
-                raise ValueError(
-                    f"Unknown sink type '{self.type}'. "
-                    f"Built-in types are: {', '.join(BUILTIN_SINK_TYPES)}. "
-                    "SIEM destinations (splunk, sentinel, elk, otel) are integrations — "
-                    "declare them in configuration.spec.integrations and reference them "
-                    "with 'integration: <name>' instead of 'type'."
-                )
-        return self
+    Distinct from ``sinks``/``policy`` (which route SIEM-bound domain events, ADR-0066)
+    and from ``deploy_log_path`` (which stores full ``DeployLogModel`` records). The
+    journal is the NDJSON CLI-invocation log written by every command via
+    ``logger.audit.audit()``. This is the primary, committed configuration location;
+    it is overridden machine-locally by ``.strata/logging.yaml``'s ``audit:`` section
+    (e.g. for a developer who wants a different local path), which in turn falls back
+    to ``configure_audit_log()``'s built-in defaults when neither is present.
+    """
+
+    path: Optional[str] = Field(default=None, description="Journal file path (relative to work_path or absolute)")
+    rotation: Optional[str] = Field(default=None, description="Rotation strategy: 'size' (default) or 'daily'")
+    max_bytes: Optional[int] = Field(default=None, description="Max file size before rotation (rotation='size')")
+    backup_count: Optional[int] = Field(default=None, description="Number of rotated backups to keep")
+    date_suffix: Optional[str] = Field(default=None, description="strftime suffix for daily-rotated backups")
 
 
 class AuditConfigModel(PlatformBaseModel):
@@ -114,6 +207,7 @@ class AuditConfigModel(PlatformBaseModel):
 
     policy: AuditPolicyModel = Field(default_factory=AuditPolicyModel, description="Event type policy")
     sinks: List[AuditSinkModel] = Field(default_factory=list, description="Configured sinks")
+    journal: Optional[AuditJournalModel] = Field(default=None, description="Local audit-trail journal configuration")
     structure: Optional[str] = Field(
         default=None,
         description=(
@@ -134,3 +228,29 @@ class AuditConfigModel(PlatformBaseModel):
             "Example: 'config' or 'state'."
         ),
     )
+
+    @model_validator(mode="after")
+    def validate_sink_filters_against_gate(self) -> "AuditConfigModel":
+        """A sink naming an event the gate has disabled is unrepresentable, not just diagnosable.
+
+        Rejected at exit code 3 rather than admitted silently — the alternative (a sink
+        filter implicitly re-enabling an event type) reopens exactly the gate/filter
+        drift ADR-0066 catalogues as problem 8.
+        """
+        for sink in self.sinks:
+            if not sink.events:
+                continue
+            for event_type in sink.events:
+                if event_type not in AUDIT_EVENT_DEFAULTS:
+                    valid = ", ".join(sorted(AUDIT_EVENT_DEFAULTS))
+                    raise ValueError(
+                        f"sink '{sink.name}' filters on unknown event type '{event_type}'. "
+                        f"Valid event types are: {valid}."
+                    )
+                if not self.policy.is_enabled(event_type):
+                    raise ValueError(
+                        f"sink '{sink.name}' filters on '{event_type}', but "
+                        f"spec.audit.policy.events.{event_type} is false. Either enable the "
+                        "event type or remove it from the sink filter."
+                    )
+        return self

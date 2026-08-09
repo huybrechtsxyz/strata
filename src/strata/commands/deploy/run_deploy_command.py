@@ -828,10 +828,7 @@ class RunDeployCommand(BaseDeployCommand):
                 base_path = self._configuration_service.get_deploy_log_path(self._work_path, create_path=True)
 
             # Write via AuditController
-            controller = AuditController(
-                work_path=self._work_path,
-                siem_sinks=self._resolve_siem_sinks(resolved_audit_cfg),
-            )
+            controller = AuditController(work_path=self._work_path)
             ok, path = controller.write_deploy_log(
                 payload=payload,
                 base_path=base_path,
@@ -851,7 +848,9 @@ class RunDeployCommand(BaseDeployCommand):
 
                 # Layer 4b: SIEM forwarding — best-effort, fire-and-forget
                 # Uses the enriched payload so SIEM gets PR data when available.
-                controller.forward_to_siem(enriched, audit_config=resolved_audit_cfg)
+                controller.forward(
+                    "deployment.completed", enriched.model_dump(exclude_none=True), audit_config=resolved_audit_cfg
+                )
 
                 # Layer 4c: Push to remote repo — best-effort, opt-in via audit.repository
                 if resolved_audit_cfg and resolved_audit_cfg.repository:
@@ -1110,68 +1109,24 @@ class RunDeployCommand(BaseDeployCommand):
             return False
 
     def _forward_workitem_event(self, event_name: str, item) -> None:
-        """Forward a work-item lifecycle event to configured SIEM sinks.
+        """Forward a work-item lifecycle event to configured audit sinks.
 
-        Best-effort — never raises. Uses the same sinks as deploy_audit but
-        sends event_name="workitem.created" / "workitem.approved" / etc.
-        Sinks without an events filter receive all events; sinks filtered to
-        ["deploy_audit"] also receive workitem events (deployment gate context).
+        Best-effort — never raises. Routes through ``AuditController.forward()``
+        (ADR-0066) — the same single sink-resolution path ``deploy_audit`` and
+        ``resend`` use, rather than a separate duplicated resolver.
         """
         try:
             audit_cfg = None
             if self._configuration_service:
                 audit_cfg = getattr(getattr(self._configuration_service.model, "spec", None), "audit", None)
-            sinks = self._resolve_siem_sinks(audit_cfg)
-            if not sinks:
+            if not audit_cfg or not audit_cfg.sinks:
                 return
+            from strata.controllers.audit_controller import AuditController
+
             data = {**item.to_dict(), "event": event_name}
-            for sink in sinks:
-                try:
-                    sink.send_event(event_name, data)
-                except Exception as exc:
-                    self.logger.debug("workitem_siem_forward_failed", event_name=event_name, error=str(exc))
+            AuditController(work_path=self._work_path).forward(event_name, data, audit_config=audit_cfg)
         except Exception as exc:
             self.logger.debug("workitem_siem_forward_error", event_name=event_name, error=str(exc))
-
-    def _resolve_siem_sinks(self, audit_config=None) -> list:
-        """Resolve integration-backed SIEM sinks from the current configuration.
-
-        Iterates audit_config.sinks, finds integration-backed entries, instantiates
-        them via IntegrationFactory, and returns those that implement ISiemSink.
-        Always returns a list (may be empty). Never raises.
-        """
-        sinks: list = []
-        if not audit_config or not audit_config.sinks:
-            return sinks
-        if not self._configuration_service or not self._configuration_service.model:
-            return sinks
-
-        integration_models = getattr(getattr(self._configuration_service.model, "spec", None), "integrations", []) or []
-        integration_map = {m.name: m for m in integration_models}
-
-        from strata.integrations.factory import IntegrationFactory
-        from strata.models.capabilities import ISiemSink
-
-        for sink in audit_config.sinks:
-            if not sink.enabled or not sink.integration:
-                continue
-            model = integration_map.get(str(sink.integration))
-            if not model or not model.enabled:
-                continue
-            # Check event filter
-            if sink.events and "deploy_audit" not in sink.events:
-                continue
-            try:
-                instance = IntegrationFactory.create(model)
-                if isinstance(instance, ISiemSink):
-                    sinks.append(instance)
-            except Exception as exc:
-                self.logger.warning(
-                    "siem_sink_resolve_failed",
-                    name=sink.integration,
-                    error=str(exc),
-                )
-        return sinks
 
     def _load_related_services(self) -> bool:
         """Services are already loaded by BaseDeployCommand._before_execute."""

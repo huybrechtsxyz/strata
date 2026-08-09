@@ -74,7 +74,6 @@ class EnvironmentService(BaseService["EnvironmentModel"]):
         * ``properties``          — shallow ``dict.update``
         * ``custom``              — shallow ``dict.update``
         * ``lifecycle``           — last-wins (wholesale)
-        * ``audit``               — last-wins (wholesale)
         * ``overrides.resources`` — last-wins by ``resource`` name
         * ``overrides.modules``   — last-wins by ``(module, resource, namespace, slot_type)``
         * ``overrides.providers`` — last-wins by ``provider`` name
@@ -107,7 +106,6 @@ class EnvironmentService(BaseService["EnvironmentModel"]):
         merged_lifecycle = None
         merged_properties: Dict[str, Any] = {}
         merged_custom: Dict[str, Any] = {}
-        merged_audit = None
         meta = None
 
         # Override accumulators
@@ -168,11 +166,9 @@ class EnvironmentService(BaseService["EnvironmentModel"]):
             if spec.custom:
                 merged_custom.update(spec.custom)
 
-            # --- Lifecycle / Audit: last-wins ---
+            # --- Lifecycle: last-wins ---
             if spec.lifecycle:
                 merged_lifecycle = spec.lifecycle
-            if spec.audit:
-                merged_audit = spec.audit
 
             # --- Overrides ---
             if spec.overrides:
@@ -233,7 +229,6 @@ class EnvironmentService(BaseService["EnvironmentModel"]):
             properties=merged_properties or None,
             custom=merged_custom or None,
             overrides=merged_overrides,
-            audit=merged_audit,
         )
 
         if meta is None:

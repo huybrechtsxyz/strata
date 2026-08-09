@@ -1,4 +1,4 @@
-"""Tests for --siem flag on strata audit export and AuditSinkModel format field."""
+"""Tests for --siem flag on strata audit export."""
 
 from __future__ import annotations
 
@@ -6,11 +6,9 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from click.testing import CliRunner
 
 from strata.commands.cli_audit import audit_group
-from strata.models.audit_config_model import AuditSinkModel
 from strata.utils.config import SOLUTION_DEPLOY_LOG_DIR, SOLUTION_DIR
 
 # ---------------------------------------------------------------------------
@@ -36,76 +34,13 @@ def _write_deploy_log(base_path: Path, execution_id: str = "exec-001") -> None:
 
 
 # ---------------------------------------------------------------------------
-# AuditSinkModel: format field validation
+# AuditSinkModel's `type`/`format`/built-in-sink-type validation (ndjson/stdout/
+# syslog/webhook as sink fields) was removed entirely in ADR-0066 — a sink is now
+# only a routing reference (`name`, `integration`, `enabled`, `events`). Coverage
+# for the promoted `syslog`/`webhook` integrations' own format/transport handling
+# now lives in test_syslog_siem_integration.py / test_webhook_siem_integration.py,
+# and AuditSinkModel's simplified shape is covered by test_models_audit_config.py.
 # ---------------------------------------------------------------------------
-
-
-class TestAuditSinkModelFormat:
-    def test_syslog_sink_accepts_json_format(self) -> None:
-        sink = AuditSinkModel(name="s", type="syslog", address="127.0.0.1:514", format="json")
-        assert sink.format == "json"
-
-    def test_syslog_sink_accepts_cef_format(self) -> None:
-        sink = AuditSinkModel(name="s", type="syslog", address="127.0.0.1:514", format="cef")
-        assert sink.format == "cef"
-
-    def test_syslog_sink_rejects_unknown_format(self) -> None:
-        with pytest.raises(Exception, match="format.*must be"):
-            AuditSinkModel(name="s", type="syslog", address="127.0.0.1:514", format="xml")
-
-    def test_syslog_sink_format_defaults_to_none(self) -> None:
-        sink = AuditSinkModel(name="s", type="syslog", address="127.0.0.1:514")
-        assert sink.format is None
-
-    def test_stdout_sink_rejects_format_field(self) -> None:
-        with pytest.raises(Exception, match="stdout sink"):
-            AuditSinkModel(name="s", type="stdout", format="json")
-
-    def test_ndjson_sink_rejects_format_field(self) -> None:
-        with pytest.raises(Exception, match="ndjson sink"):
-            AuditSinkModel(name="s", type="ndjson", path="/tmp/out.ndjson", format="json")
-
-    def test_webhook_sink_rejects_format_field(self) -> None:
-        with pytest.raises(Exception, match="webhook sink"):
-            AuditSinkModel(name="s", type="webhook", url="https://hook.example.com", format="json")
-
-    def test_integration_sink_rejects_format_field(self) -> None:
-        with pytest.raises(Exception, match="Integration-backed"):
-            AuditSinkModel(name="s", integration="my_siem", format="json")
-
-
-# ---------------------------------------------------------------------------
-# AuditSinkModel: unknown built-in sink types are rejected
-# ---------------------------------------------------------------------------
-
-
-class TestAuditSinkModelUnknownType:
-    @pytest.mark.parametrize("siem_type", ["splunk", "sentinel", "elk", "otel"])
-    def test_siem_names_are_not_builtin_types(self, siem_type: str) -> None:
-        """SIEM destinations are integrations — using them as 'type' must not pass silently."""
-        with pytest.raises(Exception, match="Unknown sink type"):
-            AuditSinkModel(name="s", type=siem_type)
-
-    def test_unknown_type_error_points_at_integration(self) -> None:
-        with pytest.raises(Exception, match="integration: <name>"):
-            AuditSinkModel(name="s", type="splunk")
-
-    def test_arbitrary_unknown_type_rejected(self) -> None:
-        with pytest.raises(Exception, match="Unknown sink type"):
-            AuditSinkModel(name="s", type="local")
-
-    @pytest.mark.parametrize(
-        ("sink_type", "extra"),
-        [
-            ("stdout", {}),
-            ("ndjson", {"path": "/tmp/out.ndjson"}),
-            ("syslog", {"address": "127.0.0.1:514"}),
-            ("webhook", {"url": "https://hook.example.com"}),
-        ],
-    )
-    def test_builtin_types_still_accepted(self, sink_type: str, extra: dict) -> None:
-        sink = AuditSinkModel(name="s", type=sink_type, **extra)
-        assert sink.type == sink_type
 
 
 # ---------------------------------------------------------------------------

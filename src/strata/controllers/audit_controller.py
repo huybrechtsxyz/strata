@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from strata.controllers.base_controller import BaseController
 from strata.models.audit_config_model import AuditConfigModel
@@ -24,7 +25,7 @@ from strata.utils.output_writer import OutputWriter
 
 if TYPE_CHECKING:
     from strata.integrations.git import GitIntegration
-    from strata.integrations.siem.base_siem_integration import SiemBaseIntegration
+    from strata.models.capabilities import ISiemSink
 
 # Built-in path definitions — used when spec.deployment.paths is absent
 BUILTIN_PATH_DEFINITIONS: Dict[str, str] = {
@@ -42,6 +43,27 @@ BUILTIN_PATH_DEFINITIONS: Dict[str, str] = {
     "full": "{{ tenant }}/{{ workspace }}/{{ environment }}/{{ deployment }}/{{ timestamp }}",
 }
 
+# CloudEvents `type` reverse-DNS prefix (ADR-0066) — from apiVersion: strata.huybrechts.xyz/v1
+_CE_TYPE_PREFIX = "xyz.huybrechts.strata."
+
+# event_type -> (ECS event.kind, ECS event.category or None) — from the ADR's type-name table.
+# workitem.created/resumed classified alongside deployment.completed (Outcome class,
+# configuration category) — added to the closed enum in step 4, not in the ADR's original table.
+_EVENT_TYPE_METADATA: Dict[str, Tuple[str, Optional[List[str]]]] = {
+    "command.executed": ("event", ["process"]),
+    "deployment.completed": ("event", ["configuration"]),
+    "deployment.measured": ("metric", None),
+    "build.completed": ("event", ["package"]),
+    "validation.completed": ("event", ["configuration"]),
+    "workitem.created": ("event", ["configuration"]),
+    "workitem.resumed": ("event", ["configuration"]),
+    "policy.violated": ("alert", ["configuration"]),
+    "secret.accessed": ("event", ["iam"]),
+    "lock.acquired": ("event", ["process"]),
+    "lock.released": ("event", ["process"]),
+    "drift.detected": ("alert", ["configuration"]),
+}
+
 
 class AuditController(BaseController):
     """Orchestrates Layer 2 (disk) and Layer 4 (SIEM + remote) audit operations."""
@@ -50,13 +72,11 @@ class AuditController(BaseController):
         self,
         work_path: Path,
         audit_config: Optional[AuditConfigModel] = None,
-        siem_sinks: Optional[List["SiemBaseIntegration"]] = None,
         git_integration: Optional["GitIntegration"] = None,
     ) -> None:
         super().__init__()
         self._work_path = work_path
         self._audit_config = audit_config or AuditConfigModel()
-        self._siem_sinks: List["SiemBaseIntegration"] = siem_sinks or []
         self._git = git_integration
 
     @staticmethod
@@ -325,137 +345,166 @@ class AuditController(BaseController):
 
         return payload
 
-    def forward_to_siem(
+    def forward(
         self,
-        payload: DeployLogModel,
+        event_type: str,
+        payload: dict,
         audit_config: Optional[AuditConfigModel] = None,
     ) -> None:
-        """Forward a deploy-log entry to configured sinks (webhook/syslog/stdout/ndjson/integration).
+        """Route *payload* to the journal, then fan out to configured sinks (ADR-0066).
 
-        Best-effort: failures are logged but never raised.
+        Single routing entrypoint — replaces the deleted ``forward_to_siem()`` (which
+        hardcoded the event type and only handled built-in sink types) plus the sink
+        resolution previously duplicated in ``RunDeployCommand._resolve_siem_sinks()``
+        / ``_forward_workitem_event()`` (problem 8). Sinks are resolved here from
+        ``AuditConfigModel`` and the already-initialised integration registry — the one
+        path every caller (deploy, work items, ``resend``) now goes through, which is
+        also what makes ``resend`` reach integration-backed sinks for the first time
+        (problem 7).
+
+        The gate is consulted first (problem 1): if ``policy.events`` does not admit
+        *event_type*, nothing is written to the journal and no sink is consulted —
+        turning an event class off stops egress everywhere in one edit. A recognised
+        event type not explicitly configured falls back to its class-aware default; an
+        event type outside the closed set (a producer this model doesn't know about) is
+        never gated off here, only validated where it's explicitly configured (sink
+        filters) — see ``AuditPolicyModel.is_enabled``.
+
+        *payload* is the plain, flat dict callers already build (a ``DeployLogModel``
+        dump, a work-item dict, ...) — callers know nothing of the envelope shape, only
+        enough to populate it. This method wraps it into a CloudEvents 1.0 envelope with
+        ECS fields under ``data`` (problems 5, 6) before writing to the journal or
+        handing it to a sink, so both receive the identical, fully-formed record.
+
+        Best-effort: sink failures are logged (``warning``) but never raised — audit
+        must never fail a deploy (ADR-0018).
         """
         cfg = audit_config or self._audit_config
-        data = payload.model_dump(exclude_none=True)
+        if not cfg.policy.is_enabled(event_type):
+            return
 
-        # --- Built-in sink types ---
-        if cfg and cfg.sinks:
-            for sink in cfg.sinks:
-                if not sink.enabled:
-                    continue
-                # Event filter
-                if sink.events and "deploy_audit" not in sink.events:
-                    continue
-                # Integration-backed sinks are handled below
-                if sink.integration:
-                    continue
-                try:
-                    match sink.type:
-                        case "stdout":
-                            import sys
+        envelope = self._build_envelope(event_type, payload)
 
-                            sys.stdout.write(json.dumps(data, default=str) + "\n")
-                            sys.stdout.flush()
-                        case "ndjson":
-                            if sink.path:
-                                ndjson_path = Path(sink.path)
-                                ndjson_path.parent.mkdir(parents=True, exist_ok=True)
-                                with open(ndjson_path, "a", encoding="utf-8") as f:
-                                    f.write(json.dumps(data, default=str) + "\n")
-                        case "syslog":
-                            if sink.address:
-                                self._send_syslog(data, sink.address, fmt=sink.format or "json")
-                        case "webhook":
-                            if sink.url:
-                                self._send_webhook(data, sink.url, sink.headers)
-                except Exception as exc:
-                    self.logger.warning("forward_to_siem_sink_failed", sink=sink.name, error=str(exc))
+        from strata.logger import audit as journal_audit
 
-        # --- Integration-backed sinks (ISiemSink instances injected at construction) ---
-        for integration_sink in self._siem_sinks:
+        journal_audit(event_type, outcome=envelope["data"]["event"].get("outcome", "success"), detail=envelope)
+
+        for integration in self._resolve_sinks(event_type, cfg):
             try:
-                integration_sink.send_event("deploy_audit", data)
+                integration.send_event(event_type, envelope)
             except Exception as exc:
                 self.logger.warning(
-                    "forward_to_siem_integration_failed",
-                    sink=getattr(integration_sink, "integration_name", "?"),
+                    "forward_sink_failed",
+                    sink=getattr(integration, "integration_name", "?"),
+                    event_type=event_type,
                     error=str(exc),
                 )
 
-    def _send_webhook(self, data: dict, url: str, headers: Optional[Dict[str, str]] = None) -> None:
-        """Send payload to a webhook URL via urllib (no external dependencies)."""
-        import urllib.request
-
-        req_headers = {"Content-Type": "application/json"}
-        if headers:
-            req_headers.update(headers)
-
-        body = json.dumps(data, default=str).encode("utf-8")
-        req = urllib.request.Request(url, data=body, headers=req_headers, method="POST")
-        with urllib.request.urlopen(req, timeout=10):  # noqa: S310 — URL comes from user config
-            pass
-
-    def _send_syslog(self, data: dict, address: str, fmt: str = "json") -> None:
-        """Send payload to a syslog server via UDP.
-
-        Args:
-            data:    Event data dict.
-            address: ``host:port`` or ``host`` (default port 514).
-            fmt:     ``"json"`` (default) or ``"cef"`` (Common Event Format).
-        """
-        import socket
-
-        host, _, port_str = address.rpartition(":")
-        port = int(port_str) if port_str else 514
-        if not host:
-            host = address
-
-        if fmt == "cef":
-            body = self._format_cef(data)
-        else:
-            body = json.dumps(data, default=str)
-
-        message = f"<14>{body}"
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        try:
-            sock.sendto(message.encode("utf-8")[:65000], (host, port))
-        finally:
-            sock.close()
-
     @staticmethod
-    def _format_cef(data: dict) -> str:
-        """Format an audit event as CEF (Common Event Format).
+    def _build_envelope(event_type: str, payload: dict) -> Dict[str, Any]:
+        """Wrap *payload* in a CloudEvents 1.0 envelope with ECS fields under ``data`` (ADR-0066).
 
-        CEF:Version|Device Vendor|Device Product|Device Version|Signature ID|
-            Name|Severity|Extension
+        CloudEvents supplies identity and timing (``id``, ``time``, ``source``,
+        ``subject``); ECS supplies ``event.kind``/``category``/``action``/``outcome``,
+        ``user.name`` (from ``resolve_actor()``, ADR-0066/ADR-0067), and ``labels`` for
+        the correlation dimensions (``execution_id`` — problem 6). Everything
+        strata-specific — the original, unmodified *payload* — lives under the
+        explicitly namespaced ``data.strata`` bag.
 
-        Severity mapping: success → 3 (Low), failure → 7 (High).
+        Best-effort field extraction throughout: *payload* may be a full
+        ``DeployLogModel`` dump, a work-item dict, or (from tests / future producers)
+        an arbitrary dict — every field is read via ``.get()`` and omitted if absent,
+        never raising for a producer that doesn't populate every field.
         """
-        version = data.get("version", "unknown")
-        deployment = data.get("deployment", "unknown")
-        success = data.get("success", True)
-        severity = 3 if success else 7
-        timestamp = data.get("timestamp", "")
-        user = data.get("user", "") or ""
-        execution_id = data.get("execution_id", "") or ""
+        from strata.controllers.actor_controller import resolve_actor
 
-        # CEF extension key=value pairs (space-separated, pipe/backslash escaped)
-        def _cef_escape(v: str) -> str:
-            return v.replace("\\", "\\\\").replace("=", "\\=").replace("\n", "\\n")
+        kind, category = _EVENT_TYPE_METADATA.get(event_type, ("event", None))
 
-        ext_parts = [
-            f"rt={_cef_escape(str(timestamp))}",
-            f"src={_cef_escape(str(user))}",
-            f"dst={_cef_escape(str(deployment))}",
-            f"act={'success' if success else 'failure'}",
-            f"externalId={_cef_escape(str(execution_id))}",
-            f"msg={_cef_escape(json.dumps(data, default=str))}",
-        ]
-        extension = " ".join(ext_parts)
+        execution_id = payload.get("execution_id") or str(uuid.uuid4())
+        event_time = payload.get("timestamp") or datetime.now(timezone.utc).isoformat()
+        deployment = payload.get("deployment")
+        workspace = payload.get("workspace")
+        success = payload.get("success")
+        duration_seconds = payload.get("duration_seconds")
 
-        return (
-            f"CEF:0|strata|strata-audit|{_cef_escape(str(version))}"
-            f"|deploy_audit|Deployment Audit Event|{severity}|{extension}"
-        )
+        event_data: Dict[str, Any] = {"kind": kind, "action": event_type.replace(".", "-")}
+        if category is not None:
+            event_data["category"] = category
+        if success is not None:
+            event_data["outcome"] = "success" if success else "failure"
+        if duration_seconds is not None:
+            event_data["duration"] = int(duration_seconds * 1_000_000_000)  # ECS: nanoseconds
+
+        labels: Dict[str, Any] = {"execution_id": execution_id}
+        for key in ("workspace", "environment", "deployment", "tenant"):
+            value = payload.get(key)
+            if value is not None:
+                labels[key] = value
+
+        return {
+            "specversion": "1.0",
+            "type": f"{_CE_TYPE_PREFIX}{event_type}",
+            "source": f"/strata/{workspace or 'unknown'}/{deployment or 'unknown'}",
+            "id": execution_id,
+            "time": event_time,
+            "datacontenttype": "application/json",
+            "subject": deployment or event_type,
+            "data": {
+                "event": event_data,
+                "user": {"name": resolve_actor()},
+                "labels": labels,
+                "strata": payload,
+            },
+        }
+
+    def _resolve_sinks(
+        self,
+        event_type: str,
+        audit_config: Optional[AuditConfigModel],
+    ) -> List["ISiemSink"]:
+        """Resolve enabled, event-admitting sinks to their backing integration instances.
+
+        Every sink is now an integration reference (ADR-0066) — resolved through the
+        already-initialised ``IntegrationService`` registry, the same path every other
+        controller uses to look up a configured integration by name.
+        """
+        resolved: List["ISiemSink"] = []
+        if not audit_config or not audit_config.sinks:
+            return resolved
+
+        from strata.models.capabilities import ISiemSink
+        from strata.services.integration_service import IntegrationService
+
+        try:
+            svc = IntegrationService.get_instance()
+            if not svc.is_initialized():
+                svc.initialize_integrations()
+        except Exception as exc:
+            self.logger.warning("audit_sink_resolution_failed", error=str(exc))
+            return resolved
+
+        for sink in audit_config.sinks:
+            if not sink.enabled:
+                continue
+            if sink.events is not None and event_type not in sink.events:
+                continue
+            try:
+                integration = svc.get_integration(str(sink.integration))
+            except Exception as exc:
+                self.logger.warning("audit_sink_integration_lookup_failed", sink=sink.name, error=str(exc))
+                continue
+            if integration is None:
+                self.logger.warning(
+                    "audit_sink_integration_not_found", sink=sink.name, integration=str(sink.integration)
+                )
+                continue
+            if not isinstance(integration, ISiemSink):
+                self.logger.warning(
+                    "audit_sink_integration_not_siem", sink=sink.name, integration=str(sink.integration)
+                )
+                continue
+            resolved.append(integration)
+        return resolved
 
     def resend(
         self,
@@ -473,7 +522,7 @@ class AuditController(BaseController):
         failed = 0
         for record in records:
             try:
-                self.forward_to_siem(record, audit_config=audit_config)
+                self.forward("deployment.completed", record.model_dump(exclude_none=True), audit_config=audit_config)
                 sent += 1
             except Exception:
                 failed += 1
