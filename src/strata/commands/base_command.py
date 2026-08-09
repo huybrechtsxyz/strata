@@ -655,6 +655,35 @@ class BaseCommand:
         }
         AuditController(work_path=self._work_path).forward("command.executed", payload, audit_config=audit_cfg)
 
+    def _forward_policy_violation_audit_event(self, result: Any) -> None:
+        """Forward a ``policy.violated`` event for one failed ``PolicyResult`` (ADR-0066 follow-up).
+
+        Shared by every command that evaluates policies (``validate``, ``build``,
+        ``deploy``, ``check_policy``) — each calls this right where it already loops
+        over ``PolicyEngine.evaluate()`` results. The actual event construction lives
+        in ``AuditController.forward_policy_violation()``, not duplicated here or at
+        each call site — ``PolicyEngine`` itself (``validators/``) cannot call
+        ``AuditController.forward()`` directly, since ``validators`` sits below
+        ``controllers`` in ADR-0003's layering chain, so the trigger has to live at
+        the command layer instead.
+
+        Never raises: a forwarding failure must never fail a validate/build/deploy/
+        policy-check run.
+        """
+        try:
+            from strata.controllers.audit_controller import AuditController
+
+            deployment = None
+            deployment_service = getattr(self, "_deployment_service", None)
+            if deployment_service is not None and getattr(deployment_service, "model", None) is not None:
+                deployment = str(deployment_service.model.meta.name)
+
+            AuditController(work_path=self._work_path).forward_policy_violation(
+                result, execution_id=self._execution_id, deployment=deployment
+            )
+        except Exception as e:
+            self.logger.debug(f"Failed to forward policy.violated audit event (non-fatal): {e}")
+
     # Output configuration
 
     def _is_quiet(self) -> bool:

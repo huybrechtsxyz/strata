@@ -165,8 +165,10 @@ class CheckPolicyCommand(BaseCommand):
                 }
                 self._results.append(entry)
 
-                if not result.passed and result.enforcement == "deny":
-                    self._denied = True
+                if not result.passed:
+                    self._forward_policy_violation_audit_event(result)
+                    if result.enforcement == "deny":
+                        self._denied = True
 
         self._output_data = self._build_output_data(self._results)
         return True

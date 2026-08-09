@@ -359,6 +359,94 @@ class TestForward:
         mock_send.assert_called_once()
 
 
+class TestForwardPolicyViolation:
+    """Tests for AuditController.forward_policy_violation() (ADR-0066 follow-up).
+
+    PolicyEngine (validators/) cannot call forward() itself since validators sits
+    below controllers in ADR-0003's layering chain — this method centralises the
+    payload shape and config resolution so each policy-evaluating command only
+    needs a one-line trigger.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _mock_actor(self):
+        with patch("strata.controllers.actor_controller.resolve_actor", return_value="test-user"):
+            yield
+
+    def _make_result(self, **overrides):
+        from strata.validators.policies.base_policy import PolicyResult
+
+        defaults = {
+            "passed": False,
+            "policy_name": "no-public-ip",
+            "enforcement": "deny",
+            "policy_type": "naming",
+            "violations": ["resource X exposes a public IP"],
+        }
+        defaults.update(overrides)
+        return PolicyResult(**defaults)
+
+    def test_forwards_with_explicit_audit_config(self, tmp_path: Path) -> None:
+        from strata.models.audit_config_model import AuditPolicyModel
+
+        result = self._make_result()
+        config = AuditConfigModel(policy=AuditPolicyModel(events={"policy.violated": True}))
+
+        with patch("strata.logger.audit") as mock_journal:
+            controller = AuditController(work_path=tmp_path)
+            controller.forward_policy_violation(
+                result, execution_id="exec-1", deployment="my-deploy", audit_config=config
+            )
+
+        mock_journal.assert_called_once()
+        args, kwargs = mock_journal.call_args
+        assert args[0] == "policy.violated"
+        envelope = kwargs["detail"]
+        assert envelope["type"] == "xyz.huybrechts.strata.policy.violated"
+        assert envelope["data"]["strata"]["policy_name"] == "no-public-ip"
+        assert envelope["data"]["strata"]["enforcement"] == "deny"
+        assert envelope["data"]["strata"]["violations"] == ["resource X exposes a public IP"]
+
+    def test_resolves_audit_config_when_not_given(self, tmp_path: Path) -> None:
+        from strata.models.audit_config_model import AuditPolicyModel
+
+        result = self._make_result()
+        config = AuditConfigModel(policy=AuditPolicyModel(events={"policy.violated": True}))
+        mock_config_service = MagicMock()
+        mock_config_service.model.spec.audit = config
+
+        with (
+            patch(
+                "strata.services.configuration_service.ConfigurationService.get_instance",
+                return_value=mock_config_service,
+            ),
+            patch("strata.logger.audit") as mock_journal,
+        ):
+            controller = AuditController(work_path=tmp_path)
+            controller.forward_policy_violation(result, execution_id="exec-1")
+
+        mock_journal.assert_called_once()
+
+    def test_never_raises_on_config_resolution_failure(self, tmp_path: Path) -> None:
+        result = self._make_result()
+
+        with patch(
+            "strata.services.configuration_service.ConfigurationService.get_instance",
+            side_effect=RuntimeError("boom"),
+        ):
+            controller = AuditController(work_path=tmp_path)
+            # Should not raise
+            controller.forward_policy_violation(result, execution_id="exec-1")
+
+    def test_never_raises_on_forward_failure(self, tmp_path: Path) -> None:
+        result = self._make_result()
+
+        with patch("strata.controllers.audit_controller.AuditController.forward", side_effect=RuntimeError("boom")):
+            controller = AuditController(work_path=tmp_path)
+            # Should not raise
+            controller.forward_policy_violation(result, execution_id="exec-1")
+
+
 class TestResend:
     """Tests for AuditController.resend()."""
 

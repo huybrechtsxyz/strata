@@ -28,6 +28,7 @@ from strata.utils.output_writer import OutputWriter
 if TYPE_CHECKING:
     from strata.integrations.git import GitIntegration
     from strata.models.capabilities import ISiemSink
+    from strata.validators.policies.base_policy import PolicyResult
 
 # Built-in path definitions — used when spec.deployment.paths is absent
 BUILTIN_PATH_DEFINITIONS: Dict[str, str] = {
@@ -401,6 +402,55 @@ class AuditController(BaseController):
                     event_type=event_type,
                     error=str(exc),
                 )
+
+    def forward_policy_violation(
+        self,
+        result: "PolicyResult",
+        execution_id: Optional[str] = None,
+        deployment: Optional[str] = None,
+        workspace: Optional[str] = None,
+        audit_config: Optional[AuditConfigModel] = None,
+    ) -> None:
+        """Forward a ``policy.violated`` event for one failed ``PolicyResult`` (ADR-0066 follow-up).
+
+        ``PolicyEngine`` (``validators/``) cannot call ``forward()`` itself — it sits
+        *below* ``controllers/`` in ADR-0003's layering chain, so the trigger has to
+        live at each policy-evaluating command (``validate``, ``build``, ``deploy``,
+        ``check_policy``), right where it already loops over ``PolicyEngine.evaluate()``
+        results. This method centralises everything *except* that trigger — payload
+        shape, config resolution, and failure handling — in the one place ``forward()``
+        itself lives, rather than duplicating it at all four call sites (problem 8's
+        own reasoning, applied to the one part of it that can be centralised).
+
+        Resolves ``AuditConfigModel`` from the already-populated ``ConfigurationService``
+        singleton when *audit_config* is not given (matching ``BaseCommand``'s own
+        ``command.executed`` / lock / drift forwarding). Never raises: a forwarding
+        failure must never fail a validate/build/deploy/policy-check run.
+        """
+        try:
+            cfg = audit_config
+            if cfg is None:
+                try:
+                    from strata.services.configuration_service import ConfigurationService
+
+                    config_model = ConfigurationService.get_instance().model
+                    cfg = getattr(getattr(config_model, "spec", None), "audit", None)
+                except Exception as e:
+                    self.logger.debug(f"Failed to resolve spec.audit for policy.violated (non-fatal): {e}")
+
+            payload = {
+                "execution_id": execution_id,
+                "deployment": deployment,
+                "workspace": workspace,
+                "policy_name": result.policy_name,
+                "policy_type": result.policy_type,
+                "enforcement": result.enforcement,
+                "violations": result.violations,
+                "success": result.passed,
+            }
+            self.forward("policy.violated", payload, audit_config=cfg)
+        except Exception as e:
+            self.logger.debug(f"Failed to forward policy.violated audit event (non-fatal): {e}")
 
     @staticmethod
     def _build_envelope(event_type: str, payload: dict) -> Dict[str, Any]:

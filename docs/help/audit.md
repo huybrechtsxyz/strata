@@ -77,24 +77,34 @@ A closed set of event types, each with a class-aware default. Set explicitly to
 override; a type left unset keeps its default. An unrecognised key is a validation
 error naming the closest valid option — there is no silent typo.
 
-| Event type             | Default | Class      | CloudEvents `type` (wire)      | Producer                                |
-| ---------------------- | ------- | ---------- | ------------------------------ | --------------------------------------- |
-| `command.executed`     | off     | Invocation | `…strata.command.executed`     | every CLI command                       |
-| `deployment.completed` | on      | Outcome    | `…strata.deployment.completed` | `deploy run`                            |
-| `deployment.measured`  | on      | Outcome    | `…strata.deployment.measured`  | not yet wired (ADR-0064 metrics record) |
-| `build.completed`      | off     | Outcome    | `…strata.build.completed`      | not yet wired                           |
-| `validation.completed` | off     | Outcome    | `…strata.validation.completed` | not yet wired                           |
-| `workitem.created`     | on      | Outcome    | `…strata.workitem.created`     | `deploy run` (gate/approval created)    |
-| `workitem.resumed`     | on      | Outcome    | `…strata.workitem.resumed`     | `deploy run` (gate/approval resumed)    |
-| `policy.violated`      | on      | Domain     | `…strata.policy.violated`      | not yet wired                           |
-| `secret.accessed`      | on      | Domain     | `…strata.secret.accessed`      | not yet wired                           |
-| `lock.acquired`        | off     | Domain     | `…strata.lock.acquired`        | `deploy run` / `deploy destroy`         |
-| `lock.released`        | off     | Domain     | `…strata.lock.released`        | `deploy run` / `deploy destroy`         |
-| `drift.detected`       | on      | Domain     | `…strata.drift.detected`       | `deploy drift`                          |
+| Event type             | Default | Class      | CloudEvents `type` (wire)      | Producer                                                                    |
+| ---------------------- | ------- | ---------- | ------------------------------ | --------------------------------------------------------------------------- |
+| `command.executed`     | off     | Invocation | `…strata.command.executed`     | every CLI command                                                           |
+| `deployment.completed` | on      | Outcome    | `…strata.deployment.completed` | `deploy run`                                                                |
+| `deployment.measured`  | on      | Outcome    | `…strata.deployment.measured`  | not yet wired (ADR-0064 metrics record)                                     |
+| `build.completed`      | off     | Outcome    | `…strata.build.completed`      | not yet wired                                                               |
+| `validation.completed` | off     | Outcome    | `…strata.validation.completed` | not yet wired                                                               |
+| `workitem.created`     | on      | Outcome    | `…strata.workitem.created`     | `deploy run` (gate/approval created)                                        |
+| `workitem.resumed`     | on      | Outcome    | `…strata.workitem.resumed`     | `deploy run` (gate/approval resumed)                                        |
+| `policy.violated`      | on      | Domain     | `…strata.policy.violated`      | `validate` / `build` / `deploy` / `check_policy` (any failed policy result) |
+| `secret.accessed`      | on      | Domain     | `…strata.secret.accessed`      | deliberately not wired — see note below                                     |
+| `lock.acquired`        | off     | Domain     | `…strata.lock.acquired`        | `deploy run` / `deploy destroy`                                             |
+| `lock.released`        | off     | Domain     | `…strata.lock.released`        | `deploy run` / `deploy destroy`                                             |
+| `drift.detected`       | on      | Domain     | `…strata.drift.detected`       | `deploy drift`                                                              |
 
 "Not yet wired" means the event type, gate, and envelope all exist and work —
 there is simply no producer calling `AuditController.forward()` for it yet. Setting
 its policy to `true` has no observable effect until a producer is added.
+
+`secret.accessed` is different: it isn't blocked by anything, it's a deliberate
+choice not to wire it. Secret stores (Vault, Key Vault, Bitwarden) already produce
+more rigorous native audit trails than strata could add, the only value strata's
+own event would contribute is correlating an access to a specific `execution_id`,
+and the one available hook point (`ValueController.resolve_values()`) is shared by
+real deploys *and* read-only inspection commands (`deploy values list`/`get`/`show`)
+with no way to tell them apart there — wiring it would reproduce the same
+read-only-command volume problem step 1 fixed for `command.executed`. See ADR-0066's
+"`secret.accessed` — deliberately not wired" for the full reasoning.
 
 A disabled event type reaches neither the journal-adjacent sink fan-out nor any sink —
 the gate is consulted before anything else in `AuditController.forward()`.

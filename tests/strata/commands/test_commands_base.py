@@ -217,3 +217,65 @@ class TestForwardCommandExecutedAuditEvent:
             cmd._forward_command_executed_audit_event(success=True, duration_seconds=1.5)
 
         mock_resolve_actor.assert_not_called()
+
+
+class TestForwardPolicyViolationAuditEvent:
+    """ADR-0066 follow-up: policy.violated forwarding, shared by validate/build/deploy/check_policy."""
+
+    def _make_result(self, **overrides):
+        from strata.validators.policies.base_policy import PolicyResult
+
+        defaults = {
+            "passed": False,
+            "policy_name": "no-public-ip",
+            "enforcement": "deny",
+            "policy_type": "naming",
+            "violations": ["resource X exposes a public IP"],
+        }
+        defaults.update(overrides)
+        return PolicyResult(**defaults)
+
+    def test_calls_audit_controller_with_execution_id(self, tmp_path):
+        cmd = _make_command(tmp_path)
+        result = self._make_result()
+
+        with patch("strata.controllers.audit_controller.AuditController.forward_policy_violation") as mock_fwd:
+            cmd._forward_policy_violation_audit_event(result)
+
+        mock_fwd.assert_called_once()
+        args, kwargs = mock_fwd.call_args
+        assert args[0] is result
+        assert kwargs["execution_id"] == cmd._execution_id
+
+    def test_includes_deployment_name_when_deployment_service_present(self, tmp_path):
+        cmd = _make_command(tmp_path)
+        result = self._make_result()
+
+        deployment_service = MagicMock()
+        deployment_service.model.meta.name = "haven-prd"
+        cmd._deployment_service = deployment_service
+
+        with patch("strata.controllers.audit_controller.AuditController.forward_policy_violation") as mock_fwd:
+            cmd._forward_policy_violation_audit_event(result)
+
+        assert mock_fwd.call_args.kwargs["deployment"] == "haven-prd"
+
+    def test_deployment_is_none_without_deployment_service(self, tmp_path):
+        cmd = _make_command(tmp_path)
+        result = self._make_result()
+
+        with patch("strata.controllers.audit_controller.AuditController.forward_policy_violation") as mock_fwd:
+            cmd._forward_policy_violation_audit_event(result)
+
+        assert mock_fwd.call_args.kwargs["deployment"] is None
+
+    def test_never_raises_on_failure(self, tmp_path):
+        cmd = _make_command(tmp_path)
+        result = self._make_result()
+
+        with patch(
+            "strata.controllers.audit_controller.AuditController.forward_policy_violation",
+            side_effect=RuntimeError("boom"),
+        ):
+            # Should not raise
+            cmd._forward_policy_violation_audit_event(result)

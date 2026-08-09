@@ -52,13 +52,23 @@ AUDIT_EVENT_DEFAULTS: Dict[str, bool] = {
     "command.executed": False,
     # Outcome
     "deployment.completed": True,
-    "deployment.measured": True,
-    "build.completed": False,
-    "validation.completed": False,
+    "deployment.measured": True,  # not yet wired — ADR-0064's metrics record isn't implemented
+    "build.completed": False,  # not yet wired — no producer calls forward() for this yet
+    "validation.completed": False,  # not yet wired — no producer calls forward() for this yet
     "workitem.created": True,
     "workitem.resumed": True,
     # Domain
-    "policy.violated": True,
+    "policy.violated": True,  # wired: validate/build/deploy/check_policy (any failed PolicyResult)
+    # secret.accessed: intentionally left unwired. The concept and default were kept in
+    # the closed enum, but wiring it is a deliberate non-decision, not an oversight — see
+    # "secret.accessed — deliberately not wired" in the ADR's Consequences section.
+    # Real secret stores (Vault, Key Vault, Bitwarden) already produce far more rigorous
+    # native audit trails than strata could add; the only unique value strata's own event
+    # would add is correlating an access to a specific execution_id, and the one hook
+    # point available (ValueController.resolve_values()) is shared by genuine deploys AND
+    # read-only inspection commands (`deploy values list/get/show`) with no way to tell
+    # them apart there — wiring it as-is would reproduce exactly the read-only-command
+    # polling-volume problem step 1 fixed for command.executed, one layer down.
     "secret.accessed": True,
     "lock.acquired": False,
     "lock.released": False,

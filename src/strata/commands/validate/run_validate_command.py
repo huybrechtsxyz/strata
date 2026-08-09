@@ -356,6 +356,7 @@ class ValidateCommand(BaseCommand):
                         click.echo(f"    \u26a0  Policy '{result.policy_name}' warning: {v}")
                     elif result.enforcement == "audit" and self._is_verbose():
                         click.echo(f"    \u00b7  Policy '{result.policy_name}' audit: {v}")
+                self._forward_policy_violation_audit_event(result)
         if denied:
             self._validate_policy_denied = True
         return not denied
