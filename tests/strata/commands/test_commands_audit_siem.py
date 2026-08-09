@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
 
 from strata.commands.cli_audit import audit_group
 from strata.utils.config import SOLUTION_DEPLOY_LOG_DIR, SOLUTION_DIR
+
+if TYPE_CHECKING:
+    from strata.commands.audit.export_audit_command import ExportAuditCommand
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -354,7 +358,7 @@ class TestSbomIgnoreRulesForwarding:
 
         ConfigurationService.reset()
 
-    def _make_command(self, tmp_path: Path, splunk_instance) -> "object":
+    def _make_command(self, tmp_path: Path, splunk_instance) -> "ExportAuditCommand":
         from strata.commands.audit.export_audit_command import ExportAuditCommand
 
         (tmp_path / ".strata").mkdir(exist_ok=True)

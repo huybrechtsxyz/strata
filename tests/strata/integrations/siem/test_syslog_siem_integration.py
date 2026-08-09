@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any, Dict
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -151,7 +152,7 @@ class TestFormatCef:
     """ADR-0066 step 5: _format_cef reads the CloudEvents/ECS envelope forward() builds."""
 
     def _envelope(self, **data_overrides) -> dict:
-        data = {"event": {}, "user": {}, "labels": {}, "strata": {}}
+        data: Dict[str, Any] = {"event": {}, "user": {}, "labels": {}, "strata": {}}
         data.update(data_overrides)
         return {"specversion": "1.0", "type": "xyz.huybrechts.strata.deployment.completed", "time": "", "data": data}
 
