@@ -368,14 +368,14 @@ class AuditController(BaseController):
                             if sink.url:
                                 self._send_webhook(data, sink.url, sink.headers)
                 except Exception as exc:
-                    self.logger.debug("forward_to_siem_sink_failed", sink=sink.name, error=str(exc))
+                    self.logger.warning("forward_to_siem_sink_failed", sink=sink.name, error=str(exc))
 
         # --- Integration-backed sinks (ISiemSink instances injected at construction) ---
         for integration_sink in self._siem_sinks:
             try:
                 integration_sink.send_event("deploy_audit", data)
             except Exception as exc:
-                self.logger.debug(
+                self.logger.warning(
                     "forward_to_siem_integration_failed",
                     sink=getattr(integration_sink, "integration_name", "?"),
                     error=str(exc),

@@ -31,6 +31,24 @@ class BaseCommand:
     OPERATION = "base_command"
     SHOW_CHROME: ClassVar[bool] = True  # Set False on commands that suppress header/footer (e.g. tools commands)
 
+    # ADR-0066 problem 3: read-only commands have no observable side effect, so
+    # auditing them is pure volume with no signal — this was ~95% of the measured
+    # 18,853-entry audit log (VS Code's `workitem_list` polling, editor `schema_get`/
+    # `schema_list`, `tools_status`). Matches the criterion `logger/audit.py` already
+    # documents ("user actions with observable side-effects").
+    _AUDIT_READ_ONLY_OPERATION_PREFIXES: ClassVar[tuple] = ("schema_",)
+    _AUDIT_READ_ONLY_OPERATION_SUFFIXES: ClassVar[tuple] = ("_list", "_show", "_status")
+
+    @classmethod
+    def _is_audit_mutating_operation(cls) -> bool:
+        """Return False for read-only operations excluded from the `command.executed` audit entry."""
+        operation = cls.OPERATION
+        if operation.startswith(cls._AUDIT_READ_ONLY_OPERATION_PREFIXES):
+            return False
+        if operation.endswith(cls._AUDIT_READ_ONLY_OPERATION_SUFFIXES):
+            return False
+        return True
+
     def __init__(
         self,
         work_path: Optional[str] = None,
@@ -562,17 +580,19 @@ class BaseCommand:
         self._end_time = datetime.now(timezone.utc)
         duration = self._end_time - self._start_time
 
-        # Emit audit entry for every command execution
-        audit(
-            f"command.{self.OPERATION}",
-            outcome="success" if success else "failure",
-            target=" ".join(redact_argv(sys.argv[1:])) if len(sys.argv) > 1 else self.OPERATION,
-            detail={
-                "execution_id": self._execution_id,
-                "duration_ms": round(duration.total_seconds() * 1000),
-                "error_count": len(self._errors),
-            },
-        )
+        # Emit audit entry only for mutating operations (ADR-0066 problem 3) — read-only
+        # commands (*_list, *_show, *_status, schema_*) have no observable side effect.
+        if self._is_audit_mutating_operation():
+            audit(
+                f"command.{self.OPERATION}",
+                outcome="success" if success else "failure",
+                target=" ".join(redact_argv(sys.argv[1:])) if len(sys.argv) > 1 else self.OPERATION,
+                detail={
+                    "execution_id": self._execution_id,
+                    "duration_ms": round(duration.total_seconds() * 1000),
+                    "error_count": len(self._errors),
+                },
+            )
         shutdown_audit()
 
         self.logger.debug(

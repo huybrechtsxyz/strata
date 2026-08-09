@@ -49,6 +49,26 @@ class TestBaseIntegrationSingleton:
         b = ConcreteIntegration(cfg)
         assert a is not b
 
+    def test_different_names_of_same_type_give_distinct_instances(self):
+        """ADR-0066: singleton key is config.name, not a shared 'default' literal —
+        two declarations of the same integration type no longer silently collapse
+        into one object."""
+        a = ConcreteIntegration(_make_config(name="first"))
+        b = ConcreteIntegration(_make_config(name="second"))
+        assert a is not b
+
+    def test_same_name_of_same_type_gives_same_instance(self):
+        a = ConcreteIntegration(_make_config(name="shared"))
+        b = ConcreteIntegration(_make_config(name="shared"))
+        assert a is b
+
+    def test_default_instance_key_is_config_name(self):
+        cfg = _make_config(name="my-integration")
+        assert BaseIntegration._get_instance_key_static(ConcreteIntegration, cfg) == "my-integration"
+
+    def test_default_instance_key_falls_back_when_no_config(self):
+        assert BaseIntegration._get_instance_key_static(ConcreteIntegration) == "default"
+
 
 # ---------------------------------------------------------------------------
 # Initialisation attributes

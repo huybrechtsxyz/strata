@@ -614,7 +614,7 @@ strata profile activate development
 
 where that profile's configuration set contains an `spec.audit` with `sinks: []` and the same `policy` block. Development keeps the full local journal and ships nothing outward, and the difference is visible in a configuration document rather than buried in an environment override.
 
-## Implementation sketch
+## Implementation plan
 
 ```
 src/strata/
@@ -642,21 +642,21 @@ src/strata/
     └── audit/                          # + status; resend and export route through forward()
 ```
 
-Ordering. Steps 0–1 are non-breaking and can ship immediately; steps 2–6 are the single breaking release and land together.
+Ordering. Steps 0–1 are non-breaking and can ship immediately; steps 2–6 are the single breaking release and land together — deliberately not started until steps 0–1 are verified (tests, lint, mypy) and the breaking release is explicitly confirmed, since steps 2–6 rewrite `spec.audit` for every existing workspace with no compatibility shim.
 
-**0. Integration instance identity.** `_get_instance_key_static` → `config.name`; `check_unique_names` on `spec.integrations`; delete Splunk's override. Non-breaking on its own (it makes previously-discarded declarations work), and everything else depends on it.
+**0. Integration instance identity.** ✅ Done. `_get_instance_key_static` → `config.name`; `check_unique_names` on `spec.integrations`; deleted Splunk's now-redundant override. Non-breaking on its own (it makes previously-discarded declarations work), and everything else depends on it. Verified: full suite 5441 passed, ruff/mypy clean, plus new regression tests (`test_integrations_base.py`, `test_models_configuration.py`) covering distinct-instance-per-name and duplicate-name rejection.
 
-**1. Stop the bleeding.** `configure_audit_log` no-ops under `PYTEST_CURRENT_TEST`; restrict the `cli_action` producer to mutating commands; `debug` → `warning` on delivery failure. No model change, removes ~95% of journal volume immediately. Fixes problems 3, 4.
+**1. Stop the bleeding.** ✅ Done. `configure_audit_log` no-ops under `PYTEST_CURRENT_TEST`; `BaseCommand._is_audit_mutating_operation()` restricts `command.{OPERATION}` to mutating ops (excludes `*_list`/`*_show`/`*_status`/`schema_*`); sink delivery failures logged at `warning` instead of `debug`. No model change, removes ~95% of journal volume immediately (matches the measured `workitem_list`/`schema_get`/`schema_list`/`tools_status` volume). Fixes problems 3, 4. Verified: full suite 5454 passed, ruff/mypy/lint-imports clean, new regression tests (`test_audit.py`, `test_commands_base.py`).
 
-**2. The two new integration classes.** `WebhookSiemIntegration` and `SyslogSiemIntegration`, lifting the logic out of `AuditController._send_webhook` / `_send_syslog` / `_format_cef` and gaining `_post_json`'s retry.
+**2. The two new integration classes.** ⏸️ Not started. `WebhookSiemIntegration` and `SyslogSiemIntegration`, lifting the logic out of `AuditController._send_webhook` / `_send_syslog` / `_format_cef` and gaining `_post_json`'s retry.
 
-**3. `AuditSinkModel` reduces to references.** Both validators deleted; `forward(event_type, payload)` with journal-then-sinks fan-out and sink resolution inside the controller. Fixes problems 2, 7, 8, 9, 10.
+**3. `AuditSinkModel` reduces to references.** ⏸️ Not started. Both validators deleted; `forward(event_type, payload)` with journal-then-sinks fan-out and sink resolution inside the controller. Fixes problems 2, 7, 8, 9, 10.
 
-**4. Policy becomes real.** `policy.events` consulted by `forward()`, closed enum with class-aware defaults, gate/filter consistency validation. Fixes problem 1.
+**4. Policy becomes real.** ⏸️ Not started. `policy.events` consulted by `forward()`, closed enum with class-aware defaults, gate/filter consistency validation. Fixes problem 1.
 
-**5. Identity and envelope.** ECS `user.name` populated from the resolved actor; the CloudEvents envelope applied to journal entries and sink payloads alike; `execution_id` carried as `labels.execution_id`. Fixes problems 5, 6.
+**5. Identity and envelope.** ⏸️ Not started. ECS `user.name` populated from the resolved actor; the CloudEvents envelope applied to journal entries and sink payloads alike; `execution_id` carried as `labels.execution_id`. Fixes problems 5, 6. `user.name` sourcing is already available via ADR-0066/ADR-0067's `resolve_actor()` (`controllers/actor_controller.py`), implemented separately from this ADR's own scope.
 
-**6. One configuration location.** `spec.audit.journal` with two-phase bootstrap and the precedence chain; `EnvironmentModel.spec.audit` and its `EnvironmentService` merge removed; `strata audit status`; `help/audit.md` corrected; old-shape detection with replacement-naming errors. Fixes problem 11.
+**6. One configuration location.** ⏸️ Not started. `spec.audit.journal` with two-phase bootstrap and the precedence chain; `EnvironmentModel.spec.audit` and its `EnvironmentService` merge removed; `strata audit status`; `help/audit.md` corrected; old-shape detection with replacement-naming errors. Fixes problem 11.
 
 Step 5 is where ADR-0065's schema contract is realised; the shape itself is already settled by the CloudEvents + ECS decision.
 

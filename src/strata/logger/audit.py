@@ -21,6 +21,7 @@ Auditable actions include:
 import json
 import logging
 import logging.handlers
+import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -56,6 +57,14 @@ def configure_audit_log(
             (default ``"%Y%m%d"``).  Only used when ``rotation="daily"``.
     """
     global _audit_logger
+
+    # ADR-0066 problem 4: tests run in-process through BaseCommand, so without this
+    # guard every test run appended real entries to the real audit log (~1/3 of the
+    # measured 18,853-entry file was pytest's own argv). Leaving `_audit_logger` unset
+    # keeps `audit()` a no-op, matching its own documented "silent no-op in tests" claim.
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return
+
     _audit_logger = logging.getLogger("strata.audit")
     _audit_logger.setLevel(logging.INFO)
     _audit_logger.propagate = False

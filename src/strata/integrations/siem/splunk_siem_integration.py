@@ -48,13 +48,6 @@ _HEC_HEALTH_PATH = "/services/collector/health"
 class SplunkSiemIntegration(SiemBaseIntegration):
     """Forwards structured audit events to Splunk via the HTTP Event Collector (HEC)."""
 
-    @classmethod
-    def _get_instance_key_static(cls, class_ref, *args, **kwargs) -> str:
-        config = kwargs.get("config") or (args[0] if args else None)
-        if config and config.endpoints and config.endpoints.address:
-            return config.endpoints.address
-        return "default"
-
     def __init__(self, config: IntegrationModel) -> None:
         super().__init__(config)
 

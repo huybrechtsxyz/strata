@@ -629,6 +629,18 @@ class ConfigurationSpecModel(PlatformBaseModel):
         return self
 
     @model_validator(mode="after")
+    def validate_unique_integrations(self) -> "ConfigurationSpecModel":
+        """Validate that all integration names are unique (ADR-0066).
+
+        Integration identity (both singleton keying in ``BaseIntegration`` and
+        ``sinks[].integration`` references) is the declared ``name`` — a duplicate
+        previously resolved last-wins silently; it is now a validation error.
+        """
+        if self.integrations:
+            check_unique_names([i.name for i in self.integrations], "integration names in configuration")
+        return self
+
+    @model_validator(mode="after")
     def validate_unique_topologies(self) -> "ConfigurationSpecModel":
         """Validate that all topology types are unique."""
         if self.topologies:

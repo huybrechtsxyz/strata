@@ -115,6 +115,34 @@ class TestPathConventionTenantResolver:
         assert len(spec.paths) == 2
 
 
+class TestUniqueIntegrationNames:
+    """ADR-0066: integration identity is the declared name — duplicates must fail."""
+
+    def test_duplicate_integration_names_raise(self):
+        from strata.models.configuration_model import ConfigurationSpecModel
+        from strata.models.integration_model import IntegrationModel
+
+        with pytest.raises(ValidationError, match="integration names in configuration"):
+            ConfigurationSpecModel(
+                integrations=[
+                    IntegrationModel(name="splunk", type="splunk"),
+                    IntegrationModel(name="splunk", type="splunk"),
+                ]
+            )
+
+    def test_unique_integration_names_are_valid(self):
+        from strata.models.configuration_model import ConfigurationSpecModel
+        from strata.models.integration_model import IntegrationModel
+
+        spec = ConfigurationSpecModel(
+            integrations=[
+                IntegrationModel(name="splunk-prod", type="splunk"),
+                IntegrationModel(name="splunk-dr", type="splunk"),
+            ]
+        )
+        assert len(spec.integrations) == 2
+
+
 class TestConfigurationLifecycleModel:
     """Test lifecycle phase models in ConfigurationModel."""
 
