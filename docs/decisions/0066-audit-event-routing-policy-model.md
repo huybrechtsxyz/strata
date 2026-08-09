@@ -2,7 +2,7 @@
 
 - Status: completed
 - Date: 2026-08-06
-- Related: ADR-0018 (deployment audit & traceability), ADR-0022 (SIEM integration), ADR-0064 (deployment metrics record), ADR-0065 (audit ingest service), ADR-0005 (secret resolution at build time), ADR-0004 (exit code convention)
+- Related: ADR-0018 (deployment audit & traceability), ADR-0022 (SIEM integration), ADR-0064 (deployment metrics record), ADR-0065 (strata state service), ADR-0005 (secret resolution at build time), ADR-0004 (exit code convention)
 - Out of scope: server-side user identity/AuthN/AuthZ (OIDC/OAuth2 login, session and token issuance, authorization model) is covered by [ADR-0067](0067-server-identity-authentication-authorization.md), needed before ADR-0065 Phase 3 (control plane) can proceed — see "Out of scope, on purpose" under "What `actor` resolves from" below
 
 ## Context and Problem Statement
