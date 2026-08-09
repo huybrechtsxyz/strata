@@ -81,11 +81,16 @@ error naming the closest valid option — there is no silent typo.
 | ---------------------- | ------- | ---------- | ------------------------------ | --------------------------------------------------------------------------- |
 | `command.executed`     | off     | Invocation | `…strata.command.executed`     | every CLI command                                                           |
 | `deployment.completed` | on      | Outcome    | `…strata.deployment.completed` | `deploy run`                                                                |
+| `deployment.destroyed` | on      | Outcome    | `…strata.deployment.destroyed` | `deploy destroy`                                                            |
 | `deployment.measured`  | on      | Outcome    | `…strata.deployment.measured`  | not yet wired (ADR-0064 metrics record)                                     |
 | `build.completed`      | off     | Outcome    | `…strata.build.completed`      | not yet wired                                                               |
 | `validation.completed` | off     | Outcome    | `…strata.validation.completed` | not yet wired                                                               |
 | `workitem.created`     | on      | Outcome    | `…strata.workitem.created`     | `deploy run` (gate/approval created)                                        |
 | `workitem.resumed`     | on      | Outcome    | `…strata.workitem.resumed`     | `deploy run` (gate/approval resumed)                                        |
+| `workitem.approved`    | on      | Outcome    | `…strata.workitem.approved`    | `workitem approve` (gate approved)                                          |
+| `workitem.rejected`    | on      | Outcome    | `…strata.workitem.rejected`    | `workitem reject` (gate rejected)                                           |
+| `workitem.completed`   | on      | Outcome    | `…strata.workitem.completed`   | `workitem complete` (gate completed)                                        |
+| `workitem.cancelled`   | on      | Outcome    | `…strata.workitem.cancelled`   | `workitem cancel` / scheduled-gate window miss                              |
 | `policy.violated`      | on      | Domain     | `…strata.policy.violated`      | `validate` / `build` / `deploy` / `check_policy` (any failed policy result) |
 | `secret.accessed`      | on      | Domain     | `…strata.secret.accessed`      | deliberately not wired — see note below                                     |
 | `lock.acquired`        | off     | Domain     | `…strata.lock.acquired`        | `deploy run` / `deploy destroy`                                             |

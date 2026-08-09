@@ -52,11 +52,16 @@ AUDIT_EVENT_DEFAULTS: Dict[str, bool] = {
     "command.executed": False,
     # Outcome
     "deployment.completed": True,
+    "deployment.destroyed": True,  # wired: DestroyDeployCommand (ADR-0066 gap B)
     "deployment.measured": True,  # not yet wired — ADR-0064's metrics record isn't implemented
     "build.completed": False,  # not yet wired — no producer calls forward() for this yet
     "validation.completed": False,  # not yet wired — no producer calls forward() for this yet
     "workitem.created": True,
     "workitem.resumed": True,
+    "workitem.approved": True,  # wired: WorkItemController.resolve() (ADR-0066 gap A)
+    "workitem.rejected": True,  # wired: WorkItemController.resolve() (ADR-0066 gap A)
+    "workitem.completed": True,  # wired: WorkItemController.resolve() (ADR-0066 gap A)
+    "workitem.cancelled": True,  # wired: WorkItemController.resolve() (ADR-0066 gap A)
     # Domain
     "policy.violated": True,  # wired: validate/build/deploy/check_policy (any failed PolicyResult)
     # secret.accessed: intentionally left unwired. The concept and default were kept in

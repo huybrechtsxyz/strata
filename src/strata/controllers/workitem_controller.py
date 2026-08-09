@@ -20,7 +20,7 @@ from strata.integrations.workitem.base_workitem_backend import (
     WorkItemNotFoundError,
     WorkItemStateError,
 )
-from strata.logger import audit, get_logger
+from strata.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -33,8 +33,13 @@ def _get_identity() -> str:
 class WorkItemController:
     """Orchestrates work-item creation, resolution, and lifecycle management."""
 
-    def __init__(self, backend: BaseWorkItemBackend) -> None:
+    def __init__(self, backend: BaseWorkItemBackend, work_path: Optional[Path] = None) -> None:
         self._backend = backend
+        # Needed to construct AuditController for forward()ing resolution events
+        # (ADR-0066 gap A) — optional only for backward compatibility with any
+        # direct, non-factory construction; forwarding is skipped (logged debug)
+        # if absent rather than raising.
+        self._work_path = work_path
 
     # ------------------------------------------------------------------
     # Factory helpers
@@ -45,7 +50,7 @@ class WorkItemController:
         """Create a controller backed by the local file-system backend."""
         from strata.integrations.workitem.workitem_local import LocalWorkItemBackend
 
-        return cls(LocalWorkItemBackend(work_path))
+        return cls(LocalWorkItemBackend(work_path), work_path=work_path)
 
     @classmethod
     def from_config(
@@ -58,7 +63,7 @@ class WorkItemController:
         from strata.integrations.workitem.workitem_factory import WorkItemBackendFactory
 
         backend = WorkItemBackendFactory.create(work_path, backend_type, configuration)
-        return cls(backend)
+        return cls(backend, work_path=work_path)
 
     # ------------------------------------------------------------------
     # Core operations
@@ -99,12 +104,13 @@ class WorkItemController:
             context=context or {},
         )
         item = self._backend.create(item)
-        audit(
-            "workitem.created",
-            outcome="success",
-            target=item.id,
-            detail={"type": item.type, "deployment": item.deployment, "commit": item.commit[:8]},
-        )
+        # No raw audit() call here (unlike pre-ADR-0066): request() is only ever
+        # invoked via WorkItemGateController.evaluate_and_create(), itself only
+        # ever called from RunDeployCommand's gate-evaluation flow, which already
+        # forwards "workitem.created" properly through AuditController.forward()
+        # via _forward_workitem_event() right after this returns. A raw journal
+        # write here would double-fire the same event through two separate,
+        # divergent code paths (one gated/enveloped/sink-forwarded, one not).
         return item
 
     def resolve(
@@ -121,13 +127,46 @@ class WorkItemController:
             resolved_by=resolver or _get_identity(),
             note=note,
         )
-        audit(
-            f"workitem.{status}",
-            outcome="success",
-            target=item_id,
-            detail={"resolved_by": result.resolved_by, "note": note},
-        )
+        self._forward_resolution_event(status, result, note)
         return result
+
+    def _forward_resolution_event(self, status: str, item: WorkItem, note: Optional[str]) -> None:
+        """Forward a ``workitem.<status>`` event through the ADR-0066 pipeline.
+
+        Best-effort — resolution must never fail because auditing failed. Resolves
+        ``AuditConfigModel`` from the already-populated ``ConfigurationService``
+        singleton (matching ``forward_policy_violation()`` / ``_forward_lock_audit_event()``),
+        since approve/reject/complete/cancel are independent CLI invocations with no
+        command object to pass a resolved config through. No ``execution_id`` is
+        available or expected here — these are not tied to a parent deploy's
+        execution; ``AuditController._build_envelope()`` already falls back to a
+        fresh UUID when it is absent.
+        """
+        if self._work_path is None:
+            logger.debug(f"Skipping workitem.{status} forward — no work_path on this controller")
+            return
+        try:
+            from strata.controllers.audit_controller import AuditController
+            from strata.services.configuration_service import ConfigurationService
+
+            audit_cfg = None
+            try:
+                config_model = ConfigurationService.get_instance().model
+                audit_cfg = getattr(getattr(config_model, "spec", None), "audit", None)
+            except Exception as e:
+                logger.debug(f"Failed to resolve spec.audit for workitem.{status} (non-fatal): {e}")
+
+            payload = {
+                "item_id": item.id,
+                "type": item.type,
+                "deployment": item.deployment,
+                "commit": item.commit[:8] if item.commit else None,
+                "resolved_by": item.resolved_by,
+                "note": note,
+            }
+            AuditController(work_path=self._work_path).forward(f"workitem.{status}", payload, audit_config=audit_cfg)
+        except Exception as e:
+            logger.debug(f"Failed to forward workitem.{status} audit event (non-fatal): {e}")
 
     def approve(self, item_id: str, note: Optional[str] = None) -> WorkItem:
         return self.resolve(item_id, WORKITEM_STATUS_APPROVED, note=note)

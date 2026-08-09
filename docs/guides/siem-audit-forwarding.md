@@ -41,12 +41,16 @@ The `otel` integration reaches Datadog and Sumo Logic without a dedicated integr
 
 The following events are logged during deployments:
 
-| Event               | When                                   | Payload                                     |
-| ------------------- | -------------------------------------- | ------------------------------------------- |
-| `workitem.created`  | A gate pauses the deployment           | Work item ID, gate type, approvers, timeout |
-| `workitem.approved` | Operator approves a gate               | Work item ID, approver, timestamp, note     |
-| `workitem.rejected` | Operator rejects a gate                | Work item ID, rejector, reason              |
-| `workitem.resumed`  | Deployment resumes after gate approval | Work item ID, commit SHA, deploy stage      |
+| Event                  | When                                                            | Payload                                         |
+| ---------------------- | --------------------------------------------------------------- | ----------------------------------------------- |
+| `workitem.created`     | A gate pauses the deployment                                    | Work item ID, gate type, approvers, timeout     |
+| `workitem.approved`    | Operator approves a gate                                        | Work item ID, approver, timestamp, note         |
+| `workitem.rejected`    | Operator rejects a gate                                         | Work item ID, rejector, reason                  |
+| `workitem.completed`   | Operator marks a gate completed                                 | Work item ID, resolver, comment                 |
+| `workitem.cancelled`   | Operator cancels a gate (or a scheduled gate misses its window) | Work item ID, resolver, reason                  |
+| `workitem.resumed`     | Deployment resumes after gate approval                          | Work item ID, commit SHA, deploy stage          |
+| `deployment.completed` | A deploy run finishes                                           | Execution ID, commit, stages, duration, success |
+| `deployment.destroyed` | A `deploy destroy` run finishes                                 | Execution ID, commit, stages, duration, success |
 
 For SIEM, these events are forwarded to your configured backend during the deploy or on-demand via `strata audit export --siem <name>`.
 

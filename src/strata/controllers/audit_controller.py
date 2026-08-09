@@ -52,14 +52,23 @@ _CE_TYPE_PREFIX = "xyz.huybrechts.strata."
 # event_type -> (ECS event.kind, ECS event.category or None) — from the ADR's type-name table.
 # workitem.created/resumed classified alongside deployment.completed (Outcome class,
 # configuration category) — added to the closed enum in step 4, not in the ADR's original table.
+# workitem.approved/rejected/completed/cancelled and deployment.destroyed added in ADR-0066's
+# gap-A/gap-B follow-up — deployment.destroyed is classified "alert" (not plain "event"), like
+# policy.violated/drift.detected, since a destroy is categorically more consequential than a
+# routine deploy and should be distinguishable in SIEM alerting rules.
 _EVENT_TYPE_METADATA: Dict[str, Tuple[str, Optional[List[str]]]] = {
     "command.executed": ("event", ["process"]),
     "deployment.completed": ("event", ["configuration"]),
+    "deployment.destroyed": ("alert", ["configuration"]),
     "deployment.measured": ("metric", None),
     "build.completed": ("event", ["package"]),
     "validation.completed": ("event", ["configuration"]),
     "workitem.created": ("event", ["configuration"]),
     "workitem.resumed": ("event", ["configuration"]),
+    "workitem.approved": ("event", ["configuration"]),
+    "workitem.rejected": ("event", ["configuration"]),
+    "workitem.completed": ("event", ["configuration"]),
+    "workitem.cancelled": ("event", ["configuration"]),
     "policy.violated": ("alert", ["configuration"]),
     "secret.accessed": ("event", ["iam"]),
     "lock.acquired": ("event", ["process"]),

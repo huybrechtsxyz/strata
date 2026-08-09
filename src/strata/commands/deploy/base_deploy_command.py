@@ -81,6 +81,7 @@ class BaseDeployCommand(BaseCommand):
         # Subclasses override these before calling _execute_provisioning.
         self._dry_run: bool = False
         self._force_lock: bool = False
+        self._force: bool = False
 
     def get_required_integrations(self):
         return {}
@@ -1027,3 +1028,175 @@ class BaseDeployCommand(BaseCommand):
                         )
                     )
         return images if images else None
+
+    # ------------------------------------------------------------------
+    # Deploy-log + SIEM forwarding (ADR-0066) — shared by run and destroy
+    # ------------------------------------------------------------------
+
+    def _get_git_field(self, *args: str) -> Optional[str]:
+        """Run a git command and return stdout, or None on failure."""
+        try:
+            from strata.utils.system import run_command
+
+            result = run_command(["git"] + list(args), cwd=str(self._work_path), timeout=10)
+            if result.returncode == 0 and result.stdout:
+                return result.stdout.strip()
+        except Exception:
+            pass
+        return None
+
+    def _get_current_commit(self) -> str:
+        """Return the current HEAD commit SHA, or 'unknown' on failure."""
+        return self._get_git_field("rev-parse", "HEAD") or "unknown"
+
+    def _write_deploy_log_and_forward(self, event_type: str, success: bool) -> None:
+        """Assemble and write deploy-log via ``AuditController``, then forward *event_type*.
+
+        Shared by ``RunDeployCommand`` (``event_type="deployment.completed"``) and
+        ``DestroyDeployCommand`` (``event_type="deployment.destroyed"``, ADR-0066 gap B)
+        so the deploy-log-build + PR-enrich + forward + push-to-remote pipeline exists
+        in exactly one place rather than being duplicated per command.
+
+        This is best-effort — failures are logged as WARNING and never affect the
+        deployment exit code (ADR 0018, decision #2).
+        """
+        try:
+            from strata.controllers.audit_controller import AuditController
+            from strata.models.deploy_log_model import (
+                DeployLogModel,
+                DeployLogStageModel,
+                DeployLogStepModel,
+            )
+            from strata.utils.config import get_deploy_log_dir
+
+            # Assemble per-stage data from manifest stage results
+            stages: List[DeployLogStageModel] = []
+            for sr in self._stage_results:
+                stage_steps: List[DeployLogStepModel] = []
+                if sr.steps:
+                    for step_name in sr.steps:
+                        stage_steps.append(DeployLogStepModel(step=step_name, success=True, duration_seconds=0.0))
+
+                stages.append(
+                    DeployLogStageModel(
+                        name=sr.name,
+                        provisioner=sr.provisioner,
+                        topology=sr.topology,
+                        success=(sr.status == "success"),
+                        started_at=sr.started_at or self._deploy_started_at or "",
+                        completed_at=sr.completed_at or datetime.now(timezone.utc).isoformat(),
+                        duration_seconds=float(sr.duration_seconds or 0),
+                        steps=stage_steps,
+                        errors=[sr.error] if sr.error else [],
+                    )
+                )
+
+            # Calculate total duration
+            completed_at = datetime.now(timezone.utc).isoformat()
+            try:
+                duration = (
+                    datetime.fromisoformat(completed_at)
+                    - datetime.fromisoformat(self._deploy_started_at or completed_at)
+                ).total_seconds()
+            except (ValueError, TypeError):
+                duration = 0.0
+
+            # Get git context (best-effort)
+            commit_sha = self._get_git_field("rev-parse", "HEAD")
+            commit_message = self._get_git_field("log", "--format=%s", "-1")
+            commit_author = self._get_git_field("log", "--format=%ae", "-1")
+
+            # Get version
+            from strata import __version__
+
+            # Resolve deployment metadata
+            deployment_name = ""
+            workspace_name = None
+            environment = None
+            if self._deployment_service and self._deployment_service.model:
+                deployment_name = self._deployment_service.model.meta.name
+                spec = self._deployment_service.model.spec
+                if spec:
+                    workspace_name = spec.workspace.name if spec.workspace else None
+                    layers = spec.layers
+                    environment = layers.get("environment") if layers else None
+
+            payload = DeployLogModel(
+                execution_id=self._execution_id,
+                timestamp=self._deploy_started_at or completed_at,
+                version=__version__,
+                commit_sha=commit_sha,
+                commit_message=commit_message,
+                commit_author=commit_author,
+                deployment=deployment_name or "unknown",
+                workspace=workspace_name,
+                environment=environment,
+                file=str(self._file_path or ""),
+                force=self._force,
+                dry_run=False,
+                success=success,
+                duration_seconds=duration,
+                stages=stages,
+                errors=list(self._errors),
+                messages=list(self._messages),
+            )
+
+            # Resolve audit config (structure + base path)
+            structure = "by-execution"
+            base_path = get_deploy_log_dir(self._work_path)
+            resolved_audit_cfg = None
+            if self._configuration_service:
+                resolved_audit_cfg = getattr(getattr(self._configuration_service.model, "spec", None), "audit", None)
+                if resolved_audit_cfg:
+                    structure = resolved_audit_cfg.structure or structure
+                base_path = self._configuration_service.get_deploy_log_path(self._work_path, create_path=True)
+
+            # Write via AuditController
+            controller = AuditController(work_path=self._work_path)
+            ok, path = controller.write_deploy_log(
+                payload=payload,
+                base_path=base_path,
+                structure=structure,
+            )
+
+            # Layer 4a: PR enrichment — best-effort, never blocks (gh CLI required)
+            if ok and path:
+                enriched = controller.enrich_with_pr_data(payload)
+                if enriched.pull_request is not None:
+                    import json
+
+                    path.write_text(
+                        json.dumps(enriched.model_dump(exclude_none=True), indent=2, default=str),
+                        encoding="utf-8",
+                    )
+
+                # Layer 4b: SIEM forwarding — best-effort, fire-and-forget
+                # Uses the enriched payload so SIEM gets PR data when available.
+                controller.forward(event_type, enriched.model_dump(exclude_none=True), audit_config=resolved_audit_cfg)
+
+                # Layer 4c: Push to remote repo — best-effort, opt-in via audit.repository
+                if resolved_audit_cfg and resolved_audit_cfg.repository:
+                    from pathlib import Path as _Path
+
+                    from strata.controllers.solution_controller import SolutionController
+
+                    sol_ctrl = SolutionController(work_path=self._work_path)
+                    sol_ctrl.load()
+                    repo_map = sol_ctrl.get_repo_map()
+                    repo_path = repo_map.get(str(resolved_audit_cfg.repository))
+                    if repo_path:
+                        controller.push_to_remote([path], working_dir=_Path(repo_path))
+                    else:
+                        self.logger.warning(
+                            "deploy_log_push_repo_not_found",
+                            repository=str(resolved_audit_cfg.repository),
+                        )
+
+            if ok and path and self._is_console_output():
+                self._audit_log_path = str(path.relative_to(self._work_path))
+                click.echo(f"  📝  Deploy-log: {self._audit_log_path}")
+            elif ok and path:
+                self._audit_log_path = str(path.relative_to(self._work_path))
+
+        except Exception as exc:
+            self.logger.warning("deploy_log_write_failed", error=str(exc))
