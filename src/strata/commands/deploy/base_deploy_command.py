@@ -1124,6 +1124,7 @@ class BaseDeployCommand(BaseCommand):
             payload = DeployLogModel(
                 execution_id=self._execution_id,
                 timestamp=self._deploy_started_at or completed_at,
+                command=self.OPERATION,
                 version=__version__,
                 commit_sha=commit_sha,
                 commit_message=commit_message,

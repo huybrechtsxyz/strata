@@ -76,6 +76,17 @@ _EVENT_TYPE_METADATA: Dict[str, Tuple[str, Optional[List[str]]]] = {
     "drift.detected": ("alert", ["configuration"]),
 }
 
+# DeployLogModel.command -> event_type — resolves which event type a persisted deploy-log
+# record should be re-forwarded as (``resend``, ``export --siem``). Needed since gap B
+# (ADR-0066): deploy-log entries are no longer exclusively ``deploy run`` records — a
+# ``deploy destroy`` writes one too — so the event type can no longer be assumed to always
+# be "deployment.completed" when replaying a record after the fact. Unknown/missing
+# ``command`` values fall back to "deployment.completed" (the only possibility before gap B).
+DEPLOY_LOG_EVENT_TYPE_BY_COMMAND: Dict[str, str] = {
+    "deploy_run": "deployment.completed",
+    "deploy_destroy": "deployment.destroyed",
+}
+
 
 class AuditController(BaseController):
     """Orchestrates Layer 2 (disk) and Layer 4 (SIEM + remote) audit operations."""
@@ -591,8 +602,9 @@ class AuditController(BaseController):
         sent = 0
         failed = 0
         for record in records:
+            event_type = DEPLOY_LOG_EVENT_TYPE_BY_COMMAND.get(record.command, "deployment.completed")
             try:
-                self.forward("deployment.completed", record.model_dump(exclude_none=True), audit_config=audit_config)
+                self.forward(event_type, record.model_dump(exclude_none=True), audit_config=audit_config)
                 sent += 1
             except Exception:
                 failed += 1

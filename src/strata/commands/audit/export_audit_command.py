@@ -141,8 +141,20 @@ class ExportAuditCommand(SchemaBaseCommand):
         work items): the policy gate is now consulted, and entries are wrapped in the
         same CloudEvents 1.0 + ECS envelope via ``AuditController._build_envelope()``
         rather than sent as raw, un-enveloped payloads.
+
+        Entries are grouped by event type before forwarding (ADR-0066 gap B) — the
+        exported deploy-log entries are no longer exclusively ``deploy run`` records
+        (``deploy destroy`` writes them too), so each record's actual event type
+        (``deployment.completed`` vs ``deployment.destroyed``, from its ``command``
+        field) is looked up individually rather than assumed for the whole batch. The
+        gate and the sink's own ``events`` filter are each consulted per group.
         """
-        from strata.controllers.audit_controller import AuditController
+        from collections import defaultdict
+
+        from strata.controllers.audit_controller import (
+            DEPLOY_LOG_EVENT_TYPE_BY_COMMAND,
+            AuditController,
+        )
         from strata.models.audit_config_model import AuditConfigModel
         from strata.models.capabilities import ISiemSink
         from strata.services.configuration_service import ConfigurationService
@@ -179,18 +191,6 @@ class ExportAuditCommand(SchemaBaseCommand):
             self._errors.append(f"Sink '{sink.name}' (integration '{siem_name}') is disabled.")
             return False
 
-        event_type = "deployment.completed"
-        if not audit_config.policy.is_enabled(event_type):
-            if not self._output_quiet:
-                click.echo(f"Skipped: spec.audit.policy.events.{event_type} is disabled — nothing forwarded.", err=True)
-            return True
-        if sink.events is not None and event_type not in sink.events:
-            if not self._output_quiet:
-                click.echo(
-                    f"Skipped: sink '{sink.name}' does not include '{event_type}' in its event filter.", err=True
-                )
-            return True
-
         try:
             svc = IntegrationService.get_instance()
             if not svc.is_initialized():
@@ -207,14 +207,48 @@ class ExportAuditCommand(SchemaBaseCommand):
             self._errors.append(f"Integration '{siem_name}' does not support SIEM forwarding.")
             return False
 
-        envelopes = [
-            AuditController._build_envelope(event_type, e.model_dump(exclude_none=True)) for e in self._entries
-        ]
-        ok = instance.send_batch(event_type, envelopes)
+        groups: Dict[str, List[Any]] = defaultdict(list)
+        for entry in self._entries:
+            event_type = DEPLOY_LOG_EVENT_TYPE_BY_COMMAND.get(entry.command, "deployment.completed")
+            groups[event_type].append(entry)
+        if not groups:
+            # No entries (e.g. --last with nothing to export) — still send one
+            # "deployment.completed" batch (empty), matching the pre-grouping
+            # behaviour of always calling send_batch once regardless of count.
+            groups["deployment.completed"] = []
+
+        ok = True
+        forwarded_count = 0
+        for event_type, group_entries in groups.items():
+            if not audit_config.policy.is_enabled(event_type):
+                if not self._output_quiet:
+                    click.echo(
+                        f"Skipped: spec.audit.policy.events.{event_type} is disabled — "
+                        f"{len(group_entries)} entries not forwarded.",
+                        err=True,
+                    )
+                continue
+            if sink.events is not None and event_type not in sink.events:
+                if not self._output_quiet:
+                    click.echo(
+                        f"Skipped: sink '{sink.name}' does not include '{event_type}' in its event filter — "
+                        f"{len(group_entries)} entries not forwarded.",
+                        err=True,
+                    )
+                continue
+
+            envelopes = [
+                AuditController._build_envelope(event_type, e.model_dump(exclude_none=True)) for e in group_entries
+            ]
+            group_ok = instance.send_batch(event_type, envelopes)
+            ok = ok and group_ok
+            if group_ok:
+                forwarded_count += len(envelopes)
+
         if not self._output_quiet:
-            if ok:
-                click.echo(f"Forwarded {len(envelopes)} entries to SIEM '{siem_name}'.")
-            else:
+            if forwarded_count:
+                click.echo(f"Forwarded {forwarded_count} entries to SIEM '{siem_name}'.")
+            if not ok:
                 click.echo(f"SIEM forwarding to '{siem_name}' failed (partial or complete). Check logs.", err=True)
 
         # Also forward sbom-ignore rules as a separate batch — kept in sync with the
