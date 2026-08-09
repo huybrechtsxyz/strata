@@ -1,10 +1,9 @@
 ---
-description: "Infrastructure-as-Code principles, state management, modularity, versioning, testing, and drift detection"
-applyTo: "**"
-confidence: high
+name: infrastructure-as-code-best-practices
+description: 'Infrastructure-as-Code principles: state management, modularity, versioning, testing, idempotency, and drift detection. Supporting context for the strata-specific skills — use when explaining why a strata pattern exists.'
 ---
 
-# Infrastructure-as-Code Best Practices — AI Skill File
+# Infrastructure-as-Code Best Practices
 
 ## Core Principles
 
@@ -20,8 +19,7 @@ meta:
   name: my-platform
 spec:
   resources:
-    - kind: resource
-      source: "@config/resources/aks-cluster.yaml"
+    - file: "@config/resources/aks-cluster.yaml"
 ```
 
 **Benefits:**
@@ -64,18 +62,18 @@ spec:
 ```yaml
 # ❌ WRONG — copy/pasted code (maintenance nightmare)
 resources:
-  - kind: aks-cluster-east
+  - name: aks-cluster-east
     spec: { ... }
-  - kind: aks-cluster-west
+  - name: aks-cluster-west
     spec: { ... }  # duplicated; hard to keep in sync
 
-# ✅ RIGHT — reusable module
+# ✅ RIGHT — reusable module referenced twice with different params
 modules:
-  - kind: aks-cluster
+  - file: "@config/modules/aks-cluster.yaml"
     parameters:
       region: eastus
       name: cluster-east
-  - kind: aks-cluster
+  - file: "@config/modules/aks-cluster.yaml"
     parameters:
       region: westus
       name: cluster-west
@@ -108,12 +106,11 @@ modules/
 ```yaml
 # ✅ RIGHT — pinned versions
 provider:
-  kind: provider
-  spec:
-    version: "3.75.0"  # specific Terraform version
+  version: "3.75.0"  # specific provider version
 
 module:
-  source: "@config/modules/aks-cluster.yaml?version=1.2.0"
+  file: "@config/modules/aks-cluster.yaml"
+  version: "1.2.0"
 ```
 
 **Promotion flow:**
@@ -139,19 +136,19 @@ Production (stable version)
 
 **Levels of testing:**
 
-| Level             | Tool                       | When              |
-| ----------------- | -------------------------- | ----------------- |
-| Syntax validation | `terraform validate`       | Every save        |
-| Policy checks     | `checkov`                  | Before build      |
-| Cost estimation   | `terraform plan`           | Before deploy     |
-| Security scan     | `trivy`                    | Before production |
-| Integration test  | Deploy to test environment | Before production |
+| Level               | Tool                         | When              |
+| ---------------------- | -------------------------------- | -------------------- |
+| Syntax validation    | `terraform validate`          | Every save         |
+| Policy checks         | `checkov`                       | Before build        |
+| Cost estimation       | `terraform plan`              | Before deploy       |
+| Security scan         | `trivy`                          | Before production   |
+| Integration test      | Deploy to test environment    | Before production   |
 
 **In strata:**
 ```bash
-strata validate <file> --output json          # Check schema
-strata build plan -f deploy.yaml --output json  # Show changes
-strata deploy run --dry-run --output json     # Dry-run deploy
+strata validate -f <file> --output json          # Check schema
+strata build plan -f deploy.yaml --output json     # Show changes
+strata deploy run -f deploy.yaml --dry-run --force --output json     # Dry-run deploy
 ```
 
 ---
@@ -250,9 +247,9 @@ database_password = var.db_password  # injected at deploy time
 ```
 
 **Flow:**
-1. Store secrets in secret store (Azure KV, Terraform Cloud, AWS Secrets Manager)
-2. Reference by name in code (using variables)
-3. At deploy time, inject actual values
+1. Store secrets in an integration-backed secret store (Azure Key Vault, HashiCorp Vault, Bitwarden, Infisical)
+2. Reference by key name in YAML (never the value itself)
+3. At deploy time, strata resolves the actual value
 4. Apply infrastructure with real secrets
 5. **Secrets never appear in code, logs, or state files**
 
@@ -286,27 +283,27 @@ config/
 
 ## When to Use IaC
 
-| Scenario                      | Use IaC? | Why                                             |
-| ----------------------------- | -------- | ----------------------------------------------- |
-| Production infrastructure     | ✅ Yes    | Reproducibility, audit trail, disaster recovery |
-| Development/test environments | ✅ Yes    | Easy to create/destroy, cost control            |
-| One-time manual setup         | ❌ No     | Overkill for short-lived resources              |
-| Learning/exploration          | ⚠️ Maybe  | Use IaC to document, then clean up              |
+| Scenario                        | Use IaC? | Why                                               |
+| ----------------------------------- | ---------- | ------------------------------------------------------ |
+| Production infrastructure         | ✅ Yes    | Reproducibility, audit trail, disaster recovery       |
+| Development/test environments     | ✅ Yes    | Easy to create/destroy, cost control                  |
+| One-time manual setup             | ❌ No     | Overkill for short-lived resources                    |
+| Learning/exploration               | ⚠️ Maybe  | Use IaC to document, then clean up                    |
 
 ---
 
 ## Anti-Patterns to Avoid
 
-| Anti-Pattern            | Problem                                     | Fix                                                |
-| ----------------------- | ------------------------------------------- | -------------------------------------------------- |
-| **Console clicking**    | No version control, hard to reproduce       | Use IaC from day 1                                 |
-| **Copy-pasted code**    | Maintenance nightmare, inconsistent         | Create reusable modules                            |
-| **Unversioned modules** | Breaking changes hit all users              | Pin versions, test before upgrade                  |
-| **Manual state edits**  | Corrupts consistency between code and state | Use IaC commands only                              |
-| **Secrets in code**     | Security breach, hard to rotate             | Use secret store references                        |
-| **No testing**          | Broken deployments in production            | Validate, plan, dry-run first                      |
-| **Long drift**          | Reality diverges from code                  | Regular drift checks, rebuild from code            |
-| **No documentation**    | Team doesn't understand infrastructure      | Use annotations, naming conventions, code comments |
+| Anti-Pattern              | Problem                                     | Fix                                                  |
+| ------------------------------ | ------------------------------------------------ | --------------------------------------------------------- |
+| **Console clicking**          | No version control, hard to reproduce       | Use IaC from day 1                                       |
+| **Copy-pasted code**          | Maintenance nightmare, inconsistent          | Create reusable modules                                  |
+| **Unversioned modules**       | Breaking changes hit all users               | Pin versions, test before upgrade                        |
+| **Manual state edits**       | Corrupts consistency between code and state | Use IaC commands only                                    |
+| **Secrets in code**          | Security breach, hard to rotate              | Use secret store references                              |
+| **No testing**                | Broken deployments in production             | Validate, plan, dry-run first                            |
+| **Long drift**                | Reality diverges from code                    | Regular drift checks, rebuild from code                  |
+| **No documentation**         | Team doesn't understand infrastructure       | Use annotations, naming conventions, code comments       |
 
 ---
 

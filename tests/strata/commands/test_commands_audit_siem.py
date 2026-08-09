@@ -1,17 +1,19 @@
-"""Tests for --siem flag on strata audit export and AuditSinkModel format field."""
+"""Tests for --siem flag on strata audit export."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
-import pytest
 from click.testing import CliRunner
 
 from strata.commands.cli_audit import audit_group
-from strata.models.audit_config_model import AuditSinkModel
 from strata.utils.config import SOLUTION_DEPLOY_LOG_DIR, SOLUTION_DIR
+
+if TYPE_CHECKING:
+    from strata.commands.audit.export_audit_command import ExportAuditCommand
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -36,42 +38,13 @@ def _write_deploy_log(base_path: Path, execution_id: str = "exec-001") -> None:
 
 
 # ---------------------------------------------------------------------------
-# AuditSinkModel: format field validation
+# AuditSinkModel's `type`/`format`/built-in-sink-type validation (ndjson/stdout/
+# syslog/webhook as sink fields) was removed entirely in ADR-0066 — a sink is now
+# only a routing reference (`name`, `integration`, `enabled`, `events`). Coverage
+# for the promoted `syslog`/`webhook` integrations' own format/transport handling
+# now lives in test_syslog_siem_integration.py / test_webhook_siem_integration.py,
+# and AuditSinkModel's simplified shape is covered by test_models_audit_config.py.
 # ---------------------------------------------------------------------------
-
-
-class TestAuditSinkModelFormat:
-    def test_syslog_sink_accepts_json_format(self) -> None:
-        sink = AuditSinkModel(name="s", type="syslog", address="127.0.0.1:514", format="json")
-        assert sink.format == "json"
-
-    def test_syslog_sink_accepts_cef_format(self) -> None:
-        sink = AuditSinkModel(name="s", type="syslog", address="127.0.0.1:514", format="cef")
-        assert sink.format == "cef"
-
-    def test_syslog_sink_rejects_unknown_format(self) -> None:
-        with pytest.raises(Exception, match="format.*must be"):
-            AuditSinkModel(name="s", type="syslog", address="127.0.0.1:514", format="xml")
-
-    def test_syslog_sink_format_defaults_to_none(self) -> None:
-        sink = AuditSinkModel(name="s", type="syslog", address="127.0.0.1:514")
-        assert sink.format is None
-
-    def test_stdout_sink_rejects_format_field(self) -> None:
-        with pytest.raises(Exception, match="stdout sink"):
-            AuditSinkModel(name="s", type="stdout", format="json")
-
-    def test_ndjson_sink_rejects_format_field(self) -> None:
-        with pytest.raises(Exception, match="ndjson sink"):
-            AuditSinkModel(name="s", type="ndjson", path="/tmp/out.ndjson", format="json")
-
-    def test_webhook_sink_rejects_format_field(self) -> None:
-        with pytest.raises(Exception, match="webhook sink"):
-            AuditSinkModel(name="s", type="webhook", url="https://hook.example.com", format="json")
-
-    def test_integration_sink_rejects_format_field(self) -> None:
-        with pytest.raises(Exception, match="Integration-backed"):
-            AuditSinkModel(name="s", integration="my_siem", format="json")
 
 
 # ---------------------------------------------------------------------------
@@ -184,36 +157,132 @@ class TestAuditExportSiemFlag:
 
 
 class TestForwardEntriesToSiem:
+    def setup_method(self):
+        from strata.services.configuration_service import ConfigurationService
+
+        # ConfigurationService.load() is a process-wide singleton that only loads once
+        # (ConfigurationService.load() docstring: "populated once per process") — reset
+        # it so each test's own .strata/configuration.yaml is actually read, rather than
+        # an earlier test's stale, already-loaded config.
+        ConfigurationService.reset()
+
+    def teardown_method(self):
+        from strata.services.configuration_service import ConfigurationService
+
+        ConfigurationService.reset()
+
     def test_integration_not_found_returns_false(self, tmp_path: Path) -> None:
+        """Sink declared in spec.audit.sinks but the integration itself isn't registered
+        (e.g. resolution failed, or the referenced integration was removed)."""
         from strata.commands.audit.export_audit_command import ExportAuditCommand
 
-        cmd = ExportAuditCommand(out_file=None, siem_name="missing_integration", work_path=str(tmp_path))
-        cmd._initialize(show_header=False)
-        result = cmd._find_integration_model("missing_integration")
-        assert result is None
+        cfg_dir = tmp_path / ".strata"
+        cfg_dir.mkdir()
+        (cfg_dir / "configuration.yaml").write_text(
+            "apiVersion: strata.huybrechts.xyz/v1\nkind: configuration\nmeta:\n  name: cfg\nspec:\n"
+            "  audit:\n    sinks:\n      - name: missing_integration\n        integration: missing_integration\n"
+        )
+
+        mock_svc = MagicMock()
+        mock_svc.is_initialized.return_value = True
+        mock_svc.get_integration.return_value = None
+
+        with patch("strata.services.integration_service.IntegrationService.get_instance", return_value=mock_svc):
+            cmd = ExportAuditCommand(out_file=None, siem_name="missing_integration", work_path=str(tmp_path))
+            cmd._initialize(show_header=False)
+            cmd._siem_name = "missing_integration"
+            result = cmd._forward_to_siem()
+
+        assert result is False
+        assert any("not found in configuration" in e for e in cmd._errors)
 
     def test_non_siem_integration_returns_false(self, tmp_path: Path) -> None:
         """Integration that doesn't implement ISiemSink should fail gracefully."""
         from strata.commands.audit.export_audit_command import ExportAuditCommand
-        from strata.models.integration_model import IntegrationModel
-
-        int_model = IntegrationModel(name="git_tool", type="git")
 
         non_siem_instance = MagicMock(spec=[])  # no ISiemSink attributes
+        mock_svc = MagicMock()
+        mock_svc.is_initialized.return_value = True
+        mock_svc.get_integration.return_value = non_siem_instance
 
         cfg_dir = tmp_path / ".strata"
         cfg_dir.mkdir()
-        (cfg_dir / "config.yaml").write_text(
-            "apiVersion: strata.huybrechts.xyz/v1\nkind: configuration\nmeta:\n  name: cfg\nspec:\n  integrations:\n    - name: git_tool\n      type: git\n"
+        (cfg_dir / "configuration.yaml").write_text(
+            "apiVersion: strata.huybrechts.xyz/v1\nkind: configuration\nmeta:\n  name: cfg\nspec:\n"
+            "  integrations:\n    - name: git_tool\n      type: git\n"
+            "  audit:\n    sinks:\n      - name: git_tool\n        integration: git_tool\n"
         )
 
-        with patch("strata.integrations.factory.IntegrationFactory.create", return_value=non_siem_instance):
+        with patch("strata.services.integration_service.IntegrationService.get_instance", return_value=mock_svc):
             cmd = ExportAuditCommand(out_file=None, siem_name="git_tool", work_path=str(tmp_path))
             cmd._initialize(show_header=False)
             cmd._siem_name = "git_tool"
             result = cmd._forward_to_siem()
 
         assert result is False
+
+    def test_integration_not_declared_as_sink_returns_false(self, tmp_path: Path) -> None:
+        """ADR-0066 gap 1 fix: an integration not referenced by spec.audit.sinks is rejected."""
+        from strata.commands.audit.export_audit_command import ExportAuditCommand
+
+        cfg_dir = tmp_path / ".strata"
+        cfg_dir.mkdir()
+        (cfg_dir / "configuration.yaml").write_text(
+            "apiVersion: strata.huybrechts.xyz/v1\nkind: configuration\nmeta:\n  name: cfg\nspec:\n"
+            "  integrations:\n    - name: splunk_hec\n      type: splunk\n"
+            "      endpoints:\n        address: https://splunk:8088\n"
+        )
+
+        cmd = ExportAuditCommand(out_file=None, siem_name="splunk_hec", work_path=str(tmp_path))
+        cmd._initialize(show_header=False)
+        cmd._siem_name = "splunk_hec"
+        result = cmd._forward_to_siem()
+
+        assert result is False
+        assert any("not declared as a sink" in e for e in cmd._errors)
+
+    def test_disabled_sink_returns_false(self, tmp_path: Path) -> None:
+        from strata.commands.audit.export_audit_command import ExportAuditCommand
+
+        cfg_dir = tmp_path / ".strata"
+        cfg_dir.mkdir()
+        (cfg_dir / "configuration.yaml").write_text(
+            "apiVersion: strata.huybrechts.xyz/v1\nkind: configuration\nmeta:\n  name: cfg\nspec:\n"
+            "  integrations:\n    - name: splunk_hec\n      type: splunk\n"
+            "      endpoints:\n        address: https://splunk:8088\n"
+            "  audit:\n    sinks:\n      - name: splunk_hec\n        integration: splunk_hec\n        enabled: false\n"
+        )
+
+        cmd = ExportAuditCommand(out_file=None, siem_name="splunk_hec", work_path=str(tmp_path))
+        cmd._initialize(show_header=False)
+        cmd._siem_name = "splunk_hec"
+        result = cmd._forward_to_siem()
+
+        assert result is False
+        assert any("disabled" in e for e in cmd._errors)
+
+    def test_gate_disabled_skips_without_failing(self, tmp_path: Path) -> None:
+        """ADR-0066 gap 1 fix: the policy gate is now consulted — a disabled event type is
+        a deliberate skip, not a failure."""
+        from strata.commands.audit.export_audit_command import ExportAuditCommand
+
+        cfg_dir = tmp_path / ".strata"
+        cfg_dir.mkdir()
+        (cfg_dir / "configuration.yaml").write_text(
+            "apiVersion: strata.huybrechts.xyz/v1\nkind: configuration\nmeta:\n  name: cfg\nspec:\n"
+            "  integrations:\n    - name: splunk_hec\n      type: splunk\n"
+            "      endpoints:\n        address: https://splunk:8088\n"
+            "  audit:\n    policy:\n      events:\n        deployment.completed: false\n"
+            "    sinks:\n      - name: splunk_hec\n        integration: splunk_hec\n"
+        )
+
+        cmd = ExportAuditCommand(out_file=None, siem_name="splunk_hec", work_path=str(tmp_path))
+        cmd._initialize(show_header=False)
+        cmd._siem_name = "splunk_hec"
+        result = cmd._forward_to_siem()
+
+        assert result is True
+        assert cmd._errors == []
 
     def test_send_batch_called_with_all_entries(self, tmp_path: Path) -> None:
         from strata.commands.audit.export_audit_command import ExportAuditCommand
@@ -248,16 +317,22 @@ class TestForwardEntriesToSiem:
 
         cfg_dir = tmp_path / ".strata"
         cfg_dir.mkdir()
-        (cfg_dir / "config.yaml").write_text(
+        (cfg_dir / "configuration.yaml").write_text(
             "apiVersion: strata.huybrechts.xyz/v1\nkind: configuration\nmeta:\n  name: cfg\nspec:\n"
             "  integrations:\n    - name: splunk_hec\n      type: splunk\n"
             "      endpoints:\n        address: https://splunk:8088\n"
+            "  audit:\n    sinks:\n      - name: splunk_hec\n        integration: splunk_hec\n"
         )
 
+        mock_svc = MagicMock()
+        mock_svc.is_initialized.return_value = True
+        mock_svc.get_integration.return_value = splunk_instance
+
         with (
-            patch("strata.integrations.factory.IntegrationFactory.create", return_value=splunk_instance),
+            patch("strata.services.integration_service.IntegrationService.get_instance", return_value=mock_svc),
             patch.object(splunk_instance, "_post_raw", return_value=True),
             patch.object(splunk_instance, "_get_hec_token", return_value="test-token"),
+            patch("strata.controllers.actor_controller.resolve_actor", return_value="test-user"),
         ):
             cmd = ExportAuditCommand(out_file=None, siem_name="splunk_hec", work_path=str(tmp_path))
             cmd._initialize(show_header=False)
@@ -266,3 +341,169 @@ class TestForwardEntriesToSiem:
             result = cmd._forward_to_siem()
 
         assert result is True
+
+
+class TestSbomIgnoreRulesForwarding:
+    """ADR-0066 gap-1 follow-up: sbom-ignore-rules forwarding stays in sync with the
+    deploy-log batch — same resolved integration instance, same envelope shape, and
+    failures now surface into self._errors instead of being swallowed."""
+
+    def setup_method(self):
+        from strata.services.configuration_service import ConfigurationService
+
+        ConfigurationService.reset()
+
+    def teardown_method(self):
+        from strata.services.configuration_service import ConfigurationService
+
+        ConfigurationService.reset()
+
+    def _make_command(self, tmp_path: Path, splunk_instance) -> "ExportAuditCommand":
+        from strata.commands.audit.export_audit_command import ExportAuditCommand
+
+        (tmp_path / ".strata").mkdir(exist_ok=True)
+        (tmp_path / ".strata" / "configuration.yaml").write_text(
+            "apiVersion: strata.huybrechts.xyz/v1\nkind: configuration\nmeta:\n  name: cfg\nspec:\n"
+            "  integrations:\n    - name: splunk_hec\n      type: splunk\n"
+            "      endpoints:\n        address: https://splunk:8088\n"
+            "  audit:\n    sinks:\n      - name: splunk_hec\n        integration: splunk_hec\n"
+        )
+        cmd = ExportAuditCommand(out_file=None, siem_name="splunk_hec", work_path=str(tmp_path))
+        cmd._initialize(show_header=False)
+        cmd._siem_name = "splunk_hec"
+        return cmd
+
+    def test_no_forward_when_ignore_config_absent(self, tmp_path: Path) -> None:
+        """No .strata/sbom-ignore.yaml — no second batch, no extra calls."""
+        from strata.integrations.siem.splunk_siem_integration import SplunkSiemIntegration
+        from strata.models.integration_model import IntegrationEndpointsSpecModel, IntegrationModel
+
+        SplunkSiemIntegration._instances.clear()
+        splunk_instance = SplunkSiemIntegration(
+            config=IntegrationModel(
+                name="splunk_hec", type="splunk", endpoints=IntegrationEndpointsSpecModel(address="https://splunk:8088")
+            )
+        )
+        mock_svc = MagicMock()
+        mock_svc.is_initialized.return_value = True
+        mock_svc.get_integration.return_value = splunk_instance
+
+        cmd = self._make_command(tmp_path, splunk_instance)
+
+        with (
+            patch("strata.services.integration_service.IntegrationService.get_instance", return_value=mock_svc),
+            patch.object(splunk_instance, "send_batch", return_value=True) as mock_send_batch,
+            patch("strata.controllers.actor_controller.resolve_actor", return_value="test-user"),
+        ):
+            result = cmd._forward_to_siem()
+
+        assert result is True
+        # Only the deploy-log batch — no sbom_ignore_rules batch when there's nothing to ignore
+        mock_send_batch.assert_called_once()
+        assert mock_send_batch.call_args[0][0] == "deployment.completed"
+
+    def test_reuses_already_resolved_instance_no_second_lookup(self, tmp_path: Path) -> None:
+        """The sbom-ignore batch goes through the SAME resolved instance — no redundant
+        .strata/*.yaml re-scan or second IntegrationService/IntegrationFactory lookup."""
+        from strata.integrations.siem.splunk_siem_integration import SplunkSiemIntegration
+        from strata.models.integration_model import IntegrationEndpointsSpecModel, IntegrationModel
+
+        (tmp_path / ".strata").mkdir(exist_ok=True)
+        (tmp_path / ".strata" / "sbom-ignore.yaml").write_text("ignore_packages:\n  - pattern: 'dev-*'\n")
+
+        SplunkSiemIntegration._instances.clear()
+        splunk_instance = SplunkSiemIntegration(
+            config=IntegrationModel(
+                name="splunk_hec", type="splunk", endpoints=IntegrationEndpointsSpecModel(address="https://splunk:8088")
+            )
+        )
+        mock_svc = MagicMock()
+        mock_svc.is_initialized.return_value = True
+        mock_svc.get_integration.return_value = splunk_instance
+
+        cmd = self._make_command(tmp_path, splunk_instance)
+
+        with (
+            patch("strata.services.integration_service.IntegrationService.get_instance", return_value=mock_svc),
+            patch.object(splunk_instance, "send_batch", return_value=True) as mock_send_batch,
+            patch("strata.controllers.actor_controller.resolve_actor", return_value="test-user"),
+        ):
+            result = cmd._forward_to_siem()
+
+        assert result is True
+        # get_integration called exactly once — the sbom batch reuses the same instance
+        mock_svc.get_integration.assert_called_once_with("splunk_hec")
+        assert mock_send_batch.call_count == 2
+        deploy_call, sbom_call = mock_send_batch.call_args_list
+        assert deploy_call[0][0] == "deployment.completed"
+        assert sbom_call[0][0] == "sbom_ignore_rules"
+
+    def test_sbom_batch_is_enveloped(self, tmp_path: Path) -> None:
+        """The sbom-ignore payload is wrapped in the same CloudEvents/ECS envelope shape
+        as the deploy-log batch, not sent raw."""
+        from strata.integrations.siem.splunk_siem_integration import SplunkSiemIntegration
+        from strata.models.integration_model import IntegrationEndpointsSpecModel, IntegrationModel
+
+        (tmp_path / ".strata").mkdir(exist_ok=True)
+        (tmp_path / ".strata" / "sbom-ignore.yaml").write_text("ignore_packages:\n  - pattern: 'dev-*'\n")
+
+        SplunkSiemIntegration._instances.clear()
+        splunk_instance = SplunkSiemIntegration(
+            config=IntegrationModel(
+                name="splunk_hec", type="splunk", endpoints=IntegrationEndpointsSpecModel(address="https://splunk:8088")
+            )
+        )
+        mock_svc = MagicMock()
+        mock_svc.is_initialized.return_value = True
+        mock_svc.get_integration.return_value = splunk_instance
+
+        cmd = self._make_command(tmp_path, splunk_instance)
+
+        with (
+            patch("strata.services.integration_service.IntegrationService.get_instance", return_value=mock_svc),
+            patch.object(splunk_instance, "send_batch", return_value=True) as mock_send_batch,
+            patch("strata.controllers.actor_controller.resolve_actor", return_value="test-user"),
+        ):
+            cmd._forward_to_siem()
+
+        _, sbom_call = mock_send_batch.call_args_list
+        sbom_payloads = sbom_call[0][1]
+        assert len(sbom_payloads) == 1
+        envelope = sbom_payloads[0]
+        assert envelope["specversion"] == "1.0"
+        assert envelope["type"] == "xyz.huybrechts.strata.sbom_ignore_rules"
+        assert envelope["data"]["strata"]["ignore_packages"][0]["pattern"] == "dev-*"
+
+    def test_sbom_forward_failure_surfaces_as_error_and_fails_command(self, tmp_path: Path) -> None:
+        """A failed sbom-ignore forward is no longer silently best-effort — it now
+        surfaces in self._errors and fails the overall result, same as the main batch."""
+        from strata.integrations.siem.splunk_siem_integration import SplunkSiemIntegration
+        from strata.models.integration_model import IntegrationEndpointsSpecModel, IntegrationModel
+
+        (tmp_path / ".strata").mkdir(exist_ok=True)
+        (tmp_path / ".strata" / "sbom-ignore.yaml").write_text("ignore_packages:\n  - pattern: 'dev-*'\n")
+
+        SplunkSiemIntegration._instances.clear()
+        splunk_instance = SplunkSiemIntegration(
+            config=IntegrationModel(
+                name="splunk_hec", type="splunk", endpoints=IntegrationEndpointsSpecModel(address="https://splunk:8088")
+            )
+        )
+        mock_svc = MagicMock()
+        mock_svc.is_initialized.return_value = True
+        mock_svc.get_integration.return_value = splunk_instance
+
+        cmd = self._make_command(tmp_path, splunk_instance)
+
+        def _send_batch_side_effect(log_type, payloads, **kwargs):
+            return log_type != "sbom_ignore_rules"
+
+        with (
+            patch("strata.services.integration_service.IntegrationService.get_instance", return_value=mock_svc),
+            patch.object(splunk_instance, "send_batch", side_effect=_send_batch_side_effect),
+            patch("strata.controllers.actor_controller.resolve_actor", return_value="test-user"),
+        ):
+            result = cmd._forward_to_siem()
+
+        assert result is False
+        assert any("sbom-ignore rules" in e for e in cmd._errors)

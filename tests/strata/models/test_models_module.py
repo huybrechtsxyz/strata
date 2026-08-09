@@ -117,6 +117,45 @@ class TestSourceModelChartFields:
 
 
 # ---------------------------------------------------------------------------
+# SourceModel — git ref pinning
+# ---------------------------------------------------------------------------
+
+
+class TestSourceModelGitRefPinning:
+    def test_git_source_with_reference(self):
+        s = SourceModel(repository="my-repo", source_path="terraform", reference="v1.4.0")
+        assert s.reference == "v1.4.0"
+
+    def test_git_source_reference_branch(self):
+        s = SourceModel(repository="my-repo", source_path="terraform", reference="main")
+        assert s.reference == "main"
+
+    def test_git_source_reference_sha(self):
+        s = SourceModel(repository="my-repo", source_path="terraform", reference="a1b2c3d")
+        assert s.reference == "a1b2c3d"
+
+    def test_git_source_without_reference(self):
+        s = SourceModel(repository="my-repo", source_path="terraform")
+        assert s.reference is None
+
+    def test_reference_on_chart_source_raises(self):
+        with pytest.raises(ValidationError, match="only valid for git-based sources"):
+            SourceModel(
+                chart_name="authentik",
+                chart_repository="https://charts.goauthentik.io",
+                reference="v1.0.0",
+            )
+
+    def test_reference_empty_string_raises(self):
+        with pytest.raises(ValidationError):
+            SourceModel(repository="my-repo", source_path="terraform", reference="")
+
+    def test_reference_whitespace_only_raises(self):
+        with pytest.raises(ValidationError):
+            SourceModel(repository="my-repo", source_path="terraform", reference="   ")
+
+
+# ---------------------------------------------------------------------------
 # ModuleMountModel — volume_ref and PVC fields
 # ---------------------------------------------------------------------------
 

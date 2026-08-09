@@ -66,6 +66,7 @@ Write-Host ""
 $currentRaw = (Get-Content $versionFile -Raw).Trim()
 $currentVer = [System.Version]$currentRaw
 $newVer = [System.Version]$Version
+$majorTag = "v$($newVer.Major)"
 
 Write-Host "[*] VERSION.txt: $currentRaw" -ForegroundColor Yellow
 
@@ -112,11 +113,19 @@ if ($newVer -eq $currentVer) {
         exit 1
     }
 
+    git tag -f $majorTag
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[!] Failed to move major tag $majorTag." -ForegroundColor Red
+        exit 1
+    }
+
     $headCommit = git rev-parse --short HEAD
     Write-Host "[+] Tag $tag created on HEAD ($headCommit)" -ForegroundColor Green
+    Write-Host "[+] Major tag $majorTag moved to HEAD ($headCommit)" -ForegroundColor Green
     Write-Host ""
-    Write-Host "[>] Push the tag to trigger ci-release:" -ForegroundColor Cyan
+    Write-Host "[>] Push both tags to trigger ci-release and update Action consumers:" -ForegroundColor Cyan
     Write-Host "     git push origin $tag" -ForegroundColor DarkCyan
+    Write-Host "     git push origin $majorTag --force" -ForegroundColor DarkCyan
     Write-Host ""
     exit 0
 }
@@ -183,12 +192,16 @@ Write-Host "     https://github.com/$repoPath/compare/main...$branch" -Foregroun
 Write-Host ""
 Write-Host "  2. Merge the PR into main." -ForegroundColor White
 Write-Host ""
-Write-Host "  3. After merging, move the tag to the merge commit and push:" -ForegroundColor White
+Write-Host "  3. After merging, move both tags to the merge commit and push:" -ForegroundColor White
 Write-Host "     git checkout main" -ForegroundColor DarkCyan
 Write-Host "     git pull --ff-only origin main" -ForegroundColor DarkCyan
 Write-Host "     git tag -f $tag" -ForegroundColor DarkCyan
+Write-Host "     git tag -f $majorTag" -ForegroundColor DarkCyan
 Write-Host "     git push origin $tag" -ForegroundColor DarkCyan
+Write-Host "     git push origin $majorTag --force" -ForegroundColor DarkCyan
 Write-Host ""
-Write-Host "     The tag push triggers ci-release, which looks up the ci-build" -ForegroundColor Gray
-Write-Host "     run for that commit to download the dist artifact." -ForegroundColor Gray
+Write-Host "     The exact-tag push triggers ci-release, which looks up the ci-build" -ForegroundColor Gray
+Write-Host "     run for that commit to download the dist artifact. The major tag" -ForegroundColor Gray
+Write-Host "     ($majorTag) lets GitHub Action consumers pin to the major line and" -ForegroundColor Gray
+Write-Host "     receive non-breaking updates automatically." -ForegroundColor Gray
 Write-Host ""

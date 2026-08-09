@@ -112,7 +112,10 @@ class DeploymentService(BaseService["DeploymentModel"]):
             for cfg in self.model.spec.configurations or []:
                 file_refs.append((f"Configuration '{cfg.name}'", cfg.file))
             if self.model.spec.tenant:
-                file_refs.append(("Tenant", f"tenants/{self.model.spec.tenant}.yaml"))
+                from strata.utils.path_convention import resolve_tenant_relative_path
+
+                tenant_rel = resolve_tenant_relative_path(str(self.model.spec.tenant), configuration_model)
+                file_refs.append(("Tenant", tenant_rel))
             errors.extend(self._validate_file_refs(work_path, repo_map, file_refs))
 
         # Deep zone check: tenant zones must all exist in configuration.spec.zones
@@ -126,8 +129,9 @@ class DeploymentService(BaseService["DeploymentModel"]):
             from pathlib import Path as _Path
 
             from strata.services.tenant_service import TenantService
+            from strata.utils.path_convention import resolve_tenant_file_path
 
-            tenant_file = _Path(work_path) / "tenants" / f"{self.model.spec.tenant}.yaml"
+            tenant_file = resolve_tenant_file_path(_Path(work_path), str(self.model.spec.tenant), configuration_model)
             if tenant_file.exists():
                 tenant_svc = TenantService(str(tenant_file))
                 is_valid_c, _ = tenant_svc.validate()

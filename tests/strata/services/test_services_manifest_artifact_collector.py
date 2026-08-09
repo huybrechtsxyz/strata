@@ -71,18 +71,13 @@ class TestCollectPlatformArtifact:
 
 
 class TestCollectRepositoryInfo:
-    def test_returns_none_without_solution_controller(self) -> None:
-        assert collect_repository_info(None) is None
-
-    def test_returns_none_when_solution_is_none(self) -> None:
-        controller = MagicMock()
-        controller.solution = None
-        assert collect_repository_info(controller) is None
+    def test_returns_none_without_solution(self) -> None:
+        assert collect_repository_info(None, None) is None
 
     def test_returns_none_without_repositories(self) -> None:
-        controller = MagicMock()
-        controller.solution.spec.repositories = []
-        assert collect_repository_info(controller) is None
+        solution = MagicMock()
+        solution.spec.repositories = []
+        assert collect_repository_info(solution, {}) is None
 
     def test_collects_url_and_ref_without_git_checkout(self) -> None:
         repo = MagicMock()
@@ -90,11 +85,10 @@ class TestCollectRepositoryInfo:
         repo.url = "git@github.com:org/infra.git"
         repo.ref = "main"
 
-        controller = MagicMock()
-        controller.solution.spec.repositories = [repo]
-        controller.get_repo_map.return_value = {}
+        solution = MagicMock()
+        solution.spec.repositories = [repo]
 
-        result = collect_repository_info(controller)
+        result = collect_repository_info(solution, {})
         assert result is not None
         assert "infra" in result
         assert result["infra"].url == "git@github.com:org/infra.git"
@@ -112,11 +106,10 @@ class TestCollectRepositoryInfo:
         repo.url = None
         repo.ref = None
 
-        controller = MagicMock()
-        controller.solution.spec.repositories = [repo]
-        controller.get_repo_map.return_value = {"infra": str(repo_path)}
+        solution = MagicMock()
+        solution.spec.repositories = [repo]
 
-        result = collect_repository_info(controller)
+        result = collect_repository_info(solution, {"infra": str(repo_path)})
         assert result is not None
         assert result["infra"].commit == "abc123deadbeef"
 
@@ -132,11 +125,10 @@ class TestCollectRepositoryInfo:
         repo.url = None
         repo.ref = None
 
-        controller = MagicMock()
-        controller.solution.spec.repositories = [repo]
-        controller.get_repo_map.return_value = {"infra": str(repo_path)}
+        solution = MagicMock()
+        solution.spec.repositories = [repo]
 
-        result = collect_repository_info(controller)
+        result = collect_repository_info(solution, {"infra": str(repo_path)})
         assert result is not None
         assert result["infra"].commit == "deadbeef1234"
 

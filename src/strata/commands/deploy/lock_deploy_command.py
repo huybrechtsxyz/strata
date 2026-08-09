@@ -1,12 +1,12 @@
 """Commands for inspecting and managing deployment state locks."""
 
-import os
 import socket
 from typing import Optional
 
 import click
 
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
+from strata.controllers.actor_controller import resolve_actor
 from strata.integrations.lock.base_lock_backend import (
     BaseLockBackend,
     LockBackendError,
@@ -207,9 +207,7 @@ class LockReleaseCommand(BaseDeployCommand):
             return True
 
         # Determine if this is our own lock
-        current_holder = (
-            os.environ.get("GITHUB_ACTOR") or os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
-        )
+        current_holder = resolve_actor()
         current_host = socket.gethostname()
         is_own_lock = entry.holder == current_holder or entry.hostname == current_host
 

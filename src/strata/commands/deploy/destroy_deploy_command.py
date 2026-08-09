@@ -58,6 +58,23 @@ class DestroyDeployCommand(BaseDeployCommand):
         self._resolved_values: Optional[ResolvedValues] = None
 
     # -------------------------------------------------------------------------
+    # Finalize override — writes deploy-log before standard finalization
+    # -------------------------------------------------------------------------
+
+    def _finalize(self, success: bool = False, show_footer: bool = True) -> bool:
+        """Write deploy-log audit evidence for the destroy, then delegate to parent finalize.
+
+        ADR-0066 gap B: destroy previously produced only a deployment manifest
+        (BOM/artifact tracking) and no deploy-log / SIEM-forwarded event at all —
+        a destructive, irreversible action was less observable than a routine
+        deploy. Reuses the same shared helper ``RunDeployCommand`` uses, with
+        ``deployment.destroyed`` instead of ``deployment.completed``.
+        """
+        if self._deploy_started_at and not self._dry_run:
+            self._write_deploy_log_and_forward("deployment.destroyed", success)
+        return super()._finalize(success=success, show_footer=show_footer)
+
+    # -------------------------------------------------------------------------
     # Public entry point
     # -------------------------------------------------------------------------
 

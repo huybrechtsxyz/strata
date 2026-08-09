@@ -12,14 +12,35 @@ _audit_mod = importlib.import_module("strata.logger.audit")
 from strata.logger.audit import (
     audit,
     configure_audit_log,
+    get_audit_log_source,
+    get_configured_audit_log_path,
     is_audit_configured,
     shutdown_audit,
 )
 
 
 @pytest.fixture(autouse=True)
-def _reset_audit_logger():
-    """Reset the audit logger state between tests."""
+def _reset_audit_logger(monkeypatch):
+    """Reset the audit logger state between tests.
+
+    This file deliberately tests ``configure_audit_log`` itself, so it neutralises the
+    ADR-0066 guard that makes ``configure_audit_log`` a no-op under pytest (so the
+    *rest* of the suite doesn't write to the real audit log) — otherwise every test
+    here would no-op too. Deleting the env var doesn't work: pytest itself re-sets
+    ``PYTEST_CURRENT_TEST`` via direct ``os.environ[...] =`` assignment at the start
+    of its "call" phase, *after* fixture setup runs. Patching the read side
+    (``os.environ.get``) instead is immune to that later reassignment.
+    """
+    import os as os_module
+
+    real_get = os_module.environ.get
+
+    def _fake_get(key, default=None):
+        if key == "PYTEST_CURRENT_TEST":
+            return default
+        return real_get(key, default)
+
+    monkeypatch.setattr(os_module.environ, "get", _fake_get)
     shutdown_audit()
     yield
     shutdown_audit()
@@ -137,6 +158,33 @@ class TestAudit:
         assert "+" in ts or "Z" in ts
 
 
+class TestAuditLogProvenance:
+    """ADR-0066: which layer last configured the journal (two-phase bootstrap, 'audit status')."""
+
+    def test_defaults_to_bootstrap_source(self, tmp_path):
+        configure_audit_log(log_path=str(tmp_path / "audit.log"))
+        assert get_audit_log_source() == "bootstrap"
+
+    def test_explicit_source_is_recorded(self, tmp_path):
+        configure_audit_log(log_path=str(tmp_path / "audit.log"), source="spec_audit")
+        assert get_audit_log_source() == "spec_audit"
+
+    def test_path_is_recorded(self, tmp_path):
+        log_path = tmp_path / "audit.log"
+        configure_audit_log(log_path=str(log_path))
+        assert get_configured_audit_log_path() == str(log_path)
+
+    def test_shutdown_clears_provenance(self, tmp_path):
+        configure_audit_log(log_path=str(tmp_path / "audit.log"), source="logging_yaml")
+        shutdown_audit()
+        assert get_audit_log_source() is None
+        assert get_configured_audit_log_path() is None
+
+    def test_source_none_before_first_configure(self):
+        shutdown_audit()
+        assert get_audit_log_source() is None
+
+
 class TestShutdownAudit:
     def test_shutdown_flushes(self, tmp_path):
         log_path = tmp_path / "audit.log"
@@ -188,6 +236,24 @@ class TestConfigureAuditLogRotation:
         entry = json.loads(log_path.read_text(encoding="utf-8").strip())
         assert entry["action"] == "test.daily"
         assert entry["target"] == "test-target"
+
+
+class TestPytestNoOp:
+    """ADR-0066 problem 4: the test suite must never write to the real audit log."""
+
+    def test_no_ops_under_pytest_current_test(self, tmp_path, monkeypatch):
+        # Override the module-level autouse fixture's neutralisation — simulate
+        # PYTEST_CURRENT_TEST actually being present for this one test.
+        monkeypatch.setattr(
+            _audit_mod.os.environ,
+            "get",
+            lambda key, default=None: "some::test (call)" if key == "PYTEST_CURRENT_TEST" else default,
+        )
+        log_path = tmp_path / "audit.log"
+        configure_audit_log(log_path=str(log_path))
+        assert not is_audit_configured()
+        audit("test.action")
+        assert not log_path.exists()
 
     def test_reconfigure_replaces_handler(self, tmp_path):
         log_path = tmp_path / "audit.log"

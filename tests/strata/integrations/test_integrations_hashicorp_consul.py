@@ -4,8 +4,8 @@
 from unittest.mock import patch
 
 from strata.integrations.base_integration import BaseIntegration
-from strata.integrations.capabilities import IFeatureStore, IKVStore, IVariableStore
 from strata.integrations.hashicorp_consul import ConsulIntegration
+from strata.models.capabilities import IFeatureStore, IKVStore, IVariableStore
 from strata.models.integration_model import IntegrationEndpointsSpecModel, IntegrationModel
 
 

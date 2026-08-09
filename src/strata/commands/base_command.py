@@ -11,7 +11,14 @@ import click
 
 from strata.controllers.integration_controller import IntegrationController
 from strata.controllers.solution_controller import SolutionController
-from strata.logger import audit, configure_audit_log, get_logger, is_audit_configured, shutdown_audit
+from strata.logger import (
+    configure_audit_log,
+    get_audit_log_source,
+    get_configured_audit_log_path,
+    get_logger,
+    is_audit_configured,
+    shutdown_audit,
+)
 from strata.logger.context import set_context
 from strata.logger.logger import reconfigure_logging
 from strata.utils.config import (
@@ -30,6 +37,24 @@ class BaseCommand:
 
     OPERATION = "base_command"
     SHOW_CHROME: ClassVar[bool] = True  # Set False on commands that suppress header/footer (e.g. tools commands)
+
+    # ADR-0066 problem 3: read-only commands have no observable side effect, so
+    # auditing them is pure volume with no signal — this was ~95% of the measured
+    # 18,853-entry audit log (VS Code's `workitem_list` polling, editor `schema_get`/
+    # `schema_list`, `tools_status`). Matches the criterion `logger/audit.py` already
+    # documents ("user actions with observable side-effects").
+    _AUDIT_READ_ONLY_OPERATION_PREFIXES: ClassVar[tuple] = ("schema_",)
+    _AUDIT_READ_ONLY_OPERATION_SUFFIXES: ClassVar[tuple] = ("_list", "_show", "_status")
+
+    @classmethod
+    def _is_audit_mutating_operation(cls) -> bool:
+        """Return False for read-only operations excluded from the `command.executed` audit entry."""
+        operation = cls.OPERATION
+        if operation.startswith(cls._AUDIT_READ_ONLY_OPERATION_PREFIXES):
+            return False
+        if operation.endswith(cls._AUDIT_READ_ONLY_OPERATION_SUFFIXES):
+            return False
+        return True
 
     def __init__(
         self,
@@ -307,6 +332,10 @@ class BaseCommand:
             # Load and merge configfile_paths from active profile
             self._load_config_sources()
 
+            # Phase 1: reconfigure the audit journal from spec.audit.journal now that
+            # configuration is loaded (ADR-0066). No-op if logging.yaml already claimed it.
+            self._apply_audit_journal_config()
+
             if show_header and self._is_console_output():
                 self.show_console_header()
 
@@ -376,6 +405,7 @@ class BaseCommand:
             self._start_session_operation()
             self._load_env_sources()
             self._load_config_sources()
+            self._apply_audit_journal_config()
 
             if show_header and self._is_console_output():
                 self.show_console_header()
@@ -562,17 +592,24 @@ class BaseCommand:
         self._end_time = datetime.now(timezone.utc)
         duration = self._end_time - self._start_time
 
-        # Emit audit entry for every command execution
-        audit(
-            f"command.{self.OPERATION}",
-            outcome="success" if success else "failure",
-            target=" ".join(redact_argv(sys.argv[1:])) if len(sys.argv) > 1 else self.OPERATION,
-            detail={
-                "execution_id": self._execution_id,
-                "duration_ms": round(duration.total_seconds() * 1000),
-                "error_count": len(self._errors),
-            },
-        )
+        # Emit audit entry only for mutating operations (ADR-0066 problem 3) — read-only
+        # commands (*_list, *_show, *_status, schema_*) have no observable side effect.
+        #
+        # Routed through AuditController.forward() (ADR-0066 gap 3) rather than the raw
+        # logger.audit.audit() call this used to make directly — command.executed now
+        # gets the same policy gate and CloudEvents/ECS envelope as every other event
+        # type, instead of unconditionally reaching only the local journal. This is a
+        # deliberate behaviour change: command.executed defaults to disabled, so unless
+        # spec.audit.policy.events.command.executed is explicitly enabled, CLI invocations
+        # no longer write a local journal entry at all (previously unconditional) — see
+        # the ADR's Risk section. Wrapped in try/except because forward() itself is not
+        # (only its per-sink loop is) and _finalize() runs outside execute()'s own
+        # per-phase try/except — an unhandled exception here must never crash the command.
+        if self._is_audit_mutating_operation():
+            try:
+                self._forward_command_executed_audit_event(success=success, duration_seconds=duration.total_seconds())
+            except Exception as e:
+                self.logger.debug(f"Failed to forward command.executed audit event (non-fatal): {e}")
         shutdown_audit()
 
         self.logger.debug(
@@ -584,6 +621,68 @@ class BaseCommand:
         )
 
         return True
+
+    def _forward_command_executed_audit_event(self, success: bool, duration_seconds: float) -> None:
+        """Route the CLI-invocation record through ``AuditController.forward()`` (ADR-0066 gap 3).
+
+        ``self.OPERATION`` travels inside the payload (not as the event type) since the
+        closed event-type enum has a single ``command.executed`` type — every CLI
+        invocation shares it, matching the ADR's type-name table (``cli_action`` ->
+        ``command.executed``). ``AuditConfigModel`` is read from the already-populated
+        ``ConfigurationService`` singleton (populated by ``_load_config_sources()`` /
+        ``_apply_audit_journal_config()`` earlier in this same command's lifecycle);
+        resolution failures fall back to ``forward()``'s own default (an all-defaults
+        ``AuditConfigModel()``, under which ``command.executed`` stays disabled).
+        """
+        from strata.controllers.audit_controller import AuditController
+        from strata.models.audit_config_model import AuditConfigModel
+
+        audit_cfg: Optional[AuditConfigModel] = None
+        try:
+            from strata.services.configuration_service import ConfigurationService
+
+            config_model = ConfigurationService.get_instance().model
+            audit_cfg = getattr(getattr(config_model, "spec", None), "audit", None)
+        except Exception as e:
+            self.logger.debug(f"Failed to resolve spec.audit for command.executed (non-fatal): {e}")
+
+        payload = {
+            "execution_id": self._execution_id,
+            "operation": self.OPERATION,
+            "target": " ".join(redact_argv(sys.argv[1:])) if len(sys.argv) > 1 else self.OPERATION,
+            "success": success,
+            "duration_seconds": duration_seconds,
+        }
+        AuditController(work_path=self._work_path).forward("command.executed", payload, audit_config=audit_cfg)
+
+    def _forward_policy_violation_audit_event(self, result: Any) -> None:
+        """Forward a ``policy.violated`` event for one failed ``PolicyResult`` (ADR-0066 follow-up).
+
+        Shared by every command that evaluates policies (``validate``, ``build``,
+        ``deploy``, ``check_policy``) — each calls this right where it already loops
+        over ``PolicyEngine.evaluate()`` results. The actual event construction lives
+        in ``AuditController.forward_policy_violation()``, not duplicated here or at
+        each call site — ``PolicyEngine`` itself (``validators/``) cannot call
+        ``AuditController.forward()`` directly, since ``validators`` sits below
+        ``controllers`` in ADR-0003's layering chain, so the trigger has to live at
+        the command layer instead.
+
+        Never raises: a forwarding failure must never fail a validate/build/deploy/
+        policy-check run.
+        """
+        try:
+            from strata.controllers.audit_controller import AuditController
+
+            deployment = None
+            deployment_service = getattr(self, "_deployment_service", None)
+            if deployment_service is not None and getattr(deployment_service, "model", None) is not None:
+                deployment = str(deployment_service.model.meta.name)
+
+            AuditController(work_path=self._work_path).forward_policy_violation(
+                result, execution_id=self._execution_id, deployment=deployment
+            )
+        except Exception as e:
+            self.logger.debug(f"Failed to forward policy.violated audit event (non-fatal): {e}")
 
     # Output configuration
 
@@ -884,6 +983,57 @@ class BaseCommand:
         except Exception as e:
             # Config loading must never block command execution
             self.logger.debug(f"Failed to load config sources: {e}")
+
+    def _apply_audit_journal_config(self) -> None:
+        """Reconfigure the audit journal from ``spec.audit.journal``, if present (ADR-0066).
+
+        This is the second of the two bootstrap phases: the first (in ``_initialize()``,
+        before configuration is loaded) opens the journal with built-in defaults so early
+        failures still produce a record. This phase runs once ``_load_config_sources()``
+        has populated ``ConfigurationService``, and re-opens the journal per
+        ``spec.audit.journal`` if one is declared.
+
+        A no-op when ``.strata/logging.yaml``'s ``audit:`` section already configured the
+        journal — that is a machine-local override and outranks the committed
+        ``spec.audit.journal`` (precedence: ``spec.audit.journal`` < ``logging.yaml`` <
+        built-in default). Never raises: a broken or absent audit config here should not
+        block the command, it should just leave the bootstrap defaults in place.
+        """
+        if get_audit_log_source() == "logging_yaml":
+            return
+        try:
+            from strata.services.configuration_service import ConfigurationService
+
+            config_model = ConfigurationService.get_instance().model
+            audit_cfg = getattr(getattr(config_model, "spec", None), "audit", None)
+            journal = audit_cfg.journal if audit_cfg else None
+        except Exception as e:
+            self.logger.debug(f"Failed to resolve spec.audit.journal (non-fatal): {e}")
+            return
+        if journal is None:
+            return
+
+        kwargs: Dict[str, Any] = {"source": "spec_audit"}
+        if journal.path is not None:
+            kwargs["log_path"] = str(resolve_path(str(self._work_path), journal.path))
+        else:
+            # Preserve the path already in effect from bootstrap phase — otherwise
+            # setting only e.g. `rotation` here would silently reset the path to
+            # configure_audit_log()'s own default (relative to CWD, not work_path).
+            kwargs["log_path"] = get_configured_audit_log_path() or str(get_audit_log_path(self._work_path))
+        if journal.rotation is not None:
+            kwargs["rotation"] = journal.rotation
+        if journal.max_bytes is not None:
+            kwargs["max_bytes"] = journal.max_bytes
+        if journal.backup_count is not None:
+            kwargs["backup_count"] = journal.backup_count
+        if journal.date_suffix is not None:
+            kwargs["date_suffix"] = journal.date_suffix
+
+        try:
+            configure_audit_log(**kwargs)
+        except Exception as e:
+            self.logger.debug(f"Failed to apply spec.audit.journal (non-fatal): {e}")
 
     # Validate declared integration requirements (e.g., check if 'git' is available for 'repository clone operations')
     def _validate_requirements(self) -> bool:

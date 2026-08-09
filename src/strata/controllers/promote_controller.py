@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import getpass
 import json
-import os
 import re
 import socket
 import subprocess
@@ -14,6 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
+from strata.controllers.actor_controller import resolve_actor
 from strata.controllers.base_controller import BaseController
 from strata.models.common_models import PlatformKind
 from strata.models.promotion_record_model import (
@@ -1319,10 +1318,8 @@ class PromoteController(BaseController):
     # ── misc ──────────────────────────────────────────────────────────────────
 
     def _get_current_user(self) -> str:
-        try:
-            return os.environ.get("CI_ACTOR") or os.environ.get("GITHUB_ACTOR") or getpass.getuser()
-        except Exception:
-            return "unknown"
+        """Resolve the current operator identity — delegates to the shared actor-resolution chain."""
+        return resolve_actor()
 
     # ── run_promote (new ADR-0011 layered design) ─────────────────────────────
 

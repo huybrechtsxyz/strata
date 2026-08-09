@@ -158,13 +158,13 @@ class CveMaxSeverityPolicy(BasePolicy):
         """Filter findings through .strata/cve-allowed.yaml if it exists."""
         from datetime import date
 
-        from strata.controllers.solution_controller import SolutionController
         from strata.models.sbom_model import CveAllowedEntryModel
+        from strata.utils.config import get_cve_allowed_path
 
         if work_path is None:
             return audit_result
 
-        allowed_path = SolutionController.get_cve_allowed_path(work_path)
+        allowed_path = get_cve_allowed_path(work_path)
         if not allowed_path.exists():
             return audit_result
 

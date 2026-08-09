@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from strata.integrations.base_integration import BaseIntegration
-from strata.integrations.capabilities import ICveScanner
 from strata.logger import get_logger
+from strata.models.capabilities import ICveScanner
 from strata.models.integration_model import IntegrationModel
 from strata.models.sbom_model import CveAuditResultModel, CveFindingModel
 from strata.utils.system import CommandResult

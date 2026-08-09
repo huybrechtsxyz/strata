@@ -18,7 +18,8 @@ class ShowCostCommand(BaseDeployCommand):
     Requires:
     - ``strata build run`` to have been executed (terraform artifacts exist)
     - ``terraform init`` to have been run in the build directory
-    - ``infracost`` binary installed and in PATH
+    - A cost estimator (e.g. Infracost) declared in ``spec.integrations``
+      (``type: infracost``, ``capabilities: [cost]``) and its binary installed
 
     Exit codes:
       0  — cost estimate produced successfully

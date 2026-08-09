@@ -3,7 +3,7 @@
 import os
 import threading
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from packaging import version
 
@@ -99,6 +99,7 @@ class BaseIntegration(ABC):
         self._is_available: Optional[bool] = None
         self._version: Optional[str] = None
         self._info: Optional[str] = None
+        self._sibling_resolver: Optional[Callable[[type], Optional[Any]]] = None
         self._initialized = True
 
         logger.debug(
@@ -107,16 +108,33 @@ class BaseIntegration(ABC):
             type=self.integration_type,
         )
 
+    def set_sibling_resolver(self, resolver: Callable[[type], Optional[Any]]) -> None:
+        """Inject a callback that finds another available, capability-implementing integration.
+
+        Used by identity-provider integrations to reuse an already-authenticated
+        sibling integration's session (e.g. ``azure_cli``, ``gcloud_cli``) without this
+        ``integrations/`` module importing ``services/`` directly — per ADR-0003,
+        ``integrations/`` must not depend on ``services/``. The resolver itself
+        (``find_available_integration_with_capability``) lives in ``controllers/`` and
+        is injected by ``IdentityController``.
+        """
+        self._sibling_resolver = resolver
+
     @classmethod
     def _get_instance_key_static(cls, class_ref, *args, **kwargs) -> str:
         """
         Get instance key for singleton lookup.
 
-        Override in subclass to provide custom instance keys based on
-        constructor arguments (e.g., endpoint, connection string, etc.).
+        Default: the declaration's ``config.name`` — a workspace can declare more than
+        one integration of the same ``type`` (two Splunk indexes, a webhook to the
+        ingest service and another to an internal bus) and each gets its own instance,
+        keyed by the name that ``sinks[].integration`` and other referrers use to find
+        it (ADR-0066). Previously this returned the literal ``"default"``, which silently
+        collapsed every same-type declaration into one object and discarded the rest.
 
-        This allows multiple singleton instances per integration class, each
-        with different configurations.
+        Override in a subclass only if identity should be based on something other than
+        the declared name (e.g. keying on endpoint URL to also dedupe two differently-named
+        declarations that point at the same underlying connection).
 
         Args:
             class_ref: The class being instantiated
@@ -124,7 +142,7 @@ class BaseIntegration(ABC):
             **kwargs: Constructor keyword arguments
 
         Returns:
-            Instance key string (default: "default")
+            Instance key string — ``config.name``, or ``"default"`` if no config was given
 
         Example:
             @classmethod
@@ -134,6 +152,9 @@ class BaseIntegration(ABC):
                 endpoint = config.endpoints.address if config.endpoints else "default"
                 return endpoint or "default"
         """
+        config = kwargs.get("config") or (args[0] if args else None)
+        if config is not None and getattr(config, "name", None):
+            return config.name
         return "default"
 
     def _get_command_from_config(self) -> str:

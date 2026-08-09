@@ -1,10 +1,9 @@
 ---
-description: Strata CLI command structure, exit codes, JSON output parsing, and dry-run patterns
-applyTo: "**"
-confidence: high
+name: strata-cli-workflows
+description: 'Strata CLI command structure, exit codes, JSON output parsing, and dry-run patterns. Use when running strata commands, parsing their output, or deciding whether an operation is safe to retry.'
 ---
 
-# Strata CLI Workflows — AI Skill File
+# Strata CLI Workflows
 
 ## Exit Code Convention
 
@@ -44,10 +43,12 @@ Every command returns this structure when `--output json` is set:
 
 ## Command Groups & Exit Code Patterns
 
+All commands that take a deployment/config file use `-f`/`--file` — **never a bare positional path.**
+
 ### `strata sln` — Solution Lifecycle
 
 ```bash
-strata sln init [name]                          # Initialize workspace
+strata sln init --name <name>                    # Initialize workspace
 strata sln status --output json                 # Single JSON snapshot of workspace state
 strata sln clean                                # Clear build artifacts (safe)
 strata sln export --output json                 # Export as archive (for CI)
@@ -58,9 +59,9 @@ strata sln export --output json                 # Export as archive (for CI)
 ### `strata validate` — Schema & Cross-Reference Checks
 
 ```bash
-strata validate <file> --output json            # Structural schema validation
-strata validate <file> --deep --output json     # Deep validation (requires active profile)
-strata validate <file> --explain --output json  # Include explanation of what passed/failed
+strata validate -f <file> --output json            # Structural schema validation
+strata validate -f <file> --deep --output json     # Deep validation (requires active profile)
+strata validate -f <file> --explain --output json  # Include explanation of what passed/failed
 ```
 
 **Agent workflow:** Validate BEFORE every build or deploy. Exit 3 = schema error (read `errors`). Exit 0 = safe to proceed.
@@ -89,11 +90,23 @@ strata deploy health -f <deploy> --output json                     # Health chec
 strata deploy destroy -f <deploy> --force --output json            # Tear down (requires --force)
 ```
 
-**Agent workflow:** 
+**Agent workflow:**
 - Always dry-run FIRST: `strata deploy run -f <file> --dry-run --output json`
 - If dry-run succeeds, execute with `--force`
 - Check `health` afterward to verify resources are available
 - Store deployment IDs from `history` for audit
+- Before it even resolves any value, `deploy run` pre-flights every referenced secret store AND every stage's provisioner tool — a failure there aborts before touching anything (see the `strata-secret-resolution-patterns` and `strata-terraform-ansible-provisioning` skills)
+
+### `strata cache` — Resolved-Model Cache
+
+```bash
+strata cache warm [-f <deploy> | --all] --output json  # Resolve and store the result
+strata cache status [-f <deploy>] --output json         # Cache freshness per deployment
+strata cache clear --output json                        # Remove every entry
+strata cache export [path] --output json                # Dump the cache to JSON (debugging)
+```
+
+**Agent workflow:** `build run`/`build plan`/`policy check` auto-warm the cache on success — you rarely need to call `cache warm` yourself. Pass `--no-cache-warm` to any of those three to opt out for a single invocation.
 
 ### `strata repo` — Repository Management
 
@@ -102,7 +115,7 @@ strata repo add --name <name> --path <path> --output json      # Register a conf
 strata repo remove --name <name> --output json                 # Unregister
 strata repo list --output json                                 # Show all registered repos
 strata repo sync --name <name> --output json                   # Pull latest from repo
-strata repo status --output json                               # Check clone status
+strata repo status --output json                                # Check clone status
 ```
 
 **Agent workflow:** Repos are registered once. Use `repo list` to verify existing registrations before adding duplicates.
@@ -113,8 +126,8 @@ strata repo status --output json                               # Check clone sta
 strata profile create --name <env> --output json               # Create profile
 strata profile activate --name <env> --output json             # Set active profile (required for deep validation)
 strata profile list --output json                              # Show all profiles
-strata profile show --output json                              # Show active profile details
-strata profile remove --name <env> --output json               # Delete profile
+strata profile show --output json                               # Show active profile details
+strata profile remove --name <env> --output json                # Delete profile
 ```
 
 **Agent workflow:** Profiles are environments (dev, staging, prod). Activate the correct one before building. Deep validation requires an active profile.
@@ -143,9 +156,9 @@ strata values get -f <deploy> <key> --output json  # Get single resolved value
 
 ```bash
 strata audit list --last --output json                    # Last command only
-strata audit list --level ERROR --output json             # Filter by severity
-strata audit list --execution-id <id> --output json       # Filter by run
-strata audit list --minutes 10 --output json              # Last N minutes
+strata audit list --level ERROR --output json              # Filter by severity
+strata audit list --execution-id <id> --output json        # Filter by run
+strata audit list --minutes 10 --output json                # Last N minutes
 ```
 
 **Agent workflow:** Use after a failed deploy to see what actually happened. Audit is append-only — never edited.
@@ -154,7 +167,7 @@ strata audit list --minutes 10 --output json              # Last N minutes
 
 ```bash
 strata tools status --output json                 # Check terraform, ansible, git, docker availability
-strata tools check <tool> --output json           # Check specific tool
+strata tools check <tool> --output json            # Check specific tool
 ```
 
 **Agent workflow:** Run before complex operations to ensure required tools are installed.
@@ -171,7 +184,7 @@ strata guide show                                 # Interactive human-readable c
 
 ```bash
 strata schema list --output json                  # List all kinds and their versions
-strata schema get <kind> --output json            # Get schema for a specific kind
+strata schema get <kind> --output json             # Get schema for a specific kind
 ```
 
 **Agent workflow:** Use to validate your YAML structure against the official schema. Before writing YAML, check the schema.
@@ -179,8 +192,8 @@ strata schema get <kind> --output json            # Get schema for a specific ki
 ### `strata new` — Scaffolding
 
 ```bash
-strata new --list --output json                   # List available templates
-strata new <kind> <name> --path <dir> --output json  # Scaffold a new file
+strata new --list --output json                              # List available templates
+strata new <name> --template <kind> --output-file <path> --output json  # Scaffold a new file
 ```
 
 **Agent workflow:** Use to generate boilerplate YAML. Always validate after scaffolding.
@@ -196,7 +209,7 @@ strata new <kind> <name> --path <dir> --output json  # Scaffold a new file
 strata build run -f deploy.yaml --dry-run --output json
 
 # Deploy dry-run (plan infrastructure changes without provisioning)
-strata deploy run -f deploy.yaml --dry-run --output json
+strata deploy run -f deploy.yaml --dry-run --force --output json
 ```
 
 Parse the response:
@@ -209,12 +222,14 @@ Parse the response:
 ## Common Error Patterns
 
 | Error                                                   | Likely Cause                                      | Fix                                                |
-| ------------------------------------------------------- | ------------------------------------------------- | -------------------------------------------------- |
+| -------------------------------------------------------- | -------------------------------------------------- | ---------------------------------------------------- |
 | `TF400813: Resource not available for anonymous access` | Missing authentication                            | Ensure Azure/AWS/GCP credentials configured        |
 | `Validation error: unknown field`                       | Schema mismatch                                   | Run `strata schema get <kind>` to see valid fields |
 | `Profile not found`                                     | No active profile                                 | Run `strata profile activate <name>` first         |
 | `Repository not found (@repo_name/...)`                 | Remote not registered                             | Run `strata repo add --name <name> --path <path>`  |
 | `Dry-run succeeded but deploy failed`                   | Environment difference between dry-run and deploy | Check profiles, secrets, external tool versions    |
+| `Store '<name>' unavailable`                            | Secret/variable store unreachable or unauthenticated | Fix connectivity/auth — strata deliberately aborts rather than risk generating/overwriting a secret |
+| `No value for required variable`                        | Value resolved but not passed to this stage        | Check `stage.secrets` allowlist — see `strata-secret-resolution-patterns` skill |
 
 ---
 

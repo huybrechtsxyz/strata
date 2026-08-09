@@ -1,7 +1,6 @@
 """Base class for deploy commands."""
 
 import json
-import os
 import socket
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,6 +9,7 @@ from typing import Any, Dict, List, Optional
 import click
 
 from strata.commands.base_command import BaseCommand
+from strata.controllers.actor_controller import resolve_actor
 from strata.integrations.lock.base_lock_backend import (
     BaseLockBackend,
     LockBackendError,
@@ -81,6 +81,7 @@ class BaseDeployCommand(BaseCommand):
         # Subclasses override these before calling _execute_provisioning.
         self._dry_run: bool = False
         self._force_lock: bool = False
+        self._force: bool = False
 
     def get_required_integrations(self):
         return {}
@@ -163,7 +164,7 @@ class BaseDeployCommand(BaseCommand):
         locking = getattr(spec, "locking", None)
         wait_timeout: str = getattr(locking, "wait_timeout", "30m") if locking else "30m"
         timeout_seconds = parse_duration(wait_timeout)
-        holder = os.environ.get("GITHUB_ACTOR") or os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
+        holder = resolve_actor()
 
         # Force-release a held lock when --force-lock is set.
         if self._force_lock:
@@ -207,6 +208,7 @@ class BaseDeployCommand(BaseCommand):
                 lock_id=handle.lock_id,
                 backend=handle.backend_type,
             )
+            self._forward_lock_audit_event("lock.acquired", handle, deploy_name)
             return handle
         except LockConflictError as exc:
             self._lock_conflict = True
@@ -238,12 +240,48 @@ class BaseDeployCommand(BaseCommand):
             if self._is_console_output():
                 click.echo(f"\n\U0001f513  Lock released ({handle.backend_type})")
             self.logger.info("deploy_lock_released", lock_id=handle.lock_id)
+            deploy_name = (
+                str(self._deployment_service.model.meta.name)  # type: ignore[union-attr]
+                if self._deployment_service is not None
+                else None
+            )
+            self._forward_lock_audit_event("lock.released", handle, deploy_name)
         except Exception as exc:  # noqa: BLE001
             self.logger.warning(
                 "deploy_lock_release_failed",
                 lock_id=handle.lock_id,
                 error=str(exc),
             )
+
+    def _forward_lock_audit_event(self, event_type: str, handle: LockHandle, deploy_name: Optional[str]) -> None:
+        """Forward a lock.acquired / lock.released event (ADR-0066 follow-up).
+
+        Best-effort: wrapped so a forwarding failure never affects the deploy/destroy
+        exit code, matching ``forward()``'s own "audit must never fail a deploy"
+        guarantee. Both event types default to disabled (not every lock/unlock is
+        interesting), so this is a no-op unless explicitly enabled via
+        ``spec.audit.policy.events``.
+        """
+        try:
+            from strata.controllers.audit_controller import AuditController
+            from strata.services.configuration_service import ConfigurationService
+
+            audit_cfg = None
+            try:
+                config_model = ConfigurationService.get_instance().model
+                audit_cfg = getattr(getattr(config_model, "spec", None), "audit", None)
+            except Exception as e:
+                self.logger.debug(f"Failed to resolve spec.audit for {event_type} (non-fatal): {e}")
+
+            payload = {
+                "execution_id": self._execution_id,
+                "deployment": deploy_name,
+                "lock_id": handle.lock_id,
+                "backend": handle.backend_type,
+            }
+            AuditController(work_path=self._work_path).forward(event_type, payload, audit_config=audit_cfg)
+        except Exception as e:
+            self.logger.debug(f"Failed to forward {event_type} audit event (non-fatal): {e}")
 
     # -------------------------------------------------------------------------
     # Hierarchical lifecycle helper
@@ -672,9 +710,7 @@ class BaseDeployCommand(BaseCommand):
             version = labels.get("version")
 
             # Actor
-            deployed_by = (
-                os.environ.get("GITHUB_ACTOR") or os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
-            )
+            deployed_by = resolve_actor()
 
             # Full artifact BOM
             artifacts = self._collect_artifacts()
@@ -843,6 +879,100 @@ class BaseDeployCommand(BaseCommand):
             self.logger.warning("Failed to write outputs artifact", stage=stage_name, error=str(exc))
             return None
 
+    def _write_combined_outputs_artifact(
+        self,
+        stage_results: list,
+    ) -> Optional[Path]:
+        """Write a combined deployment-outputs.json merging all stages' outputs.
+
+        Produces a single registry-consumable artifact with outputs keyed by
+        stage name.  Written to the build directory alongside the manifest.
+        Non-fatal: failures are logged as warnings.
+
+        Args:
+            stage_results: List of dicts with keys: name, status, outputs, sensitive_outputs.
+
+        Returns:
+            Path written, or None when skipped/failed.
+        """
+        from strata.models.deployment_outputs_model import (
+            DeploymentOutputsMetaModel,
+            DeploymentOutputsModel,
+        )
+
+        if self._deployment_service is None:
+            return None
+
+        try:
+            deploy_meta = self._deployment_service.model.meta  # type: ignore[union-attr]
+            deployment_name = str(deploy_meta.name)
+            labels = deploy_meta.labels or {}
+            version = str(labels.get("version", "unknown"))
+
+            ws_service = self._deployment_service.get_workspace_service()
+            workspace_name = str(ws_service.model.meta.name) if ws_service and ws_service.model else deployment_name
+
+            env_service = self._deployment_service.get_environment_service()
+            environment_name = None
+            tenant_code = None
+            if env_service and env_service.model and env_service.model.meta:
+                env_labels = env_service.model.meta.labels or {}
+                environment_name = env_labels.get("environment")
+                tenant_code = env_labels.get("tenant")
+
+            outputs: Dict[str, Dict[str, Any]] = {}
+            sensitive_keys: List[str] = []
+            completed_stages: List[str] = []
+
+            for result in stage_results:
+                if result.get("status") != "success":
+                    continue
+                stage_name = result.get("name", "unknown")
+                completed_stages.append(stage_name)
+
+                stage_outputs = result.get("outputs") or {}
+                outputs[stage_name] = dict(stage_outputs)
+
+                for key in (result.get("sensitive_outputs") or {}).keys():
+                    sensitive_keys.append(f"{stage_name}.{key}")
+
+            if not outputs:
+                return None  # No successful stages with outputs
+
+            artifact = DeploymentOutputsModel(
+                meta=DeploymentOutputsMetaModel(
+                    name=deployment_name,
+                    deployment=deployment_name,
+                    version=version,
+                    deployed_at=datetime.now(timezone.utc).isoformat(),
+                    workspace=workspace_name,
+                    environment=environment_name,
+                    tenant=tenant_code,
+                ),
+                outputs=outputs,
+                sensitive_keys=sensitive_keys,
+                provenance={
+                    "stages_completed": completed_stages,
+                },
+            )
+
+            output_path = self._deployment_service.get_build_path(self._build_path) / "deployment-outputs.json"
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+
+            with open(output_path, "w", encoding="utf-8") as fh:
+                json.dump(artifact.model_dump(exclude_none=True), fh, indent=2, default=str)
+
+            self.logger.info(
+                "Combined outputs artifact written",
+                path=str(output_path),
+                stage_count=len(completed_stages),
+            )
+            return output_path
+
+        except Exception as exc:
+            self.logger.warning("Failed to write combined outputs artifact", error=str(exc))
+            return None
+
     def _collect_artifacts(self) -> ManifestArtifactsModel:
         """Assemble the full artifact BOM from available runtime data."""
         return ManifestArtifactsModel(
@@ -858,7 +988,9 @@ class BaseDeployCommand(BaseCommand):
 
     def _collect_repository_info(self) -> Optional[Dict[str, ManifestRepositoryModel]]:
         """Walk solution repositories and collect URL/ref/commit info."""
-        return collect_repository_info(self._solution_controller)
+        if self._solution_controller is None:
+            return None
+        return collect_repository_info(self._solution_controller.solution, self._solution_controller.get_repo_map())
 
     def _collect_provider_info(self) -> Optional[List[ManifestArtifactProviderModel]]:
         """Collect provisioner metadata from the workspace model.
@@ -896,3 +1028,176 @@ class BaseDeployCommand(BaseCommand):
                         )
                     )
         return images if images else None
+
+    # ------------------------------------------------------------------
+    # Deploy-log + SIEM forwarding (ADR-0066) — shared by run and destroy
+    # ------------------------------------------------------------------
+
+    def _get_git_field(self, *args: str) -> Optional[str]:
+        """Run a git command and return stdout, or None on failure."""
+        try:
+            from strata.utils.system import run_command
+
+            result = run_command(["git"] + list(args), cwd=str(self._work_path), timeout=10)
+            if result.returncode == 0 and result.stdout:
+                return result.stdout.strip()
+        except Exception:
+            pass
+        return None
+
+    def _get_current_commit(self) -> str:
+        """Return the current HEAD commit SHA, or 'unknown' on failure."""
+        return self._get_git_field("rev-parse", "HEAD") or "unknown"
+
+    def _write_deploy_log_and_forward(self, event_type: str, success: bool) -> None:
+        """Assemble and write deploy-log via ``AuditController``, then forward *event_type*.
+
+        Shared by ``RunDeployCommand`` (``event_type="deployment.completed"``) and
+        ``DestroyDeployCommand`` (``event_type="deployment.destroyed"``, ADR-0066 gap B)
+        so the deploy-log-build + PR-enrich + forward + push-to-remote pipeline exists
+        in exactly one place rather than being duplicated per command.
+
+        This is best-effort — failures are logged as WARNING and never affect the
+        deployment exit code (ADR 0018, decision #2).
+        """
+        try:
+            from strata.controllers.audit_controller import AuditController
+            from strata.models.deploy_log_model import (
+                DeployLogModel,
+                DeployLogStageModel,
+                DeployLogStepModel,
+            )
+            from strata.utils.config import get_deploy_log_dir
+
+            # Assemble per-stage data from manifest stage results
+            stages: List[DeployLogStageModel] = []
+            for sr in self._stage_results:
+                stage_steps: List[DeployLogStepModel] = []
+                if sr.steps:
+                    for step_name in sr.steps:
+                        stage_steps.append(DeployLogStepModel(step=step_name, success=True, duration_seconds=0.0))
+
+                stages.append(
+                    DeployLogStageModel(
+                        name=sr.name,
+                        provisioner=sr.provisioner,
+                        topology=sr.topology,
+                        success=(sr.status == "success"),
+                        started_at=sr.started_at or self._deploy_started_at or "",
+                        completed_at=sr.completed_at or datetime.now(timezone.utc).isoformat(),
+                        duration_seconds=float(sr.duration_seconds or 0),
+                        steps=stage_steps,
+                        errors=[sr.error] if sr.error else [],
+                    )
+                )
+
+            # Calculate total duration
+            completed_at = datetime.now(timezone.utc).isoformat()
+            try:
+                duration = (
+                    datetime.fromisoformat(completed_at)
+                    - datetime.fromisoformat(self._deploy_started_at or completed_at)
+                ).total_seconds()
+            except (ValueError, TypeError):
+                duration = 0.0
+
+            # Get git context (best-effort)
+            commit_sha = self._get_git_field("rev-parse", "HEAD")
+            commit_message = self._get_git_field("log", "--format=%s", "-1")
+            commit_author = self._get_git_field("log", "--format=%ae", "-1")
+
+            # Get version
+            from strata import __version__
+
+            # Resolve deployment metadata
+            deployment_name = ""
+            workspace_name = None
+            environment = None
+            if self._deployment_service and self._deployment_service.model:
+                deployment_name = self._deployment_service.model.meta.name
+                spec = self._deployment_service.model.spec
+                if spec:
+                    workspace_name = spec.workspace.name if spec.workspace else None
+                    layers = spec.layers
+                    environment = layers.get("environment") if layers else None
+
+            payload = DeployLogModel(
+                execution_id=self._execution_id,
+                timestamp=self._deploy_started_at or completed_at,
+                command=self.OPERATION,
+                version=__version__,
+                commit_sha=commit_sha,
+                commit_message=commit_message,
+                commit_author=commit_author,
+                deployment=deployment_name or "unknown",
+                workspace=workspace_name,
+                environment=environment,
+                file=str(self._file_path or ""),
+                force=self._force,
+                dry_run=False,
+                success=success,
+                duration_seconds=duration,
+                stages=stages,
+                errors=list(self._errors),
+                messages=list(self._messages),
+            )
+
+            # Resolve audit config (structure + base path)
+            structure = "by-execution"
+            base_path = get_deploy_log_dir(self._work_path)
+            resolved_audit_cfg = None
+            if self._configuration_service:
+                resolved_audit_cfg = getattr(getattr(self._configuration_service.model, "spec", None), "audit", None)
+                if resolved_audit_cfg:
+                    structure = resolved_audit_cfg.structure or structure
+                base_path = self._configuration_service.get_deploy_log_path(self._work_path, create_path=True)
+
+            # Write via AuditController
+            controller = AuditController(work_path=self._work_path)
+            ok, path = controller.write_deploy_log(
+                payload=payload,
+                base_path=base_path,
+                structure=structure,
+            )
+
+            # Layer 4a: PR enrichment — best-effort, never blocks (gh CLI required)
+            if ok and path:
+                enriched = controller.enrich_with_pr_data(payload)
+                if enriched.pull_request is not None:
+                    import json
+
+                    path.write_text(
+                        json.dumps(enriched.model_dump(exclude_none=True), indent=2, default=str),
+                        encoding="utf-8",
+                    )
+
+                # Layer 4b: SIEM forwarding — best-effort, fire-and-forget
+                # Uses the enriched payload so SIEM gets PR data when available.
+                controller.forward(event_type, enriched.model_dump(exclude_none=True), audit_config=resolved_audit_cfg)
+
+                # Layer 4c: Push to remote repo — best-effort, opt-in via audit.repository
+                if resolved_audit_cfg and resolved_audit_cfg.repository:
+                    from pathlib import Path as _Path
+
+                    from strata.controllers.solution_controller import SolutionController
+
+                    sol_ctrl = SolutionController(work_path=self._work_path)
+                    sol_ctrl.load()
+                    repo_map = sol_ctrl.get_repo_map()
+                    repo_path = repo_map.get(str(resolved_audit_cfg.repository))
+                    if repo_path:
+                        controller.push_to_remote([path], working_dir=_Path(repo_path))
+                    else:
+                        self.logger.warning(
+                            "deploy_log_push_repo_not_found",
+                            repository=str(resolved_audit_cfg.repository),
+                        )
+
+            if ok and path and self._is_console_output():
+                self._audit_log_path = str(path.relative_to(self._work_path))
+                click.echo(f"  📝  Deploy-log: {self._audit_log_path}")
+            elif ok and path:
+                self._audit_log_path = str(path.relative_to(self._work_path))
+
+        except Exception as exc:
+            self.logger.warning("deploy_log_write_failed", error=str(exc))

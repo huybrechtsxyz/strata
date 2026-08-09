@@ -8,6 +8,7 @@ import click
 import yaml
 
 from strata.commands.base_command import BaseCommand
+from strata.controllers.lifecycle_controller import LifecycleController
 from strata.validators.platform_validator import PlatformValidator
 
 
@@ -183,6 +184,7 @@ class ValidateCommand(BaseCommand):
             configuration_service=config_svc,
             repo_map=solution_repo_map,
             verify_digests=self._verify_digests,
+            lifecycle_controller=LifecycleController(),
         )
 
         work_path = self._work_path
@@ -354,6 +356,7 @@ class ValidateCommand(BaseCommand):
                         click.echo(f"    \u26a0  Policy '{result.policy_name}' warning: {v}")
                     elif result.enforcement == "audit" and self._is_verbose():
                         click.echo(f"    \u00b7  Policy '{result.policy_name}' audit: {v}")
+                self._forward_policy_violation_audit_event(result)
         if denied:
             self._validate_policy_denied = True
         return not denied

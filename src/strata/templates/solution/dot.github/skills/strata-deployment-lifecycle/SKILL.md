@@ -1,10 +1,9 @@
 ---
-description: Strata deployment lifecycle, stages, provisioners, health checks, and rollback patterns
-applyTo: "**"
-confidence: high
+name: strata-deployment-lifecycle
+description: 'Strata deployment lifecycle: validate/build/dry-run/deploy phases, stages, provisioners, stage-scoped secrets, health checks, and rollback patterns. Use when running or debugging a strata deploy.'
 ---
 
-# Strata Deployment Lifecycle — AI Skill File
+# Strata Deployment Lifecycle
 
 ## The Four-Phase Flow
 
@@ -22,21 +21,21 @@ VALIDATE → BUILD → DRY-RUN → DEPLOY
 
 **Phase 2: BUILD**
 - Generate Terraform/Ansible artifacts
-- Resolve variables, secrets, environment
 - Write platform.json (artifact manifest)
-- Does NOT provision — only creates artifacts
+- Does NOT resolve secrets and does NOT provision — only creates artifacts
 
 **Phase 3: DRY-RUN**
 - Terraform plan (show what would change)
 - Ansible play dry-run (show what would run)
 - No actual infrastructure changes
-- Uses `--dry-run` flag or `terraform plan`
+- Uses `--dry-run` flag
 
 **Phase 4: DEPLOY**
+- Pre-flight: every referenced secret store AND every stage's provisioner tool is checked for availability BEFORE anything runs or the deployment lock is acquired
 - Terraform apply (provision infrastructure)
 - Ansible run (configure infrastructure)
-- Stages execute in order
-- Exit 0 = success; Exit 1 = failure
+- Stages execute in order, each scoped to only the secrets it explicitly allowlists
+- Exit 0 = success; Exit 1 = failure; Exit 3 = validation failure; Exit 4 = lock conflict
 
 ---
 
@@ -44,7 +43,7 @@ VALIDATE → BUILD → DRY-RUN → DEPLOY
 
 ```bash
 # Phase 1: Validate
-strata validate deploy/my-deploy.yaml --output json
+strata validate -f deploy/my-deploy.yaml --output json
 
 # Phase 2: Build
 strata build run -f deploy/my-deploy.yaml --output json
@@ -65,7 +64,7 @@ strata deploy run -f deploy/my-deploy.yaml --force --output json
 
 ## Stages & Provisioners
 
-A deployment defines **stages** — sequential steps that execute in order. Each stage uses a **provisioner** (the tool that does the work).
+A deployment defines **stages** — sequential steps that execute in order. Each stage uses a **provisioner** (the tool that does the work) and an explicit **secrets allowlist**.
 
 ```yaml
 kind: deployment
@@ -77,16 +76,18 @@ spec:
       provisioner: terraform          # Provisions cloud resources
       scope: all
       on_failure: stop
+      secrets: [db_password]          # only this key reaches the terraform subprocess
     - name: configuration
       provisioner: ansible            # Configures provisioned resources
       scope: all
       on_failure: stop
+      secrets: ['*']                  # escape hatch: every resolved secret
 ```
 
 ### Supported Provisioners
 
 | Provisioner | Tool             | Purpose                                                 | When to Use                                  |
-| ----------- | ---------------- | ------------------------------------------------------- | -------------------------------------------- |
+| ----------- | ---------------- | ---------------------------------------------------------- | ----------------------------------------------- |
 | `terraform` | Terraform CLI    | Provision cloud infrastructure (VMs, networks, storage) | Always for infrastructure                    |
 | `ansible`   | Ansible playbook | Configure servers after provisioning                    | Post-provision setup, application deployment |
 
@@ -94,10 +95,12 @@ spec:
 
 - Stages execute **sequentially in the order listed**
 - Each stage can **succeed or fail independently**
-- `on_failure: stop` — if this stage fails, subsequent stages don't run
-- `on_failure: continue` — even if this stage fails, continue to next stage (not common)
+- `on_failure: stop` (default) — if this stage fails, subsequent stages don't run, and the whole deploy exits non-zero
+- `on_failure: rollback` — same halt behavior as `stop`; reserved for stages where you also want to signal a rollback should happen
+- `on_failure: continue` — even if this stage fails, continue to the next stage
 - `scope: all` — apply to all resources (most common)
 - `scope: <name>` — apply to specific resource/module only
+- `secrets:` — allowlist of secret keys this stage's provisioner subprocess receives; `[]` or omitted = none, `['*']` = all resolved secrets. **A secret resolving successfully does not mean every stage gets it** — this is scoped per stage. See the `strata-secret-resolution-patterns` skill.
 
 ---
 
@@ -116,6 +119,7 @@ spec:
       provisioner: terraform
       scope: all
       on_failure: stop
+      secrets: [HETZNER_ROOT_PASSWORD]
 ```
 
 **Agent workflow:**
@@ -142,7 +146,7 @@ resource "azurerm_kubernetes_cluster" "main" {
   name                = "platform-aks"
   resource_group_name = azurerm_resource_group.main.name
   location            = azurerm_resource_group.main.location
-  
+
   default_node_pool {
     name       = "default"
     node_count = 3
@@ -170,6 +174,7 @@ spec:
     - name: configuration
       provisioner: ansible
       on_failure: stop
+      secrets: [platform_ssh_key]
 ```
 
 **Agent workflow:**
@@ -208,7 +213,7 @@ provisioners:
 3. Passes to `ansible-playbook` via `--private-key`
 4. Deletes temp file after ansible completes
 
-**Agent rule:** Never put SSH private keys in YAML — always use the secret reference pattern.
+**Agent rule:** Never put SSH private keys in YAML — always use the secret reference pattern, and make sure the stage's `secrets:` allowlist includes that key (see `strata-secret-resolution-patterns`).
 
 ---
 
@@ -255,19 +260,19 @@ strata deploy run -f deploy.yaml --force --output json  # ← Will fail
 
 **Agent rule:** If dry-run fails, fix the issue BEFORE attempting production deploy.
 
-### Single Stage Failure (on_failure: stop)
+### Single Stage Failure (on_failure: stop / rollback)
 
-If a stage fails and `on_failure: stop`:
+If a stage fails and `on_failure` is `stop` or `rollback`:
 - That stage is marked FAILED
 - Subsequent stages do NOT run
-- Deployment exits with code 1
+- Deployment exits with a non-zero code
 
 **Recovery:**
 ```bash
 # Check what failed
 strata audit list --last --output json
 
-# Fix the issue (usually in provisioner scripts/config)
+# Fix the issue (usually in provisioner scripts/config, or a missing stage.secrets entry)
 
 # Retry from that stage
 strata deploy run -f deploy.yaml --force --output json
@@ -280,6 +285,10 @@ If stage 1 (Terraform) succeeds but stage 2 (Ansible) fails:
 - Infrastructure exists (not torn down)
 - Configuration is incomplete
 - Ansible scripts must be idempotent so retry works
+
+### "Resolved but missing" is usually a stage.secrets gap, not a store outage
+
+If a provisioner reports a variable/value has no value, but strata's own logs never showed a "not found" or "store unavailable" warning for that key — the value almost certainly resolved fine at the environment level but was never added to the failing stage's `secrets:` allowlist. Check that YAML before investigating the secret store itself.
 
 ---
 
@@ -352,17 +361,18 @@ rm .strata/deployment.lock
 strata deploy run -f deploy.yaml --force --output json
 ```
 
-**Agent rule:** Never force-remove locks if a deploy is actively running in another terminal.
+**Agent rule:** Never force-remove locks if a deploy is actively running in another terminal. A lock conflict returns exit code 4.
 
 ---
 
 ## Agent Checklist Before Deploying
 
-- [ ] Validate passed: `strata validate deploy.yaml --output json` (exit 0)
+- [ ] Validate passed: `strata validate -f deploy.yaml --output json` (exit 0)
 - [ ] Build succeeded: `strata build run -f deploy.yaml --output json` (exit 0)
 - [ ] Dry-run succeeded: `strata deploy run -f deploy.yaml --dry-run --force --output json` (exit 0)
 - [ ] Stages are in logical order (infrastructure before configuration)
-- [ ] `on_failure` policy is appropriate (stop or continue?)
+- [ ] `on_failure` policy is appropriate (stop, rollback, or continue?)
+- [ ] Every stage's `secrets:` allowlist includes every key its provisioner actually needs
 - [ ] SSH keys are secret references, not plain values
 - [ ] All provisioners exist in the configuration
 - [ ] Profile is activated (if deep validation needed)
@@ -371,10 +381,11 @@ strata deploy run -f deploy.yaml --force --output json
 
 ## Common Deployment Issues
 
-| Issue                                   | Cause                                                | Fix                                                 |
-| --------------------------------------- | ---------------------------------------------------- | --------------------------------------------------- |
-| "Provisioner not found"                 | Provisioner referenced in stage not in configuration | Add to configuration's `spec.provisioners`          |
-| "State locked"                          | Previous deploy didn't complete                      | `rm .strata/deployment.lock` and retry              |
-| "Dry-run succeeds, deploy fails"        | Environment difference (secrets, profiles)           | Check active profile, verify secrets exist          |
-| "Ansible fails but Terraform succeeded" | SSH key not readable, playbook error                 | Check SSH key secret reference, review ansible logs |
-| "Health check returns DEGRADED"         | Resource didn't stabilize, network issues            | Wait and re-check, or investigate specific resource |
+| Issue                                     | Cause                                                | Fix                                                     |
+| -------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------- |
+| "Provisioner not found"                    | Provisioner referenced in stage not in configuration | Add to configuration's `spec.provisioners`             |
+| "State locked" (exit 4)                    | Previous deploy didn't complete                       | `rm .strata/deployment.lock` and retry                  |
+| "Dry-run succeeds, deploy fails"           | Environment difference (secrets, profiles)            | Check active profile, verify secrets exist              |
+| "Ansible fails but Terraform succeeded"    | SSH key not readable, playbook error                   | Check SSH key secret reference, review ansible logs     |
+| "Health check returns DEGRADED"            | Resource didn't stabilize, network issues             | Wait and re-check, or investigate specific resource      |
+| "No value for required variable" (Terraform) | Value resolved but stage's `secrets:` allowlist omits it | Add the key to that stage's `secrets:` list           |

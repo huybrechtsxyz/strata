@@ -34,7 +34,7 @@ same object.  Override ``_get_instance_key_static()`` to key on something
 else (e.g. endpoint URL) if your integration needs multiple simultaneous
 connections.
 
-Capability protocols (optional, from strata.integrations.capabilities)
+Capability protocols (optional, from strata.models.capabilities)
 -----------------------------------------------------------------------------
 Declare CAPABILITIES to signal what your integration can do:
   IRepositoryTool      - git-style clone/fetch/push
@@ -58,7 +58,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from strata.integrations.base_integration import BaseIntegration
 from strata.integrations.factory import IntegrationFactory
 
-# from strata.integrations.capabilities import ISecretStore  # uncomment if needed
+# from strata.models.capabilities import ISecretStore  # uncomment if needed
 from strata.models.integration_model import IntegrationModel
 
 

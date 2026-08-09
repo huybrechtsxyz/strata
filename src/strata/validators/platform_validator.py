@@ -6,11 +6,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 if TYPE_CHECKING:
+    from strata.controllers.lifecycle_controller import LifecycleController
     from strata.services.configuration_service import ConfigurationService
 
 import yaml
 
-from strata.controllers.lifecycle_controller import LifecycleController
 from strata.logger import get_logger
 from strata.models.common_models import CommonLifecycleModel, PlatformKind
 from strata.models.configuration_model import ConfigurationModel
@@ -58,7 +58,14 @@ _KIND_TO_SERVICE: Dict[PlatformKind, Any] = {
 
 
 class PlatformValidator(BaseValidator):
-    """Validates a single platform YAML file by resolving its kind and delegating to the appropriate service."""
+    """Validates a single platform YAML file by resolving its kind and delegating to the appropriate service.
+
+    ``lifecycle_controller`` is injected by the caller (``commands/`` or
+    ``controllers/``) rather than constructed internally — per ADR-0003,
+    ``validators/`` must not depend on ``controllers/``. When omitted, the
+    ``validate_before``/``validate_after`` lifecycle hooks are skipped (treated the
+    same as ``configuration_service=None`` skipping Phase 2 dynamic validation).
+    """
 
     def __init__(
         self,
@@ -66,12 +73,14 @@ class PlatformValidator(BaseValidator):
         configuration_service: Optional[ConfigurationService] = None,
         repo_map: Optional[Dict[str, str]] = None,
         verify_digests: bool = False,
+        lifecycle_controller: Optional["LifecycleController"] = None,
     ) -> None:
         super().__init__()
         self._file_path = file_path
         self._configuration_service = configuration_service
         self._repo_map = repo_map
         self._verify_digests = verify_digests
+        self._lifecycle_controller = lifecycle_controller
         self._detected_kind: Optional[PlatformKind] = None
         self._service: Optional[BaseService] = None
         self._lifecycle_model: Optional[CommonLifecycleModel] = None
@@ -205,7 +214,10 @@ class PlatformValidator(BaseValidator):
                 )
 
         # Execute validate_before lifecycle hook (file-level + configuration-level scripts)
-        lc = LifecycleController()
+        if self._lifecycle_controller is None:
+            return True
+
+        lc = self._lifecycle_controller
         if not lc.execute_phase(
             phase_name="validate_before",
             lifecycle_model=self._lifecycle_model,
@@ -428,7 +440,10 @@ class PlatformValidator(BaseValidator):
 
     def after_validate(self, work_path: Path) -> bool:
         """Execute validate_after lifecycle hook (file-level + configuration-level scripts)."""
-        lc = LifecycleController()
+        if self._lifecycle_controller is None:
+            return True
+
+        lc = self._lifecycle_controller
         if not lc.execute_phase(
             phase_name="validate_after",
             lifecycle_model=self._lifecycle_model,

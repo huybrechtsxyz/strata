@@ -68,13 +68,15 @@ authentication:
 
 Audit configuration in deployment YAML
 
+SIEM sinks reference the integration **by name** with `integration:`. Only the built-in
+sink types (`stdout`, `ndjson`, `syslog`, `webhook`) use `type:`.
+
 ```yaml
 spec:
   audit:
-    enabled: true
     sinks:
       - name: elk
-        type: elk
+        integration: elk          # must match integrations[].name above
 ```
 
 Verify TCP connectivity

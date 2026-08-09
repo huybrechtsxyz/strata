@@ -291,7 +291,15 @@ class WorkspaceResourceModel(PlatformBaseModel):
     """Model for workspace resource definition (gluing layer)."""
 
     name: PlatformName = Field(description="Unique resource name")
-    file: str = Field(description="Path to the resource configuration file")
+    file: Optional[str] = Field(
+        None,
+        description="Path to the resource configuration file. Required unless managed_by is set.",
+    )
+    managed_by: Optional[Literal["provisioner"]] = Field(
+        default=None,
+        description="Indicates the resource is fully managed externally and no resource file is needed. "
+        "Currently supported: 'provisioner' (resource details defined in Terraform/Ansible).",
+    )
     description: Optional[str] = Field(
         None,
         description="Optional description of the resource for documentation purposes",
@@ -367,6 +375,21 @@ class WorkspaceResourceModel(PlatformBaseModel):
     )
     tags: Optional[List[Any]] = Field(None, description="Optional tags (list of values for categorization)")
 
+    @model_validator(mode="after")
+    def validate_file_or_managed_by(self) -> "WorkspaceResourceModel":
+        """Ensure resource has either a file reference or a managed_by declaration."""
+        if not self.file and not self.managed_by:
+            raise ValueError(
+                f"Resource '{self.name}' must either specify a 'file' path or set 'managed_by: provisioner'. "
+                "If the provisioner (Terraform/Ansible) fully manages this resource, set managed_by: provisioner."
+            )
+        if self.file and self.managed_by:
+            raise ValueError(
+                f"Resource '{self.name}' cannot both specify a 'file' and 'managed_by'. "
+                "Remove the file reference or remove managed_by."
+            )
+        return self
+
 
 class WorkspaceIacBackendModel(PlatformBaseModel):
     """Model for IaC backend configuration (state storage)."""
@@ -398,6 +421,42 @@ class WorkspaceIacAnsiblePropertiesModel(PlatformBaseModel):
         None,
         description="Extra variables passed to ansible-playbook via --extra-vars",
     )
+
+
+class ProvisionerInputMappingModel(PlatformBaseModel):
+    """Maps outputs from an upstream provisioner to inputs of this provisioner."""
+
+    provisioner: PlatformName = Field(description="Name of the upstream provisioner whose outputs to consume")
+    mapping: Optional[Dict[str, str]] = Field(
+        None,
+        description=(
+            "Optional output-to-input name mapping. Keys are upstream output names, "
+            "values are downstream variable names. When omitted, outputs are passed "
+            "through with their original names."
+        ),
+    )
+    prefix: Optional[str] = Field(
+        None,
+        description=(
+            "Optional prefix to add to all output names when injecting as inputs. "
+            "Mutually exclusive with 'mapping'. E.g., prefix='baseline_' turns "
+            "'vnet_id' into 'baseline_vnet_id'."
+        ),
+    )
+    select: Optional[List[str]] = Field(
+        None,
+        description=(
+            "Optional allowlist of output names to pass. When set, only these "
+            "outputs are forwarded. When omitted, all non-sensitive outputs pass."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate_mapping_prefix_exclusive(self) -> "ProvisionerInputMappingModel":
+        """Ensure mapping and prefix are not both set."""
+        if self.mapping and self.prefix:
+            raise ValueError("'mapping' and 'prefix' are mutually exclusive on inputs_from")
+        return self
 
 
 class WorkspaceIacModel(PlatformBaseModel):
@@ -447,6 +506,13 @@ class WorkspaceIacModel(PlatformBaseModel):
             "Pinned tool version for this provisioner. "
             "Set by 'strata versions' when a type:tool pin targets this provisioner's name. "
             "Used by build/deploy to select the exact tool version (e.g. Terraform, Ansible)."
+        ),
+    )
+    inputs_from: Optional[List[ProvisionerInputMappingModel]] = Field(
+        None,
+        description=(
+            "Declare dependencies on other provisioners' outputs. Outputs from the "
+            "named provisioners are injected as variables into this provisioner at deploy time."
         ),
     )
 
@@ -525,6 +591,63 @@ class WorkspaceSpecModel(PlatformBaseModel):
         """Validate that all provisioner names are unique."""
         if self.provisioners:
             check_unique_names([prov.name for prov in self.provisioners], "provisioner names")
+        return self
+
+    # Validate inputs_from references, self-references, and cycles
+    @model_validator(mode="after")
+    def validate_inputs_from(self) -> "WorkspaceSpecModel":
+        """Validate inputs_from declarations across all provisioners."""
+        if not self.provisioners:
+            return self
+
+        provisioner_names = {p.name for p in self.provisioners}
+        errors: list = []
+
+        # Build dependency graph for cycle detection
+        graph: dict = {str(p.name): set() for p in self.provisioners}
+
+        for prov in self.provisioners:
+            if not prov.inputs_from:
+                continue
+            for inp in prov.inputs_from:
+                # Reference to unknown provisioner
+                if inp.provisioner not in provisioner_names:
+                    errors.append(
+                        f"Provisioner '{prov.name}': inputs_from references unknown provisioner '{inp.provisioner}'"
+                    )
+                # Self-reference
+                elif inp.provisioner == prov.name:
+                    errors.append(f"Provisioner '{prov.name}' cannot reference itself in inputs_from")
+                else:
+                    graph[str(prov.name)].add(str(inp.provisioner))
+
+        # Cycle detection via topological sort (Kahn's algorithm)
+        if not errors:
+            # reverse_in tracks, per node, how many other nodes it is depended on by
+            # (i.e. how many nodes must be processed before this one can be considered "free").
+            reverse_in: dict = {node: 0 for node in graph}
+            for node, deps in graph.items():
+                reverse_in[node] = len(deps)
+
+            queue = [n for n, d in reverse_in.items() if d == 0]
+            visited = 0
+            while queue:
+                current = queue.pop(0)
+                visited += 1
+                # Find nodes that depend on current and reduce their count
+                for node, deps in graph.items():
+                    if current in deps:
+                        reverse_in[node] -= 1
+                        if reverse_in[node] == 0:
+                            queue.append(node)
+
+            if visited < len(graph):
+                cycle_nodes = [n for n, d in reverse_in.items() if d > 0]
+                errors.append(f"Circular dependency in inputs_from: {' → '.join(sorted(cycle_nodes))}")
+
+        if errors:
+            raise ValueError("; ".join(errors))
+
         return self
 
     # Validate unique topology names

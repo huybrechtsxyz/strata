@@ -1,6 +1,5 @@
 """Command to execute the platform build pipeline."""
 
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -15,6 +14,7 @@ from strata.builders.sbom_builder import SbomBuilder
 from strata.builders.sync_builder import SyncBuilder
 from strata.builders.terraform_builder import TerraformBuilder
 from strata.commands.builders.base_build_command import BaseBuildCommand
+from strata.controllers.actor_controller import resolve_actor
 from strata.services.manifest_artifact_collector import (
     collect_platform_artifact,
     collect_provider_info,
@@ -325,6 +325,7 @@ class RunBuildCommand(BaseBuildCommand):
                         click.echo(f"    \u26a0  Policy '{result.policy_name}' warning: {v}")
                     elif result.enforcement == "audit" and self._is_verbose():
                         click.echo(f"    \u00b7  Policy '{result.policy_name}' audit: {v}")
+                self._forward_policy_violation_audit_event(result)
 
         # Record policy results for the build manifest
         for result in results:
@@ -711,9 +712,7 @@ class RunBuildCommand(BaseBuildCommand):
             version = labels.get("version")
 
             # Actor
-            built_by = (
-                os.environ.get("GITHUB_ACTOR") or os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
-            )
+            built_by = resolve_actor()
 
             # Artifact BOM
             artifacts = ManifestArtifactsModel(
@@ -802,7 +801,9 @@ class RunBuildCommand(BaseBuildCommand):
 
     def _collect_repository_info(self) -> Optional[Dict[str, Any]]:
         """Walk solution repositories and collect URL/ref/commit info."""
-        return collect_repository_info(self._solution_controller)
+        if self._solution_controller is None:
+            return None
+        return collect_repository_info(self._solution_controller.solution, self._solution_controller.get_repo_map())
 
     def _collect_provider_info(self) -> Optional[List[Any]]:
         """Collect provisioner metadata from the workspace model."""

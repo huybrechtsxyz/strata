@@ -14,14 +14,14 @@ if TYPE_CHECKING:
     from strata.utils.secret_metadata import SecretMetadata
 
 from strata.exceptions import SecretStoreUnavailableError
-from strata.integrations.capabilities import (
+from strata.integrations.store_integration import StoreIntegration
+from strata.logger import get_logger
+from strata.models.capabilities import (
     IFeatureStore,
     IKVStore,
     ISecretStore,
     IVariableStore,
 )
-from strata.integrations.store_integration import StoreIntegration
-from strata.logger import get_logger
 from strata.models.integration_model import IntegrationModel
 from strata.utils.system import CommandResult
 

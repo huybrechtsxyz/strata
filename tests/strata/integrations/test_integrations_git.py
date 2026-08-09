@@ -4,8 +4,8 @@
 from unittest.mock import MagicMock, patch
 
 from strata.integrations.base_integration import BaseIntegration
-from strata.integrations.capabilities import IRepositoryTool
 from strata.integrations.git import GitIntegration
+from strata.models.capabilities import IRepositoryTool
 from strata.models.integration_model import IntegrationModel
 
 

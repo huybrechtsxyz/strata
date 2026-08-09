@@ -60,13 +60,15 @@ No authentication is needed when targeting a local OTel Collector on a private n
 
 Audit configuration in deployment YAML
 
+SIEM sinks reference the integration **by name** with `integration:`. Only the built-in
+sink types (`stdout`, `ndjson`, `syslog`, `webhook`) use `type:`.
+
 ```yaml
 spec:
   audit:
-    enabled: true
     sinks:
       - name: otel
-        type: otel
+        integration: otel         # must match integrations[].name above
 ```
 
 Verify endpoint

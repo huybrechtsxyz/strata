@@ -147,19 +147,42 @@ class AzureCLIIntegration(BaseIntegration):
         """
         return self._get_subscription_safe()
 
+    def get_signed_in_user(self) -> Optional[Dict[str, str]]:
+        """Return the signed-in principal from ``az account show``'s ``user`` field.
+
+        Returns a dict with ``name`` (UPN/email for a user, or the app ID for a
+        service principal) and ``type`` (``user`` or ``servicePrincipal``), or
+        ``None`` if not logged in or the command fails.
+
+        Used by ``AzureIdentityIntegration`` (ADR-0067) to supply `actor` identity
+        when reusing an already-authenticated ``az`` session instead of running a
+        separate OIDC login.
+        """
+        data = self._account_show_raw()
+        if data is None:
+            return None
+        user = data.get("user") or {}
+        return {"name": user.get("name", ""), "type": user.get("type", "")}
+
     def _get_subscription_safe(self) -> Optional[Dict[str, str]]:
-        """Run ``az account show --output json``; return parsed dict or None."""
+        """Return ``id``/``name``/``tenantId``/``state`` from ``az account show``, or None."""
+        data = self._account_show_raw()
+        if data is None:
+            return None
+        return {
+            "id": data.get("id", ""),
+            "name": data.get("name", ""),
+            "tenantId": data.get("tenantId", ""),
+            "state": data.get("state", ""),
+        }
+
+    def _account_show_raw(self) -> Optional[Dict[str, Any]]:
+        """Run ``az account show --output json``; return the parsed dict or None."""
         try:
             result = self._run_integration(["account", "show", "--output", "json"], timeout=15)
             if result.returncode != 0 or not result.stdout:
                 return None
-            data = json.loads(result.stdout)
-            return {
-                "id": data.get("id", ""),
-                "name": data.get("name", ""),
-                "tenantId": data.get("tenantId", ""),
-                "state": data.get("state", ""),
-            }
+            return json.loads(result.stdout)
         except Exception:
             return None
 

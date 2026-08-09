@@ -64,7 +64,7 @@ class TestCveScannerAvailability:
         assert len(version) > 0
 
     def test_capability_registered(self, scanner: CveScannerIntegration) -> None:
-        from strata.integrations.capabilities import ICveScanner
+        from strata.models.capabilities import ICveScanner
 
         caps = getattr(scanner, "CAPABILITIES", [])
         assert ICveScanner in caps

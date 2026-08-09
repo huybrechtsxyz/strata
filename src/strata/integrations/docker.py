@@ -4,8 +4,8 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from strata.integrations.base_integration import BaseIntegration
-from strata.integrations.capabilities import IContainerTool
 from strata.logger import get_logger
+from strata.models.capabilities import IContainerTool
 from strata.models.integration_model import IntegrationModel
 from strata.utils.system import CommandResult
 

@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from strata.controllers.base_controller import BaseController
-from strata.integrations.capabilities import ICostEstimator
+from strata.models.capabilities import ICostEstimator
 from strata.models.common_models import ProvisionerType
 from strata.utils.config import get_cost_cache_dir
 
@@ -28,6 +28,16 @@ if TYPE_CHECKING:
 
 # Cache TTL: 7 days in seconds
 _CACHE_TTL_SECONDS = 7 * 24 * 3600
+
+# Shown when no ICostEstimator-capable integration is declared in spec.integrations.
+_NO_ESTIMATOR_CONFIGURED_MSG = (
+    "No cost estimator configured. Declare one in spec.integrations, e.g.:\n"
+    "  integrations:\n"
+    "    - name: infracost\n"
+    "      type: infracost\n"
+    "      capabilities: [cost]\n"
+    "See: https://www.infracost.io/docs/install"
+)
 
 
 class CostController(BaseController):
@@ -40,6 +50,29 @@ class CostController(BaseController):
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def is_auto_diff_enabled(self) -> bool:
+        """Return True if a cost estimator is declared in ``spec.integrations``.
+
+        Gates the automatic cost diff that ``deploy run --dry-run`` runs after
+        each stage's plan — e.g.::
+
+            spec:
+              integrations:
+                - name: infracost
+                  type: infracost
+                  capabilities: [cost]
+                  enabled: true   # default; set false to disable
+
+        An installed ``infracost`` binary alone is not enough to trigger the
+        automatic dry-run diff (or ``strata cost show``/``strata cost diff``)
+        — it must be declared, consistent with how every other integration
+        (secret stores, provisioners, etc.) is gated by declaration rather
+        than by probing for installed binaries. This only checks whether it's
+        *declared*; use :meth:`is_available` to also confirm it's installed
+        and working.
+        """
+        return self._get_estimator() is not None
 
     def show(
         self,
@@ -73,7 +106,7 @@ class CostController(BaseController):
         """
         estimator = self._get_estimator()
         if estimator is None:
-            return self._fail("No cost estimator available. Install infracost: https://www.infracost.io/docs/install")
+            return self._fail(_NO_ESTIMATOR_CONFIGURED_MSG)
 
         available, msg = estimator.ensure_available()
         if not available:
@@ -219,7 +252,7 @@ class CostController(BaseController):
         """
         estimator = self._get_estimator()
         if estimator is None:
-            return self._fail("No cost estimator available. Install infracost: https://www.infracost.io/docs/install")
+            return self._fail(_NO_ESTIMATOR_CONFIGURED_MSG)
 
         available, msg = estimator.ensure_available()
         if not available:
@@ -258,16 +291,28 @@ class CostController(BaseController):
     # ------------------------------------------------------------------
 
     def _get_estimator(self) -> Optional[ICostEstimator]:
-        """Return the first available ICostEstimator integration, or None."""
-        from strata.integrations.factory import IntegrationFactory
+        """Return the ICostEstimator integration declared in ``spec.integrations``, or None.
 
-        for type_str in IntegrationFactory.get_known_types():
-            try:
-                integration = IntegrationFactory.create_by_type(type_str)
-                if isinstance(integration, ICostEstimator):
-                    return integration
-            except Exception:
-                continue
+        Requires an explicit declaration (``type: infracost``, ``capabilities:
+        [cost]``, not ``enabled: false``) — consistent with every other
+        integration (secret stores, provisioners, etc.). Does NOT fall back to
+        probing for an installed binary that isn't declared.
+
+        Deliberately does not filter on live availability here (unlike
+        ``IntegrationService.get_integration_with_capability``) so that a
+        declared-but-not-installed integration is still returned — callers
+        call ``ensure_available()`` on the result themselves to get a precise,
+        actionable error message instead of a generic "not found".
+        """
+        from strata.services.integration_service import IntegrationService
+
+        svc = IntegrationService.get_instance()
+        if not svc.is_initialized():
+            svc.initialize_integrations()
+        for name in svc.get_integrations_with_capability(ICostEstimator):
+            integration = svc.get_integration(name)
+            if integration is not None:
+                return integration
         return None
 
     def _get_terraform_provisioners(
@@ -347,15 +392,19 @@ class CostController(BaseController):
     def _compute_cache_key(self, terraform_path: Path, currency: Optional[str]) -> str:
         """Compute a cache key from terraform directory content hash + currency.
 
-        Hash is computed from file names + sizes (fast, avoids reading all content).
-        Adding currency ensures separate cache entries per currency.
+        Hash is computed from file names + sizes + mtimes (fast, avoids reading
+        all file content) — including mtime catches same-byte-count edits that
+        name+size alone would miss. Adding currency ensures separate cache
+        entries per currency.
         """
         h = hashlib.sha256()
         try:
             for f in sorted(terraform_path.rglob("*")):
                 if f.is_file() and ".terraform" not in f.parts:
+                    stat = f.stat()
                     h.update(f.name.encode())
-                    h.update(str(f.stat().st_size).encode())
+                    h.update(str(stat.st_size).encode())
+                    h.update(str(stat.st_mtime_ns).encode())
         except OSError:
             pass
         h.update((currency or "USD").encode())

@@ -55,13 +55,15 @@ Optional properties
 
 Audit configuration in deployment YAML
 
+SIEM sinks reference the integration **by name** with `integration:`. Only the built-in
+sink types (`stdout`, `ndjson`, `syslog`, `webhook`) use `type:`.
+
 ```yaml
 spec:
   audit:
-    enabled: true
     sinks:
       - name: splunk
-        type: splunk
+        integration: splunk       # must match integrations[].name above
 ```
 
 Verify HEC connectivity

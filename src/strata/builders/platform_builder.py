@@ -360,7 +360,7 @@ class PlatformBuilder(BaseBuilder):
                     count=resource_to_count.get(str(svc.model.meta.name), 1),
                 )
                 for svc in resource_services.values()
-                if svc.model is not None
+                if svc is not None and svc.model is not None
             ]
 
         # Enrich topology components with role/count now that resource maps exist
@@ -412,6 +412,8 @@ class PlatformBuilder(BaseBuilder):
         # Merged firewalls synthesised per resource from its firewall references
         if resource_services:
             for resource_name, resource_service in resource_services.items():
+                if resource_service is None:
+                    continue
                 merged_fw = resource_service.get_merged_firewall()
                 if merged_fw:
                     merged_fw_name = f"{resource_name}_merged_fw"
@@ -484,7 +486,9 @@ class PlatformBuilder(BaseBuilder):
         # ------------------------------------------------------------------
         platform_tenant: Optional[PlatformTenantModel] = None
         if deployment_model.spec.tenant and work_path:
-            tenant_file = work_path / "tenants" / f"{deployment_model.spec.tenant}.yaml"
+            from strata.utils.path_convention import resolve_tenant_file_path
+
+            tenant_file = resolve_tenant_file_path(work_path, str(deployment_model.spec.tenant), configuration_model)
             if tenant_file.exists():
                 tenant_svc = TenantService(str(tenant_file))
                 is_valid, c_errors = tenant_svc.validate()

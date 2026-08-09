@@ -254,6 +254,16 @@ class SourceModel(PlatformBaseModel):
     )
     description: Optional[str] = Field(None, description="Optional description for documentation purposes")
 
+    # Git ref pinning (overrides the workspace-level remote default)
+    reference: Optional[Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]] = Field(
+        None,
+        description=(
+            "Git ref override (branch, tag, or commit SHA) for this specific source. "
+            "Takes precedence over the remote's default reference and any environment "
+            "remote override. Only valid for git-based sources (repository + source_path)."
+        ),
+    )
+
     # Helm / ArgoCD chart registry fields
     chart_name: Optional[str] = Field(
         None,
@@ -288,6 +298,11 @@ class SourceModel(PlatformBaseModel):
             raise ValueError("source_path is required when repository is specified.")
         if has_chart and self.chart_name is None:
             raise ValueError("chart_name is required when chart_repository is specified.")
+        if self.reference is not None and has_chart:
+            raise ValueError(
+                "SourceModel.reference is only valid for git-based sources, "
+                "not chart-based sources (use chart_version instead)."
+            )
         return self
 
     @field_validator("source_path", "target_path")

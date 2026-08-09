@@ -4,9 +4,9 @@
 from unittest.mock import patch
 
 from strata.integrations.base_integration import BaseIntegration
-from strata.integrations.capabilities import IInfrastructureTool
 from strata.integrations.opentofu import OpenTofuIntegration
 from strata.integrations.terraform import TerraformIntegration
+from strata.models.capabilities import IInfrastructureTool
 from strata.models.integration_model import IntegrationModel
 
 

@@ -21,6 +21,7 @@ Auditable actions include:
 import json
 import logging
 import logging.handlers
+import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -30,6 +31,14 @@ from strata.utils.config import SOLUTION_AUDIT_LOG_FILE, SOLUTION_DIR
 
 _audit_logger: Optional[logging.Logger] = None
 
+# ADR-0066 problem 11 — which layer last configured the journal, so callers can tell
+# a bootstrap default apart from an explicit source before deciding whether to
+# reconfigure (see base_command.py's two-phase bootstrap) and so `strata audit status`
+# can report provenance. One of: "bootstrap", "logging_yaml", "spec_audit", or None
+# (never configured — e.g. under pytest).
+_audit_log_source: Optional[str] = None
+_audit_log_path: Optional[str] = None
+
 
 def configure_audit_log(
     log_path: str = f"{SOLUTION_DIR}/{SOLUTION_AUDIT_LOG_FILE}",
@@ -37,6 +46,7 @@ def configure_audit_log(
     max_bytes: int = 5 * 1024 * 1024,
     backup_count: int = 3,
     date_suffix: str = "%Y%m%d",
+    source: str = "bootstrap",
 ) -> None:
     """
     Configure the dedicated audit log sink.
@@ -54,8 +64,23 @@ def configure_audit_log(
         backup_count: Number of rotated backups to keep (default 3).
         date_suffix: strftime pattern for daily-rotated backup filenames
             (default ``"%Y%m%d"``).  Only used when ``rotation="daily"``.
+        source: Which configuration layer supplied these settings — one of
+            ``"bootstrap"`` (built-in default), ``"logging_yaml"`` (``.strata/logging.yaml``'s
+            ``audit:`` section), or ``"spec_audit"`` (``spec.audit.journal``). Recorded so a
+            later caller can tell whether it is safe to reconfigure (ADR-0066 precedence:
+            ``spec.audit.journal`` < ``logging.yaml`` < built-in default).
     """
-    global _audit_logger
+    global _audit_logger, _audit_log_source, _audit_log_path
+
+    # ADR-0066 problem 4: tests run in-process through BaseCommand, so without this
+    # guard every test run appended real entries to the real audit log (~1/3 of the
+    # measured 18,853-entry file was pytest's own argv). Leaving `_audit_logger` unset
+    # keeps `audit()` a no-op, matching its own documented "silent no-op in tests" claim.
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return
+
+    _audit_log_source = source
+    _audit_log_path = log_path
     _audit_logger = logging.getLogger("strata.audit")
     _audit_logger.setLevel(logging.INFO)
     _audit_logger.propagate = False
@@ -133,11 +158,23 @@ def is_audit_configured() -> bool:
     return _audit_logger is not None
 
 
+def get_audit_log_source() -> Optional[str]:
+    """Return which layer last configured the journal: "bootstrap", "logging_yaml", "spec_audit", or None."""
+    return _audit_log_source
+
+
+def get_configured_audit_log_path() -> Optional[str]:
+    """Return the currently configured journal log path, or None if not configured."""
+    return _audit_log_path
+
+
 def shutdown_audit() -> None:
     """Flush and close the audit logger handlers."""
-    global _audit_logger
+    global _audit_logger, _audit_log_source, _audit_log_path
     if _audit_logger is not None:
         for handler in _audit_logger.handlers[:]:
             handler.flush()
             handler.close()
         _audit_logger = None
+    _audit_log_source = None
+    _audit_log_path = None

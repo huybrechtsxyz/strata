@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from strata.integrations.base_integration import BaseIntegration
-from strata.integrations.capabilities import ICostEstimator
 from strata.integrations.infracost import InfracostIntegration
+from strata.models.capabilities import ICostEstimator
 from strata.models.integration_model import IntegrationModel
 
 
@@ -299,22 +299,22 @@ class TestInfracostFactoryRegistration:
 
 class TestICostEstimatorCapability:
     def test_cost_in_capability_map(self):
-        from strata.integrations.capabilities import CAPABILITY_MAP
+        from strata.models.capabilities import CAPABILITY_MAP
 
         assert "cost" in CAPABILITY_MAP
 
     def test_cost_in_valid_capability_names(self):
-        from strata.integrations.capabilities import VALID_CAPABILITY_NAMES
+        from strata.models.capabilities import VALID_CAPABILITY_NAMES
 
         assert "cost" in VALID_CAPABILITY_NAMES
 
     def test_cost_maps_to_icost_estimator(self):
-        from strata.integrations.capabilities import CAPABILITY_MAP, ICostEstimator
+        from strata.models.capabilities import CAPABILITY_MAP, ICostEstimator
 
         assert CAPABILITY_MAP["cost"] is ICostEstimator
 
     def test_icost_estimator_in_registry(self):
-        from strata.integrations.capabilities import CAPABILITY_REGISTRY
+        from strata.models.capabilities import CAPABILITY_REGISTRY
 
         assert "ICostEstimator" in CAPABILITY_REGISTRY
         assert CAPABILITY_REGISTRY["ICostEstimator"]["examples"] == ["Infracost"]

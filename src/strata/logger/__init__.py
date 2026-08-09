@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 """Structured logging for strata, powered by structlog."""
 
-from .audit import audit, configure_audit_log, is_audit_configured, shutdown_audit
+from .audit import (
+    audit,
+    configure_audit_log,
+    get_audit_log_source,
+    get_configured_audit_log_path,
+    is_audit_configured,
+    shutdown_audit,
+)
 from .context import (
     LogContext,
     clear_context,
@@ -29,6 +36,8 @@ __all__ = [
     "get_active_log_files",
     "audit",
     "configure_audit_log",
+    "get_audit_log_source",
+    "get_configured_audit_log_path",
     "is_audit_configured",
     "shutdown_audit",
     "LogContext",

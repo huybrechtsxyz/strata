@@ -15,12 +15,12 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from strata.controllers.solution_controller import SolutionController
 from strata.models.deployment_manifest_model import (
     ManifestArtifactProviderModel,
     ManifestPlatformModel,
     ManifestRepositoryModel,
 )
+from strata.models.solution_model import SolutionModel
 from strata.services.deployment_service import DeploymentService
 
 
@@ -49,13 +49,19 @@ def collect_platform_artifact(
 
 
 def collect_repository_info(
-    solution_controller: Optional[SolutionController],
+    solution: Optional[SolutionModel],
+    repo_map: Optional[Dict[str, str]],
 ) -> Optional[Dict[str, ManifestRepositoryModel]]:
-    """Walk solution repositories and collect URL/ref/commit info."""
-    if solution_controller is None or solution_controller.solution is None:
+    """Walk solution repositories and collect URL/ref/commit info.
+
+    Takes the already-resolved ``solution`` model and ``repo_map`` (rather than a
+    ``SolutionController`` instance) so this ``services/`` module never depends on
+    ``controllers/`` (ADR-0003) — callers (``commands/``) already hold the controller
+    and can pass ``solution_controller.solution`` / ``solution_controller.get_repo_map()``.
+    """
+    if solution is None:
         return None
 
-    solution = solution_controller.solution
     repos = solution.spec.repositories or []
     if not repos:
         return None
@@ -67,7 +73,6 @@ def collect_repository_info(
         ref = getattr(repo, "ref", None)
         commit: Optional[str] = None
 
-        repo_map = solution_controller.get_repo_map()
         if repo_map and name in repo_map:
             repo_path = Path(repo_map[name])
             head_file = repo_path / ".git" / "HEAD"

@@ -426,3 +426,148 @@ class TestCopyProvisionerSourceSingleRepo:
         assert result is True
         messages = "\n".join(builder.get_messages())
         assert str(src_dir) in messages
+
+
+def _make_provisioner_with_ref(
+    source_path: str, repository: str | None = None, reference: str | None = None
+) -> WorkspaceIacModel:
+    """Build a WorkspaceIacModel with a terraform provisioner and optional ref pinning."""
+    source = SourceModel(source_path=source_path, repository=repository, reference=reference)
+    return WorkspaceIacModel(name="platform_iac", provisioner=ProvisionerType.TERRAFORM, source=source)
+
+
+class TestCopyProvisionerSourceRefPinning:
+    """_copy_provisioner_source handles source.reference for ref-pinned extraction."""
+
+    def test_dry_run_with_reference_reports_ref(self, tmp_path):
+        """In dry-run mode, when source.reference is set, message mentions the ref."""
+        build_path = tmp_path / "build"
+        build_path.mkdir()
+
+        prov = _make_provisioner_with_ref(source_path="terraform", repository="my_repo", reference="v1.4.0")
+        depl_svc = _make_deployment_svc(prov, build_path)
+
+        repo_root = tmp_path / "my-repo"
+        repo_root.mkdir()
+
+        builder = TerraformBuilder()
+        with patch.object(builder, "_build_template_context", return_value={}):
+            result = builder._copy_provisioner_source(
+                depl_svc, build_path, tmp_path, repo_map={"my_repo": str(repo_root)}, dry_run=True
+            )
+
+        assert result is True
+        messages = "\n".join(builder.get_messages())
+        assert "v1.4.0" in messages
+        assert "DRY-RUN" in messages
+
+    def test_no_reference_uses_standard_copy(self, tmp_path):
+        """Without source.reference, standard working-tree copy is used."""
+        src_dir = tmp_path / "terraform"
+        src_dir.mkdir()
+        (src_dir / "main.tf").write_text("resource {}")
+        build_path = tmp_path / "build"
+        build_path.mkdir()
+
+        prov = _make_provisioner_with_ref(source_path="terraform", reference=None)
+        depl_svc = _make_deployment_svc(prov, build_path)
+
+        builder = TerraformBuilder()
+        with patch.object(builder, "_build_template_context", return_value={}):
+            result = builder._copy_provisioner_source(depl_svc, build_path, tmp_path, repo_map={}, dry_run=False)
+
+        assert result is True
+        assert (build_path / "terraform" / "main.tf").exists()
+
+    def test_reference_on_non_git_dir_falls_back_to_copy(self, tmp_path):
+        """When source.reference is set but repo_root has no .git, falls back to tree copy."""
+        repo_root = tmp_path / "my-repo"
+        src_dir = repo_root / "terraform"
+        src_dir.mkdir(parents=True)
+        (src_dir / "main.tf").write_text("resource {}")
+        build_path = tmp_path / "build"
+        build_path.mkdir()
+
+        prov = _make_provisioner_with_ref(source_path="terraform", repository="my_repo", reference="v1.0.0")
+        depl_svc = _make_deployment_svc(prov, build_path)
+
+        builder = TerraformBuilder()
+        with patch.object(builder, "_build_template_context", return_value={}):
+            result = builder._copy_provisioner_source(
+                depl_svc, build_path, tmp_path, repo_map={"my_repo": str(repo_root)}, dry_run=False
+            )
+
+        assert result is True
+        assert (build_path / "terraform" / "main.tf").exists()
+        messages = "\n".join(builder.get_messages())
+        assert "not a git repository" in messages
+
+
+class TestEmitVariableValue:
+    """Tests for TerraformBuilder._emit_variable_value — typed emission logic."""
+
+    def test_no_type_emits_value_as_is(self):
+        """Without type field, value passes through unchanged."""
+        from strata.models.store_models import VariableStoreModel
+
+        var = VariableStoreModel(key="k", store="constant", value="hello")
+        result = TerraformBuilder._emit_variable_value(var)
+        assert result == "hello"
+
+    def test_no_type_dict_value_passes_through(self):
+        """Without type, dict values pass through as-is (backward compat)."""
+        from strata.models.store_models import VariableStoreModel
+
+        val = {"nested": {"key": "value"}}
+        var = VariableStoreModel(key="k", store="constant", value=val)
+        result = TerraformBuilder._emit_variable_value(var)
+        assert result == val
+
+    def test_type_string_stringifies(self):
+        """type=string forces string serialization."""
+        from strata.models.store_models import VariableStoreModel
+
+        var = VariableStoreModel(key="k", store="constant", value=42, type="string")
+        result = TerraformBuilder._emit_variable_value(var)
+        assert result == "42"
+
+    def test_type_number_emits_native(self):
+        from strata.models.store_models import VariableStoreModel
+
+        var = VariableStoreModel(key="k", store="constant", value=42, type="number")
+        result = TerraformBuilder._emit_variable_value(var)
+        assert result == 42
+        assert isinstance(result, int)
+
+    def test_type_bool_emits_native(self):
+        from strata.models.store_models import VariableStoreModel
+
+        var = VariableStoreModel(key="k", store="constant", value=True, type="bool")
+        result = TerraformBuilder._emit_variable_value(var)
+        assert result is True
+
+    def test_type_object_emits_dict(self):
+        from strata.models.store_models import VariableStoreModel
+
+        val = {"pools": {"default": {"size": "Standard_D4s_v3"}}}
+        var = VariableStoreModel(key="k", store="constant", value=val, type="object")
+        result = TerraformBuilder._emit_variable_value(var)
+        assert result == val
+        assert isinstance(result, dict)
+
+    def test_type_list_emits_list(self):
+        from strata.models.store_models import VariableStoreModel
+
+        val = ["10.0.0.0/8", "172.16.0.0/12"]
+        var = VariableStoreModel(key="k", store="constant", value=val, type="list")
+        result = TerraformBuilder._emit_variable_value(var)
+        assert result == val
+        assert isinstance(result, list)
+
+    def test_type_map_emits_dict(self):
+        from strata.models.store_models import VariableStoreModel
+
+        val = {"env": "prod", "team": "platform"}
+        var = VariableStoreModel(key="k", store="constant", value=val, type="map")
+        result = TerraformBuilder._emit_variable_value(var)
+        assert result == val

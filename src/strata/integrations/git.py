@@ -6,8 +6,8 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 
 from strata.integrations.base_integration import BaseIntegration
-from strata.integrations.capabilities import IRepositoryTool
 from strata.logger import get_logger
+from strata.models.capabilities import IRepositoryTool
 from strata.models.integration_model import IntegrationModel
 from strata.utils.system import CommandResult
 
@@ -443,6 +443,97 @@ class GitIntegration(BaseIntegration):
             CommandResult whose ``stdout`` contains the SHA when successful.
         """
         return self._run_integration(["rev-parse", ref], cwd=working_dir, timeout=timeout)
+
+    def archive_subtree(
+        self,
+        working_dir: str,
+        ref: str,
+        subtree_path: str,
+        dest_dir: str,
+        timeout: int = 120,
+    ) -> Tuple[bool, str]:
+        """Extract a subtree at a specific ref into dest_dir without mutating the working tree.
+
+        Uses ``git archive <ref> -- <path>`` piped through tar extraction.
+        Falls back gracefully if the ref or path does not exist.
+
+        Args:
+            working_dir: Git repository directory.
+            ref: Branch, tag, or commit SHA to extract from.
+            subtree_path: Relative path within the repository to extract.
+            dest_dir: Destination directory to extract files into.
+            timeout: Command timeout in seconds.
+
+        Returns:
+            (success, message) tuple.
+        """
+        import shutil
+        import subprocess
+        import tempfile
+        from pathlib import Path
+
+        available, error = self.ensure_available()
+        if not available:
+            return False, f"Git not available: {error}"
+
+        dest = Path(dest_dir)
+        dest.mkdir(parents=True, exist_ok=True)
+
+        # Use git archive to extract the subtree at the given ref
+        # This does not mutate the working tree
+        archive_cmd = [
+            self.command,
+            "-C",
+            working_dir,
+            "archive",
+            ref,
+            "--",
+            subtree_path,
+        ]
+
+        try:
+            # Run git archive and pipe to tar extraction
+            archive_proc = subprocess.Popen(
+                archive_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            # Extract to a temp dir first, then move contents
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                tar_cmd = ["tar", "-x", "-C", tmp_dir]
+                tar_proc = subprocess.Popen(
+                    tar_cmd,
+                    stdin=archive_proc.stdout,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                archive_proc.stdout.close()  # Allow archive to receive SIGPIPE
+                _, tar_stderr = tar_proc.communicate(timeout=timeout)
+                _, archive_stderr = archive_proc.communicate(timeout=10)
+
+                if archive_proc.returncode != 0:
+                    err_msg = archive_stderr.decode("utf-8", errors="replace").strip()
+                    return False, f"git archive failed for ref '{ref}' path '{subtree_path}': {err_msg}"
+
+                if tar_proc.returncode != 0:
+                    err_msg = tar_stderr.decode("utf-8", errors="replace").strip()
+                    return False, f"tar extraction failed: {err_msg}"
+
+                # git archive preserves the subtree_path prefix in the archive.
+                # Copy from tmp_dir/subtree_path/* into dest_dir/
+                extracted_root = Path(tmp_dir) / subtree_path
+                if not extracted_root.exists():
+                    # Some git versions strip trailing slashes differently
+                    extracted_root = Path(tmp_dir)
+
+                shutil.copytree(str(extracted_root), str(dest), dirs_exist_ok=True)
+
+            return True, f"Extracted '{subtree_path}' at ref '{ref}' to {dest_dir}"
+
+        except subprocess.TimeoutExpired:
+            return False, f"git archive timed out after {timeout}s"
+        except OSError as exc:
+            return False, f"git archive OS error: {exc}"
 
     def get_remote_url(self, working_dir: str, remote: str = "origin", timeout: int = 15) -> Optional[str]:
         """Return the fetch URL for a remote.

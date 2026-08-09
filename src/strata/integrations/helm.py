@@ -4,8 +4,8 @@ import re
 from typing import List, Tuple
 
 from strata.integrations.base_integration import BaseIntegration
-from strata.integrations.capabilities import IInfrastructureTool
 from strata.logger import get_logger
+from strata.models.capabilities import IInfrastructureTool
 from strata.models.integration_model import IntegrationModel
 
 logger = get_logger(__name__)

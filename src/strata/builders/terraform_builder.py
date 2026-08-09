@@ -9,7 +9,7 @@ import os
 import shutil
 from glob import glob
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 from strata.builders.base_builder import BaseBuilder
 from strata.models.environment_model import IncludeMergeStrategy
@@ -194,6 +194,15 @@ class TerraformBuilder(BaseBuilder):
                 solution_controller=solution_controller,
             )
             if not include_ok:
+                return False
+
+            # Validate declared inputs against module variables.tf
+            inputs_ok = self._validate_inputs(
+                deployment_service=deployment_service,
+                build_path=build_path,
+                solution_controller=solution_controller,
+            )
+            if not inputs_ok:
                 return False
 
             return True
@@ -842,6 +851,11 @@ class TerraformBuilder(BaseBuilder):
         """Resolve constant/environment-store variables for build-time emission.
 
         Returns a flat ``{key: value}`` dict suitable for ``variables.auto.tfvars.json``.
+
+        When a variable declares a ``type`` field (VariableValueType), the value is
+        emitted as its native Python type (dict, list, int, float, bool) which serializes
+        to the corresponding JSON type. Without ``type``, values are emitted as-is for
+        backward compatibility (strings remain strings, but dicts/lists also pass through).
         """
         from strata.models.store_models import VariableStoreType
 
@@ -851,12 +865,35 @@ class TerraformBuilder(BaseBuilder):
         result: Dict[str, Any] = {}
         for var in env_service.get_variables():
             if var.store == VariableStoreType.CONSTANT:
-                result[var.key] = var.value
+                result[var.key] = self._emit_variable_value(var)
             elif var.store == VariableStoreType.ENVIRONMENT:
                 env_val = os.environ.get(str(var.value))
                 if env_val is not None:
                     result[var.key] = env_val
         return result
+
+    @staticmethod
+    def _emit_variable_value(var) -> Any:
+        """Convert a variable's value to the JSON-serializable form for tfvars emission.
+
+        When ``var.type`` is set, the value passes through as its native Python type
+        (Pydantic validation already ensured type-value consistency).
+        When ``var.type`` is None (default), the value is emitted as-is for backward
+        compatibility — string values remain strings, complex values (dict/list) also
+        pass through since JSON supports them natively.
+        """
+        from strata.models.store_models import VariableValueType
+
+        if var.type is None:
+            # Backward compatible: emit value as-is
+            return var.value
+
+        # Typed emission: ensure correct Python type mapping
+        if var.type == VariableValueType.STRING:
+            return str(var.value) if var.value is not None else None
+        # For number, bool, object, list, map — value is already the correct Python type
+        # after Pydantic validation
+        return var.value
 
     def _resolve_merged_properties(
         self,
@@ -1282,6 +1319,136 @@ class TerraformBuilder(BaseBuilder):
         path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     # ------------------------------------------------------------------
+    # Input validation against module variables.tf
+    # ------------------------------------------------------------------
+
+    def _validate_inputs(
+        self,
+        deployment_service: DeploymentService,
+        build_path: Path,
+        solution_controller: Optional["SolutionController"] = None,
+    ) -> bool:
+        """Validate declared variable/feature keys against the module's variables.tf.
+
+        Runs after source copy, so the provisioner's .tf files are available in the
+        build directory. Collects all declared input keys (variables + features from
+        environment YAML) and cross-checks against parsed variable declarations.
+
+        Undeclared inputs are errors (blocks build). Unsupplied required variables
+        are warnings (informational, does not block).
+
+        Returns:
+            True if no undeclared-input errors found, False otherwise.
+        """
+        from strata.validators.terraform_input_validator import (
+            STRATA_INJECTED_KEYS,
+            check_inputs,
+            parse_variables_tf,
+        )
+
+        workspace_service = deployment_service.get_workspace_service()
+        if workspace_service is None or workspace_service.model is None:
+            return True
+
+        provisioners = workspace_service.model.spec.provisioners or []
+        has_errors = False
+
+        for prov in provisioners:
+            if prov.provisioner != "terraform":
+                continue
+
+            # Determine the build directory where .tf files were copied
+            prov_build_dir = (
+                solution_controller.get_provisioner_path(deployment_service, build_path, prov)
+                if solution_controller is not None
+                else deployment_service.get_build_path(build_path)
+                / (prov.source.target_path or prov.source.source_path if prov.source else "terraform")
+            )
+
+            if not prov_build_dir.exists():
+                continue
+
+            # Parse module variable declarations
+            module_vars = parse_variables_tf(prov_build_dir)
+            if not module_vars:
+                # No variables.tf found or no variables declared — skip
+                continue
+
+            # Collect all declared input keys for this provisioner
+            declared_keys = self._collect_declared_input_keys(deployment_service)
+
+            # Include keys that will be injected at deploy-time via inputs_from
+            if prov.inputs_from:
+                from strata.utils.resolved_values import collect_inputs_from_keys
+
+                declared_keys.update(collect_inputs_from_keys(prov.inputs_from))
+
+            # Also include keys from the platform structural output (resource categories, etc.)
+            # These are emitted by the builder itself and should be excluded from checks.
+            excluded = set(STRATA_INJECTED_KEYS)
+            # Add resource-category keys emitted by _build_resources_by_category
+            excluded.update(self._collect_platform_emitted_keys(deployment_service))
+
+            # Run the cross-check
+            result = check_inputs(declared_keys, module_vars, excluded_keys=excluded)
+
+            # Report results
+            for error in result.errors:
+                self._errors.append(f"[{prov.name}] {error}")
+            for warning in result.warnings:
+                self._messages.append(f"⚠ [{prov.name}] {warning}")
+
+            if result.has_errors:
+                has_errors = True
+
+        return not has_errors
+
+    def _collect_declared_input_keys(self, deployment_service: DeploymentService) -> Set[str]:
+        """Collect all variable and feature keys declared in the environment YAML.
+
+        These are the keys that will be emitted to tfvars files (either at build-time
+        for constant/env stores, or at deploy-time for integration stores).
+        """
+        keys: Set[str] = set()
+
+        env_service = deployment_service.get_environment_service()
+        if env_service is None or env_service.model is None:
+            return keys
+
+        # Variables
+        for var in env_service.get_variables():
+            keys.add(var.key)
+
+        # Features
+        for feat in env_service.get_features():
+            keys.add(feat.key)
+
+        # Secrets (injected as TF_VAR_* at deploy-time)
+        if env_service.model.spec and env_service.model.spec.secrets:
+            for secret in env_service.model.spec.secrets:
+                keys.add(secret.key)
+
+        return keys
+
+    def _collect_platform_emitted_keys(self, deployment_service: DeploymentService) -> Set[str]:
+        """Collect keys emitted by the platform builder that should be excluded from checks.
+
+        These are structural keys like resource category variable names that the builder
+        emits regardless of what the environment declares.
+        """
+        keys: Set[str] = set()
+
+        # Resource category keys (e.g. "databases", "caches") from workspace resources
+        workspace_service = deployment_service.get_workspace_service()
+        if workspace_service and workspace_service.model and workspace_service.model.spec.resources:
+            # The builder groups resources by their role/category into tfvars
+            for resource in workspace_service.model.spec.resources:
+                if resource.role:
+                    keys.add(str(resource.role))
+
+        return keys
+
+    # ------------------------------------------------------------------
     # Terraform provisioner source copy
     # ------------------------------------------------------------------
 
@@ -1337,6 +1504,33 @@ class TerraformBuilder(BaseBuilder):
                 else deployment_build_path / (source.target_path or source.source_path)
             )
 
+            # When source.reference is set, extract from the pinned ref using git archive
+            # instead of copying from the (potentially different) working tree checkout.
+            if source.reference:
+                if dry_run:
+                    self._messages.append(
+                        f"[DRY-RUN] Would extract terraform source at ref '{source.reference}': "
+                        f"{repo_root}/{source.source_path} → {dest_dir}"
+                    )
+                    continue
+
+                ok, msg = self._extract_source_at_ref(
+                    repo_root=repo_root,
+                    source_path=source.source_path,
+                    ref=source.reference,
+                    dest_dir=dest_dir,
+                    provisioner_name=prov.name,
+                )
+                if not ok:
+                    self._errors.append(msg)
+                    return False
+                self._apply_templates_to_dir(dest_dir, template_context)
+                self._messages.append(
+                    f"Extracted terraform source at ref '{source.reference}': "
+                    f"{repo_root}/{source.source_path} → {dest_dir}"
+                )
+                continue
+
             if dry_run:
                 self._messages.append(f"[DRY-RUN] Would copy terraform source: {src_dir} → {dest_dir}")
                 if not src_dir.exists():
@@ -1354,6 +1548,64 @@ class TerraformBuilder(BaseBuilder):
             self._messages.append(f"Copied terraform source: {src_dir} → {dest_dir}")
 
         return True
+
+    def _extract_source_at_ref(
+        self,
+        repo_root: Path,
+        source_path: str,
+        ref: str,
+        dest_dir: Path,
+        provisioner_name: str,
+    ) -> tuple:
+        """Extract source files at a pinned git ref using git archive.
+
+        Falls back to copying from the working tree if git archive is unavailable
+        (e.g., repo_root is not a git repository).
+
+        Args:
+            repo_root: Root directory of the git repository.
+            source_path: Relative path within the repo to extract.
+            ref: Git ref (branch, tag, SHA) to extract from.
+            dest_dir: Destination directory.
+            provisioner_name: Provisioner name for error messages.
+
+        Returns:
+            (success, message) tuple.
+        """
+        from strata.integrations.git import GitIntegration
+        from strata.models.integration_model import IntegrationModel
+
+        # Check if repo_root is a git repository
+        if not (repo_root / ".git").exists():
+            # Not a git repo — fall back to direct copy from working tree
+            src_dir = repo_root / source_path
+            if not src_dir.exists():
+                return False, (
+                    f"Terraform source directory not found: {src_dir} "
+                    f"(provisioner: {provisioner_name}, ref: {ref}). "
+                    f"Repository at '{repo_root}' is not a git repository; cannot extract at ref."
+                )
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(src_dir, dest_dir, dirs_exist_ok=True)
+            self._messages.append(
+                f"Warning: '{repo_root}' is not a git repository. "
+                f"Copied from working tree instead of ref '{ref}' (provisioner: {provisioner_name})."
+            )
+            return True, ""
+
+        # Use git archive to extract without mutating the working tree
+        config = IntegrationModel(name="git_archive", type="git")
+        git = GitIntegration(config)
+
+        ok, msg = git.archive_subtree(
+            working_dir=str(repo_root),
+            ref=ref,
+            subtree_path=source_path,
+            dest_dir=str(dest_dir),
+        )
+        if not ok:
+            return False, (f"Failed to extract source at ref '{ref}' for provisioner '{provisioner_name}': {msg}")
+        return True, msg
 
     # ------------------------------------------------------------------
     # Terraform file includes (merge external .tf / .tfvars into build)

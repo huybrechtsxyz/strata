@@ -392,6 +392,27 @@ class TestCheckPolicyCommandRunExecution:
         cmd = self._run_with_policies(tmp_path, [pm], [pr])
         assert cmd._denied is False
 
+    def test_failed_policy_forwards_policy_violated_audit_event(self, tmp_path):
+        """ADR-0066 follow-up: a failed policy result (any enforcement level) forwards
+        policy.violated — not just deny-enforcement ones (those only set _denied)."""
+        pm = _make_policy_model("soft_check", "validate", enforcement="warn")
+        pr = _make_policy_result("soft_check", "warn", passed=False, violations=["soft violation"])
+
+        with patch("strata.controllers.audit_controller.AuditController.forward_policy_violation") as mock_fwd:
+            self._run_with_policies(tmp_path, [pm], [pr])
+
+        mock_fwd.assert_called_once()
+        assert mock_fwd.call_args[0][0] is pr
+
+    def test_passed_policy_does_not_forward_audit_event(self, tmp_path):
+        pm = _make_policy_model("naming_check", "validate")
+        pr = _make_policy_result("naming_check", "deny", passed=True)
+
+        with patch("strata.controllers.audit_controller.AuditController.forward_policy_violation") as mock_fwd:
+            self._run_with_policies(tmp_path, [pm], [pr])
+
+        mock_fwd.assert_not_called()
+
     def test_plan_note_added_when_no_plan_file(self, tmp_path):
         pm = _make_policy_model("zone_check", "plan", type_="tenant_zone")
         pr = _make_policy_result("zone_check", "deny", passed=True)

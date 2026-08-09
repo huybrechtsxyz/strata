@@ -156,3 +156,96 @@ class TestFeatureStoreModelDefault:
     def test_default_none_by_default(self):
         m = FeatureStoreModel(key="k", store="constant", value=True)
         assert m.default is None
+
+
+# ---------------------------------------------------------------------------
+# VariableStoreModel.type field — structured value types
+# ---------------------------------------------------------------------------
+
+
+class TestVariableStoreModelType:
+    """Tests for the VariableValueType field on VariableStoreModel."""
+
+    def test_type_none_by_default(self):
+        m = VariableStoreModel(key="k", store="constant", value="hello")
+        assert m.type is None
+
+    def test_type_string_valid(self):
+        m = VariableStoreModel(key="k", store="constant", value="hello", type="string")
+        assert m.type.value == "string"
+
+    def test_type_number_with_int(self):
+        m = VariableStoreModel(key="k", store="constant", value=42, type="number")
+        assert m.type.value == "number"
+        assert m.value == 42
+
+    def test_type_number_with_float(self):
+        m = VariableStoreModel(key="k", store="constant", value=3.14, type="number")
+        assert m.value == 3.14
+
+    def test_type_bool_with_true(self):
+        m = VariableStoreModel(key="k", store="constant", value=True, type="bool")
+        assert m.value is True
+
+    def test_type_bool_with_false(self):
+        m = VariableStoreModel(key="k", store="constant", value=False, type="bool")
+        assert m.value is False
+
+    def test_type_object_with_dict(self):
+        val = {"worker_pools": {"default": {"size": "Standard_D4s_v3"}}}
+        m = VariableStoreModel(key="aks_config", store="constant", value=val, type="object")
+        assert m.value == val
+
+    def test_type_list_with_list(self):
+        val = ["10.0.0.0/8", "172.16.0.0/12"]
+        m = VariableStoreModel(key="allowed_ips", store="constant", value=val, type="list")
+        assert m.value == val
+
+    def test_type_map_with_dict(self):
+        val = {"env": "production", "team": "platform"}
+        m = VariableStoreModel(key="tags", store="constant", value=val, type="map")
+        assert m.value == val
+
+    # --- Validation errors: type-value mismatch ---
+
+    def test_type_object_with_string_raises(self):
+        with pytest.raises(ValidationError, match="type=object requires a mapping value"):
+            VariableStoreModel(key="k", store="constant", value="not a dict", type="object")
+
+    def test_type_list_with_string_raises(self):
+        with pytest.raises(ValidationError, match="type=list requires a sequence value"):
+            VariableStoreModel(key="k", store="constant", value="not a list", type="list")
+
+    def test_type_map_with_list_raises(self):
+        with pytest.raises(ValidationError, match="type=map requires a mapping value"):
+            VariableStoreModel(key="k", store="constant", value=["a", "b"], type="map")
+
+    def test_type_number_with_string_raises(self):
+        with pytest.raises(ValidationError, match="type=number requires a numeric value"):
+            VariableStoreModel(key="k", store="constant", value="not a number", type="number")
+
+    def test_type_bool_with_string_raises(self):
+        with pytest.raises(ValidationError, match="type=bool requires a boolean value"):
+            VariableStoreModel(key="k", store="constant", value="true", type="bool")
+
+    def test_type_bool_with_int_raises(self):
+        """int 1 is not bool — must be actual True/False."""
+        with pytest.raises(ValidationError, match="type=bool requires a boolean value"):
+            VariableStoreModel(key="k", store="constant", value=1, type="bool")
+
+    # --- Non-constant stores: type is accepted without value validation ---
+
+    def test_type_on_vault_store_no_validation(self):
+        """Type on non-constant store is accepted (resolved at deploy-time)."""
+        m = VariableStoreModel(key="k", store="vault", value="secret/data/k", type="object")
+        assert m.type.value == "object"
+
+    def test_type_on_appconfig_store_no_validation(self):
+        m = VariableStoreModel(key="k", store="azure-appconfig", value="myapp/k", type="number")
+        assert m.type.value == "number"
+
+    # --- Invalid type value ---
+
+    def test_invalid_type_raises(self):
+        with pytest.raises(ValidationError):
+            VariableStoreModel(key="k", store="constant", value="v", type="invalid_type")

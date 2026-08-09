@@ -458,6 +458,112 @@ class TestLockingWiring:
         cmd._release_lock(backend, handle)
 
     # ------------------------------------------------------------------
+    # lock.acquired / lock.released audit forwarding (ADR-0066 follow-up)
+    # ------------------------------------------------------------------
+
+    def test_acquire_lock_forwards_when_gate_enabled(self, tmp_path):
+        from strata.models.audit_config_model import AuditConfigModel, AuditPolicyModel
+
+        cmd = _make_run_command(tmp_path)
+        svc = MagicMock()
+        svc.model.spec = _make_locking_spec(enabled=True, wait_timeout="1m")
+        svc.model.meta.name = "my-deploy"
+        cmd._deployment_service = svc
+
+        handle = MagicMock()
+        handle.lock_id = "abc-123"
+        handle.backend_type = "local"
+        handle.acquired_at = "2024-01-01T00:00:00Z"
+
+        backend = MagicMock()
+        backend.acquire.return_value = handle
+
+        audit_cfg = AuditConfigModel(policy=AuditPolicyModel(events={"lock.acquired": True}))
+        mock_config_service = MagicMock()
+        mock_config_service.model.spec.audit = audit_cfg
+
+        with (
+            patch(
+                "strata.services.configuration_service.ConfigurationService.get_instance",
+                return_value=mock_config_service,
+            ),
+            patch("strata.controllers.audit_controller.AuditController.forward") as mock_forward,
+        ):
+            cmd._acquire_lock(backend)
+
+        mock_forward.assert_called_once()
+        args, kwargs = mock_forward.call_args
+        assert args[0] == "lock.acquired"
+        assert args[1]["deployment"] == "my-deploy"
+        assert args[1]["lock_id"] == "abc-123"
+
+    def test_acquire_lock_no_forward_when_gate_disabled_by_default(self, tmp_path):
+        """_forward_lock_audit_event() always calls forward() — the gate is checked
+        *inside* forward() itself, so with no config the default-disabled gate means
+        no journal write and no sink fan-out, even though forward() is still invoked."""
+        cmd = _make_run_command(tmp_path)
+        svc = MagicMock()
+        svc.model.spec = _make_locking_spec(enabled=True, wait_timeout="1m")
+        svc.model.meta.name = "my-deploy"
+        cmd._deployment_service = svc
+
+        handle = MagicMock()
+        handle.lock_id = "abc-123"
+        handle.backend_type = "local"
+        handle.acquired_at = "2024-01-01T00:00:00Z"
+
+        backend = MagicMock()
+        backend.acquire.return_value = handle
+
+        with patch("strata.logger.audit") as mock_journal:
+            cmd._acquire_lock(backend)
+
+        mock_journal.assert_not_called()
+
+    def test_release_lock_forwards_when_gate_enabled(self, tmp_path):
+        from strata.models.audit_config_model import AuditConfigModel, AuditPolicyModel
+
+        cmd = _make_run_command(tmp_path)
+        svc = MagicMock()
+        svc.model.meta.name = "my-deploy"
+        cmd._deployment_service = svc
+
+        handle = MagicMock()
+        handle.lock_id = "abc-123"
+        handle.backend_type = "local"
+
+        backend = MagicMock()
+
+        audit_cfg = AuditConfigModel(policy=AuditPolicyModel(events={"lock.released": True}))
+        mock_config_service = MagicMock()
+        mock_config_service.model.spec.audit = audit_cfg
+
+        with (
+            patch(
+                "strata.services.configuration_service.ConfigurationService.get_instance",
+                return_value=mock_config_service,
+            ),
+            patch("strata.controllers.audit_controller.AuditController.forward") as mock_forward,
+        ):
+            cmd._release_lock(backend, handle)
+
+        mock_forward.assert_called_once()
+        args, kwargs = mock_forward.call_args
+        assert args[0] == "lock.released"
+        assert args[1]["deployment"] == "my-deploy"
+
+    def test_release_lock_forward_failure_does_not_raise(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        handle = MagicMock()
+        handle.lock_id = "abc-123"
+        handle.backend_type = "local"
+        backend = MagicMock()
+
+        with patch("strata.controllers.audit_controller.AuditController.forward", side_effect=RuntimeError("boom")):
+            # Must not raise
+            cmd._release_lock(backend, handle)
+
+    # ------------------------------------------------------------------
     # Stage loop wrapping — acquire called before stages, release in finally
     # ------------------------------------------------------------------
 
@@ -1606,6 +1712,74 @@ def _make_destroy_stage(name: str = "infra"):
     stage.provisioner = "tf_main"
     stage.topology = None
     return stage
+
+
+# ---------------------------------------------------------------------------
+# _run_cost_diff_for_stage — gated on CostController.is_auto_diff_enabled()
+# (i.e. a cost estimator declared in spec.integrations), not just on whether
+# an estimator binary happens to be installed.
+# ---------------------------------------------------------------------------
+
+
+class TestRunCostDiffForStage:
+    def _make_stage(self, provisioner: str = "terraform"):
+        stage = MagicMock()
+        stage.name = "infra"
+        stage.provisioner = provisioner
+        return stage
+
+    def test_skips_when_auto_diff_not_enabled(self, tmp_path):
+        """Not declared in spec.integrations -> never even checks is_available()
+        or attempts a diff, regardless of whether the binary is installed."""
+        cmd = _make_run_command(tmp_path)
+        cmd._deployment_service = MagicMock()
+        stage = self._make_stage()
+
+        mock_controller = MagicMock()
+        mock_controller.is_auto_diff_enabled.return_value = False
+
+        with patch("strata.controllers.cost_controller.CostController", return_value=mock_controller):
+            cmd._run_cost_diff_for_stage(stage, tmp_path / "plan.json")
+
+        mock_controller.is_auto_diff_enabled.assert_called_once()
+        mock_controller.is_available.assert_not_called()
+        mock_controller.diff.assert_not_called()
+
+    def test_proceeds_when_auto_diff_enabled_and_available(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        cmd._deployment_service = MagicMock()
+        cmd._output_format = "json"  # suppress console rendering
+        stage = self._make_stage()
+
+        mock_controller = MagicMock()
+        mock_controller.is_auto_diff_enabled.return_value = True
+        mock_controller.is_available.return_value = True
+        mock_controller.diff.return_value = (True, {"diff": {}, "totalMonthlyCost": "0", "pastTotalMonthlyCost": "0"})
+        mock_controller.get_messages.return_value = []
+        mock_controller.get_errors.return_value = []
+
+        with patch("strata.controllers.cost_controller.CostController", return_value=mock_controller):
+            cmd._run_cost_diff_for_stage(stage, tmp_path / "plan.json")
+
+        mock_controller.is_auto_diff_enabled.assert_called_once()
+        mock_controller.is_available.assert_called_once()
+        mock_controller.diff.assert_called_once()
+
+    def test_skips_when_enabled_but_binary_not_available(self, tmp_path):
+        """Declared in spec.integrations but the binary itself isn't installed
+        -> still skips silently (non-fatal), same as before this change."""
+        cmd = _make_run_command(tmp_path)
+        cmd._deployment_service = MagicMock()
+        stage = self._make_stage()
+
+        mock_controller = MagicMock()
+        mock_controller.is_auto_diff_enabled.return_value = True
+        mock_controller.is_available.return_value = False
+
+        with patch("strata.controllers.cost_controller.CostController", return_value=mock_controller):
+            cmd._run_cost_diff_for_stage(stage, tmp_path / "plan.json")
+
+        mock_controller.diff.assert_not_called()
 
 
 def _make_mock_deployer(step_names=("setup", "destroy")):

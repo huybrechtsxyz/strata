@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from strata.integrations.ansible import AnsibleIntegration
 from strata.integrations.base_integration import BaseIntegration
-from strata.integrations.capabilities import IInfrastructureTool
+from strata.models.capabilities import IInfrastructureTool
 from strata.models.integration_model import IntegrationModel
 
 

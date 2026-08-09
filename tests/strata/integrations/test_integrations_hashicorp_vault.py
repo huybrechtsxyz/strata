@@ -7,8 +7,8 @@ import pytest
 
 from strata.exceptions import SecretStoreUnavailableError
 from strata.integrations.base_integration import BaseIntegration
-from strata.integrations.capabilities import IFeatureStore, IKVStore, ISecretStore, IVariableStore
 from strata.integrations.hashicorp_vault import VaultIntegration
+from strata.models.capabilities import IFeatureStore, IKVStore, ISecretStore, IVariableStore
 from strata.models.integration_model import IntegrationEndpointsSpecModel, IntegrationModel
 
 

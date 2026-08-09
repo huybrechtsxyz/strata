@@ -277,7 +277,22 @@ variables:
   - key: ENVIRONMENT # UPPER_SNAKE_CASE
     source: constant # constant, env, file, computed
     value: production
+    type: string     # optional: string, number, bool, object, list, map
 ```
+
+**Variable types** — declare the data type for Terraform inputs (v1.4.0+):
+
+| Type     | Description                               | Example                            |
+| -------- | ----------------------------------------- | ---------------------------------- |
+| `string` | Text value (default)                      | `"vpc-id-123"`                     |
+| `number` | Integer or float                          | `3`, `1.5`                         |
+| `bool`   | Boolean value                             | `true`, `false`                    |
+| `object` | Key-value map (native YAML mapping)       | `{ vpc_id: "x", subnet: "y" }`     |
+| `list`   | Sequence of values (native YAML sequence) | `[ "az1", "az2", "az3" ]`          |
+| `map`    | String-keyed mapping                      | `{ env: prod, region: us-east-1 }` |
+
+When `type` is declared, values are emitted as native JSON types in `.auto.tfvars.json` (not as strings).
+This enables Terraform to validate object shapes and list types at plan time. Omit `type` for backward compatibility (defaults to string).
 
 **Merging:** Same key overrides workspace, new keys extend workspace.
 

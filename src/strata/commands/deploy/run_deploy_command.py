@@ -202,6 +202,21 @@ class RunDeployCommand(BaseDeployCommand):
             if manifest_path and self._is_console_output():
                 click.echo(f"\n📋  Deployment manifest: {manifest_path}")
 
+            # Write combined outputs artifact for registry consumption
+            if not self._dry_run and self._stage_results:
+                combined_results = [
+                    {
+                        "name": str(sr.name),
+                        "status": sr.status,
+                        "outputs": sr.outputs,
+                        "sensitive_outputs": {},  # sensitive tracked via _write_outputs_artifact per stage
+                    }
+                    for sr in self._stage_results
+                ]
+                combined_path = self._write_combined_outputs_artifact(combined_results)
+                if combined_path and self._is_console_output():
+                    click.echo(f"📦  Combined outputs: {combined_path}")
+
             if self._ai and not self._dry_run:
                 self._run_ai_deployment_summary()
 
@@ -439,7 +454,10 @@ class RunDeployCommand(BaseDeployCommand):
         """Run infracost diff after plan in dry-run mode. Non-fatal — cost errors never block deploy.
 
         Displays cost impact (before/after/delta) in console output.
-        Skips silently if Infracost is not installed or not available.
+        Requires a cost estimator (e.g. Infracost) to be declared in
+        ``spec.integrations`` — an installed binary alone is not enough (see
+        ``CostController.is_auto_diff_enabled``). Skips silently if not
+        declared, not installed, or otherwise unavailable.
         """
         if self._deployment_service is None:
             return
@@ -449,8 +467,11 @@ class RunDeployCommand(BaseDeployCommand):
 
             controller = CostController(work_path=self._work_path)
 
+            if not controller.is_auto_diff_enabled():
+                return  # No cost estimator declared in spec.integrations — skip silently
+
             if not controller.is_available():
-                return  # Infracost not installed — skip silently
+                return  # Declared but not installed/available — skip silently
 
             success, result = controller.diff(
                 deployment_service=self._deployment_service,
@@ -711,169 +732,14 @@ class RunDeployCommand(BaseDeployCommand):
         _click.echo("")
 
     def _write_deploy_log(self, success: bool) -> None:
-        """Assemble and write deploy-log via AuditController.
+        """Assemble and write deploy-log via ``AuditController``, forwarding ``deployment.completed``.
 
-        This is best-effort — failures are logged as WARNING and never
-        affect the deployment exit code (ADR 0018, decision #2).
+        Thin wrapper around the shared ``BaseDeployCommand._write_deploy_log_and_forward()``
+        (ADR-0066 gap B) — kept as its own named method (rather than inlining the call at
+        the one call site in ``_finalize``) so existing tests that patch/call
+        ``_write_deploy_log`` directly keep working unchanged.
         """
-        try:
-            from strata.controllers.audit_controller import AuditController
-            from strata.models.deploy_log_model import (
-                DeployLogModel,
-                DeployLogStageModel,
-                DeployLogStepModel,
-            )
-            from strata.utils.config import get_deploy_log_dir
-
-            # Assemble per-stage data from manifest stage results
-            stages: List[DeployLogStageModel] = []
-            for sr in self._stage_results:
-                stage_steps: List[DeployLogStepModel] = []
-                if sr.steps:
-                    for step_name in sr.steps:
-                        stage_steps.append(DeployLogStepModel(step=step_name, success=True, duration_seconds=0.0))
-
-                stages.append(
-                    DeployLogStageModel(
-                        name=sr.name,
-                        provisioner=sr.provisioner,
-                        topology=sr.topology,
-                        success=(sr.status == "success"),
-                        started_at=sr.started_at or self._deploy_started_at or "",
-                        completed_at=sr.completed_at or _dt.now(_tz.utc).isoformat(),
-                        duration_seconds=float(sr.duration_seconds or 0),
-                        steps=stage_steps,
-                        errors=[sr.error] if sr.error else [],
-                    )
-                )
-
-            # Calculate total duration
-            completed_at = _dt.now(_tz.utc).isoformat()
-            try:
-                duration = (
-                    _dt.fromisoformat(completed_at) - _dt.fromisoformat(self._deploy_started_at or completed_at)
-                ).total_seconds()
-            except (ValueError, TypeError):
-                duration = 0.0
-
-            # Get git context (best-effort)
-            commit_sha = self._get_git_field("rev-parse", "HEAD")
-            commit_message = self._get_git_field("log", "--format=%s", "-1")
-            commit_author = self._get_git_field("log", "--format=%ae", "-1")
-
-            # Get version
-            from strata import __version__
-
-            # Resolve deployment metadata
-            deployment_name = ""
-            workspace_name = None
-            environment = None
-            if self._deployment_service and self._deployment_service.model:
-                deployment_name = self._deployment_service.model.meta.name
-                spec = self._deployment_service.model.spec
-                if spec:
-                    workspace_name = spec.workspace.name if spec.workspace else None
-                    layers = spec.layers
-                    environment = layers.get("environment") if layers else None
-
-            payload = DeployLogModel(
-                execution_id=self._execution_id,
-                timestamp=self._deploy_started_at or completed_at,
-                version=__version__,
-                commit_sha=commit_sha,
-                commit_message=commit_message,
-                commit_author=commit_author,
-                deployment=deployment_name or "unknown",
-                workspace=workspace_name,
-                environment=environment,
-                file=str(self._file_path or ""),
-                force=self._force,
-                dry_run=False,
-                success=success,
-                duration_seconds=duration,
-                stages=stages,
-                errors=list(self._errors),
-                messages=list(self._messages),
-            )
-
-            # Resolve audit config (structure + base path)
-            structure = "by-execution"
-            base_path = get_deploy_log_dir(self._work_path)
-            resolved_audit_cfg = None
-            if self._configuration_service:
-                resolved_audit_cfg = getattr(getattr(self._configuration_service.model, "spec", None), "audit", None)
-                if resolved_audit_cfg:
-                    structure = resolved_audit_cfg.structure or structure
-                base_path = self._configuration_service.get_deploy_log_path(self._work_path, create_path=True)
-
-            # Write via AuditController
-            controller = AuditController(
-                work_path=self._work_path,
-                siem_sinks=self._resolve_siem_sinks(resolved_audit_cfg),
-            )
-            ok, path = controller.write_deploy_log(
-                payload=payload,
-                base_path=base_path,
-                structure=structure,
-            )
-
-            # Layer 4a: PR enrichment — best-effort, never blocks (gh CLI required)
-            if ok and path:
-                enriched = controller.enrich_with_pr_data(payload)
-                if enriched.pull_request is not None:
-                    import json
-
-                    path.write_text(
-                        json.dumps(enriched.model_dump(exclude_none=True), indent=2, default=str),
-                        encoding="utf-8",
-                    )
-
-                # Layer 4b: SIEM forwarding — best-effort, fire-and-forget
-                # Uses the enriched payload so SIEM gets PR data when available.
-                controller.forward_to_siem(enriched, audit_config=resolved_audit_cfg)
-
-                # Layer 4c: Push to remote repo — best-effort, opt-in via audit.repository
-                if resolved_audit_cfg and resolved_audit_cfg.repository:
-                    from pathlib import Path as _Path
-
-                    from strata.controllers.solution_controller import SolutionController
-
-                    sol_ctrl = SolutionController(work_path=self._work_path)
-                    sol_ctrl.load()
-                    repo_map = sol_ctrl.get_repo_map()
-                    repo_path = repo_map.get(str(resolved_audit_cfg.repository))
-                    if repo_path:
-                        controller.push_to_remote([path], working_dir=_Path(repo_path))
-                    else:
-                        self.logger.warning(
-                            "deploy_log_push_repo_not_found",
-                            repository=str(resolved_audit_cfg.repository),
-                        )
-
-            if ok and path and self._is_console_output():
-                self._audit_log_path = str(path.relative_to(self._work_path))
-                click.echo(f"  📝  Deploy-log: {self._audit_log_path}")
-            elif ok and path:
-                self._audit_log_path = str(path.relative_to(self._work_path))
-
-        except Exception as exc:
-            self.logger.warning("deploy_log_write_failed", error=str(exc))
-
-    def _get_git_field(self, *args: str) -> Optional[str]:
-        """Run a git command and return stdout, or None on failure."""
-        try:
-            from strata.utils.system import run_command
-
-            result = run_command(["git"] + list(args), cwd=str(self._work_path), timeout=10)
-            if result.returncode == 0 and result.stdout:
-                return result.stdout.strip()
-        except Exception:
-            pass
-        return None
-
-    def _get_current_commit(self) -> str:
-        """Return the current HEAD commit SHA, or 'unknown' on failure."""
-        return self._get_git_field("rev-parse", "HEAD") or "unknown"
+        self._write_deploy_log_and_forward("deployment.completed", success)
 
     def _evaluate_deployment_gates(self, stages_to_run: List[DeploymentStageModel]):
         """Evaluate spec.gates from the deployment model — pre-provisioning.
@@ -1089,68 +955,24 @@ class RunDeployCommand(BaseDeployCommand):
             return False
 
     def _forward_workitem_event(self, event_name: str, item) -> None:
-        """Forward a work-item lifecycle event to configured SIEM sinks.
+        """Forward a work-item lifecycle event to configured audit sinks.
 
-        Best-effort — never raises. Uses the same sinks as deploy_audit but
-        sends event_name="workitem.created" / "workitem.approved" / etc.
-        Sinks without an events filter receive all events; sinks filtered to
-        ["deploy_audit"] also receive workitem events (deployment gate context).
+        Best-effort — never raises. Routes through ``AuditController.forward()``
+        (ADR-0066) — the same single sink-resolution path ``deploy_audit`` and
+        ``resend`` use, rather than a separate duplicated resolver.
         """
         try:
             audit_cfg = None
             if self._configuration_service:
                 audit_cfg = getattr(getattr(self._configuration_service.model, "spec", None), "audit", None)
-            sinks = self._resolve_siem_sinks(audit_cfg)
-            if not sinks:
+            if not audit_cfg or not audit_cfg.sinks:
                 return
+            from strata.controllers.audit_controller import AuditController
+
             data = {**item.to_dict(), "event": event_name}
-            for sink in sinks:
-                try:
-                    sink.send_event(event_name, data)
-                except Exception as exc:
-                    self.logger.debug("workitem_siem_forward_failed", event_name=event_name, error=str(exc))
+            AuditController(work_path=self._work_path).forward(event_name, data, audit_config=audit_cfg)
         except Exception as exc:
             self.logger.debug("workitem_siem_forward_error", event_name=event_name, error=str(exc))
-
-    def _resolve_siem_sinks(self, audit_config=None) -> list:
-        """Resolve integration-backed SIEM sinks from the current configuration.
-
-        Iterates audit_config.sinks, finds integration-backed entries, instantiates
-        them via IntegrationFactory, and returns those that implement ISiemSink.
-        Always returns a list (may be empty). Never raises.
-        """
-        sinks: list = []
-        if not audit_config or not audit_config.sinks:
-            return sinks
-        if not self._configuration_service or not self._configuration_service.model:
-            return sinks
-
-        integration_models = getattr(getattr(self._configuration_service.model, "spec", None), "integrations", []) or []
-        integration_map = {m.name: m for m in integration_models}
-
-        from strata.integrations.capabilities import ISiemSink
-        from strata.integrations.factory import IntegrationFactory
-
-        for sink in audit_config.sinks:
-            if not sink.enabled or not sink.integration:
-                continue
-            model = integration_map.get(str(sink.integration))
-            if not model or not model.enabled:
-                continue
-            # Check event filter
-            if sink.events and "deploy_audit" not in sink.events:
-                continue
-            try:
-                instance = IntegrationFactory.create(model)
-                if isinstance(instance, ISiemSink):
-                    sinks.append(instance)
-            except Exception as exc:
-                self.logger.warning(
-                    "siem_sink_resolve_failed",
-                    name=sink.integration,
-                    error=str(exc),
-                )
-        return sinks
 
     def _load_related_services(self) -> bool:
         """Services are already loaded by BaseDeployCommand._before_execute."""
@@ -1918,4 +1740,5 @@ class RunDeployCommand(BaseDeployCommand):
                         click.echo(f"    \u26a0  Policy '{result.policy_name}' warning: {v}")
                     elif result.enforcement == "audit" and self._is_verbose():
                         click.echo(f"    \u00b7  Policy '{result.policy_name}' audit: {v}")
+                self._forward_policy_violation_audit_event(result)
         return not denied

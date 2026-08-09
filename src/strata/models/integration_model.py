@@ -112,7 +112,7 @@ class IntegrationModel(PlatformBaseModel):
         Imports inside validator to avoid circular dependency.
         """
         # Lazy import to avoid circular dependency
-        from strata.integrations.capabilities import VALID_CAPABILITY_NAMES
+        from strata.models.capabilities import VALID_CAPABILITY_NAMES
 
         invalid = v - VALID_CAPABILITY_NAMES
         if invalid:
@@ -133,7 +133,7 @@ class IntegrationModel(PlatformBaseModel):
         Imports inside validator to avoid circular dependency.
         """
         # Lazy import to avoid circular dependency
-        from strata.integrations.capabilities import (
+        from strata.models.capabilities import (
             CUSTOM_INTEGRATION_TYPES,
             is_custom_integration_type,
         )
@@ -161,7 +161,7 @@ class IntegrationModel(PlatformBaseModel):
         For example, customsecret should have 'secrets' in capabilities.
         """
         # Lazy import to avoid circular dependency
-        from strata.integrations.capabilities import (
+        from strata.models.capabilities import (
             CUSTOM_TYPE_CAPABILITY_MAP,
             is_custom_integration_type,
         )

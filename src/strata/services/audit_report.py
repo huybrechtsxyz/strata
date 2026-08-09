@@ -1,7 +1,11 @@
 """Audit report writers — CycloneDX VEX 1.6 and SARIF 2.1.0.
 
 Pure functions that convert a ``CveAuditResultModel`` into standard
-file formats.  No external dependencies — just ``json``.
+file formats.  No external dependencies beyond ``json`` and ``strata.models``.
+
+Lives in ``services/`` (not ``utils/``) because it operates directly on domain
+models (``CveAuditResultModel``) — per ADR-0003, ``utils/`` must not depend on
+``models/``.
 """
 
 import json

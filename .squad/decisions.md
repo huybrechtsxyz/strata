@@ -2,6 +2,19 @@
 
 ## Active Decisions
 
+### 2026-08-06 — Cost estimation breaking-change placement in `[Unreleased]`
+- **By:** Reuben (Docs / Technical Writer)
+- **Decision:** Added a `### Breaking Changes` subsection ahead of the existing `### Added`
+  subsection in `.github/CHANGELOG.md`'s `[Unreleased]` section for the infracost
+  integration-gating change, matching the established category order (Breaking Changes,
+  Added, Fixed, Changed, Security) used in prior released versions (e.g. 1.6.0). Mirrored
+  with a detailed file/method-level entry in `.github/HISTORY.md`'s `[Unreleased]` section,
+  including the YAML example and test-count callout, consistent with existing HISTORY.md
+  entry style.
+- **Rationale:** Existing ADR-0063 `### Added` entries in CHANGELOG.md's `[Unreleased]` were
+  left untouched per instructions; the new content is unrelated (Gap 4, cost controller) and
+  warrants its own category since it's a deliberate no-backward-compat change, not an addition.
+
 ### 2026-08-03 — v1.6.1 changelog release-cut
 - **By:** Reuben (Docs / Technical Writer)
 - **Decision:** Turned `## [Unreleased]` into `## [1.6.1] - 2026-08-03` in both `.github/CHANGELOG.md`

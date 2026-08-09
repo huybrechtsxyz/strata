@@ -52,6 +52,31 @@ class IntegrationFactory:
         "azure_cli": ("strata.integrations.azure_cli", "AzureCLIIntegration"),
         "aws_cli": ("strata.integrations.aws_cli", "AWSCLIIntegration"),
         "gcloud_cli": ("strata.integrations.gcloud_cli", "GCloudCLIIntegration"),
+        # Identity providers — CLI-side OIDC/OAuth2 login (ADR-0067)
+        "generic_oidc": (
+            "strata.integrations.identity.generic_oidc_identity_integration",
+            "GenericOidcIdentityIntegration",
+        ),
+        "azure_ad": (
+            "strata.integrations.identity.azure_identity_integration",
+            "AzureIdentityIntegration",
+        ),
+        "google": (
+            "strata.integrations.identity.google_identity_integration",
+            "GoogleIdentityIntegration",
+        ),
+        "aws_identity_center": (
+            "strata.integrations.identity.aws_identity_integration",
+            "AwsIdentityIntegration",
+        ),
+        "auth0": (
+            "strata.integrations.identity.auth0_identity_integration",
+            "Auth0IdentityIntegration",
+        ),
+        "github_oauth": (
+            "strata.integrations.identity.github_oauth_identity_integration",
+            "GitHubOAuthIdentityIntegration",
+        ),
         # AI agent (ADR-0025)
         "ai_agent": ("strata.integrations.ai.ai_integration", "AiAgentIntegration"),
         # SIEM / audit sinks
@@ -59,6 +84,9 @@ class IntegrationFactory:
         "elk": ("strata.integrations.siem.elk_siem_integration", "ElkSiemIntegration"),
         "otel": ("strata.integrations.siem.otel_siem_integration", "OtelSiemIntegration"),
         "splunk": ("strata.integrations.siem.splunk_siem_integration", "SplunkSiemIntegration"),
+        # Was sink-only `type: webhook` / `type: syslog` — promoted to integrations (ADR-0066)
+        "webhook": ("strata.integrations.siem.webhook_siem_integration", "WebhookSiemIntegration"),
+        "syslog": ("strata.integrations.siem.syslog_siem_integration", "SyslogSiemIntegration"),
     }
 
     @classmethod

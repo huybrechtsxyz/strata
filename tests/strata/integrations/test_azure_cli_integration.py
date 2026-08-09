@@ -13,7 +13,8 @@ _AZ_ACCOUNT_SHOW = """{
   "id": "aaaaaaaa-0000-0000-0000-000000000001",
   "name": "my-subscription",
   "tenantId": "bbbbbbbb-0000-0000-0000-000000000002",
-  "state": "Enabled"
+  "state": "Enabled",
+  "user": {"name": "dev@example.com", "type": "user"}
 }"""
 
 _AZ_TOKEN = '{"accessToken": "eyJfake_token", "expiresOn": "2026-07-24 00:00:00.000000", "tokenType": "Bearer"}'
@@ -140,6 +141,32 @@ class TestGetSubscription:
         with patch.object(az, "_run_integration", return_value=_ok("")):
             sub = az.get_subscription()
         assert sub is None
+
+
+# ===========================================================================
+# get_signed_in_user
+# ===========================================================================
+
+
+class TestGetSignedInUser:
+    def test_returns_user_dict(self):
+        az = _make()
+        with patch.object(az, "_run_integration", return_value=_ok(_AZ_ACCOUNT_SHOW)):
+            user = az.get_signed_in_user()
+        assert user == {"name": "dev@example.com", "type": "user"}
+
+    def test_returns_none_when_not_logged_in(self):
+        az = _make()
+        with patch.object(az, "_run_integration", return_value=_fail()):
+            user = az.get_signed_in_user()
+        assert user is None
+
+    def test_missing_user_field_returns_empty_strings(self):
+        az = _make()
+        no_user = '{"id": "x", "name": "sub", "tenantId": "t", "state": "Enabled"}'
+        with patch.object(az, "_run_integration", return_value=_ok(no_user)):
+            user = az.get_signed_in_user()
+        assert user == {"name": "", "type": ""}
 
 
 # ===========================================================================

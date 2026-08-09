@@ -363,7 +363,7 @@ class TestSiemForwarding:
         with (
             patch("strata.controllers.audit_controller.AuditController.write_deploy_log", mock_write_log),
             patch("strata.controllers.audit_controller.AuditController.enrich_with_pr_data", side_effect=lambda p: p),
-            patch("strata.controllers.audit_controller.AuditController.forward_to_siem", mock_forward),
+            patch("strata.controllers.audit_controller.AuditController.forward", mock_forward),
         ):
             cmd._write_deploy_log(success=True)
 
@@ -390,7 +390,7 @@ class TestSiemForwarding:
             p.pull_request = pr
             return p
 
-        def _capture_forward(payload, audit_config=None):
+        def _capture_forward(event_type, payload, audit_config=None):
             forwarded.append(payload)
 
         cmd = _make_command(tmp_path)
@@ -399,13 +399,13 @@ class TestSiemForwarding:
         with (
             patch("strata.controllers.audit_controller.AuditController.write_deploy_log", mock_write_log),
             patch("strata.controllers.audit_controller.AuditController.enrich_with_pr_data", side_effect=_enrich),
-            patch("strata.controllers.audit_controller.AuditController.forward_to_siem", side_effect=_capture_forward),
+            patch("strata.controllers.audit_controller.AuditController.forward", side_effect=_capture_forward),
         ):
             cmd._write_deploy_log(success=True)
 
         assert len(forwarded) == 1
-        assert forwarded[0].pull_request is not None
-        assert forwarded[0].pull_request.number == 7
+        assert forwarded[0]["pull_request"] is not None
+        assert forwarded[0]["pull_request"]["number"] == 7
 
     @patch("strata.commands.deploy.run_deploy_command.RunDeployCommand._get_git_field")
     def test_siem_forwarding_not_called_when_write_fails(
@@ -423,7 +423,7 @@ class TestSiemForwarding:
 
         with (
             patch("strata.controllers.audit_controller.AuditController.write_deploy_log", mock_write_log),
-            patch("strata.controllers.audit_controller.AuditController.forward_to_siem", mock_forward),
+            patch("strata.controllers.audit_controller.AuditController.forward", mock_forward),
         ):
             cmd._write_deploy_log(success=True)
 
@@ -447,7 +447,7 @@ class TestSiemForwarding:
             patch("strata.controllers.audit_controller.AuditController.write_deploy_log", mock_write_log),
             patch("strata.controllers.audit_controller.AuditController.enrich_with_pr_data", side_effect=lambda p: p),
             patch(
-                "strata.controllers.audit_controller.AuditController.forward_to_siem",
+                "strata.controllers.audit_controller.AuditController.forward",
                 side_effect=RuntimeError("network error"),
             ),
         ):
@@ -484,7 +484,7 @@ class TestDeployLogPushToRepo:
         with (
             patch("strata.controllers.audit_controller.AuditController.write_deploy_log", mock_write_log),
             patch("strata.controllers.audit_controller.AuditController.enrich_with_pr_data", side_effect=lambda p: p),
-            patch("strata.controllers.audit_controller.AuditController.forward_to_siem"),
+            patch("strata.controllers.audit_controller.AuditController.forward"),
             patch("strata.controllers.audit_controller.AuditController.push_to_remote", mock_push),
             patch(
                 "strata.controllers.solution_controller.SolutionController.get_repo_map",
@@ -528,7 +528,7 @@ class TestDeployLogPushToRepo:
         with (
             patch("strata.controllers.audit_controller.AuditController.write_deploy_log", mock_write_log),
             patch("strata.controllers.audit_controller.AuditController.enrich_with_pr_data", side_effect=lambda p: p),
-            patch("strata.controllers.audit_controller.AuditController.forward_to_siem"),
+            patch("strata.controllers.audit_controller.AuditController.forward"),
             patch("strata.controllers.audit_controller.AuditController.push_to_remote", mock_push),
         ):
             cmd._write_deploy_log(success=True)
@@ -556,17 +556,13 @@ class TestDeployLogPushToRepo:
         with (
             patch("strata.controllers.audit_controller.AuditController.write_deploy_log", mock_write_log),
             patch("strata.controllers.audit_controller.AuditController.enrich_with_pr_data", side_effect=lambda p: p),
-            patch("strata.controllers.audit_controller.AuditController.forward_to_siem"),
+            patch("strata.controllers.audit_controller.AuditController.forward"),
             patch("strata.controllers.audit_controller.AuditController.push_to_remote", mock_push),
             patch(
                 "strata.controllers.solution_controller.SolutionController.get_repo_map",
                 return_value={},  # empty — repo name not found
             ),
             patch("strata.controllers.solution_controller.SolutionController.load"),
-            patch(
-                "strata.commands.deploy.run_deploy_command.RunDeployCommand._resolve_siem_sinks",
-                return_value=[],
-            ),
         ):
             # Patch to inject resolved_audit_cfg with repository set
             from strata.models.audit_config_model import AuditConfigModel as AuditCfg

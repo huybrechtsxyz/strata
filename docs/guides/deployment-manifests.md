@@ -199,6 +199,124 @@ The manifest is written **automatically** upon completion (success or failure).
 
 ---
 
+## Deployment Outputs Artifact
+
+> **Introduced:** v1.4.0 — Team-owned Terraform modules with output passing
+
+When a deployment completes, strata generates a **deployment outputs** artifact alongside the deployment manifest.
+
+**File:** `.strata/deployments/{deployment}/{version}/deployment-outputs.json`
+
+**Purpose:** Registry-consumable artifact containing all Terraform outputs from all stages,
+useful for:
+
+- **Registry integration** — Team modules published to registries can consume platform baseline outputs
+- **Cross-stage output passing** — Output values validated and available for downstream provisioners
+- **Compliance audits** — Final deployed state captured immutably
+
+### Structure
+
+```json
+{
+  "apiVersion": "strata.huybrechts.xyz/v1",
+  "kind": "deployment-outputs",
+  "meta": {
+    "name": "prod_deployment",
+    "labels": {
+      "version": "2.3.0",
+      "environment": "production",
+      "workspace": "prod_workspace",
+      "tenant": "acme-corp"
+    }
+  },
+  "spec": {
+    "outputs": {
+      "platform_baseline": {
+        "vpc_id": "vpc-0123456789abcdef0",
+        "subnet_ids": ["subnet-1", "subnet-2"],
+        "aks_cluster_name": "aks-prod-01",
+        "database_password": "(sensitive)"
+      },
+      "team_module": {
+        "app_endpoint": "https://app-prod.example.com",
+        "load_balancer_ip": "203.0.113.42"
+      }
+    },
+    "sensitive_keys": [
+      "platform_baseline.database_password",
+      "platform_baseline.admin_token"
+    ],
+    "stages_completed": [
+      "infrastructure",
+      "configuration"
+    ],
+    "provenance": {
+      "manifest_path": ".strata/deployments/prod_deployment/v2.3.0/2024-06-17T10:45:33Z.json",
+      "timestamp": "2024-06-17T10:45:33Z",
+      "deployment_status": "success"
+    }
+  }
+}
+```
+
+**Key fields:**
+
+- **`outputs`** — Nested dict: `{stage_name: {output_name: value}}`
+- **`sensitive_keys`** — Dot-notation paths of sensitive outputs (values omitted for security)
+- **`stages_completed`** — List of stages that finished successfully
+- **`provenance`** — Metadata linking to the deployment manifest and completion status
+
+### Using Deployment Outputs
+
+**Query outputs for a specific stage:**
+
+```bash
+jq '.spec.outputs.platform_baseline' deployment-outputs.json
+# {
+#   "vpc_id": "vpc-0123456789abcdef0",
+#   "subnet_ids": ["subnet-1", "subnet-2"],
+#   "aks_cluster_name": "aks-prod-01",
+#   "database_password": "(sensitive)"
+# }
+```
+
+**Extract non-sensitive outputs for team module:**
+
+```bash
+jq '.spec.outputs.team_module' deployment-outputs.json
+# {
+#   "app_endpoint": "https://app-prod.example.com",
+#   "load_balancer_ip": "203.0.113.42"
+# }
+```
+
+**Check which outputs are sensitive:**
+
+```bash
+jq '.spec.sensitive_keys[]' deployment-outputs.json
+# "platform_baseline.database_password"
+# "platform_baseline.admin_token"
+```
+
+**Integration with team module registries:**
+
+Team-owned modules can automatically fetch deployment outputs from the previous deployment:
+
+```python
+# registry/fetch_platform_outputs.py
+import json
+from pathlib import Path
+
+outputs_file = Path(".strata/deployments/prod_deployment/latest/deployment-outputs.json")
+if outputs_file.exists():
+    with open(outputs_file) as f:
+        deployment_outputs = json.load(f)
+        baseline = deployment_outputs["spec"]["outputs"]["platform_baseline"]
+        # Use baseline outputs: vpc_id, subnet_ids, etc.
+```
+
+---
+
 ## Reading a Manifest
 
 Manifests are JSON files with this structure:

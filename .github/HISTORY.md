@@ -7,6 +7,28 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- **Cost estimation gated behind declared `infracost` integration**
+  - (detailed notes as before)
+
+### Added
+
+- **Provisioner-managed resources**
+  - New field: `WorkspaceResourceModel.managed_by: Optional[Literal["provisioner"]]` (`src/strata/models/workspace_model.py`) — marks a resource as fully provisioner-owned
+  - Sibling field `WorkspaceResourceModel.file: Optional[str]` now optional (was required)
+  - New validator `validate_file_or_managed_by()` enforces strict XOR: resource must have `file` reference OR `managed_by` set, but never both
+  - Validation rejects invalid `managed_by` values; only `"provisioner"` is currently allowed (extensible for future values like `"external"`, `"configuration"`, etc.)
+  - Workspace loading skip (_`src/strata/services/workspace_service.py`) skips file resolution/loading when `resource_ref.managed_by` is set; stores `None` in resource service cache to mark the resource as externally-managed
+  - Builder skip (`src/strata/builders/platform_builder.py`) guards against `None` resource services in both resource emission loop and firewall merge loop
+  - Use case: multi-tenant IaC deployments where Terraform modules fully define resources (VMs, databases, networks, etc.) and workspace YAML only needs to wire topology/provisioners without detailed resource specs. Eliminates stub resource files.
+  - Backward-compatible: existing workspaces with `file: <path>` continue working unchanged
+  - Test coverage: all 5263 tests pass; 152 workspace-specific tests verified
+    - Deployment-service integration: 2 new tests in `tests/strata/services/test_services_deployment.py` covering custom convention resolution and proving old `tenants/` location NOT consulted once custom convention declared
+    - Full suite: 5263 passed / 16 skipped
+
+- **Git ref pinning on `SourceModel` (ADR-0063, Gap 1)** — Provisioner sources now accept an optional `reference` field (branch, tag, or commit SHA) that overrides the workspace-level remote default. This allows two provisioners referencing the same remote to pin different versions (e.g., platform baseline on `v1.4.0` and team module on `main`). Resolution priority: `source.reference` → environment remote override → remote default. When a ref is pinned, `git archive` extracts the subtree without mutating the working tree.
+
 ---
 
 ## [1.6.1] - 2026-08-03

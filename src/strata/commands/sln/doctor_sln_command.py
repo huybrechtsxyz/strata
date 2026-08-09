@@ -64,6 +64,8 @@ class DoctorSlnCommand(BaseCommand):
     ``auth``
         Authentication and backend reachability.
         Skipped unless ``--deep`` is supplied to avoid slow network calls.
+        Pass ``--login`` to actively drive a login for integrations that support it
+        (ADR-0067), instead of only printing a fix hint.
 
     Exit code ``0`` when all checks pass (warnings are allowed).
     Exit code ``3`` when one or more checks fail.
@@ -77,6 +79,7 @@ class DoctorSlnCommand(BaseCommand):
         work_path: Optional[str] = None,
         category: Optional[str] = None,
         deep: bool = False,
+        login: bool = False,
         ai: bool = False,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
@@ -91,6 +94,7 @@ class DoctorSlnCommand(BaseCommand):
         self._file = file
         self._category = category
         self._deep = deep
+        self._login = login
         self._ai = ai
         self._has_check_failures = False
 
@@ -538,6 +542,8 @@ class DoctorSlnCommand(BaseCommand):
                 if not hasattr(integration, "check_auth"):
                     continue
                 ok, detail = integration.check_auth()
+                if not ok and self._login and hasattr(integration, "login"):
+                    ok, detail = integration.login()
                 results.append(
                     CheckResult(
                         f"auth_{type_str}",
@@ -549,6 +555,11 @@ class DoctorSlnCommand(BaseCommand):
             except Exception:
                 pass  # best-effort
 
+        # Identity-provider integrations need real configuration (issuer, client_id) to
+        # check — unlike az/aws/gcloud above, a bare default IntegrationModel can't reach
+        # anything, so these are resolved from the workspace's actual spec.integrations.
+        results.extend(self._check_identity_integrations())
+
         if not results:
             results.append(
                 CheckResult(
@@ -558,6 +569,54 @@ class DoctorSlnCommand(BaseCommand):
                 )
             )
 
+        return results
+
+    def _check_identity_integrations(self) -> List[CheckResult]:
+        """Check auth for `identity`-capable integrations actually configured in this workspace.
+
+        Unlike the bare-type loop above (which needs no config to check az/aws/gcloud
+        login state), an identity-provider integration requires real config — issuer,
+        client_id — from ``spec.integrations``, so it is resolved from the loaded
+        workspace configuration rather than instantiated with a default IntegrationModel.
+        Best-effort: skipped entirely if no workspace/profile/config can be loaded.
+        """
+        results: List[CheckResult] = []
+        try:
+            from strata.controllers.solution_controller import SolutionController
+            from strata.models.capabilities import IIdentityProvider
+            from strata.services.configuration_service import ConfigurationService
+            from strata.services.integration_service import IntegrationService
+
+            sol = SolutionController(work_path=self._work_path)
+            sol.load()
+            profile, _ = sol.get_active_profile()
+            if not profile:
+                return results
+
+            for cp in [str(p.path) for p in (profile.configfile_paths or [])]:
+                ConfigurationService.load(cp)
+
+            svc = IntegrationService.get_instance()
+            if not svc.is_initialized():
+                svc.initialize_integrations()
+
+            for name in svc.get_integrations_with_capability(IIdentityProvider):
+                integration = svc.get_integration(name)
+                if integration is None:
+                    continue
+                ok, detail = integration.check_auth()
+                if not ok and self._login and hasattr(integration, "login"):
+                    ok, detail = integration.login()
+                results.append(
+                    CheckResult(
+                        f"auth_identity_{name}",
+                        "pass" if ok else "fail",
+                        value=detail,
+                        fix_hint=None if ok else "Run 'strata sln doctor --deep --login' to sign in.",
+                    )
+                )
+        except Exception as exc:
+            self.logger.debug("doctor_identity_check_skipped", error=str(exc))
         return results
 
     # ------------------------------------------------------------------

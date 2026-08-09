@@ -151,45 +151,133 @@ class TestResolveProvisionerPath:
 class TestGetEstimator:
     def test_returns_none_when_no_cost_integrations(self):
         ctrl = CostController()
+        mock_service = MagicMock()
+        mock_service.is_initialized.return_value = True
+        mock_service.get_integrations_with_capability.return_value = []
         with patch(
-            "strata.integrations.factory.IntegrationFactory.get_known_types",
-            return_value=[],
+            "strata.services.integration_service.IntegrationService.get_instance",
+            return_value=mock_service,
         ):
             assert ctrl._get_estimator() is None
 
     def test_returns_estimator_when_available(self):
-        from strata.integrations.capabilities import ICostEstimator
+        from strata.models.capabilities import ICostEstimator
 
         mock_estimator = MagicMock(spec=ICostEstimator)
         ctrl = CostController()
-        with (
-            patch(
-                "strata.integrations.factory.IntegrationFactory.get_known_types",
-                return_value=["infracost"],
-            ),
-            patch(
-                "strata.integrations.factory.IntegrationFactory.create_by_type",
-                return_value=mock_estimator,
-            ),
+        mock_service = MagicMock()
+        mock_service.is_initialized.return_value = True
+        mock_service.get_integrations_with_capability.return_value = ["infracost"]
+        mock_service.get_integration.return_value = mock_estimator
+        with patch(
+            "strata.services.integration_service.IntegrationService.get_instance",
+            return_value=mock_service,
         ):
             result = ctrl._get_estimator()
         assert result is mock_estimator
 
     def test_skips_non_cost_integrations(self):
-        non_cost = MagicMock()
         ctrl = CostController()
-        with (
-            patch(
-                "strata.integrations.factory.IntegrationFactory.get_known_types",
-                return_value=["git"],
-            ),
-            patch(
-                "strata.integrations.factory.IntegrationFactory.create_by_type",
-                return_value=non_cost,
-            ),
+        mock_service = MagicMock()
+        mock_service.is_initialized.return_value = True
+        mock_service.get_integrations_with_capability.return_value = []
+        with patch(
+            "strata.services.integration_service.IntegrationService.get_instance",
+            return_value=mock_service,
         ):
             result = ctrl._get_estimator()
         assert result is None
+
+    def test_returns_none_and_does_not_probe_binaries_when_not_declared(self):
+        """Regression: _get_estimator() must never fall back to probing for an
+        installed binary that isn't declared in spec.integrations."""
+        ctrl = CostController()
+        mock_service = MagicMock()
+        mock_service.is_initialized.return_value = True
+        mock_service.get_integrations_with_capability.return_value = []
+        with (
+            patch(
+                "strata.services.integration_service.IntegrationService.get_instance",
+                return_value=mock_service,
+            ),
+            patch("strata.integrations.factory.IntegrationFactory.create_by_type") as mock_create_by_type,
+        ):
+            result = ctrl._get_estimator()
+        assert result is None
+        mock_create_by_type.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# is_auto_diff_enabled — gates deploy run --dry-run's automatic cost diff on
+# whether a cost estimator is DECLARED in spec.integrations, unlike
+# _get_estimator() which probes for any installed binary regardless of config.
+# ---------------------------------------------------------------------------
+
+
+class TestIsAutoDiffEnabled:
+    def test_false_when_no_cost_integration_declared(self):
+        ctrl = CostController()
+        mock_service = MagicMock()
+        mock_service.is_initialized.return_value = True
+        mock_service.get_integrations_with_capability.return_value = []
+        with patch(
+            "strata.services.integration_service.IntegrationService.get_instance",
+            return_value=mock_service,
+        ):
+            assert ctrl.is_auto_diff_enabled() is False
+        mock_service.get_integrations_with_capability.assert_called_once()
+
+    def test_true_when_cost_integration_declared_and_enabled(self):
+        from strata.models.capabilities import ICostEstimator
+
+        ctrl = CostController()
+        mock_service = MagicMock()
+        mock_service.is_initialized.return_value = True
+        mock_service.get_integrations_with_capability.return_value = ["infracost"]
+        mock_service.get_integration.return_value = MagicMock(spec=ICostEstimator)
+        with patch(
+            "strata.services.integration_service.IntegrationService.get_instance",
+            return_value=mock_service,
+        ):
+            assert ctrl.is_auto_diff_enabled() is True
+
+    def test_false_when_integration_declared_but_disabled(self):
+        """A declared-but-disabled (enabled: false) integration never reaches
+        the registry, so get_integrations_with_capability returns an empty
+        list — same outcome as not declaring it at all."""
+        ctrl = CostController()
+        mock_service = MagicMock()
+        mock_service.is_initialized.return_value = True
+        mock_service.get_integrations_with_capability.return_value = []
+        with patch(
+            "strata.services.integration_service.IntegrationService.get_instance",
+            return_value=mock_service,
+        ):
+            assert ctrl.is_auto_diff_enabled() is False
+
+    def test_initializes_integrations_if_not_already_done(self):
+        ctrl = CostController()
+        mock_service = MagicMock()
+        mock_service.is_initialized.return_value = False
+        mock_service.get_integrations_with_capability.return_value = []
+        with patch(
+            "strata.services.integration_service.IntegrationService.get_instance",
+            return_value=mock_service,
+        ):
+            ctrl.is_auto_diff_enabled()
+        mock_service.initialize_integrations.assert_called_once()
+
+    def test_does_not_reinitialize_if_already_initialized(self):
+        ctrl = CostController()
+        mock_service = MagicMock()
+        mock_service.is_initialized.return_value = True
+        mock_service.get_integrations_with_capability.return_value = []
+        with patch(
+            "strata.services.integration_service.IntegrationService.get_instance",
+            return_value=mock_service,
+        ):
+            ctrl.is_auto_diff_enabled()
+        mock_service.initialize_integrations.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -405,6 +493,29 @@ class TestCostControllerCache:
         key_eur = ctrl._compute_cache_key(tf_path, "EUR")
         key_usd = ctrl._compute_cache_key(tf_path, "USD")
         assert key_eur != key_usd
+
+    def test_compute_cache_key_changes_on_same_size_edit(self, tmp_path):
+        """Regression: name+size alone missed a same-byte-count content edit —
+        mtime is now part of the hash so this no longer silently reuses a stale
+        cache entry."""
+        import os
+        import time
+
+        tf_path = tmp_path / "terraform"
+        tf_path.mkdir()
+        f = tf_path / "main.tf"
+        f.write_text("resource {a}")  # same length as the edit below
+        ctrl = CostController(work_path=tmp_path)
+        key_before = ctrl._compute_cache_key(tf_path, "EUR")
+
+        # Rewrite with different content but identical byte length, and force
+        # a distinct mtime (some filesystems have coarse mtime resolution).
+        f.write_text("resource {b}")
+        future = time.time() + 5
+        os.utime(f, (future, future))
+
+        key_after = ctrl._compute_cache_key(tf_path, "EUR")
+        assert key_before != key_after
 
     def test_read_cache_returns_none_when_no_work_path(self):
         ctrl = CostController()
