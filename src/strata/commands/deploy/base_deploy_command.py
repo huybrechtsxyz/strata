@@ -207,6 +207,7 @@ class BaseDeployCommand(BaseCommand):
                 lock_id=handle.lock_id,
                 backend=handle.backend_type,
             )
+            self._forward_lock_audit_event("lock.acquired", handle, deploy_name)
             return handle
         except LockConflictError as exc:
             self._lock_conflict = True
@@ -238,12 +239,48 @@ class BaseDeployCommand(BaseCommand):
             if self._is_console_output():
                 click.echo(f"\n\U0001f513  Lock released ({handle.backend_type})")
             self.logger.info("deploy_lock_released", lock_id=handle.lock_id)
+            deploy_name = (
+                str(self._deployment_service.model.meta.name)  # type: ignore[union-attr]
+                if self._deployment_service is not None
+                else None
+            )
+            self._forward_lock_audit_event("lock.released", handle, deploy_name)
         except Exception as exc:  # noqa: BLE001
             self.logger.warning(
                 "deploy_lock_release_failed",
                 lock_id=handle.lock_id,
                 error=str(exc),
             )
+
+    def _forward_lock_audit_event(self, event_type: str, handle: LockHandle, deploy_name: Optional[str]) -> None:
+        """Forward a lock.acquired / lock.released event (ADR-0066 follow-up).
+
+        Best-effort: wrapped so a forwarding failure never affects the deploy/destroy
+        exit code, matching ``forward()``'s own "audit must never fail a deploy"
+        guarantee. Both event types default to disabled (not every lock/unlock is
+        interesting), so this is a no-op unless explicitly enabled via
+        ``spec.audit.policy.events``.
+        """
+        try:
+            from strata.controllers.audit_controller import AuditController
+            from strata.services.configuration_service import ConfigurationService
+
+            audit_cfg = None
+            try:
+                config_model = ConfigurationService.get_instance().model
+                audit_cfg = getattr(getattr(config_model, "spec", None), "audit", None)
+            except Exception as e:
+                self.logger.debug(f"Failed to resolve spec.audit for {event_type} (non-fatal): {e}")
+
+            payload = {
+                "execution_id": self._execution_id,
+                "deployment": deploy_name,
+                "lock_id": handle.lock_id,
+                "backend": handle.backend_type,
+            }
+            AuditController(work_path=self._work_path).forward(event_type, payload, audit_config=audit_cfg)
+        except Exception as e:
+            self.logger.debug(f"Failed to forward {event_type} audit event (non-fatal): {e}")
 
     # -------------------------------------------------------------------------
     # Hierarchical lifecycle helper

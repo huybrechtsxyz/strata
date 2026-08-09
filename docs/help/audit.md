@@ -77,20 +77,24 @@ A closed set of event types, each with a class-aware default. Set explicitly to
 override; a type left unset keeps its default. An unrecognised key is a validation
 error naming the closest valid option — there is no silent typo.
 
-| Event type             | Default | Class      | CloudEvents `type` (wire)      |
-| ---------------------- | ------- | ---------- | ------------------------------ |
-| `command.executed`     | off     | Invocation | `…strata.command.executed`     |
-| `deployment.completed` | on      | Outcome    | `…strata.deployment.completed` |
-| `deployment.measured`  | on      | Outcome    | `…strata.deployment.measured`  |
-| `build.completed`      | off     | Outcome    | `…strata.build.completed`      |
-| `validation.completed` | off     | Outcome    | `…strata.validation.completed` |
-| `workitem.created`     | on      | Outcome    | `…strata.workitem.created`     |
-| `workitem.resumed`     | on      | Outcome    | `…strata.workitem.resumed`     |
-| `policy.violated`      | on      | Domain     | `…strata.policy.violated`      |
-| `secret.accessed`      | on      | Domain     | `…strata.secret.accessed`      |
-| `lock.acquired`        | off     | Domain     | `…strata.lock.acquired`        |
-| `lock.released`        | off     | Domain     | `…strata.lock.released`        |
-| `drift.detected`       | on      | Domain     | `…strata.drift.detected`       |
+| Event type             | Default | Class      | CloudEvents `type` (wire)      | Producer                                |
+| ---------------------- | ------- | ---------- | ------------------------------ | --------------------------------------- |
+| `command.executed`     | off     | Invocation | `…strata.command.executed`     | every CLI command                       |
+| `deployment.completed` | on      | Outcome    | `…strata.deployment.completed` | `deploy run`                            |
+| `deployment.measured`  | on      | Outcome    | `…strata.deployment.measured`  | not yet wired (ADR-0064 metrics record) |
+| `build.completed`      | off     | Outcome    | `…strata.build.completed`      | not yet wired                           |
+| `validation.completed` | off     | Outcome    | `…strata.validation.completed` | not yet wired                           |
+| `workitem.created`     | on      | Outcome    | `…strata.workitem.created`     | `deploy run` (gate/approval created)    |
+| `workitem.resumed`     | on      | Outcome    | `…strata.workitem.resumed`     | `deploy run` (gate/approval resumed)    |
+| `policy.violated`      | on      | Domain     | `…strata.policy.violated`      | not yet wired                           |
+| `secret.accessed`      | on      | Domain     | `…strata.secret.accessed`      | not yet wired                           |
+| `lock.acquired`        | off     | Domain     | `…strata.lock.acquired`        | `deploy run` / `deploy destroy`         |
+| `lock.released`        | off     | Domain     | `…strata.lock.released`        | `deploy run` / `deploy destroy`         |
+| `drift.detected`       | on      | Domain     | `…strata.drift.detected`       | `deploy drift`                          |
+
+"Not yet wired" means the event type, gate, and envelope all exist and work —
+there is simply no producer calling `AuditController.forward()` for it yet. Setting
+its policy to `true` has no observable effect until a producer is added.
 
 A disabled event type reaches neither the journal-adjacent sink fan-out nor any sink —
 the gate is consulted before anything else in `AuditController.forward()`.

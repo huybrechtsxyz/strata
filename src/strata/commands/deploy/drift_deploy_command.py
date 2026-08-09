@@ -108,6 +108,9 @@ class DriftDeployCommand(BaseDeployCommand):
         # Store for JSON output
         self._output_data = report.to_dict()
 
+        if report.has_drift:
+            self._forward_drift_audit_event(report)
+
         # --baseline mode: acknowledge all detected entries, reset history, always exit 0
         if self._baseline:
             deployment_name = str(self._deployment_service.model.meta.name)  # type: ignore[union-attr]
@@ -138,6 +141,32 @@ class DriftDeployCommand(BaseDeployCommand):
             self._run_ai_drift_explanation(report)
 
         return True
+
+    def _forward_drift_audit_event(self, report: object) -> None:
+        """Forward a drift.detected event (ADR-0066 follow-up).
+
+        Best-effort: wrapped so a forwarding failure never affects this command's
+        exit code, matching ``forward()``'s own "audit must never fail a deploy"
+        guarantee. ``drift.detected`` defaults to enabled (Domain class, high value —
+        see the ADR's class table), so this reaches configured sinks unless the
+        gate is explicitly turned off.
+        """
+        try:
+            from strata.controllers.audit_controller import AuditController
+            from strata.services.configuration_service import ConfigurationService
+
+            audit_cfg = None
+            try:
+                config_model = ConfigurationService.get_instance().model
+                audit_cfg = getattr(getattr(config_model, "spec", None), "audit", None)
+            except Exception as e:
+                self.logger.debug(f"Failed to resolve spec.audit for drift.detected (non-fatal): {e}")
+
+            payload = dict(report.to_dict())  # type: ignore[attr-defined]
+            payload["execution_id"] = self._execution_id
+            AuditController(work_path=self._work_path).forward("drift.detected", payload, audit_config=audit_cfg)
+        except Exception as e:
+            self.logger.debug(f"Failed to forward drift.detected audit event (non-fatal): {e}")
 
     def _run_ai_drift_explanation(self, report: object) -> None:
         """Explain detected drift using the configured AI integration."""
