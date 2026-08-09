@@ -12,7 +12,6 @@ import click
 from strata.controllers.integration_controller import IntegrationController
 from strata.controllers.solution_controller import SolutionController
 from strata.logger import (
-    audit,
     configure_audit_log,
     get_audit_log_source,
     get_configured_audit_log_path,
@@ -595,17 +594,22 @@ class BaseCommand:
 
         # Emit audit entry only for mutating operations (ADR-0066 problem 3) — read-only
         # commands (*_list, *_show, *_status, schema_*) have no observable side effect.
+        #
+        # Routed through AuditController.forward() (ADR-0066 gap 3) rather than the raw
+        # logger.audit.audit() call this used to make directly — command.executed now
+        # gets the same policy gate and CloudEvents/ECS envelope as every other event
+        # type, instead of unconditionally reaching only the local journal. This is a
+        # deliberate behaviour change: command.executed defaults to disabled, so unless
+        # spec.audit.policy.events.command.executed is explicitly enabled, CLI invocations
+        # no longer write a local journal entry at all (previously unconditional) — see
+        # the ADR's Risk section. Wrapped in try/except because forward() itself is not
+        # (only its per-sink loop is) and _finalize() runs outside execute()'s own
+        # per-phase try/except — an unhandled exception here must never crash the command.
         if self._is_audit_mutating_operation():
-            audit(
-                f"command.{self.OPERATION}",
-                outcome="success" if success else "failure",
-                target=" ".join(redact_argv(sys.argv[1:])) if len(sys.argv) > 1 else self.OPERATION,
-                detail={
-                    "execution_id": self._execution_id,
-                    "duration_ms": round(duration.total_seconds() * 1000),
-                    "error_count": len(self._errors),
-                },
-            )
+            try:
+                self._forward_command_executed_audit_event(success=success, duration_seconds=duration.total_seconds())
+            except Exception as e:
+                self.logger.debug(f"Failed to forward command.executed audit event (non-fatal): {e}")
         shutdown_audit()
 
         self.logger.debug(
@@ -617,6 +621,39 @@ class BaseCommand:
         )
 
         return True
+
+    def _forward_command_executed_audit_event(self, success: bool, duration_seconds: float) -> None:
+        """Route the CLI-invocation record through ``AuditController.forward()`` (ADR-0066 gap 3).
+
+        ``self.OPERATION`` travels inside the payload (not as the event type) since the
+        closed event-type enum has a single ``command.executed`` type — every CLI
+        invocation shares it, matching the ADR's type-name table (``cli_action`` ->
+        ``command.executed``). ``AuditConfigModel`` is read from the already-populated
+        ``ConfigurationService`` singleton (populated by ``_load_config_sources()`` /
+        ``_apply_audit_journal_config()`` earlier in this same command's lifecycle);
+        resolution failures fall back to ``forward()``'s own default (an all-defaults
+        ``AuditConfigModel()``, under which ``command.executed`` stays disabled).
+        """
+        from strata.controllers.audit_controller import AuditController
+        from strata.models.audit_config_model import AuditConfigModel
+
+        audit_cfg: Optional[AuditConfigModel] = None
+        try:
+            from strata.services.configuration_service import ConfigurationService
+
+            config_model = ConfigurationService.get_instance().model
+            audit_cfg = getattr(getattr(config_model, "spec", None), "audit", None)
+        except Exception as e:
+            self.logger.debug(f"Failed to resolve spec.audit for command.executed (non-fatal): {e}")
+
+        payload = {
+            "execution_id": self._execution_id,
+            "operation": self.OPERATION,
+            "target": " ".join(redact_argv(sys.argv[1:])) if len(sys.argv) > 1 else self.OPERATION,
+            "success": success,
+            "duration_seconds": duration_seconds,
+        }
+        AuditController(work_path=self._work_path).forward("command.executed", payload, audit_config=audit_cfg)
 
     # Output configuration
 

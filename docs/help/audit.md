@@ -95,6 +95,12 @@ error naming the closest valid option — there is no silent typo.
 A disabled event type reaches neither the journal-adjacent sink fan-out nor any sink —
 the gate is consulted before anything else in `AuditController.forward()`.
 
+Note on `command.executed`: since it defaults to disabled, a plain CLI invocation does
+**not** leave a `.strata/audit.log` entry unless `spec.audit.policy.events.command.executed`
+is explicitly set to `true` — this applies to the local journal too, not just SIEM
+forwarding, matching every other event type's gate. Set it to `true` (with no sink
+referencing it) to get a local-only invocation trail without any SIEM traffic.
+
 ---
 
 ## Sinks — `spec.audit.sinks`
@@ -211,7 +217,7 @@ strata audit status                              # Effective journal/policy/sink
 strata audit changes                              # List recent deployments from the deploy-log
 strata audit changes --last 20 --ai                # Summarise trends with an AI integration
 strata audit export --last 20 --format ndjson --out deploy-log.ndjson
-strata audit export --siem <integration_name>      # One-off forward to a named integration
+strata audit export --siem <name>                  # Forward exported entries to a configured sink
 strata audit resend --last 50                      # Re-forward deploy-log entries to configured sinks
 strata audit diff <execution_id>                   # Diff two deployment executions
 ```
@@ -222,6 +228,18 @@ strata audit diff <execution_id>                   # Diff two deployment executi
 - every event type in the policy gate and whether it is currently admitted,
 - every configured sink, whether it is enabled, and whether its referenced
   integration actually exists.
+
+`strata audit export --siem <name>` requires `<name>` to match an *enabled*
+`spec.audit.sinks[].integration` — the same sinks `deploy run` and `strata audit resend`
+use. Entries are wrapped in the same CloudEvents 1.0 + ECS envelope as every other path,
+and the policy gate applies: if `policy.events.deployment.completed` is disabled, or the
+sink's own `events` filter excludes it, the export is skipped (not an error) with a
+message explaining why.
+
+If `.strata/sbom-ignore.yaml` declares any rules, `--siem <name>` also forwards them
+as a second, `sbom_ignore_rules`-typed batch to the same resolved sink — the same
+integration instance, the same envelope shape, and a failure here now surfaces as an
+error and fails the command too, rather than being silently best-effort.
 
 ---
 

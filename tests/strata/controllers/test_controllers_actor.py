@@ -13,6 +13,7 @@ from strata.controllers.actor_controller import (
     _resolve_cloud_cli_identity,
     _resolve_control_plane_identity,
     _safe_getpass,
+    reset_actor_cache,
     resolve_actor,
 )
 
@@ -24,6 +25,15 @@ def _clear_actor_env(monkeypatch):
     """Ensure no ambient env var leaks between tests."""
     for var in ACTOR_ENV_VARS:
         monkeypatch.delenv(var, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _clear_actor_cache():
+    """resolve_actor() memoizes per process (ADR-0066 gap 3) — reset between tests so
+    an earlier test's resolved identity doesn't leak into a later one."""
+    reset_actor_cache()
+    yield
+    reset_actor_cache()
 
 
 class TestResolveActorPrecedence:
@@ -107,6 +117,33 @@ class TestResolveActorPrecedence:
             patch("strata.controllers.actor_controller._safe_getpass", return_value=None),
         ):
             assert resolve_actor() == "unknown"
+
+
+class TestResolveActorCaching:
+    """ADR-0066 gap 3: resolve_actor() is memoized per process."""
+
+    def test_second_call_reuses_cached_value_without_re_resolving(self):
+        with (
+            patch(
+                "strata.controllers.actor_controller._resolve_control_plane_identity", return_value="first-user"
+            ) as mock_control_plane,
+            patch("strata.controllers.actor_controller._resolve_cloud_cli_identity") as mock_cloud_cli,
+        ):
+            assert resolve_actor() == "first-user"
+            assert resolve_actor() == "first-user"
+
+        mock_control_plane.assert_called_once()
+        mock_cloud_cli.assert_not_called()
+
+    def test_reset_actor_cache_forces_re_resolution(self):
+        with patch(
+            "strata.controllers.actor_controller._resolve_control_plane_identity", side_effect=["user-a", "user-b"]
+        ) as mock_control_plane:
+            assert resolve_actor() == "user-a"
+            reset_actor_cache()
+            assert resolve_actor() == "user-b"
+
+        assert mock_control_plane.call_count == 2
 
 
 class TestResolveControlPlaneIdentity:

@@ -36,12 +36,37 @@ from strata.logger import get_logger
 
 logger = get_logger(__name__)
 
+# ADR-0066 gap 3 — resolve_actor() has no cheap fast path: the cloud-CLI check can
+# shell out (e.g. `az account show`). Once command.executed routes through
+# AuditController.forward() too, a single CLI invocation can call resolve_actor()
+# more than once (its own command.executed envelope, plus any domain event the same
+# command also forwards, e.g. deploy_run's deployment.completed) — memoized per
+# process so the same identity isn't re-resolved from scratch each time.
+_actor_cache: Optional[str] = None
+
 
 def resolve_actor() -> str:
     """Resolve the current operator identity using the full precedence chain.
 
     Never raises — always returns a usable string, falling back to ``"unknown"``.
+    Memoized per process — see ``reset_actor_cache()`` to force re-resolution
+    (e.g. after a login/logout, or between tests).
     """
+    global _actor_cache
+    if _actor_cache is not None:
+        return _actor_cache
+
+    _actor_cache = _resolve_actor_uncached()
+    return _actor_cache
+
+
+def reset_actor_cache() -> None:
+    """Clear the memoized actor identity, forcing the next resolve_actor() call to re-resolve."""
+    global _actor_cache
+    _actor_cache = None
+
+
+def _resolve_actor_uncached() -> str:
     identity = _resolve_control_plane_identity()
     if identity:
         return identity

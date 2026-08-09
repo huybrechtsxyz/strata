@@ -7,7 +7,7 @@ import pytest
 
 from strata.commands.base_command import BaseCommand
 from strata.logger import get_audit_log_source, get_logger, shutdown_audit
-from strata.models.audit_config_model import AuditConfigModel, AuditJournalModel
+from strata.models.audit_config_model import AuditConfigModel, AuditJournalModel, AuditPolicyModel
 
 
 def _op(name: str) -> bool:
@@ -131,3 +131,89 @@ class TestApplyAuditJournalConfig:
         ):
             # Should not raise
             cmd._apply_audit_journal_config()
+
+
+class TestForwardCommandExecutedAuditEvent:
+    """ADR-0066 gap 3: command.executed now routes through AuditController.forward()."""
+
+    def setup_method(self):
+        shutdown_audit()
+
+    def teardown_method(self):
+        shutdown_audit()
+
+    def _config_service_with_audit(self, audit_config):
+        mock_service = MagicMock()
+        mock_service.model.spec.audit = audit_config
+        return mock_service
+
+    def test_noop_by_default_gate_disabled(self, tmp_path):
+        """command.executed defaults to disabled — forward() should return before
+        building an envelope or touching resolve_actor()."""
+        cmd = _make_command(tmp_path)
+        with (
+            patch(
+                "strata.services.configuration_service.ConfigurationService.get_instance",
+                return_value=self._config_service_with_audit(None),
+            ),
+            patch("strata.controllers.actor_controller.resolve_actor") as mock_resolve_actor,
+        ):
+            cmd._forward_command_executed_audit_event(success=True, duration_seconds=1.5)
+
+        mock_resolve_actor.assert_not_called()
+
+    def test_forwards_when_gate_enabled(self, tmp_path):
+        cmd = _make_command(tmp_path)
+        audit_config = AuditConfigModel(policy=AuditPolicyModel(events={"command.executed": True}))
+        with (
+            patch(
+                "strata.services.configuration_service.ConfigurationService.get_instance",
+                return_value=self._config_service_with_audit(audit_config),
+            ),
+            patch("strata.controllers.actor_controller.resolve_actor", return_value="test-user"),
+            patch("strata.controllers.audit_controller.AuditController._resolve_sinks", return_value=[]),
+            patch("strata.logger.audit") as mock_journal,
+        ):
+            cmd._forward_command_executed_audit_event(success=True, duration_seconds=1.5)
+
+        mock_journal.assert_called_once()
+        args, kwargs = mock_journal.call_args
+        assert args[0] == "command.executed"
+        envelope = kwargs["detail"]
+        assert envelope["type"] == "xyz.huybrechts.strata.command.executed"
+        # self.OPERATION travels inside the payload, not as the event type
+        assert envelope["data"]["strata"]["operation"] == cmd.OPERATION
+        assert envelope["data"]["strata"]["success"] is True
+
+    def test_exception_in_forward_does_not_raise(self, tmp_path):
+        """_finalize() has no surrounding try/except at the execute() call site —
+        this method itself must never let an exception escape."""
+        cmd = _make_command(tmp_path)
+        with patch("strata.controllers.audit_controller.AuditController.forward", side_effect=RuntimeError("boom")):
+            with pytest.raises(RuntimeError):
+                # The method itself doesn't swallow — _finalize()'s own try/except does.
+                cmd._forward_command_executed_audit_event(success=True, duration_seconds=1.5)
+
+    def test_finalize_swallows_forward_exception(self, tmp_path, capsys):
+        """The actual call site in _finalize() wraps this in try/except (non-fatal)."""
+        cmd = _make_command(tmp_path)
+        cmd.OPERATION = "deploy_run"  # a mutating operation
+        with patch.object(cmd, "_forward_command_executed_audit_event", side_effect=RuntimeError("boom")):
+            # Should not raise — _finalize() itself must complete successfully.
+            cmd._finalize(success=True, show_footer=False)
+
+    def test_config_resolution_failure_falls_back_to_defaults(self, tmp_path):
+        """A ConfigurationService failure must not prevent forward() from running with
+        its own default (all-disabled) AuditConfigModel."""
+        cmd = _make_command(tmp_path)
+        with (
+            patch(
+                "strata.services.configuration_service.ConfigurationService.get_instance",
+                side_effect=RuntimeError("boom"),
+            ),
+            patch("strata.controllers.actor_controller.resolve_actor") as mock_resolve_actor,
+        ):
+            # Should not raise; gate stays disabled by default so resolve_actor is never reached.
+            cmd._forward_command_executed_audit_event(success=True, duration_seconds=1.5)
+
+        mock_resolve_actor.assert_not_called()
