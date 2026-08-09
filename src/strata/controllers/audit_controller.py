@@ -1,10 +1,12 @@
-"""AuditController — orchestrates deploy-log writing (Layer 2).
+"""AuditController — orchestrates deploy-log writing (Layer 2) and audit event routing (Layer 4).
 
 Responsibilities:
 - Assemble and write deploy-log JSON to disk (_execution.json + per-stage files)
 - Resolve output path from Jinja2 templates (spec.deployment.paths)
 - Query existing deploy-log entries for reporting (strata audit changes)
-- PR enrichment and SIEM forwarding are stubs in this phase (activated later)
+- Best-effort PR enrichment via GitHub CLI (enrich_with_pr_data)
+- Route audit events to the journal and configured sinks (forward), wrapped in a
+  CloudEvents 1.0 + ECS envelope (ADR-0066)
 """
 
 from __future__ import annotations
@@ -415,6 +417,15 @@ class AuditController(BaseController):
         ``DeployLogModel`` dump, a work-item dict, or (from tests / future producers)
         an arbitrary dict — every field is read via ``.get()`` and omitted if absent,
         never raising for a producer that doesn't populate every field.
+
+        ``id`` is a fresh UUID per call, independent of ``execution_id`` — CloudEvents
+        requires ``(source, id)`` together to uniquely identify *this* event, whereas
+        ``execution_id`` is a *correlation* key deliberately shared across every event
+        from the same command run (e.g. a deploy's own ``deployment.completed`` and a
+        gate's ``workitem.created`` can share ``execution_id`` and ``source`` — using
+        ``execution_id`` as ``id`` would make those two distinct events collide on
+        ``(source, id)``). ``execution_id`` still carries the correlation key, in
+        ``labels.execution_id`` only.
         """
         from strata.controllers.actor_controller import resolve_actor
 
@@ -445,7 +456,7 @@ class AuditController(BaseController):
             "specversion": "1.0",
             "type": f"{_CE_TYPE_PREFIX}{event_type}",
             "source": f"/strata/{workspace or 'unknown'}/{deployment or 'unknown'}",
-            "id": execution_id,
+            "id": str(uuid.uuid4()),
             "time": event_time,
             "datacontenttype": "application/json",
             "subject": deployment or event_type,

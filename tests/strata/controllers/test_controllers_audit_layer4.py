@@ -206,6 +206,23 @@ class TestForward:
         assert envelope["data"]["strata"] == {"a": 1}
         assert envelope["data"]["user"] == {"name": "test-user"}
 
+    def test_id_is_independent_of_execution_id(self, tmp_path: Path) -> None:
+        """CloudEvents' (source, id) must uniquely identify *this* event — id is a fresh
+        UUID per call, not the correlation key. Two events sharing execution_id and
+        source (e.g. workitem.created and deployment.completed from the same deploy
+        run) must not collide on (source, id)."""
+        controller = AuditController(work_path=tmp_path)
+        payload = {"execution_id": "same-execution-id", "workspace": "ws", "deployment": "dep"}
+
+        envelope_1 = controller._build_envelope("workitem.created", payload)
+        envelope_2 = controller._build_envelope("deployment.completed", payload)
+
+        assert envelope_1["data"]["labels"]["execution_id"] == "same-execution-id"
+        assert envelope_2["data"]["labels"]["execution_id"] == "same-execution-id"
+        assert envelope_1["source"] == envelope_2["source"]
+        assert envelope_1["id"] != envelope_2["id"]
+        assert envelope_1["id"] != "same-execution-id"
+
     def test_sends_to_enabled_sink(self, tmp_path: Path) -> None:
         sink_integration = _make_siem_integration()
         config = AuditConfigModel(sinks=[AuditSinkModel(name="splunk", integration="splunk-prod")])
