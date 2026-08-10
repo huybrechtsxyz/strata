@@ -232,7 +232,7 @@ Once `name` can point multiple record kinds — or multiple workspaces — at th
 - **No change to version-lock files.** They are already stored directly in a git-backed repo, not a local file with a push bolted on — there is nothing here for them to adopt.
 - **Does not touch the HTTP state service.** Phase 2 (below) is independent of this — git-push buys durability, the state service buys queryability, and a record kind can adopt either, both, or neither.
 
-### Phase 2 — ingest endpoint and event store
+### Phase 2 — ingest endpoint and event store ✅ Done
 
 The end state is a single service exposing one write route, shared by every record kind:
 
@@ -414,15 +414,52 @@ Verified via full `Check.ps1`: 5625 tests passed (34 new), ruff/mypy/Sphinx all 
 
 **Done when:** an unauthenticated or wrong-token `POST /v1/events` is rejected (`401`/`403`) before touching the database, a correctly-authenticated `POST` succeeds exactly as step 2.3 already verified, and a token revoked via `serve token revoke` is rejected on its very next use.
 
-#### Step 2.5 — client-side delivery
+#### Step 2.5 — client-side delivery ✅ Done
 
-**Already correct for audit, and the same discipline applies to drift/cost — best-effort, and bounded, but not needlessly lossy.** `_send_webhook()` uses a 10-second `urllib` timeout and swallows failures; today that is a single attempt with no retry at all. Worth tightening, not loosening: a **small, bounded retry — one immediate retry, purely for a clearly transient failure** (connection reset, a single dropped packet) **and only that** — costs almost nothing and turns a network blip into a delivered record instead of a silently missing one. This is different from resilience against a sustained outage, which is explicitly not the goal — the retry is for the failure mode that is over by the time you'd notice it, not for the failure mode that needs `resend`. So an ingest outage still costs a deploy, build, drift check, or cost check at most ~10–20 seconds and nothing else — no failed command, no changed exit code, ever.
+**Correction: the ADR's original framing of this step is stale.** It describes `_send_webhook()` as "a single attempt with no retry at all," worth "tightening." That function no longer exists — ADR-0066 already replaced it with `WebhookSiemIntegration`, which inherits `SiemBaseIntegration._post_json()`: a real retry loop (`_MAX_RETRIES = 3`, `_RETRY_BACKOFF = 1.0` doubling per attempt, retrying only 5xx/network errors, never 4xx). So the actual gap isn't "add retry" — retry already exists — it's that those constants are **hardcoded module globals**, identical for every sink, when the right amount of retry is genuinely different for a third-party SIEM (no replay path, worth retrying harder) versus this first-party state service (resend/replay already exists, so retrying hard just delays the command for no real recovery benefit).
 
-That handful of seconds is nonetheless a real cost worth stating plainly, and applies to more command types than audit alone: with the state service hard-down (connection hanging rather than refused), every deploy *and* every drift check *and* every cost check pays the full timeout (times up to two attempts) if forwarding is enabled for all three. This is acceptable, but it is the reason ingest must never be given a real retry *loop*, or backoff, on any of those paths — one bounded extra attempt for a transient blip is the entire concession. Recovery from anything longer than that is a resend command, run after the fact, which already exists for audit and is already idempotent under step 2.3's primary key.
+**Fix: make retry configurable per-sink, via the config surface every SIEM integration already has** — `config.properties`, read through the existing `self._prop(key, default)` helper (already used for `headers`/`allow_insecure`; no schema change needed):
 
-This is also why the state service is reached through the **built-in `webhook` sink rather than as a new `ISiemSink` integration**, for every record kind — the actual wiring this step delivers is `spec.audit.sinks` config pointing an existing `webhook` sink at the now-running, now-authenticated endpoint from steps 2.1–2.4, nothing new to build on the sink side. Integration-backed sinks share `SiemBaseIntegration`'s transport, which uses `requests` with `_REQUESTS_TIMEOUT = 15`, `_MAX_RETRIES = 3`, and `_RETRY_BACKOFF = 1.0` doubling per attempt — roughly 45 seconds of timeout plus ~7 seconds of backoff against a hard-down endpoint, on every command that forwards. That retry behaviour is correct for a third-party SIEM whose delivery we cannot replay, but wrong for a first-party store that has resend/replay as a first-class recovery path. Cheap-and-lossy plus explicit replay beats expensive-and-persistent on the command path.
+```python
+max_retries = max(1, int(self._prop("max_retries", _MAX_RETRIES)))
+backoff = float(self._prop("retry_backoff_seconds", _RETRY_BACKOFF))
+```
 
-**Done when:** running `deploy run` against a workspace configured with a webhook sink pointed at the server produces a row in `events` within the deploy's own runtime, and killing the server mid-deploy costs at most the bounded timeout above, never a failed deploy.
+**And the defaults themselves change, for every sink, not just newly-configured ones — `max_retries: 1` (no retry at all by default), `retry_backoff_seconds: 10`.** This is a deliberate, broader simplification, not a state-service-only carve-out: the same "resend already exists as the real recovery path" argument that motivates this for the state service has always applied equally to Sentinel/Splunk/ELK/OTel — `strata audit resend` (ADR-0066) already covers re-forwarding a record that failed to reach *any* sink, so the aggressive 3-attempt/45-second-worst-case retry was never actually buying anything a real outage couldn't already recover from via resend, for any sink. `retry_backoff_seconds: 10` still matters even with `max_retries: 1` as the *default* — it's what a sink gets automatically the moment an operator raises `max_retries` above 1, without also having to remember to set a sane backoff. This is a real, existing-behaviour-affecting change: any test asserting a specific retry count against the *old* defaults needs to configure `properties.max_retries` explicitly to keep testing what it was actually testing (retry-loop correctness), not the old default value.
+
+**A second, independent correctness detail found while wiring the actual example: use `authentication.method: oauth2`, not `api_key`, to reach the ingest token from step 2.4.** `_build_auth_headers()` has two branches: `api_key` sends `{header_name: value}` **verbatim** — reaching `Authorization: Bearer <token>` that way would require the operator to store the literal string `"Bearer <token>"` as the secret value, an easy-to-forget footgun. `oauth2` already builds `{"Authorization": f"Bearer {token}"}` **automatically** from `oauth2.client_secret` (an env-var/secret reference holding just the raw token) — exactly the shape step 2.4's ingest-token verification expects, with zero new auth code. (The field name "client_secret" is a minor semantic mismatch — this isn't a real OAuth2 client-credentials flow, just a convenient reuse of the one existing auth branch that already auto-prefixes `Bearer` — worth a one-line callout in the worked example, not worth adding a new auth method for.)
+
+**Worked example:**
+
+```yaml
+integrations:
+  - name: strata-ingest
+    type: webhook
+    capabilities: [audit]
+    endpoints:
+      address: https://state-service.internal/v1/events
+    authentication:
+      method: oauth2
+      oauth2:
+        client_secret: "${secret:strata_ingest_token}"   # from `strata serve token create`
+    properties:
+      max_retries: 1              # the new default — no retry; resend is the real recovery path
+      retry_backoff_seconds: 10   # only relevant if an operator raises max_retries above 1
+
+spec:
+  audit:
+    sinks:
+      - name: state-service
+        integration: strata-ingest
+```
+
+With the new defaults, a hard-down state service (connection hanging, not refused) costs one sink's worth of `_REQUESTS_TIMEOUT` (15s) per forwarding command — down from the old worst case of ~45s of timeout plus ~3s of backoff across 3 attempts — and exactly the same for every other sink type unless an operator explicitly opts back into more attempts.
+
+**Implemented as designed.** `SiemBaseIntegration._post_json()` (and `SplunkSiemIntegration._post_raw()`, which had its own separate, previously-hardcoded retry loop — found and fixed identically) now read `max_retries`/`retry_backoff_seconds` via `self._prop(...)`, floored at 1 attempt minimum. Module defaults changed from `_MAX_RETRIES = 3`/`_RETRY_BACKOFF = 1.0` to `_MAX_RETRIES = 1`/`_RETRY_BACKOFF = 10.0`. Three existing tests (`test_base_siem_integration.py`, two in `test_splunk_siem_integration.py`) that asserted the old 3-attempt default now explicitly configure `properties.max_retries` to keep testing retry-loop *mechanics*, not the changed default value. New tests added covering the no-retry default, the floor-at-1 guard, and backoff-value honouring. Docs updated: `docs/guides/siem-audit-forwarding.md`'s "Retry Behavior" section (was describing the old hardcoded 3-attempt behaviour) and a new "Webhook / strata state-service Reference" section with the `oauth2`-not-`api_key` worked example.
+
+Verified via full `Check.ps1`: 5628 tests passed (3 new), ruff/mypy/Sphinx all green.
+
+**Done when:** a workspace configured with this sink, run against a live server, produces a row in `events` from a real `deploy run`; killing the server mid-command costs at most one `_REQUESTS_TIMEOUT` window, never a failed command; `properties.max_retries`/`retry_backoff_seconds` are honoured when explicitly configured higher, and every existing retry-loop test is updated to configure them explicitly rather than relying on the now-changed defaults.
 
 #### What Phase 2 deliberately excludes
 

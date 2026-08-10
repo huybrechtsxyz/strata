@@ -443,17 +443,60 @@ integrations:
 
 ---
 
+## Webhook / strata state-service Reference
+
+The `webhook` sink is also the primary transport to a first-party strata state service (ADR-0065). One important detail: use `authentication.method: oauth2`, **not `api_key`**, to reach a bearer-token-protected endpoint like `/v1/events` — `oauth2` automatically builds the `Authorization: Bearer <token>` header from `oauth2.client_secret`, while `api_key` sends its configured value verbatim (you'd have to store the literal string `"Bearer <token>"` as the secret yourself).
+
+```yaml
+integrations:
+  - name: strata-ingest
+    type: webhook
+    capabilities: [audit]
+    endpoints:
+      address: https://state-service.internal/v1/events
+    authentication:
+      method: oauth2
+      oauth2:
+        client_secret: "${secret:strata_ingest_token}"   # from `strata serve token create`
+    properties:
+      max_retries: 1              # default — no retry; `strata audit resend` is the recovery path
+      retry_backoff_seconds: 10   # only relevant if max_retries is raised above 1
+
+spec:
+  audit:
+    sinks:
+      - name: state-service
+        integration: strata-ingest
+```
+
+Generate the token first with `strata serve token create --url <server> --admin-token ... --workspace <name>`, then store the printed secret wherever `${secret:strata_ingest_token}` resolves from (env var, secret store, etc.).
+
+---
+
 ## Retry Behavior
 
-All HTTP-based integrations (Splunk, Sentinel, ELK HTTP, OTel) retry on server errors (5xx) and network exceptions:
+All HTTP-based integrations (Splunk, Sentinel, ELK HTTP, OTel, webhook) retry on server errors (5xx) and network exceptions. **By default there is no retry** (`max_retries: 1`) — `strata audit resend` is the real recovery path for a failed forward, so retrying hard here only delays the command without buying additional resilience (ADR-0065 step 2.5).
 
-| Attempt | Backoff   |
-| ------- | --------- |
-| 1       | immediate |
-| 2       | 1 second  |
-| 3       | 2 seconds |
+Configure retries per sink via `properties`:
 
-Client errors (4xx) are not retried — they indicate a configuration problem (bad token, wrong endpoint, etc.).
+```yaml
+integrations:
+  - name: my-sentinel
+    type: sentinel
+    properties:
+      max_retries: 3               # total attempts, including the first (default: 1 — no retry)
+      retry_backoff_seconds: 10    # seconds before the 2nd attempt, doubled per subsequent attempt (default: 10)
+```
+
+With `max_retries: 3` and the default backoff:
+
+| Attempt | Backoff    |
+| ------- | ---------- |
+| 1       | immediate  |
+| 2       | 10 seconds |
+| 3       | 20 seconds |
+
+Client errors (4xx) are never retried, regardless of `max_retries` — they indicate a configuration problem (bad token, wrong endpoint, etc.), not a transient failure.
 
 Failures are **always graceful** — a failed SIEM forward never blocks or fails a deployment. Errors are logged at `WARNING` level.
 

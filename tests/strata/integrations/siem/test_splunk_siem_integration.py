@@ -140,6 +140,10 @@ class TestSplunkSendBatch:
     def test_send_batch_retries_on_server_error(self):
         SplunkSiemIntegration._instances.clear()
         cfg = _make_splunk_config()
+        # max_retries defaults to 1 (no retry, ADR-0065 step 2.5) — explicitly
+        # configure a higher value here to test the retry-loop mechanics themselves.
+        cfg.properties["max_retries"] = 3
+        cfg.properties["retry_backoff_seconds"] = 0
         siem = SplunkSiemIntegration(config=cfg)
 
         # First two calls: 503, third: 200
@@ -161,6 +165,8 @@ class TestSplunkSendBatch:
     def test_send_batch_exhausts_retries_returns_false(self):
         SplunkSiemIntegration._instances.clear()
         cfg = _make_splunk_config()
+        cfg.properties["max_retries"] = 3
+        cfg.properties["retry_backoff_seconds"] = 0
         siem = SplunkSiemIntegration(config=cfg)
 
         err_resp = MagicMock()

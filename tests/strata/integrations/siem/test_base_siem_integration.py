@@ -147,7 +147,9 @@ class TestPostJson:
         assert mock_requests.post.call_count == 1
 
     def test_post_server_error_retries_three_times(self):
-        cfg = _make_config()
+        # max_retries defaults to 1 (no retry, ADR-0065 step 2.5) — explicitly
+        # configure a higher value here to test the retry-loop mechanics themselves.
+        cfg = _make_config(properties={"max_retries": 3, "retry_backoff_seconds": 0})
         _TestSiem._instances.clear()
         siem = _TestSiem(config=cfg)
 
@@ -177,3 +179,56 @@ class TestPostJson:
                 result = siem._post_json("https://example.com/v1/logs", {})
 
         assert result is False
+
+    def test_default_max_retries_is_one_no_retry_on_server_error(self):
+        """ADR-0065 step 2.5: default is no retry — resend is the real recovery path."""
+        cfg = _make_config()
+        _TestSiem._instances.clear()
+        siem = _TestSiem(config=cfg)
+
+        mock_resp = MagicMock()
+        mock_resp.ok = False
+        mock_resp.status_code = 503
+
+        with patch("strata.integrations.siem.base_siem_integration.requests") as mock_requests:
+            with patch("strata.integrations.siem.base_siem_integration.time") as mock_time:
+                mock_time.sleep = MagicMock()
+                mock_requests.post.return_value = mock_resp
+                result = siem._post_json("https://example.com/v1/logs", {})
+
+        assert result is False
+        assert mock_requests.post.call_count == 1
+        mock_time.sleep.assert_not_called()
+
+    def test_max_retries_property_is_floored_at_one(self):
+        """A configured 0 or negative max_retries must not disable the single attempt entirely."""
+        cfg = _make_config(properties={"max_retries": 0})
+        _TestSiem._instances.clear()
+        siem = _TestSiem(config=cfg)
+
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+
+        with patch("strata.integrations.siem.base_siem_integration.requests") as mock_requests:
+            mock_requests.post.return_value = mock_resp
+            result = siem._post_json("https://example.com/v1/logs", {})
+
+        assert result is True
+        assert mock_requests.post.call_count == 1
+
+    def test_retry_backoff_seconds_property_is_honoured(self):
+        cfg = _make_config(properties={"max_retries": 2, "retry_backoff_seconds": 5})
+        _TestSiem._instances.clear()
+        siem = _TestSiem(config=cfg)
+
+        mock_resp = MagicMock()
+        mock_resp.ok = False
+        mock_resp.status_code = 503
+
+        with patch("strata.integrations.siem.base_siem_integration.requests") as mock_requests:
+            with patch("strata.integrations.siem.base_siem_integration.time") as mock_time:
+                mock_time.sleep = MagicMock()
+                mock_requests.post.return_value = mock_resp
+                siem._post_json("https://example.com/v1/logs", {})
+
+        mock_time.sleep.assert_called_once_with(5.0)
