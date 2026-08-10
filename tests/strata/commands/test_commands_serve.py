@@ -1,8 +1,9 @@
-"""Tests for the ``serve`` command group (ADR-0065 Phase 2, Steps 2.1-2.2)."""
+"""Tests for the ``serve`` command group (ADR-0065 Phase 2, Steps 2.1-2.4)."""
 
 from __future__ import annotations
 
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -40,6 +41,7 @@ class TestServeCliGroup:
         assert "--port" in result.output
         assert "--tls-cert" in result.output
         assert "--tls-key" in result.output
+        assert "--admin-token" in result.output
 
     def test_health_subcommand_help_exits_zero(self) -> None:
         runner = CliRunner()
@@ -85,11 +87,15 @@ class TestServeRunWiresUvicornCorrectly:
 
         fake_app = object()
         mock_uvicorn = MagicMock()
+        # Fake the whole strata.server.app module (not just fastapi) so this test
+        # doesn't depend on whether the real module has already been imported
+        # with a fake `fastapi` by some other test — sys.modules caches the real
+        # module permanently once imported, and app.py now imports fastapi at
+        # module scope (required for FastAPI's own annotation resolution).
+        fake_server_app_module = ModuleType("strata.server.app")
+        fake_server_app_module.create_app = MagicMock(return_value=fake_app)  # type: ignore[attr-defined]
 
-        with (
-            patch.dict("sys.modules", {"uvicorn": mock_uvicorn}),
-            patch("strata.server.app.create_app", return_value=fake_app),
-        ):
+        with patch.dict("sys.modules", {"uvicorn": mock_uvicorn, "strata.server.app": fake_server_app_module}):
             runner = CliRunner()
             result = runner.invoke(
                 serve_group,
@@ -183,3 +189,131 @@ def _import_side_effect_for_sqlalchemy(name: str, *args: Any, **kwargs: Any) -> 
     if name == "strata.server.db.schema":
         raise ImportError("sqlalchemy not installed")
     return _real_import(name, *args, **kwargs)
+
+
+class TestServeTokenCliGroup:
+    def test_token_group_help_exits_zero(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(serve_group, ["token", "--help"])
+        assert result.exit_code == 0
+        assert "create" in result.output
+        assert "list" in result.output
+        assert "revoke" in result.output
+
+
+class TestServeTokenCreate:
+    def test_create_posts_to_tokens_route_and_prints_secret(self) -> None:
+        runner = CliRunner()
+        mock_response = MagicMock(status_code=201, json=lambda: {"token_id": "abc", "token": "secret-value"})
+        with patch("requests.post", return_value=mock_response) as mock_post:
+            result = runner.invoke(
+                serve_group,
+                [
+                    "token",
+                    "create",
+                    "--url",
+                    "https://example.test",
+                    "--admin-token",
+                    "admin-secret",
+                    "--workspace",
+                    "my-workspace",
+                ],
+            )
+        assert result.exit_code == 0, result.output
+        assert "secret-value" in result.output
+        mock_post.assert_called_once()
+        _, kwargs = mock_post.call_args
+        assert kwargs["headers"]["Authorization"] == "Bearer admin-secret"
+        assert kwargs["params"]["workspace"] == "my-workspace"
+
+    def test_create_non_201_exits_nonzero(self) -> None:
+        runner = CliRunner()
+        mock_response = MagicMock(status_code=403, text="Invalid admin token")
+        with patch("requests.post", return_value=mock_response):
+            result = runner.invoke(
+                serve_group,
+                [
+                    "token",
+                    "create",
+                    "--url",
+                    "https://example.test",
+                    "--admin-token",
+                    "wrong",
+                    "--workspace",
+                    "my-workspace",
+                ],
+            )
+        assert result.exit_code != 0
+
+    def test_create_connection_error_exits_nonzero(self) -> None:
+        import requests
+
+        runner = CliRunner()
+        with patch("requests.post", side_effect=requests.ConnectionError("refused")):
+            result = runner.invoke(
+                serve_group,
+                [
+                    "token",
+                    "create",
+                    "--url",
+                    "https://example.test",
+                    "--admin-token",
+                    "admin-secret",
+                    "--workspace",
+                    "my-workspace",
+                ],
+            )
+        assert result.exit_code != 0
+
+
+class TestServeTokenList:
+    def test_list_gets_tokens_route(self) -> None:
+        runner = CliRunner()
+        mock_response = MagicMock(
+            status_code=200,
+            json=lambda: {
+                "tokens": [{"token_id": "abc", "workspace": "my-workspace", "created_at": "t", "revoked_at": None}]
+            },
+        )
+        with patch("requests.get", return_value=mock_response) as mock_get:
+            result = runner.invoke(
+                serve_group,
+                ["token", "list", "--url", "https://example.test", "--admin-token", "admin-secret"],
+            )
+        assert result.exit_code == 0, result.output
+        assert "abc" in result.output
+        mock_get.assert_called_once()
+
+    def test_list_non_200_exits_nonzero(self) -> None:
+        runner = CliRunner()
+        mock_response = MagicMock(status_code=401, text="Missing Authorization header")
+        with patch("requests.get", return_value=mock_response):
+            result = runner.invoke(
+                serve_group,
+                ["token", "list", "--url", "https://example.test", "--admin-token", "admin-secret"],
+            )
+        assert result.exit_code != 0
+
+
+class TestServeTokenRevoke:
+    def test_revoke_deletes_token_route(self) -> None:
+        runner = CliRunner()
+        mock_response = MagicMock(status_code=200, json=lambda: {"status": "revoked", "token_id": "abc"})
+        with patch("requests.delete", return_value=mock_response) as mock_delete:
+            result = runner.invoke(
+                serve_group,
+                ["token", "revoke", "abc", "--url", "https://example.test", "--admin-token", "admin-secret"],
+            )
+        assert result.exit_code == 0, result.output
+        assert "abc" in result.output
+        mock_delete.assert_called_once()
+
+    def test_revoke_not_found_exits_nonzero(self) -> None:
+        runner = CliRunner()
+        mock_response = MagicMock(status_code=404, text="Token not found or already revoked")
+        with patch("requests.delete", return_value=mock_response):
+            result = runner.invoke(
+                serve_group,
+                ["token", "revoke", "abc", "--url", "https://example.test", "--admin-token", "admin-secret"],
+            )
+        assert result.exit_code != 0

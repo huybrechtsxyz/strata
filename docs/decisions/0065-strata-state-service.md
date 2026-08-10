@@ -248,7 +248,7 @@ But that end state is not one unit of work, and treating it as one hides a real 
 | 2.1  | `serve` command + server skeleton (`/healthz` only, TLS-enforced bind, graceful shutdown) | `strata serve run`, `strata serve health <url>`              | Phase 1 (nothing to ingest yet, but nothing here needs it either) |
 | 2.2  | Event store — `events` table, schema/migration, DB connection at startup                  | `strata serve migrate`                                       | 2.1 (a process to hold the connection)                            |
 | 2.3  | `POST /v1/events` — idempotent, append-only ingest                                        | none — server-side only                                      | 2.2 (the primary key idempotency relies on)                       |
-| 2.4  | Authentication — per-workspace bearer tokens on the ingest route                          | `strata serve token create\|list\|revoke --workspace <name>` | 2.3 (a route to protect)                                          |
+| 2.4  | Authentication — admin-token-protected `/v1/tokens` routes + per-workspace bearer tokens on the ingest route | `strata serve token create\|list\|revoke --url ... --admin-token ...` (HTTP clients, not direct-DB) | 2.3 (a route to protect) |
 | 2.5  | Client-side delivery — webhook sink pointed at the endpoint, bounded retry tightening     | none new — reuses existing `spec.audit.sinks` config         | 2.4 (a real, authenticated endpoint to point a sink at)           |
 
 The more fundamental point first, because it governs every step below: **whether the state service accepted a record is not, and must never become, a question about whether the underlying action happened.** A terraform apply that succeeds has changed real infrastructure whether or not the forwarded record made it to the state service afterwards; a drift check ran and produced a real answer whether or not that answer got ingested. Ingestion failure is a gap in *our observability of the fact*, never a gap in the fact itself, and no step below is allowed to blur that — e.g. by making ingestion a precondition, a gate, or a required step of the command it is merely reporting on.
@@ -286,8 +286,10 @@ TLS enforcement belongs here, not in step 2.4, because it is a property of the p
 events = Table(
     "events", metadata,
     Column("execution_id", String, nullable=False),
-    Column("record_type", String, nullable=False),   # deploy-log | deployment-manifest
-                                                       # | deployment-metrics | drift-history | cost-history
+    Column("record_type", String, nullable=False),   # the envelope's CloudEvents `type` string, verbatim
+                                                       # (ADR-0066's full event-type enum, e.g.
+                                                       # "xyz.huybrechts.strata.deployment.completed") —
+                                                       # see step 2.3's correction below
     Column("recorded_at", DateTime(timezone=True), nullable=False),
     Column("received_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
 
@@ -330,23 +332,85 @@ Schema application gets its own command, `strata serve migrate`, run separately 
 
 **Done when:** `strata serve migrate --db-url sqlite:///./x.db` creates the `events` table and exits `0`, and running it again against the same file is a no-op; `strata serve run` started afterward connects successfully and only ever issues `INSERT`/`SELECT`; `strata serve migrate --db-url postgresql+psycopg://...` and `--db-url mssql+pyodbc://...` build a correctly-dialected engine (verified structurally, not against a live server in CI); taking the database away makes `/healthz` return `503` rather than the server silently accepting requests it has nowhere to put.
 
-#### Step 2.3 — ingest endpoint
+#### Step 2.3 — ingest endpoint ✅ Done
 
-Adds the actual write route: `POST /v1/events`. The body is whatever the sink sent — a `DeployLogModel`, a deployment manifest, an ADR-0064 metrics record, a drift-history snapshot, or a cost-history snapshot. Record type is discriminated by the payload's `kind` (or inferred for legacy deploy-log payloads, which predate a `kind` field).
+**Correction to step 2.2's schema: `record_type` is not the five artifact kinds.** Tracing the actual delivery path (`AuditController.forward()` → `_build_envelope()` → any sink, including the webhook sink step 2.5 points at this endpoint) shows the body arriving here is **always the CloudEvents 1.0 + ECS envelope** `_build_envelope()` builds for every event — never a raw artifact dump. Its `type` field is `"xyz.huybrechts.strata.<event_type>"`, where `event_type` is ADR-0066's full closed enum (~20 values: `deployment.completed`, `workitem.approved`, `policy.violated`, `cost.threshold_exceeded`, ...) — finer-grained than, and not a clean many-to-one mapping onto, the five-artifact-kind list step 2.2 originally assumed (`workitem.*`/`lock.*`/`policy.violated` don't correspond to any of the five at all). Forcing that mapping would invent structure this ADR argues against having. **Resolution: `record_type` = the envelope's own `type` string, verbatim** — simpler, no mapping table to maintain, and already the exact granularity ADR-0066 settled on.
 
-**Idempotency is mandatory, not optional, from this step's first line of code.** Duplicate delivery is **certain**, not hypothetical, for two concrete reasons: best-effort forwarding has no delivery confirmation, and a resend/replay path (`strata audit resend` today; the equivalent for drift/cost once they adopt forwarding) exists specifically to re-forward records that failed the first time. The primary key on `(execution_id, record_type)` from step 2.2, used with insert-on-conflict-ignore, makes replay a no-op for every record kind uniformly. Without it, one resend after an ingest outage would silently inflate deployment frequency (or drift-check counts, or cost snapshots) and corrupt every ratio derived from it — the kind of defect that is invisible in the data and only discovered when someone questions a dashboard months later. `execution_id` is already unique per run for audit records (`AuditController.generate_execution_id()`); drift and cost history would need an equivalent stable identifier per snapshot (e.g. `deployment` + `recorded_at`, or a generated UUID at snapshot time) — a small addition to each store, not a new concept.
+Adds the actual write route: `POST /v1/events`. Idempotency (`(execution_id, record_type)`, from step 2.2) needs both fields pulled out of the envelope, not read top-level:
+
+| Column                                                | Source in the envelope           | Required?                                                                                                                                                         |
+| ----------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `execution_id`                                        | `data.labels.execution_id`       | Yes — `400` if missing                                                                                                                                            |
+| `record_type`                                         | `type`                           | Yes — `400` if missing                                                                                                                                            |
+| `recorded_at`                                         | `time` (ISO 8601)                | No — falls back to server-received time if absent/unparseable                                                                                                     |
+| `deployment` / `workspace` / `environment` / `tenant` | `data.labels.*`                  | No                                                                                                                                                                |
+| `action` / `outcome`                                  | `data.event.*`                   | No                                                                                                                                                                |
+| `ring`, `strata_version`                              | —                                | **Not populated** — `_build_envelope()` doesn't emit either today; columns stay `NULL` until a future producer-side change adds them (out of scope for this step) |
+| `payload`                                             | the **whole envelope**, verbatim | —                                                                                                                                                                 |
+
+Storing the full envelope (not just the inner `data.strata` payload) in `payload` is deliberate — it's the only place `user.name` (who did it) and `event.kind`/`category` (alert vs. plain event) exist; discarding them for a slimmer `payload` would throw away exactly the audit value this service exists to keep.
+
+**Idempotency is mandatory, not optional, from this step's first line of code.** Duplicate delivery is **certain**, not hypothetical, for two concrete reasons: best-effort forwarding has no delivery confirmation, and a resend/replay path (`strata audit resend` today; the equivalent for drift/cost once they adopt forwarding) exists specifically to re-forward records that failed the first time. The primary key on `(execution_id, record_type)` from step 2.2, used with step 2.2's insert-then-catch-duplicate helper, makes replay a no-op for every record kind uniformly. Without it, one resend after an ingest outage would silently inflate deployment frequency (or drift-check counts, or cost snapshots) and corrupt every ratio derived from it — the kind of defect that is invisible in the data and only discovered when someone questions a dashboard months later. `execution_id` is already unique per run for audit records (`AuditController.generate_execution_id()`); drift and cost history would need an equivalent stable identifier per snapshot (e.g. `deployment` + `recorded_at`, or a generated UUID at snapshot time) — a small addition to each store, not a new concept, and still a producer-side gap (see the `ring`/`strata_version` note above) rather than something this step can fix from the server side.
 
 **Append-only.** There are no update or delete routes, for any record kind. Records are immutable facts about events that have already happened. Corrections, if ever needed, are new records — never mutations of old ones. Retention enforcement is an operator-run job against the database, not an API surface.
 
+**Route shape: raw bytes, not a pydantic body model — stays a plain `def`, matching step 2.1's no-`async def` precedent.**
+
+```python
+@app.post("/v1/events", status_code=202)
+def ingest_event(request: Request, body: bytes = Body(...)) -> Dict[str, Any]:
+    if _content_too_large(request, body):
+        raise HTTPException(413, "Payload too large")
+    try:
+        envelope = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(400, f"Malformed JSON: {exc}") from exc
+    if not isinstance(envelope, dict):
+        raise HTTPException(400, "Body must be a JSON object")
+    try:
+        row = extract_row(envelope)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    try:
+        insert_event(engine, row)
+    except Exception as exc:
+        raise HTTPException(503, f"Insert failed: {exc}") from exc
+    return {"status": "accepted"}
+```
+
+`body: bytes = Body(...)` (not a pydantic model) is what keeps the handler a plain `def` — FastAPI reads the body for you asynchronously and hands the already-read bytes to your (possibly synchronous) function; no `await` needed in the handler itself. Content-length is checked against a cap (256 KiB — matches Phase 2's own "no large blobs" exclusion) before `json.loads` ever runs, so an oversized body is never even parsed.
+
+**Status codes chosen to match the webhook client's own, already-existing retry logic** (`base_siem_integration.py`'s `_post_json()`: `resp.status_code < 500` → no retry, confirmed in code, not assumed): `202` on success, including duplicate no-ops — idempotency is invisible to the caller, per step 2.2. `400`/`413` for anything the client itself sent wrong — correctly never retried, since retrying a malformed payload would never help. `503` only if the *database* write itself fails — so a real outage **is** retried by the existing webhook mechanism, the same convention `/healthz` already established in step 2.2.
+
 **Server-side delivery semantics: respond immediately.** Validate shallowly (well-formed JSON, required identity fields present, size limit), insert, return `202`. No aggregation, no enrichment, no fan-out on the request path — that discipline is what keeps this step's contribution to command latency bounded regardless of how many record kinds eventually flow through it.
 
-**Done when:** a hand-crafted `POST` with a valid deploy-log-shaped payload gets a `202` and a row in `events`; a byte-for-byte duplicate (same `execution_id` + `record_type`) gets a `202` and no second row; a malformed payload gets a `4xx`, never a `500` or a hang.
+**Implemented as designed.** New `src/strata/server/db/ingest.py`: `extract_row(envelope)` — the mapping table above, raising `ValueError` for the two required identity fields, letting the route translate that into `400`. `app.py`'s `create_app(engine)` gained the `/v1/events` route exactly as shown, plus a small `_content_too_large()` helper checking both the `Content-Length` header and the actual body length (defends against a missing/incorrect header).
 
-#### Step 2.4 — authentication
+**One implementation correction found along the way: `fastapi` moved from a lazy in-function import (step 2.1/2.2's pattern) to a real module-scope import in `app.py`, guarded by the same try/except-with-install-hint `schema.py` already uses.** FastAPI resolves route parameter annotations (`Request`, `Body(...)`) via the handler function's own `__globals__` — for a nested route function defined inside `create_app()`, that's always the *module's* globals, never the enclosing factory function's locals. A lazy `from fastapi import Request, Body` inside `create_app()` would leave those names unresolvable to FastAPI's real signature inspection at request-handling time, even though the fake-module tests (which call route handlers directly, bypassing FastAPI's own dependency injection) couldn't have caught it. `/healthz` never exercised this risk (no parameter annotations reference FastAPI types), which is why step 2.1/2.2 didn't need to fix it — step 2.3's `Request`/`Body(...)` parameters are the first to.
+
+Verified via full `Check.ps1`: 5591 tests passed (18 new), ruff/mypy/Sphinx all green.
+
+**Done when:** a hand-crafted `POST` with a valid envelope-shaped payload gets a `202` and a row in `events`; a byte-for-byte duplicate (same `execution_id` + `record_type`) gets a `202` and no second row; a payload missing `type` or `data.labels.execution_id` gets a `400`; an oversized payload gets a `413`; a database failure during insert gets a `503`, never a silent `202` or an unhandled `500`.
+
+#### Step 2.4 — authentication ✅ Done
 
 Bearer token via the sink's existing `headers` map, issued **per workspace** so that tokens can be attributed and revoked individually. Tokens grant append-only ingest and nothing else — they cannot read, cannot query, and cannot delete. A leaked runner token lets an attacker write junk records, which is bad but bounded and detectable; it does not expose deployment, drift, or cost history. Verification happens before the route's body is even parsed — an unauthenticated request never reaches step 2.3's idempotency or validation logic.
 
-Tokens need a lifecycle, and this step is where it's introduced: `strata serve token create --workspace <name>` (prints the token once, never stored or retrievable in plaintext again — the server keeps only a hash), `strata serve token list --workspace <name>` (shows identifiers/creation dates, never the token itself), and `strata serve token revoke <id>`. Without this, step 2.4's own bearer-token design has no way to actually produce a token for a sink's `headers` config to hold.
+**Token management goes through the running server's own HTTP API, not direct database access — a correction made during design review.** The first version of this step put `serve token create/list/revoke` on the same footing as `serve migrate`: a direct-DB CLI command. That reasoning didn't actually transfer: `migrate` needs genuinely elevated `CREATE TABLE`/`ALTER TABLE` rights the long-lived server must never hold — that privilege split is real. Issuing a token is just `INSERT`/`SELECT`/`UPDATE` on one table, the *same* privilege level `serve run` already has. Keeping it as a direct-DB command would mean every operator managing tokens needs two separate connections/credentials (DB *and* HTTP) — exactly the fragmentation this whole phase exists to remove — and creates a bootstrap problem where getting a workspace its (lower-privilege) ingest token first requires a *higher*-privilege raw DB grant.
+
+**Two credential classes, deliberately separate — an admin credential and per-workspace ingest tokens:**
+- **Admin token** — `--admin-token` / `STRATA_SERVE_ADMIN_TOKEN`, configured at `serve run` startup, same CLI-flag-plus-envvar shape as everything else in step 2.1. Guards new `/v1/tokens` routes: `POST /v1/tokens` (create), `GET /v1/tokens` (list), `DELETE /v1/tokens/{token_id}` (revoke). **If not provided, these routes are not registered at all** — no accidental unauthenticated admin surface by default. Compared via `hmac.compare_digest` (a genuine raw string comparison this time, unlike ingest-token verification below, so constant-time comparison actually matters here).
+- **Per-workspace ingest tokens** — created via the admin routes above, persisted (as a SHA-256 hash only) in a new `tokens` table, guard `POST /v1/events` via the same bearer-token mechanism. Verification is a DB *equality lookup* on the hash, not a raw string compare, so there is no timing-attack surface to add `hmac.compare_digest` for.
+
+`serve migrate` remains the one genuine direct-DB exception — it must run before any table (including `tokens`) exists at all, so it structurally cannot go through an HTTP API that has nothing to talk to yet. Everything else, including token issuance, now goes through the same interface every other client uses.
+
+`serve token create --url <server> --admin-token ... --workspace <name>` (prints the token once, never stored or retrievable in plaintext again — the server keeps only a hash), `serve token list --url ... --admin-token ...` (identifiers/creation dates, never the token itself), and `serve token revoke <id> --url ... --admin-token ...` — all thin HTTP clients, the same shape as `serve health`, not `serve migrate`.
+
+**New table: `tokens`** (`token_id`, `token_hash`, `workspace`, `created_at`, `revoked_at`) — deliberately mutable (revocation), unlike `events`. This doesn't violate step 2.3's append-only principle: that principle is specifically about the audit-fact table, not about access-control housekeeping data, which is a different concept entirely. Token secrets are generated via the existing `strata.utils.secret_generator.generate_secret("urlsafe", 32)` (~256 bits of entropy) and hashed with `hashlib.sha256` — the same hashing convention already used elsewhere in this codebase (cache keys, content digests) — not bcrypt/argon2, which exist specifically to slow down brute-forcing *low-entropy, human-chosen* secrets; that doesn't apply to a machine-generated token.
+
+**Implemented as designed.** New `src/strata/server/db/tokens.py`: `create_token()`, `list_tokens()`, `revoke_token()`, `verify_token()`. `app.py` gained `verify_ingest_token`/`verify_admin_token` (nested closures, same pattern as `healthz`/`ingest_event`, wired via FastAPI's `dependencies=[Depends(...)]` so an auth failure never reaches the route's own body), and the three `/v1/tokens*` routes (registered only when `admin_token` is passed to `create_app()`). `cli_serve.py` gained `--admin-token` on `serve run` and a new `serve token` subgroup (`create`/`list`/`revoke`) as HTTP clients. New command classes `CreateTokenServeCommand`/`ListTokensServeCommand`/`RevokeTokenServeCommand` (`commands/serve/`).
+
+Verified via full `Check.ps1`: 5625 tests passed (34 new), ruff/mypy/Sphinx all green.
 
 **Done when:** an unauthenticated or wrong-token `POST /v1/events` is rejected (`401`/`403`) before touching the database, a correctly-authenticated `POST` succeeds exactly as step 2.3 already verified, and a token revoked via `serve token revoke` is rejected on its very next use.
 

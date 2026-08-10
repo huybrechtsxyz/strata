@@ -14,8 +14,11 @@ from strata.commands.cli_common import (
     click_work_path,
     handle_command_exit,
 )
+from strata.commands.serve.create_token_serve_command import CreateTokenServeCommand
 from strata.commands.serve.health_serve_command import HealthServeCommand
+from strata.commands.serve.list_tokens_serve_command import ListTokensServeCommand
 from strata.commands.serve.migrate_serve_command import MigrateServeCommand
+from strata.commands.serve.revoke_token_serve_command import RevokeTokenServeCommand
 
 # Shared default/envvar for the event-store connection (ADR-0065 Step 2.2) — sqlite
 # is the zero-config default; postgresql+psycopg://... / mssql+pyodbc://... are the
@@ -68,18 +71,37 @@ def serve_group() -> None:
     type=click.Path(exists=True, dir_okay=False),
     help="Path to the TLS private key file. [env: STRATA_SERVE_TLS_KEY]",
 )
+@click.option(
+    "--admin-token",
+    "admin_token",
+    default=None,
+    envvar="STRATA_SERVE_ADMIN_TOKEN",
+    help=(
+        "Admin bearer token, enabling the /v1/tokens management routes (ADR-0065 Step 2.4). "
+        "Omit to leave those routes unregistered entirely. [env: STRATA_SERVE_ADMIN_TOKEN]"
+    ),
+)
 @_DB_URL_OPTION
-def serve_run(host: str, port: int, tls_cert: Optional[str], tls_key: Optional[str], db_url: str) -> None:
+def serve_run(
+    host: str,
+    port: int,
+    tls_cert: Optional[str],
+    tls_key: Optional[str],
+    admin_token: Optional[str],
+    db_url: str,
+) -> None:
     """Launch the strata state-service server.
 
     Runs in the foreground — like `strata mcp serve`, lifecycle (start/stop/restart)
     is owned by whatever launches this process (systemd, a container runtime,
     Ctrl+C), not by a separate CLI command tracking a PID.
 
-    `GET /healthz` also verifies database connectivity (ADR-0065 Step 2.2). No
-    `/v1/events` route exists yet (Step 2.3). Refuses to start on a non-loopback
-    bind without TLS. Run `strata serve migrate --db-url ...` first to create the
-    schema — this command only ever issues INSERT/SELECT, never CREATE TABLE.
+    `GET /healthz` also verifies database connectivity (ADR-0065 Step 2.2).
+    `POST /v1/events` requires a per-workspace bearer token (Step 2.4) — issue one
+    via `strata serve token create` once `--admin-token` is configured here.
+    Refuses to start on a non-loopback bind without TLS. Run
+    `strata serve migrate --db-url ...` first to create the schema — this command
+    only ever issues INSERT/SELECT, never CREATE TABLE.
 
     Requires the optional server dependency:
         pip install xyz-strata[server]
@@ -111,7 +133,7 @@ def serve_run(host: str, port: int, tls_cert: Optional[str], tls_key: Optional[s
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    app = create_app(engine)
+    app = create_app(engine, admin_token=admin_token)
     uvicorn.run(app, host=host, port=port, ssl_certfile=tls_cert, ssl_keyfile=tls_key)
 
 
@@ -154,6 +176,134 @@ def serve_health(
     """GET <url>/healthz and report reachability."""
     command = HealthServeCommand(
         url=url, timeout=timeout, work_path=work_path, output=output, verbose=verbose, quiet=quiet
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+# --url / --admin-token — shared by every `serve token` subcommand (ADR-0065 Step
+# 2.4). These are HTTP clients against a running server's /v1/tokens routes, not
+# direct-DB commands like `migrate` — issuing an ingest token is a routine,
+# ongoing operation, unlike schema setup, so it goes through the same interface
+# every other client uses rather than requiring a separate DB credential.
+_SERVER_URL_OPTION = click.option(
+    "--url",
+    "url",
+    required=True,
+    help="Base URL of the running state-service server.",
+)
+_ADMIN_TOKEN_OPTION = click.option(
+    "--admin-token",
+    "admin_token",
+    required=True,
+    envvar="STRATA_SERVE_ADMIN_TOKEN",
+    help="Admin bearer token for the running server. [env: STRATA_SERVE_ADMIN_TOKEN]",
+)
+
+
+@serve_group.group(name="token", help="Manage per-workspace ingest tokens on a running server.")
+def serve_token_group() -> None:
+    """Token management subgroup."""
+    pass
+
+
+@serve_token_group.command(name="create", help="Create a new per-workspace ingest token.")
+@_SERVER_URL_OPTION
+@_ADMIN_TOKEN_OPTION
+@click.option("--workspace", "workspace", required=True, help="Workspace name this token is issued to.")
+@click.option("--timeout", default=10.0, type=float, show_default=True, help="Request timeout in seconds.")
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def serve_token_create(
+    url: str,
+    admin_token: str,
+    workspace: str,
+    timeout: float = 10.0,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> None:
+    """Create a new ingest token. The secret is shown exactly once — save it now."""
+    command = CreateTokenServeCommand(
+        url=url,
+        admin_token=admin_token,
+        workspace=workspace,
+        timeout=timeout,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@serve_token_group.command(name="list", help="List ingest tokens (never the secret).")
+@_SERVER_URL_OPTION
+@_ADMIN_TOKEN_OPTION
+@click.option("--workspace", "workspace", default=None, help="Filter by workspace.")
+@click.option("--timeout", default=10.0, type=float, show_default=True, help="Request timeout in seconds.")
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def serve_token_list(
+    url: str,
+    admin_token: str,
+    workspace: Optional[str] = None,
+    timeout: float = 10.0,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> None:
+    """List tokens — token_id/workspace/created_at/revoked_at only."""
+    command = ListTokensServeCommand(
+        url=url,
+        admin_token=admin_token,
+        workspace=workspace,
+        timeout=timeout,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@serve_token_group.command(name="revoke", help="Revoke an ingest token by id.")
+@click.argument("token_id")
+@_SERVER_URL_OPTION
+@_ADMIN_TOKEN_OPTION
+@click.option("--timeout", default=10.0, type=float, show_default=True, help="Request timeout in seconds.")
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def serve_token_revoke(
+    token_id: str,
+    url: str,
+    admin_token: str,
+    timeout: float = 10.0,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> None:
+    """Revoke a token — rejected on its very next use."""
+    command = RevokeTokenServeCommand(
+        url=url,
+        admin_token=admin_token,
+        token_id=token_id,
+        timeout=timeout,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
     )
     success = command.execute()
     handle_command_exit(command, success)

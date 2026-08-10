@@ -42,3 +42,18 @@ events = Table(
 
 Index("idx_events_recorded_at", events.c.recorded_at.desc())
 Index("idx_events_slice", events.c.deployment, events.c.environment, events.c.recorded_at.desc())
+
+# Per-workspace ingest token credentials (ADR-0065 Step 2.4). Unlike `events`,
+# this table is mutable (revocation) — it's access-control state, not an
+# audit fact, so it doesn't fall under the append-only principle above.
+tokens = Table(
+    "tokens",
+    metadata,
+    Column("token_id", String, primary_key=True),  # non-secret identifier, safe to display/log
+    Column("token_hash", String, nullable=False),  # sha256(secret) — the secret itself is never stored
+    Column("workspace", String, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("revoked_at", DateTime(timezone=True), nullable=True),  # NULL = active
+)
+
+Index("idx_tokens_hash", tokens.c.token_hash, unique=True)
