@@ -726,6 +726,101 @@ class TestManifestPushToRemote:
         mock_push.assert_not_called()
 
 
+class TestManifestRecordedEvent:
+    """Tests for the manifest.recorded producer (ADR-0065 Phase 2)."""
+
+    def _make_cmd(self, tmp_path: Path) -> "RunDeployCommand":
+        from unittest.mock import MagicMock
+
+        cmd = RunDeployCommand.__new__(RunDeployCommand)
+        cmd._work_path = tmp_path
+        cmd._dry_run = False
+        cmd._deploy_started_at = "2024-01-15T10:00:00+00:00"
+        cmd._stage_results = []
+        cmd._policy_results = []
+        cmd._lock_ref = None
+        cmd._audit_log_path = None
+        cmd._execution_id = "exec-abc-123"
+        cmd.logger = MagicMock()
+
+        mock_deployment_service = MagicMock()
+        mock_deployment_service.model.meta.name = PlatformName("test_deploy")
+        mock_deployment_service.model.meta.annotations = None
+        mock_deployment_service.model.meta.labels = {}
+        mock_deployment_service.model.meta.tags = None
+        mock_deployment_service.get_workspace_service.return_value = None
+        cmd._deployment_service = mock_deployment_service
+        cmd._configuration_service = None
+        return cmd
+
+    def test_forwards_manifest_recorded_after_write(self, tmp_path: Path) -> None:
+        from unittest.mock import MagicMock, patch
+
+        from strata.models.configuration_model import ConfigurationManifestModel
+        from strata.models.deployment_manifest_model import ManifestArtifactsModel, ManifestPlatformModel
+
+        manifest_config = ConfigurationManifestModel(path=str(tmp_path / "manifests"))
+        cmd = self._make_cmd(tmp_path)
+
+        written_path = tmp_path / "manifests" / "test.json"
+        written_path.parent.mkdir(parents=True, exist_ok=True)
+        written_path.touch()
+
+        mock_artifacts = ManifestArtifactsModel(platform=ManifestPlatformModel(hash="sha256:abc123"))
+
+        with (
+            patch(
+                "strata.commands.deploy.base_deploy_command.BaseDeployCommand._get_manifest_config",
+                return_value=manifest_config,
+            ),
+            patch("strata.commands.deploy.base_deploy_command.DeploymentManifestService") as mock_svc_cls,
+            patch(
+                "strata.commands.deploy.base_deploy_command.BaseDeployCommand._collect_artifacts",
+                return_value=mock_artifacts,
+            ),
+            patch("strata.controllers.audit_controller.AuditController.forward") as mock_forward,
+        ):
+            mock_svc_cls.return_value.save_with_config = MagicMock(return_value=written_path)
+            cmd._write_deployment_manifest(action="deploy", status="success")
+
+        mock_forward.assert_called_once()
+        args, _kwargs = mock_forward.call_args
+        assert args[0] == "manifest.recorded"
+        assert args[1]["execution_id"] == "exec-abc-123"
+        assert args[1]["deployment"] == "test_deploy"
+
+    def test_forward_failure_does_not_raise(self, tmp_path: Path) -> None:
+        cmd = self._make_cmd(tmp_path)
+        from strata.models.deployment_manifest_model import (
+            DeploymentManifestMetaModel,
+            DeploymentManifestModel,
+            DeploymentManifestSpecModel,
+            ManifestArtifactsModel,
+            ManifestPlatformModel,
+        )
+
+        manifest = DeploymentManifestModel(
+            meta=DeploymentManifestMetaModel(name=PlatformName("test_deploy")),
+            spec=DeploymentManifestSpecModel(
+                deployment_name=PlatformName("test_deploy"),
+                workspace_name=PlatformName("test_ws"),
+                environment=None,
+                action="deploy",
+                started_at="2024-01-15T10:00:00+00:00",
+                completed_at="2024-01-15T10:05:00+00:00",
+                status="success",
+                dry_run=False,
+                artifacts=ManifestArtifactsModel(platform=ManifestPlatformModel(hash="sha256:abc123")),
+            ),
+        )
+
+        from unittest.mock import patch
+
+        with patch("strata.controllers.audit_controller.AuditController.forward", side_effect=RuntimeError("boom")):
+            # Must not raise
+            cmd._forward_manifest_recorded_event(manifest)
+
+
 class TestDeployLogExecutionId:
     """Tests for execution_id generation."""
 

@@ -57,6 +57,10 @@ _CE_TYPE_PREFIX = "xyz.huybrechts.strata."
 # policy.violated/drift.detected, since a destroy is categorically more consequential than a
 # routine deploy and should be distinguishable in SIEM alerting rules. cost.threshold_exceeded
 # is a third follow-up (drift.detected's cost counterpart) — also "alert", same reasoning.
+# cost.recorded/drift.recorded (ADR-0065 Phase 2 producers) are plain "event" — the full
+# history snapshot itself, not an anomaly signal, forwarded on every check unconditionally.
+# manifest.recorded is the same pattern for the deployment-manifest record kind — forwarded
+# once per deploy/destroy, unconditionally, alongside the existing manifest git-push.
 _EVENT_TYPE_METADATA: Dict[str, Tuple[str, Optional[List[str]]]] = {
     "command.executed": ("event", ["process"]),
     "deployment.completed": ("event", ["configuration"]),
@@ -76,6 +80,9 @@ _EVENT_TYPE_METADATA: Dict[str, Tuple[str, Optional[List[str]]]] = {
     "lock.released": ("event", ["process"]),
     "drift.detected": ("alert", ["configuration"]),
     "cost.threshold_exceeded": ("alert", ["configuration"]),
+    "cost.recorded": ("event", ["configuration"]),
+    "drift.recorded": ("event", ["configuration"]),
+    "manifest.recorded": ("event", ["configuration"]),
 }
 
 # DeployLogModel.command -> event_type — resolves which event type a persisted deploy-log

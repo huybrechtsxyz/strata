@@ -79,6 +79,12 @@ AUDIT_EVENT_DEFAULTS: Dict[str, bool] = {
     "lock.released": False,
     "drift.detected": True,
     "cost.threshold_exceeded": True,  # wired: CostController._forward_cost_audit_event() (ADR-0066 follow-up)
+    # cost.recorded / drift.recorded: the full history snapshot itself, forwarded on
+    # every check — not an alert (ADR-0065 Phase 2 producer, was a documented gap in
+    # the ADR's command-by-command review until this was wired).
+    "cost.recorded": True,  # wired: CostController._forward_cost_recorded_event()
+    "drift.recorded": True,  # wired: DriftDeployCommand._forward_drift_recorded_event()
+    "manifest.recorded": True,  # wired: BaseDeployCommand._forward_manifest_recorded_event()
 }
 
 

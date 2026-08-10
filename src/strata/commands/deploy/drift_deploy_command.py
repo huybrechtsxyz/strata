@@ -110,6 +110,7 @@ class DriftDeployCommand(BaseDeployCommand):
 
         if report.has_drift:
             self._forward_drift_audit_event(report)
+        self._forward_drift_recorded_event(report)
 
         # --baseline mode: acknowledge all detected entries, reset history, always exit 0
         if self._baseline:
@@ -167,6 +168,39 @@ class DriftDeployCommand(BaseDeployCommand):
             AuditController(work_path=self._work_path).forward("drift.detected", payload, audit_config=audit_cfg)
         except Exception as e:
             self.logger.debug(f"Failed to forward drift.detected audit event (non-fatal): {e}")
+
+    def _forward_drift_recorded_event(self, report: object) -> None:
+        """Forward a drift.recorded event for every drift check (ADR-0065 Phase 2 producer).
+
+        Unlike drift.detected (fires only when report.has_drift), this fires on
+        every drift check unconditionally — it's the actual history record Step
+        2.2's schema was built for, not an alert signal. Uses a deterministic
+        execution_id (hash of deployment+checked_at) rather than this command's
+        own self._execution_id: the record's identity is the snapshot itself, so
+        resending the same snapshot must be a no-op under Step 2.3's idempotency
+        regardless of which invocation re-sends it.
+        """
+        try:
+            import hashlib
+
+            from strata.controllers.audit_controller import AuditController
+            from strata.services.configuration_service import ConfigurationService
+
+            audit_cfg = None
+            try:
+                config_model = ConfigurationService.get_instance().model
+                audit_cfg = getattr(getattr(config_model, "spec", None), "audit", None)
+            except Exception as e:
+                self.logger.debug(f"Failed to resolve spec.audit for drift.recorded (non-fatal): {e}")
+
+            payload = dict(report.to_dict())  # type: ignore[attr-defined]
+            deployment = payload.get("deployment", "unknown")
+            checked_at = payload.get("checked_at", "")
+            payload["execution_id"] = hashlib.sha256(f"{deployment}:{checked_at}".encode()).hexdigest()
+
+            AuditController(work_path=self._work_path).forward("drift.recorded", payload, audit_config=audit_cfg)
+        except Exception as e:
+            self.logger.debug(f"Failed to forward drift.recorded audit event (non-fatal): {e}")
 
     def _run_ai_drift_explanation(self, report: object) -> None:
         """Explain detected drift using the configured AI integration."""

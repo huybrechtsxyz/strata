@@ -206,6 +206,7 @@ class CostController(BaseController):
             self.logger.debug("cost_history_recorded", deployment=deployment_name)
             self._push_cost_history(store, deployment_service, self._work_path)
             self._forward_cost_audit_event(store, deployment_service, self._work_path)
+            self._forward_cost_recorded_event(store, deployment_service, self._work_path)
         except Exception as exc:
             self.logger.debug("cost_history_record_failed", error=str(exc))
             # Non-fatal
@@ -303,6 +304,54 @@ class CostController(BaseController):
             AuditController(work_path=work_path).forward("cost.threshold_exceeded", payload, audit_config=audit_cfg)
         except Exception as exc:
             self.logger.debug("cost_audit_forward_failed", error=str(exc))
+            # Non-fatal
+
+    def _forward_cost_recorded_event(
+        self, store: "CostHistoryStore", deployment_service: "DeploymentService", work_path: Path
+    ) -> None:
+        """Forward a cost.recorded event for every snapshot (ADR-0065 Phase 2 producer).
+
+        Unlike cost.threshold_exceeded (fires only when a configured threshold is
+        crossed), this fires unconditionally on every recorded snapshot — it's the
+        actual history record Step 2.2's schema was built for, not an alert signal.
+        Uses a deterministic execution_id (hash of deployment+recorded_at) rather
+        than a fresh UUID: CostController has no command-level execution_id to
+        reuse, and the record's identity is the snapshot itself, not which
+        invocation produced it — resending the same snapshot must be a no-op
+        under Step 2.3's idempotency, regardless of what re-sends it.
+
+        Best-effort — never raises, never affects the cost-recording result above.
+        """
+        try:
+            import hashlib
+
+            from strata.controllers.audit_controller import AuditController
+            from strata.services.configuration_service import ConfigurationService
+
+            latest = store.latest()
+            if latest is None:
+                return
+
+            config_model = ConfigurationService.get_instance().model
+            audit_cfg = getattr(getattr(config_model, "spec", None), "audit", None)
+            deployment_name = deployment_service.get_name() if deployment_service else "unknown"
+            recorded_at = latest.get("recorded_at")
+
+            payload: Dict[str, Any] = {
+                "execution_id": hashlib.sha256(f"{deployment_name}:{recorded_at}".encode()).hexdigest(),
+                "deployment": str(deployment_name),
+                "recorded_at": recorded_at,
+                "currency": latest.get("currency"),
+                "total_monthly": latest.get("total_monthly"),
+                "delta_from_previous": latest.get("delta_from_previous"),
+                "provisioners": latest.get("provisioners"),
+            }
+            if latest.get("version"):
+                payload["version"] = latest["version"]
+
+            AuditController(work_path=work_path).forward("cost.recorded", payload, audit_config=audit_cfg)
+        except Exception as exc:
+            self.logger.debug("cost_recorded_forward_failed", error=str(exc))
             # Non-fatal
 
     def invalidate_cache(self, work_path: Optional[Path] = None) -> int:

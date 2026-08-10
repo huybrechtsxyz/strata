@@ -773,11 +773,47 @@ class BaseDeployCommand(BaseCommand):
                 else:
                     self.logger.warning("Deployment manifest push failed — continuing", path=str(path))
 
+            self._forward_manifest_recorded_event(manifest)
+
             return path
 
         except Exception as exc:
             self.logger.warning("Failed to write deployment manifest", error=str(exc))
             return None
+
+    def _forward_manifest_recorded_event(self, manifest: DeploymentManifestModel) -> None:
+        """Forward a manifest.recorded event for this deploy/destroy (ADR-0065 Phase 2 producer).
+
+        Unconditional — fires once per manifest write, independent of whether git-push
+        (``manifest_config.push_manifest``/``repository.push``) is configured; the two
+        delivery mechanisms are orthogonal, same as cost/drift's own recorded events.
+        Uses this command's own ``self._execution_id`` (not a derived hash): a manifest
+        is written exactly once per command run, so it's the same correlation key
+        ``deployment.completed``/``deployment.destroyed`` already use for events from
+        the same run — a resend of the persisted record keeps that same id.
+
+        Best-effort — never raises, never affects the deployment/destroy exit code.
+        """
+        try:
+            from strata.controllers.audit_controller import AuditController
+            from strata.services.configuration_service import ConfigurationService
+
+            audit_cfg = None
+            try:
+                config_model = ConfigurationService.get_instance().model
+                audit_cfg = getattr(getattr(config_model, "spec", None), "audit", None)
+            except Exception as e:
+                self.logger.debug(f"Failed to resolve spec.audit for manifest.recorded (non-fatal): {e}")
+
+            payload = manifest.model_dump(mode="json")
+            payload["execution_id"] = self._execution_id
+            payload["deployment"] = manifest.spec.deployment_name
+            payload["workspace"] = manifest.spec.workspace_name
+            payload["environment"] = manifest.spec.environment
+
+            AuditController(work_path=self._work_path).forward("manifest.recorded", payload, audit_config=audit_cfg)
+        except Exception as e:
+            self.logger.debug(f"Failed to forward manifest.recorded audit event (non-fatal): {e}")
 
     def _get_manifest_config(self):
         """Retrieve manifest configuration from the configuration service.

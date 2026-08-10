@@ -12,6 +12,7 @@ PowerShell helper scripts for local development.
 | `Docs.ps1`    | Builds the Sphinx documentation site.                                                                                                                                                                                                                         |
 | `Run.ps1`     | Thin wrapper that forwards all arguments to `uv run strata`.                                                                                                                                                                                                  |
 | `Release.ps1` | Bumps `VERSION.txt`, commits, and creates an annotated git tag. Run `git push origin main --tags` after.                                                                                                                                                      |
+| `server.http` | Manual test fixture for the `strata serve` state-service server (ADR-0065) — healthz, token, and event-ingest requests. Run with the VS Code "REST Client" extension.                                                                                         |
 
 Run any script from the repository root:
 
