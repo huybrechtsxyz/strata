@@ -278,46 +278,57 @@ TLS enforcement belongs here, not in step 2.4, because it is a property of the p
 
 **Done when:** `strata serve run` starts, `curl https://.../healthz` (or `strata serve health https://...`) returns `200`, the process exits cleanly on `Ctrl+C`, and attempting a non-loopback, non-TLS bind fails fast with a clear error instead of starting insecurely.
 
-#### Step 2.2 — event store: schema and connection
+#### Step 2.2 — event store: schema and connection ✅ Done
 
-One table, deliberately, covering every record kind:
+**Three backends, one schema.** SQLite is the zero-config default — friction-free local/dev use, no external service, no driver beyond Python's own stdlib `sqlite3`. PostgreSQL and SQL Server are supported, opt-in production backends. Maintaining three hand-written dialect-specific SQL files for one logical schema is exactly the kind of drift risk this ADR's own "payload verbatim, promote later" philosophy argues against — so the schema is defined once, in **SQLAlchemy Core** (`Table`/`MetaData`, not the ORM layer), and rendered per-dialect by SQLAlchemy itself:
 
-```sql
-CREATE TABLE events (
-    execution_id    TEXT        NOT NULL,
-    record_type     TEXT        NOT NULL,   -- deploy-log | deployment-manifest | deployment-metrics
-                                             -- | drift-history | cost-history
-    recorded_at     TIMESTAMPTZ NOT NULL,
-    received_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+```python
+events = Table(
+    "events", metadata,
+    Column("execution_id", String, nullable=False),
+    Column("record_type", String, nullable=False),   # deploy-log | deployment-manifest
+                                                       # | deployment-metrics | drift-history | cost-history
+    Column("recorded_at", DateTime(timezone=True), nullable=False),
+    Column("received_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
 
-    -- promoted dimensions: bounded cardinality, indexed, safe as labels
-    deployment      TEXT,
-    workspace       TEXT,
-    environment     TEXT,
-    tenant          TEXT,
-    ring            TEXT,
-    action          TEXT,
-    outcome         TEXT,
+    # promoted dimensions: bounded cardinality, indexed, safe as labels
+    Column("deployment", String), Column("workspace", String), Column("environment", String),
+    Column("tenant", String), Column("ring", String), Column("action", String), Column("outcome", String),
 
-    strata_version  TEXT,
-    payload         JSONB       NOT NULL,   -- the complete record, verbatim
+    Column("strata_version", String),
+    Column("payload", JSON, nullable=False),          # the complete record, verbatim
 
-    PRIMARY KEY (execution_id, record_type)
-);
-
-CREATE INDEX idx_events_recorded_at ON events (recorded_at DESC);
-CREATE INDEX idx_events_slice       ON events (deployment, environment, recorded_at DESC);
+    PrimaryKeyConstraint("execution_id", "record_type"),
+)
+Index("idx_events_recorded_at", events.c.recorded_at.desc())
+Index("idx_events_slice", events.c.deployment, events.c.environment, events.c.recorded_at.desc())
 ```
 
-The promoted columns are precisely ADR-0064's `label_safe` set, and they apply unchanged to drift and cost history too — a resource address or a monthly total lives in `payload`, never as its own column, for exactly the same bounded-cardinality reasoning. That is not a coincidence: the same discipline that keeps `commit_sha` out of Prometheus labels keeps it out of indexed columns here, regardless of which of the five record kinds it comes from.
+`payload` uses SQLAlchemy's generic `JSON` type — renders JSONB-equivalent storage on Postgres, `NVARCHAR(MAX)` with automatic (de)serialization on SQL Server, `TEXT` on SQLite. No JSON-path querying is needed at this step (that's Phase 3's read API); the type only needs to round-trip a dict faithfully, which all three do. The promoted columns are still precisely ADR-0064's `label_safe` set, for the same bounded-cardinality reasoning as before — a resource address or a monthly total lives in `payload`, never as its own column, regardless of which of the five record kinds or three backends it comes from.
 
-Storing the **complete record verbatim in `payload`** is what neutralises schema-churn risk across all five kinds at once. A new field added to any of them lands in `payload` and is immediately queryable via a JSON path expression, with no migration and no coordination between runner and server versions. Promotion to a typed column happens later and only when a query needs an index — and it can be backfilled from `payload` at that point, because the data was never discarded.
+Storing the **complete record verbatim in `payload`** is still what neutralises schema-churn risk across all five record kinds at once, unchanged from the original design. A new field added to any of them lands in `payload` and is immediately available, with no migration and no coordination between runner and server versions. Promotion to a typed column happens later and only when a query needs an index — and it can be backfilled from `payload` at that point, because the data was never discarded.
 
-The server gains a DB connection at startup (connection string via config, own decision at implementation time — an env var and/or a new `spec.state_service` block), and applies or verifies this schema — a single versioned SQL file plus a `schema_version` check is deliberately enough; this is one table, not a framework. No route touches the table yet. `/healthz` can optionally start checking DB connectivity once this step lands, so a database outage is visible the same way a process-down outage already is.
+**Idempotency: insert-then-catch-duplicate, not dialect-specific upsert SQL.** `ON CONFLICT DO NOTHING` (Postgres, SQLite) has no equivalent on SQL Server without a `MERGE` statement per insert — three different SQL shapes for one concept. Simpler and fully portable: attempt a plain `INSERT`; catch the resulting integrity/duplicate-key error (SQLAlchemy normalises this to one `IntegrityError` across all three dialects); treat it as a no-op. Idempotency here exists for correctness on retry/replay, not hot-path throughput, so the dialect-free approach wins outright — there is no performance case for the more complex per-dialect upsert yet, and if one ever appears, it can be optimised later without changing the schema.
 
-Schema application gets its own command, `strata serve migrate`, run separately from `serve run` — not folded into server startup. This is a deliberate privilege split, not just convenience: `migrate` is the one place anything needs `CREATE TABLE`/`ALTER TABLE` rights, run once by an operator or a CI step with elevated DB credentials, while `serve run`'s own long-lived connection only ever needs `INSERT` on an already-existing table. An internet-facing process holding schema-modification privileges for its entire lifetime is exactly the kind of standing-privilege footprint worth avoiding by construction, not by later hardening.
+**Connection config:** `--db-url` / `STRATA_SERVE_DB_URL`, same CLI-flag-plus-envvar shape as `--host`/`--port`/`--tls-*` (ADR's own "operational config for a standalone process, not workspace config" reasoning from step 2.1 applies unchanged). Default `sqlite:///./strata-state.db` — zero configuration needed to start. Production backends select via SQLAlchemy's own URL scheme: `postgresql+psycopg://...`, `mssql+pyodbc://...`.
 
-**Done when:** `strata serve migrate` creates or verifies the `events` table against a real database and exits `0`; `strata serve run` started afterward against the same database connects successfully and needs nothing beyond `INSERT`; taking the database away makes `/healthz` fail loudly rather than the server silently accepting requests it has nowhere to put.
+**Dependency layout — sqlite is free, postgres/mssql are opt-in extras:**
+
+```toml
+server          = ["fastapi>=0.115", "uvicorn>=0.30", "sqlalchemy>=2.0"]
+server-postgres = ["psycopg[binary]>=3.1"]
+server-mssql    = ["pyodbc>=5.0"]
+```
+
+`pip install xyz-strata[server]` alone is enough to run against SQLite. Postgres/SQL Server each need their own compiled driver installed via a second extra — no reason to force a C extension or an ODBC driver on someone who only wants to try the server locally. Unlike `fastapi`/`uvicorn` (kept genuinely absent from the dev/test venv, per step 2.1's own precedent), `sqlalchemy` **is** added to the `dev` dependency-group — it needs no external service or compiled driver to exercise against SQLite, so real tests against a real (temp-file or in-memory) SQLite database are strictly better than hand-faking an entire query-building API. Postgres/SQL Server connection paths get structural tests only (URL scheme → correct dialect/engine), the same "can't hit the real service in CI" treatment this codebase already gives cloud integrations (Azure Key Vault, AWS, etc.) — mocked, not connected.
+
+Schema application gets its own command, `strata serve migrate`, run separately from `serve run` — not folded into server startup. This is a deliberate privilege split, not just convenience: `migrate` is the one place anything needs `CREATE TABLE`/`ALTER TABLE` rights, run once by an operator or a CI step with elevated DB credentials, while `serve run`'s own long-lived connection only ever needs `INSERT`/`SELECT` on an already-existing table. An internet-facing process holding schema-modification privileges for its entire lifetime is exactly the kind of standing-privilege footprint worth avoiding by construction, not by later hardening. `metadata.create_all(engine, checkfirst=True)` implements "create if not exists" identically across all three backends — no dialect-specific migration files to maintain even at this step.
+
+`/healthz` now also runs `SELECT 1` through the configured engine, so a database outage is visible the same way a process-down outage already was in step 2.1 — the handler raises a `503 HTTPException` with the failure detail, never a silent `200`.
+
+**Implemented as designed.** New `src/strata/server/db/` package: `schema.py` (the `MetaData`/`Table` above, raising a clear `ImportError` install hint if `sqlalchemy` is missing, same pattern as `strata.mcp.server`), `engine.py` (`create_engine_from_url()` — validates the URL's backend name against the three supported dialects before constructing the engine; `check_connection()` — the `SELECT 1` liveness check, catching broadly since it must never raise past `/healthz`), `store.py` (`insert_event()` — the insert-then-catch-`IntegrityError` idempotency helper). `strata serve migrate` (`commands/serve/migrate_serve_command.py`, a real `BaseCommand`, workspace-optional like `serve health`) calls `metadata.create_all(engine, checkfirst=True)` and disposes its own connection afterward — short-lived, unlike `serve run`'s. `serve run` gained `--db-url`/`STRATA_SERVE_DB_URL` (default `sqlite:///./strata-state.db`), builds the engine before `create_app(engine)`, and `/healthz` now raises `HTTPException(503, detail=...)` on a failed `SELECT 1`. `sqlalchemy` added to the `dev` dependency-group (test-only, real SQLite in tests — `psycopg`/`pyodbc` deliberately are not, so the postgresql/mssql dialect-selection tests patch `sqlalchemy.create_engine` itself rather than requiring either driver); `server`/`server-postgres`/`server-mssql` extras added to `pyproject.toml`. Verified via full `Check.ps1`: 5573 tests passed (19 new), ruff/mypy/Sphinx all green.
+
+**Done when:** `strata serve migrate --db-url sqlite:///./x.db` creates the `events` table and exits `0`, and running it again against the same file is a no-op; `strata serve run` started afterward connects successfully and only ever issues `INSERT`/`SELECT`; `strata serve migrate --db-url postgresql+psycopg://...` and `--db-url mssql+pyodbc://...` build a correctly-dialected engine (verified structurally, not against a live server in CI); taking the database away makes `/healthz` return `503` rather than the server silently accepting requests it has nowhere to put.
 
 #### Step 2.3 — ingest endpoint
 

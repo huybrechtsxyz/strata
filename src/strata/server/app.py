@@ -1,9 +1,8 @@
-"""ASGI application factory for the strata state-service server (ADR-0065 Step 2.1).
+"""ASGI application factory for the strata state-service server.
 
-Only ``GET /healthz`` exists at this step — no ``/v1/events``, no database. Import
-of ``fastapi`` happens inside :func:`create_app`, never at module scope, so this
-module can itself be imported (e.g. by tests) without the optional ``server``
-dependency installed.
+``GET /healthz`` exists from Step 2.1 onward; from Step 2.2 onward it also
+verifies database connectivity via the engine passed to :func:`create_app`.
+No ``/v1/events`` route exists yet (that's Step 2.3).
 """
 
 from __future__ import annotations
@@ -12,17 +11,23 @@ from typing import TYPE_CHECKING, Any, Dict
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
+    from sqlalchemy.engine import Engine
 
 
-def create_app() -> "FastAPI":
+def create_app(engine: "Engine") -> "FastAPI":
     """Build the FastAPI app. Requires ``pip install xyz-strata[server]``."""
-    from fastapi import FastAPI
+    from fastapi import FastAPI, HTTPException
+
+    from strata.server.db.engine import check_connection
 
     app = FastAPI(title="strata state service")
 
     @app.get("/healthz")
     def healthz() -> Dict[str, Any]:
-        """Liveness check. Step 2.2 will extend this to also verify DB connectivity."""
+        """Liveness check — also verifies the database is reachable (Step 2.2)."""
+        ok, detail = check_connection(engine)
+        if not ok:
+            raise HTTPException(status_code=503, detail=detail)
         return {"status": "ok"}
 
     return app

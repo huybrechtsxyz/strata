@@ -1,4 +1,4 @@
-"""Tests for the ``serve`` command group (ADR-0065 Phase 2, Step 2.1)."""
+"""Tests for the ``serve`` command group (ADR-0065 Phase 2, Steps 2.1-2.2)."""
 
 from __future__ import annotations
 
@@ -26,6 +26,7 @@ class TestServeCliGroup:
         assert result.exit_code == 0
         assert "run" in result.output
         assert "health" in result.output
+        assert "migrate" in result.output
 
     def test_run_subcommand_help_exits_zero(self) -> None:
         runner = CliRunner()
@@ -141,3 +142,44 @@ class TestServeHealth:
             result = runner.invoke(serve_group, ["health", "https://example.test", "--output", "json"])
         assert result.exit_code == 0
         assert '"reachable": true' in result.output
+
+
+class TestServeMigrate:
+    def test_migrate_help_shows_db_url_option(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(serve_group, ["migrate", "--help"])
+        assert result.exit_code == 0
+        assert "--db-url" in result.output
+
+    def test_migrate_creates_schema_against_sqlite_file(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "state.db"
+        runner = CliRunner()
+        result = runner.invoke(serve_group, ["migrate", "--db-url", f"sqlite:///{db_path}"])
+        assert result.exit_code == 0, result.output
+        assert db_path.exists()
+
+    def test_migrate_is_idempotent(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "state.db"
+        runner = CliRunner()
+        first = runner.invoke(serve_group, ["migrate", "--db-url", f"sqlite:///{db_path}"])
+        second = runner.invoke(serve_group, ["migrate", "--db-url", f"sqlite:///{db_path}"])
+        assert first.exit_code == 0
+        assert second.exit_code == 0
+
+    def test_migrate_unsupported_backend_exits_nonzero(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(serve_group, ["migrate", "--db-url", "mysql://user:pass@localhost/db"])
+        assert result.exit_code != 0
+
+    def test_migrate_fails_gracefully_when_server_extra_missing(self) -> None:
+        runner = CliRunner()
+        with patch("builtins.__import__", side_effect=_import_side_effect_for_sqlalchemy):
+            result = runner.invoke(serve_group, ["migrate", "--db-url", "sqlite:///:memory:"])
+        assert result.exit_code != 0
+        assert "xyz-strata[server]" in result.output
+
+
+def _import_side_effect_for_sqlalchemy(name: str, *args: Any, **kwargs: Any) -> Any:
+    if name == "strata.server.db.schema":
+        raise ImportError("sqlalchemy not installed")
+    return _real_import(name, *args, **kwargs)

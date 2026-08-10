@@ -15,6 +15,19 @@ from strata.commands.cli_common import (
     handle_command_exit,
 )
 from strata.commands.serve.health_serve_command import HealthServeCommand
+from strata.commands.serve.migrate_serve_command import MigrateServeCommand
+
+# Shared default/envvar for the event-store connection (ADR-0065 Step 2.2) — sqlite
+# is the zero-config default; postgresql+psycopg://... / mssql+pyodbc://... are the
+# opt-in production backends (server-postgres / server-mssql extras).
+_DB_URL_OPTION = click.option(
+    "--db-url",
+    "db_url",
+    default="sqlite:///./strata-state.db",
+    envvar="STRATA_SERVE_DB_URL",
+    show_default=True,
+    help="Event-store connection URL (sqlite/postgresql/mssql). [env: STRATA_SERVE_DB_URL]",
+)
 
 
 @click.group(name="serve", help="Run and check the strata state-service server (ADR-0065).")
@@ -55,15 +68,18 @@ def serve_group() -> None:
     type=click.Path(exists=True, dir_okay=False),
     help="Path to the TLS private key file. [env: STRATA_SERVE_TLS_KEY]",
 )
-def serve_run(host: str, port: int, tls_cert: Optional[str], tls_key: Optional[str]) -> None:
+@_DB_URL_OPTION
+def serve_run(host: str, port: int, tls_cert: Optional[str], tls_key: Optional[str], db_url: str) -> None:
     """Launch the strata state-service server.
 
     Runs in the foreground — like `strata mcp serve`, lifecycle (start/stop/restart)
     is owned by whatever launches this process (systemd, a container runtime,
     Ctrl+C), not by a separate CLI command tracking a PID.
 
-    Only `GET /healthz` exists at this step — no `/v1/events`, no database
-    (ADR-0065 Step 2.1). Refuses to start on a non-loopback bind without TLS.
+    `GET /healthz` also verifies database connectivity (ADR-0065 Step 2.2). No
+    `/v1/events` route exists yet (Step 2.3). Refuses to start on a non-loopback
+    bind without TLS. Run `strata serve migrate --db-url ...` first to create the
+    schema — this command only ever issues INSERT/SELECT, never CREATE TABLE.
 
     Requires the optional server dependency:
         pip install xyz-strata[server]
@@ -84,13 +100,40 @@ def serve_run(host: str, port: int, tls_cert: Optional[str], tls_key: Optional[s
         import uvicorn
 
         from strata.server.app import create_app
+        from strata.server.db.engine import create_engine_from_url
     except ImportError as exc:
         raise click.ClickException(
             "The 'server' optional dependency is required.\nInstall it with: pip install xyz-strata[server]"
         ) from exc
 
-    app = create_app()
+    try:
+        engine = create_engine_from_url(db_url)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    app = create_app(engine)
     uvicorn.run(app, host=host, port=port, ssl_certfile=tls_cert, ssl_keyfile=tls_key)
+
+
+@serve_group.command(name="migrate", help="Apply/verify the event-store schema (run separately from `serve run`).")
+@_DB_URL_OPTION
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def serve_migrate(
+    db_url: str,
+    output: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> None:
+    """Create or verify the `events` table against the configured database.
+
+    Run separately from `serve run` — a deliberate privilege split: this is the
+    one place anything needs CREATE TABLE/ALTER TABLE rights.
+    """
+    command = MigrateServeCommand(db_url=db_url, output=output, verbose=verbose, quiet=quiet)
+    success = command.execute()
+    handle_command_exit(command, success)
 
 
 @serve_group.command(name="health", help="Check reachability of a running state-service server.")
