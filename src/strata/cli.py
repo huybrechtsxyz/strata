@@ -47,6 +47,7 @@ from strata.commands.cli_repo import repo_group
 from strata.commands.cli_rollout import rollout_group
 from strata.commands.cli_schema import schema_group
 from strata.commands.cli_secret import secret_group
+from strata.commands.cli_serve import serve_group
 from strata.commands.cli_service import service_group
 from strata.commands.cli_sln import sln_group
 from strata.commands.cli_tools import tools_group
@@ -313,6 +314,7 @@ main.add_command(manifest_group, name="manifest")
 main.add_command(mcp_group, name="mcp")
 main.add_command(workitem_group, name="workitem")
 main.add_command(cache_group, name="cache")
+main.add_command(serve_group, name="serve")
 
 # Apply the standard exit-code epilog to every leaf command that doesn't
 # already define its own (deploy run / deploy destroy / validate run carry
