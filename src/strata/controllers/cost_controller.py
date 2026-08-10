@@ -205,6 +205,7 @@ class CostController(BaseController):
             store.save()
             self.logger.debug("cost_history_recorded", deployment=deployment_name)
             self._push_cost_history(store, deployment_service, self._work_path)
+            self._forward_cost_audit_event(store, deployment_service, self._work_path)
         except Exception as exc:
             self.logger.debug("cost_history_record_failed", error=str(exc))
             # Non-fatal
@@ -241,6 +242,67 @@ class CostController(BaseController):
             )
         except Exception as exc:
             self.logger.debug("cost_history_push_failed", error=str(exc))
+            # Non-fatal
+
+    def _forward_cost_audit_event(
+        self, store: "CostHistoryStore", deployment_service: "DeploymentService", work_path: Path
+    ) -> None:
+        """Forward a cost.threshold_exceeded event when the latest snapshot crosses a
+        configured threshold (ADR-0066 follow-up — drift.detected's cost counterpart).
+
+        Unlike drift, "any cost" is not inherently alert-worthy, so this requires an
+        actual threshold to be configured under spec.cost.history.alert — no config,
+        no event, ever. Best-effort — never raises, never affects the cost-recording
+        result above.
+        """
+        try:
+            from strata.controllers.audit_controller import AuditController
+            from strata.services.configuration_service import ConfigurationService
+
+            config_model = ConfigurationService.get_instance().model
+            cost_cfg = getattr(getattr(config_model, "spec", None), "cost", None)
+            alert_cfg = getattr(getattr(cost_cfg, "history", None), "alert", None)
+            if alert_cfg is None or (alert_cfg.max_monthly is None and alert_cfg.delta_percent is None):
+                return
+
+            latest = store.latest()
+            if latest is None:
+                return
+
+            total = latest.get("total_monthly")
+            delta = latest.get("delta_from_previous")
+            if total is None:
+                return
+
+            alert_reason: Optional[str] = None
+            if alert_cfg.max_monthly is not None and total > alert_cfg.max_monthly:
+                alert_reason = "ceiling"
+            elif alert_cfg.delta_percent is not None and delta is not None and delta > 0:
+                previous_total = total - delta
+                if previous_total > 0 and (delta / previous_total) * 100 >= alert_cfg.delta_percent:
+                    alert_reason = "delta"
+
+            if alert_reason is None:
+                return
+
+            audit_cfg = getattr(getattr(config_model, "spec", None), "audit", None)
+            deployment_name = deployment_service.get_name() if deployment_service else "unknown"
+
+            payload: Dict[str, Any] = {
+                "deployment": str(deployment_name),
+                "recorded_at": latest.get("recorded_at"),
+                "currency": latest.get("currency"),
+                "total_monthly": total,
+                "delta_from_previous": delta,
+                "alert_reason": alert_reason,
+                "provisioners": latest.get("provisioners"),
+            }
+            if latest.get("version"):
+                payload["version"] = latest["version"]
+
+            AuditController(work_path=work_path).forward("cost.threshold_exceeded", payload, audit_config=audit_cfg)
+        except Exception as exc:
+            self.logger.debug("cost_audit_forward_failed", error=str(exc))
             # Non-fatal
 
     def invalidate_cache(self, work_path: Optional[Path] = None) -> int:

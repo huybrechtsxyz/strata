@@ -512,6 +512,29 @@ class ConfigurationZoneModel(PlatformBaseModel):
     )
 
 
+class CostAlertConfigModel(PlatformBaseModel):
+    """Threshold configuration for ``cost.threshold_exceeded`` alerts (ADR-0066 follow-up).
+
+    Either condition fires the alert; both are optional and independent.
+    """
+
+    max_monthly: Optional[float] = Field(
+        default=None,
+        description=(
+            "Fire an alert if the recorded total_monthly exceeds this value. "
+            "Same name and meaning as CostThresholdPolicy's max_monthly — deliberately "
+            "reusing that vocabulary rather than inventing a second one."
+        ),
+    )
+    delta_percent: Optional[float] = Field(
+        default=None,
+        description=(
+            "Fire an alert if total_monthly increased by at least this percent since the "
+            "previous snapshot. A decrease never fires this condition."
+        ),
+    )
+
+
 class CostHistoryConfigModel(PlatformBaseModel):
     """Configuration for cost-history durable storage (ADR-0065 Phase 1).
 
@@ -522,6 +545,10 @@ class CostHistoryConfigModel(PlatformBaseModel):
     repository: Optional[RepositoryPushModel] = Field(
         default=None,
         description="Durable git-push destination for cost history. Omit to skip.",
+    )
+    alert: Optional[CostAlertConfigModel] = Field(
+        default=None,
+        description="Threshold configuration for cost.threshold_exceeded alerts. Omit to skip.",
     )
 
 

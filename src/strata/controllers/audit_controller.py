@@ -55,7 +55,8 @@ _CE_TYPE_PREFIX = "xyz.huybrechts.strata."
 # workitem.approved/rejected/completed/cancelled and deployment.destroyed added in ADR-0066's
 # gap-A/gap-B follow-up — deployment.destroyed is classified "alert" (not plain "event"), like
 # policy.violated/drift.detected, since a destroy is categorically more consequential than a
-# routine deploy and should be distinguishable in SIEM alerting rules.
+# routine deploy and should be distinguishable in SIEM alerting rules. cost.threshold_exceeded
+# is a third follow-up (drift.detected's cost counterpart) — also "alert", same reasoning.
 _EVENT_TYPE_METADATA: Dict[str, Tuple[str, Optional[List[str]]]] = {
     "command.executed": ("event", ["process"]),
     "deployment.completed": ("event", ["configuration"]),
@@ -74,6 +75,7 @@ _EVENT_TYPE_METADATA: Dict[str, Tuple[str, Optional[List[str]]]] = {
     "lock.acquired": ("event", ["process"]),
     "lock.released": ("event", ["process"]),
     "drift.detected": ("alert", ["configuration"]),
+    "cost.threshold_exceeded": ("alert", ["configuration"]),
 }
 
 # DeployLogModel.command -> event_type — resolves which event type a persisted deploy-log

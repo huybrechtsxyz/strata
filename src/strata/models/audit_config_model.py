@@ -78,6 +78,7 @@ AUDIT_EVENT_DEFAULTS: Dict[str, bool] = {
     "lock.acquired": False,
     "lock.released": False,
     "drift.detected": True,
+    "cost.threshold_exceeded": True,  # wired: CostController._forward_cost_audit_event() (ADR-0066 follow-up)
 }
 
 
