@@ -145,30 +145,23 @@ meta:
   name: local_manifest_config
 spec:
   manifest:
-    type: local
     path: ".strata/deployments"
 ```
 
-**GitOps (state repository):**
+**Local + durable push to a shared repo (ADR-0065 Phase 1):**
 
 ```yaml
 apiVersion: strata.huybrechts.xyz/v1
 kind: configuration
 meta:
-  name: gitops_manifest_config
+  name: shared_manifest_config
 spec:
-  repositories:
-    - name: xyz-state-repo
-      url: git@github.com:acme/xyz-state.git
-      branch: main
-      clone: true
-
   manifest:
-    type: gitops
     path: "deployments"
-    repository: xyz-state-repo
-    branch: manifests
-    tag: true
+    repository:
+      push: true
+      name: xyz-state-repo   # registered via `strata repo add`, not spec.remotes
+      path: history/manifest
 ```
 
 ### 2. Reference in Your Deployment
@@ -182,7 +175,7 @@ meta:
   name: prod_deployment
 spec:
   configurations:
-    - name: local_manifest_config  # or gitops_manifest_config
+    - name: local_manifest_config  # or shared_manifest_config
       source:
         type: local
         repository: /
@@ -566,44 +559,39 @@ jq '.spec.stages[] | select(.status != "success") | .error' failed_manifest.json
 
 ---
 
-## GitOps Workflow
+## Durable Git-Push Workflow (ADR-0065 Phase 1)
 
-When using `type: gitops`, manifests are automatically committed and tagged:
+When `manifest.repository.push` (or the legacy `push_manifest`) is enabled, manifests are automatically committed and pushed after each write:
 
 ```bash
 # After deploy
 strata deploy run -f prod.yaml
 
 # In your state repository:
-git log --oneline deployments/
-# 2a3b4c5 strata: deployment manifest prod_deployment v2.3.0
-# 1f2g3h4 strata: deployment manifest prod_deployment v2.2.9
+git log --oneline history/manifest/
+# 2a3b4c5 chore(manifest): deployment manifest update [skip ci]
+# 1f2g3h4 chore(manifest): deployment manifest update [skip ci]
 # ...
 
-# Tags are also created:
-git tag -l "prod_deployment/*" | sort
-# prod_deployment/v2.2.8
-# prod_deployment/v2.2.9
-# prod_deployment/v2.3.0
-
-# Retrieve a manifest from a tag:
-git show prod_deployment/v2.3.0:deployments/prod_deployment/v2.3.0/2024-06-17T10:45:33Z.json
+# Retrieve a manifest directly from the working tree (no tags are created):
+cat history/manifest/<workspace>/prod_deployment/v2.3.0/2024-06-17T10:45:33Z.json
 ```
+
+There is no automatic git tagging — each push is a plain commit, and the manifest's own `spec.deployment_name`/`spec.artifacts` fields are what identify a specific deployment/version, not a git tag.
 
 ### Downstream Automation
 
-GitOps manifests enable automatic downstream workflows:
+A shared state repo enables automatic downstream workflows:
 
 ```bash
 # Compliance scanner watches the state repo
 # On new manifest commit → scan SBOM for vulnerabilities
-# On new tag → generate audit report
 
 # Example: GitHub Actions on manifest push
 on:
   push:
     paths:
-      - 'deployments/**'
+      - 'history/manifest/**'
 jobs:
   compliance-scan:
     runs-on: ubuntu-latest
@@ -611,8 +599,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Extract SBOM from manifest
         run: |
-          manifest=$(ls -t deployments/prod_deployment/**/*.json | head -1)
-          sbom_path=$(jq -r '.spec.artifacts.sbom.path' $manifest)
+          manifest=$(ls -t history/manifest/*/prod_deployment/**/*.json | head -1)
+          sbom_path=$(jq -r '.spec.sbom.path' $manifest)
           # Run compliance scanner on sbom_path
 ```
 
@@ -652,11 +640,11 @@ spec:
 # Check git credentials
 git clone git@github.com:acme/xyz-state.git
 
-# Verify branch exists
-git ls-remote origin manifests
+# Verify the repo is registered
+strata repo list
 
 # Check deploy logs for git errors
-strata deploy run -f prod.yaml --verbose 2>&1 | grep -i "git\|push\|branch"
+strata deploy run -f prod.yaml --verbose 2>&1 | grep -i "git\|push"
 ```
 
 ### Manifest Has Empty `artifacts.content`

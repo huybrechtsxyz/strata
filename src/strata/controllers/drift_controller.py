@@ -172,6 +172,7 @@ class DriftController(BaseController):
         drifted_addresses = [e.address for e in all_entries]
         history.record_run(checked_at=checked_at, drifted_addresses=drifted_addresses)
         history.save()
+        self._push_drift_history(history, deployment_service, configuration_service, work_path)
 
         return DriftReport(
             deployment=deployment_name,
@@ -180,6 +181,43 @@ class DriftController(BaseController):
             entries=all_entries,
             summary=summary,
         )
+
+    def _push_drift_history(
+        self,
+        history: DriftHistoryStore,
+        deployment_service: "DeploymentService",
+        configuration_service: "ConfigurationService",
+        work_path: Path,
+    ) -> None:
+        """Push the drift-history file to a durable git repo, if configured (ADR-0065 Phase 1).
+
+        Best-effort — never raises, never affects the drift-check result above.
+        """
+        try:
+            from strata.controllers.audit_controller import AuditController
+
+            config_model = getattr(configuration_service, "model", None)
+            drift_cfg = getattr(getattr(config_model, "spec", None), "drift", None)
+            repo_cfg = getattr(getattr(drift_cfg, "history", None), "repository", None)
+            if not repo_cfg or not repo_cfg.push:
+                return
+
+            workspace_service = deployment_service.get_workspace_service() if deployment_service else None
+            workspace_name = (
+                str(workspace_service.model.meta.name) if workspace_service and workspace_service.model else "unknown"
+            )
+
+            AuditController(work_path=work_path).push_to_remote(
+                [history.history_file],
+                local_base=history.history_dir,
+                remote_path=repo_cfg.path or "drift",
+                repo_name=repo_cfg.name,
+                workspace=workspace_name,
+                commit_message="chore(drift): history update [skip ci]",
+            )
+        except Exception as exc:
+            logger.debug("drift_history_push_failed", error=str(exc))
+            # Non-fatal
 
     def _check_stage(
         self,

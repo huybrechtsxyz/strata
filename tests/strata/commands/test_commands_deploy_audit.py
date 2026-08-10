@@ -474,9 +474,9 @@ class TestDeployLogPushToRepo:
         repo_dir = tmp_path / "repos" / "config"
         repo_dir.mkdir(parents=True)
 
-        from strata.models.audit_config_model import AuditConfigModel
+        from strata.models.audit_config_model import AuditConfigModel, RepositoryPushModel
 
-        audit_cfg = AuditConfigModel(repository="config")  # type: ignore[call-arg]
+        audit_cfg = AuditConfigModel(repository=RepositoryPushModel(push=True, name="config"))
 
         cmd = _make_command(tmp_path)
         cmd._stage_results = []
@@ -566,9 +566,10 @@ class TestDeployLogPushToRepo:
         ):
             # Patch to inject resolved_audit_cfg with repository set
             from strata.models.audit_config_model import AuditConfigModel as AuditCfg
+            from strata.models.audit_config_model import RepositoryPushModel
 
             audit_cfg = AuditCfg()
-            audit_cfg.repository = "nonexistent-repo"  # type: ignore[attr-defined]
+            audit_cfg.repository = RepositoryPushModel(push=True, name="nonexistent-repo")
 
             original_method = type(cmd)._write_deploy_log
 
@@ -592,11 +593,13 @@ class TestAuditConfigModel:
         cfg = AuditConfigModel()
         assert cfg.repository is None
 
-    def test_repository_accepts_string(self) -> None:
-        from strata.models.audit_config_model import AuditConfigModel
+    def test_repository_accepts_repository_push_model(self) -> None:
+        from strata.models.audit_config_model import AuditConfigModel, RepositoryPushModel
 
-        cfg = AuditConfigModel(repository="config")  # type: ignore[call-arg]
-        assert cfg.repository == "config"
+        cfg = AuditConfigModel(repository=RepositoryPushModel(push=True, name="config"))
+        assert cfg.repository is not None
+        assert cfg.repository.push is True
+        assert cfg.repository.name == "config"
 
 
 class TestManifestPushToRemote:
@@ -606,10 +609,9 @@ class TestManifestPushToRemote:
         """When push_manifest=True, push_to_remote is called after writing the manifest."""
         from unittest.mock import MagicMock, patch
 
-        from strata.models.configuration_model import ConfigurationManifestModel, ManifestStoreType
+        from strata.models.configuration_model import ConfigurationManifestModel
 
         manifest_config = ConfigurationManifestModel(
-            type=ManifestStoreType.LOCAL,
             path=str(tmp_path / "manifests"),
             push_manifest=True,
         )
@@ -653,21 +655,27 @@ class TestManifestPushToRemote:
                 "strata.commands.deploy.base_deploy_command.BaseDeployCommand._collect_artifacts",
                 return_value=mock_artifacts,
             ),
-            patch("strata.controllers.manifest_controller.ManifestController.push_to_remote", mock_push),
+            patch("strata.controllers.audit_controller.AuditController.push_to_remote", mock_push),
         ):
             mock_svc_cls.return_value.save_with_config = mock_save
             cmd._write_deployment_manifest(action="deploy", status="success")
 
-        mock_push.assert_called_once_with([written_path])
+        mock_push.assert_called_once_with(
+            [written_path],
+            local_base=Path(str(tmp_path / "manifests")),
+            remote_path="manifest",
+            repo_name=None,
+            workspace="unknown",
+            commit_message="chore(manifest): deployment manifest update [skip ci]",
+        )
 
     def test_push_manifest_false_does_not_push(self, tmp_path: Path) -> None:
         """When push_manifest=False (default), push_to_remote is not called."""
         from unittest.mock import MagicMock, patch
 
-        from strata.models.configuration_model import ConfigurationManifestModel, ManifestStoreType
+        from strata.models.configuration_model import ConfigurationManifestModel
 
         manifest_config = ConfigurationManifestModel(
-            type=ManifestStoreType.LOCAL,
             path=str(tmp_path / "manifests"),
             push_manifest=False,
         )
@@ -710,7 +718,7 @@ class TestManifestPushToRemote:
                 "strata.commands.deploy.base_deploy_command.BaseDeployCommand._collect_artifacts",
                 return_value=mock_artifacts,
             ),
-            patch("strata.controllers.manifest_controller.ManifestController.push_to_remote", mock_push),
+            patch("strata.controllers.audit_controller.AuditController.push_to_remote", mock_push),
         ):
             mock_svc_cls.return_value.save_with_config = MagicMock(return_value=written_path)
             cmd._write_deployment_manifest(action="deploy", status="success")

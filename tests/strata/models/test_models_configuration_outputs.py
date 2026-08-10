@@ -105,7 +105,7 @@ class TestConfigurationDeploymentModelOutputsField:
 
     def test_outputs_coexists_with_manifest(self):
         m = ConfigurationDeploymentModel(
-            manifest={"type": "local"},
+            manifest={},
             outputs={"path": ".strata/outputs", "sensitive": "redact"},
         )
         assert m.manifest is not None

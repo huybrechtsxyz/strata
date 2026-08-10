@@ -250,24 +250,43 @@ class AuditController(BaseController):
 
     def push_to_remote(
         self,
-        paths: List[Path],
+        local_paths: List[Path],
+        local_base: Path,
+        remote_path: str,
+        *,
+        repo_name: Optional[str] = None,
+        workspace: str = "default",
         remote_name: str = "origin",
-        working_dir: Optional[Path] = None,
+        commit_message: str = "chore: durable storage update [skip ci]",
     ) -> bool:
-        """Stage, commit, and push deploy-log files to a git remote.
+        """Copy local files into a target repo at a configured location, then push (ADR-0065 Phase 1).
+
+        Unlike the pre-Phase-1 implementation this replaces, this does not assume
+        *local_paths* already sit inside the target repo's working tree — it copies
+        them there first, so the local write location and the push destination never
+        have to be manually kept in sync (the previous assumption silently broke
+        whenever they didn't coincide).
 
         Args:
-            paths:       List of deploy-log file paths to commit.
-            remote_name: Git remote name to push to (default: 'origin').
-            working_dir: Directory to run git operations from.  Defaults to
-                         ``self._work_path``.  Pass the resolved path of a
-                         registered solution repo to push from that repo's
-                         working tree.
+            local_paths:    Absolute paths to the local files to push.
+            local_base:     Directory ``local_paths`` are relative to — used to
+                             preserve each file's relative layout at the destination
+                             (see ADR-0065 "Distinguishing artifacts within a shared repo").
+            remote_path:    Where inside the target repo this artifact lands, relative
+                             to the repo root (e.g. ``"history/cost"``).
+            repo_name:      Name of a registered solution repo (``strata repo add``).
+                             ``None`` pushes to this workspace's own repo instead.
+            workspace:      Workspace name — always inserted as a path segment
+                             (``{remote_path}/{workspace}/...``), unconditionally, so
+                             multiple workspaces sharing one target repo don't collide.
+            remote_name:    Git remote name to push to (default: ``'origin'``).
+            commit_message: Commit message — callers state their own intent rather
+                             than sharing one hardcoded message across record kinds.
 
         Returns:
-            True if push succeeded, False otherwise.
+            True if the push (or a no-op "nothing to commit") succeeded, False otherwise.
         """
-        if not paths:
+        if not local_paths:
             return False
 
         from strata.integrations.factory import IntegrationFactory
@@ -278,16 +297,46 @@ class AuditController(BaseController):
             self.logger.warning("push_to_remote_git_unavailable")
             return False
 
-        wd = str(working_dir) if working_dir else str(self._work_path)
-        base = working_dir if working_dir else self._work_path
-
-        # Stage the files
-        relative_paths = []
-        for p in paths:
+        if repo_name:
             try:
-                relative_paths.append(str(p.relative_to(base)))
+                from strata.controllers.solution_controller import SolutionController
+
+                sol_ctrl = SolutionController(work_path=self._work_path)
+                sol_ctrl.load()
+                repo_map = sol_ctrl.get_repo_map()
+            except Exception as exc:
+                self.logger.warning("push_to_remote_repo_map_failed", error=str(exc))
+                return False
+            repo_dir_str = repo_map.get(repo_name)
+            if not repo_dir_str:
+                self.logger.warning("push_to_remote_repo_not_found", repository=repo_name)
+                return False
+            repo_dir = Path(repo_dir_str)
+        else:
+            repo_dir = self._work_path
+
+        import shutil
+
+        relative_paths: List[str] = []
+        for p in local_paths:
+            try:
+                rel = p.relative_to(local_base)
             except ValueError:
-                relative_paths.append(str(p))
+                self.logger.warning("push_to_remote_path_outside_base", path=str(p))
+                continue
+            dest = repo_dir / remote_path / workspace / rel
+            try:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(p, dest)
+            except OSError as exc:
+                self.logger.warning("push_to_remote_copy_failed", path=str(p), error=str(exc))
+                return False
+            relative_paths.append(str(dest.relative_to(repo_dir)))
+
+        if not relative_paths:
+            return False
+
+        wd = str(repo_dir)
 
         result = git.add(wd, relative_paths)
         if result.returncode != 0:
@@ -295,7 +344,7 @@ class AuditController(BaseController):
             return False
 
         # Commit
-        result = git.commit(wd, "chore(audit): deploy-log update [skip ci]")
+        result = git.commit(wd, commit_message)
         if result.returncode != 0:
             # Nothing to commit is acceptable (returncode 1 with "nothing to commit")
             if "nothing to commit" in (result.stdout or "") + (result.stderr or ""):

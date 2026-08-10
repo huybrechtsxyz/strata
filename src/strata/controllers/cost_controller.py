@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from strata.controllers.solution_controller import SolutionController
     from strata.models.workspace_model import WorkspaceIacModel
     from strata.services.deployment_service import DeploymentService
+    from strata.utils.cost_history import CostHistoryStore
 
 # Cache TTL: 7 days in seconds
 _CACHE_TTL_SECONDS = 7 * 24 * 3600
@@ -203,8 +204,43 @@ class CostController(BaseController):
             store.record_snapshot(cost_data=cost_data, version=version, currency=currency)
             store.save()
             self.logger.debug("cost_history_recorded", deployment=deployment_name)
+            self._push_cost_history(store, deployment_service, self._work_path)
         except Exception as exc:
             self.logger.debug("cost_history_record_failed", error=str(exc))
+            # Non-fatal
+
+    def _push_cost_history(
+        self, store: "CostHistoryStore", deployment_service: "DeploymentService", work_path: Path
+    ) -> None:
+        """Push the cost-history file to a durable git repo, if configured (ADR-0065 Phase 1).
+
+        Best-effort — never raises, never affects the cost-recording result above.
+        """
+        try:
+            from strata.controllers.audit_controller import AuditController
+            from strata.services.configuration_service import ConfigurationService
+
+            config_model = ConfigurationService.get_instance().model
+            cost_cfg = getattr(getattr(config_model, "spec", None), "cost", None)
+            repo_cfg = getattr(getattr(cost_cfg, "history", None), "repository", None)
+            if not repo_cfg or not repo_cfg.push:
+                return
+
+            workspace_service = deployment_service.get_workspace_service() if deployment_service else None
+            workspace_name = (
+                str(workspace_service.model.meta.name) if workspace_service and workspace_service.model else "unknown"
+            )
+
+            AuditController(work_path=work_path).push_to_remote(
+                [store.history_file],
+                local_base=store.history_dir,
+                remote_path=repo_cfg.path or "cost",
+                repo_name=repo_cfg.name,
+                workspace=workspace_name,
+                commit_message="chore(cost): history update [skip ci]",
+            )
+        except Exception as exc:
+            self.logger.debug("cost_history_push_failed", error=str(exc))
             # Non-fatal
 
     def invalidate_cache(self, work_path: Optional[Path] = None) -> int:

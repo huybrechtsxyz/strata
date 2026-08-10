@@ -666,6 +666,8 @@ class BaseDeployCommand(BaseCommand):
         Returns:
             Path to the written manifest, or None on skip/error.
         """
+        from strata.controllers.audit_controller import AuditController
+
         if dry_run:
             self.logger.debug("Dry-run — skipping deployment manifest write")
             return None
@@ -750,11 +752,22 @@ class BaseDeployCommand(BaseCommand):
             )
             self.logger.info("Deployment manifest written", path=str(path))
 
-            if manifest_config.push_manifest and path:
-                from strata.controllers.manifest_controller import ManifestController
+            repo_cfg = manifest_config.repository
+            should_push = manifest_config.push_manifest or (repo_cfg is not None and repo_cfg.push)
+            if should_push and path:
+                manifest_base = Path(manifest_config.path)
+                if not manifest_base.is_absolute():
+                    manifest_base = self._work_path / manifest_base
 
-                manifest_ctrl = ManifestController(work_path=self._work_path)
-                pushed = manifest_ctrl.push_to_remote([path])
+                audit_ctrl = AuditController(work_path=self._work_path)
+                pushed = audit_ctrl.push_to_remote(
+                    [path],
+                    local_base=manifest_base,
+                    remote_path=(repo_cfg.path if repo_cfg else None) or "manifest",
+                    repo_name=repo_cfg.name if repo_cfg else None,
+                    workspace=workspace_name,
+                    commit_message="chore(manifest): deployment manifest update [skip ci]",
+                )
                 if pushed:
                     self.logger.info("Deployment manifest pushed to remote", path=str(path))
                 else:
@@ -1175,23 +1188,17 @@ class BaseDeployCommand(BaseCommand):
                 # Uses the enriched payload so SIEM gets PR data when available.
                 controller.forward(event_type, enriched.model_dump(exclude_none=True), audit_config=resolved_audit_cfg)
 
-                # Layer 4c: Push to remote repo — best-effort, opt-in via audit.repository
-                if resolved_audit_cfg and resolved_audit_cfg.repository:
-                    from pathlib import Path as _Path
-
-                    from strata.controllers.solution_controller import SolutionController
-
-                    sol_ctrl = SolutionController(work_path=self._work_path)
-                    sol_ctrl.load()
-                    repo_map = sol_ctrl.get_repo_map()
-                    repo_path = repo_map.get(str(resolved_audit_cfg.repository))
-                    if repo_path:
-                        controller.push_to_remote([path], working_dir=_Path(repo_path))
-                    else:
-                        self.logger.warning(
-                            "deploy_log_push_repo_not_found",
-                            repository=str(resolved_audit_cfg.repository),
-                        )
+                # Layer 4c: Push to remote repo — best-effort, opt-in via audit.repository.push (ADR-0065 Phase 1)
+                repo_cfg = resolved_audit_cfg.repository if resolved_audit_cfg else None
+                if repo_cfg and repo_cfg.push:
+                    controller.push_to_remote(
+                        [path],
+                        local_base=base_path,
+                        remote_path=repo_cfg.path or "deploy-log",
+                        repo_name=repo_cfg.name,
+                        workspace=str(workspace_name or "default"),
+                        commit_message="chore(audit): deploy-log update [skip ci]",
+                    )
 
             if ok and path and self._is_console_output():
                 self._audit_log_path = str(path.relative_to(self._work_path))
