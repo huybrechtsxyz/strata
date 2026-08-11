@@ -1,6 +1,6 @@
 # Resolved-model cache for fleet-wide command performance
 
-- Status: partially implemented
+- Status: partially-implemented
 - Date: 2026-07-08
 
 ## Implementation status
@@ -9,6 +9,14 @@ Phases 1–3 (CacheService/SQLite backend, `strata cache` CLI group, VS Code bac
 warmer) are implemented. Command integration (originally "Phase 2") is intentionally
 narrower than first planned — see "Implementation reality check" below for what's wired
 and why the rest is deferred, not merely unfinished.
+
+## Remaining Work
+
+- `deploy run/show`, `values list/get/resolve` — need a second, serialisable
+  "resolved deployment" cache concept distinct from `PlatformArtifactModel`;
+  tracked as a follow-up, not implemented.
+- `deploy destroy/output/drift/plan`, `env show/status` — deferred until those
+  commands exist.
 
 ## Context and Problem Statement
 

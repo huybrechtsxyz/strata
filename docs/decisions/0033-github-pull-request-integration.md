@@ -3,6 +3,10 @@
 - Status: proposed
 - Date: 2026-07-11
 
+## Remaining Work
+
+- Not started — nothing in this ADR has been implemented yet.
+
 ## Context and Problem Statement
 
 Today, strata operates in isolation from source control workflows. Infrastructure changes are typically tracked through a separate Git repository (configuration spec repos), but deployment actions (validate, build, deploy) happen outside the GitHub PR review process.

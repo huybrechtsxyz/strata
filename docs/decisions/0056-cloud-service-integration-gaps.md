@@ -4,6 +4,10 @@
 - Date: 2026-07-23
 - Related: ADR-0053 (Azure CLI), ADR-0054 (AWS CLI), ADR-0055 (gcloud CLI)
 
+## Remaining Work
+
+- Not started — nothing in this ADR has been implemented yet.
+
 ## Context
 
 strata's integration layer covers secrets, variables, and feature flags for the

@@ -1,6 +1,6 @@
 # Deep Validation and Layer Consistency
 
-- Status: phase 1 complete / phase 2 in progress
+- Status: partially-implemented — Phase 1 complete, Phase 2 in progress
 - Date: 2026-07-15
 - Last updated: 2026-07-23
 
@@ -19,7 +19,7 @@
 - [x] Documentation updated: docs/config/configuration.md with migration guide and examples
 - [x] Changelog updated: [Unreleased] section documents the change
 
-## TODO (Phase 2)
+## Remaining Work (Phase 2)
 
 - [ ] **Rule Set 1 — Layer Identity Consistency** — Detect mismatches between declared layers and environment file paths
 - [ ] **Rule Set 2 — Template Drift Detection** — Warn when template versions advance beyond reviewed instantiation

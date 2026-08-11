@@ -4,6 +4,10 @@
 - Date: 2026-08-06
 - Related: ADR-0018 (deployment audit & traceability), ADR-0022 (SIEM integration), ADR-0031 (cost estimation), ADR-0009 (SBOM), ADR-0008 (drift detection), ADR-0032 (approval gates)
 
+## Remaining Work
+
+- Not started — nothing in this ADR has been implemented yet.
+
 ## Context and Problem Statement
 
 DORA metrics (DevOps Research and Assessment) were the entry point for this ADR:

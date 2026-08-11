@@ -3,6 +3,10 @@
 - Status: proposed
 - Date: 2026-08-06
 
+## Remaining Work
+
+- Not started — nothing in this ADR has been implemented yet.
+
 ## Context and Problem Statement
 
 Platform teams provide a shared Terraform template (`iac_aks_core`). Product teams must

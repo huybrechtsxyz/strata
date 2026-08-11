@@ -4,6 +4,10 @@
 - Date: 2026-07-20
 - Priority: low — implement only on demonstrated operator demand
 
+## Remaining Work
+
+- Not started — nothing in this ADR has been implemented yet.
+
 ## Context and Problem Statement
 
 The Cloud Development Kit (CDK) family covers two distinct tools with different deployment targets:

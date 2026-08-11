@@ -2,7 +2,9 @@
 
 - Status: proposed
 - Date: 2026-07-14
-- Revised: 2026-07-21
+## Remaining Work
+
+- Not started — nothing in this ADR has been implemented yet.- Revised: 2026-07-21
 
 ## Context and Problem Statement
 

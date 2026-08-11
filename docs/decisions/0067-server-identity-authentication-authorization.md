@@ -1,8 +1,15 @@
 # Identity, authentication, and authorization for a strata server component
 
-- Status: partially implemented — CLI-side (steps 0–6) ✅ Done; OIDC relying party (step 7) ✅ Done; session store (step 8) ✅ Done; RBAC/M2M (steps 9–10) ⏳ not started
+- Status: partially-implemented — CLI-side (steps 0–6) ✅ Done; OIDC relying party (step 7) ✅ Done; session store (step 8) ✅ Done; RBAC/M2M (steps 9–10) ⏳ not started
 - Date: 2026-08-07
 - Related: ADR-0065 (strata state service — Phase 3 control plane, per-workspace bearer tokens), ADR-0066 (audit event routing & policy model — CLI-side `actor` resolution), ADR-0018 (deployment audit & traceability), ADR-0062 (CLI consolidation — `sln doctor`'s health-check surface, extended here), ADR-0057 (deployment workflow orchestration — work items and hand-off gates), ADR-0007 (deployment state locking), ADR-0005 (secret resolution at build time)
+
+## Remaining Work
+
+- Step 9 — RBAC authorization model (role mapping from IdP group/team claims plus
+  local override) — not started.
+- Step 10 — Machine-to-machine (Client Credentials grant) tokens for CI/scheduled
+  jobs calling the control plane — not started.
 
 ## Context and Problem Statement
 

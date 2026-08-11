@@ -3,6 +3,10 @@
 - Status: proposed
 - Date: 2026-07-11
 
+## Remaining Work
+
+- Not started — nothing in this ADR has been implemented yet.
+
 ## Context and Problem Statement
 
 Today, the VS Code extension provides text-based tree views and code lens for exploring strata workspaces, but lacks visual representations of infrastructure topology, deployment orchestration, and version promotion flows. Users must mentally construct these relationships by navigating YAML files and tree views, which is cognitively expensive and error-prone.
