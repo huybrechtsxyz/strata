@@ -82,6 +82,47 @@ def serve_group() -> None:
         "Omit to leave those routes unregistered entirely. [env: STRATA_SERVE_ADMIN_TOKEN]"
     ),
 )
+@click.option(
+    "--oidc-issuer",
+    "oidc_issuer",
+    default=None,
+    envvar="STRATA_SERVE_OIDC_ISSUER",
+    help="OIDC issuer URL, enabling /auth/login + /auth/callback (ADR-0067 Step 7). [env: STRATA_SERVE_OIDC_ISSUER]",
+)
+@click.option(
+    "--oidc-client-id",
+    "oidc_client_id",
+    default=None,
+    envvar="STRATA_SERVE_OIDC_CLIENT_ID",
+    help="OIDC client id. [env: STRATA_SERVE_OIDC_CLIENT_ID]",
+)
+@click.option(
+    "--oidc-client-secret",
+    "oidc_client_secret",
+    default=None,
+    envvar="STRATA_SERVE_OIDC_CLIENT_SECRET",
+    help=("OIDC client secret. Omit for a public client using PKCE alone. [env: STRATA_SERVE_OIDC_CLIENT_SECRET]"),
+)
+@click.option(
+    "--oidc-redirect-base",
+    "oidc_redirect_base",
+    default=None,
+    envvar="STRATA_SERVE_OIDC_REDIRECT_BASE",
+    help=(
+        "Externally-visible base URL used to build the /auth/callback redirect URI "
+        "(e.g. https://control-plane.example.com). [env: STRATA_SERVE_OIDC_REDIRECT_BASE]"
+    ),
+)
+@click.option(
+    "--session-secret",
+    "session_secret",
+    default=None,
+    envvar="STRATA_SERVE_SESSION_SECRET",
+    help=(
+        "HMAC signing key for session tokens minted by /auth/callback. Required alongside "
+        "the --oidc-* flags. [env: STRATA_SERVE_SESSION_SECRET]"
+    ),
+)
 @_DB_URL_OPTION
 def serve_run(
     host: str,
@@ -89,6 +130,11 @@ def serve_run(
     tls_cert: Optional[str],
     tls_key: Optional[str],
     admin_token: Optional[str],
+    oidc_issuer: Optional[str],
+    oidc_client_id: Optional[str],
+    oidc_client_secret: Optional[str],
+    oidc_redirect_base: Optional[str],
+    session_secret: Optional[str],
     db_url: str,
 ) -> None:
     """Launch the strata state-service server.
@@ -119,6 +165,16 @@ def serve_run(
     if bind_error:
         raise click.ClickException(bind_error)
 
+    oidc_fields = {"issuer": oidc_issuer, "client_id": oidc_client_id, "redirect_base": oidc_redirect_base}
+    configured_oidc_fields = {k: v for k, v in oidc_fields.items() if v}
+    if configured_oidc_fields and len(configured_oidc_fields) != len(oidc_fields):
+        missing = ", ".join(f"--oidc-{k.replace('_', '-')}" for k, v in oidc_fields.items() if not v)
+        raise click.ClickException(
+            f"OIDC login requires all of --oidc-issuer/--oidc-client-id/--oidc-redirect-base. Missing: {missing}"
+        )
+    if configured_oidc_fields and not session_secret:
+        raise click.ClickException("OIDC login also requires --session-secret to sign session tokens.")
+
     try:
         import uvicorn
 
@@ -134,7 +190,18 @@ def serve_run(
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    app = create_app(engine, admin_token=admin_token)
+    oidc_config = None
+    if configured_oidc_fields:
+        from strata.server.auth.oidc_relying_party import OidcRelyingPartyConfig
+
+        oidc_config = OidcRelyingPartyConfig(
+            issuer=oidc_issuer,  # type: ignore[arg-type]
+            client_id=oidc_client_id,  # type: ignore[arg-type]
+            redirect_base=oidc_redirect_base,  # type: ignore[arg-type]
+            client_secret=oidc_client_secret,
+        )
+
+    app = create_app(engine, admin_token=admin_token, oidc_config=oidc_config, session_secret=session_secret)
     uvicorn.run(app, host=host, port=port, ssl_certfile=tls_cert, ssl_keyfile=tls_key)
 
 

@@ -19,9 +19,10 @@ import datetime
 import inspect
 import json
 import sys
-from types import ModuleType
+import urllib.parse
+from types import ModuleType, SimpleNamespace
 from typing import Any, Callable, Dict, Generator, List, Optional
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import create_engine
@@ -39,21 +40,25 @@ class _FakeHTTPError(Exception):
 
 
 class _FakeRequest:
-    def __init__(self, headers: Dict[str, str] | None = None) -> None:
+    def __init__(self, headers: Dict[str, str] | None = None, app: Any = None) -> None:
         self.headers = headers or {}
+        self.app = app
 
 
 def _make_fake_fastapi_module() -> ModuleType:
     """Build a minimal fake `fastapi` module — just enough to exercise create_app()."""
     fake_fastapi = ModuleType("fastapi")
 
-    class _FakeFastAPI:
-        def __init__(self, title: str = "") -> None:
-            self.title = title
+    class _FakeRouteRegistrar:
+        """Shared route-registration behaviour for both `FastAPI` and `APIRouter` fakes —
+        real FastAPI's `APIRouter` supports the exact same `.get()`/`.post()`/`.delete()`
+        decorators as the app itself, which is what `include_router()` relies on.
+        """
+
+        def __init__(self) -> None:
             # Keyed by (method, path) — /v1/tokens has both a GET and a POST route.
             self.routes: Dict[tuple, Callable[..., Any]] = {}
             self.dependencies: Dict[tuple, List[Callable[..., Any]]] = {}
-            self.middlewares: List[Any] = []
 
         def _register(self, method: str, path: str, dependencies: Optional[List[Callable[..., Any]]]):
             def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -72,10 +77,28 @@ def _make_fake_fastapi_module() -> ModuleType:
         def delete(self, path: str, dependencies: Optional[List[Callable[..., Any]]] = None):
             return self._register("DELETE", path, dependencies)
 
+    class _FakeAPIRouter(_FakeRouteRegistrar):
+        """Fakes `fastapi.APIRouter` — one per route module (`routes/health.py` etc.)."""
+
+    class _FakeFastAPI(_FakeRouteRegistrar):
+        def __init__(self, title: str = "") -> None:
+            super().__init__()
+            self.title = title
+            self.middlewares: List[Any] = []
+            # Real FastAPI's `Starlette.state` — an arbitrary-attribute bag route
+            # modules read per-app-instance config from (see `routes/state.py`).
+            self.state = SimpleNamespace()
+
+        def include_router(self, router: "_FakeAPIRouter") -> None:
+            """Fakes `app.include_router()` — merges a router's routes into this app's own."""
+            self.routes.update(router.routes)
+            self.dependencies.update(router.dependencies)
+
         def add_middleware(self, middleware_class: Any, **kwargs: Any) -> None:
             self.middlewares.append((middleware_class, kwargs))
 
     fake_fastapi.FastAPI = _FakeFastAPI  # type: ignore[attr-defined]
+    fake_fastapi.APIRouter = _FakeAPIRouter  # type: ignore[attr-defined]
     fake_fastapi.HTTPException = _FakeHTTPError  # type: ignore[attr-defined]
     fake_fastapi.Request = _FakeRequest  # type: ignore[attr-defined]
     fake_fastapi.Body = lambda *args, **kwargs: None  # type: ignore[attr-defined]
@@ -121,13 +144,11 @@ def sqlite_engine() -> Generator[Engine, None, None]:
 def _call_route(app: Any, method: str, path: str, headers: Optional[Dict[str, str]] = None, **kwargs: Any) -> Any:
     """Run a route's dependencies (as real FastAPI would, before the handler), then the handler itself.
 
-    Only passes `request` to the handler if its signature actually declares it —
-    most Step 2.4 admin routes rely entirely on their `Depends()` dependency for
-    auth and take no `request` parameter of their own (matches real FastAPI:
-    a dependency's own `request` parameter is resolved independently of the
-    route handler's parameters).
+    Always passes `request` to the handler if its signature declares it — most
+    route handlers now read per-instance config off `request.app.state` (see
+    `routes/state.py`) rather than closing over `create_app()`'s locals.
     """
-    request = _FakeRequest(headers=headers)
+    request = _FakeRequest(headers=headers, app=app)
     key = (method, path)
     for dependency in app.dependencies.get(key, []):
         dependency(request)
@@ -178,8 +199,7 @@ class TestCreateApp:
         from strata.server.app import create_app
 
         app = create_app(sqlite_engine)
-        handler = app.routes[("GET", "/healthz")]
-        assert handler() == {"status": "ok"}
+        assert _call_route(app, "GET", "/healthz", headers={}) == {"status": "ok"}
 
     def test_healthz_raises_503_when_db_unreachable(self, fake_fastapi_module: ModuleType) -> None:
         from strata.server.app import create_app
@@ -188,10 +208,9 @@ class TestCreateApp:
         broken_engine.connect.side_effect = RuntimeError("connection refused")
 
         app = create_app(broken_engine)
-        handler = app.routes[("GET", "/healthz")]
 
         with pytest.raises(_FakeHTTPError) as exc_info:
-            handler()
+            _call_route(app, "GET", "/healthz", headers={})
         assert exc_info.value.status_code == 503
 
     def test_healthz_requires_no_auth(self, fake_fastapi_module: ModuleType, sqlite_engine: Engine) -> None:
@@ -228,7 +247,7 @@ class TestWorkspacesRoute:
             )
         app = create_app(sqlite_engine)
 
-        result = app.routes[("GET", "/v1/workspaces")]()
+        result = _call_route(app, "GET", "/v1/workspaces", headers={})
 
         assert result == {"workspaces": ["alpha", "beta"]}
 
@@ -237,7 +256,7 @@ class TestWorkspacesRoute:
 
         app = create_app(sqlite_engine)
 
-        result = app.routes[("GET", "/v1/workspaces")]()
+        result = _call_route(app, "GET", "/v1/workspaces", headers={})
 
         assert result == {"workspaces": []}
 
@@ -594,7 +613,8 @@ class TestTailRoute:
         assert {event["execution_id"] for event in result["events"]} == {"exec-a", "exec-b"}
 
     def test_limit_is_capped_server_side(self, fake_fastapi_module: ModuleType, sqlite_engine: Engine) -> None:
-        from strata.server.app import _MAX_TAIL_LIMIT, create_app
+        from strata.server.app import create_app
+        from strata.server.routes.events import _MAX_TAIL_LIMIT
 
         for i in range(3):
             self._insert(sqlite_engine, f"exec-{i}", "my-workspace")
@@ -606,3 +626,230 @@ class TestTailRoute:
 
         assert len(result["events"]) <= _MAX_TAIL_LIMIT
         assert len(result["events"]) == 3
+
+
+class TestAuthRoutes:
+    """ADR-0067 Step 7 — /auth/login + /auth/callback registration gating and the happy path."""
+
+    _ISSUER = "https://idp.example.test"
+    _CLIENT_ID = "strata-control-plane"
+    _REDIRECT_BASE = "https://control-plane.example.test"
+
+    def _oidc_config(self) -> Any:
+        from strata.server.auth.oidc_relying_party import OidcRelyingPartyConfig
+
+        return OidcRelyingPartyConfig(issuer=self._ISSUER, client_id=self._CLIENT_ID, redirect_base=self._REDIRECT_BASE)
+
+    def _discovery_doc(self) -> Dict[str, Any]:
+        return {
+            "issuer": self._ISSUER,
+            "authorization_endpoint": f"{self._ISSUER}/authorize",
+            "token_endpoint": f"{self._ISSUER}/token",
+            "userinfo_endpoint": f"{self._ISSUER}/userinfo",
+            "jwks_uri": f"{self._ISSUER}/.well-known/jwks.json",
+        }
+
+    def _sign_id_token(self, rsa_key: Any, nonce: str, **overrides: Any) -> str:
+        import time as _time
+
+        from joserfc import jwt as joserfc_jwt
+
+        now = int(_time.time())
+        claims = {
+            "iss": self._ISSUER,
+            "aud": self._CLIENT_ID,
+            "sub": "user-123",
+            "email": "user@example.test",
+            "exp": now + 300,
+            "iat": now,
+            "nonce": nonce,
+        }
+        claims.update(overrides)
+        return joserfc_jwt.encode({"alg": "RS256", "kid": rsa_key.kid}, claims, rsa_key)
+
+    def _urlopen_mock(
+        self,
+        discovery: Dict[str, Any],
+        rsa_key: Any,
+        token_response: Optional[Dict[str, Any]] = None,
+        userinfo_response: Optional[Dict[str, Any]] = None,
+    ) -> Any:
+        import json as _json
+
+        class _FakeResponse:
+            def __init__(self, payload: Dict[str, Any]) -> None:
+                self._body = _json.dumps(payload).encode("utf-8")
+                self.status = 200
+
+            def read(self) -> bytes:
+                return self._body
+
+            def __enter__(self) -> "_FakeResponse":
+                return self
+
+            def __exit__(self, *exc: Any) -> None:
+                return None
+
+        def _urlopen(req: Any, timeout: Any = None) -> _FakeResponse:
+            url = req.full_url if hasattr(req, "full_url") else req
+            if url == f"{self._ISSUER}/.well-known/openid-configuration":
+                return _FakeResponse(discovery)
+            if url == discovery["jwks_uri"]:
+                return _FakeResponse({"keys": [rsa_key.as_dict(private=False)]})
+            if url == discovery["token_endpoint"]:
+                return _FakeResponse(token_response or {"error": "not configured"})
+            if url == discovery["userinfo_endpoint"]:
+                return _FakeResponse(userinfo_response or {})
+            raise AssertionError(f"Unexpected URL requested in test: {url}")
+
+        return _urlopen
+
+    def test_not_registered_without_oidc_config(self, fake_fastapi_module: ModuleType, sqlite_engine: Engine) -> None:
+        from strata.server.app import create_app
+
+        app = create_app(sqlite_engine)
+        assert ("GET", "/auth/login") not in app.routes
+        assert ("GET", "/auth/callback") not in app.routes
+
+    def test_not_registered_with_only_oidc_config_and_no_session_secret(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from strata.server.app import create_app
+
+        app = create_app(sqlite_engine, oidc_config=self._oidc_config())
+        assert ("GET", "/auth/login") not in app.routes
+
+    def test_registered_when_fully_configured(self, fake_fastapi_module: ModuleType, sqlite_engine: Engine) -> None:
+        from strata.server.app import create_app
+
+        app = create_app(sqlite_engine, oidc_config=self._oidc_config(), session_secret="shh")
+        assert ("GET", "/auth/login") in app.routes
+        assert ("GET", "/auth/callback") in app.routes
+
+    def test_login_returns_authorization_url_and_state(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from joserfc.jwk import RSAKey
+
+        from strata.server.app import create_app
+
+        rsa_key = RSAKey.generate_key(2048, parameters={"kid": "k1"}, private=True)
+        discovery = self._discovery_doc()
+        app = create_app(sqlite_engine, oidc_config=self._oidc_config(), session_secret="shh")
+
+        with patch("urllib.request.urlopen", side_effect=self._urlopen_mock(discovery, rsa_key)):
+            result = _call_route(app, "GET", "/auth/login", headers={})
+
+        assert result["authorization_url"].startswith(f"{self._ISSUER}/authorize?")
+        assert "state" in result
+
+    def test_full_login_round_trip_returns_session_token(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from joserfc.jwk import RSAKey
+
+        from strata.server.app import create_app
+
+        rsa_key = RSAKey.generate_key(2048, parameters={"kid": "k1"}, private=True)
+        discovery = self._discovery_doc()
+        app = create_app(sqlite_engine, oidc_config=self._oidc_config(), session_secret="shh")
+
+        with patch("urllib.request.urlopen", side_effect=self._urlopen_mock(discovery, rsa_key)):
+            login = _call_route(app, "GET", "/auth/login", headers={})
+
+        state = login["state"]
+        # Recover the nonce that /auth/login generated internally via the authorization_url.
+        nonce = urllib.parse.parse_qs(urllib.parse.urlparse(login["authorization_url"]).query)["nonce"][0]
+        id_token = self._sign_id_token(rsa_key, nonce=nonce)
+        token_response = {"access_token": "at-1", "id_token": id_token, "expires_in": 3600}
+
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=self._urlopen_mock(discovery, rsa_key, token_response=token_response),
+        ):
+            result = _call_route(app, "GET", "/auth/callback", headers={}, code="auth-code", state=state)
+
+        assert result["token_type"] == "Bearer"
+        assert result["claims"]["sub"] == "user-123"
+
+    def test_callback_with_unknown_state_returns_400(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from strata.server.app import create_app
+
+        app = create_app(sqlite_engine, oidc_config=self._oidc_config(), session_secret="shh")
+
+        with pytest.raises(_FakeHTTPError) as exc_info:
+            _call_route(app, "GET", "/auth/callback", headers={}, code="auth-code", state="never-issued")
+        assert exc_info.value.status_code == 400
+
+    def test_callback_with_wrong_nonce_returns_400(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from joserfc.jwk import RSAKey
+
+        from strata.server.app import create_app
+
+        rsa_key = RSAKey.generate_key(2048, parameters={"kid": "k1"}, private=True)
+        discovery = self._discovery_doc()
+        app = create_app(sqlite_engine, oidc_config=self._oidc_config(), session_secret="shh")
+
+        with patch("urllib.request.urlopen", side_effect=self._urlopen_mock(discovery, rsa_key)):
+            login = _call_route(app, "GET", "/auth/login", headers={})
+
+        # Sign the id_token with a nonce that does NOT match the one /auth/login generated.
+        id_token = self._sign_id_token(rsa_key, nonce="wrong-nonce")
+        token_response = {"access_token": "at-1", "id_token": id_token, "expires_in": 3600}
+
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=self._urlopen_mock(discovery, rsa_key, token_response=token_response),
+        ):
+            with pytest.raises(_FakeHTTPError) as exc_info:
+                _call_route(app, "GET", "/auth/callback", headers={}, code="auth-code", state=login["state"])
+        assert exc_info.value.status_code == 400
+
+    def test_callback_missing_id_token_returns_400(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from joserfc.jwk import RSAKey
+
+        from strata.server.app import create_app
+
+        rsa_key = RSAKey.generate_key(2048, parameters={"kid": "k1"}, private=True)
+        discovery = self._discovery_doc()
+        app = create_app(sqlite_engine, oidc_config=self._oidc_config(), session_secret="shh")
+
+        with patch("urllib.request.urlopen", side_effect=self._urlopen_mock(discovery, rsa_key)):
+            login = _call_route(app, "GET", "/auth/login", headers={})
+
+        token_response = {"access_token": "at-1", "expires_in": 3600}  # no id_token
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=self._urlopen_mock(discovery, rsa_key, token_response=token_response),
+        ):
+            with pytest.raises(_FakeHTTPError) as exc_info:
+                _call_route(app, "GET", "/auth/callback", headers={}, code="auth-code", state=login["state"])
+        assert exc_info.value.status_code == 400
+
+    def test_callback_failed_code_exchange_returns_400(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from joserfc.jwk import RSAKey
+
+        from strata.server.app import create_app
+
+        rsa_key = RSAKey.generate_key(2048, parameters={"kid": "k1"}, private=True)
+        discovery = self._discovery_doc()
+        app = create_app(sqlite_engine, oidc_config=self._oidc_config(), session_secret="shh")
+
+        with patch("urllib.request.urlopen", side_effect=self._urlopen_mock(discovery, rsa_key)):
+            login = _call_route(app, "GET", "/auth/login", headers={})
+
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=self._urlopen_mock(discovery, rsa_key, token_response={"error": "invalid_grant"}),
+        ):
+            with pytest.raises(_FakeHTTPError) as exc_info:
+                _call_route(app, "GET", "/auth/callback", headers={}, code="bad-code", state=login["state"])
+        assert exc_info.value.status_code == 400
