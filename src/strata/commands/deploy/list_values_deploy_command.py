@@ -11,6 +11,7 @@ from strata.models.store_models import (
     SecretStoreModel,
     VariableStoreModel,
 )
+from strata.services.deployment_service import DeploymentService
 
 
 def _mask(value: Any) -> str:
@@ -49,6 +50,8 @@ class ListValuesDeployCommand(BaseDeployCommand):
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
+        no_cache: bool = False,
+        refresh_cache: bool = False,
     ):
         super().__init__(
             file=file,
@@ -56,6 +59,8 @@ class ListValuesDeployCommand(BaseDeployCommand):
             output=output,
             verbose=verbose,
             quiet=quiet,
+            no_cache=no_cache,
+            refresh_cache=refresh_cache,
         )
         self._stage = stage
         self._type_filter = type_filter  # "variables" | "secrets" | "features" | None (all)
@@ -63,6 +68,10 @@ class ListValuesDeployCommand(BaseDeployCommand):
         self._unresolved_only = unresolved_only
         self._trace = trace
         self._ai = ai
+
+    def _load_related_services(self, deployment_service: DeploymentService, repo_map: Dict[str, str]) -> bool:
+        """ADR-0026: only the merged environment is needed — never the workspace."""
+        return self._load_environment_related_services(deployment_service, repo_map)
 
     # ------------------------------------------------------------------
     # Core logic

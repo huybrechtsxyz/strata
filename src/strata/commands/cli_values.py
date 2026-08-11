@@ -5,9 +5,11 @@ from typing import Optional
 import click
 
 from strata.commands.cli_common import (
+    click_no_cache,
     click_output_format,
     click_output_quiet,
     click_output_verbose,
+    click_refresh_cache,
     click_work_path,
     handle_command_exit,
 )
@@ -68,6 +70,8 @@ def values_group():
     default=False,
     help="Show which environment file each value originates from (provenance).",
 )
+@click_no_cache
+@click_refresh_cache
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -87,6 +91,8 @@ def values_list(
     unresolved_only: bool = False,
     trace: bool = False,
     ai: bool = False,
+    no_cache: bool = False,
+    refresh_cache: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -105,6 +111,8 @@ def values_list(
         unresolved_only=unresolved_only,
         trace=trace,
         ai=ai,
+        no_cache=no_cache,
+        refresh_cache=refresh_cache,
         output=output,
         verbose=verbose,
         quiet=quiet,
@@ -124,6 +132,8 @@ def values_list(
 )
 @click_work_path
 @click.argument("keys", nargs=-1, required=True, metavar="KEY...")
+@click_no_cache
+@click_refresh_cache
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -131,6 +141,8 @@ def values_get(
     file: str,
     keys: tuple,
     work_path: Optional[str] = None,
+    no_cache: bool = False,
+    refresh_cache: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -144,6 +156,8 @@ def values_get(
         file=file,
         keys=list(keys),
         work_path=work_path,
+        no_cache=no_cache,
+        refresh_cache=refresh_cache,
         output=output,
         verbose=verbose,
         quiet=quiet,
@@ -252,6 +266,8 @@ def values_set(
     default=False,
     help="Also attempt actual resolution against store backends (without revealing values).",
 )
+@click_no_cache
+@click_refresh_cache
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -259,6 +275,8 @@ def values_resolve(
     file: str,
     key: Optional[str] = None,
     probe: bool = False,
+    no_cache: bool = False,
+    refresh_cache: bool = False,
     work_path: Optional[str] = None,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
@@ -278,6 +296,8 @@ def values_resolve(
         file=file,
         key=key,
         probe=probe,
+        no_cache=no_cache,
+        refresh_cache=refresh_cache,
         work_path=work_path,
         output=output,
         verbose=verbose,

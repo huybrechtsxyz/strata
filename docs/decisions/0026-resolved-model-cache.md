@@ -10,13 +10,37 @@ warmer) are implemented. Command integration (originally "Phase 2") is intention
 narrower than first planned — see "Implementation reality check" below for what's wired
 and why the rest is deferred, not merely unfinished.
 
+**Path B (2026-08-11):** a second cache kind, `resolved_environment`, is now
+implemented alongside the original `deployment` (build-artifact) kind. It caches only
+the merged `EnvironmentModel` (declared variables/secrets/features, properties,
+custom, `overrides.remotes`) plus merge provenance — never the workspace, providers,
+resources, or modules, and never resolved secret *values* (only the store type +
+reference declarations, which is why no encryption-at-rest is needed here — see the
+OQ-4 discussion this sidesteps, below). `DeploymentService.load_environment_only()`
+is the corresponding lightweight live loader (skips the workspace load entirely), and
+`DeploymentService.apply_remote_overrides()` was extracted from
+`apply_environment_overrides()` so effective remote references can still be computed
+without a workspace. `deploy show` and `values list/get/resolve` now use this path via
+`BaseDeployCommand._load_related_services()`'s override seam
+(`_load_environment_related_services`) and expose `--no-cache`/`--refresh-cache`.
+
+The `cache` table's primary key was also changed from `name` alone to a surrogate
+`id` with `UNIQUE (name, kind, cache_version)` — the original `name`-only key could
+not support two cache kinds for the same deployment name. `cache_inputs` now keys off
+`cache_id` (FK, `ON DELETE CASCADE`) instead of `name`. A local cache built under the
+old schema is dropped and rebuilt automatically on next open (see
+`CacheService._migrate_legacy_schema`) — safe, since the cache is always fully
+rebuildable from committed YAML.
+
 ## Remaining Work
 
-- `deploy run/show`, `values list/get/resolve` — need a second, serialisable
-  "resolved deployment" cache concept distinct from `PlatformArtifactModel`;
-  tracked as a follow-up, not implemented.
+- `deploy run/show`(execution path — provisioning, not display), `values
+  list/get/resolve` still resolve secret/variable *values* live via
+  `ValueController` on every invocation (by design — see OQ-4). Only the
+  *declarations* are cached now.
 - `deploy destroy/output/drift/plan`, `env show/status` — deferred until those
   commands exist.
+
 
 ## Context and Problem Statement
 
@@ -112,26 +136,26 @@ Caching the platform.json-shaped output does nothing to avoid that step for thes
 commands; it only helps commands that were going to build a `PlatformArtifactModel`
 anyway.
 
-| Command                                                            | Loads `DeploymentService`?                                                                                | Builds/reads `PlatformArtifactModel`?                             | Cache wiring done?                                                                                                                                                                                                                                                                                                |
-| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `strata build run -f`                                              | Yes (via `BaseBuildCommand`)                                                                              | Builds one (`PlatformBuilder`)                                    | **Yes** — auto-warms from the model already built after a successful run. `--no-cache-warm` to opt out.                                                                                                                                                                                                           |
-| `strata build plan -f`                                             | Yes                                                                                                       | Builds one (into a temp dir for diffing)                          | **Yes** — same auto-warm pattern, same flag.                                                                                                                                                                                                                                                                      |
-| `strata policy check -f`                                           | Yes (own direct `DeploymentService.load()` call)                                                          | **Reads** an existing `platform.json` off disk (never builds one) | **Yes** — opportunistic warm using the artifact it already read. `--no-cache-warm` to opt out.                                                                                                                                                                                                                    |
-| `strata deploy run -f`                                             | Yes                                                                                                       | No — executes provisioners directly off the live service graph    | **No.** Needs the live graph to provision infrastructure; a cached platform.json can't replace that, and there's no `PlatformArtifactModel` in memory to warm from.                                                                                                                                               |
-| `strata deploy show -f`                                            | Yes                                                                                                       | No                                                                | **No.** Same reason — no model built here to warm the cache with; skipping `load_deploy_services()` to serve straight from a cached dict would require rewriting its data access from typed service accessors (`get_variables()`, `get_secrets()`, …) to reading a plain dict. Out of scope as a "quick wire-in". |
-| `strata values list/get/resolve -f`                                | Yes                                                                                                       | No                                                                | **No.** Same reason as `deploy show`.                                                                                                                                                                                                                                                                             |
-| `strata validate run -f`                                           | **No** — uses `PlatformValidator` directly over the raw YAML dict, never loads `DeploymentService` at all | No                                                                | **N/A.** The cache is irrelevant to this command's actual implementation.                                                                                                                                                                                                                                         |
-| `strata deploy destroy/output/drift/plan -f`, `env show/status -f` | Not yet implemented as of this writing                                                                    | —                                                                 | Deferred until the commands exist.                                                                                                                                                                                                                                                                                |
-| `strata deploy list`, `strata manifest list`                       | **No** — both do a cheap direct filesystem/JSON scan, no `DeploymentService` load at all                  | No                                                                | **N/A.** Already cheap; not the "Full load ×N" the fleet-wide table assumed.                                                                                                                                                                                                                                      |
+| Command                                                            | Loads `DeploymentService`?                                                                                | Builds/reads `PlatformArtifactModel`?                             | Cache wiring done?                                                                                                                                                                                                                                                                                                         |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `strata build run -f`                                              | Yes (via `BaseBuildCommand`)                                                                              | Builds one (`PlatformBuilder`)                                    | **Yes** — auto-warms from the model already built after a successful run. `--no-cache-warm` to opt out.                                                                                                                                                                                                                    |
+| `strata build plan -f`                                             | Yes                                                                                                       | Builds one (into a temp dir for diffing)                          | **Yes** — same auto-warm pattern, same flag.                                                                                                                                                                                                                                                                               |
+| `strata policy check -f`                                           | Yes (own direct `DeploymentService.load()` call)                                                          | **Reads** an existing `platform.json` off disk (never builds one) | **Yes** — opportunistic warm using the artifact it already read. `--no-cache-warm` to opt out.                                                                                                                                                                                                                             |
+| `strata deploy run -f`                                             | Yes                                                                                                       | No — executes provisioners directly off the live service graph    | **No.** Needs the live graph to provision infrastructure; a cached platform.json can't replace that, and there's no `PlatformArtifactModel` in memory to warm from.                                                                                                                                                        |
+| `strata deploy show -f`                                            | Yes                                                                                                       | No                                                                | **Yes (2026-08-11)** — via the second `resolved_environment` cache kind (Path B, see "Implementation status" above), not `PlatformArtifactModel`. Skips the workspace load entirely (`load_environment_only()`); effective remote refs still computed live via `apply_remote_overrides()`. `--no-cache`/`--refresh-cache`. |
+| `strata values list/get/resolve -f`                                | Yes                                                                                                       | No                                                                | **Yes (2026-08-11)** — same `resolved_environment` cache kind as `deploy show`, minus the remote-override step (not needed by these commands). `--no-cache`/`--refresh-cache`.                                                                                                                                             |
+| `strata validate run -f`                                           | **No** — uses `PlatformValidator` directly over the raw YAML dict, never loads `DeploymentService` at all | No                                                                | **N/A.** The cache is irrelevant to this command's actual implementation.                                                                                                                                                                                                                                                  |
+| `strata deploy destroy/output/drift/plan -f`, `env show/status -f` | Not yet implemented as of this writing                                                                    | —                                                                 | Deferred until the commands exist.                                                                                                                                                                                                                                                                                         |
+| `strata deploy list`, `strata manifest list`                       | **No** — both do a cheap direct filesystem/JSON scan, no `DeploymentService` load at all                  | No                                                                | **N/A.** Already cheap; not the "Full load ×N" the fleet-wide table assumed.                                                                                                                                                                                                                                               |
 
-**Revised conclusion:** of the originally-listed single-deployment commands, only the
-ones that build or read a `PlatformArtifactModel` as part of their existing work
-(`build run`, `build plan`, `policy check`) get a safe, real cache benefit today. Giving
-the rest (`deploy run/show`, `values list/get/resolve`) genuine cache benefit would
-require a second cache concept — a cached, serialisable "resolved deployment" (variables/
-secrets/features/stage config) distinct from `PlatformArtifactModel` — plus rewriting
-each command to read from it instead of the live service graph. Tracked as a follow-up,
-not implemented.
+**Revised conclusion:** of the originally-listed single-deployment commands, `build
+run`/`build plan`/`policy check` get a cache benefit via the `PlatformArtifactModel`
+(`deployment`) cache kind, and `deploy show`/`values list/get/resolve` now get one via
+the second, lighter `resolved_environment` cache kind (implemented 2026-08-11 — see
+"Implementation status" above). `deploy run` remains uncached: it executes
+provisioners directly off the live service graph (workspace, providers, resources,
+modules) for which no cache concept exists yet, and always needs a live remote
+checkout / secret-store resolution regardless of caching.
 
 ## Decision Drivers
 

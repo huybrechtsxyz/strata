@@ -288,3 +288,136 @@ class TestCacheControllerSyncRemotes:
         assert ok is False
         assert result is None
         assert "remote checkout failed" in controller.get_errors()
+
+
+def _fresh_validated_deployment(deployment_file: Path):
+    """Build a standalone DeploymentService instance for *deployment_file*.
+
+    Deliberately bypasses ``DeploymentService.load()``'s process-lifetime L1 cache
+    (``strata.utils.service_cache``) so each test gets its own instance — the
+    resolved-environment path mutates instance state (``_environment_service``),
+    and a shared cached instance would leak that state across tests.
+    """
+    import yaml
+
+    from strata.services.deployment_service import DeploymentService
+
+    data = yaml.safe_load(deployment_file.read_text(encoding="utf-8"))
+    ds = DeploymentService(path=str(deployment_file), data=data)
+    ok, errors = ds.validate()
+    assert ok, errors
+    return ds
+
+
+def _patched_config_service():
+    from unittest.mock import MagicMock, patch
+
+    fake_config = MagicMock()
+    fake_config.get_remote_map.return_value = {}
+    return patch("strata.services.deployment_service.ConfigurationService.get_instance", return_value=fake_config)
+
+
+class TestCacheControllerResolvedEnvironment:
+    """ADR-0026 Path B: the lighter ``resolved_environment`` cache kind.
+
+    Unlike the ``deployment`` (build-artifact) kind, this never loads the
+    workspace/providers/resources/modules — only the deployment + environment
+    file(s). Uses an isolated ``CacheService`` (tmp_path-backed) so these tests
+    never touch the repo's real ``.strata/cache/model/cache.db``.
+    """
+
+    def _controller(self, tmp_path: Path) -> CacheController:
+        from strata.services.cache_service import CacheService
+
+        repo_root = _repo_root()
+        controller = CacheController(repo_root)
+        # Redirect only the cache storage to an isolated tmp dir; keep repo_root as
+        # the work_path so the fixture's relative file references still resolve.
+        controller._cache = CacheService(tmp_path)
+        return controller
+
+    def test_collect_environment_input_paths_excludes_workspace(self, tmp_path: Path) -> None:
+        deployment_file = _repo_root() / "tests" / "data" / "deployments" / "deployment-standard.yaml"
+        controller = self._controller(tmp_path)
+        deployment_service = _fresh_validated_deployment(deployment_file)
+
+        paths = controller._collect_environment_input_paths(deployment_service)
+        names = {Path(p).name for p in paths}
+
+        assert "deployment-standard.yaml" in names
+        assert "environment-standard.yaml" in names
+        assert "workspace-standard.yaml" not in names
+        assert "provider-standard.yaml" not in names
+
+    def test_get_or_resolve_environment_cold_then_cached(self, tmp_path: Path) -> None:
+        deployment_file = _repo_root() / "tests" / "data" / "deployments" / "deployment-standard.yaml"
+        controller = self._controller(tmp_path)
+
+        deployment_service = _fresh_validated_deployment(deployment_file)
+        with _patched_config_service():
+            ok, snapshot, indicator = controller.get_or_resolve_environment(deployment_service, {})
+        assert ok is True
+        assert indicator == "refreshed"
+        assert snapshot is not None
+        assert snapshot["deployment_name"] == "valid_platform"
+        var_keys = {v["key"] for v in snapshot["environment"]["spec"]["variables"]}
+        assert var_keys == {"WORKSPACE", "DATACENTER", "KAMATERA_MANAGER_ID"}
+        # Cold path mutates the caller's deployment_service in place (matches a live
+        # load_environment_only() call).
+        assert deployment_service._environment_service is not None
+
+        # Second call, fresh instance (simulating a new process) — should be a cache hit.
+        deployment_service2 = _fresh_validated_deployment(deployment_file)
+        with _patched_config_service():
+            ok2, snapshot2, indicator2 = controller.get_or_resolve_environment(deployment_service2, {})
+        assert ok2 is True
+        assert indicator2 == "cached"
+        assert snapshot2 == snapshot
+        # Cache-hit path never calls load_environment_only() — deployment_service2
+        # is left untouched; callers must use apply_environment_snapshot() themselves.
+        assert deployment_service2._environment_service is None
+
+    def test_apply_environment_snapshot_rehydrates_accessors(self, tmp_path: Path) -> None:
+        deployment_file = _repo_root() / "tests" / "data" / "deployments" / "deployment-standard.yaml"
+        controller = self._controller(tmp_path)
+
+        warm_deployment_service = _fresh_validated_deployment(deployment_file)
+        with _patched_config_service():
+            ok, snapshot, _ = controller.get_or_resolve_environment(warm_deployment_service, {})
+        assert ok is True
+        assert snapshot is not None
+
+        # Simulate a fresh process: a new deployment_service with no environment loaded.
+        fresh_deployment_service = _fresh_validated_deployment(deployment_file)
+        assert fresh_deployment_service._environment_service is None
+
+        CacheController.apply_environment_snapshot(fresh_deployment_service, snapshot)
+
+        env_service = fresh_deployment_service.get_environment_service()
+        assert env_service is not None
+        keys = {v.key for v in env_service.get_variables()}
+        assert keys == {"WORKSPACE", "DATACENTER", "KAMATERA_MANAGER_ID"}
+
+        provenance = fresh_deployment_service.get_merge_provenance()
+        # Single environment file in this fixture — merge_envfiles() never ran, so
+        # provenance is None (matches a live single-file load_environment_only() call).
+        assert provenance is None
+
+    def test_kind_scoping_does_not_collide_with_deployment_build_artifact_kind(self, tmp_path: Path) -> None:
+        """Regression test for the surrogate-key schema fix: warming both cache
+        kinds for the same deployment name must not collide."""
+        deployment_file = _repo_root() / "tests" / "data" / "deployments" / "deployment-standard.yaml"
+        controller = self._controller(tmp_path)
+
+        deployment_service = _fresh_validated_deployment(deployment_file)
+        controller.cache.warm(
+            "valid_platform", "deployment", "buildkey", {"kind": "build-artifact"}, [str(deployment_file)]
+        )
+        with _patched_config_service():
+            ok, snapshot, _ = controller.get_or_resolve_environment(deployment_service, {})
+        assert ok is True
+
+        assert controller.cache.get("valid_platform", "deployment", "buildkey") == {"kind": "build-artifact"}
+        entries = {(e["name"], e["kind"]) for e in controller.status()[1]}
+        assert ("valid_platform", "deployment") in entries
+        assert ("valid_platform", "resolved_environment") in entries

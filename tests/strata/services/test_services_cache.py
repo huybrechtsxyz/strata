@@ -25,8 +25,8 @@ class TestCacheServiceReadWrite:
         cache = CacheService(work_path)
         cache_key = cache.compute_cache_key([str(input_file)])
         assert cache_key is not None
-        assert cache.get("demo", cache_key) is None
-        assert cache.status("demo", cache_key) == CacheStatus.COLD
+        assert cache.get("demo", "deployment", cache_key) is None
+        assert cache.status("demo", "deployment", cache_key) == CacheStatus.COLD
 
     def test_warm_then_get_returns_same_payload(self, work_path: Path, input_file: Path) -> None:
         cache = CacheService(work_path)
@@ -36,9 +36,9 @@ class TestCacheServiceReadWrite:
         resolved = {"meta": {"name": "demo"}, "spec": {"a": 1}}
         assert cache.warm("demo", "deployment", cache_key, resolved, [str(input_file)]) is True
 
-        fetched = cache.get("demo", cache_key)
+        fetched = cache.get("demo", "deployment", cache_key)
         assert fetched == resolved
-        assert cache.status("demo", cache_key) == CacheStatus.FRESH
+        assert cache.status("demo", "deployment", cache_key) == CacheStatus.FRESH
 
     def test_stale_when_input_file_changes(self, work_path: Path, input_file: Path) -> None:
         cache = CacheService(work_path)
@@ -52,11 +52,22 @@ class TestCacheServiceReadWrite:
         assert cache_key2 is not None
         assert cache_key2 != cache_key1
 
-        assert cache.get("demo", cache_key2) is None
-        assert cache.status("demo", cache_key2) == CacheStatus.STALE
+        assert cache.get("demo", "deployment", cache_key2) is None
+        assert cache.status("demo", "deployment", cache_key2) == CacheStatus.STALE
         # Old key still technically matches what's stored, but a caller would never
         # recompute the old key again once the file has changed.
-        assert cache.get("demo", cache_key1) == {"v": 1}
+        assert cache.get("demo", "deployment", cache_key1) == {"v": 1}
+
+    def test_same_name_different_kind_do_not_collide(self, work_path: Path, input_file: Path) -> None:
+        cache = CacheService(work_path)
+        cache_key = cache.compute_cache_key([str(input_file)])
+        assert cache_key is not None
+        cache.warm("demo", "deployment", cache_key, {"v": "build-artifact"}, [str(input_file)])
+        cache.warm("demo", "resolved_environment", cache_key, {"v": "resolved-env"}, [str(input_file)])
+
+        assert cache.get("demo", "deployment", cache_key) == {"v": "build-artifact"}
+        assert cache.get("demo", "resolved_environment", cache_key) == {"v": "resolved-env"}
+        assert len(cache.list_entries()) == 2
 
     def test_compute_cache_key_returns_none_for_missing_file(self, work_path: Path) -> None:
         cache = CacheService(work_path)
@@ -78,7 +89,17 @@ class TestCacheServiceInvalidation:
         assert key is not None
         cache.warm("demo", "deployment", key, {"v": 1}, [str(input_file)])
         cache.invalidate("demo")
-        assert cache.get("demo", key) is None
+        assert cache.get("demo", "deployment", key) is None
+
+    def test_invalidate_scoped_to_kind(self, work_path: Path, input_file: Path) -> None:
+        cache = CacheService(work_path)
+        key = cache.compute_cache_key([str(input_file)])
+        assert key is not None
+        cache.warm("demo", "deployment", key, {"v": 1}, [str(input_file)])
+        cache.warm("demo", "resolved_environment", key, {"v": 2}, [str(input_file)])
+        cache.invalidate("demo", "deployment")
+        assert cache.get("demo", "deployment", key) is None
+        assert cache.get("demo", "resolved_environment", key) == {"v": 2}
 
     def test_invalidate_all_clears_every_entry(self, work_path: Path, input_file: Path) -> None:
         cache = CacheService(work_path)
@@ -107,8 +128,8 @@ class TestCacheServiceInvalidation:
 
         removed = cache.invalidate_by_path_prefix(str(remote_dir))
         assert removed == 1
-        assert cache.get("a", key_a) is None
-        assert cache.get("b", key_b) == {"v": 2}
+        assert cache.get("a", "deployment", key_a) is None
+        assert cache.get("b", "deployment", key_b) == {"v": 2}
 
 
 class TestCacheServiceListingAndExport:
@@ -132,8 +153,8 @@ class TestCacheServiceListingAndExport:
         cache.warm("demo", "deployment", key, resolved, [str(input_file)])
 
         exported = cache.export_json()
-        assert "demo" in exported
-        assert exported["demo"]["resolved"] == resolved
+        assert "demo::deployment" in exported
+        assert exported["demo::deployment"]["resolved"] == resolved
 
 
 class TestCacheServiceHighLevelApi:

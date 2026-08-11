@@ -6,6 +6,7 @@ import click
 
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
 from strata.controllers.value_controller import ValueController
+from strata.services.deployment_service import DeploymentService
 
 
 class GetValuesDeployCommand(BaseDeployCommand):
@@ -29,6 +30,8 @@ class GetValuesDeployCommand(BaseDeployCommand):
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
+        no_cache: bool = False,
+        refresh_cache: bool = False,
     ):
         super().__init__(
             file=file,
@@ -36,8 +39,14 @@ class GetValuesDeployCommand(BaseDeployCommand):
             output=output,
             verbose=verbose,
             quiet=quiet,
+            no_cache=no_cache,
+            refresh_cache=refresh_cache,
         )
         self._keys: List[str] = list(keys or [])
+
+    def _load_related_services(self, deployment_service: DeploymentService, repo_map: Dict[str, str]) -> bool:
+        """ADR-0026: only the merged environment is needed — never the workspace."""
+        return self._load_environment_related_services(deployment_service, repo_map)
 
     # ------------------------------------------------------------------
     # Core logic

@@ -55,6 +55,8 @@ class BaseDeployCommand(BaseCommand):
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
+        no_cache: bool = False,
+        refresh_cache: bool = False,
     ):
         super().__init__(
             work_path=work_path,
@@ -82,6 +84,13 @@ class BaseDeployCommand(BaseCommand):
         self._dry_run: bool = False
         self._force_lock: bool = False
         self._force: bool = False
+        # ADR-0026 resolved-environment cache (only consumed by commands that
+        # override _load_related_services to use _load_environment_related_services,
+        # e.g. ShowDeployCommand, values list/get/resolve — unused elsewhere).
+        self._no_cache: bool = no_cache
+        self._refresh_cache: bool = refresh_cache
+        self._environment_snapshot: Optional[Dict[str, Any]] = None
+        self._cache_indicator: str = "no-cache"
 
     def get_required_integrations(self):
         return {}
@@ -462,19 +471,40 @@ class BaseDeployCommand(BaseCommand):
             return False
 
         # Load related services (workspace, environment, providers, resources, ...)
+        # Overridable hook: environment-only commands (deploy show, values
+        # list/get/resolve) skip the workspace load entirely — see
+        # _load_environment_related_services below.
+        if not self._load_related_services(deployment_service, repo_map):
+            return False
+
+        self._deployment_service = deployment_service
+
+        self.logger.debug(
+            "Deployment loaded",
+            file=str(self._file_path),
+            build_path=str(self._build_path),
+        )
+        return True
+
+    def _load_related_services(self, deployment_service: DeploymentService, repo_map: Dict[str, str]) -> bool:
+        """Load workspace + environment services and apply overrides.
+
+        Default hook used by commands that need full infrastructure resolution
+        (``deploy run``/``destroy``/``plan``/etc.). Override for lighter-weight,
+        environment-only commands that never touch workspace resources, providers,
+        or modules — see :meth:`_load_environment_related_services`.
+        """
         if not deployment_service.load_deploy_services(str(self._work_path), repo_map=repo_map):
             self._errors.extend(deployment_service.get_validation_errors())
             self._validation_failed = True
             return False
 
-        # Cross-validate related services
         ok, errors = deployment_service.validate_related_services()
         if not ok:
             self._errors.extend(errors)
             self._validation_failed = True
             return False
 
-        # Apply environment overrides
         ok, errors = deployment_service.apply_environment_overrides()
         if not ok:
             critical = [e for e in errors if "skipped" not in e.lower()]
@@ -484,13 +514,55 @@ class BaseDeployCommand(BaseCommand):
                 return False
             self._messages.extend(errors)  # non-critical warnings
 
-        self._deployment_service = deployment_service
+        return True
 
-        self.logger.debug(
-            "Deployment loaded",
-            file=str(self._file_path),
-            build_path=str(self._build_path),
+    def _load_environment_related_services(
+        self,
+        deployment_service: DeploymentService,
+        repo_map: Dict[str, str],
+        apply_remote_overrides: bool = False,
+    ) -> bool:
+        """Load only the merged environment (ADR-0026 ``resolved_environment`` cache) —
+        never the workspace.
+
+        Used by commands that only need declared variables/secrets/features and merge
+        provenance (``deploy show``, ``values list/get/resolve``). Skips workspace,
+        provider, resource, and module resolution entirely, which is the expensive
+        part of the default :meth:`_load_related_services` for a fleet of deployments
+        that share the same workspace file.
+
+        With *apply_remote_overrides*, also applies the environment's declared remote
+        reference overrides to the active ``ConfigurationService`` (needed by ``deploy
+        show`` to display effective remote references) — this only depends on the
+        environment service populated here, not on the workspace.
+
+        Populates ``self._environment_snapshot`` (the cache payload, for callers that
+        want to display cache provenance) and ``self._cache_indicator`` (``"cached"``
+        / ``"refreshed"`` / ``"no-cache"``).
+        """
+        from strata.controllers.cache_controller import CacheController
+
+        controller = CacheController(self._work_path)
+        ok, snapshot, indicator = controller.get_or_resolve_environment(
+            deployment_service,
+            repo_map,
+            no_cache=self._no_cache,
+            refresh_cache=self._refresh_cache,
         )
+        if not ok or snapshot is None:
+            self._errors.extend(controller.get_errors())
+            self._validation_failed = True
+            return False
+
+        self._environment_snapshot = snapshot
+        self._cache_indicator = indicator
+        CacheController.apply_environment_snapshot(deployment_service, snapshot)
+
+        if apply_remote_overrides:
+            _, errors = deployment_service.apply_remote_overrides()
+            if errors:
+                self._messages.extend(errors)
+
         return True
 
     def _create_deployer(self, stage: DeploymentStageModel):
