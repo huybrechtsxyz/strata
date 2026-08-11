@@ -1,6 +1,6 @@
 # Resolved-model cache for fleet-wide command performance
 
-- Status: partially-implemented
+- Status: implemented
 - Date: 2026-07-08
 
 ## Implementation status
@@ -97,13 +97,17 @@ backends already return more data per call than strata was keeping:
 - `deploy run` (execution/provisioning path) still resolves all values live via
   `ValueController.resolve_values()` (unaffected by any cache — by design).
   `deploy show`/`values list/get/resolve` cache variable/feature values now;
-  secrets are still always resolved live on every invocation (by design — see
-  OQ-4). A future iteration may add secret value caching once an at-rest
-  encryption approach is chosen.
+  secrets are still always resolved live on every invocation. **Secret value
+  caching is deferred indefinitely, not scheduled** — the store-level batching
+  fixes (see below) already address the main throttling concern without it; see
+  OQ-4's closing decision for the full rationale. Revisit only if concrete
+  evidence (a reported rate-limit incident, a measured fleet-scale cost, or an
+  offline/air-gapped requirement) makes the case.
 - No client-side pacing/backoff or rate-limit-response detection exists yet for
   any store integration — the batching fixes above reduce call *volume* but a
   large fleet with many genuinely distinct keys per store can still burst. Not
-  implemented; tracked as a possible follow-up if it proves necessary in practice.
+  implemented; same evidence-first bar as secret caching applies before picking
+  this up.
 - `deploy destroy/output/drift/plan`, `env show/status` — deferred until those
   commands exist.
 
@@ -881,4 +885,21 @@ need to revisit or re-justify the L2 cache design.
    - Still open for a future iteration: secret value caching (needs an encryption
      decision), and a fleet-wide `strata cache warm --values`/bulk refresh command
      (only per-deployment `--refresh-cache` exists today).
+
+   **Decision: secret value caching deferred, not scheduled (2026-08-11).**
+
+   The primary driver for a store-value cache was twofold: offline resilience and
+   throttling protection for mass fleet-wide rollouts. The throttling half is now
+   substantially addressed without caching secret *values* at all — see "Store-level
+   batching / throttling mitigation" above, which cut per-secret call volume via
+   bulk-fetch reuse (etcd, Consul, Azure App Configuration, Infisical) and per-path
+   document caching (Vault). Only Bitwarden, Azure Key Vault, and Vault-without-
+   shared-paths still cost one live call per secret, and no concrete evidence
+   (a reported rate-limit incident, a measured fleet size that trips one, or an
+   offline-resilience requirement) has surfaced to justify taking on Problem 1
+   (no TTL/staleness signal) and Problem 2 (at-rest encryption) for those
+   remaining cases. Secret value caching is deferred indefinitely, not scheduled
+   as follow-up work — it should be revisited only when concrete evidence (an
+   observed throttling incident, a specific offline/air-gapped deployment
+   requirement, or a measured fleet-scale cost) makes the case, not speculatively.
 
