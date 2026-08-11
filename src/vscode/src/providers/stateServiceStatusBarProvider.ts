@@ -24,7 +24,10 @@ export class StateServiceStatusBarProvider implements vscode.Disposable {
     private _onStatus: ((url: string | undefined, reachable: boolean | undefined) => void) | undefined;
 
     constructor() {
-        this._item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
+        // Priority 98 — deliberately distinct from CacheWarmerProvider's 99 (both
+        // StatusBarAlignment.Left) so the two never tie and land in an unstable
+        // relative order.
+        this._item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 98);
         this._item.command = 'strata.stateService.showTail';
     }
 
