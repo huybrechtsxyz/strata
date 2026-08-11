@@ -12,96 +12,109 @@ import * as vscode from 'vscode';
 import type { WorkspaceStatus, ChecklistItem } from '../strataClient';
 
 export class GuideViewProvider implements vscode.Disposable {
-    private _panel: vscode.WebviewPanel | undefined;
-    private _status: WorkspaceStatus | undefined;
-    private _onRefreshRequested: (() => void) | undefined;
+  private _panel: vscode.WebviewPanel | undefined;
+  private _status: WorkspaceStatus | undefined;
+  private _onRefreshRequested: (() => void) | undefined;
+  private _stateServiceHint: { configured: boolean; detected: boolean } | undefined;
 
-    // ── Public API ────────────────────────────────────────────────────────────
+  // ── Public API ──────────────────────────────────────────────────────────────────────────
 
-    /**
-     * Register the callback invoked when the user clicks Refresh in the panel.
-     * Extension wires this to _refreshAll().
-     */
-    onRefresh(cb: () => void): void {
-        this._onRefreshRequested = cb;
+  /**
+   * ADR-0065 Step 2.7 — nudge shown once a `deploy-*.yaml` forwarding to a
+   * state-service-shaped webhook sink is detected but `strata.stateService.url`
+   * isn't configured yet. Best-effort detection lives in extension.ts.
+   */
+  setStateServiceHint(configured: boolean, detected: boolean): void {
+    this._stateServiceHint = { configured, detected };
+    if (this._panel) {
+      this._panel.webview.html = this._buildHtml();
+    }
+  }
+
+  /**
+   * Register the callback invoked when the user clicks Refresh in the panel.
+   * Extension wires this to _refreshAll().
+   */
+  onRefresh(cb: () => void): void {
+    this._onRefreshRequested = cb;
+  }
+
+  /** Open or reveal the panel, rendering the supplied (or last known) status. */
+  show(status?: WorkspaceStatus): void {
+    if (status) {
+      this._status = status;
     }
 
-    /** Open or reveal the panel, rendering the supplied (or last known) status. */
-    show(status?: WorkspaceStatus): void {
-        if (status) {
-            this._status = status;
-        }
-
-        if (this._panel) {
-            this._panel.reveal(vscode.ViewColumn.One);
-            this._panel.webview.html = this._buildHtml();
-            return;
-        }
-
-        this._panel = vscode.window.createWebviewPanel(
-            'strataGuide',
-            'Strata Guide',
-            vscode.ViewColumn.One,
-            {
-                enableScripts: true,
-                retainContextWhenHidden: true,
-            },
-        );
-
-        this._panel.webview.html = this._buildHtml();
-
-        // Handle messages from the webview (Refresh button)
-        this._panel.webview.onDidReceiveMessage((msg: { command: string }) => {
-            if (msg.command === 'refresh') {
-                this._onRefreshRequested?.();
-            }
-        });
-
-        this._panel.onDidDispose(() => {
-            this._panel = undefined;
-        });
+    if (this._panel) {
+      this._panel.reveal(vscode.ViewColumn.One);
+      this._panel.webview.html = this._buildHtml();
+      return;
     }
 
-    /** Called by _refreshAll() after every successful getStatus() call. */
-    update(status: WorkspaceStatus): void {
-        this._status = status;
-        if (this._panel) {
-            this._panel.webview.html = this._buildHtml();
-        }
+    this._panel = vscode.window.createWebviewPanel(
+      'strataGuide',
+      'Strata Guide',
+      vscode.ViewColumn.One,
+      {
+        enableScripts: true,
+        retainContextWhenHidden: true,
+      },
+    );
+
+    this._panel.webview.html = this._buildHtml();
+
+    // Handle messages from the webview (Refresh button)
+    this._panel.webview.onDidReceiveMessage((msg: { command: string }) => {
+      if (msg.command === 'refresh') {
+        this._onRefreshRequested?.();
+      }
+    });
+
+    this._panel.onDidDispose(() => {
+      this._panel = undefined;
+    });
+  }
+
+  /** Called by _refreshAll() after every successful getStatus() call. */
+  update(status: WorkspaceStatus): void {
+    this._status = status;
+    if (this._panel) {
+      this._panel.webview.html = this._buildHtml();
+    }
+  }
+
+  dispose(): void {
+    this._panel?.dispose();
+  }
+
+  // ── HTML builder ──────────────────────────────────────────────────────────
+
+  private _buildHtml(): string {
+    if (!this._status) {
+      return this._loadingPage();
     }
 
-    dispose(): void {
-        this._panel?.dispose();
-    }
+    const { health, solution, profiles, readiness } = this._status;
+    const solutionName = solution.name ?? solution.id ?? 'Workspace';
+    const profile = profiles.active ?? '(no profile)';
+    const { phases_complete, phases_total, checklist, next_step } = readiness;
 
-    // ── HTML builder ──────────────────────────────────────────────────────────
+    const healthColour = health.status === 'HEALTHY'
+      ? 'var(--vscode-testing-iconPassed, #73c991)'
+      : health.status === 'DEGRADED'
+        ? 'var(--vscode-list-warningForeground, #cca700)'
+        : 'var(--vscode-list-errorForeground, #f14c4c)';
 
-    private _buildHtml(): string {
-        if (!this._status) {
-            return this._loadingPage();
-        }
+    const healthIcon = health.status === 'HEALTHY' ? '●' : health.status === 'DEGRADED' ? '▲' : '✕';
 
-        const { health, solution, profiles, readiness } = this._status;
-        const solutionName = solution.name ?? solution.id ?? 'Workspace';
-        const profile = profiles.active ?? '(no profile)';
-        const { phases_complete, phases_total, checklist, next_step } = readiness;
-
-        const healthColour = health.status === 'HEALTHY'
-            ? 'var(--vscode-testing-iconPassed, #73c991)'
-            : health.status === 'DEGRADED'
-                ? 'var(--vscode-list-warningForeground, #cca700)'
-                : 'var(--vscode-list-errorForeground, #f14c4c)';
-
-        const healthIcon = health.status === 'HEALTHY' ? '●' : health.status === 'DEGRADED' ? '▲' : '✕';
-
-        const phaseRows = checklist.map((p: ChecklistItem) => {
-            const icon = p.status === 'ok' ? '✅' : p.status === 'warn' ? '⚠️' : '○';
-            const cls = p.status === 'ok' ? 'ok' : p.status === 'warn' ? 'warn' : 'pending';
-            const detail = p.detail
-                ? `<div class="phase-detail">${this._esc(p.detail)}</div>`
-                : '';
-            const isNext = next_step?.phase === p.phase && p.status !== 'ok';
-            return `
+    const phaseRows = checklist.map((p: ChecklistItem) => {
+      const icon = p.status === 'ok' ? '✅' : p.status === 'warn' ? '⚠️' : '○';
+      const cls = p.status === 'ok' ? 'ok' : p.status === 'warn' ? 'warn' : 'pending';
+      const detail = p.detail
+        ? `<div class="phase-detail">${this._esc(p.detail)}</div>`
+        : '';
+      const isNext = next_step?.phase === p.phase && p.status !== 'ok';
+      return `
                 <tr class="phase-row ${cls}${isNext ? ' next-step' : ''}">
                     <td class="phase-icon">${icon}</td>
                     <td class="phase-label">
@@ -109,37 +122,37 @@ export class GuideViewProvider implements vscode.Disposable {
                         ${detail}
                     </td>
                 </tr>`;
-        }).join('');
+    }).join('');
 
-        const issueRows = health.issues.length > 0
-            ? `<section class="section issues-section">
+    const issueRows = health.issues.length > 0
+      ? `<section class="section issues-section">
                 <h3 class="section-title">Issues</h3>
                 <ul class="issue-list">
                     ${health.issues.map(i => `<li>${this._esc(i)}</li>`).join('')}
                 </ul>
                </section>`
-            : '';
+      : '';
 
-        const nextStepBlock = next_step
-            ? `<section class="section next-section">
+    const nextStepBlock = next_step
+      ? `<section class="section next-section">
                 <h3 class="section-title">Next Step</h3>
                 <div class="next-card">
                     <div class="next-label">${this._esc(next_step.label)}</div>
                     <div class="next-hint">${this._esc(next_step.hint)}</div>
                     ${next_step.see_also
-                ? `<div class="next-see-also">See: ${this._esc(next_step.see_also)}</div>`
-                : ''}
+        ? `<div class="next-see-also">See: ${this._esc(next_step.see_also)}</div>`
+        : ''}
                 </div>
                </section>`
-            : `<section class="section next-section">
+      : `<section class="section next-section">
                 <div class="next-card complete">All phases complete 🎉</div>
                </section>`;
 
-        const progressPct = phases_total > 0
-            ? Math.round((phases_complete / phases_total) * 100)
-            : 0;
+    const progressPct = phases_total > 0
+      ? Math.round((phases_complete / phases_total) * 100)
+      : 0;
 
-        return /* html */`<!DOCTYPE html>
+    return /* html */`<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -330,6 +343,7 @@ export class GuideViewProvider implements vscode.Disposable {
 
 ${issueRows}
 ${nextStepBlock}
+${this._stateServiceHintBlock()}
 
 <script>
   const vscode = acquireVsCodeApi();
@@ -337,16 +351,29 @@ ${nextStepBlock}
 </script>
 </body>
 </html>`;
-    }
+  }
 
-    private _loadingPage(): string {
-        return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+  private _loadingPage(): string {
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';">
 <style>body{font-family:system-ui;padding:40px;color:var(--vscode-editor-foreground);background:var(--vscode-editor-background);text-align:center;}</style>
 </head><body><p>Loading workspace state…</p></body></html>`;
-    }
+  }
 
-    private _esc(s: string): string {
-        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  private _stateServiceHintBlock(): string {
+    if (!this._stateServiceHint || this._stateServiceHint.configured || !this._stateServiceHint.detected) {
+      return '';
     }
+    return `<section class="section next-section">
+                <h3 class="section-title">State Service</h3>
+                <div class="next-card">
+                    <div class="next-label">A deployment forwards audit events to a strata state-service webhook sink</div>
+                    <div class="next-hint">Set the <code>strata.stateService.url</code> setting to see its health and tail its events.</div>
+                </div>
+               </section>`;
+  }
+
+  private _esc(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
 }

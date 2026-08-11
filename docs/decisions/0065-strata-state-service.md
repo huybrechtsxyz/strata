@@ -232,7 +232,7 @@ Once `name` can point multiple record kinds — or multiple workspaces — at th
 - **No change to version-lock files.** They are already stored directly in a git-backed repo, not a local file with a push bolted on — there is nothing here for them to adopt.
 - **Does not touch the HTTP state service.** Phase 2 (below) is independent of this — git-push buys durability, the state service buys queryability, and a record kind can adopt either, both, or neither.
 
-### Phase 2 — ingest endpoint and event store ✅ Done (core + 2.6); 2.7 ⏳ planned
+### Phase 2 — ingest endpoint and event store ✅ Done
 
 The end state is a single service exposing one write route, shared by every record kind:
 
@@ -503,7 +503,7 @@ Verified via full `Check.ps1`: 5660 tests passed (21 new), ruff/mypy/Sphinx all 
 
 **Done when:** `GET /v1/events/tail` returns the most recent `limit` (default 100, capped) events for the caller's authorized scope, ordered oldest-to-newest by `received_at`, excluding the full payload; an ingest token cannot see another workspace's events via this route even if a `workspace` query param requests it; and the admin token can tail across all workspaces.
 
-#### Step 2.7 — VS Code extension integration ⏳ planned
+#### Step 2.7 — VS Code extension integration ✅ Done
 
 **Architecture, unchanged from every other extension feature:** the extension talks to the server exclusively through the CLI — `strata serve health`/`serve token create|list|revoke`/`serve tail` — via `StrataClient._run()`'s existing spawn-and-parse-JSON pattern, never a direct HTTP call from Node. This keeps exactly one code path (the CLI) responsible for talking to the server, consistent with the rest of the extension's design (every other feature, including the closest existing precedent, `deploy health`, already works this way).
 
@@ -511,7 +511,7 @@ Verified via full `Check.ps1`: 5660 tests passed (21 new), ruff/mypy/Sphinx all 
 
 **Token management**, via three command-palette actions (`strata.stateService.createToken`/`.listTokens`/`.revokeToken`), Quick Pick-driven the same way `strata.manageRefs` already is. **The admin token is never written to `settings.json`** — first use prompts via `vscode.window.showInputBox({ password: true })` and stores it in `context.secrets` (VS Code's `SecretStorage` API — a new pattern for this extension, nothing uses it today, but the only correct place for a credential this sensitive). Two housekeeping commands, `strata.stateService.setAdminToken`/`.clearAdminToken`, cover updating/removing it, since there is no settings UI for a secret.
 
-**Tools view row** — one additional row in the existing tools-status view (`toolsViewProvider.ts`), alongside the integration rows it already renders: reachable/unreachable, same iconography, reusing the same health call the status bar item makes rather than polling independently a second time.
+**Tools view row — correction during implementation: there is no separate "Tools view".** `toolsViewProvider.ts` turned out to be unused, superseded, dead code — the real Tools section is a collapsible group inside `WorkspaceHealthProvider._buildTools()` (the `strataWorkspace` tree view). The state-service row was added there instead: one extra row, appended after the CLI-provided tool rows, shown only when a URL is configured, reusing the status bar item's own health check via a new `setStateServiceStatus(url, reachable)` setter — rather than polling independently a second time, exactly as designed.
 
 **Guide view step** — a new step in `guideViewProvider.ts`'s existing walkthrough, appearing once a workspace's `deploy-*.yaml` is detected forwarding to a state-service-shaped webhook sink (step 2.5's worked example) — nudging the operator to set `strata.stateService.url` so the indicator/tail view has something to point at, the same "detect config, suggest the next step" pattern the guide already uses elsewhere.
 
@@ -528,7 +528,11 @@ Verified via full `Check.ps1`: 5660 tests passed (21 new), ruff/mypy/Sphinx all 
 
 **Scoping limit, explicit:** Phase 3 (read API) is still deferred, so nothing here can browse deployment/cost/drift history beyond the last-100-rows tail step 2.6 provides — no filtering by date range, no per-resource drill-down, no aggregation. That is intentional; a fuller history browser is a Phase 3 consumer, not part of this step.
 
-**Done when:** the second status bar item reflects a running server's real health and is hidden entirely when `strata.stateService.url` is empty; token management round-trips create → list → revoke entirely through Quick Picks with the admin token stored only in `SecretStorage`, never in a setting; the tools view shows the same reachability the status bar does; the guide view surfaces the setup nudge when a state-service webhook sink is detected; and the tail view shows new rows appearing within one poll interval of a live `deploy run` against a configured server.
+**Implemented as designed** (with the tools-view correction above). New `providers/stateServiceStatusBarProvider.ts` (second status bar item, `onStatus()` callback so `WorkspaceHealthProvider` and the guide hint reuse one poll) and `providers/stateServiceTailProvider.ts` (`OutputChannel`-backed poller, client-side de-dup via last-seen `received_at`). `strataClient.ts` gained `getServerHealth()`/`getServerTail()`/`createIngestToken()`/`listIngestTokens()`/`revokeIngestToken()`, each a thin `strata serve ...` CLI passthrough. Seven new commands registered in `extension.ts`; the admin token is read/written exclusively through `context.secrets` (`_getStateServiceAdminToken()`), never a setting. The guide-view nudge does a best-effort plain-text scan of `deploy*.yaml` files for `/v1/events` (not full YAML parsing — matches this step's deliberately simple scope) to decide whether to show the setup hint. Config changes to `strata.stateService.url`/`pollIntervalSeconds` restart the status bar's polling live, same pattern as the existing `strata.cliPath` change handler.
+
+Verified via `tsc -p ./` (clean compile) — the extension has no existing per-provider unit test suite to extend (only a broad smoke test), consistent with the rest of the codebase's test coverage for this package.
+
+**Done when:** the second status bar item reflects a running server's real health and is hidden entirely when `strata.stateService.url` is empty; token management round-trips create → list → revoke entirely through Quick Picks with the admin token stored only in `SecretStorage`, never in a setting; the Tools row in the workspace health view shows the same reachability the status bar does; the guide view surfaces the setup nudge when a state-service webhook sink is detected; and the tail view shows new rows appearing within one poll interval of a live `deploy run` against a configured server.
 
 #### What Phase 2 deliberately excludes
 

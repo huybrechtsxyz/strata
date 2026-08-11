@@ -35,6 +35,8 @@ import { IntegrationHelpProvider } from './providers/integrationHelpProvider';
 import { HelpViewProvider } from './providers/helpViewProvider';
 import { WorkItemsViewProvider } from './providers/workItemsViewProvider';
 import { CacheWarmerProvider } from './providers/cacheWarmerProvider';
+import { StateServiceStatusBarProvider } from './providers/stateServiceStatusBarProvider';
+import { StateServiceTailProvider } from './providers/stateServiceTailProvider';
 
 // ---------------------------------------------------------------------------
 // Extension state (singleton per VS Code window)
@@ -61,6 +63,8 @@ let _integrationHelp: IntegrationHelpProvider | undefined;
 let _helpView: HelpViewProvider | undefined;
 let _workItemsView: WorkItemsViewProvider | undefined;
 let _cacheWarmer: CacheWarmerProvider | undefined;
+let _stateServiceStatusBar: StateServiceStatusBarProvider | undefined;
+let _stateServiceTail: StateServiceTailProvider | undefined;
 let _lastStatus: import('./strataClient').WorkspaceStatus | undefined;
 let _lastDriftTarget: string | undefined;
 let _lastDeployTarget: string | undefined;
@@ -114,6 +118,43 @@ function _resolveTarget(explicit?: string): string | undefined {
     return explicit
         ?? _deployCtx?.activeFile
         ?? vscode.window.activeTextEditor?.document.uri.fsPath;
+}
+
+// ---------------------------------------------------------------------------
+// State service helpers (ADR-0065 Step 2.7) — the admin token is stored in
+// VS Code SecretStorage, never in settings.json.
+// ---------------------------------------------------------------------------
+
+const _STATE_SERVICE_ADMIN_TOKEN_KEY = 'strata.stateService.adminToken';
+
+function _stateServiceUrl(): string | undefined {
+    const url = vscode.workspace.getConfiguration('strata').get<string>('stateService.url', '').trim();
+    return url || undefined;
+}
+
+/** Prompt once and cache in SecretStorage if not already set. Returns undefined if the user cancels. */
+async function _getStateServiceAdminToken(context: vscode.ExtensionContext): Promise<string | undefined> {
+    const existing = await context.secrets.get(_STATE_SERVICE_ADMIN_TOKEN_KEY);
+    if (existing) return existing;
+    const value = await vscode.window.showInputBox({
+        prompt: 'Strata state-service admin token (saved for next time)',
+        password: true,
+        ignoreFocusOut: true,
+    });
+    if (!value) return undefined;
+    await context.secrets.store(_STATE_SERVICE_ADMIN_TOKEN_KEY, value);
+    return value;
+}
+
+/** The tail view accepts either the saved admin token or a one-off ingest token. */
+async function _getStateServiceToken(context: vscode.ExtensionContext): Promise<string | undefined> {
+    const saved = await context.secrets.get(_STATE_SERVICE_ADMIN_TOKEN_KEY);
+    if (saved) return saved;
+    return vscode.window.showInputBox({
+        prompt: 'Strata state-service ingest or admin token (no admin token saved yet)',
+        password: true,
+        ignoreFocusOut: true,
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -183,6 +224,16 @@ export function activate(context: vscode.ExtensionContext): void {
 
     _cacheWarmer = new CacheWarmerProvider();
     _cacheWarmer.setClient(_client);
+
+    // ADR-0065 Step 2.7 — state-service status bar + tail view
+    _stateServiceStatusBar = new StateServiceStatusBarProvider();
+    _stateServiceStatusBar.setClient(_client);
+    _stateServiceStatusBar.onStatus((url, reachable) => {
+        _workspaceHealth?.setStateServiceStatus(url, reachable);
+    });
+
+    _stateServiceTail = new StateServiceTailProvider();
+    _stateServiceTail.setClient(_client);
 
     // Propagate deployment context changes to status bar
     context.subscriptions.push(
@@ -812,6 +863,108 @@ export function activate(context: vscode.ExtensionContext): void {
             _client?.runInTerminal(['cost', 'history', '-f', target], 'strata cost history');
         }),
 
+        // ── State service (ADR-0065 Step 2.7) ───────────────────────────────────
+
+        vscode.commands.registerCommand('strata.stateService.checkHealth', async () => {
+            const url = _stateServiceUrl();
+            if (!url) { void vscode.window.showWarningMessage('Set the strata.stateService.url setting first.'); return; }
+            await _stateServiceStatusBar?.refresh();
+            const reachable = _stateServiceStatusBar?.lastReachable();
+            void vscode.window.showInformationMessage(
+                reachable ? `Strata state service reachable: ${url}` : `Strata state service unreachable: ${url}`,
+            );
+        }),
+
+        vscode.commands.registerCommand('strata.stateService.showTail', async () => {
+            const url = _stateServiceUrl();
+            if (!url) { void vscode.window.showWarningMessage('Set the strata.stateService.url setting first.'); return; }
+            const token = await _getStateServiceToken(context);
+            if (!token) return;
+            const seconds = vscode.workspace.getConfiguration('strata').get<number>('stateService.pollIntervalSeconds', 60);
+            _stateServiceTail?.show(url, token, Math.max(10, seconds) * 1000);
+        }),
+
+        vscode.commands.registerCommand('strata.stateService.createToken', async () => {
+            const url = _stateServiceUrl();
+            if (!url || !_client) { void vscode.window.showWarningMessage('Set the strata.stateService.url setting first.'); return; }
+            const adminToken = await _getStateServiceAdminToken(context);
+            if (!adminToken) return;
+            const workspace = await vscode.window.showInputBox({ prompt: 'Workspace name to issue an ingest token for' });
+            if (!workspace) return;
+            try {
+                const created = await _client.createIngestToken(url, adminToken, workspace);
+                const copy = 'Copy Token';
+                void vscode.window.showInformationMessage(
+                    `Token created for "${workspace}" (id ${created.token_id}). Shown once — save it now: ${created.token}`,
+                    copy,
+                ).then((v) => { if (v === copy) void vscode.env.clipboard.writeText(created.token); });
+            } catch (err) {
+                void vscode.window.showErrorMessage(`Create ingest token failed: ${String(err)}`);
+            }
+        }),
+
+        vscode.commands.registerCommand('strata.stateService.listTokens', async () => {
+            const url = _stateServiceUrl();
+            if (!url || !_client) { void vscode.window.showWarningMessage('Set the strata.stateService.url setting first.'); return; }
+            const adminToken = await _getStateServiceAdminToken(context);
+            if (!adminToken) return;
+            try {
+                const tokens = await _client.listIngestTokens(url, adminToken);
+                if (tokens.length === 0) { void vscode.window.showInformationMessage('No ingest tokens found.'); return; }
+                await vscode.window.showQuickPick(
+                    tokens.map(t => ({
+                        label: t.workspace,
+                        description: t.revoked_at ? 'revoked' : 'active',
+                        detail: `${t.token_id}  \u2014  created ${t.created_at}`,
+                    })),
+                    { title: 'Strata ingest tokens' },
+                );
+            } catch (err) {
+                void vscode.window.showErrorMessage(`List ingest tokens failed: ${String(err)}`);
+            }
+        }),
+
+        vscode.commands.registerCommand('strata.stateService.revokeToken', async () => {
+            const url = _stateServiceUrl();
+            if (!url || !_client) { void vscode.window.showWarningMessage('Set the strata.stateService.url setting first.'); return; }
+            const adminToken = await _getStateServiceAdminToken(context);
+            if (!adminToken) return;
+            try {
+                const tokens = await _client.listIngestTokens(url, adminToken);
+                const active = tokens.filter(t => !t.revoked_at);
+                if (active.length === 0) { void vscode.window.showInformationMessage('No active ingest tokens to revoke.'); return; }
+                const pick = await vscode.window.showQuickPick(
+                    active.map(t => ({ label: t.workspace, description: t.token_id, token: t })),
+                    { title: 'Revoke which ingest token?' },
+                );
+                if (!pick) return;
+                const confirmed = await vscode.window.showWarningMessage(
+                    `Revoke the ingest token for "${pick.label}"?`, { modal: true }, 'Revoke',
+                );
+                if (confirmed !== 'Revoke') return;
+                await _client.revokeIngestToken(url, adminToken, pick.token.token_id);
+                void vscode.window.showInformationMessage(`Revoked token for "${pick.label}".`);
+            } catch (err) {
+                void vscode.window.showErrorMessage(`Revoke ingest token failed: ${String(err)}`);
+            }
+        }),
+
+        vscode.commands.registerCommand('strata.stateService.setAdminToken', async () => {
+            const value = await vscode.window.showInputBox({
+                prompt: 'Strata state-service admin token',
+                password: true,
+                ignoreFocusOut: true,
+            });
+            if (!value) return;
+            await context.secrets.store(_STATE_SERVICE_ADMIN_TOKEN_KEY, value);
+            void vscode.window.showInformationMessage('Strata state-service admin token saved.');
+        }),
+
+        vscode.commands.registerCommand('strata.stateService.clearAdminToken', async () => {
+            await context.secrets.delete(_STATE_SERVICE_ADMIN_TOKEN_KEY);
+            void vscode.window.showInformationMessage('Strata state-service admin token cleared.');
+        }),
+
         // ── Misc ───────────────────────────────────────────────────────────────
 
         vscode.commands.registerCommand('strata.openConsole', () => {
@@ -873,7 +1026,15 @@ export function activate(context: vscode.ExtensionContext): void {
                 _auditView?.setClient(_client);
                 _valuesView?.setClient(_client);
                 _promotionsView?.setClient(_client);
+                _stateServiceStatusBar?.setClient(_client);
+                _stateServiceTail?.setClient(_client);
                 void _refreshAll();
+            }
+            if (
+                e.affectsConfiguration('strata.stateService.url') ||
+                e.affectsConfiguration('strata.stateService.pollIntervalSeconds')
+            ) {
+                _stateServiceStatusBar?.start();
             }
         }),
     );
@@ -955,7 +1116,7 @@ export function activate(context: vscode.ExtensionContext): void {
         _statusBar, _workspaceHealth, _deploymentExplorer, _operationsView,
         _deployCtx, _diagnostics, _codeLens, _guideView, _crossRef, _snippets,
         _taskProvider, _fileDecorations, _chatParticipant, solutionWatcher,
-        _auditView!, _valuesView!, _cacheWarmer,
+        _auditView!, _valuesView!, _cacheWarmer, _stateServiceStatusBar, _stateServiceTail,
     );
 
     // ── Context key ────────────────────────────────────────────────────────────
@@ -972,4 +1133,34 @@ export function activate(context: vscode.ExtensionContext): void {
     } else {
         void _refreshAll();
     }
+
+    // ADR-0065 Step 2.7 — start the state-service indicator and detect whether
+    // a deploy-*.yaml already forwards to a state-service-shaped webhook sink
+    // (nudges the guide view to set strata.stateService.url if so).
+    _stateServiceStatusBar?.start();
+    void _detectStateServiceSinkConfigured().then((detected) => {
+        const configured = vscode.workspace.getConfiguration('strata').get<string>('stateService.url', '').trim().length > 0;
+        _guideView?.setStateServiceHint(configured, detected);
+    });
+}
+
+/**
+ * Best-effort scan of `deploy*.yaml` files for a webhook sink pointed at a
+ * strata state-service `/v1/events` endpoint (ADR-0065 Step 2.5's worked
+ * example) — plain text search, not full YAML parsing, matching this
+ * integration's deliberately simple scope.
+ */
+async function _detectStateServiceSinkConfigured(): Promise<boolean> {
+    try {
+        const files = await vscode.workspace.findFiles('**/deploy*.yaml', '**/node_modules/**', 20);
+        for (const file of files) {
+            const bytes = await vscode.workspace.fs.readFile(file);
+            if (Buffer.from(bytes).toString('utf8').includes('/v1/events')) {
+                return true;
+            }
+        }
+    } catch {
+        // best-effort only — never block activation on this
+    }
+    return false;
 }

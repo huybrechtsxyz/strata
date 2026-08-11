@@ -137,6 +137,42 @@ export interface WorkspaceStatus {
     integrations: Record<string, IntegrationInfo>;
 }
 
+// ── State service (ADR-0065) ────────────────────────────────────────────────
+
+/** Matches HealthServeCommand's output_data (`strata serve health <url>`). */
+export interface ServerHealthData {
+    url: string;
+    reachable: boolean;
+    status_code?: number;
+}
+
+/** Matches list_tokens()'s per-row shape (`strata serve token list`) — never the hash/secret. */
+export interface ServerTokenInfo {
+    token_id: string;
+    workspace: string;
+    created_at: string;
+    revoked_at: string | null;
+}
+
+/** Matches list_recent_events()'s lean projection (`strata serve tail`, ADR-0065 Step 2.6). */
+export interface ServerTailEvent {
+    execution_id: string;
+    record_type: string;
+    recorded_at: string | null;
+    received_at: string | null;
+    workspace: string | null;
+    deployment: string | null;
+    environment: string | null;
+    action: string | null;
+    outcome: string | null;
+}
+
+/** Matches CreateTokenServeCommand's output_data (`strata serve token create`). */
+export interface CreatedServerToken {
+    token_id: string;
+    token: string;
+}
+
 /** Matches ValidationError.to_dict() in strata/models/validation_error.py */
 export interface ValidationError {
     code: string;
@@ -1070,6 +1106,49 @@ export class StrataClient {
         }
         const resp = await this._run<{ integrations: ToolsStatusRow[] }>(args);
         return resp.data?.integrations ?? [];
+    }
+
+    // ── State service (ADR-0065) ─────────────────────────────────────────────
+
+    /** Run `strata serve health <url> --output json`. */
+    async getServerHealth(url: string): Promise<ServerHealthData> {
+        const resp = await this._run<ServerHealthData>(['serve', 'health', url, '--output', 'json']);
+        return resp.data;
+    }
+
+    /** Run `strata serve tail <url> --token <token> --limit <limit> [--workspace <workspace>] --output json`. */
+    async getServerTail(url: string, token: string, limit = 100, workspace?: string): Promise<ServerTailEvent[]> {
+        const args = ['serve', 'tail', url, '--token', token, '--limit', String(limit), '--output', 'json'];
+        if (workspace) {
+            args.push('--workspace', workspace);
+        }
+        const resp = await this._run<{ events: ServerTailEvent[] }>(args);
+        return resp.data?.events ?? [];
+    }
+
+    /** Run `strata serve token create --url <url> --admin-token <token> --workspace <workspace> --output json`. */
+    async createIngestToken(url: string, adminToken: string, workspace: string): Promise<CreatedServerToken> {
+        const resp = await this._run<CreatedServerToken>([
+            'serve', 'token', 'create',
+            '--url', url, '--admin-token', adminToken, '--workspace', workspace,
+            '--output', 'json',
+        ]);
+        return resp.data;
+    }
+
+    /** Run `strata serve token list --url <url> --admin-token <token> --output json`. */
+    async listIngestTokens(url: string, adminToken: string): Promise<ServerTokenInfo[]> {
+        const resp = await this._run<{ tokens: ServerTokenInfo[] }>([
+            'serve', 'token', 'list', '--url', url, '--admin-token', adminToken, '--output', 'json',
+        ]);
+        return resp.data?.tokens ?? [];
+    }
+
+    /** Run `strata serve token revoke <tokenId> --url <url> --admin-token <token> --output json`. */
+    async revokeIngestToken(url: string, adminToken: string, tokenId: string): Promise<void> {
+        await this._run([
+            'serve', 'token', 'revoke', tokenId, '--url', url, '--admin-token', adminToken, '--output', 'json',
+        ]);
     }
 
     // ── Help ──────────────────────────────────────────────────────────────────
