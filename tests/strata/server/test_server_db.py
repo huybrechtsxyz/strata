@@ -214,3 +214,38 @@ class TestListRecentEvents:
         from strata.server.db.query import list_recent_events
 
         assert list_recent_events(sqlite_engine) == []
+
+
+class TestListWorkspaces:
+    """Backs GET /v1/workspaces — the no-auth read-only React dashboard's workspace list."""
+
+    def _row(self, execution_id: str, workspace: str | None) -> dict:
+        return {
+            "execution_id": execution_id,
+            "record_type": "xyz.huybrechts.strata.deployment.completed",
+            "recorded_at": datetime.datetime.now(datetime.timezone.utc),
+            "workspace": workspace,
+            "payload": {},
+        }
+
+    def test_returns_distinct_workspaces_sorted(self, sqlite_engine: Engine) -> None:
+        from strata.server.db.query import list_workspaces
+
+        insert_event(sqlite_engine, self._row("exec-a", "beta"))
+        insert_event(sqlite_engine, self._row("exec-b", "alpha"))
+        insert_event(sqlite_engine, self._row("exec-c", "beta"))
+
+        assert list_workspaces(sqlite_engine) == ["alpha", "beta"]
+
+    def test_null_workspace_is_excluded(self, sqlite_engine: Engine) -> None:
+        from strata.server.db.query import list_workspaces
+
+        insert_event(sqlite_engine, self._row("exec-a", None))
+        insert_event(sqlite_engine, self._row("exec-b", "alpha"))
+
+        assert list_workspaces(sqlite_engine) == ["alpha"]
+
+    def test_empty_store_returns_empty_list(self, sqlite_engine: Engine) -> None:
+        from strata.server.db.query import list_workspaces
+
+        assert list_workspaces(sqlite_engine) == []

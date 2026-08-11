@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 
 try:
     from fastapi import Body, Depends, FastAPI, HTTPException, Request
+    from fastapi.middleware.cors import CORSMiddleware
 except ImportError as _exc:
     raise ImportError(
         "The 'fastapi' package is required for the strata state-service server.\n"
@@ -78,11 +79,21 @@ def create_app(engine: "Engine", admin_token: Optional[str] = None) -> FastAPI:
     """
     from strata.server.db.engine import check_connection
     from strata.server.db.ingest import extract_row
-    from strata.server.db.query import list_recent_events
+    from strata.server.db.query import list_recent_events, list_workspaces
     from strata.server.db.store import insert_event
     from strata.server.db.tokens import create_token, list_tokens, revoke_token, verify_token
 
     app = FastAPI(title="strata state service")
+
+    # Wide open for now — the read-only dashboard (a separate React app, no auth yet)
+    # runs on its own origin/port and needs to call this API directly from the browser.
+    # Tighten this once the dashboard grows real authentication.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     def verify_ingest_token(request: Request) -> None:
         """Per-workspace bearer token required for /v1/events (Step 2.4)."""
@@ -101,17 +112,23 @@ def create_app(engine: "Engine", admin_token: Optional[str] = None) -> FastAPI:
             raise HTTPException(status_code=403, detail="Invalid admin token")
 
     def resolve_read_scope(request: Request) -> Optional[str]:
-        """Bearer token required for /v1/events/tail (Step 2.6).
+        """Bearer token optional for /v1/events/tail (Step 2.6).
 
         Returns the workspace scope to enforce — an ingest token's own workspace — or
-        `None` for unrestricted (admin) access. Called directly from the route body
-        rather than via `dependencies=[]`, unlike `verify_ingest_token`/`verify_admin_token`
-        above: those are fire-and-forget checks, but this route needs the *scope value*
-        itself to filter the query, not just a pass/fail auth decision.
+        `None` for unrestricted access. Called directly from the route body rather than
+        via `dependencies=[]`, unlike `verify_ingest_token`/`verify_admin_token` above:
+        those are fire-and-forget checks, but this route needs the *scope value* itself
+        to filter the query, not just a pass/fail auth decision.
+
+        TEMPORARY: no token at all is treated as unrestricted access (same as a valid
+        admin token) rather than a 401 — relaxed for the read-only React dashboard,
+        which has no auth yet. A malformed/invalid/revoked token is still rejected. Once
+        the dashboard grows real authentication, this should go back to requiring a
+        token unconditionally.
         """
         token = _bearer_token(request)
         if token is None:
-            raise HTTPException(status_code=401, detail="Missing or malformed Authorization header")
+            return None
         if admin_token and hmac.compare_digest(token, admin_token):
             return None
         workspace = verify_token(engine, token)
@@ -126,6 +143,16 @@ def create_app(engine: "Engine", admin_token: Optional[str] = None) -> FastAPI:
         if not ok:
             raise HTTPException(status_code=503, detail=detail)
         return {"status": "ok"}
+
+    @app.get("/v1/workspaces")
+    def workspaces_route() -> Dict[str, Any]:
+        """List distinct workspaces seen in `events` — unauthenticated, read-only.
+
+        Backs the read-only dashboard's "Workspaces" view. Unlike `/v1/tokens` (which
+        lists registered ingest tokens and requires the admin token), this reflects
+        workspaces that have actually sent data, with no credential required.
+        """
+        return {"workspaces": list_workspaces(engine)}
 
     @app.post("/v1/events", status_code=202, dependencies=[Depends(verify_ingest_token)])
     def ingest_event(request: Request, body: bytes = Body(...)) -> Dict[str, Any]:

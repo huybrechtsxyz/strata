@@ -53,6 +53,7 @@ def _make_fake_fastapi_module() -> ModuleType:
             # Keyed by (method, path) — /v1/tokens has both a GET and a POST route.
             self.routes: Dict[tuple, Callable[..., Any]] = {}
             self.dependencies: Dict[tuple, List[Callable[..., Any]]] = {}
+            self.middlewares: List[Any] = []
 
         def _register(self, method: str, path: str, dependencies: Optional[List[Callable[..., Any]]]):
             def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -71,6 +72,9 @@ def _make_fake_fastapi_module() -> ModuleType:
         def delete(self, path: str, dependencies: Optional[List[Callable[..., Any]]] = None):
             return self._register("DELETE", path, dependencies)
 
+        def add_middleware(self, middleware_class: Any, **kwargs: Any) -> None:
+            self.middlewares.append((middleware_class, kwargs))
+
     fake_fastapi.FastAPI = _FakeFastAPI  # type: ignore[attr-defined]
     fake_fastapi.HTTPException = _FakeHTTPError  # type: ignore[attr-defined]
     fake_fastapi.Request = _FakeRequest  # type: ignore[attr-defined]
@@ -82,10 +86,27 @@ def _make_fake_fastapi_module() -> ModuleType:
     return fake_fastapi
 
 
+def _make_fake_fastapi_middleware_cors_module() -> ModuleType:
+    """Build the fake `fastapi.middleware.cors` submodule `app.py` imports `CORSMiddleware` from."""
+
+    class _FakeCORSMiddleware:
+        def __init__(self, app: Any, **kwargs: Any) -> None:
+            self.app = app
+            self.kwargs = kwargs
+
+    fake_cors = ModuleType("fastapi.middleware.cors")
+    fake_cors.CORSMiddleware = _FakeCORSMiddleware  # type: ignore[attr-defined]
+    return fake_cors
+
+
 @pytest.fixture
 def fake_fastapi_module(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     fake = _make_fake_fastapi_module()
     monkeypatch.setitem(sys.modules, "fastapi", fake)
+    fake_middleware = ModuleType("fastapi.middleware")
+    fake_cors = _make_fake_fastapi_middleware_cors_module()
+    monkeypatch.setitem(sys.modules, "fastapi.middleware", fake_middleware)
+    monkeypatch.setitem(sys.modules, "fastapi.middleware.cors", fake_cors)
     return fake
 
 
@@ -132,6 +153,7 @@ class TestCreateApp:
         app = create_app(sqlite_engine)
         assert set(app.routes.keys()) == {
             ("GET", "/healthz"),
+            ("GET", "/v1/workspaces"),
             ("POST", "/v1/events"),
             ("GET", "/v1/events/tail"),
         }
@@ -144,6 +166,7 @@ class TestCreateApp:
         app = create_app(sqlite_engine, admin_token="admin-secret")
         assert set(app.routes.keys()) == {
             ("GET", "/healthz"),
+            ("GET", "/v1/workspaces"),
             ("POST", "/v1/events"),
             ("GET", "/v1/events/tail"),
             ("POST", "/v1/tokens"),
@@ -177,6 +200,46 @@ class TestCreateApp:
 
         app = create_app(sqlite_engine, admin_token="admin-secret")
         assert app.dependencies.get(("GET", "/healthz"), []) == []
+
+
+class TestWorkspacesRoute:
+    """GET /v1/workspaces — unauthenticated, read-only, backs the React dashboard."""
+
+    def test_requires_no_auth(self, fake_fastapi_module: ModuleType, sqlite_engine: Engine) -> None:
+        from strata.server.app import create_app
+
+        app = create_app(sqlite_engine, admin_token="admin-secret")
+        assert app.dependencies.get(("GET", "/v1/workspaces"), []) == []
+
+    def test_returns_distinct_workspaces_sorted(self, fake_fastapi_module: ModuleType, sqlite_engine: Engine) -> None:
+        from strata.server.app import create_app
+        from strata.server.db.store import insert_event
+
+        for execution_id, workspace in [("exec-a", "beta"), ("exec-b", "alpha"), ("exec-c", "beta")]:
+            insert_event(
+                sqlite_engine,
+                {
+                    "execution_id": execution_id,
+                    "record_type": "xyz.huybrechts.strata.deployment.completed",
+                    "recorded_at": datetime.datetime.now(datetime.timezone.utc),
+                    "workspace": workspace,
+                    "payload": {},
+                },
+            )
+        app = create_app(sqlite_engine)
+
+        result = app.routes[("GET", "/v1/workspaces")]()
+
+        assert result == {"workspaces": ["alpha", "beta"]}
+
+    def test_empty_store_returns_empty_list(self, fake_fastapi_module: ModuleType, sqlite_engine: Engine) -> None:
+        from strata.server.app import create_app
+
+        app = create_app(sqlite_engine)
+
+        result = app.routes[("GET", "/v1/workspaces")]()
+
+        assert result == {"workspaces": []}
 
 
 def _make_envelope(**overrides: Any) -> Dict[str, Any]:
@@ -450,15 +513,24 @@ class TestTailRoute:
     def _tail(self, app: Any, headers: Dict[str, str], **kwargs: Any) -> Any:
         return _call_route(app, "GET", "/v1/events/tail", headers=headers, **kwargs)
 
-    def test_missing_authorization_header_returns_401(
+    def test_missing_authorization_header_is_unrestricted(
         self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
     ) -> None:
+        """TEMPORARY relaxation: no token is treated as unrestricted access, not a 401.
+
+        Backs the no-auth v0 read-only React dashboard. See `resolve_read_scope()`'s
+        docstring in `app.py` for the plan to require a token again once the
+        dashboard grows real authentication.
+        """
         from strata.server.app import create_app
 
+        self._insert(sqlite_engine, "exec-a", "workspace-a")
+        self._insert(sqlite_engine, "exec-b", "workspace-b")
         app = create_app(sqlite_engine)
-        with pytest.raises(_FakeHTTPError) as exc_info:
-            self._tail(app, {}, limit=100, workspace=None)
-        assert exc_info.value.status_code == 401
+
+        result = self._tail(app, {}, limit=100, workspace=None)
+
+        assert {event["execution_id"] for event in result["events"]} == {"exec-a", "exec-b"}
 
     def test_wrong_token_returns_403(self, fake_fastapi_module: ModuleType, sqlite_engine: Engine) -> None:
         from strata.server.app import create_app

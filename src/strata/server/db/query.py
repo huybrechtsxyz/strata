@@ -15,6 +15,26 @@ if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
 
 
+def list_workspaces(engine: "Engine") -> List[str]:
+    """Return the distinct, non-null workspace names seen in `events`, sorted alphabetically.
+
+    A read-only projection, not a workspace registry — a workspace shows up here once it has
+    sent at least one event, regardless of whether it has (or ever had) an ingest token. Backs
+    the read-only dashboard's "Workspaces" view (no auth required for this query, unlike
+    `/v1/tokens`, which lists *registered* tokens instead).
+    """
+    from sqlalchemy import select
+
+    from strata.server.db.schema import events
+
+    query = select(events.c.workspace).distinct().where(events.c.workspace.isnot(None)).order_by(events.c.workspace)
+
+    with engine.connect() as conn:
+        rows = conn.execute(query).scalars().all()
+
+    return list(rows)
+
+
 def list_recent_events(engine: "Engine", workspace: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
     """Return the most recent `limit` events, oldest-of-the-batch first, optionally scoped to one workspace.
 
