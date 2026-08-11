@@ -33,7 +33,7 @@ sln_group.add_command(status_command, name="status")
 sln_group.add_command(export_command, name="export")
 
 
-@sln_group.command(name="doctor", help="Run a workspace health check: runtime, tools, config, and auth.")
+@sln_group.command(name="doctor", help="Run a workspace health check: runtime, tools, config, auth, and server.")
 @click.option(
     "--file",
     "-f",
@@ -46,7 +46,7 @@ sln_group.add_command(export_command, name="export")
 @click.option(
     "--category",
     default=None,
-    type=click.Choice(["runtime", "workspace", "tools", "config", "auth"], case_sensitive=False),
+    type=click.Choice(["runtime", "workspace", "tools", "config", "auth", "server"], case_sensitive=False),
     metavar="NAME",
     help="Run only a specific check category.",
 )
@@ -54,7 +54,7 @@ sln_group.add_command(export_command, name="export")
     "--deep",
     is_flag=True,
     default=False,
-    help="Run slow checks: backend reachability and auth validation.",
+    help="Run slow checks: backend reachability, auth validation, and server reachability.",
 )
 @click.option(
     "--login",
@@ -70,6 +70,17 @@ sln_group.add_command(export_command, name="export")
     default=False,
     help="Run AI analysis of failed checks (requires an ai_agent integration).",
 )
+@click.option(
+    "--server-url",
+    "server_url",
+    default=None,
+    envvar="STRATA_SERVE_URL",
+    metavar="URL",
+    help=(
+        "Base URL of a running state-service server to check (with --deep), same as "
+        "'strata serve health <url>'. [env: STRATA_SERVE_URL]"
+    ),
+)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -80,11 +91,12 @@ def sln_doctor(
     deep: bool = False,
     login: bool = False,
     ai: bool = False,
+    server_url=None,
     output=None,
     verbose: bool = False,
     quiet: bool = False,
 ) -> None:
-    """Run a workspace health check across runtime, workspace, tools, config, and auth."""
+    """Run a workspace health check across runtime, workspace, tools, config, auth, and server."""
     command = DoctorSlnCommand(
         file=file,
         work_path=work_path,
@@ -92,6 +104,7 @@ def sln_doctor(
         deep=deep or login,
         login=login,
         ai=ai,
+        server_url=server_url,
         output=output,
         verbose=verbose,
         quiet=quiet,

@@ -232,7 +232,7 @@ Once `name` can point multiple record kinds — or multiple workspaces — at th
 - **No change to version-lock files.** They are already stored directly in a git-backed repo, not a local file with a push bolted on — there is nothing here for them to adopt.
 - **Does not touch the HTTP state service.** Phase 2 (below) is independent of this — git-push buys durability, the state service buys queryability, and a record kind can adopt either, both, or neither.
 
-### Phase 2 — ingest endpoint and event store ✅ Done
+### Phase 2 — ingest endpoint and event store ✅ Done (core + 2.6); 2.7 ⏳ planned
 
 The end state is a single service exposing one write route, shared by every record kind:
 
@@ -241,7 +241,7 @@ POST /v1/events          → 202 Accepted
 GET  /healthz             → 200
 ```
 
-But that end state is not one unit of work, and treating it as one hides a real ordering dependency: there is no such thing as "add the ingest route" before there is a process that runs, listens, and can be reached, and no such thing as "make ingestion idempotent" before there is a database to hold the primary key that idempotency depends on. Phase 2 is therefore five sequential steps, each a prerequisite for the next, not a single delivery:
+But that end state is not one unit of work, and treating it as one hides a real ordering dependency: there is no such thing as "add the ingest route" before there is a process that runs, listens, and can be reached, and no such thing as "make ingestion idempotent" before there is a database to hold the primary key that idempotency depends on. Phase 2 is therefore seven sequential steps, each a prerequisite for the next, not a single delivery — the first five deliver the core service; the last two (2.6/2.7) are a later, narrower addition once a concrete consumer (the VS Code extension) needed something from it:
 
 | Step | Delivers                                                                                                     | New CLI                                                                                             | Depends on                                                        |
 | ---- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
@@ -250,6 +250,8 @@ But that end state is not one unit of work, and treating it as one hides a real 
 | 2.3  | `POST /v1/events` — idempotent, append-only ingest                                                           | none — server-side only                                                                             | 2.2 (the primary key idempotency relies on)                       |
 | 2.4  | Authentication — admin-token-protected `/v1/tokens` routes + per-workspace bearer tokens on the ingest route | `strata serve token create\|list\|revoke --url ... --admin-token ...` (HTTP clients, not direct-DB) | 2.3 (a route to protect)                                          |
 | 2.5  | Client-side delivery — webhook sink pointed at the endpoint, bounded retry tightening                        | none new — reuses existing `spec.audit.sinks` config                                                | 2.4 (a real, authenticated endpoint to point a sink at)           |
+| 2.6  | Minimal `/v1/events/tail` read-only endpoint — last N rows, no filters beyond workspace                      | `strata serve tail <url> --limit 100`                                                               | 2.4 (reuses the same tokens for read scope)                       |
+| 2.7  | VS Code extension integration — status bar, token management, tools row, guide step, tail view               | none new (extension only)                                                                           | 2.6 (the tail view's data source)                                 |
 
 The more fundamental point first, because it governs every step below: **whether the state service accepted a record is not, and must never become, a question about whether the underlying action happened.** A terraform apply that succeeds has changed real infrastructure whether or not the forwarded record made it to the state service afterwards; a drift check ran and produced a real answer whether or not that answer got ingested. Ingestion failure is a gap in *our observability of the fact*, never a gap in the fact itself, and no step below is allowed to blur that — e.g. by making ingestion a precondition, a gate, or a required step of the command it is merely reporting on.
 
@@ -461,9 +463,76 @@ Verified via full `Check.ps1`: 5628 tests passed (3 new), ruff/mypy/Sphinx all g
 
 **Done when:** a workspace configured with this sink, run against a live server, produces a row in `events` from a real `deploy run`; killing the server mid-command costs at most one `_REQUESTS_TIMEOUT` window, never a failed command; `properties.max_retries`/`retry_backoff_seconds` are honoured when explicitly configured higher, and every existing retry-loop test is updated to configure them explicitly rather than relying on the now-changed defaults.
 
+#### Step 2.6 — minimal read-tail endpoint ✅ Done
+
+Phase 3's fuller read API is still deliberately deferred — real query patterns haven't emerged yet. But there is one already-known, narrow need, driven by the VS Code extension (step 2.7): a lightweight, human-facing "tail" of recent activity — the same shape `tail -f`/`kubectl logs -f` already provide, not a query surface. Scoping it precisely as "the last N rows, no filters beyond workspace, no date ranges, no aggregation" keeps it out of Phase 3's territory: it answers exactly one question ("what happened most recently"), not the open-ended "what happened when, for which resource" Phase 3 exists to answer once real usage reveals the actual query shapes needed.
+
+**New route:** `GET /v1/events/tail?limit=100&workspace=<name>`.
+
+**Auth reuses the same two credential classes step 2.4 already established, with read access scoped exactly like write access already is:** a per-workspace ingest token can only tail its own workspace — a `workspace` query param, if present, is ignored/overridden to the token's own scope, so there is no cross-workspace leakage through a "read" door that write access doesn't have. The admin token can tail any workspace, or omit the filter for the full cross-workspace tail. No new credential type — same `tokens` table, same bearer-token mechanism, one new `verify_read_access()` dependency alongside the existing `verify_ingest_token`/`verify_admin_token`, returning either a workspace scope (ingest token) or `None` (admin, unrestricted).
+
+`limit` defaults to 100 (matching the ask) and is capped server-side at a fixed maximum regardless of what the client requests — the same size-discipline reasoning `_MAX_BODY_BYTES` already applies to ingest, applied here to response size instead.
+
+**Response is a lean projection, not the full stored payload** — `execution_id`, `record_type`, `recorded_at`, `received_at`, `workspace`, `deployment`, `environment`, `action`, `outcome`. The full `payload` JSON blob stays available (once Phase 3 exists) for anyone who needs to inspect a specific record in full; a tail view showing 100 rows needs a log-line summary, not 100 complete envelopes.
+
+**Ordering: `received_at` ascending** (oldest of the N first) — the same order a real `tail` shows lines in, and the order a UI can safely append to the bottom of a scrolling list without re-sorting. `received_at`, not `recorded_at`, because it's insertion order — the property a "what just happened" tail actually needs, and it stays stable even when two records share the same `recorded_at`.
+
+Worked example:
+
+```
+GET /v1/events/tail?limit=100
+Authorization: Bearer <ingest-or-admin-token>
+
+200 OK
+{
+  "events": [
+    {"execution_id": "...", "record_type": "xyz.huybrechts.strata.deployment.completed",
+     "recorded_at": "...", "received_at": "...", "workspace": "my-workspace",
+     "deployment": "my-deploy", "environment": "prd", "action": "deploy-run", "outcome": "success"}
+  ]
+}
+```
+
+New code: `src/strata/server/db/query.py` (`list_recent_events(engine, workspace=None, limit=100)`), a `resolve_read_scope()` helper in `app.py` (called directly from the route body, not via `dependencies=[]`, since its return value — the workspace scope — is needed by the handler, unlike the fire-and-forget `verify_ingest_token`/`verify_admin_token` checks), and the `GET /v1/events/tail` route — registered unconditionally, same as `/v1/events`, guarded per-request rather than gated on `admin_token` presence like `/v1/tokens`. A new CLI passthrough, `strata serve tail <url> --token ... --limit 100 --output json` (`TailServeCommand`), gives step 2.7's extension integration a CLI-shaped way to call it, matching `serve health`'s existing thin-HTTP-client precedent rather than the extension talking to the server directly.
+
+**Implemented as designed.** `list_recent_events()` orders by `received_at` descending under `LIMIT` (to actually get the most recent rows), then reverses to ascending order for the response. `resolve_read_scope()` checks the admin token first (if configured), falling through to an ingest-token lookup via the existing `verify_token()` — exactly the same two-credential-class shape step 2.4 established. `_MAX_TAIL_LIMIT = 500` caps the response regardless of the requested `limit`.
+
+**This is a narrow, deliberate exception to "What Phase 2 deliberately excludes: No read API" below** — one fixed-shape endpoint for one known consumer, not a general query surface. Phase 3's fuller read API (filters, date ranges, aggregation, first-party `metrics`/`trends` commands) remains deferred exactly as before.
+
+Verified via full `Check.ps1`: 5660 tests passed (21 new), ruff/mypy/Sphinx all green.
+
+**Done when:** `GET /v1/events/tail` returns the most recent `limit` (default 100, capped) events for the caller's authorized scope, ordered oldest-to-newest by `received_at`, excluding the full payload; an ingest token cannot see another workspace's events via this route even if a `workspace` query param requests it; and the admin token can tail across all workspaces.
+
+#### Step 2.7 — VS Code extension integration ⏳ planned
+
+**Architecture, unchanged from every other extension feature:** the extension talks to the server exclusively through the CLI — `strata serve health`/`serve token create|list|revoke`/`serve tail` — via `StrataClient._run()`'s existing spawn-and-parse-JSON pattern, never a direct HTTP call from Node. This keeps exactly one code path (the CLI) responsible for talking to the server, consistent with the rest of the extension's design (every other feature, including the closest existing precedent, `deploy health`, already works this way).
+
+**Status bar — a second, independent item, shown only when configured.** New `StateServiceStatusBarProvider`, mirroring `StatusBarProvider`'s existing loading/healthy/degraded/broken state machine, gated on a new `strata.stateService.url` setting (empty by default — same gating pattern `showStatusBar` already uses). Polls `serve health` on an interval (`strata.stateService.pollIntervalSeconds`, default 60, minimum 10 — same shape as the existing `workItemPollIntervalSeconds`). States: `$(sync~spin)` loading, `$(radio-tower)` ok, `$(warning)` unreachable, `$(error)` explicit failure (e.g. a `503` from a database outage). Click opens the tail view below — the natural next action after "is it up" is "what is it seeing."
+
+**Token management**, via three command-palette actions (`strata.stateService.createToken`/`.listTokens`/`.revokeToken`), Quick Pick-driven the same way `strata.manageRefs` already is. **The admin token is never written to `settings.json`** — first use prompts via `vscode.window.showInputBox({ password: true })` and stores it in `context.secrets` (VS Code's `SecretStorage` API — a new pattern for this extension, nothing uses it today, but the only correct place for a credential this sensitive). Two housekeeping commands, `strata.stateService.setAdminToken`/`.clearAdminToken`, cover updating/removing it, since there is no settings UI for a secret.
+
+**Tools view row** — one additional row in the existing tools-status view (`toolsViewProvider.ts`), alongside the integration rows it already renders: reachable/unreachable, same iconography, reusing the same health call the status bar item makes rather than polling independently a second time.
+
+**Guide view step** — a new step in `guideViewProvider.ts`'s existing walkthrough, appearing once a workspace's `deploy-*.yaml` is detected forwarding to a state-service-shaped webhook sink (step 2.5's worked example) — nudging the operator to set `strata.stateService.url` so the indicator/tail view has something to point at, the same "detect config, suggest the next step" pattern the guide already uses elsewhere.
+
+**Tail view**, `strata.stateService.showTail`, opens (or reveals) a dedicated VS Code `OutputChannel` ("Strata: State Service Tail") and polls `serve tail` on the same interval as the status bar item, appending only rows newer than the last-seen `received_at` (tracked client-side) — a real `tail -f`-like experience without the server needing any streaming/websocket support, matching step 2.6's deliberately simple, poll-friendly design. An `OutputChannel`, not a webview, because it's a plain scrolling log of one-line summaries — no richer surface than the data shape needs.
+
+**Command palette actions, in full:** `Strata: Check State Service Health`, `Strata: Show State Service Tail`, `Strata: Create Ingest Token`, `Strata: List Ingest Tokens`, `Strata: Revoke Ingest Token`, `Strata: Set State Service Admin Token`, `Strata: Clear State Service Admin Token`.
+
+**New settings:**
+
+```jsonc
+"strata.stateService.url": { "type": "string", "default": "", "description": "Base URL of a running strata state-service server (ADR-0065). Leave empty to disable the status bar indicator, tools row, and tail view." },
+"strata.stateService.pollIntervalSeconds": { "type": "number", "default": 60, "minimum": 10, "description": "How often the state-service status bar item and tail view poll the server." }
+```
+
+**Scoping limit, explicit:** Phase 3 (read API) is still deferred, so nothing here can browse deployment/cost/drift history beyond the last-100-rows tail step 2.6 provides — no filtering by date range, no per-resource drill-down, no aggregation. That is intentional; a fuller history browser is a Phase 3 consumer, not part of this step.
+
+**Done when:** the second status bar item reflects a running server's real health and is hidden entirely when `strata.stateService.url` is empty; token management round-trips create → list → revoke entirely through Quick Picks with the admin token stored only in `SecretStorage`, never in a setting; the tools view shows the same reachability the status bar does; the guide view surfaces the setup nudge when a state-service webhook sink is detected; and the tail view shows new rows appearing within one poll interval of a live `deploy run` against a configured server.
+
 #### What Phase 2 deliberately excludes
 
-- **No read API.** Operators query the database directly. This is the point — SQL is a better and more widely supported interface than any REST API we would design, and shipping one now would freeze a query model before we know the questions, for any of the five record kinds.
+- **No general-purpose read API.** Operators query the database directly. This is the point — SQL is a better and more widely supported interface than any REST API we would design, and shipping one now would freeze a query model before we know the questions, for any of the five record kinds. **Step 2.6's `/v1/events/tail` is a narrow, deliberate exception** — one fixed-shape, size-capped, non-queryable endpoint built for one known consumer (the VS Code tail view), not a general query surface; it does not change this conclusion for anything beyond "the last N rows."
 - **No UI.** Grafana, Metabase, and Power BI all speak SQL already.
 - **No aggregation.** Deployment frequency, change failure rate, MTTR, drift duration, and cost trend are all `GROUP BY` queries, not endpoints.
 - **No large blobs.** Terraform plan JSON and SBOM documents are referenced by digest, not inlined. Inlining them turns the state service into an artifact store — a different product with different retention economics and different security review. Payloads are size-capped, and oversized records are rejected with a clear error rather than silently truncated.

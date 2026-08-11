@@ -8,6 +8,7 @@ no fakes needed.
 
 from __future__ import annotations
 
+import datetime
 from typing import Generator
 from unittest.mock import patch
 
@@ -140,3 +141,76 @@ class TestInsertEvent:
         with sqlite_engine.connect() as conn:
             rows = conn.execute(events.select()).fetchall()
         assert len(rows) == 2
+
+
+class TestListRecentEvents:
+    """ADR-0065 Step 2.6 — the minimal read-tail endpoint's underlying query."""
+
+    def _row(
+        self,
+        execution_id: str,
+        received_at: datetime.datetime,
+        workspace: str = "my-workspace",
+        record_type: str = "xyz.huybrechts.strata.deployment.completed",
+    ) -> dict:
+        return {
+            "execution_id": execution_id,
+            "record_type": record_type,
+            "recorded_at": received_at,
+            "received_at": received_at,
+            "workspace": workspace,
+            "deployment": "my-deploy",
+            "environment": "prd",
+            "action": "deploy-run",
+            "outcome": "success",
+            "payload": {"foo": "bar"},
+        }
+
+    def test_returns_events_ordered_oldest_to_newest(self, sqlite_engine: Engine) -> None:
+        from strata.server.db.query import list_recent_events
+
+        base = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+        insert_event(sqlite_engine, self._row("exec-1", base))
+        insert_event(sqlite_engine, self._row("exec-2", base + datetime.timedelta(seconds=1)))
+        insert_event(sqlite_engine, self._row("exec-3", base + datetime.timedelta(seconds=2)))
+
+        rows = list_recent_events(sqlite_engine)
+
+        assert [row["execution_id"] for row in rows] == ["exec-1", "exec-2", "exec-3"]
+
+    def test_limit_returns_the_most_recent_rows_not_the_oldest(self, sqlite_engine: Engine) -> None:
+        from strata.server.db.query import list_recent_events
+
+        base = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+        for i in range(5):
+            insert_event(sqlite_engine, self._row(f"exec-{i}", base + datetime.timedelta(seconds=i)))
+
+        rows = list_recent_events(sqlite_engine, limit=2)
+
+        # The 2 most recent, still returned oldest-first.
+        assert [row["execution_id"] for row in rows] == ["exec-3", "exec-4"]
+
+    def test_workspace_filter_scopes_results(self, sqlite_engine: Engine) -> None:
+        from strata.server.db.query import list_recent_events
+
+        base = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+        insert_event(sqlite_engine, self._row("exec-a", base, workspace="workspace-a"))
+        insert_event(sqlite_engine, self._row("exec-b", base + datetime.timedelta(seconds=1), workspace="workspace-b"))
+
+        rows = list_recent_events(sqlite_engine, workspace="workspace-a")
+
+        assert [row["execution_id"] for row in rows] == ["exec-a"]
+
+    def test_omits_the_full_payload(self, sqlite_engine: Engine) -> None:
+        from strata.server.db.query import list_recent_events
+
+        insert_event(sqlite_engine, self._row("exec-1", datetime.datetime.now(datetime.timezone.utc)))
+
+        rows = list_recent_events(sqlite_engine)
+
+        assert "payload" not in rows[0]
+
+    def test_empty_store_returns_empty_list(self, sqlite_engine: Engine) -> None:
+        from strata.server.db.query import list_recent_events
+
+        assert list_recent_events(sqlite_engine) == []

@@ -42,6 +42,12 @@ if TYPE_CHECKING:
 # rejected, never silently truncated or fully buffered/parsed.
 _MAX_BODY_BYTES = 256 * 1024
 
+# Step 2.6's read-tail endpoint caps the response size server-side regardless
+# of what a client requests — the same size-discipline reasoning as above,
+# applied to response size instead of request size.
+_MAX_TAIL_LIMIT = 500
+_DEFAULT_TAIL_LIMIT = 100
+
 
 def _content_too_large(request: Request, body: bytes) -> bool:
     """True if the request exceeds the ingest size cap.
@@ -72,6 +78,7 @@ def create_app(engine: "Engine", admin_token: Optional[str] = None) -> FastAPI:
     """
     from strata.server.db.engine import check_connection
     from strata.server.db.ingest import extract_row
+    from strata.server.db.query import list_recent_events
     from strata.server.db.store import insert_event
     from strata.server.db.tokens import create_token, list_tokens, revoke_token, verify_token
 
@@ -92,6 +99,25 @@ def create_app(engine: "Engine", admin_token: Optional[str] = None) -> FastAPI:
             raise HTTPException(status_code=401, detail="Missing or malformed Authorization header")
         if not admin_token or not hmac.compare_digest(token, admin_token):
             raise HTTPException(status_code=403, detail="Invalid admin token")
+
+    def resolve_read_scope(request: Request) -> Optional[str]:
+        """Bearer token required for /v1/events/tail (Step 2.6).
+
+        Returns the workspace scope to enforce — an ingest token's own workspace — or
+        `None` for unrestricted (admin) access. Called directly from the route body
+        rather than via `dependencies=[]`, unlike `verify_ingest_token`/`verify_admin_token`
+        above: those are fire-and-forget checks, but this route needs the *scope value*
+        itself to filter the query, not just a pass/fail auth decision.
+        """
+        token = _bearer_token(request)
+        if token is None:
+            raise HTTPException(status_code=401, detail="Missing or malformed Authorization header")
+        if admin_token and hmac.compare_digest(token, admin_token):
+            return None
+        workspace = verify_token(engine, token)
+        if workspace is None:
+            raise HTTPException(status_code=403, detail="Invalid or revoked token")
+        return workspace
 
     @app.get("/healthz")
     def healthz() -> Dict[str, Any]:
@@ -125,6 +151,21 @@ def create_app(engine: "Engine", admin_token: Optional[str] = None) -> FastAPI:
             raise HTTPException(status_code=503, detail=f"Insert failed: {exc}") from exc
 
         return {"status": "accepted"}
+
+    @app.get("/v1/events/tail")
+    def tail_events(
+        request: Request, limit: int = _DEFAULT_TAIL_LIMIT, workspace: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Return the most recent events (Step 2.6) — a lean projection, not the full payload.
+
+        A per-workspace ingest token can only tail its own workspace — any `workspace` query
+        param is overridden to the token's own scope, never widened by it. The admin token can
+        tail any workspace, or omit the filter for the full cross-workspace tail.
+        """
+        scope = resolve_read_scope(request)
+        effective_workspace = scope if scope is not None else workspace
+        capped_limit = max(1, min(limit, _MAX_TAIL_LIMIT))
+        return {"events": list_recent_events(engine, workspace=effective_workspace, limit=capped_limit)}
 
     if admin_token:
 

@@ -115,3 +115,54 @@ class TestCheckIdentityIntegrations:
         with patch("strata.controllers.solution_controller.SolutionController", side_effect=RuntimeError("boom")):
             results = cmd._check_identity_integrations()
         assert results == []
+
+
+class TestCheckServer:
+    """Unit tests for the `server` category (state-service reachability, ADR-0065)."""
+
+    def test_skipped_without_deep(self):
+        cmd = DoctorSlnCommand(work_path=".", deep=False, server_url="http://localhost:8443")
+        results = cmd._check_server()
+        assert len(results) == 1
+        assert results[0].status == "skip"
+        assert results[0].name == "server"
+
+    def test_skipped_without_url_even_when_deep(self):
+        cmd = DoctorSlnCommand(work_path=".", deep=True, server_url=None)
+        results = cmd._check_server()
+        assert results[0].status == "skip"
+        assert "--server-url" in results[0].fix_hint
+
+    def test_reports_pass_when_reachable(self):
+        cmd = DoctorSlnCommand(work_path=".", deep=True, server_url="http://localhost:8443")
+        response = MagicMock()
+        response.status_code = 200
+        with patch("strata.commands.sln.doctor_sln_command.requests.get", return_value=response) as mock_get:
+            results = cmd._check_server()
+
+        mock_get.assert_called_once_with("http://localhost:8443/healthz", timeout=5.0)
+        assert results[0].status == "pass"
+        assert results[0].name == "server_reachable"
+
+    def test_reports_fail_on_non_200(self):
+        cmd = DoctorSlnCommand(work_path=".", deep=True, server_url="http://localhost:8443")
+        response = MagicMock()
+        response.status_code = 503
+        with patch("strata.commands.sln.doctor_sln_command.requests.get", return_value=response):
+            results = cmd._check_server()
+
+        assert results[0].status == "fail"
+        assert "503" in results[0].value
+
+    def test_reports_fail_on_connection_error(self):
+        import requests
+
+        cmd = DoctorSlnCommand(work_path=".", deep=True, server_url="http://localhost:8443")
+        with patch(
+            "strata.commands.sln.doctor_sln_command.requests.get",
+            side_effect=requests.ConnectionError("refused"),
+        ):
+            results = cmd._check_server()
+
+        assert results[0].status == "fail"
+        assert "refused" in results[0].fix_hint

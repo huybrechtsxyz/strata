@@ -19,6 +19,7 @@ from strata.commands.serve.health_serve_command import HealthServeCommand
 from strata.commands.serve.list_tokens_serve_command import ListTokensServeCommand
 from strata.commands.serve.migrate_serve_command import MigrateServeCommand
 from strata.commands.serve.revoke_token_serve_command import RevokeTokenServeCommand
+from strata.commands.serve.tail_serve_command import TailServeCommand
 
 # Shared default/envvar for the event-store connection (ADR-0065 Step 2.2) — sqlite
 # is the zero-config default; postgresql+psycopg://... / mssql+pyodbc://... are the
@@ -176,6 +177,54 @@ def serve_health(
     """GET <url>/healthz and report reachability."""
     command = HealthServeCommand(
         url=url, timeout=timeout, work_path=work_path, output=output, verbose=verbose, quiet=quiet
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@serve_group.command(name="tail", help="Show the most recent events on a running server (ADR-0065 Step 2.6).")
+@click.argument("url")
+@click.option(
+    "--token",
+    "token",
+    required=True,
+    envvar="STRATA_SERVE_TOKEN",
+    help="Ingest or admin bearer token. [env: STRATA_SERVE_TOKEN]",
+)
+@click.option("--limit", "limit", default=100, type=int, show_default=True, help="Max rows to return (server-capped).")
+@click.option(
+    "--workspace",
+    "workspace",
+    default=None,
+    help="Filter by workspace. Ignored/overridden server-side if the token is a per-workspace ingest token.",
+)
+@click.option("--timeout", default=10.0, type=float, show_default=True, help="Request timeout in seconds.")
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def serve_tail(
+    url: str,
+    token: str,
+    limit: int = 100,
+    workspace: Optional[str] = None,
+    timeout: float = 10.0,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> None:
+    """GET <url>/v1/events/tail and print the most recent events (lean projection, no full payload)."""
+    command = TailServeCommand(
+        url=url,
+        token=token,
+        limit=limit,
+        workspace=workspace,
+        timeout=timeout,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
     )
     success = command.execute()
     handle_command_exit(command, success)

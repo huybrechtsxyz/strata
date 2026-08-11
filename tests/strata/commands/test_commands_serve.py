@@ -28,6 +28,7 @@ class TestServeCliGroup:
         assert "run" in result.output
         assert "health" in result.output
         assert "migrate" in result.output
+        assert "tail" in result.output
 
     def test_run_subcommand_help_exits_zero(self) -> None:
         runner = CliRunner()
@@ -317,3 +318,81 @@ class TestServeTokenRevoke:
                 ["token", "revoke", "abc", "--url", "https://example.test", "--admin-token", "admin-secret"],
             )
         assert result.exit_code != 0
+
+
+class TestServeTail:
+    def test_tail_help_shows_limit_and_workspace_options(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(serve_group, ["tail", "--help"])
+        assert result.exit_code == 0
+        assert "--token" in result.output
+        assert "--limit" in result.output
+        assert "--workspace" in result.output
+
+    def test_tail_gets_events_route(self) -> None:
+        runner = CliRunner()
+        mock_response = MagicMock(
+            status_code=200,
+            json=lambda: {
+                "events": [
+                    {
+                        "execution_id": "exec-1",
+                        "record_type": "xyz.huybrechts.strata.deployment.completed",
+                        "received_at": "2026-08-10T12:00:00+00:00",
+                        "workspace": "my-workspace",
+                        "deployment": "my-deploy",
+                        "outcome": "success",
+                    }
+                ]
+            },
+        )
+        with patch("requests.get", return_value=mock_response) as mock_get:
+            result = runner.invoke(
+                serve_group,
+                ["tail", "https://example.test", "--token", "ingest-token"],
+            )
+        assert result.exit_code == 0, result.output
+        assert "my-deploy" in result.output
+        mock_get.assert_called_once()
+
+    def test_tail_non_200_exits_nonzero(self) -> None:
+        runner = CliRunner()
+        mock_response = MagicMock(status_code=403, text="Invalid or revoked token")
+        with patch("requests.get", return_value=mock_response):
+            result = runner.invoke(
+                serve_group,
+                ["tail", "https://example.test", "--token", "wrong-token"],
+            )
+        assert result.exit_code != 0
+
+    def test_tail_connection_error_exits_nonzero(self) -> None:
+        import requests
+
+        runner = CliRunner()
+        with patch("requests.get", side_effect=requests.ConnectionError("refused")):
+            result = runner.invoke(
+                serve_group,
+                ["tail", "https://example.test", "--token", "ingest-token"],
+            )
+        assert result.exit_code != 0
+
+    def test_tail_passes_limit_and_workspace_as_query_params(self) -> None:
+        runner = CliRunner()
+        mock_response = MagicMock(status_code=200, json=lambda: {"events": []})
+        with patch("requests.get", return_value=mock_response) as mock_get:
+            result = runner.invoke(
+                serve_group,
+                [
+                    "tail",
+                    "https://example.test",
+                    "--token",
+                    "ingest-token",
+                    "--limit",
+                    "25",
+                    "--workspace",
+                    "my-workspace",
+                ],
+            )
+        assert result.exit_code == 0, result.output
+        _, kwargs = mock_get.call_args
+        assert kwargs["params"] == {"limit": 25, "workspace": "my-workspace"}

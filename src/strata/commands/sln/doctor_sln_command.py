@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
 import click
+import requests
 
 from strata.commands.base_command import BaseCommand
 from strata.controllers.guide_controller import GuideController
@@ -21,7 +22,7 @@ _STATUS_ICON: Dict[str, str] = {
     "skip": "⏭️ ",
 }
 
-_CATEGORIES = ("runtime", "workspace", "tools", "config", "auth")
+_CATEGORIES = ("runtime", "workspace", "tools", "config", "auth", "server")
 
 # Guide phase index → check name (phases 1–6; 7/8 are build artefacts, not diagnostics)
 _PHASE_CHECK_NAME = {
@@ -67,6 +68,13 @@ class DoctorSlnCommand(BaseCommand):
         Pass ``--login`` to actively drive a login for integrations that support it
         (ADR-0067), instead of only printing a fix hint.
 
+    ``server``
+        Reachability of a running strata state-service server (ADR-0065), via
+        ``GET <url>/healthz`` — the same check as ``strata serve health <url>``.
+        Skipped unless ``--deep`` is supplied, and skipped (with a fix hint) when
+        no URL is known: strata does not auto-discover a running server, so pass
+        ``--server-url`` or set ``STRATA_SERVE_URL``.
+
     Exit code ``0`` when all checks pass (warnings are allowed).
     Exit code ``3`` when one or more checks fail.
     """
@@ -81,6 +89,7 @@ class DoctorSlnCommand(BaseCommand):
         deep: bool = False,
         login: bool = False,
         ai: bool = False,
+        server_url: Optional[str] = None,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -96,6 +105,7 @@ class DoctorSlnCommand(BaseCommand):
         self._deep = deep
         self._login = login
         self._ai = ai
+        self._server_url = server_url
         self._has_check_failures = False
 
     def get_required_integrations(self) -> Dict[str, str]:
@@ -275,6 +285,7 @@ class DoctorSlnCommand(BaseCommand):
             "tools": self._check_tools,
             "config": self._check_config,
             "auth": self._check_auth,
+            "server": self._check_server,
         }[category]
         try:
             return runner()
@@ -618,6 +629,64 @@ class DoctorSlnCommand(BaseCommand):
         except Exception as exc:
             self.logger.debug("doctor_identity_check_skipped", error=str(exc))
         return results
+
+    # ------------------------------------------------------------------
+    # Category: server
+    # ------------------------------------------------------------------
+
+    def _check_server(self) -> List[CheckResult]:
+        """Check reachability of a running state-service server (ADR-0065).
+
+        Same ``GET <url>/healthz`` check as ``strata serve health <url>``, folded
+        into doctor so a single command can report it alongside every other
+        health signal. Gated behind ``--deep`` (a network call, like the other
+        ``auth`` checks) and requires a URL — strata has no auto-discovery for a
+        running server (it's a standalone process shared across workspaces, not
+        recorded in workspace/profile config), so one must be supplied explicitly
+        via ``--server-url`` or ``STRATA_SERVE_URL``.
+        """
+        if not self._deep:
+            return [
+                CheckResult(
+                    "server",
+                    "skip",
+                    value="Skipped (use --deep to run server reachability checks)",
+                )
+            ]
+
+        if not self._server_url:
+            return [
+                CheckResult(
+                    "server",
+                    "skip",
+                    value="No server URL configured",
+                    fix_hint="Pass --server-url or set STRATA_SERVE_URL to check state-service reachability.",
+                )
+            ]
+
+        url = self._server_url.rstrip("/")
+        healthz_url = f"{url}/healthz"
+        try:
+            response = requests.get(healthz_url, timeout=5.0)
+            if response.status_code == 200:
+                return [CheckResult("server_reachable", "pass", value=healthz_url)]
+            return [
+                CheckResult(
+                    "server_reachable",
+                    "fail",
+                    value=f"{healthz_url} \u2014 {response.status_code}",
+                    fix_hint="Verify the state-service server is running and reachable.",
+                )
+            ]
+        except requests.RequestException as exc:
+            return [
+                CheckResult(
+                    "server_reachable",
+                    "fail",
+                    value=healthz_url,
+                    fix_hint=f"Failed to reach server: {exc}",
+                )
+            ]
 
     # ------------------------------------------------------------------
     # Console rendering

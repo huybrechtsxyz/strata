@@ -15,6 +15,7 @@ handler itself — since Step 2.4 added auth dependencies to /v1/events and
 
 from __future__ import annotations
 
+import datetime
 import inspect
 import json
 import sys
@@ -129,7 +130,11 @@ class TestCreateApp:
         from strata.server.app import create_app
 
         app = create_app(sqlite_engine)
-        assert set(app.routes.keys()) == {("GET", "/healthz"), ("POST", "/v1/events")}
+        assert set(app.routes.keys()) == {
+            ("GET", "/healthz"),
+            ("POST", "/v1/events"),
+            ("GET", "/v1/events/tail"),
+        }
 
     def test_registers_token_routes_when_admin_token_configured(
         self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
@@ -140,6 +145,7 @@ class TestCreateApp:
         assert set(app.routes.keys()) == {
             ("GET", "/healthz"),
             ("POST", "/v1/events"),
+            ("GET", "/v1/events/tail"),
             ("POST", "/v1/tokens"),
             ("GET", "/v1/tokens"),
             ("DELETE", "/v1/tokens/{token_id}"),
@@ -436,3 +442,95 @@ class TestTokenRoutes:
                 app, "DELETE", "/v1/tokens/{token_id}", headers=self._admin_headers(), token_id="does-not-exist"
             )
         assert exc_info.value.status_code == 404
+
+
+class TestTailRoute:
+    """ADR-0065 Step 2.6 — GET /v1/events/tail."""
+
+    def _tail(self, app: Any, headers: Dict[str, str], **kwargs: Any) -> Any:
+        return _call_route(app, "GET", "/v1/events/tail", headers=headers, **kwargs)
+
+    def test_missing_authorization_header_returns_401(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from strata.server.app import create_app
+
+        app = create_app(sqlite_engine)
+        with pytest.raises(_FakeHTTPError) as exc_info:
+            self._tail(app, {}, limit=100, workspace=None)
+        assert exc_info.value.status_code == 401
+
+    def test_wrong_token_returns_403(self, fake_fastapi_module: ModuleType, sqlite_engine: Engine) -> None:
+        from strata.server.app import create_app
+
+        app = create_app(sqlite_engine)
+        with pytest.raises(_FakeHTTPError) as exc_info:
+            self._tail(app, {"authorization": "Bearer wrong-token"}, limit=100, workspace=None)
+        assert exc_info.value.status_code == 403
+
+    def _insert(self, engine: Engine, execution_id: str, workspace: str) -> None:
+        from strata.server.db.store import insert_event
+
+        insert_event(
+            engine,
+            {
+                "execution_id": execution_id,
+                "record_type": "xyz.huybrechts.strata.deployment.completed",
+                "recorded_at": datetime.datetime.now(datetime.timezone.utc),
+                "workspace": workspace,
+                "payload": {},
+            },
+        )
+
+    def test_ingest_token_returns_only_its_own_workspace_events(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from strata.server.app import create_app
+
+        self._insert(sqlite_engine, "exec-a", "workspace-a")
+        self._insert(sqlite_engine, "exec-b", "workspace-b")
+        token = create_token(sqlite_engine, "workspace-a")["token"]
+        app = create_app(sqlite_engine)
+
+        result = self._tail(app, {"authorization": f"Bearer {token}"}, limit=100, workspace=None)
+
+        assert [event["execution_id"] for event in result["events"]] == ["exec-a"]
+
+    def test_ingest_token_cannot_widen_scope_via_workspace_param(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from strata.server.app import create_app
+
+        self._insert(sqlite_engine, "exec-b", "workspace-b")
+        token = create_token(sqlite_engine, "workspace-a")["token"]
+        app = create_app(sqlite_engine)
+
+        # Attempting to request workspace-b's events with a workspace-a token must not leak them.
+        result = self._tail(app, {"authorization": f"Bearer {token}"}, limit=100, workspace="workspace-b")
+
+        assert result["events"] == []
+
+    def test_admin_token_can_see_all_workspaces(self, fake_fastapi_module: ModuleType, sqlite_engine: Engine) -> None:
+        from strata.server.app import create_app
+
+        self._insert(sqlite_engine, "exec-a", "workspace-a")
+        self._insert(sqlite_engine, "exec-b", "workspace-b")
+        app = create_app(sqlite_engine, admin_token="admin-secret")
+
+        result = self._tail(app, {"authorization": "Bearer admin-secret"}, limit=100, workspace=None)
+
+        assert {event["execution_id"] for event in result["events"]} == {"exec-a", "exec-b"}
+
+    def test_limit_is_capped_server_side(self, fake_fastapi_module: ModuleType, sqlite_engine: Engine) -> None:
+        from strata.server.app import _MAX_TAIL_LIMIT, create_app
+
+        for i in range(3):
+            self._insert(sqlite_engine, f"exec-{i}", "my-workspace")
+        token = create_token(sqlite_engine, "my-workspace")["token"]
+        app = create_app(sqlite_engine)
+
+        # Requesting far above the cap must not error and must not return more than the cap.
+        result = self._tail(app, {"authorization": f"Bearer {token}"}, limit=_MAX_TAIL_LIMIT * 10, workspace=None)
+
+        assert len(result["events"]) <= _MAX_TAIL_LIMIT
+        assert len(result["events"]) == 3
