@@ -752,9 +752,9 @@ class VaultIntegration(StoreIntegration):
         if prefer_cli:
             # Try Vault CLI first — best-effort, never raises (the CLI cannot
             # cleanly distinguish "not found" from an auth/network problem).
-            document = self._get_secret_via_cli(secret_path, None, timeout)
+            document = self._get_secret_via_cli(secret_path, None, timeout)  # type: ignore[assignment]
             if document is not None:
-                self._path_cache[secret_path] = document  # type: ignore[assignment]
+                self._path_cache[secret_path] = document
                 logger.info(
                     "Secret retrieved from HashiCorp Vault via CLI",
                     secret_path=secret_path,
@@ -776,9 +776,9 @@ class VaultIntegration(StoreIntegration):
         else:
             # Authoritative first — if this raises, we stop here rather than
             # masking a real store problem behind a CLI fallback.
-            document = self._get_secret_via_api(secret_path, None)
+            document = self._get_secret_via_api(secret_path, None)  # type: ignore[assignment]
             if document is not None:
-                self._path_cache[secret_path] = document  # type: ignore[assignment]
+                self._path_cache[secret_path] = document
                 logger.info(
                     "Secret retrieved from HashiCorp Vault via API",
                     secret_path=secret_path,

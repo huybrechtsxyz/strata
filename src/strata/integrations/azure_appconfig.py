@@ -334,9 +334,8 @@ class AzureAppConfigIntegration(StoreIntegration):
         label = kwargs.get("label")
         prefer_cli = kwargs.get("prefer_cli", True)
         timeout = kwargs.get("timeout", 60)
-        cached = self._get_from_kv_cache(key, label=label, prefer_cli=prefer_cli, timeout=timeout)
-        if cached is not None:
-            return cached
+        if self._warm_kv_cache(label, prefer_cli=prefer_cli, timeout=timeout):
+            return self._kv_cache.get(key)  # type: ignore[union-attr]
         return self._get_value(key, label=label, prefer_cli=prefer_cli, timeout=timeout)
 
     def list_variables(self, prefix: str = "", **kwargs) -> List[str]:
@@ -395,13 +394,14 @@ class AzureAppConfigIntegration(StoreIntegration):
         prefer_cli = kwargs.get("prefer_cli", True)
         timeout = kwargs.get("timeout", 60)
         feature_key = f".appconfig.featureflag/{key}"
-        cached = self._get_from_kv_cache(feature_key, label=label, prefer_cli=prefer_cli, timeout=timeout)
-        if cached is not None:
+        if self._warm_kv_cache(label, prefer_cli=prefer_cli, timeout=timeout):
+            raw = self._kv_cache.get(feature_key)  # type: ignore[union-attr]
             result: Optional[Any] = None
-            try:
-                result = json.loads(cached)
-            except json.JSONDecodeError:
-                result = None
+            if raw is not None:
+                try:
+                    result = json.loads(raw)
+                except json.JSONDecodeError:
+                    result = None
         else:
             result = self._get_flag(key, label, prefer_cli, timeout)
         if result is None:
@@ -721,22 +721,23 @@ class AzureAppConfigIntegration(StoreIntegration):
                 logger.info("Value retrieved from Azure App Configuration via CLI", name=self.integration_name, key=key)
             return result
 
-    def _get_from_kv_cache(
-        self, key: str, label: Optional[str], prefer_cli: bool = True, timeout: int = 60
-    ) -> Optional[str]:
-        """Return *key* from the lazily-warmed whole-namespace cache, warming it first if needed.
+    def _warm_kv_cache(self, label: Optional[str], prefer_cli: bool = True, timeout: int = 60) -> bool:
+        """Ensure the whole-namespace cache is populated and scoped to *label*.
 
-        Returns ``None`` when the cache is unavailable (backing fetch failed) or was
-        warmed for a different *label* — callers fall back to a direct per-key read
-        in either case, so a cache miss here is never mistaken for "key not found".
+        Returns ``True`` when the cache is usable (already warmed for this label,
+        or just warmed successfully) — callers may then trust ``self._kv_cache``
+        fully, including a miss meaning "confirmed not present". Returns ``False``
+        only when the backing bulk fetch itself failed, in which case callers must
+        fall back to a direct per-key read rather than conclude "not found".
         """
-        if self._kv_cache is None or self._kv_cache_label != label:
-            fetched = self._fetch_all_keyvalues(label=label, prefer_cli=prefer_cli, timeout=timeout)
-            if fetched is None:
-                return None
-            self._kv_cache = fetched
-            self._kv_cache_label = label
-        return self._kv_cache.get(key)
+        if self._kv_cache is not None and self._kv_cache_label == label:
+            return True
+        fetched = self._fetch_all_keyvalues(label=label, prefer_cli=prefer_cli, timeout=timeout)
+        if fetched is None:
+            return False
+        self._kv_cache = fetched
+        self._kv_cache_label = label
+        return True
 
     def _fetch_all_keyvalues(
         self, label: Optional[str] = None, prefer_cli: bool = True, timeout: int = 60

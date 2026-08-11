@@ -154,3 +154,49 @@ class TestConsulFeatureStore:
         ):
             i.list_features(prefix="payment-")
         assert captured["path"] == "features/payment-"
+
+
+class TestConsulBulkValueCache:
+    """ADR-0026: Consul's recursive KV read already returns values in the same
+    call keys are fetched with — get_variable() should warm a whole-tree cache
+    once and serve every subsequent call from it, not one Consul call per key.
+    Feature flags (which delegate to get_variable) share the same cache."""
+
+    def setup_method(self):
+        BaseIntegration._instances.clear()
+
+    def test_second_get_variable_call_does_not_refetch(self):
+        i = ConsulIntegration(_cfg(address="http://consul.example.com"))
+        with patch.object(
+            i, "_fetch_all_keyvalues", return_value={"config/a": "1", "features/dark-mode": "true"}
+        ) as mock_fetch:
+            assert i.get_variable("config/a") == "1"
+            assert i.get_feature("dark-mode") is True
+        mock_fetch.assert_called_once()
+
+    def test_missing_key_returns_none_without_extra_call(self):
+        i = ConsulIntegration(_cfg(address="http://consul.example.com"))
+        with patch.object(i, "_fetch_all_keyvalues", return_value={"config/a": "1"}):
+            with patch.object(i, "get_keyvalue") as mock_direct:
+                assert i.get_variable("config/missing") is None
+        mock_direct.assert_not_called()
+
+    def test_bulk_fetch_failure_falls_back_to_direct_get(self):
+        i = ConsulIntegration(_cfg(address="http://consul.example.com"))
+        with patch.object(i, "_fetch_all_keyvalues", return_value=None):
+            with patch.object(i, "get_keyvalue", return_value="direct-value") as mock_direct:
+                result = i.get_variable("config/a")
+        assert result == "direct-value"
+        mock_direct.assert_called_once()
+
+    def test_set_variable_invalidates_cache(self):
+        i = ConsulIntegration(_cfg(address="http://consul.example.com"))
+        # Empty cache so the "never overwrite" existence check reports "not found"
+        # and set_variable actually performs a write.
+        with patch.object(i, "ensure_available", return_value=(True, "")):
+            with patch.object(i, "_fetch_all_keyvalues", return_value={}) as mock_fetch:
+                i.get_variable("config/new")  # warm (empty)
+                with patch.object(i, "_put_keyvalue", return_value=True):
+                    i.set_variable("config/new", "2")
+                i.get_variable("config/new")  # should re-warm
+            assert mock_fetch.call_count == 2

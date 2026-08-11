@@ -40,6 +40,58 @@ list/get/resolve` via `BaseDeployCommand._resolve_values()`, using the same
 `--no-cache`/`--refresh-cache` flags as every other cache kind — one cache, one set
 of semantics, for the operator.
 
+**OQ-4 phase 1 review fixes (2026-08-11):** a post-implementation review of
+`resolve_values_via_cache()` found and fixed three issues before this shipped further:
+
+- `environment`-store variables/features were being cached like any other value —
+  wrong, since they're pipeline/session-scoped and can change between invocations
+  with no file change to invalidate a stale cache entry. They're now excluded from
+  the cached payload and always re-resolved live, cache hit or miss.
+- A batch with any resolution error (non-strict mode just accumulates errors, it
+  doesn't abort) was still written to the cache, silently persisting a transient
+  failure until an explicit `--refresh-cache` instead of retrying naturally on the
+  next invocation. `resolve_values_via_cache()` now only warms the cache when the
+  variables/features batch had zero errors.
+- The store-availability preflight ran unconditionally before the cache lookup,
+  pinging variable/feature stores even on a full cache hit — exactly the kind of
+  call the cache exists to avoid. `_preflight_check_stores()` now takes
+  `include_variables`/`include_secrets`/`include_features` flags so a cache hit only
+  preflights the secret stores that will actually be called live.
+
+
+**Store-level batching / throttling mitigation (2026-08-11):** a mass fleet-wide
+rollout (e.g. a cold `strata cache warm --all`) makes one live store call per
+declared variable/secret/feature per deployment, with no pacing — a real risk of
+tripping store-side rate limits, independent of any cache TTL (a cache doesn't help
+the *first* cold sweep across a fleet). A per-integration audit found most store
+backends already return more data per call than strata was keeping:
+
+- **etcd, HashiCorp Consul, Azure App Configuration, Infisical** — each already made
+  a bulk list/range call that returns *values* alongside keys, but strata's own
+  wrapper code discarded the value field (etcd/Consul requested keys-only explicitly;
+  Azure App Config and Infisical's list wrappers only extracted the key/name field).
+  Fixed by keeping the value field the backend was already returning — zero added
+  API cost. Each integration now lazily warms a whole-store (or whole-scope, for
+  Infisical) in-process cache on first `get_variable`/`get_feature`/`get_secret` call
+  (mirrors `FlagsmithIntegration._flags_cache`, which already did this), serving every
+  subsequent call — for any key, from any deployment sharing the integration's
+  singleton instance within one process — as a local dict lookup. Invalidated on
+  writes (`set_variable`/`set_secret`/`set_feature`).
+- **HashiCorp Vault** — a single `vault kv get <path>` already returns the *entire*
+  multi-field document regardless of which field is requested (the `field` kwarg only
+  controls local dict extraction, never the underlying CLI/API call). `_get_secretvalue()`
+  now always fetches the full document and caches it per-path, so multiple declared
+  secrets/features sharing one Vault path collapse from N reads to 1 — at zero added
+  cost even for the single-field case.
+- **Bitwarden, Azure Key Vault** — no batching lever exists: both stores' list APIs are
+  deliberately metadata-only (no values), by the vendor's own security design. These two
+  remain one-call-per-secret; nothing to fix at the API-usage level.
+- Infisical's secret cache is intentionally more conservative than the others: a HIT is
+  trusted (served from cache), but a MISS always falls through to a live per-key
+  confirmation rather than being trusted as "not found" — a false negative here could
+  trigger `ValueController`'s generate-on-missing secret creation, which is not a risk
+  worth taking for a perf optimisation.
+
 ## Remaining Work
 
 - `deploy run` (execution/provisioning path) still resolves all values live via
@@ -48,6 +100,10 @@ of semantics, for the operator.
   secrets are still always resolved live on every invocation (by design — see
   OQ-4). A future iteration may add secret value caching once an at-rest
   encryption approach is chosen.
+- No client-side pacing/backoff or rate-limit-response detection exists yet for
+  any store integration — the batching fixes above reduce call *volume* but a
+  large fleet with many genuinely distinct keys per store can still burst. Not
+  implemented; tracked as a possible follow-up if it proves necessary in practice.
 - `deploy destroy/output/drift/plan`, `env show/status` — deferred until those
   commands exist.
 

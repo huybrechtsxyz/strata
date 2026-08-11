@@ -1064,6 +1064,104 @@ class TestValueControllerResolveValuesViaCache:
         assert indicator == "refreshed"
         spy_var.assert_called_once()
 
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    def test_environment_store_variable_never_cached_always_live(self, _mock_init, tmp_path, monkeypatch):
+        """environment-store variables must be resolved live every call, cache
+        hit or miss — they are pipeline/session-scoped and a stale cached value
+        would be silently wrong (ADR-0026 OQ-4)."""
+        monkeypatch.setenv("REGION_ENV_VAR", "eu-west-1")
+        const_var = VariableStoreModel(key="STATIC", store=VariableStoreType.CONSTANT, value="fixed")
+        env_var = VariableStoreModel(key="REGION", store=VariableStoreType.ENVIRONMENT, value="REGION_ENV_VAR")
+        env_svc = self._env_service_with(variables=[const_var, env_var])
+        dep_svc = self._deployment_service_with(env_svc)
+        cache = self._cache(tmp_path)
+        input_paths = self._input_paths(tmp_path)
+
+        ctrl = ValueController()
+        ok, resolved, errors, indicator = ctrl.resolve_values_via_cache(dep_svc, cache, "demo", input_paths)
+        assert indicator == "refreshed"
+        assert resolved.variables == {"STATIC": "fixed", "REGION": "eu-west-1"}
+
+        # The cached payload must not contain the environment-store key.
+        entries = cache.list_entries()
+        assert len(entries) == 1
+
+        # Change the underlying env var — a file-hash-based cache has no way to
+        # see this change, so if REGION were cached it would come back stale.
+        monkeypatch.setenv("REGION_ENV_VAR", "us-east-1")
+        with patch.object(ValueController, "_resolve_variable", wraps=ctrl._resolve_variable) as spy_var:
+            ok2, resolved2, errors2, indicator2 = ctrl.resolve_values_via_cache(dep_svc, cache, "demo", input_paths)
+
+        assert indicator2 == "cached"  # the CONSTANT portion was served from cache
+        assert resolved2.variables["STATIC"] == "fixed"
+        assert resolved2.variables["REGION"] == "us-east-1"  # live, reflects the new env value
+        spy_var.assert_called_once()  # only the environment-store item was re-resolved
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    def test_environment_store_feature_never_cached_always_live(self, _mock_init, tmp_path, monkeypatch):
+        monkeypatch.setenv("DARK_MODE_FLAG", "true")
+        env_feature = FeatureStoreModel(key="DARK_MODE", store=FeatureStoreType.ENVIRONMENT, value="DARK_MODE_FLAG")
+        env_svc = self._env_service_with(features=[env_feature])
+        dep_svc = self._deployment_service_with(env_svc)
+        cache = self._cache(tmp_path)
+        input_paths = self._input_paths(tmp_path)
+
+        ctrl = ValueController()
+        ctrl.resolve_values_via_cache(dep_svc, cache, "demo", input_paths)
+
+        monkeypatch.setenv("DARK_MODE_FLAG", "false")
+        ok, resolved, errors, indicator = ctrl.resolve_values_via_cache(dep_svc, cache, "demo", input_paths)
+        assert resolved.features["DARK_MODE"] is False  # live, not the stale cached True
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    def test_partial_failure_batch_is_not_cached(self, _mock_init, tmp_path):
+        """A batch where one variable failed to resolve must not be persisted —
+        otherwise the failure is silently cached until --refresh-cache instead
+        of being retried naturally on the next invocation."""
+        good_var = VariableStoreModel(key="OK", store=VariableStoreType.CONSTANT, value="fine")
+        bad_var = VariableStoreModel(key="MISSING_ENV", store=VariableStoreType.ENVIRONMENT, value="NOT_SET_VAR")
+        env_svc = self._env_service_with(variables=[good_var, bad_var])
+        dep_svc = self._deployment_service_with(env_svc)
+        cache = self._cache(tmp_path)
+        input_paths = self._input_paths(tmp_path)
+
+        ctrl = ValueController()
+        ok, resolved, errors, indicator = ctrl.resolve_values_via_cache(dep_svc, cache, "demo", input_paths)
+
+        assert resolved.variables == {"OK": "fine"}
+        assert errors  # MISSING_ENV failed
+        assert indicator == "no-cache"  # not persisted — errors present
+        assert cache.list_entries() == []
+
+        # Next call must retry the failed item live again (not treat the
+        # non-existent cache entry as an empty/valid one).
+        with patch.object(ValueController, "_resolve_variable", wraps=ctrl._resolve_variable) as spy_var:
+            ctrl.resolve_values_via_cache(dep_svc, cache, "demo", input_paths)
+        assert spy_var.call_count == 2  # both OK and MISSING_ENV re-resolved live
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    def test_preflight_skips_variable_stores_on_cache_hit(self, _mock_init, tmp_path):
+        """On a cache hit, preflighting the variable's store would waste exactly
+        the call caching is meant to avoid — only secret stores (always live)
+        should be checked."""
+        var = VariableStoreModel(key="REGION", store=VariableStoreType.CONSTANT, value="eu-west-1")
+        env_svc = self._env_service_with(variables=[var])
+        dep_svc = self._deployment_service_with(env_svc)
+        cache = self._cache(tmp_path)
+        input_paths = self._input_paths(tmp_path)
+
+        ctrl = ValueController()
+        ctrl.resolve_values_via_cache(dep_svc, cache, "demo", input_paths)  # warm
+
+        with patch.object(ValueController, "_preflight_check_stores", wraps=ctrl._preflight_check_stores) as spy:
+            ctrl.resolve_values_via_cache(dep_svc, cache, "demo", input_paths)  # cache hit
+
+        spy.assert_called_once()
+        _, kwargs = spy.call_args
+        assert kwargs["include_variables"] is False
+        assert kwargs["include_features"] is False
+        assert kwargs["include_secrets"] is True
+
 
 # ---------------------------------------------------------------------------
 # ValueController._resolve_variable — seed-on-missing (Phase 2)

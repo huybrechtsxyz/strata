@@ -542,17 +542,30 @@ class TerraformBuilder(BaseBuilder):
         return {"firewalls": firewalls_dict}
 
     def _build_dns_vars(self, platform: PlatformArtifactModel, messages: List[str]) -> Dict[str, Any]:
-        """Build DNS zone tfvars payload."""
+        """Build DNS zone tfvars payload.
+
+        Records sourced via ``output_key:`` never have their value written to
+        ``dns.auto.tfvars.json`` (the output only exists once a preceding stage has
+        applied, which build time cannot know about) — instead their coordinates
+        are bucketed into ``dns_output_records`` (mirrors ``dns_secret_records``),
+        keyed by ``{name}_{type}``, carrying the ``output_key`` name. The value is
+        already available generically as ``TF_VAR_<output_key>`` in the DNS stage's
+        apply environment (every resolved stage output is auto-injected this way),
+        so the consuming Terraform module reads it directly via ``var.<output_key>``.
+        """
         dns_dict: Dict[str, Any] = {}
         secret_records_dict: Dict[str, Any] = {}
+        output_records_dict: Dict[str, Any] = {}
 
         if platform.spec.dns_zones:
             for dns in platform.spec.dns_zones:
                 zones_dict: Dict[str, Any] = {}
                 dns_secret_zones: Dict[str, Any] = {}
+                dns_output_zones: Dict[str, Any] = {}
                 for zone in dns.zones:
                     records = []
                     secret_records = {}
+                    output_records = {}
                     if zone.records:
                         for record in zone.records:
                             if record.value is not None:
@@ -566,14 +579,24 @@ class TerraformBuilder(BaseBuilder):
                                         f"var '{record.var}' which has no resolved value — "
                                         "emitting null. Pass resolved_values to resolve at build time."
                                     )
-                            else:
-                                # record.secret is not None
+                            elif record.secret is not None:
                                 resolved_value = None
                                 coord_key = f"{record.name}_{record.type.value}"
                                 secret_records[coord_key] = {
                                     "name": record.name,
                                     "type": record.type.value,
                                     "secret_key": record.secret,
+                                    "ttl": record.ttl,
+                                    "priority": record.priority,
+                                }
+                            else:
+                                # record.output_key is not None
+                                resolved_value = None
+                                coord_key = f"{record.name}_{record.type.value}"
+                                output_records[coord_key] = {
+                                    "name": record.name,
+                                    "type": record.type.value,
+                                    "output_key": record.output_key,
                                     "ttl": record.ttl,
                                     "priority": record.priority,
                                 }
@@ -592,6 +615,8 @@ class TerraformBuilder(BaseBuilder):
                     }
                     if secret_records:
                         dns_secret_zones[zone.name] = secret_records
+                    if output_records:
+                        dns_output_zones[zone.name] = output_records
                 dns_dict[dns.name] = {
                     "description": (dns.annotations.get("description", "") if dns.annotations else ""),
                     "labels": dns.labels or {},
@@ -601,11 +626,17 @@ class TerraformBuilder(BaseBuilder):
                 }
                 if dns_secret_zones:
                     secret_records_dict[dns.name] = dns_secret_zones
+                if dns_output_zones:
+                    output_records_dict[dns.name] = dns_output_zones
 
         if self.verbose:
             messages.append(f"Built DNS vars: {len(dns_dict)} DNS zone configurations")
 
-        return {"dns_zones": dns_dict, "dns_secret_records": secret_records_dict}
+        return {
+            "dns_zones": dns_dict,
+            "dns_secret_records": secret_records_dict,
+            "dns_output_records": output_records_dict,
+        }
 
     def _build_network_vars(self, platform: PlatformArtifactModel, messages: List[str]) -> Dict[str, Any]:
         """Build network topology tfvars payload."""
@@ -790,6 +821,13 @@ class TerraformBuilder(BaseBuilder):
                     (
                         "dns_secret_records.auto.tfvars.json",
                         {"dns_secret_records": dns["dns_secret_records"]},
+                    )
+                )
+            if dns.get("dns_output_records"):
+                files.append(
+                    (
+                        "dns_output_records.auto.tfvars.json",
+                        {"dns_output_records": dns["dns_output_records"]},
                     )
                 )
 

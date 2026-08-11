@@ -156,6 +156,23 @@ class ValueController(BaseController):
         only for display (``strata cache status``); freshness is an explicit
         operator decision, matching the ADR's "operator responsibility model".
 
+        Three correctness/efficiency properties this method guarantees:
+
+        - ``environment``-store variables/features are NEVER cached, even when
+          the rest of the batch is. They are pipeline/session-scoped and can
+          differ between invocations with no file change to invalidate a stale
+          cache entry (see the ADR-0026 OQ-4 TTL table) — they're always
+          resolved live, cache hit or miss.
+        - A batch that had ANY resolution error is never written to the cache —
+          caching a partial/degraded result would silently mask a transient
+          failure (e.g. a momentary network blip) until an explicit
+          ``--refresh-cache``, instead of naturally retrying on the next
+          invocation the way an uncached path would.
+        - The store-availability preflight is scoped to only the types that
+          will actually be resolved live this run — on a cache hit, variable/
+          feature stores are never pinged (they won't be called at all), which
+          would otherwise waste exactly the calls caching is meant to avoid.
+
         Same flag semantics as every other ADR-0026 cache consumer: ``no_cache``
         bypasses caching entirely (live resolve, nothing read or written);
         ``refresh_cache`` forces a live re-fetch of the cacheable portion
@@ -181,7 +198,29 @@ class ValueController(BaseController):
 
         self._ensure_integrations_initialized()
 
-        preflight_errors = self._preflight_check_stores(environment_service)
+        # environment-store keys are never cached — always resolved live below,
+        # cache hit or miss.
+        env_variable_keys = {
+            v.key for v in environment_service.get_variables() if v.store == VariableStoreType.ENVIRONMENT
+        }
+        env_feature_keys = {
+            f.key for f in environment_service.get_features() if f.store == FeatureStoreType.ENVIRONMENT
+        }
+
+        indicator = "no-cache"
+        cached_payload = None
+        cache_key = None if no_cache else cache.compute_cache_key(input_paths)
+        if cache_key is not None and not refresh_cache:
+            cached_payload = cache.get(cache_name, CACHE_KIND_RESOLVED_VALUES, cache_key)
+        cache_hit = cached_payload is not None
+
+        # Preflight only the types that will actually be resolved live this run.
+        preflight_errors = self._preflight_check_stores(
+            environment_service,
+            include_variables=not cache_hit,
+            include_secrets=True,
+            include_features=not cache_hit,
+        )
         if preflight_errors:
             resolved.errors.extend(preflight_errors)
             resolved.store_unavailable_errors.extend(preflight_errors)
@@ -191,17 +230,22 @@ class ValueController(BaseController):
             )
             return False, resolved, resolved.errors, "no-cache"
 
-        # --- variables + features: the only cacheable portion ---
-        indicator = "no-cache"
-        cached_payload = None
-        cache_key = None if no_cache else cache.compute_cache_key(input_paths)
-        if cache_key is not None and not refresh_cache:
-            cached_payload = cache.get(cache_name, CACHE_KIND_RESOLVED_VALUES, cache_key)
-
-        if cached_payload is not None:
+        if cache_hit:
+            assert cached_payload is not None  # narrowed by cache_hit
             resolved.variables.update(cached_payload.get("variables") or {})
             resolved.features.update(cached_payload.get("features") or {})
             indicator = "cached"
+
+            # environment-store values are never trusted from cache — resolve
+            # them live even on a hit.
+            if env_variable_keys:
+                abort = self._resolve_all_variables(environment_service, resolved, strict, only_keys=env_variable_keys)
+                if abort is not None:
+                    return abort[0], abort[1], abort[2], indicator
+            if env_feature_keys:
+                abort = self._resolve_all_features(environment_service, resolved, strict, only_keys=env_feature_keys)
+                if abort is not None:
+                    return abort[0], abort[1], abort[2], indicator
         else:
             abort = self._resolve_all_variables(environment_service, resolved, strict)
             if abort is not None:
@@ -209,12 +253,16 @@ class ValueController(BaseController):
             abort = self._resolve_all_features(environment_service, resolved, strict)
             if abort is not None:
                 return abort[0], abort[1], abort[2], "no-cache"
-            if cache_key is not None:
+
+            # Only persist a fully-successful batch — see docstring.
+            if cache_key is not None and not resolved.errors and not resolved.store_unavailable_errors:
+                cacheable_variables = {k: v for k, v in resolved.variables.items() if k not in env_variable_keys}
+                cacheable_features = {k: v for k, v in resolved.features.items() if k not in env_feature_keys}
                 cache.warm(
                     cache_name,
                     CACHE_KIND_RESOLVED_VALUES,
                     cache_key,
-                    {"variables": dict(resolved.variables), "features": dict(resolved.features)},
+                    {"variables": cacheable_variables, "features": cacheable_features},
                     input_paths,
                 )
                 indicator = "refreshed"
@@ -240,15 +288,26 @@ class ValueController(BaseController):
     # Per-type bulk resolvers (shared by resolve_values / resolve_values_via_cache)
 
     def _resolve_all_variables(
-        self, environment_service, resolved: ResolvedValues, strict: bool
+        self,
+        environment_service,
+        resolved: ResolvedValues,
+        strict: bool,
+        only_keys: Optional[set] = None,
     ) -> Optional[Tuple[bool, ResolvedValues, List[str]]]:
-        """Resolve every declared variable into ``resolved.variables``.
+        """Resolve declared variables into ``resolved.variables``.
+
+        With *only_keys*, resolves only variables whose ``key`` is in that set
+        (used by :meth:`resolve_values_via_cache` to re-resolve just the
+        environment-sourced subset live on a cache hit); ``None`` resolves all
+        declared variables (the default, used by :meth:`resolve_values`).
 
         Returns an abort tuple ``(False, resolved, errors)`` when ``strict`` and
         a failure occurred (matching ``resolve_values()``'s early-exit
         behaviour), else ``None`` to continue.
         """
         for item in environment_service.get_variables():
+            if only_keys is not None and item.key not in only_keys:
+                continue
             try:
                 val, err, note = self._resolve_variable(item)
             except SecretStoreUnavailableError as exc:
@@ -290,11 +349,21 @@ class ValueController(BaseController):
         return None
 
     def _resolve_all_features(
-        self, environment_service, resolved: ResolvedValues, strict: bool
+        self,
+        environment_service,
+        resolved: ResolvedValues,
+        strict: bool,
+        only_keys: Optional[set] = None,
     ) -> Optional[Tuple[bool, ResolvedValues, List[str]]]:
-        """Resolve every declared feature flag into ``resolved.features``. See
-        :meth:`_resolve_all_variables` for the abort-tuple contract."""
+        """Resolve declared feature flags into ``resolved.features``.
+
+        With *only_keys*, resolves only features whose ``key`` is in that set.
+        See :meth:`_resolve_all_variables` for the abort-tuple contract and
+        the ``only_keys`` use case.
+        """
         for feature_item in environment_service.get_features():
+            if only_keys is not None and feature_item.key not in only_keys:
+                continue
             try:
                 val, err, note = self._resolve_feature(feature_item)
             except SecretStoreUnavailableError as exc:
@@ -540,7 +609,13 @@ class ValueController(BaseController):
 
     # Helpers
 
-    def _preflight_check_stores(self, environment_service) -> List[str]:
+    def _preflight_check_stores(
+        self,
+        environment_service,
+        include_variables: bool = True,
+        include_secrets: bool = True,
+        include_features: bool = True,
+    ) -> List[str]:
         """Confirm availability of every distinct integration-backed store
         referenced by this deployment's variables/secrets/features.
 
@@ -551,20 +626,29 @@ class ValueController(BaseController):
         the existing per-item resolution to report (a configuration error, not
         an availability one — respects ``strict`` as before).
 
+        ``include_variables``/``include_secrets``/``include_features`` scope the
+        check to only the types that will actually be resolved live this run —
+        used by :meth:`resolve_values_via_cache` to skip preflighting
+        variable/feature stores on a cache hit (they won't be called at all),
+        which would otherwise waste exactly the calls caching is meant to avoid.
+
         Returns:
             List of error messages for any referenced store confirmed
             unavailable (empty if all referenced, registered stores are up).
         """
         store_types: set = set()
-        for item in environment_service.get_variables():
-            if item.store not in (VariableStoreType.CONSTANT, VariableStoreType.ENVIRONMENT):
-                store_types.add(item.store.value)
-        for item in environment_service.get_secrets():
-            if item.store not in (SecretStoreType.CONSTANT, SecretStoreType.ENVIRONMENT, SecretStoreType.GITHUB):
-                store_types.add(item.store.value)
-        for item in environment_service.get_features():
-            if item.store not in (FeatureStoreType.CONSTANT, FeatureStoreType.ENVIRONMENT):
-                store_types.add(item.store.value)
+        if include_variables:
+            for item in environment_service.get_variables():
+                if item.store not in (VariableStoreType.CONSTANT, VariableStoreType.ENVIRONMENT):
+                    store_types.add(item.store.value)
+        if include_secrets:
+            for item in environment_service.get_secrets():
+                if item.store not in (SecretStoreType.CONSTANT, SecretStoreType.ENVIRONMENT, SecretStoreType.GITHUB):
+                    store_types.add(item.store.value)
+        if include_features:
+            for item in environment_service.get_features():
+                if item.store not in (FeatureStoreType.CONSTANT, FeatureStoreType.ENVIRONMENT):
+                    store_types.add(item.store.value)
 
         errors: List[str] = []
         for store_type in sorted(store_types):
