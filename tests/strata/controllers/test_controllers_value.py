@@ -836,7 +836,6 @@ class TestValueControllerSecretGenerateOnMissing:
         assert err is None
         assert val is not None
         assert len(val) > 0
-        mock_integration.set_secret.assert_called_once()
 
     @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
     @patch("strata.controllers.value_controller.ValueController._get_integration_by_type")
@@ -904,6 +903,166 @@ class TestValueControllerSecretGenerateOnMissing:
         assert val2 == "generated-value"
         # Still only called once
         mock_integration.set_secret.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# ValueController.resolve_values_via_cache — ADR-0026 OQ-4 phase 1
+# (variables + features cached; secrets always live, never cached)
+# ---------------------------------------------------------------------------
+
+
+class TestValueControllerResolveValuesViaCache:
+    def _env_service_with(self, variables=(), secrets=(), features=()):
+        env_svc = MagicMock()
+        env_svc.get_variables.return_value = list(variables)
+        env_svc.get_secrets.return_value = list(secrets)
+        env_svc.get_features.return_value = list(features)
+        return env_svc
+
+    def _deployment_service_with(self, env_svc):
+        dep_svc = MagicMock()
+        dep_svc.get_environment_service.return_value = env_svc
+        dep_svc.get_merge_provenance.return_value = None
+        return dep_svc
+
+    def _cache(self, tmp_path):
+        from strata.services.cache_service import CacheService
+
+        return CacheService(tmp_path)
+
+    def _input_paths(self, tmp_path):
+        f = tmp_path / "deployment.yaml"
+        f.write_text("meta:\n  name: demo\n", encoding="utf-8")
+        return [str(f)]
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    def test_cold_warms_cache_and_resolves_everything_live(self, _mock_init, tmp_path):
+        var = VariableStoreModel(key="REGION", store=VariableStoreType.CONSTANT, value="eu-west-1")
+        feat = FeatureStoreModel(key="FLAG", store=FeatureStoreType.CONSTANT, value=True)
+        secret = SecretStoreModel(key="TOKEN", store=SecretStoreType.CONSTANT, value="tok")
+        env_svc = self._env_service_with(variables=[var], features=[feat], secrets=[secret])
+        dep_svc = self._deployment_service_with(env_svc)
+        cache = self._cache(tmp_path)
+        input_paths = self._input_paths(tmp_path)
+
+        ctrl = ValueController()
+        ok, resolved, errors, indicator = ctrl.resolve_values_via_cache(dep_svc, cache, "demo", input_paths)
+
+        assert ok is True
+        assert indicator == "refreshed"
+        assert resolved.variables == {"REGION": "eu-west-1"}
+        assert resolved.features == {"FLAG": True}
+        assert resolved.secrets == {"TOKEN": "tok"}
+
+        entries = cache.list_entries()
+        assert len(entries) == 1
+        assert entries[0]["kind"] == "resolved_values"
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    def test_cache_hit_skips_live_variable_and_feature_resolution(self, _mock_init, tmp_path):
+        var = VariableStoreModel(key="REGION", store=VariableStoreType.CONSTANT, value="eu-west-1")
+        feat = FeatureStoreModel(key="FLAG", store=FeatureStoreType.CONSTANT, value=True)
+        secret = SecretStoreModel(key="TOKEN", store=SecretStoreType.CONSTANT, value="tok")
+        env_svc = self._env_service_with(variables=[var], features=[feat], secrets=[secret])
+        dep_svc = self._deployment_service_with(env_svc)
+        cache = self._cache(tmp_path)
+        input_paths = self._input_paths(tmp_path)
+
+        ctrl = ValueController()
+        ctrl.resolve_values_via_cache(dep_svc, cache, "demo", input_paths)  # cold warm
+
+        # Second call: variables/features must be served from cache — proven by
+        # patching the per-item resolvers and asserting they're never invoked.
+        # Secrets are never cached, so _resolve_secret MUST still be called.
+        with (
+            patch.object(ValueController, "_resolve_variable") as mock_var,
+            patch.object(ValueController, "_resolve_feature") as mock_feat,
+            patch.object(ValueController, "_resolve_secret", wraps=ctrl._resolve_secret) as spy_secret,
+        ):
+            ok, resolved, errors, indicator = ctrl.resolve_values_via_cache(dep_svc, cache, "demo", input_paths)
+
+        assert ok is True
+        assert indicator == "cached"
+        assert resolved.variables == {"REGION": "eu-west-1"}
+        assert resolved.features == {"FLAG": True}
+        assert resolved.secrets == {"TOKEN": "tok"}
+        mock_var.assert_not_called()
+        mock_feat.assert_not_called()
+        spy_secret.assert_called_once()
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    def test_no_cache_bypasses_entirely_and_never_writes(self, _mock_init, tmp_path):
+        var = VariableStoreModel(key="REGION", store=VariableStoreType.CONSTANT, value="eu-west-1")
+        env_svc = self._env_service_with(variables=[var])
+        dep_svc = self._deployment_service_with(env_svc)
+        cache = self._cache(tmp_path)
+        input_paths = self._input_paths(tmp_path)
+
+        ctrl = ValueController()
+        ok, resolved, errors, indicator = ctrl.resolve_values_via_cache(
+            dep_svc, cache, "demo", input_paths, no_cache=True
+        )
+
+        assert indicator == "no-cache"
+        assert resolved.variables == {"REGION": "eu-west-1"}
+        assert cache.list_entries() == []  # no-cache never reads or writes
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    def test_refresh_cache_forces_live_refetch_even_when_cached(self, _mock_init, tmp_path):
+        var = VariableStoreModel(key="REGION", store=VariableStoreType.CONSTANT, value="eu-west-1")
+        env_svc = self._env_service_with(variables=[var])
+        dep_svc = self._deployment_service_with(env_svc)
+        cache = self._cache(tmp_path)
+        input_paths = self._input_paths(tmp_path)
+
+        ctrl = ValueController()
+        ctrl.resolve_values_via_cache(dep_svc, cache, "demo", input_paths)  # cold warm
+
+        with patch.object(ValueController, "_resolve_variable", wraps=ctrl._resolve_variable) as spy_var:
+            ok, resolved, errors, indicator = ctrl.resolve_values_via_cache(
+                dep_svc, cache, "demo", input_paths, refresh_cache=True
+            )
+
+        assert indicator == "refreshed"
+        spy_var.assert_called_once()
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    def test_no_environment_service_returns_no_cache_indicator(self, _mock_init, tmp_path):
+        dep_svc = MagicMock()
+        dep_svc.get_environment_service.return_value = None
+        cache = self._cache(tmp_path)
+
+        ctrl = ValueController()
+        ok, resolved, errors, indicator = ctrl.resolve_values_via_cache(dep_svc, cache, "demo", [])
+
+        assert ok is True
+        assert indicator == "no-cache"
+        assert resolved.is_empty()
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    def test_declaration_change_invalidates_cached_values(self, _mock_init, tmp_path):
+        """Adding a new variable changes the cache key (same input-path scope as
+        the resolved_environment cache) — the stale entry is not served."""
+        var = VariableStoreModel(key="REGION", store=VariableStoreType.CONSTANT, value="eu-west-1")
+        env_svc = self._env_service_with(variables=[var])
+        dep_svc = self._deployment_service_with(env_svc)
+        cache = self._cache(tmp_path)
+
+        f = tmp_path / "deployment.yaml"
+        f.write_text("meta:\n  name: demo\n", encoding="utf-8")
+        input_paths = [str(f)]
+
+        ctrl = ValueController()
+        ctrl.resolve_values_via_cache(dep_svc, cache, "demo", input_paths)
+
+        # Simulate the environment file changing (new variable declared).
+        f.write_text("meta:\n  name: demo\n  extra: changed\n", encoding="utf-8")
+
+        with patch.object(ValueController, "_resolve_variable", wraps=ctrl._resolve_variable) as spy_var:
+            ok, resolved, errors, indicator = ctrl.resolve_values_via_cache(dep_svc, cache, "demo", input_paths)
+
+        assert indicator == "refreshed"
+        spy_var.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

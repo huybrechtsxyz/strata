@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Optional
 import click
 
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
-from strata.controllers.value_controller import ValueController
 from strata.services.deployment_service import DeploymentService
 
 
@@ -69,8 +68,7 @@ class GetValuesDeployCommand(BaseDeployCommand):
             return False
 
         # Resolve all values in one pass — cheaper than resolving individually
-        controller = ValueController()
-        _, resolved, _ = controller.resolve_values(self._deployment_service, strict=False)
+        _, resolved, _ = self._resolve_values(strict=False)
 
         # Merge all resolved maps into one lookup: variables + secrets + features
         all_resolved: Dict[str, Any] = {}

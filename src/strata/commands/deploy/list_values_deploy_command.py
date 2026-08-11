@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Optional
 import click
 
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
-from strata.controllers.value_controller import ValueController
 from strata.models.store_models import (
     FeatureStoreModel,
     SecretStoreModel,
@@ -94,9 +93,8 @@ class ListValuesDeployCommand(BaseDeployCommand):
         declared_secrets = env_service.get_secrets()
         declared_features = env_service.get_features()
 
-        # Resolve all using ValueController (does not raise on individual failures)
-        controller = ValueController()
-        _, resolved, _ = controller.resolve_values(self._deployment_service, strict=False)
+        # Resolve all using the cache-aware helper (does not raise on individual failures)
+        _, resolved, _ = self._resolve_values(strict=False)
 
         # Build per-type result rows
         var_rows = self._build_var_rows(

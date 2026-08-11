@@ -565,6 +565,52 @@ class BaseDeployCommand(BaseCommand):
 
         return True
 
+    def _resolve_values(self, strict: bool = False):
+        """Resolve variables/secrets/features for ``self._deployment_service``.
+
+        Uses the ADR-0026 OQ-4 ``resolved_values`` cache for variables and
+        features (never secrets — always resolved live) when this command was
+        loaded via :meth:`_load_environment_related_services` (signalled by
+        ``self._environment_snapshot`` being set). Commands that load the full
+        workspace (``deploy run``/``destroy``/etc., where
+        ``_environment_snapshot`` is never populated) get a plain live
+        ``ValueController.resolve_values()`` call, completely unaffected by the
+        value cache.
+
+        Same ``--no-cache``/``--refresh-cache`` flags as every other ADR-0026
+        cache consumer — one cache, one set of semantics, for the user.
+
+        Returns ``(success, resolved, errors)`` — same shape as
+        ``ValueController.resolve_values()``. Also updates
+        ``self._cache_indicator`` when the cache-aware path is used.
+        """
+        from strata.controllers.cache_controller import CacheController
+        from strata.controllers.value_controller import ValueController
+        from strata.utils.resolved_values import ResolvedValues
+
+        if self._deployment_service is None:
+            return True, ResolvedValues(), []
+
+        controller = ValueController()
+
+        if self._environment_snapshot is None:
+            return controller.resolve_values(self._deployment_service, strict=strict)
+
+        cache_controller = CacheController(self._work_path)
+        name = self._deployment_service.get_name() or str(self._file_path)
+        input_paths = cache_controller._collect_environment_input_paths(self._deployment_service)
+        ok, resolved, errors, indicator = controller.resolve_values_via_cache(
+            self._deployment_service,
+            cache_controller.cache,
+            name,
+            input_paths,
+            no_cache=self._no_cache,
+            refresh_cache=self._refresh_cache,
+            strict=strict,
+        )
+        self._cache_indicator = indicator
+        return ok, resolved, errors
+
     def _create_deployer(self, stage: DeploymentStageModel):
         """Instantiate the deployer for *stage*, or None on failure.
 

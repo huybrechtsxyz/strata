@@ -32,12 +32,22 @@ old schema is dropped and rebuilt automatically on next open (see
 `CacheService._migrate_legacy_schema`) — safe, since the cache is always fully
 rebuildable from committed YAML.
 
+**OQ-4 phase 1 (2026-08-11):** a third cache kind, `resolved_values`, caches the
+*resolved values* of declared variables and feature flags only — never secrets, and
+never with a TTL (see OQ-4 below for the full rationale). Wired into
+`ValueController.resolve_values_via_cache()` and consumed by `deploy show`/`values
+list/get/resolve` via `BaseDeployCommand._resolve_values()`, using the same
+`--no-cache`/`--refresh-cache` flags as every other cache kind — one cache, one set
+of semantics, for the operator.
+
 ## Remaining Work
 
-- `deploy run/show`(execution path — provisioning, not display), `values
-  list/get/resolve` still resolve secret/variable *values* live via
-  `ValueController` on every invocation (by design — see OQ-4). Only the
-  *declarations* are cached now.
+- `deploy run` (execution/provisioning path) still resolves all values live via
+  `ValueController.resolve_values()` (unaffected by any cache — by design).
+  `deploy show`/`values list/get/resolve` cache variable/feature values now;
+  secrets are still always resolved live on every invocation (by design — see
+  OQ-4). A future iteration may add secret value caching once an at-rest
+  encryption approach is chosen.
 - `deploy destroy/output/drift/plan`, `env show/status` — deferred until those
   commands exist.
 
@@ -780,3 +790,39 @@ need to revisit or re-justify the L2 cache design.
      fetch, or only re-warm the model?
    - What happens when the store is unreachable and no cached value exists (hard error
      vs deployment blocked vs degraded mode)?
+
+   **Phase 1 implemented (2026-08-11) — variables + features only, no TTL:**
+
+   Rather than answer every blocking question above up front, a narrower first
+   iteration shipped directly in this ADR (not a separate one — the scope ended up
+   small enough not to warrant it):
+
+   - **No TTL policy at all.** The draft TTL table above is not implemented. An
+     entry is used as-is until the operator explicitly passes `--refresh-cache`, or
+     the underlying declaration changes (which changes the cache key — same
+     hash-based mechanism as the `resolved_environment` cache, reusing the same
+     input-path scope: deployment + environment + tenant files). There is no
+     automatic staleness/expiry check. `strata cache status`'s `written_at` column
+     is the only "how old is this" signal — freshness is entirely an operator
+     decision, matching the ADR's "operator responsibility model" above. CI
+     patterns (OQ-1) were judged not worth designing for separately here.
+   - **Secrets excluded, deferred to a later iteration.** Only variables and
+     feature-flag values are cached (`ValueController.resolve_values_via_cache()`,
+     new cache kind `resolved_values`). Secrets are always resolved live, every
+     invocation, regardless of cache state — this sidesteps Problem 2
+     (at-rest encryption) entirely for now: nothing sensitive is ever written to
+     `cache.db`.
+   - **One cache, one set of semantics, for the operator.** `--no-cache` and
+     `--refresh-cache` (already established by the `resolved_environment` cache)
+     apply uniformly: `--no-cache` bypasses every cache kind and always resolves
+     live; `--refresh-cache` forces a live re-fetch of every cacheable kind. There
+     is no separate flag or mental model for "the value cache" vs "the model
+     cache" — `deploy show`/`values list/get/resolve` route both through the same
+     two flags via `BaseDeployCommand._resolve_values()`.
+   - **VS Code extension:** no automatic background refresh for this cache kind —
+     a manual refresh action is sufficient for phase 1 (not implemented in this
+     change; CLI-level mechanism is the prerequisite, now in place).
+   - Still open for a future iteration: secret value caching (needs an encryption
+     decision), and a fleet-wide `strata cache warm --values`/bulk refresh command
+     (only per-deployment `--refresh-cache` exists today).
+

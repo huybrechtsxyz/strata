@@ -2,7 +2,7 @@
 
 import os
 from datetime import datetime, timezone
-from typing import Any, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, List, Optional, Tuple
 
 from strata.controllers.base_controller import BaseController
 from strata.exceptions import SecretStoreUnavailableError
@@ -25,7 +25,17 @@ from strata.utils.resolved_values import (  # noqa: F401 — re-exported for cal
 )
 from strata.utils.secret_generator import generate_secret
 
+if TYPE_CHECKING:
+    from strata.services.cache_service import CacheService
+
 logger = get_logger(__name__)
+
+# ADR-0026 Path B follow-up (OQ-4, phase 1): cache kind for resolved variable/feature
+# *values* (never secrets). Mirrors strata.controllers.cache_controller.CacheController
+# .KIND_RESOLVED_ENVIRONMENT / .KIND — kept as its own literal here (rather than
+# importing CacheController) to avoid coupling ValueController to the controller layer;
+# it only needs the generic CacheService primitive, supplied by the caller.
+CACHE_KIND_RESOLVED_VALUES = "resolved_values"
 
 
 class ValueController(BaseController):
@@ -94,58 +104,19 @@ class ValueController(BaseController):
             return False, resolved, resolved.errors
 
         # --- variables ---
-        for item in environment_service.get_variables():
-            try:
-                val, err, note = self._resolve_variable(item)
-            except SecretStoreUnavailableError as exc:
-                msg = f"Variable '{item.key}': {exc}"
-                resolved.errors.append(msg)
-                resolved.store_unavailable_errors.append(msg)
-                continue
-            if err:
-                resolved.errors.append(err)
-                if strict:
-                    return False, resolved, resolved.errors
-            else:
-                resolved.variables[item.key] = val
-                if note:
-                    resolved.variable_notes[item.key] = note
+        abort = self._resolve_all_variables(environment_service, resolved, strict)
+        if abort is not None:
+            return abort
 
         # --- secrets ---
-        for secret_item in environment_service.get_secrets():
-            try:
-                val, err, note = self._resolve_secret(secret_item)
-            except SecretStoreUnavailableError as exc:
-                msg = f"Secret '{secret_item.key}': {exc}"
-                resolved.errors.append(msg)
-                resolved.store_unavailable_errors.append(msg)
-                continue
-            if err:
-                resolved.errors.append(err)
-                if strict:
-                    return False, resolved, resolved.errors
-            else:
-                resolved.secrets[secret_item.key] = val
-                if note:
-                    resolved.secret_notes[secret_item.key] = note
+        abort = self._resolve_all_secrets(environment_service, resolved, strict)
+        if abort is not None:
+            return abort
 
         # --- features ---
-        for feature_item in environment_service.get_features():
-            try:
-                val, err, note = self._resolve_feature(feature_item)
-            except SecretStoreUnavailableError as exc:
-                msg = f"Feature '{feature_item.key}': {exc}"
-                resolved.errors.append(msg)
-                resolved.store_unavailable_errors.append(msg)
-                continue
-            if err:
-                resolved.errors.append(err)
-                if strict:
-                    return False, resolved, resolved.errors
-            else:
-                resolved.features[feature_item.key] = val
-                if note:
-                    resolved.feature_notes[feature_item.key] = note
+        abort = self._resolve_all_features(environment_service, resolved, strict)
+        if abort is not None:
+            return abort
 
         logger.debug(
             "Value resolution complete",
@@ -162,6 +133,184 @@ class ValueController(BaseController):
         # overrides `strict` in both directions: never downgraded to a warning.
         success = (len(resolved.errors) == 0 if strict else True) and not resolved.store_unavailable_errors
         return success, resolved, resolved.errors
+
+    def resolve_values_via_cache(
+        self,
+        deployment_service: "DeploymentService",
+        cache: "CacheService",
+        cache_name: str,
+        input_paths: List[str],
+        no_cache: bool = False,
+        refresh_cache: bool = False,
+        strict: bool = False,
+    ) -> Tuple[bool, ResolvedValues, List[str], str]:
+        """Resolve values using the ADR-0026 ``resolved_values`` cache for
+        variables and features only — secrets are always resolved live.
+
+        Phase 1 of ADR-0026 OQ-4 ("Store value caching"): deliberately scoped to
+        non-secret values. Secrets are never cached — no TTL policy, no at-rest
+        encryption question to answer yet (tracked as a follow-up once this
+        mechanism is proven). There is no automatic staleness/TTL check either —
+        an entry is used as-is until the operator passes ``--refresh-cache`` (or
+        the underlying declarations change, which changes the cache key). Age is
+        only for display (``strata cache status``); freshness is an explicit
+        operator decision, matching the ADR's "operator responsibility model".
+
+        Same flag semantics as every other ADR-0026 cache consumer: ``no_cache``
+        bypasses caching entirely (live resolve, nothing read or written);
+        ``refresh_cache`` forces a live re-fetch of the cacheable portion
+        (variables/features) even if the cache entry is present.
+
+        Returns ``(success, resolved, errors, indicator)`` where ``indicator``
+        is ``"cached"``, ``"refreshed"``, or ``"no-cache"`` — describing only
+        the variables/features portion (secrets are always live).
+        """
+        resolved = ResolvedValues()
+
+        environment_service = deployment_service.get_environment_service()
+        if environment_service is None:
+            logger.warning("No environment service attached to deployment — no variables/secrets/features to resolve.")
+            return True, resolved, [], "no-cache"
+
+        provenance = deployment_service.get_merge_provenance()
+        if provenance is not None:
+            resolved.variable_sources = dict(provenance.variable_sources)
+            resolved.secret_sources = dict(provenance.secret_sources)
+            resolved.feature_sources = dict(provenance.feature_sources)
+            resolved.merge_order = list(provenance.merge_order)
+
+        self._ensure_integrations_initialized()
+
+        preflight_errors = self._preflight_check_stores(environment_service)
+        if preflight_errors:
+            resolved.errors.extend(preflight_errors)
+            resolved.store_unavailable_errors.extend(preflight_errors)
+            logger.error(
+                "Aborting value resolution — required store(s) unavailable",
+                errors=preflight_errors,
+            )
+            return False, resolved, resolved.errors, "no-cache"
+
+        # --- variables + features: the only cacheable portion ---
+        indicator = "no-cache"
+        cached_payload = None
+        cache_key = None if no_cache else cache.compute_cache_key(input_paths)
+        if cache_key is not None and not refresh_cache:
+            cached_payload = cache.get(cache_name, CACHE_KIND_RESOLVED_VALUES, cache_key)
+
+        if cached_payload is not None:
+            resolved.variables.update(cached_payload.get("variables") or {})
+            resolved.features.update(cached_payload.get("features") or {})
+            indicator = "cached"
+        else:
+            abort = self._resolve_all_variables(environment_service, resolved, strict)
+            if abort is not None:
+                return abort[0], abort[1], abort[2], "no-cache"
+            abort = self._resolve_all_features(environment_service, resolved, strict)
+            if abort is not None:
+                return abort[0], abort[1], abort[2], "no-cache"
+            if cache_key is not None:
+                cache.warm(
+                    cache_name,
+                    CACHE_KIND_RESOLVED_VALUES,
+                    cache_key,
+                    {"variables": dict(resolved.variables), "features": dict(resolved.features)},
+                    input_paths,
+                )
+                indicator = "refreshed"
+
+        # --- secrets: always live, never cached (see docstring) ---
+        abort = self._resolve_all_secrets(environment_service, resolved, strict)
+        if abort is not None:
+            return abort[0], abort[1], abort[2], indicator
+
+        logger.debug(
+            "Value resolution complete (cache-aware)",
+            variables=len(resolved.variables),
+            secrets=len(resolved.secrets),
+            features=len(resolved.features),
+            errors=len(resolved.errors),
+            store_unavailable=len(resolved.store_unavailable_errors),
+            indicator=indicator,
+        )
+
+        success = (len(resolved.errors) == 0 if strict else True) and not resolved.store_unavailable_errors
+        return success, resolved, resolved.errors, indicator
+
+    # Per-type bulk resolvers (shared by resolve_values / resolve_values_via_cache)
+
+    def _resolve_all_variables(
+        self, environment_service, resolved: ResolvedValues, strict: bool
+    ) -> Optional[Tuple[bool, ResolvedValues, List[str]]]:
+        """Resolve every declared variable into ``resolved.variables``.
+
+        Returns an abort tuple ``(False, resolved, errors)`` when ``strict`` and
+        a failure occurred (matching ``resolve_values()``'s early-exit
+        behaviour), else ``None`` to continue.
+        """
+        for item in environment_service.get_variables():
+            try:
+                val, err, note = self._resolve_variable(item)
+            except SecretStoreUnavailableError as exc:
+                msg = f"Variable '{item.key}': {exc}"
+                resolved.errors.append(msg)
+                resolved.store_unavailable_errors.append(msg)
+                continue
+            if err:
+                resolved.errors.append(err)
+                if strict:
+                    return False, resolved, resolved.errors
+            else:
+                resolved.variables[item.key] = val
+                if note:
+                    resolved.variable_notes[item.key] = note
+        return None
+
+    def _resolve_all_secrets(
+        self, environment_service, resolved: ResolvedValues, strict: bool
+    ) -> Optional[Tuple[bool, ResolvedValues, List[str]]]:
+        """Resolve every declared secret into ``resolved.secrets``. See
+        :meth:`_resolve_all_variables` for the abort-tuple contract."""
+        for secret_item in environment_service.get_secrets():
+            try:
+                val, err, note = self._resolve_secret(secret_item)
+            except SecretStoreUnavailableError as exc:
+                msg = f"Secret '{secret_item.key}': {exc}"
+                resolved.errors.append(msg)
+                resolved.store_unavailable_errors.append(msg)
+                continue
+            if err:
+                resolved.errors.append(err)
+                if strict:
+                    return False, resolved, resolved.errors
+            else:
+                resolved.secrets[secret_item.key] = val
+                if note:
+                    resolved.secret_notes[secret_item.key] = note
+        return None
+
+    def _resolve_all_features(
+        self, environment_service, resolved: ResolvedValues, strict: bool
+    ) -> Optional[Tuple[bool, ResolvedValues, List[str]]]:
+        """Resolve every declared feature flag into ``resolved.features``. See
+        :meth:`_resolve_all_variables` for the abort-tuple contract."""
+        for feature_item in environment_service.get_features():
+            try:
+                val, err, note = self._resolve_feature(feature_item)
+            except SecretStoreUnavailableError as exc:
+                msg = f"Feature '{feature_item.key}': {exc}"
+                resolved.errors.append(msg)
+                resolved.store_unavailable_errors.append(msg)
+                continue
+            if err:
+                resolved.errors.append(err)
+                if strict:
+                    return False, resolved, resolved.errors
+            else:
+                resolved.features[feature_item.key] = val
+                if note:
+                    resolved.feature_notes[feature_item.key] = note
+        return None
 
     # Per-type resolvers
 

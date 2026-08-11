@@ -57,6 +57,11 @@ class CacheController(BaseController):
     # commands that only need declared variables/secrets/features (store type +
     # reference, never resolved values — see get_or_resolve_environment docstring).
     KIND_RESOLVED_ENVIRONMENT = "resolved_environment"
+    # Third cache kind (ADR-0026 OQ-4, phase 1): resolved variable/feature *values*
+    # (never secrets). Written/read by ValueController.resolve_values_via_cache() —
+    # kept here too (same literal) purely so `strata cache status`/`export` can
+    # label entries of this kind without importing the controller layer's ValueController.
+    KIND_RESOLVED_VALUES = "resolved_values"
 
     def __init__(self, work_path: Path) -> None:
         super().__init__()

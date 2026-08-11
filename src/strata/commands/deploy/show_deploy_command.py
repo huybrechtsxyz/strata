@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Optional
 import click
 
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
-from strata.controllers.value_controller import ValueController
 from strata.services.deployment_service import DeploymentService
 
 
@@ -182,9 +181,8 @@ class ShowDeployCommand(BaseDeployCommand):
             if env_model.spec.custom:
                 env_data["custom"] = dict(env_model.spec.custom)
 
-        controller = ValueController()
         assert self._deployment_service is not None
-        _, resolved, _ = controller.resolve_values(self._deployment_service, strict=False)
+        _, resolved, _ = self._resolve_values(strict=False)
 
         declared_vars = env_service.get_variables()
         var_rows = []
