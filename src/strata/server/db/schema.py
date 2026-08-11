@@ -23,7 +23,8 @@ events = Table(
     "events",
     metadata,
     Column("execution_id", String, nullable=False),
-    # deploy-log | deployment-manifest | deployment-metrics | drift-history | cost-history
+    # the CloudEvents `type` string, e.g. "xyz.huybrechts.strata.deployment.completed"
+    # (ADR-0066's closed event-type enum) — not the original 5 "artifact kind" labels
     Column("record_type", String, nullable=False),
     Column("recorded_at", DateTime(timezone=True), nullable=False),
     Column("received_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
