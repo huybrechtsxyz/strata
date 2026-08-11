@@ -128,11 +128,19 @@ export interface HealthData {
     issues: string[];
 }
 
+/** A deployment file registered in the solution (`sln add-deployment`/`sln scan-deployments`). */
+export interface DeploymentRegistryEntry {
+    name: string;
+    path: string;
+}
+
 export interface WorkspaceStatus {
     health: HealthData;
     solution: SolutionData;
     readiness: ReadinessData;
     profiles: ProfileData;
+    /** Solution-wide registered deployments — NOT profile-scoped, unlike `profiles.paths`. */
+    deployments: DeploymentRegistryEntry[];
     repositories: RepositoryInfo[];
     integrations: Record<string, IntegrationInfo>;
 }

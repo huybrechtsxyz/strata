@@ -95,6 +95,14 @@ class StatusCommand(BaseCommand):
                     if items
                 }
 
+        # ── Deployments ─────────────────────────────────────────────────
+        # Solution-wide (registered via `sln add-deployment`/`sln scan-deployments`),
+        # not profile-scoped like the ref paths above — a deployment isn't a "ref".
+        deployments_data: List[Dict[str, Any]] = []
+        if initialized:
+            deployments, _ = self._solution_controller.get_deployments()
+            deployments_data = [{"name": str(d.name), "path": d.path} for d in deployments]
+
         # ── Integrations ──────────────────────────────────────────────
         ic = self.get_integration_controller()
         _, integrations_status = ic.get_all_integrations_status()
@@ -141,6 +149,7 @@ class StatusCommand(BaseCommand):
             "solution": solution_data,
             "readiness": readiness_data,
             "profiles": profiles_data,
+            "deployments": deployments_data,
             "repositories": repos_data,
             "integrations": integrations_status,
             "version": get_version(),

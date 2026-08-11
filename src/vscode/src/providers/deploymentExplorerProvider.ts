@@ -387,7 +387,7 @@ export class DeploymentExplorerProvider
 
         const items: ExplorerItem[] = [];
         const activeFile = this._deployCtx?.activeFile;
-        const allDeployments = this._status?.profiles.paths['deployment'] ?? [];
+        const allDeployments = this._status?.deployments ?? [];
 
         // Select prompt (always shown when nothing is active)
         if (!activeFile) {

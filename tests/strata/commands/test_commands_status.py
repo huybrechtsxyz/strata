@@ -79,3 +79,58 @@ class TestSlnStatusCommand:
         with patch("strata.commands.status.show_status_command.StatusCommand.execute", return_value=False):
             result = runner.invoke(sln_group, ["status", "--work-path", str(tmp_path)])
         assert result.exit_code != 0
+
+
+class TestStatusDeployments:
+    """`data["deployments"]` — solution-wide registered deployments (not profile-scoped).
+
+    Regression coverage: the VS Code extension's deployment picker/auto-select
+    previously read the never-populated `profiles.paths['deployment']` instead
+    of this field.
+    """
+
+    def test_deployments_empty_when_uninitialized(self, tmp_path):
+        runner = CliRunner()
+        result = runner.invoke(status_command, ["--work-path", str(tmp_path), "--output", "json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["data"]["deployments"] == []
+
+    def test_deployments_lists_registered_deployment(self, tmp_path):
+        from strata.commands.cli_sln import sln_group
+        from strata.utils.config import SOLUTION_DIR, SOLUTION_FILE
+        from strata.utils.system import generate_uuid
+
+        state_dir = tmp_path / SOLUTION_DIR
+        state_dir.mkdir()
+        (state_dir / "logs").mkdir()
+        solution_json = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "solution",
+            "meta": {"name": "test-solution"},
+            "spec": {"solution_id": generate_uuid()},
+        }
+        (state_dir / SOLUTION_FILE).write_text(json.dumps(solution_json), encoding="utf-8")
+
+        deploy_dir = tmp_path / "deploy"
+        deploy_dir.mkdir()
+        deploy_file = deploy_dir / "deploy-prd.yaml"
+        deploy_file.write_text(
+            "apiVersion: strata.huybrechts.xyz/v1\nkind: deployment\nmeta:\n  name: my_deploy\n"
+            "spec:\n  workspace:\n    name: ws\n    file: workspace.yaml\n  layers: {}\n  environments: []\n",
+            encoding="utf-8",
+        )
+
+        runner = CliRunner()
+        add_result = runner.invoke(
+            sln_group,
+            ["deployment", "add", str(deploy_file), "--work-path", str(tmp_path)],
+        )
+        assert add_result.exit_code == 0, add_result.output
+
+        result = runner.invoke(status_command, ["--work-path", str(tmp_path), "--output", "json"])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        deployments = data["data"]["deployments"]
+        assert len(deployments) == 1
+        assert deployments[0]["name"] == "my_deploy"
