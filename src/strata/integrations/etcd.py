@@ -51,6 +51,15 @@ class EtcdIntegration(StoreIntegration):
         """
         super().__init__(config)
 
+        # Lazy per-process cache of the full keyspace (key -> value), populated by
+        # one bulk range read on first get_variable() call instead of one etcd call
+        # per declared variable. Mirrors FlagsmithIntegration._flags_cache. Invalidated
+        # (not incrementally updated) on any successful write — the next read simply
+        # re-warms. See docs/decisions/0026-resolved-model-cache.md OQ-4 throttling
+        # discussion: etcd's range API already returns values in the same call keys
+        # are fetched with, so this costs nothing extra over the previous keys-only list.
+        self._kv_cache: Optional[Dict[str, str]] = None
+
         # Endpoint — config takes priority, then env vars, then localhost default
         self.etcd_endpoints = "http://127.0.0.1:2379"
         if self.config.endpoints and self.config.endpoints.address:
@@ -208,16 +217,34 @@ class EtcdIntegration(StoreIntegration):
     # Unified Store Interface Implementation (IVariableStore)
 
     def get_variable(self, key: str, **kwargs) -> Optional[Any]:
-        """Get a variable value from etcd (delegates to get_keyvalue)."""
+        """Get a variable value from etcd.
+
+        Serves from the lazily-warmed whole-keyspace cache (see ``__init__``) —
+        the first call for this integration instance triggers one bulk range
+        read; every subsequent call (for any key, from any deployment sharing
+        this instance within the same process) is a local dict lookup. Falls
+        back to a direct per-key read if the bulk read failed.
+        """
         prefer_cli = kwargs.get("prefer_cli", True)
         timeout = kwargs.get("timeout", 60)
+        if self._kv_cache is None:
+            self._kv_cache = self._fetch_all_keyvalues(prefer_cli=prefer_cli, timeout=timeout)
+        if self._kv_cache is not None:
+            return self._kv_cache.get(key)
         return self.get_keyvalue(key, prefer_cli=prefer_cli, timeout=timeout)
 
     def set_variable(self, key: str, value: Any, **kwargs) -> bool:
-        """Set a variable value in etcd (delegates to put_keyvalue)."""
+        """Set a variable value in etcd (delegates to put_keyvalue).
+
+        Invalidates the bulk-read cache on success so the next read re-warms
+        with the new value included.
+        """
         prefer_cli = kwargs.get("prefer_cli", True)
         timeout = kwargs.get("timeout", 60)
-        return self.put_keyvalue(key, str(value), prefer_cli=prefer_cli, timeout=timeout)
+        ok = self.put_keyvalue(key, str(value), prefer_cli=prefer_cli, timeout=timeout)
+        if ok:
+            self._kv_cache = None
+        return ok
 
     def list_variables(self, prefix: str = "", **kwargs) -> List[str]:
         """List variable keys in etcd (delegates to list_keys)."""
@@ -337,6 +364,63 @@ class EtcdIntegration(StoreIntegration):
                 return result.stdout.strip()
             return None
         except Exception:
+            return None
+
+    def _fetch_all_keyvalues(self, prefer_cli: bool = True, timeout: int = 60) -> Optional[Dict[str, str]]:
+        """Bulk-fetch the entire etcd keyspace (key -> value) in one call.
+
+        Backs the lazy cache used by :meth:`get_variable`. Uses the same range
+        read as ``_list_keys_via_cli``/``_list_keys_via_api`` but WITHOUT
+        ``--keys-only``/``keys_only: True`` — etcd's range API returns values
+        in the identical call keys are fetched with, so this costs nothing
+        extra over the previous keys-only list. Returns ``None`` (not an empty
+        dict) on failure so callers can distinguish "cache unavailable" from
+        "keyspace is genuinely empty".
+        """
+        if prefer_cli:
+            result = self._fetch_all_keyvalues_via_cli(timeout)
+            if result is not None:
+                return result
+            return self._fetch_all_keyvalues_via_api()
+        else:
+            result = self._fetch_all_keyvalues_via_api()
+            if result is not None:
+                return result
+            return self._fetch_all_keyvalues_via_cli(timeout)
+
+    def _fetch_all_keyvalues_via_cli(self, timeout: int = 60) -> Optional[Dict[str, str]]:
+        try:
+            args = self._base_args() + ["get", "", "--prefix", "-w", "json"]
+            result = self._run_integration(args=args, timeout=timeout)
+            if result.returncode != 0 or not result.stdout.strip():
+                return None
+            data = json.loads(result.stdout)
+            kvs = data.get("kvs") or []
+            return {
+                base64.b64decode(kv["key"]).decode("utf-8"): base64.b64decode(kv.get("value", "")).decode("utf-8")
+                for kv in kvs
+            }
+        except Exception as e:
+            logger.debug("etcd CLI bulk fetch failed", error_type=type(e).__name__, name=self.integration_name)
+            return None
+
+    def _fetch_all_keyvalues_via_api(self) -> Optional[Dict[str, str]]:
+        try:
+            # Range over the entire keyspace: key=\x00, range_end=\x00 (etcd v3 convention).
+            payload = json.dumps(
+                {"key": base64.b64encode(b"\x00").decode(), "range_end": base64.b64encode(b"\x00").decode()}
+            ).encode("utf-8")
+            req = urllib.request.Request(self._api_url("/v3/kv/range"), data=payload, method="POST")
+            for k, v in self._api_headers().items():
+                req.add_header(k, v)
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                return {
+                    base64.b64decode(kv["key"]).decode("utf-8"): base64.b64decode(kv.get("value", "")).decode("utf-8")
+                    for kv in data.get("kvs", [])
+                }
+        except Exception as e:
+            logger.debug("etcd API bulk fetch failed", error_type=type(e).__name__, name=self.integration_name)
             return None
 
     def _put_kv_via_cli(self, key: str, value: str, timeout: int = 60) -> bool:

@@ -114,6 +114,15 @@ class VaultIntegration(StoreIntegration):
             "VAULT_K8S_JWT_PATH", "/var/run/secrets/kubernetes.io/serviceaccount/token"
         )
 
+        # Lazy per-process cache of full documents, keyed by secret_path. A single
+        # Vault read already returns every field at a path regardless of whether one
+        # field or all were requested (the "field" kwarg only affects local dict
+        # extraction, not the underlying CLI/API call) — so _get_secretvalue() always
+        # fetches the full document and caches it here. Multiple declared
+        # secrets/variables/features sharing the same Vault path (different fields)
+        # collapse from N reads to 1. Invalidated per-path on any successful write.
+        self._path_cache: Dict[str, Dict[str, Any]] = {}
+
         logger.debug(
             "HashiCorp Vault integration initialized",
             name=self.integration_name,
@@ -327,6 +336,7 @@ class VaultIntegration(StoreIntegration):
             )
             if result.returncode == 0:
                 logger.info("Secret written to HashiCorp Vault via CLI", name=self.integration_name, secret_path=key)
+                self._path_cache.pop(key, None)  # invalidate — next read re-warms with the new value included
                 return True
             logger.warning(
                 "Failed to write secret via CLI — trying API",
@@ -339,6 +349,7 @@ class VaultIntegration(StoreIntegration):
         ok = self._set_secret_via_api(key, field, value)
         if ok:
             logger.info("Secret written to HashiCorp Vault via API", name=self.integration_name, secret_path=key)
+            self._path_cache.pop(key, None)
         else:
             logger.warning("Failed to write secret to HashiCorp Vault", name=self.integration_name, secret_path=key)
         return ok
@@ -713,6 +724,18 @@ class VaultIntegration(StoreIntegration):
         if not available:
             raise SecretStoreUnavailableError(self.integration_name, error)
 
+        # Fast path: the full document at this path was already fetched for a
+        # previous field/caller (see __init__) — extract locally, no Vault call.
+        if secret_path in self._path_cache:
+            document = self._path_cache[secret_path]
+            logger.info(
+                "Secret retrieved from HashiCorp Vault via path cache",
+                secret_path=secret_path,
+                field=field,
+                name=self.integration_name,
+            )
+            return document.get(field) if field else document  # type: ignore[return-value]
+
         logger.debug(
             "Retrieving secret from HashiCorp Vault",
             secret_path=secret_path,
@@ -721,48 +744,59 @@ class VaultIntegration(StoreIntegration):
             name=self.integration_name,
         )
 
+        # Always fetch the FULL document (field=None), never just one field: Vault's
+        # CLI/API read the entire path regardless of which field is requested — the
+        # "field" kwarg only controls local dict extraction, never the network/CLI
+        # call itself — so this costs nothing extra over fetching a single field,
+        # and lets every other field at this path be served from cache afterward.
         if prefer_cli:
             # Try Vault CLI first — best-effort, never raises (the CLI cannot
             # cleanly distinguish "not found" from an auth/network problem).
-            result = self._get_secret_via_cli(secret_path, field, timeout)
-            if result is not None:
+            document = self._get_secret_via_cli(secret_path, None, timeout)
+            if document is not None:
+                self._path_cache[secret_path] = document  # type: ignore[assignment]
                 logger.info(
                     "Secret retrieved from HashiCorp Vault via CLI",
                     secret_path=secret_path,
                     name=self.integration_name,
                 )
-                return result
+                return document.get(field) if field else document  # type: ignore[union-attr,return-value]
 
             # Authoritative: the API path distinguishes 404 from real errors.
-            result = self._get_secret_via_api(secret_path, field)
-            if result is not None:
+            document = self._get_secret_via_api(secret_path, None)
+            if document is not None:
+                self._path_cache[secret_path] = document  # type: ignore[assignment]
                 logger.info(
                     "Secret retrieved from HashiCorp Vault via API",
                     secret_path=secret_path,
                     name=self.integration_name,
                 )
-            return result
+                return document.get(field) if field else document  # type: ignore[union-attr,return-value]
+            return document
         else:
             # Authoritative first — if this raises, we stop here rather than
             # masking a real store problem behind a CLI fallback.
-            result = self._get_secret_via_api(secret_path, field)
-            if result is not None:
+            document = self._get_secret_via_api(secret_path, None)
+            if document is not None:
+                self._path_cache[secret_path] = document  # type: ignore[assignment]
                 logger.info(
                     "Secret retrieved from HashiCorp Vault via API",
                     secret_path=secret_path,
                     name=self.integration_name,
                 )
-                return result
+                return document.get(field) if field else document  # type: ignore[union-attr,return-value]
 
             # API confirmed "not found" — CLI double-check is harmless.
-            result = self._get_secret_via_cli(secret_path, field, timeout)
-            if result is not None:
+            document = self._get_secret_via_cli(secret_path, None, timeout)
+            if document is not None:
+                self._path_cache[secret_path] = document  # type: ignore[assignment]
                 logger.info(
                     "Secret retrieved from HashiCorp Vault via CLI",
                     secret_path=secret_path,
                     name=self.integration_name,
                 )
-            return result
+                return document.get(field) if field else document  # type: ignore[union-attr,return-value]
+            return document
 
     def _get_secret_via_cli(self, secret_path: str, field: Optional[str] = None, timeout: int = 60) -> Optional[str]:
         """

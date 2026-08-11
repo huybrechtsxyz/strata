@@ -75,6 +75,17 @@ class InfisicalIntegration(StoreIntegration):
         # Cached access token from universal auth login
         self._access_token: Optional[str] = None
 
+        # Lazy per-process cache of resolved secret values (key -> value) for a given
+        # (project_id, environment, secret_path) scope, populated by one bulk list
+        # call on first get_secret() call instead of one Infisical call per declared
+        # secret. Mirrors FlagsmithIntegration._flags_cache / EtcdIntegration._kv_cache.
+        # Only consulted on a HIT — a miss always falls through to the authoritative
+        # live per-key lookup (never treated as a confirmed "not found") since a false
+        # negative here could trigger unwanted generate-on-missing secret creation in
+        # ValueController. Invalidated on any successful write.
+        self._secrets_cache: Optional[Dict[str, str]] = None
+        self._secrets_cache_scope: Optional[Tuple[str, str, str]] = None
+
         logger.debug(
             "Infisical integration initialized",
             name=self.integration_name,
@@ -297,6 +308,20 @@ class InfisicalIntegration(StoreIntegration):
         if not available:
             raise SecretStoreUnavailableError(self.integration_name, error)
 
+        # Fast path: served from the lazily-warmed bulk cache for this scope (see
+        # __init__). Only consulted on a HIT — a miss (key not in the bulk listing,
+        # or the bulk fetch itself failed) always falls through to the authoritative
+        # per-key lookup below, never short-circuited to "not found" here.
+        scope = (project_id, environment, secret_path)
+        if self._secrets_cache is None or self._secrets_cache_scope != scope:
+            fetched = self._fetch_all_secret_values(project_id, environment, secret_path)
+            if fetched is not None:
+                self._secrets_cache = fetched
+                self._secrets_cache_scope = scope
+        if self._secrets_cache is not None and self._secrets_cache_scope == scope and key in self._secrets_cache:
+            logger.info("Secret retrieved from Infisical via bulk cache", key=key, name=self.integration_name)
+            return self._secrets_cache[key]
+
         logger.debug(
             "Retrieving secret from Infisical",
             key=key,
@@ -337,7 +362,44 @@ class InfisicalIntegration(StoreIntegration):
         if not available:
             return False
 
-        return self._set_secret_via_api(key, value, project_id, environment, secret_path)
+        ok = self._set_secret_via_api(key, value, project_id, environment, secret_path)
+        if ok:
+            self._secrets_cache = None  # invalidate — next read re-warms with the new value included
+        return ok
+
+    def _fetch_all_secret_values(
+        self, project_id: Optional[str], environment: str, secret_path: str
+    ) -> Optional[Dict[str, str]]:
+        """Bulk-fetch every secret's value for this (project, environment, path) scope in one call.
+
+        Backs the cache used by :meth:`get_secret`. Infisical's raw-secrets list
+        endpoint (``GET /api/v3/secrets/raw``) already returns a ``secretValue``
+        per entry in the same call ``list_secrets()`` uses to list names — this was
+        previously discarded, keeping only ``secretKey``. Returns ``None`` (not an
+        empty dict) on any failure so callers never mistake "fetch failed" for
+        "scope is genuinely empty".
+        """
+        token = self._get_access_token()
+        if not token:
+            return None
+        try:
+            params: Dict[str, str] = {"environment": environment, "secretPath": secret_path}
+            if project_id:
+                params["workspaceId"] = project_id
+            query = urllib.parse.urlencode(params)
+            url = f"{self.infisical_addr}/api/v3/secrets/raw?{query}"
+            req = urllib.request.Request(url, method="GET")
+            req.add_header("Authorization", f"Bearer {token}")
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                return {s["secretKey"]: s.get("secretValue", "") for s in data.get("secrets", []) if s.get("secretKey")}
+        except Exception as e:
+            logger.debug(
+                "Infisical bulk secret fetch failed",
+                error_type=type(e).__name__,
+                name=self.integration_name,
+            )
+            return None
 
     def list_secrets(self, prefix: str = "", **kwargs) -> List[str]:
         """
