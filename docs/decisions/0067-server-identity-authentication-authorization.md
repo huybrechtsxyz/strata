@@ -1,6 +1,6 @@
 # Identity, authentication, and authorization for a strata server component
 
-- Status: partially implemented — CLI-side (steps 0–6) ✅ Done; OIDC relying party (step 7) ✅ Done; session store/RBAC/M2M (steps 8–10) ⏳ not started
+- Status: partially implemented — CLI-side (steps 0–6) ✅ Done; OIDC relying party (step 7) ✅ Done; session store (step 8) ✅ Done; RBAC/M2M (steps 9–10) ⏳ not started
 - Date: 2026-08-07
 - Related: ADR-0065 (strata state service — Phase 3 control plane, per-workspace bearer tokens), ADR-0066 (audit event routing & policy model — CLI-side `actor` resolution), ADR-0018 (deployment audit & traceability), ADR-0062 (CLI consolidation — `sln doctor`'s health-check surface, extended here), ADR-0057 (deployment workflow orchestration — work items and hand-off gates), ADR-0007 (deployment state locking), ADR-0005 (secret resolution at build time)
 
@@ -129,6 +129,36 @@ The model is a hybrid, not a binary choice:
 
 This is not a new mechanism invented for strata: refresh-token rotation with server-side revocation is the pattern Auth0 and Azure AD already push clients toward, so this decides where strata's own boundary sits rather than adding a mechanism on top of the IdPs already chosen above. It also means `strata audit status`-style introspection (ADR-0066's naming precedent for "is this actually working") extends naturally to a future `strata server sessions` or equivalent view over the same table — one place to answer "who is currently logged in, and can I kick them out right now."
 
+### Session store, mechanically — Step 8 ✅ Done
+
+Step 7's `/auth/callback` mints a stateless session token today and discards everything else — including the IdP's `refresh_token`, on the rare occasion one even comes back, since the relying party's scope (`openid profile email`) never requests `offline_access`. Step 8 has to fix that first, then add the table the "Session model" section above already commits to.
+
+**New table — `sessions`** (`src/strata/server/db/schema.py`, alongside `events`/`tokens`):
+
+| Column                             | Purpose                                                                               |
+| ---------------------------------- | ------------------------------------------------------------------------------------- |
+| `session_id`                       | PK, opaque UUID — what the client holds; never the refresh token itself               |
+| `subject`                          | the `sub` claim — whose session this is                                               |
+| `email`                            | nullable, for a human-readable "who's logged in" list                                 |
+| `encrypted_refresh_token`          | the IdP's refresh token, encrypted at rest — see below for why encrypted, not hashed  |
+| `created_at` / `last_refreshed_at` | audit trail                                                                           |
+| `revoked_at`                       | nullable — `NULL` = active, the exact same convention the `tokens` table already uses |
+
+**Encrypted, not hashed — and that is a deliberate departure from the `tokens` table's own convention.** Ingest tokens only ever need equality comparison, so an irreversible SHA-256 hash is correct there. A refresh token is different: the server must hand it back to the IdP on every refresh, so it has to be recoverable, not merely comparable. Encryption uses `joserfc`'s JWE (already present via the `authlib` dependency Step 7 added — no new library) with a key derived from `--session-secret` (`sha256(session_secret)` → 32 bytes → AES-256-GCM, `alg: dir`), not a fresh secret to configure and lose track of.
+
+**Scope change:** the relying party's default scope grows from `"openid profile email"` to include `offline_access` — the standard OIDC signal that a refresh token should be issued at all. Documented, deliberate gap: Google uses `access_type=offline` as a query parameter instead of a scope value, which this generic relying party does not special-case yet, the same way the CLI-side identity integrations already carry their own provider-specific quirks separately rather than this module trying to absorb all of them.
+
+**Route changes (`routes/auth.py`):**
+
+- `/auth/callback` — if the token exchange returns a `refresh_token`, create a `sessions` row and embed `session_id` as a claim in the stateless access token; the response gains a `session_id` field alongside `access_token`. No `refresh_token` in the response → behaves exactly as it does today (stateless only, no row created) — the hybrid model is conditional on the IdP actually giving something worth persisting.
+- `POST /auth/refresh {"session_id": ...}` (new) — look up the session (401 if missing or `revoked_at` is set), decrypt the stored refresh token, call a new `OidcRelyingParty.refresh_access_token()` (mirrors `exchange_code()`'s shape, `grant_type=refresh_token`), mint a new 5-minute access token, update `last_refreshed_at`, and if the IdP rotated the refresh token, re-encrypt and store the new one in place of the old.
+- `GET /auth/sessions` (new, admin-gated — `dependencies=[Depends(verify_admin_token)]`, the exact same credential `/v1/tokens` already uses) — lists `session_id`/`subject`/`email`/`created_at`/`last_refreshed_at`/`revoked_at`. Never the encrypted refresh token.
+- `DELETE /auth/sessions/{session_id}` (new, admin-gated) — sets `revoked_at`. This is the literal, operator-facing "kick them out right now" the "Session model" section above promises — the next refresh attempt against this session fails; the access token already in the caller's hand is untouched directly (it is stateless, there is nothing to touch) but expires within its own 5-minute window regardless.
+
+**New module:** `src/strata/server/db/sessions.py`, mirroring `db/tokens.py`'s existing shape — `create_session()`, `get_session()`, `list_sessions()`, `revoke_session()`, `touch_session()`.
+
+**Net effect:** an off-boarded person's exposure window stays bounded at exactly one access-token lifetime (5 minutes) after an operator revokes their session, closing the loop the "Session model" section above describes but does not, by itself, mechanically deliver.
+
 ### User login and machine-to-machine tokens are both first-class, from the same providers
 
 A control plane needs to authenticate two different kinds of caller, and both are settled as part of this ADR rather than left as a gap:
@@ -222,7 +252,7 @@ server/  (Phase 3 — deployable shape is ADR-0065's own open question 2, in-pac
     ├── oidc_relying_party.py                 # ✅ Done — Authorization Code+PKCE (human), id_token verification
     │                                          #   via authlib/joserfc (JWKS); Client Credentials (M2M) helper only,
     │                                          #   no HTTP route (see module docstring)
-    ├── session_store.py                      # ⏳ NOT YET — refresh-token record, one more table in ADR-0065's DB
+    ├── session_store.py                      # ✅ Done — db/sessions.py + auth/refresh_crypto.py (see below)
     └── rbac.py                               # ⏳ NOT YET — role-binding store + per-route enforcement middleware
 ```
 
@@ -250,7 +280,7 @@ Ordering. Steps 0–6 are CLI-side, non-breaking, and ship independently of Phas
 
 Verified via a real signed-JWT test suite (RSA keypair generated per test run, no fakes for the cryptography itself): 44 new tests across `test_server_auth_pkce.py`, `test_server_auth_session_tokens.py`, `test_server_auth_oidc_relying_party.py`, and `TestAuthRoutes` in `test_server_app.py` — covering valid-token acceptance, wrong-nonce/wrong-audience/wrong-issuer/expired/tampered-signature/wrong-signing-key rejection, route registration gating, and the full `/auth/login` → `/auth/callback` round trip. Full `Check.ps1`: all green.
 
-**8. Session store.** ⏳ Not started. One more table in the database ADR-0065 already commits Phase 3 to (SQLite-first, per its own open question 1): refresh-token records, checked only at refresh, revoked for off-boarding.
+**8. Session store.** ✅ Done — implemented exactly as designed above. New `sessions` table (`db/schema.py`), `db/sessions.py` (`create_session`/`get_session`/`list_sessions`/`revoke_session`/`touch_session`), `auth/refresh_crypto.py` (JWE-encrypted refresh tokens via `joserfc`, key derived from `--session-secret`). `/auth/callback` now creates a session row and embeds `session_id` in the access token's claims whenever the exchange returns a `refresh_token` (default scope grew to include `offline_access` to make that happen at all). New routes: `POST /auth/refresh` (silent renewal, no re-login), `GET /auth/sessions` and `DELETE /auth/sessions/{session_id}` (both admin-token gated, the same credential `/v1/tokens` already uses — the literal "who is logged in, kick them out right now" view the "Session model" section promised). `OidcRelyingParty.refresh_access_token()` mirrors `exchange_code()`'s shape for the `refresh_token` grant. Verified via 136 tests (real JWE encrypt/decrypt round trips, tamper/wrong-key rejection, session creation/refresh/revocation through the full `/auth/login` → `/auth/callback` → `/auth/refresh` → `/auth/sessions` flow); full `Check.ps1` green.
 
 **9. RBAC store and enforcement middleware.** ⏳ Not started. Role bindings (viewer/approver/deployer/admin per workspace/environment), sourced from IdP group claims with a local override table; middleware on every control-plane API route — RBAC is a server-only concern (settled above), so nothing is added to the CLI here.
 

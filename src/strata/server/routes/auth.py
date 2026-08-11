@@ -1,8 +1,10 @@
-"""`/auth/login`, `/auth/callback` — OIDC Authorization Code + PKCE login (ADR-0067 Step 7).
+"""`/auth/login`, `/auth/callback`, `/auth/refresh`, `/auth/sessions` — OIDC
+Authorization Code + PKCE login (ADR-0067 Step 7) and the persistent session
+store backing refresh/revocation (ADR-0067 Step 8).
 
-Only registered by `create_app()` when both `oidc_config` and `session_secret`
-are configured — see `app.py`, the same all-or-nothing gating `/v1/tokens`
-already uses for `admin_token`.
+`/auth/login` and `/auth/callback` are only registered by `create_app()` when
+both `oidc_config` and `session_secret` are configured — see `app.py`, the
+same all-or-nothing gating `/v1/tokens` already uses for `admin_token`.
 """
 
 from __future__ import annotations
@@ -10,9 +12,16 @@ from __future__ import annotations
 import time
 from typing import Any, Dict
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
-from strata.server.routes.state import get_pending_logins, get_relying_party, get_session_secret, sweep_pending_logins
+from strata.server.routes.security import verify_admin_token
+from strata.server.routes.state import (
+    get_engine,
+    get_pending_logins,
+    get_relying_party,
+    get_session_secret,
+    sweep_pending_logins,
+)
 
 router = APIRouter()
 
@@ -54,11 +63,17 @@ def auth_callback(request: Request, code: str, state: str) -> Dict[str, Any]:
     returns no `id_token`, or one that fails verification, is a rejected login, not
     a degraded-but-accepted one.
 
-    The returned token is a stateless, short-lived bearer credential — see
-    `server/auth/session_tokens.py`'s module docstring for why this is an interim
-    placeholder, not the persistent/revocable session Step 8 will add.
+    The returned token is a stateless, short-lived bearer credential (ADR-0067 Step 7).
+    If the identity provider also returned a `refresh_token` (requires the `offline_access`
+    scope), a persistent session row is created (Step 8) and its `session_id` is both
+    embedded in the access token's claims and returned in the response — present it to
+    `/auth/refresh` to silently renew without logging in again. No `refresh_token` in the
+    exchange → no session row, no `session_id`; the access token is purely stateless, same
+    as before Step 8 existed.
     """
+    from strata.server.auth.refresh_crypto import encrypt_refresh_token
     from strata.server.auth.session_tokens import mint_session_token
+    from strata.server.db.sessions import create_session
 
     relying_party = get_relying_party(request)
     assert relying_party is not None  # gated by create_app(); see module docstring
@@ -97,10 +112,92 @@ def auth_callback(request: Request, code: str, state: str) -> Dict[str, Any]:
     userinfo_claims = relying_party.fetch_userinfo(relying_party.discover(), token_response["access_token"])
     claims = {**userinfo_claims, **claims}
 
+    session_id = None
+    refresh_token = token_response.get("refresh_token")
+    if refresh_token:
+        encrypted = encrypt_refresh_token(refresh_token, session_secret)
+        session_id = create_session(
+            get_engine(request), subject=claims["sub"], encrypted_refresh_token=encrypted, email=claims.get("email")
+        )
+        claims = {**claims, "session_id": session_id}
+
     session_token = mint_session_token(claims, session_secret, ttl_seconds=300)
-    return {
+    response: Dict[str, Any] = {
         "access_token": session_token,
         "token_type": "Bearer",
         "expires_in": 300,
         "claims": claims,
     }
+    if session_id:
+        response["session_id"] = session_id
+    return response
+
+
+@router.post("/auth/refresh")
+def auth_refresh(request: Request, session_id: str) -> Dict[str, Any]:
+    """Silently renew an access token using a persisted session's refresh token (ADR-0067 Step 8).
+
+    Checked only here, not on every request — the stateless access token stays the
+    hot-path credential. A revoked or unknown session fails immediately; the identity
+    provider is never even contacted in that case.
+    """
+    from strata.server.auth.refresh_crypto import decrypt_refresh_token, encrypt_refresh_token
+    from strata.server.auth.session_tokens import mint_session_token
+    from strata.server.db.sessions import get_session, touch_session
+
+    relying_party = get_relying_party(request)
+    assert relying_party is not None  # gated by create_app(); see module docstring
+    session_secret = get_session_secret(request)
+    assert session_secret is not None  # gated by create_app(); see module docstring
+    engine = get_engine(request)
+
+    session = get_session(engine, session_id)
+    if session is None:
+        raise HTTPException(status_code=401, detail="Unknown or revoked session")
+
+    refresh_token = decrypt_refresh_token(session["encrypted_refresh_token"], session_secret)
+    try:
+        ok, token_response = relying_party.refresh_access_token(refresh_token)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Could not reach identity provider: {exc}") from exc
+    if not ok:
+        raise HTTPException(
+            status_code=401,
+            detail=f"Refresh failed: {token_response.get('error_description', token_response)}",
+        )
+
+    # The IdP may rotate the refresh token on use; store the new one if so, otherwise
+    # keep the existing (still-valid) one untouched.
+    rotated_refresh_token = token_response.get("refresh_token")
+    new_encrypted = encrypt_refresh_token(rotated_refresh_token, session_secret) if rotated_refresh_token else None
+    touch_session(engine, session_id, encrypted_refresh_token=new_encrypted)
+
+    claims = {"sub": session["subject"], "email": session["email"], "session_id": session_id}
+    session_token = mint_session_token(claims, session_secret, ttl_seconds=300)
+    return {"access_token": session_token, "token_type": "Bearer", "expires_in": 300}
+
+
+@router.get("/auth/sessions", dependencies=[Depends(verify_admin_token)])
+def list_sessions_route(request: Request) -> Dict[str, Any]:
+    """List all human login sessions (never the encrypted refresh token) — admin-only (ADR-0067 Step 8).
+
+    The operator-facing "who is currently logged in" view the ADR's own "Session model"
+    section calls for.
+    """
+    from strata.server.db.sessions import list_sessions
+
+    return {"sessions": list_sessions(get_engine(request))}
+
+
+@router.delete("/auth/sessions/{session_id}", dependencies=[Depends(verify_admin_token)])
+def revoke_session_route(request: Request, session_id: str) -> Dict[str, Any]:
+    """Revoke a session by id — admin-only (ADR-0067 Step 8).
+
+    The next `/auth/refresh` against this session fails immediately; the literal
+    "kick them out right now" the ADR's "Session model" section calls for.
+    """
+    from strata.server.db.sessions import revoke_session
+
+    if not revoke_session(get_engine(request), session_id):
+        raise HTTPException(status_code=404, detail="Session not found or already revoked")
+    return {"status": "revoked", "session_id": session_id}

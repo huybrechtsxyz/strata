@@ -771,6 +771,7 @@ class TestAuthRoutes:
 
         assert result["token_type"] == "Bearer"
         assert result["claims"]["sub"] == "user-123"
+        assert "session_id" not in result  # no refresh_token in the exchange -> no session row (Step 8)
 
     def test_callback_with_unknown_state_returns_400(
         self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
@@ -853,3 +854,179 @@ class TestAuthRoutes:
             with pytest.raises(_FakeHTTPError) as exc_info:
                 _call_route(app, "GET", "/auth/callback", headers={}, code="bad-code", state=login["state"])
         assert exc_info.value.status_code == 400
+
+    def _login_and_callback_with_refresh_token(
+        self, app: Any, discovery: Dict[str, Any], rsa_key: Any
+    ) -> Dict[str, Any]:
+        """Helper: run /auth/login -> /auth/callback with a refresh_token in the exchange, creating a session."""
+        with patch("urllib.request.urlopen", side_effect=self._urlopen_mock(discovery, rsa_key)):
+            login = _call_route(app, "GET", "/auth/login", headers={})
+
+        nonce = urllib.parse.parse_qs(urllib.parse.urlparse(login["authorization_url"]).query)["nonce"][0]
+        id_token = self._sign_id_token(rsa_key, nonce=nonce)
+        token_response = {
+            "access_token": "at-1",
+            "id_token": id_token,
+            "refresh_token": "the-refresh-token",
+            "expires_in": 3600,
+        }
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=self._urlopen_mock(discovery, rsa_key, token_response=token_response),
+        ):
+            return _call_route(app, "GET", "/auth/callback", headers={}, code="auth-code", state=login["state"])
+
+    def test_callback_with_refresh_token_creates_a_session(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from joserfc.jwk import RSAKey
+
+        from strata.server.app import create_app
+        from strata.server.db.sessions import get_session
+
+        rsa_key = RSAKey.generate_key(2048, parameters={"kid": "k1"}, private=True)
+        discovery = self._discovery_doc()
+        app = create_app(sqlite_engine, oidc_config=self._oidc_config(), session_secret="shh")
+
+        result = self._login_and_callback_with_refresh_token(app, discovery, rsa_key)
+
+        assert "session_id" in result
+        assert result["claims"]["session_id"] == result["session_id"]
+        row = get_session(sqlite_engine, result["session_id"])
+        assert row is not None
+        assert row["subject"] == "user-123"
+        assert row["encrypted_refresh_token"] != "the-refresh-token"  # encrypted, not stored raw
+
+    def test_auth_refresh_returns_new_access_token(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from joserfc.jwk import RSAKey
+
+        from strata.server.app import create_app
+
+        rsa_key = RSAKey.generate_key(2048, parameters={"kid": "k1"}, private=True)
+        discovery = self._discovery_doc()
+        app = create_app(sqlite_engine, oidc_config=self._oidc_config(), session_secret="shh")
+
+        login_result = self._login_and_callback_with_refresh_token(app, discovery, rsa_key)
+        session_id = login_result["session_id"]
+
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=self._urlopen_mock(
+                discovery, rsa_key, token_response={"access_token": "at-2", "expires_in": 3600}
+            ),
+        ):
+            result = _call_route(app, "POST", "/auth/refresh", headers={}, session_id=session_id)
+
+        assert result["token_type"] == "Bearer"
+        assert result["access_token"]
+
+    def test_auth_refresh_with_unknown_session_returns_401(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from strata.server.app import create_app
+
+        app = create_app(sqlite_engine, oidc_config=self._oidc_config(), session_secret="shh")
+
+        with pytest.raises(_FakeHTTPError) as exc_info:
+            _call_route(app, "POST", "/auth/refresh", headers={}, session_id="never-issued")
+        assert exc_info.value.status_code == 401
+
+    def test_auth_refresh_with_revoked_session_returns_401(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from joserfc.jwk import RSAKey
+
+        from strata.server.app import create_app
+        from strata.server.db.sessions import revoke_session
+
+        rsa_key = RSAKey.generate_key(2048, parameters={"kid": "k1"}, private=True)
+        discovery = self._discovery_doc()
+        app = create_app(sqlite_engine, oidc_config=self._oidc_config(), session_secret="shh")
+
+        login_result = self._login_and_callback_with_refresh_token(app, discovery, rsa_key)
+        revoke_session(sqlite_engine, login_result["session_id"])
+
+        with pytest.raises(_FakeHTTPError) as exc_info:
+            _call_route(app, "POST", "/auth/refresh", headers={}, session_id=login_result["session_id"])
+        assert exc_info.value.status_code == 401
+
+    def test_list_sessions_requires_admin_token(self, fake_fastapi_module: ModuleType, sqlite_engine: Engine) -> None:
+        from strata.server.app import create_app
+
+        app = create_app(
+            sqlite_engine, admin_token="admin-secret", oidc_config=self._oidc_config(), session_secret="shh"
+        )
+
+        with pytest.raises(_FakeHTTPError) as exc_info:
+            _call_route(app, "GET", "/auth/sessions", headers={})
+        assert exc_info.value.status_code == 401
+
+    def test_list_sessions_with_admin_token_returns_sessions(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from joserfc.jwk import RSAKey
+
+        from strata.server.app import create_app
+
+        rsa_key = RSAKey.generate_key(2048, parameters={"kid": "k1"}, private=True)
+        discovery = self._discovery_doc()
+        app = create_app(
+            sqlite_engine, admin_token="admin-secret", oidc_config=self._oidc_config(), session_secret="shh"
+        )
+
+        self._login_and_callback_with_refresh_token(app, discovery, rsa_key)
+
+        result = _call_route(app, "GET", "/auth/sessions", headers={"authorization": "Bearer admin-secret"})
+
+        assert len(result["sessions"]) == 1
+        assert result["sessions"][0]["subject"] == "user-123"
+        assert "encrypted_refresh_token" not in result["sessions"][0]
+
+    def test_revoke_session_route_with_admin_token(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from joserfc.jwk import RSAKey
+
+        from strata.server.app import create_app
+
+        rsa_key = RSAKey.generate_key(2048, parameters={"kid": "k1"}, private=True)
+        discovery = self._discovery_doc()
+        app = create_app(
+            sqlite_engine, admin_token="admin-secret", oidc_config=self._oidc_config(), session_secret="shh"
+        )
+
+        login_result = self._login_and_callback_with_refresh_token(app, discovery, rsa_key)
+        session_id = login_result["session_id"]
+
+        result = _call_route(
+            app,
+            "DELETE",
+            "/auth/sessions/{session_id}",
+            headers={"authorization": "Bearer admin-secret"},
+            session_id=session_id,
+        )
+        assert result == {"status": "revoked", "session_id": session_id}
+
+        # The very next refresh attempt against this session must now fail.
+        with pytest.raises(_FakeHTTPError) as exc_info:
+            _call_route(app, "POST", "/auth/refresh", headers={}, session_id=session_id)
+        assert exc_info.value.status_code == 401
+
+    def test_revoke_unknown_session_returns_404(self, fake_fastapi_module: ModuleType, sqlite_engine: Engine) -> None:
+        from strata.server.app import create_app
+
+        app = create_app(
+            sqlite_engine, admin_token="admin-secret", oidc_config=self._oidc_config(), session_secret="shh"
+        )
+
+        with pytest.raises(_FakeHTTPError) as exc_info:
+            _call_route(
+                app,
+                "DELETE",
+                "/auth/sessions/{session_id}",
+                headers={"authorization": "Bearer admin-secret"},
+                session_id="does-not-exist",
+            )
+        assert exc_info.value.status_code == 404

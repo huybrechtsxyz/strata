@@ -220,6 +220,51 @@ class TestVerifyIdToken:
                 rp.verify_id_token(id_token, nonce="test-nonce")
 
 
+class TestRefreshAccessToken:
+    def test_successful_refresh_returns_new_access_token(self, discovery_doc: Dict[str, Any], rsa_key: RSAKey) -> None:
+        rp = OidcRelyingParty(
+            OidcRelyingPartyConfig(issuer=_ISSUER, client_id=_CLIENT_ID, redirect_base=_REDIRECT_BASE)
+        )
+        token_response = {"access_token": "at-new", "expires_in": 3600}
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=_make_urlopen_mock(discovery_doc, rsa_key, token_response=token_response),
+        ):
+            ok, data = rp.refresh_access_token("old-refresh-token")
+
+        assert ok is True
+        assert data["access_token"] == "at-new"
+
+    def test_failed_refresh_returns_error_payload(self, discovery_doc: Dict[str, Any], rsa_key: RSAKey) -> None:
+        rp = OidcRelyingParty(
+            OidcRelyingPartyConfig(issuer=_ISSUER, client_id=_CLIENT_ID, redirect_base=_REDIRECT_BASE)
+        )
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=_make_urlopen_mock(discovery_doc, rsa_key, token_response={"error": "invalid_grant"}),
+        ):
+            ok, data = rp.refresh_access_token("revoked-refresh-token")
+
+        assert ok is False
+        assert data["error"] == "invalid_grant"
+
+    def test_rotated_refresh_token_is_passed_through_in_response(
+        self, discovery_doc: Dict[str, Any], rsa_key: RSAKey
+    ) -> None:
+        rp = OidcRelyingParty(
+            OidcRelyingPartyConfig(issuer=_ISSUER, client_id=_CLIENT_ID, redirect_base=_REDIRECT_BASE)
+        )
+        token_response = {"access_token": "at-new", "refresh_token": "rotated-refresh-token", "expires_in": 3600}
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=_make_urlopen_mock(discovery_doc, rsa_key, token_response=token_response),
+        ):
+            ok, data = rp.refresh_access_token("old-refresh-token")
+
+        assert ok is True
+        assert data["refresh_token"] == "rotated-refresh-token"
+
+
 class TestClientCredentialsToken:
     def test_requires_client_secret(self, discovery_doc: Dict[str, Any], rsa_key: RSAKey) -> None:
         rp = OidcRelyingParty(

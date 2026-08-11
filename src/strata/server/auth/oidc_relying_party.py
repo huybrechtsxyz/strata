@@ -57,7 +57,12 @@ except ImportError as _exc:
     ) from _exc
 
 _HTTP_TIMEOUT = 15
-_DEFAULT_SCOPE = "openid profile email"
+# `offline_access` is the standard OIDC signal that a refresh_token should be issued
+# (ADR-0067 Step 8) — without it, most IdPs never return one. Documented, deliberate
+# gap: Google uses `access_type=offline` as a query param instead, not special-cased
+# here yet, same as the CLI-side identity integrations carry provider-specific quirks
+# separately rather than this module absorbing all of them.
+_DEFAULT_SCOPE = "openid profile email offline_access"
 
 
 @dataclass(frozen=True)
@@ -165,6 +170,25 @@ class OidcRelyingParty:
             "redirect_uri": self.redirect_uri,
             "client_id": self._config.client_id,
             "code_verifier": code_verifier,
+        }
+        if self._config.client_secret:
+            fields["client_secret"] = self._config.client_secret
+        status, data = self._post_form(discovery["token_endpoint"], fields)
+        return (status == 200 and "access_token" in data), data
+
+    def refresh_access_token(self, refresh_token: str) -> Tuple[bool, Dict[str, Any]]:
+        """Exchange a refresh token for a new access token (ADR-0067 Step 8).
+
+        Mirrors `exchange_code()`'s shape (`grant_type=refresh_token` instead of
+        `authorization_code`). The IdP may or may not return a new `id_token` and/or
+        a rotated `refresh_token` in the response — callers must check for both
+        rather than assuming either is present.
+        """
+        discovery = self.discover()
+        fields = {
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "client_id": self._config.client_id,
         }
         if self._config.client_secret:
             fields["client_secret"] = self._config.client_secret

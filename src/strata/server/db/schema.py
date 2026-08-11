@@ -58,3 +58,21 @@ tokens = Table(
 )
 
 Index("idx_tokens_hash", tokens.c.token_hash, unique=True)
+
+# Human login sessions (ADR-0067 Step 8). Unlike `tokens`, `encrypted_refresh_token`
+# must be recoverable (the server presents it back to the IdP on every refresh), so
+# it is encrypted at rest, not hashed — a hash cannot be reversed to re-present the
+# credential, and equality comparison (what a hash is for) is not what refresh needs.
+sessions = Table(
+    "sessions",
+    metadata,
+    Column("session_id", String, primary_key=True),  # opaque UUID; the client holds this, never the refresh token
+    Column("subject", String, nullable=False),  # the id_token's `sub` claim
+    Column("email", String, nullable=True),
+    Column("encrypted_refresh_token", String, nullable=False),  # JWE compact serialization
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("last_refreshed_at", DateTime(timezone=True), nullable=True),
+    Column("revoked_at", DateTime(timezone=True), nullable=True),  # NULL = active
+)
+
+Index("idx_sessions_subject", sessions.c.subject)
