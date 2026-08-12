@@ -27,7 +27,7 @@ from strata.commands.serve.tail_serve_command import TailServeCommand
 _DB_URL_OPTION = click.option(
     "--db-url",
     "db_url",
-    default="sqlite:///./strata-state.db",
+    default="sqlite:///.strata/state-service.db",
     envvar="STRATA_SERVE_DB_URL",
     show_default=True,
     help="Event-store connection URL (sqlite/postgresql/mssql). [env: STRATA_SERVE_DB_URL]",

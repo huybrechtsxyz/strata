@@ -40,7 +40,7 @@ strata serve run
 # Press Ctrl+C to stop
 ```
 
-The server binds to `127.0.0.1:8000` by default and creates a `./strata-state.db` file in the current directory. On first start, the database tables are created automatically by the migration step below.
+The server binds to `127.0.0.1:8000` by default and creates a `.strata/state-service.db` file inside the workspace's `.strata/` directory. On first start, the database tables are created automatically by the migration step below.
 
 ### Initialize the database (first time only)
 
@@ -48,7 +48,7 @@ Before the server can accept events, create the `events` table:
 
 ```bash
 # SQLite (same file as 'serve run' will use)
-strata serve migrate --db-url sqlite:///./strata-state.db
+strata serve migrate --db-url sqlite:///.strata/state-service.db
 
 # PostgreSQL
 strata serve migrate --db-url postgresql+psycopg://user:pass@localhost/strata_state
