@@ -295,7 +295,7 @@ ORDER BY recorded_at DESC;
 2. Point it at your state-service database
 3. Build panels with queries like:
 
-```sql
+```text
 SELECT
   $__timeGroupAlias(recorded_at, $__interval),
   COUNT(*) as deployments,
@@ -474,7 +474,7 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" \
 
 **Response:**
 
-```json
+```text
 {
   "events": [
     {
@@ -484,7 +484,7 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" \
       "workspace": "...",
       "outcome": "success",
       "recorded_at": "2026-08-12T15:30:45Z",
-      "payload": { ...full event... }
+      "payload": { ... }
     }
   ],
   "count": 5,

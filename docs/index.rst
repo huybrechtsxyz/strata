@@ -154,7 +154,9 @@ strata
    guides/at-scale
    guides/building-a-provisioner-plugin
    guides/detecting-infrastructure-drift
+   guides/caching
    guides/cost-estimation
+   guides/strata-state-service
    guides/azure-lifecycle-scripts
    guides/aws-lifecycle-scripts
    guides/gcloud-lifecycle-scripts
