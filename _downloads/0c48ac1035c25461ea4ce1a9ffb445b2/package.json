@@ -2,7 +2,7 @@
   "name": "xyz-strata",
   "displayName": "Strata",
   "description": "Strata infrastructure workspace integration — validate YAML, explore workspace, build and deploy.",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "publisher": "huybrechts-xyz",
   "icon": "resources/icon.png",
   "license": "AGPL-3.0-or-later",
@@ -365,6 +365,41 @@
         "command": "strata.showHelp",
         "title": "Strata: Show Help",
         "icon": "$(book)"
+      },
+      {
+        "command": "strata.stateService.checkHealth",
+        "title": "Strata: Check State Service Health",
+        "icon": "$(radio-tower)"
+      },
+      {
+        "command": "strata.stateService.showTail",
+        "title": "Strata: Show State Service Tail",
+        "icon": "$(output)"
+      },
+      {
+        "command": "strata.stateService.createToken",
+        "title": "Strata: Create Ingest Token",
+        "icon": "$(key)"
+      },
+      {
+        "command": "strata.stateService.listTokens",
+        "title": "Strata: List Ingest Tokens",
+        "icon": "$(list-unordered)"
+      },
+      {
+        "command": "strata.stateService.revokeToken",
+        "title": "Strata: Revoke Ingest Token",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "strata.stateService.setAdminToken",
+        "title": "Strata: Set State Service Admin Token",
+        "icon": "$(lock)"
+      },
+      {
+        "command": "strata.stateService.clearAdminToken",
+        "title": "Strata: Clear State Service Admin Token",
+        "icon": "$(clear-all)"
       }
     ],
     "viewsContainers": {
@@ -688,6 +723,17 @@
           "type": "boolean",
           "default": true,
           "description": "Automatically warm the resolved-model cache (ADR-0026) in the background when strata YAML files are saved, and once on startup."
+        },
+        "strata.stateService.url": {
+          "type": "string",
+          "default": "",
+          "description": "Base URL of a running strata state-service server (ADR-0065). Leave empty to disable the status bar indicator, tools row, and tail view."
+        },
+        "strata.stateService.pollIntervalSeconds": {
+          "type": "number",
+          "default": 60,
+          "minimum": 10,
+          "description": "How often the state-service status bar item and tail view poll the server. Minimum 10."
         }
       }
     },

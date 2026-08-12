@@ -145,30 +145,23 @@ meta:
   name: local_manifest_config
 spec:
   manifest:
-    type: local
     path: ".strata/deployments"
 ```
 
-**GitOps (state repository):**
+**Local + durable push to a shared repo (ADR-0065 Phase 1):**
 
 ```yaml
 apiVersion: strata.huybrechts.xyz/v1
 kind: configuration
 meta:
-  name: gitops_manifest_config
+  name: shared_manifest_config
 spec:
-  repositories:
-    - name: xyz-state-repo
-      url: git@github.com:acme/xyz-state.git
-      branch: main
-      clone: true
-
   manifest:
-    type: gitops
     path: "deployments"
-    repository: xyz-state-repo
-    branch: manifests
-    tag: true
+    repository:
+      push: true
+      name: xyz-state-repo   # registered via `strata repo add`, not spec.remotes
+      path: history/manifest
 ```
 
 ### 2. Reference in Your Deployment
@@ -182,7 +175,7 @@ meta:
   name: prod_deployment
 spec:
   configurations:
-    - name: local_manifest_config  # or gitops_manifest_config
+    - name: local_manifest_config  # or shared_manifest_config
       source:
         type: local
         repository: /
@@ -196,6 +189,124 @@ strata deploy run -f deployments/prod.yaml
 ```
 
 The manifest is written **automatically** upon completion (success or failure).
+
+---
+
+## Deployment Outputs Artifact
+
+> **Introduced:** v1.4.0 — Team-owned Terraform modules with output passing
+
+When a deployment completes, strata generates a **deployment outputs** artifact alongside the deployment manifest.
+
+**File:** `.strata/deployments/{deployment}/{version}/deployment-outputs.json`
+
+**Purpose:** Registry-consumable artifact containing all Terraform outputs from all stages,
+useful for:
+
+- **Registry integration** — Team modules published to registries can consume platform baseline outputs
+- **Cross-stage output passing** — Output values validated and available for downstream provisioners
+- **Compliance audits** — Final deployed state captured immutably
+
+### Structure
+
+```json
+{
+  "apiVersion": "strata.huybrechts.xyz/v1",
+  "kind": "deployment-outputs",
+  "meta": {
+    "name": "prod_deployment",
+    "labels": {
+      "version": "2.3.0",
+      "environment": "production",
+      "workspace": "prod_workspace",
+      "tenant": "acme-corp"
+    }
+  },
+  "spec": {
+    "outputs": {
+      "platform_baseline": {
+        "vpc_id": "vpc-0123456789abcdef0",
+        "subnet_ids": ["subnet-1", "subnet-2"],
+        "aks_cluster_name": "aks-prod-01",
+        "database_password": "(sensitive)"
+      },
+      "team_module": {
+        "app_endpoint": "https://app-prod.example.com",
+        "load_balancer_ip": "203.0.113.42"
+      }
+    },
+    "sensitive_keys": [
+      "platform_baseline.database_password",
+      "platform_baseline.admin_token"
+    ],
+    "stages_completed": [
+      "infrastructure",
+      "configuration"
+    ],
+    "provenance": {
+      "manifest_path": ".strata/deployments/prod_deployment/v2.3.0/2024-06-17T10:45:33Z.json",
+      "timestamp": "2024-06-17T10:45:33Z",
+      "deployment_status": "success"
+    }
+  }
+}
+```
+
+**Key fields:**
+
+- **`outputs`** — Nested dict: `{stage_name: {output_name: value}}`
+- **`sensitive_keys`** — Dot-notation paths of sensitive outputs (values omitted for security)
+- **`stages_completed`** — List of stages that finished successfully
+- **`provenance`** — Metadata linking to the deployment manifest and completion status
+
+### Using Deployment Outputs
+
+**Query outputs for a specific stage:**
+
+```bash
+jq '.spec.outputs.platform_baseline' deployment-outputs.json
+# {
+#   "vpc_id": "vpc-0123456789abcdef0",
+#   "subnet_ids": ["subnet-1", "subnet-2"],
+#   "aks_cluster_name": "aks-prod-01",
+#   "database_password": "(sensitive)"
+# }
+```
+
+**Extract non-sensitive outputs for team module:**
+
+```bash
+jq '.spec.outputs.team_module' deployment-outputs.json
+# {
+#   "app_endpoint": "https://app-prod.example.com",
+#   "load_balancer_ip": "203.0.113.42"
+# }
+```
+
+**Check which outputs are sensitive:**
+
+```bash
+jq '.spec.sensitive_keys[]' deployment-outputs.json
+# "platform_baseline.database_password"
+# "platform_baseline.admin_token"
+```
+
+**Integration with team module registries:**
+
+Team-owned modules can automatically fetch deployment outputs from the previous deployment:
+
+```python
+# registry/fetch_platform_outputs.py
+import json
+from pathlib import Path
+
+outputs_file = Path(".strata/deployments/prod_deployment/latest/deployment-outputs.json")
+if outputs_file.exists():
+    with open(outputs_file) as f:
+        deployment_outputs = json.load(f)
+        baseline = deployment_outputs["spec"]["outputs"]["platform_baseline"]
+        # Use baseline outputs: vpc_id, subnet_ids, etc.
+```
 
 ---
 
@@ -448,44 +559,39 @@ jq '.spec.stages[] | select(.status != "success") | .error' failed_manifest.json
 
 ---
 
-## GitOps Workflow
+## Durable Git-Push Workflow (ADR-0065 Phase 1)
 
-When using `type: gitops`, manifests are automatically committed and tagged:
+When `manifest.repository.push` (or the legacy `push_manifest`) is enabled, manifests are automatically committed and pushed after each write:
 
 ```bash
 # After deploy
 strata deploy run -f prod.yaml
 
 # In your state repository:
-git log --oneline deployments/
-# 2a3b4c5 strata: deployment manifest prod_deployment v2.3.0
-# 1f2g3h4 strata: deployment manifest prod_deployment v2.2.9
+git log --oneline history/manifest/
+# 2a3b4c5 chore(manifest): deployment manifest update [skip ci]
+# 1f2g3h4 chore(manifest): deployment manifest update [skip ci]
 # ...
 
-# Tags are also created:
-git tag -l "prod_deployment/*" | sort
-# prod_deployment/v2.2.8
-# prod_deployment/v2.2.9
-# prod_deployment/v2.3.0
-
-# Retrieve a manifest from a tag:
-git show prod_deployment/v2.3.0:deployments/prod_deployment/v2.3.0/2024-06-17T10:45:33Z.json
+# Retrieve a manifest directly from the working tree (no tags are created):
+cat history/manifest/<workspace>/prod_deployment/v2.3.0/2024-06-17T10:45:33Z.json
 ```
+
+There is no automatic git tagging — each push is a plain commit, and the manifest's own `spec.deployment_name`/`spec.artifacts` fields are what identify a specific deployment/version, not a git tag.
 
 ### Downstream Automation
 
-GitOps manifests enable automatic downstream workflows:
+A shared state repo enables automatic downstream workflows:
 
 ```bash
 # Compliance scanner watches the state repo
 # On new manifest commit → scan SBOM for vulnerabilities
-# On new tag → generate audit report
 
 # Example: GitHub Actions on manifest push
 on:
   push:
     paths:
-      - 'deployments/**'
+      - 'history/manifest/**'
 jobs:
   compliance-scan:
     runs-on: ubuntu-latest
@@ -493,8 +599,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Extract SBOM from manifest
         run: |
-          manifest=$(ls -t deployments/prod_deployment/**/*.json | head -1)
-          sbom_path=$(jq -r '.spec.artifacts.sbom.path' $manifest)
+          manifest=$(ls -t history/manifest/*/prod_deployment/**/*.json | head -1)
+          sbom_path=$(jq -r '.spec.sbom.path' $manifest)
           # Run compliance scanner on sbom_path
 ```
 
@@ -534,11 +640,11 @@ spec:
 # Check git credentials
 git clone git@github.com:acme/xyz-state.git
 
-# Verify branch exists
-git ls-remote origin manifests
+# Verify the repo is registered
+strata repo list
 
 # Check deploy logs for git errors
-strata deploy run -f prod.yaml --verbose 2>&1 | grep -i "git\|push\|branch"
+strata deploy run -f prod.yaml --verbose 2>&1 | grep -i "git\|push"
 ```
 
 ### Manifest Has Empty `artifacts.content`

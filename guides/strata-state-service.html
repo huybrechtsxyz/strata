@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Cookbook: Hash a Secret Before Storing It &mdash; strata 0.8.0 documentation</title>
+  <title>Strata state service — Running a central history store &mdash; strata 0.8.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -23,8 +23,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Environment Composition" href="environment-composition.html" />
-    <link rel="prev" title="Cookbook: Add a New Environment" href="cookbook-add-environment.html" /> 
+    <link rel="next" title="Azure Lifecycle Scripts" href="azure-lifecycle-scripts.html" />
+    <link rel="prev" title="Cost Estimation and Visibility" href="cost-estimation.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -2668,18 +2668,18 @@
 <li class="toctree-l2"><a class="reference internal" href="cookbook-add-environment.html#common-mistakes">Common mistakes</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Cookbook: Hash a Secret Before Storing It</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#when-to-use-this">When to use this</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#the-recipe">The recipe</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#powershell">PowerShell</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#bash">bash</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cookbook-hash-secret-before-storage.html">Cookbook: Hash a Secret Before Storing It</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="cookbook-hash-secret-before-storage.html#when-to-use-this">When to use this</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook-hash-secret-before-storage.html#the-recipe">The recipe</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cookbook-hash-secret-before-storage.html#powershell">PowerShell</a></li>
+<li class="toctree-l3"><a class="reference internal" href="cookbook-hash-secret-before-storage.html#bash">bash</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#required-yaml">Required YAML</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#why-this-is-a-documented-recipe-not-a-built-in-feature">Why this is a documented recipe, not a built-in feature</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#security-notes">Security notes</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#verify-before-you-rely-on-it">Verify before you rely on it</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#checklist">Checklist</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook-hash-secret-before-storage.html#required-yaml">Required YAML</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook-hash-secret-before-storage.html#why-this-is-a-documented-recipe-not-a-built-in-feature">Why this is a documented recipe, not a built-in feature</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook-hash-secret-before-storage.html#security-notes">Security notes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook-hash-secret-before-storage.html#verify-before-you-rely-on-it">Verify before you rely on it</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook-hash-secret-before-storage.html#checklist">Checklist</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="environment-composition.html">Environment Composition</a><ul>
@@ -3277,56 +3277,56 @@
 <li class="toctree-l2"><a class="reference internal" href="cost-estimation.html#troubleshooting">Troubleshooting</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="strata-state-service.html">Strata state service — Running a central history store</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="strata-state-service.html#installation">Installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="strata-state-service.html#starting-the-server">Starting the server</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="strata-state-service.html#zero-config-local-start-sqlite">Zero-config local start (SQLite)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="strata-state-service.html#initialize-the-database-first-time-only">Initialize the database (first time only)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="strata-state-service.html#production-configuration">Production configuration</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="strata-state-service.html#tls-recommended-for-remote-access">TLS (recommended for remote access)</a></li>
-<li class="toctree-l4"><a class="reference internal" href="strata-state-service.html#postgresql-backend">PostgreSQL backend</a></li>
-<li class="toctree-l4"><a class="reference internal" href="strata-state-service.html#environment-variables-for-containerization">Environment variables (for containerization)</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Strata state service — Running a central history store</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#installation">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#starting-the-server">Starting the server</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#zero-config-local-start-sqlite">Zero-config local start (SQLite)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#initialize-the-database-first-time-only">Initialize the database (first time only)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#production-configuration">Production configuration</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#tls-recommended-for-remote-access">TLS (recommended for remote access)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#postgresql-backend">PostgreSQL backend</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#environment-variables-for-containerization">Environment variables (for containerization)</a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="strata-state-service.html#docker-kubernetes">Docker / Kubernetes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#docker-kubernetes">Docker / Kubernetes</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="strata-state-service.html#token-management">Token management</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="strata-state-service.html#create-a-workspace-token">Create a workspace token</a></li>
-<li class="toctree-l3"><a class="reference internal" href="strata-state-service.html#list-tokens-admin-only">List tokens (admin only)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="strata-state-service.html#revoke-a-token">Revoke a token</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#token-management">Token management</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#create-a-workspace-token">Create a workspace token</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#list-tokens-admin-only">List tokens (admin only)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#revoke-a-token">Revoke a token</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="strata-state-service.html#configuring-workspaces-to-forward-events">Configuring workspaces to forward events</a></li>
-<li class="toctree-l2"><a class="reference internal" href="strata-state-service.html#querying-the-stored-events">Querying the stored events</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="strata-state-service.html#basic-queries">Basic queries</a></li>
-<li class="toctree-l3"><a class="reference internal" href="strata-state-service.html#building-dashboards">Building dashboards</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#configuring-workspaces-to-forward-events">Configuring workspaces to forward events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#querying-the-stored-events">Querying the stored events</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#basic-queries">Basic queries</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#building-dashboards">Building dashboards</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="strata-state-service.html#health-checks-and-monitoring">Health checks and monitoring</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="strata-state-service.html#cli-health-check">CLI health check</a></li>
-<li class="toctree-l3"><a class="reference internal" href="strata-state-service.html#health-check-endpoint">Health check endpoint</a></li>
-<li class="toctree-l3"><a class="reference internal" href="strata-state-service.html#metrics">Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#health-checks-and-monitoring">Health checks and monitoring</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#cli-health-check">CLI health check</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#health-check-endpoint">Health check endpoint</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#metrics">Metrics</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="strata-state-service.html#troubleshooting">Troubleshooting</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="strata-state-service.html#connection-refused-or-403-forbidden-when-workspace-tries-to-forward">“Connection refused” or “403 Forbidden” when workspace tries to forward</a></li>
-<li class="toctree-l3"><a class="reference internal" href="strata-state-service.html#database-connection-failed-on-healthz">“database connection failed” on /healthz</a></li>
-<li class="toctree-l3"><a class="reference internal" href="strata-state-service.html#tls-certificate-required-error">“TLS certificate required” error</a></li>
-<li class="toctree-l3"><a class="reference internal" href="strata-state-service.html#slow-ingest-or-high-latency">Slow ingest or high latency</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#troubleshooting">Troubleshooting</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#connection-refused-or-403-forbidden-when-workspace-tries-to-forward">“Connection refused” or “403 Forbidden” when workspace tries to forward</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#database-connection-failed-on-healthz">“database connection failed” on /healthz</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#tls-certificate-required-error">“TLS certificate required” error</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#slow-ingest-or-high-latency">Slow ingest or high latency</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="strata-state-service.html#production-checklist">Production checklist</a></li>
-<li class="toctree-l2"><a class="reference internal" href="strata-state-service.html#api-reference">API Reference</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="strata-state-service.html#post-v1-events">POST /v1/events</a></li>
-<li class="toctree-l3"><a class="reference internal" href="strata-state-service.html#get-healthz">GET /healthz</a></li>
-<li class="toctree-l3"><a class="reference internal" href="strata-state-service.html#get-v1-events-tail">GET /v1/events/tail</a></li>
-<li class="toctree-l3"><a class="reference internal" href="strata-state-service.html#post-v1-tokens-admin-only">POST /v1/tokens (admin-only)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="strata-state-service.html#get-v1-tokens-admin-only">GET /v1/tokens (admin-only)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="strata-state-service.html#delete-v1-tokens-id-admin-only">DELETE /v1/tokens/:id (admin-only)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#production-checklist">Production checklist</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#api-reference">API Reference</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#post-v1-events">POST /v1/events</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#get-healthz">GET /healthz</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#get-v1-events-tail">GET /v1/events/tail</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#post-v1-tokens-admin-only">POST /v1/tokens (admin-only)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#get-v1-tokens-admin-only">GET /v1/tokens (admin-only)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#delete-v1-tokens-id-admin-only">DELETE /v1/tokens/:id (admin-only)</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="strata-state-service.html#see-also">See also</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#see-also">See also</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="azure-lifecycle-scripts.html">Azure Lifecycle Scripts</a><ul>
@@ -3407,9 +3407,9 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Cookbook: Hash a Secret Before Storing It</li>
+      <li class="breadcrumb-item active">Strata state service — Running a central history store</li>
       <li class="wy-breadcrumbs-aside">
-            <a href="../_sources/guides/cookbook-hash-secret-before-storage.md.txt" rel="nofollow"> View page source</a>
+            <a href="../_sources/guides/strata-state-service.md.txt" rel="nofollow"> View page source</a>
       </li>
   </ul>
   <hr/>
@@ -3417,107 +3417,534 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="cookbook-hash-a-secret-before-storing-it">
-<h1>Cookbook: Hash a Secret Before Storing It<a class="headerlink" href="#cookbook-hash-a-secret-before-storing-it" title="Link to this heading"></a></h1>
-<blockquote>
-<div><p><strong>Audience:</strong> Operator who needs to store a <em>transformed</em> (e.g. hashed) version of a generated secret, while keeping the raw plaintext retrievable for a separate, human purpose (e.g. logging into an admin UI).</p>
-</div></blockquote>
-<hr class="docutils" />
-<section id="when-to-use-this">
-<h2>When to use this<a class="headerlink" href="#when-to-use-this" title="Link to this heading"></a></h2>
-<p>Some backends don’t accept a raw secret directly — they require the <strong>stored</strong> value to already be a one-way transform of it. The canonical example is <a class="reference external" href="https://github.com/dani-garcia/vaultwarden">Vaultwarden</a>’s <code class="docutils literal notranslate"><span class="pre">ADMIN_TOKEN</span></code>: Vaultwarden expects an Argon2 hash in its config, but a human still needs the <strong>raw</strong> value separately — to paste it into another vault (e.g. Bitwarden) or type it in during an emergency.</p>
-<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">secret</span> <span class="pre">put</span> <span class="pre">KEY</span> <span class="pre">--generate</span></code> alone can’t do this: it generates a value and writes it straight to the store as-is. There’s no built-in transform step between “generate” and “store”.</p>
-<p>This recipe uses only existing CLI commands (<code class="docutils literal notranslate"><span class="pre">secret</span> <span class="pre">put</span> <span class="pre">--generate</span></code>, <code class="docutils literal notranslate"><span class="pre">secret</span> <span class="pre">get</span> <span class="pre">--unmask</span></code>, <code class="docutils literal notranslate"><span class="pre">secret</span> <span class="pre">put</span> <span class="pre">--value</span></code>) to bootstrap <strong>two separate keys</strong> — one holding the raw value, one holding the transformed value — with no code changes required.</p>
-</section>
-<hr class="docutils" />
-<section id="the-recipe">
-<h2>The recipe<a class="headerlink" href="#the-recipe" title="Link to this heading"></a></h2>
-<p>Run this once, interactively, from your own terminal.</p>
-<section id="powershell">
-<h3>PowerShell<a class="headerlink" href="#powershell" title="Link to this heading"></a></h3>
-<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="c"># 1. Bootstrap the raw secret once (human-run, interactive)</span>
-<span class="n">strata</span> <span class="n">secret</span> <span class="n">put</span> <span class="n">VAULTWARDEN_ADMIN_TOKEN_RAW</span> <span class="p">-</span><span class="n">-generate</span> <span class="o">-f</span> <span class="n">deploy</span><span class="p">.</span><span class="n">yaml</span>
-
-<span class="c"># 2. Read the raw value back</span>
-<span class="nv">$raw</span> <span class="p">=</span> <span class="n">strata</span> <span class="n">secret</span> <span class="n">get</span> <span class="n">VAULTWARDEN_ADMIN_TOKEN_RAW</span> <span class="p">-</span><span class="n">-unmask</span> <span class="o">-f</span> <span class="n">deploy</span><span class="p">.</span><span class="n">yaml</span>
-
-<span class="c"># 3. Transform it (Vaultwarden&#39;s own hashing tool, reads stdin, writes stdout)</span>
-<span class="nv">$hash</span> <span class="p">=</span> <span class="nv">$raw</span> <span class="p">|</span> <span class="n">docker</span> <span class="n">run</span> <span class="p">-</span><span class="n">-rm</span> <span class="n">-i</span> <span class="n">vaultwarden</span><span class="p">/</span><span class="n">server</span> <span class="p">/</span><span class="n">vaultwarden</span> <span class="n">hash</span> <span class="p">-</span><span class="n">-preset</span> <span class="n">owasp</span>
-
-<span class="c"># 4. Store the transformed value under a second, separate key</span>
-<span class="n">strata</span> <span class="n">secret</span> <span class="n">put</span> <span class="n">VAULTWARDEN_ADMIN_TOKEN_HASH</span> <span class="p">-</span><span class="n">-value</span> <span class="nv">$hash</span> <span class="o">-f</span> <span class="n">deploy</span><span class="p">.</span><span class="n">yaml</span>
-</pre></div>
-</div>
-</section>
-<section id="bash">
-<h3>bash<a class="headerlink" href="#bash" title="Link to this heading"></a></h3>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># 1. Bootstrap the raw secret once (human-run, interactive)</span>
-strata<span class="w"> </span>secret<span class="w"> </span>put<span class="w"> </span>VAULTWARDEN_ADMIN_TOKEN_RAW<span class="w"> </span>--generate<span class="w"> </span>-f<span class="w"> </span>deploy.yaml
-
-<span class="c1"># 2. Read the raw value back</span>
-<span class="nv">raw</span><span class="o">=</span><span class="k">$(</span>strata<span class="w"> </span>secret<span class="w"> </span>get<span class="w"> </span>VAULTWARDEN_ADMIN_TOKEN_RAW<span class="w"> </span>--unmask<span class="w"> </span>-f<span class="w"> </span>deploy.yaml<span class="k">)</span>
-
-<span class="c1"># 3. Transform it (Vaultwarden&#39;s own hashing tool, reads stdin, writes stdout)</span>
-<span class="nv">hash</span><span class="o">=</span><span class="k">$(</span><span class="nb">echo</span><span class="w"> </span>-n<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$raw</span><span class="s2">&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-i<span class="w"> </span>vaultwarden/server<span class="w"> </span>/vaultwarden<span class="w"> </span><span class="nb">hash</span><span class="w"> </span>--preset<span class="w"> </span>owasp<span class="k">)</span>
-
-<span class="c1"># 4. Store the transformed value under a second, separate key</span>
-strata<span class="w"> </span>secret<span class="w"> </span>put<span class="w"> </span>VAULTWARDEN_ADMIN_TOKEN_HASH<span class="w"> </span>--value<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$hash</span><span class="s2">&quot;</span><span class="w"> </span>-f<span class="w"> </span>deploy.yaml
-</pre></div>
-</div>
-</section>
-</section>
-<hr class="docutils" />
-<section id="required-yaml">
-<h2>Required YAML<a class="headerlink" href="#required-yaml" title="Link to this heading"></a></h2>
-<p>Both keys must be declared in your environment file, and <strong>both need an integration-backed <code class="docutils literal notranslate"><span class="pre">store:</span></code></strong> (<code class="docutils literal notranslate"><span class="pre">bitwarden</span></code>, <code class="docutils literal notranslate"><span class="pre">vault</span></code>, <code class="docutils literal notranslate"><span class="pre">azure-keyvault</span></code>, or <code class="docutils literal notranslate"><span class="pre">infisical</span></code>). <code class="docutils literal notranslate"><span class="pre">put</span></code> has no integration to call for <code class="docutils literal notranslate"><span class="pre">constant</span></code>, <code class="docutils literal notranslate"><span class="pre">environment</span></code>, or <code class="docutils literal notranslate"><span class="pre">github</span></code> — it will error with <code class="docutils literal notranslate"><span class="pre">No</span> <span class="pre">integration</span> <span class="pre">registered</span> <span class="pre">for</span> <span class="pre">store</span> <span class="pre">type</span> <span class="pre">...</span></code>.</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">secrets</span><span class="p">:</span>
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">VAULTWARDEN_ADMIN_TOKEN_RAW</span>
-<span class="w">    </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bitwarden</span>
-<span class="w">    </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">vw-admin-token-raw</span>
-<span class="w">    </span><span class="nt">generate</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">urlsafe</span>
-<span class="w">      </span><span class="nt">length</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">48</span>
-
-<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">VAULTWARDEN_ADMIN_TOKEN_HASH</span>
-<span class="w">    </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure-keyvault</span>
-<span class="w">    </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">vw-admin-token-hash</span>
-</pre></div>
-</div>
-<p>The raw key keeps its normal <code class="docutils literal notranslate"><span class="pre">generate:</span></code> spec (and can still be rotated normally — see <a class="reference internal" href="secrets-variables-features.html"><span class="std std-doc">Secrets, Variables, and Features</span></a>). The hash key has no <code class="docutils literal notranslate"><span class="pre">generate:</span></code> spec at all — it’s only ever written via <code class="docutils literal notranslate"><span class="pre">secret</span> <span class="pre">put</span> <span class="pre">--value</span></code> in step 4.</p>
-</section>
-<hr class="docutils" />
-<section id="why-this-is-a-documented-recipe-not-a-built-in-feature">
-<h2>Why this is a documented recipe, not a built-in feature<a class="headerlink" href="#why-this-is-a-documented-recipe-not-a-built-in-feature" title="Link to this heading"></a></h2>
-<p>A design review looked at adding a <code class="docutils literal notranslate"><span class="pre">post_generate:</span></code> hook to the generate spec, so this transform could run automatically. It was rejected: running an arbitrary transform automatically during an unattended <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> / <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> generate-on-missing or auto-rotate would risk permanently losing the one-way-hashed raw value with nobody present to capture it — there’d be no way to recover it afterward. This recipe keeps the raw secret’s full existing lifecycle (generate, rotate, get) completely untouched, and only needs to be run once, interactively, by a human. If this pattern becomes common across more than this one use case, a first-class <code class="docutils literal notranslate"><span class="pre">derive:</span></code> secret concept may be added later — until then, this doc is the interim, zero-code-change answer.</p>
-</section>
-<hr class="docutils" />
-<section id="security-notes">
-<h2>Security notes<a class="headerlink" href="#security-notes" title="Link to this heading"></a></h2>
+  <section id="strata-state-service-running-a-central-history-store">
+<h1>Strata state service — Running a central history store<a class="headerlink" href="#strata-state-service-running-a-central-history-store" title="Link to this heading"></a></h1>
+<p>The strata state service is a small HTTP server that accepts and stores deployment history, audit events, cost data, and drift records from one or more strata workspaces. This guide covers setup, operation, and integration.</p>
+<p><strong>Key concepts:</strong></p>
 <ul class="simple">
-<li><p><strong>Run steps 1–4 interactively from your own terminal, not from a CI pipeline.</strong> The raw value only exists transiently in your session.</p></li>
-<li><p>The raw value is captured only into a local shell variable and piped directly via stdin — it is never written to a temp file, and never passed as a literal CLI argument.</p></li>
-<li><p>⚠️ <strong>Known caveat:</strong> <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">secret</span> <span class="pre">put</span> <span class="pre">--value</span> <span class="pre">&lt;value&gt;</span></code> currently records the full command arguments (including the value) in strata’s own audit log (<code class="docutils literal notranslate"><span class="pre">.strata/deploy-log/</span></code>). This is a separate, already-tracked issue unrelated to this recipe — until it’s fixed, step 4 above will write the transformed hash value into your local audit log.</p></li>
-<li><p>Never paste the raw value into chat, tickets, or commit messages. Treat step 2’s output as sensitive for the duration of your terminal session only.</p></li>
+<li><p><strong>Local-first by default</strong> — history (deploy-logs, cost tracking, drift records) is written to local files by default and remains local unless explicitly forwarded</p></li>
+<li><p><strong>Central when configured</strong> — point a workspace’s webhook sink at the state service and history is forwarded over HTTP; the service stores it durably in SQL</p></li>
+<li><p><strong>Queryable for reporting</strong> — operators can query the database directly with <code class="docutils literal notranslate"><span class="pre">psql</span></code>, Grafana, Metabase, or any SQL tool to build dashboards, reports, and cost/drift trends</p></li>
+<li><p><strong>No state dependency</strong> — deployments succeed or fail independently of the state service; ingestion failures never block the commands that produce the events</p></li>
+<li><p><strong>Bearer-token protected</strong> — each workspace gets its own token; tokens are created/revoked by an admin through HTTP, not by direct database access</p></li>
+</ul>
+<hr class="docutils" />
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h2>
+<p>The state service is an optional extra, not installed by default:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Install with SQLite support (zero-config, good for dev/small deployments)</span>
+pip<span class="w"> </span>install<span class="w"> </span>xyz-strata<span class="o">[</span>server<span class="o">]</span>
+
+<span class="c1"># Or for production backends</span>
+pip<span class="w"> </span>install<span class="w"> </span>xyz-strata<span class="o">[</span>server,server-postgres<span class="o">]</span><span class="w">      </span><span class="c1"># PostgreSQL</span>
+pip<span class="w"> </span>install<span class="w"> </span>xyz-strata<span class="o">[</span>server,server-mssql<span class="o">]</span><span class="w">         </span><span class="c1"># SQL Server</span>
+pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;xyz-strata[server,server-postgres,server-mssql]&quot;</span><span class="w">  </span><span class="c1"># All three</span>
+</pre></div>
+</div>
+<p>SQLite is used by default; it requires no external service and is suitable for up to hundreds of thousands of events. For production deployments with many workspaces, PostgreSQL or SQL Server is recommended.</p>
+</section>
+<hr class="docutils" />
+<section id="starting-the-server">
+<h2>Starting the server<a class="headerlink" href="#starting-the-server" title="Link to this heading"></a></h2>
+<section id="zero-config-local-start-sqlite">
+<h3>Zero-config local start (SQLite)<a class="headerlink" href="#zero-config-local-start-sqlite" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>serve<span class="w"> </span>run
+<span class="c1"># Listening on http://127.0.0.1:8000</span>
+<span class="c1"># Press Ctrl+C to stop</span>
+</pre></div>
+</div>
+<p>The server binds to <code class="docutils literal notranslate"><span class="pre">127.0.0.1:8000</span></code> by default and creates a <code class="docutils literal notranslate"><span class="pre">.strata/state-service.db</span></code> file inside the workspace’s <code class="docutils literal notranslate"><span class="pre">.strata/</span></code> directory. On first start, the database tables are created automatically by the migration step below.</p>
+</section>
+<section id="initialize-the-database-first-time-only">
+<h3>Initialize the database (first time only)<a class="headerlink" href="#initialize-the-database-first-time-only" title="Link to this heading"></a></h3>
+<p>Before the server can accept events, create the <code class="docutils literal notranslate"><span class="pre">events</span></code> table:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># SQLite (same file as &#39;serve run&#39; will use)</span>
+strata<span class="w"> </span>serve<span class="w"> </span>migrate<span class="w"> </span>--db-url<span class="w"> </span>sqlite:///.strata/state-service.db
+
+<span class="c1"># PostgreSQL</span>
+strata<span class="w"> </span>serve<span class="w"> </span>migrate<span class="w"> </span>--db-url<span class="w"> </span>postgresql+psycopg://user:pass@localhost/strata_state
+
+<span class="c1"># SQL Server</span>
+strata<span class="w"> </span>serve<span class="w"> </span>migrate<span class="w"> </span>--db-url<span class="w"> </span>mssql+pyodbc://user:pass@hostname/strata_state
+</pre></div>
+</div>
+<p>This step is idempotent — running it again is safe.</p>
+</section>
+<section id="production-configuration">
+<h3>Production configuration<a class="headerlink" href="#production-configuration" title="Link to this heading"></a></h3>
+<section id="tls-recommended-for-remote-access">
+<h4>TLS (recommended for remote access)<a class="headerlink" href="#tls-recommended-for-remote-access" title="Link to this heading"></a></h4>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Generate a self-signed certificate (development)</span>
+openssl<span class="w"> </span>req<span class="w"> </span>-x509<span class="w"> </span>-newkey<span class="w"> </span>rsa:4096<span class="w"> </span>-nodes<span class="w"> </span>-out<span class="w"> </span>cert.pem<span class="w"> </span>-keyout<span class="w"> </span>key.pem<span class="w"> </span>-days<span class="w"> </span><span class="m">365</span>
+
+<span class="c1"># Start with TLS</span>
+strata<span class="w"> </span>serve<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--host<span class="w"> </span><span class="m">0</span>.0.0.0<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tls-cert<span class="w"> </span>cert.pem<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tls-key<span class="w"> </span>key.pem
+</pre></div>
+</div>
+<p><strong>TLS requirement:</strong> If binding to any address other than <code class="docutils literal notranslate"><span class="pre">127.0.0.1</span></code>, <code class="docutils literal notranslate"><span class="pre">::1</span></code>, or <code class="docutils literal notranslate"><span class="pre">localhost</span></code>, TLS is mandatory. Attempting a non-loopback bind without TLS fails fast with a clear error.</p>
+</section>
+<section id="postgresql-backend">
+<h4>PostgreSQL backend<a class="headerlink" href="#postgresql-backend" title="Link to this heading"></a></h4>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>serve<span class="w"> </span>migrate<span class="w"> </span>--db-url<span class="w"> </span>postgresql+psycopg://strata:<span class="nv">$PASSWORD</span>@postgres.internal:5432/strata_state
+
+strata<span class="w"> </span>serve<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--host<span class="w"> </span><span class="m">0</span>.0.0.0<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--db-url<span class="w"> </span>postgresql+psycopg://strata:<span class="nv">$PASSWORD</span>@postgres.internal:5432/strata_state<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tls-cert<span class="w"> </span>cert.pem<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--tls-key<span class="w"> </span>key.pem
+</pre></div>
+</div>
+</section>
+<section id="environment-variables-for-containerization">
+<h4>Environment variables (for containerization)<a class="headerlink" href="#environment-variables-for-containerization" title="Link to this heading"></a></h4>
+<p>All CLI flags have <code class="docutils literal notranslate"><span class="pre">STRATA_SERVE_*</span></code> environment-variable equivalents:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">STRATA_SERVE_HOST</span><span class="o">=</span><span class="m">0</span>.0.0.0
+<span class="nb">export</span><span class="w"> </span><span class="nv">STRATA_SERVE_PORT</span><span class="o">=</span><span class="m">8000</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">STRATA_SERVE_DB_URL</span><span class="o">=</span>postgresql+psycopg://user:pass@postgres:5432/strata_state
+<span class="nb">export</span><span class="w"> </span><span class="nv">STRATA_SERVE_TLS_CERT</span><span class="o">=</span>/etc/certs/cert.pem
+<span class="nb">export</span><span class="w"> </span><span class="nv">STRATA_SERVE_TLS_KEY</span><span class="o">=</span>/etc/certs/key.pem
+
+strata<span class="w"> </span>serve<span class="w"> </span>run
+<span class="c1"># Uses all env vars, no flags needed</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="docker-kubernetes">
+<h3>Docker / Kubernetes<a class="headerlink" href="#docker-kubernetes" title="Link to this heading"></a></h3>
+<p><strong>Example Dockerfile:</strong></p>
+<div class="highlight-dockerfile notranslate"><div class="highlight"><pre><span></span><span class="k">FROM</span><span class="w"> </span><span class="s">python:3.13-slim</span>
+
+<span class="k">RUN</span><span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>xyz-strata<span class="o">[</span>server,server-postgres<span class="o">]</span>
+
+<span class="k">ENTRYPOINT</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;strata&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;serve&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;run&quot;</span><span class="p">]</span>
+</pre></div>
+</div>
+<p><strong>Example pod manifest:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Pod</span>
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata-state-service</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">containers</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata-state</span>
+<span class="w">      </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ghcr.io/org/strata-state:latest</span>
+<span class="w">      </span><span class="nt">ports</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">containerPort</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8000</span>
+<span class="w">          </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http</span>
+<span class="w">      </span><span class="nt">env</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">STRATA_SERVE_HOST</span>
+<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0.0.0.0&quot;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">STRATA_SERVE_PORT</span>
+<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;8000&quot;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">STRATA_SERVE_DB_URL</span>
+<span class="w">          </span><span class="nt">valueFrom</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">secretKeyRef</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata-state-db</span>
+<span class="w">              </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">connection-string</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">STRATA_SERVE_TLS_CERT</span>
+<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/etc/certs/tls.crt</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">STRATA_SERVE_TLS_KEY</span>
+<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/etc/certs/tls.key</span>
+<span class="w">      </span><span class="nt">volumeMounts</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tls-certs</span>
+<span class="w">          </span><span class="nt">mountPath</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/etc/certs</span>
+<span class="w">          </span><span class="nt">readOnly</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">      </span><span class="nt">livenessProbe</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">httpGet</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/healthz</span>
+<span class="w">          </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8000</span>
+<span class="w">      </span><span class="nt">readinessProbe</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">httpGet</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/healthz</span>
+<span class="w">          </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8000</span>
+<span class="w">  </span><span class="nt">volumes</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tls-certs</span>
+<span class="w">      </span><span class="nt">secret</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">secretName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata-state-tls</span>
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="token-management">
+<h2>Token management<a class="headerlink" href="#token-management" title="Link to this heading"></a></h2>
+<p>Workspaces authenticate to the service using bearer tokens. Tokens are created by an admin and rotated by operators — never stored or shared through deployment configuration.</p>
+<section id="create-a-workspace-token">
+<h3>Create a workspace token<a class="headerlink" href="#create-a-workspace-token" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Generate a new token for the &quot;prod&quot; workspace</span>
+strata<span class="w"> </span>serve<span class="w"> </span>token<span class="w"> </span>create<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--url<span class="w"> </span>https://state-service.internal:8000<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--admin-token<span class="w"> </span><span class="nv">$ADMIN_TOKEN</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--workspace<span class="w"> </span>prod
+
+<span class="c1"># Output:</span>
+<span class="c1"># Token: strata_state_e1d3f6c9a2b4e7k...</span>
+<span class="c1"># Workspace: prod</span>
+<span class="c1"># Created: 2026-08-12T15:30:45Z</span>
+</pre></div>
+</div>
+<p>Store this token securely (e.g., in your secret management system — Vault, Bitwarden, GitHub Secrets).</p>
+</section>
+<section id="list-tokens-admin-only">
+<h3>List tokens (admin only)<a class="headerlink" href="#list-tokens-admin-only" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>serve<span class="w"> </span>token<span class="w"> </span>list<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--url<span class="w"> </span>https://state-service.internal:8000<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--admin-token<span class="w"> </span><span class="nv">$ADMIN_TOKEN</span>
+</pre></div>
+</div>
+</section>
+<section id="revoke-a-token">
+<h3>Revoke a token<a class="headerlink" href="#revoke-a-token" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>serve<span class="w"> </span>token<span class="w"> </span>revoke<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--url<span class="w"> </span>https://state-service.internal:8000<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--admin-token<span class="w"> </span><span class="nv">$ADMIN_TOKEN</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--workspace<span class="w"> </span>prod
+</pre></div>
+</div>
+<p><strong>Admin token:</strong> By default, the first time the service starts, it prints an admin token to stdout (save it immediately). To rotate the admin token, consult the <a class="reference internal" href="#api-reference">API Reference</a> below or use your database client directly to <code class="docutils literal notranslate"><span class="pre">UPDATE</span></code> the <code class="docutils literal notranslate"><span class="pre">admin_tokens</span></code> table. The admin token is never stored in clear text — only its hash — so you <strong>cannot</strong> recover a lost one; you must generate a new one and update the database.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="configuring-workspaces-to-forward-events">
+<h2>Configuring workspaces to forward events<a class="headerlink" href="#configuring-workspaces-to-forward-events" title="Link to this heading"></a></h2>
+<p>Once the service is running and a workspace token exists, point a workspace’s audit configuration at it:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># config/my-config.yaml (kind: configuration)</span>
+
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">audit</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">policy</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">events</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">deployment.completed</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">        </span><span class="nt">deployment.failed</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">        </span><span class="nt">policy.violated</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">sinks</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata-state</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">webhook</span>
+<span class="w">        </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://state-service.internal:8000/v1/events</span>
+<span class="w">        </span><span class="nt">authentication</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">oauth2</span>
+<span class="w">          </span><span class="nt">oauth2</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">client_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">$STRATA_STATE_TOKEN</span><span class="w">  </span><span class="c1"># from &#39;serve token create&#39;</span>
+<span class="w">        </span><span class="nt">headers</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">User-Agent</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata-workspace/prod</span>
+</pre></div>
+</div>
+<p>This configuration:</p>
+<ul class="simple">
+<li><p>Captures deploy completion, failures, and policy violations</p></li>
+<li><p>Forwards them to the state service over HTTPS</p></li>
+<li><p>Uses bearer-token authentication (the token is automatically prefixed with <code class="docutils literal notranslate"><span class="pre">Authorization:</span> <span class="pre">Bearer</span></code>)</p></li>
+<li><p>Continues to work even if the service is temporarily unavailable (best-effort delivery, with bounded retry)</p></li>
+</ul>
+<p>The token can be an environment variable, a file reference via <code class="docutils literal notranslate"><span class="pre">&#64;repo/path</span></code>, or a secret from a store like Vault or Azure Key Vault — see <a class="reference internal" href="#../platform/config/configuration.md"><span class="xref myst">Secrets &amp; Variables</span></a> for the full reference.</p>
+</section>
+<hr class="docutils" />
+<section id="querying-the-stored-events">
+<h2>Querying the stored events<a class="headerlink" href="#querying-the-stored-events" title="Link to this heading"></a></h2>
+<p>Events are stored in the <code class="docutils literal notranslate"><span class="pre">events</span></code> table as JSON. Query directly with <code class="docutils literal notranslate"><span class="pre">psql</span></code>, <code class="docutils literal notranslate"><span class="pre">mysql</span></code>, a Grafana datasource, or any SQL tool:</p>
+<section id="basic-queries">
+<h3>Basic queries<a class="headerlink" href="#basic-queries" title="Link to this heading"></a></h3>
+<p><strong>Last 10 events:</strong></p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">SELECT</span><span class="w"> </span><span class="n">execution_id</span><span class="p">,</span><span class="w"> </span><span class="n">record_type</span><span class="p">,</span><span class="w"> </span><span class="n">deployment</span><span class="p">,</span><span class="w"> </span><span class="n">workspace</span><span class="p">,</span><span class="w"> </span><span class="n">outcome</span><span class="p">,</span><span class="w"> </span><span class="n">recorded_at</span>
+<span class="k">FROM</span><span class="w"> </span><span class="n">events</span>
+<span class="k">ORDER</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">recorded_at</span><span class="w"> </span><span class="k">DESC</span>
+<span class="k">LIMIT</span><span class="w"> </span><span class="mi">10</span><span class="p">;</span>
+</pre></div>
+</div>
+<p><strong>Failed deployments in the last 7 days:</strong></p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">SELECT</span><span class="w"> </span><span class="n">deployment</span><span class="p">,</span><span class="w"> </span><span class="n">workspace</span><span class="p">,</span><span class="w"> </span><span class="n">environment</span><span class="p">,</span><span class="w"> </span><span class="n">recorded_at</span><span class="p">,</span><span class="w"> </span><span class="n">payload</span>
+<span class="k">FROM</span><span class="w"> </span><span class="n">events</span>
+<span class="k">WHERE</span><span class="w"> </span><span class="n">record_type</span><span class="w"> </span><span class="k">LIKE</span><span class="w"> </span><span class="s1">&#39;%.deployment.failed&#39;</span>
+<span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">recorded_at</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="n">NOW</span><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="nb">INTERVAL</span><span class="w"> </span><span class="s1">&#39;7 days&#39;</span>
+<span class="k">ORDER</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">recorded_at</span><span class="w"> </span><span class="k">DESC</span><span class="p">;</span>
+</pre></div>
+</div>
+<p><strong>Events by workspace:</strong></p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">SELECT</span><span class="w"> </span><span class="n">workspace</span><span class="p">,</span><span class="w"> </span><span class="k">COUNT</span><span class="p">(</span><span class="o">*</span><span class="p">)</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">event_count</span><span class="p">,</span><span class="w"> </span><span class="k">MAX</span><span class="p">(</span><span class="n">recorded_at</span><span class="p">)</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">latest</span>
+<span class="k">FROM</span><span class="w"> </span><span class="n">events</span>
+<span class="k">GROUP</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">workspace</span>
+<span class="k">ORDER</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">latest</span><span class="w"> </span><span class="k">DESC</span><span class="p">;</span>
+</pre></div>
+</div>
+<p><strong>Extract a field from the JSON payload (PostgreSQL):</strong></p>
+<div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">SELECT</span>
+<span class="w">  </span><span class="n">deployment</span><span class="p">,</span>
+<span class="w">  </span><span class="p">(</span><span class="n">payload</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="s1">&#39;duration_seconds&#39;</span><span class="p">)::</span><span class="nb">numeric</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">duration</span><span class="p">,</span>
+<span class="w">  </span><span class="n">recorded_at</span>
+<span class="k">FROM</span><span class="w"> </span><span class="n">events</span>
+<span class="k">WHERE</span><span class="w"> </span><span class="n">record_type</span><span class="w"> </span><span class="k">LIKE</span><span class="w"> </span><span class="s1">&#39;%.deployment.completed&#39;</span>
+<span class="k">ORDER</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">recorded_at</span><span class="w"> </span><span class="k">DESC</span><span class="p">;</span>
+</pre></div>
+</div>
+</section>
+<section id="building-dashboards">
+<h3>Building dashboards<a class="headerlink" href="#building-dashboards" title="Link to this heading"></a></h3>
+<p><strong>Grafana datasource setup:</strong></p>
+<ol class="arabic simple">
+<li><p>Add a PostgreSQL datasource</p></li>
+<li><p>Point it at your state-service database</p></li>
+<li><p>Build panels with queries like:</p></li>
+</ol>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>SELECT
+  $__timeGroupAlias(recorded_at, $__interval),
+  COUNT(*) as deployments,
+  SUM(CASE WHEN outcome = &#39;success&#39; THEN 1 ELSE 0 END) as successful,
+  SUM(CASE WHEN outcome = &#39;failed&#39; THEN 1 ELSE 0 END) as failed
+FROM events
+WHERE record_type LIKE &#39;%.deployment.%&#39;
+  AND workspace = &#39;$workspace&#39;
+  AND environment = &#39;$environment&#39;
+GROUP BY $__timeGroupAlias(recorded_at, $__interval)
+ORDER BY time DESC;
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="health-checks-and-monitoring">
+<h2>Health checks and monitoring<a class="headerlink" href="#health-checks-and-monitoring" title="Link to this heading"></a></h2>
+<section id="cli-health-check">
+<h3>CLI health check<a class="headerlink" href="#cli-health-check" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Local (loopback, no TLS)</span>
+strata<span class="w"> </span>serve<span class="w"> </span>health<span class="w"> </span>http://127.0.0.1:8000
+
+<span class="c1"># Remote (HTTPS)</span>
+strata<span class="w"> </span>serve<span class="w"> </span>health<span class="w"> </span>https://state-service.internal:8000
+</pre></div>
+</div>
+<p>Success: <code class="docutils literal notranslate"><span class="pre">{&quot;status&quot;:</span> <span class="pre">&quot;ok&quot;}</span></code><br />
+Failure: HTTP 503 with error detail (e.g., database connection failed).</p>
+</section>
+<section id="health-check-endpoint">
+<h3>Health check endpoint<a class="headerlink" href="#health-check-endpoint" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>https://state-service.internal:8000/healthz
+<span class="c1"># {&quot;status&quot;: &quot;ok&quot;}</span>
+
+curl<span class="w"> </span>-I<span class="w"> </span>https://state-service.internal:8000/healthz
+<span class="c1"># HTTP/1.1 200 OK</span>
+</pre></div>
+</div>
+<p>Use this endpoint for Kubernetes <code class="docutils literal notranslate"><span class="pre">livenessProbe</span></code>/<code class="docutils literal notranslate"><span class="pre">readinessProbe</span></code> (see Docker/Kubernetes example above).</p>
+</section>
+<section id="metrics">
+<h3>Metrics<a class="headerlink" href="#metrics" title="Link to this heading"></a></h3>
+<p>The service exposes Prometheus-compatible metrics at <code class="docutils literal notranslate"><span class="pre">/metrics</span></code> (optional; requires <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">xyz-strata[server-metrics]</span></code>, not yet shipped). For now, monitor via your database connection — query <code class="docutils literal notranslate"><span class="pre">SELECT</span> <span class="pre">COUNT(*)</span> <span class="pre">FROM</span> <span class="pre">events</span></code> to track ingestion rate.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="troubleshooting">
+<h2>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading"></a></h2>
+<section id="connection-refused-or-403-forbidden-when-workspace-tries-to-forward">
+<h3>“Connection refused” or “403 Forbidden” when workspace tries to forward<a class="headerlink" href="#connection-refused-or-403-forbidden-when-workspace-tries-to-forward" title="Link to this heading"></a></h3>
+<p><strong>Cause:</strong> The workspace token is invalid, expired, or the service is not reachable.</p>
+<p><strong>Fix:</strong></p>
+<ol class="arabic simple">
+<li><p>Verify the service is running: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">serve</span> <span class="pre">health</span> <span class="pre">&lt;url&gt;</span></code></p></li>
+<li><p>Verify the token is current: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">serve</span> <span class="pre">token</span> <span class="pre">list</span> <span class="pre">--url</span> <span class="pre">&lt;url&gt;</span> <span class="pre">--admin-token</span> <span class="pre">...</span></code> and recreate if needed</p></li>
+<li><p>Verify network access: <code class="docutils literal notranslate"><span class="pre">curl</span> <span class="pre">-v</span> <span class="pre">https://state-service.internal:8000/healthz</span></code></p></li>
+<li><p>Check the workspace’s audit sink configuration (URL must be exact, token must be set)</p></li>
+</ol>
+</section>
+<section id="database-connection-failed-on-healthz">
+<h3>“database connection failed” on /healthz<a class="headerlink" href="#database-connection-failed-on-healthz" title="Link to this heading"></a></h3>
+<p><strong>Cause:</strong> The database backend (PostgreSQL, SQL Server) is unreachable or credentials are wrong.</p>
+<p><strong>Fix:</strong></p>
+<ol class="arabic">
+<li><p>Test the connection manually:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>psql<span class="w"> </span>postgresql+psycopg://user:pass@postgres/strata_state
+<span class="c1"># or</span>
+strata<span class="w"> </span>serve<span class="w"> </span>migrate<span class="w"> </span>--db-url<span class="w"> </span>postgresql+psycopg://user:pass@postgres/strata_state
+</pre></div>
+</div>
+</li>
+<li><p>Check environment variables: <code class="docutils literal notranslate"><span class="pre">env</span> <span class="pre">|</span> <span class="pre">grep</span> <span class="pre">STRATA_SERVE</span></code></p></li>
+<li><p>Verify firewall rules if using a remote database</p></li>
+<li><p>For PostgreSQL, ensure <code class="docutils literal notranslate"><span class="pre">psycopg</span></code> is installed: <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">psycopg[binary]</span></code></p></li>
+</ol>
+</section>
+<section id="tls-certificate-required-error">
+<h3>“TLS certificate required” error<a class="headerlink" href="#tls-certificate-required-error" title="Link to this heading"></a></h3>
+<p><strong>Cause:</strong> Attempting to bind to a non-loopback address (e.g., <code class="docutils literal notranslate"><span class="pre">0.0.0.0</span></code>) without TLS.</p>
+<p><strong>Fix:</strong></p>
+<ol class="arabic simple">
+<li><p>Provide TLS certs: <code class="docutils literal notranslate"><span class="pre">--tls-cert</span> <span class="pre">cert.pem</span> <span class="pre">--tls-key</span> <span class="pre">key.pem</span></code></p></li>
+<li><p>Or bind to loopback only: <code class="docutils literal notranslate"><span class="pre">--host</span> <span class="pre">127.0.0.1</span></code> (local-only, not suitable for production)</p></li>
+</ol>
+</section>
+<section id="slow-ingest-or-high-latency">
+<h3>Slow ingest or high latency<a class="headerlink" href="#slow-ingest-or-high-latency" title="Link to this heading"></a></h3>
+<p><strong>Causes:</strong></p>
+<ul class="simple">
+<li><p>Database is far away (high network latency) — move closer or use a local cache</p></li>
+<li><p>Database is overloaded — check <code class="docutils literal notranslate"><span class="pre">SELECT</span> <span class="pre">COUNT(*)</span> <span class="pre">FROM</span> <span class="pre">events</span></code> and consider archiving old rows</p></li>
+<li><p>Network issues between workspace and service — check retry logs in the workspace’s local audit output</p></li>
+</ul>
+<p><strong>Fix:</strong></p>
+<ul class="simple">
+<li><p>Query the <code class="docutils literal notranslate"><span class="pre">events</span></code> table’s size: <code class="docutils literal notranslate"><span class="pre">SELECT</span> <span class="pre">pg_size_pretty(pg_total_relation_size('events'));</span></code> (PostgreSQL)</p></li>
+<li><p>Archive old events (older than 90 days, for example) to a separate table or CSV for cold storage</p></li>
+<li><p>Monitor database connection pool if using a connection pooler like PgBouncer</p></li>
+</ul>
+</section>
+</section>
+<hr class="docutils" />
+<section id="production-checklist">
+<h2>Production checklist<a class="headerlink" href="#production-checklist" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>[ ] Database is PostgreSQL or SQL Server (not SQLite for production)</p></li>
+<li><p>[ ] Database backups are configured and tested</p></li>
+<li><p>[ ] TLS certificates are valid and will be renewed before expiry</p></li>
+<li><p>[ ] Admin token is stored securely (password manager, secret vault)</p></li>
+<li><p>[ ] Workspace tokens are rotated regularly (e.g., quarterly)</p></li>
+<li><p>[ ] <code class="docutils literal notranslate"><span class="pre">/healthz</span></code> endpoint is monitored and alerts on failure</p></li>
+<li><p>[ ] Database connectivity is monitored (e.g., Prometheus scrape of row count)</p></li>
+<li><p>[ ] Firewall rules allow only required access to the service</p></li>
+<li><p>[ ] Service is behind a load balancer if high availability is needed</p></li>
+<li><p>[ ] Old events are archived or purged according to retention policy</p></li>
+<li><p>[ ] Server process runs under a non-root user (not <code class="docutils literal notranslate"><span class="pre">root</span></code>)</p></li>
 </ul>
 </section>
 <hr class="docutils" />
-<section id="verify-before-you-rely-on-it">
-<h2>Verify before you rely on it<a class="headerlink" href="#verify-before-you-rely-on-it" title="Link to this heading"></a></h2>
-<p>Before using this in a real rotation, smoke-test the transform command once in your own environment and confirm it prints <strong>exactly one line</strong>, with no extra prompt text mixed into stdout:</p>
-<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="s2">&quot;test-value&quot;</span> <span class="p">|</span> <span class="n">docker</span> <span class="n">run</span> <span class="p">-</span><span class="n">-rm</span> <span class="n">-i</span> <span class="n">vaultwarden</span><span class="p">/</span><span class="n">server</span> <span class="p">/</span><span class="n">vaultwarden</span> <span class="n">hash</span> <span class="p">-</span><span class="n">-preset</span> <span class="n">owasp</span>
+<section id="api-reference">
+<h2>API Reference<a class="headerlink" href="#api-reference" title="Link to this heading"></a></h2>
+<section id="post-v1-events">
+<h3>POST /v1/events<a class="headerlink" href="#post-v1-events" title="Link to this heading"></a></h3>
+<p>Ingest an audit event.</p>
+<p><strong>Request:</strong></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Authorization</span><span class="p">:</span> <span class="n">Bearer</span> <span class="o">&lt;</span><span class="n">workspace_token</span><span class="o">&gt;</span>
+<span class="n">Content</span><span class="o">-</span><span class="n">Type</span><span class="p">:</span> <span class="n">application</span><span class="o">/</span><span class="n">json</span>
+
+<span class="p">{</span>
+  <span class="s2">&quot;specversion&quot;</span><span class="p">:</span> <span class="s2">&quot;1.0&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;xyz.huybrechts.strata.deployment.completed&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="s2">&quot;my-workspace/my-deployment&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="s2">&quot;deployment-abc123-20260812&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;time&quot;</span><span class="p">:</span> <span class="s2">&quot;2026-08-12T15:30:45Z&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;deployment&quot;</span><span class="p">:</span> <span class="s2">&quot;my-deployment&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;workspace&quot;</span><span class="p">:</span> <span class="s2">&quot;my-workspace&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;environment&quot;</span><span class="p">:</span> <span class="s2">&quot;prod&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;outcome&quot;</span><span class="p">:</span> <span class="s2">&quot;success&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{</span> <span class="o">...</span><span class="n">full</span> <span class="n">event</span> <span class="n">payload</span><span class="o">...</span> <span class="p">}</span>
+<span class="p">}</span>
 </pre></div>
 </div>
-<p>If the output has extra lines or banner text, <code class="docutils literal notranslate"><span class="pre">$hash</span></code> / <code class="docutils literal notranslate"><span class="pre">hash</span></code> will contain more than the hash itself.</p>
+<p><strong>Response:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">202</span> <span class="pre">Accepted</span></code> — Event accepted (will be written to database)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">400</span> <span class="pre">Bad</span> <span class="pre">Request</span></code> — Invalid payload (e.g., missing required fields)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">401</span> <span class="pre">Unauthorized</span></code> — Invalid or missing token</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">409</span> <span class="pre">Conflict</span></code> — Duplicate (same <code class="docutils literal notranslate"><span class="pre">id</span></code> + <code class="docutils literal notranslate"><span class="pre">type</span></code>; idempotent)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">500</span> <span class="pre">Internal</span> <span class="pre">Server</span> <span class="pre">Error</span></code> — Database error</p></li>
+</ul>
+</section>
+<section id="get-healthz">
+<h3>GET /healthz<a class="headerlink" href="#get-healthz" title="Link to this heading"></a></h3>
+<p>Health check endpoint.</p>
+<p><strong>Response:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">200</span> <span class="pre">OK</span></code> — Service healthy</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">503</span> <span class="pre">Service</span> <span class="pre">Unavailable</span></code> — Database unreachable</p></li>
+</ul>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ok&quot;</span><span class="w"> </span><span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="get-v1-events-tail">
+<h3>GET /v1/events/tail<a class="headerlink" href="#get-v1-events-tail" title="Link to this heading"></a></h3>
+<p>Retrieve the most recent events (admin-only, read-only).</p>
+<p><strong>Request (requires admin token):</strong></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">curl</span> <span class="o">-</span><span class="n">H</span> <span class="s2">&quot;Authorization: Bearer $ADMIN_TOKEN&quot;</span> \
+  <span class="s1">&#39;https://state-service.internal:8000/v1/events/tail?limit=100&amp;workspace=prod&#39;</span>
+</pre></div>
+</div>
+<p><strong>Parameters:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">limit</span></code> (default: 100, max: 1000) — Number of recent events to return</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">workspace</span></code> (optional) — Filter to a specific workspace</p></li>
+</ul>
+<p><strong>Response:</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>{
+  &quot;events&quot;: [
+    {
+      &quot;execution_id&quot;: &quot;...&quot;,
+      &quot;record_type&quot;: &quot;xyz.huybrechts.strata.deployment.completed&quot;,
+      &quot;deployment&quot;: &quot;...&quot;,
+      &quot;workspace&quot;: &quot;...&quot;,
+      &quot;outcome&quot;: &quot;success&quot;,
+      &quot;recorded_at&quot;: &quot;2026-08-12T15:30:45Z&quot;,
+      &quot;payload&quot;: { ... }
+    }
+  ],
+  &quot;count&quot;: 5,
+  &quot;limit&quot;: 100
+}
+</pre></div>
+</div>
+</section>
+<section id="post-v1-tokens-admin-only">
+<h3>POST /v1/tokens (admin-only)<a class="headerlink" href="#post-v1-tokens-admin-only" title="Link to this heading"></a></h3>
+<p>Create a new workspace token.</p>
+<p><strong>Request:</strong></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Authorization</span><span class="p">:</span> <span class="n">Bearer</span> <span class="o">&lt;</span><span class="n">admin_token</span><span class="o">&gt;</span>
+<span class="n">Content</span><span class="o">-</span><span class="n">Type</span><span class="p">:</span> <span class="n">application</span><span class="o">/</span><span class="n">json</span>
+
+<span class="p">{</span> <span class="s2">&quot;workspace&quot;</span><span class="p">:</span> <span class="s2">&quot;prod&quot;</span> <span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>Response:</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;token&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;strata_state_e1d3f6c9a2b4e7k...&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;workspace&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;prod&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;created_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-08-12T15:30:45Z&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;expires_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="get-v1-tokens-admin-only">
+<h3>GET /v1/tokens (admin-only)<a class="headerlink" href="#get-v1-tokens-admin-only" title="Link to this heading"></a></h3>
+<p>List all workspace tokens.</p>
+<p><strong>Request:</strong></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Authorization</span><span class="p">:</span> <span class="n">Bearer</span> <span class="o">&lt;</span><span class="n">admin_token</span><span class="o">&gt;</span>
+</pre></div>
+</div>
+<p><strong>Response:</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;tokens&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;tok_123&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;workspace&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;prod&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;created_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-08-12T15:30:45Z&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;last_used_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-08-12T16:00:00Z&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;expires_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="delete-v1-tokens-id-admin-only">
+<h3>DELETE /v1/tokens/:id (admin-only)<a class="headerlink" href="#delete-v1-tokens-id-admin-only" title="Link to this heading"></a></h3>
+<p>Revoke a workspace token.</p>
+<p><strong>Request:</strong></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Authorization</span><span class="p">:</span> <span class="n">Bearer</span> <span class="o">&lt;</span><span class="n">admin_token</span><span class="o">&gt;</span>
+<span class="n">DELETE</span> <span class="o">/</span><span class="n">v1</span><span class="o">/</span><span class="n">tokens</span><span class="o">/</span><span class="n">tok_123</span>
+</pre></div>
+</div>
+<p><strong>Response:</strong> 204 No Content</p>
+</section>
 </section>
 <hr class="docutils" />
-<section id="checklist">
-<h2>Checklist<a class="headerlink" href="#checklist" title="Link to this heading"></a></h2>
+<section id="see-also">
+<h2>See also<a class="headerlink" href="#see-also" title="Link to this heading"></a></h2>
 <ul class="simple">
-<li><p>[ ] Raw key declared with <code class="docutils literal notranslate"><span class="pre">generate:</span></code> spec, backed by an integration store (<code class="docutils literal notranslate"><span class="pre">bitwarden</span></code>, <code class="docutils literal notranslate"><span class="pre">vault</span></code>, <code class="docutils literal notranslate"><span class="pre">azure-keyvault</span></code>, or <code class="docutils literal notranslate"><span class="pre">infisical</span></code>)</p></li>
-<li><p>[ ] Hash key declared separately, also backed by an integration store, with no <code class="docutils literal notranslate"><span class="pre">generate:</span></code> spec</p></li>
-<li><p>[ ] Steps run interactively, never from CI</p></li>
-<li><p>[ ] Transform command smoke-tested once (single-line output confirmed)</p></li>
-<li><p>[ ] Raw value never pasted outside your terminal session</p></li>
+<li><p><span class="xref myst">ADR-0065: Strata state service</span> — Design rationale and phases</p></li>
+<li><p><a class="reference internal" href="siem-audit-forwarding.html#webhook-strata-state-service-reference"><span class="std std-ref">SIEM integration &amp; audit forwarding</span></a> — Configuring webhook sinks</p></li>
+<li><p><a class="reference internal" href="../platform/commands.html#audit"><span class="std std-ref">Deployment audit &amp; traceability</span></a> — Audit command reference</p></li>
 </ul>
 </section>
 </section>
@@ -3526,8 +3953,8 @@ strata<span class="w"> </span>secret<span class="w"> </span>put<span class="w"> 
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="cookbook-add-environment.html" class="btn btn-neutral float-left" title="Cookbook: Add a New Environment" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="environment-composition.html" class="btn btn-neutral float-right" title="Environment Composition" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="cost-estimation.html" class="btn btn-neutral float-left" title="Cost Estimation and Visibility" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="azure-lifecycle-scripts.html" class="btn btn-neutral float-right" title="Azure Lifecycle Scripts" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

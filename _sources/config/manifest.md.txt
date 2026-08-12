@@ -11,7 +11,7 @@ When enabled, deployment manifests provide:
 - **Rollback reference** — Pin exact versions for recovery
 - **Forensic analysis** — Investigate drift or failed deployments
 
-When omitted from configuration, manifests are not written and a log message is emitted.
+When the `manifest` section is omitted from configuration entirely, manifests are not written and a log message is emitted.
 
 ## Schema
 
@@ -22,113 +22,91 @@ meta:
   name: <name>
 spec:
   manifest:
-    type: local | gitops              # Storage backend (required)
-    path: <path>                      # Base directory (required)
-    repository: <repository_name>     # Repo name for gitops (required if type=gitops)
-    branch: <branch_name>             # Target branch (required if type=gitops)
-    tag: true | false                 # Create git tag (gitops only, default: true)
+    path: <path>                # Base directory. Default: ".strata/deployments"
+    push_manifest: true | false # Commit and push the manifest to this workspace's own git repo
+    repository:                 # Optional — durable push to a named solution repo instead (ADR-0065)
+      push: true | false        # Whether to push at all
+      name: <repo_name>         # Name of a repo registered with `strata repo add`; omit to push to this workspace's own repo
+      path: <path_in_repo>      # Where inside that repo the manifest lands; defaults to "manifest"
 ```
 
-## Storage Types
+The manifest is **always written locally** at `{path}/{deployment_name}/{version}/{timestamp}.json` when the `manifest` section is present — this part never depends on any push configuration. `push_manifest`/`repository` only control whether that same file is *additionally* committed and pushed to git afterwards.
 
-### Local Filesystem Storage
-
-Write manifests to a local directory within the workspace:
+## Local Storage (always on when `manifest` is configured)
 
 ```yaml
 manifest:
-  type: local
   path: ".strata/deployments"
 ```
 
 **Output structure:**
-```
+
+```text
 .strata/deployments/
-  ├── my_deployment_v1.0.0_2024-06-15T14:32:45Z.json
-  ├── my_deployment_v1.0.1_2024-06-16T09:15:22Z.json
-  └── prod_deployment_v2.3.0_2024-06-17T10:45:33Z.json
+  my_deployment/
+    v1.0.0/
+      2024-06-15T14:32:45Z.json
+    v1.0.1/
+      2024-06-16T09:15:22Z.json
 ```
 
 **Path resolution:**
 
 The service auto-appends `/{deployment_name}/{version}/{timestamp}.json` to the base path:
 
-```
+```text
 {path}/{deployment_name}/{version}/{timestamp}.json
 ```
 
-**Use when:**
-- Single-environment or local deployments
-- Manifests are committed to Git separately
-- Minimal external dependencies
+This is the only thing `path` controls. There is no separate "local" vs. "gitops" storage mode — every manifest is written to disk the same way; git push is a separate, optional step layered on top (below).
 
 ---
 
-### GitOps Repository Storage
+## Durable git-push (ADR-0065 Phase 1)
 
-Commit manifests automatically to a Git repository (state repo pattern):
+Additionally commit and push the manifest file to git after writing it locally. Two destinations are available:
+
+**Push to this workspace's own repo** — the simple case, unchanged from previous behaviour:
 
 ```yaml
 manifest:
-  type: gitops
-  path: "deployments"                           # Directory in target repo
-  repository: xyz-state-repo                    # Remote name (must be in spec.remotes)
-  branch: manifests                             # Target branch
-  tag: true                                     # Create git tag after commit
+  path: ".strata/deployments"
+  push_manifest: true
 ```
 
-**Output structure:**
-```
-xyz-state-repo/
-  manifests/
-    ├── my_deployment/
-    │   ├── v1.0.0/
-    │   │   └── 2024-06-15T14:32:45Z.json
-    │   └── v1.0.1/
-    │       └── 2024-06-16T09:15:22Z.json
-    └── prod_deployment/
-        └── v2.3.0/
-            └── 2024-06-17T10:45:33Z.json
-```
+This commits and pushes from the current workspace's own git checkout, to its own `origin` remote.
 
-**Git workflow:**
-
-```bash
-# Service creates/updates manifest file
-# Commits to specified branch with message:
-git add deployments/<deployment_name>/<version>/<timestamp>.json
-git commit -m "strata: deployment manifest <deployment_name> v<version>"
-
-# Optionally creates annotated tag:
-git tag -a <deployment_name>/<version> -m "Deployed at <timestamp>"
-git push origin <branch_name> --tags
-```
-
-**Repository requirement:**
-
-The `repository` field must reference a registered remote in `spec.remotes`:
+**Push to a named solution repo instead** — for a shared state repo used across multiple workspaces:
 
 ```yaml
-spec:
-  remotes:
-    - name: xyz-state-repo
-      url: git@github.com:org/xyz-state-repo.git
-      branch: main
-      clone: true
-      
-  manifest:
-    type: gitops
-    path: deployments
-    repository: xyz-state-repo              # ← must match a registered repo
-    branch: manifests                       # ← branch in that repo
-    tag: true
+manifest:
+  path: ".strata/deployments"
+  repository:
+    push: true
+    name: state-repo        # must be registered with `strata repo add`, not spec.remotes
+    path: history/manifest  # where inside that repo — optional, defaults to "manifest"
 ```
 
-**Use when:**
-- Multi-environment GitOps workflows
-- Compliance requires immutable audit trail in version control
-- Multiple teams need shared deployment history
-- Automated downstream processes consume manifests (e.g., compliance scanners)
+`repository.name` resolves against the **solution-level repo registry** (`strata repo add`, listed in `solution.json`) — the same registry `@repo_name/path` cross-repo file references use elsewhere. It is a different, separate concept from `spec.remotes` (`RemoteModel` — named remote endpoints used for `gitops` provisioner backends and `ref_convention` policy tag conventions); a repo referenced here must be registered via `strata repo add`, not declared under `spec.remotes`.
+
+When multiple workspaces push manifests to the same `repository.name`, the workspace name is automatically inserted as a path segment (`{repository.path}/{workspace}/...`) to prevent them from overwriting each other's history — this happens unconditionally and needs no configuration.
+
+**Output structure (pushed to a named repo):**
+
+```text
+state-repo/
+  history/manifest/
+    my_workspace/
+      my_deployment/
+        v1.0.0/
+          2024-06-15T14:32:45Z.json
+```
+
+**Use a named repo when:**
+
+- Multiple teams or workspaces need shared deployment history in one place
+- Compliance requires an immutable audit trail in version control separate from the deployment repo itself
+- Automated downstream processes consume manifests (e.g., compliance scanners) from one predictable location
 
 ---
 
@@ -136,25 +114,27 @@ spec:
 
 Every manifest captures:
 
-| Field                      | Contents                                       | Purpose                                      |
-| -------------------------- | ---------------------------------------------- | -------------------------------------------- |
-| **deployment_name**        | Name of the deployment                         | Identification                               |
-| **workspace_name**         | Referenced workspace name                      | Traceability                                 |
-| **action**                 | `deploy` or `destroy`                          | Operation type                               |
-| **status**                 | `success` or `failure`                         | Outcome                                      |
-| **timestamp**              | ISO 8601 timestamp (UTC)                       | When it happened                             |
-| **user**                   | Git user.name from `.gitconfig`                | Who deployed it                              |
-| **platform**               | Platform version                               | Audit trail                                  |
-| **artifacts.platform**     | Hash + full `platform.json` content            | Complete configuration snapshot              |
-| **artifacts.repositories** | Pinned commits for all referenced repos        | Version control proof                        |
-| **artifacts.images**       | Container images with digests (if applicable)  | Application versions                         |
-| **artifacts.providers**    | All provisioners, backends, and state backends | Infrastructure tooling                       |
-| **artifacts.sbom**         | Software Bill of Materials (CycloneDX format)  | Component inventory & vulnerability tracking |
-| **stages**                 | Per-stage status, duration, outputs            | Execution details                            |
+| Field                           | Contents                                       | Purpose                                      |
+| ------------------------------- | ---------------------------------------------- | -------------------------------------------- |
+| **deployment_name**             | Name of the deployment                         | Identification                               |
+| **workspace_name**              | Referenced workspace name                      | Traceability                                 |
+| **action**                      | `build`, `deploy`, or `destroy`                | Operation type                               |
+| **status**                      | `success`, `partial`, or `failed`              | Outcome                                      |
+| **started_at**/**completed_at** | ISO 8601 timestamps (UTC)                      | When it happened                             |
+| **deployed_by**                 | Actor identity                                 | Who deployed it                              |
+| **artifacts.platform**          | Hash + full `platform.json` content            | Complete configuration snapshot              |
+| **artifacts.repositories**      | Pinned commits for all referenced repos        | Version control proof                        |
+| **artifacts.images**            | Container images with digests (if applicable)  | Application versions                         |
+| **artifacts.providers**         | All provisioners, backends, and state backends | Infrastructure tooling                       |
+| **sbom**                        | Reference to the generated CycloneDX SBOM file | Component inventory & vulnerability tracking |
+| **policy_results**              | Policy evaluation results from all phases      | Governance evidence                          |
+| **lock**                        | State-lock audit trail (if locking enabled)    | Concurrency audit trail                      |
+| **audit_log**                   | Path to this execution's deploy-log entry      | Cross-reference to the execution narrative   |
+| **stages**                      | Per-stage status, duration, outputs            | Execution details                            |
 
 ## Examples
 
-### Local — Development
+### Local only — Development
 
 ```yaml
 apiVersion: strata.huybrechts.xyz/v1
@@ -163,17 +143,17 @@ meta:
   name: dev_manifest
 spec:
   manifest:
-    type: local
     path: ".strata/deployments"
 ```
 
 Run:
+
 ```bash
 strata deploy run -f deployments/dev.yaml
-# Writes: .strata/deployments/dev_v0.1.0_2024-06-15T14:32:45Z.json
+# Writes: .strata/deployments/dev/0.1.0/2024-06-15T14:32:45Z.json
 ```
 
-### GitOps — Multi-Environment
+### Local + durable push to a shared repo — Production
 
 ```yaml
 apiVersion: strata.huybrechts.xyz/v1
@@ -181,38 +161,31 @@ kind: configuration
 meta:
   name: prod_manifest
 spec:
-  repositories:
-    - name: xyz-state-repo
-      url: git@github.com:acme/xyz-state.git
-      branch: main
-      clone: true
-
   manifest:
-    type: gitops
     path: "deployments"
-    repository: xyz-state-repo
-    branch: manifests
-    tag: true
+    repository:
+      push: true
+      name: xyz-state-repo   # registered via `strata repo add xyz-state-repo <url>`
+      path: history/manifest
 ```
 
 Run:
+
 ```bash
 strata deploy run -f deployments/prod.yaml
-# Commits to xyz-state-repo/manifests/prod_v2.3.0/2024-06-17T10:45:33Z.json
-# Tags: prod/v2.3.0
-# Pushes: git push origin manifests --tags
+# Writes locally: deployments/prod/2.3.0/2024-06-17T10:45:33Z.json
+# Pushes to: xyz-state-repo/history/manifest/<workspace>/prod/2.3.0/2024-06-17T10:45:33Z.json
 ```
 
 ---
 
 ## Troubleshooting
 
-| Issue                        | Cause                                | Solution                                                   |
-| ---------------------------- | ------------------------------------ | ---------------------------------------------------------- |
-| Manifest not written         | `manifest` section missing in config | Add `manifest` section with `type` and `path`              |
-| gitops type fails to push    | Remote not registered                | Verify `repository` field matches a name in `spec.remotes` |
-| gitops fails: branch not set | Required field missing               | Add `branch` field when `type: gitops`                     |
-| Manifest has empty `content` | Platform artifact not generated      | Run `strata build run` before `strata deploy run`          |
+| Issue                        | Cause                                | Solution                                                         |
+| ---------------------------- | ------------------------------------ | ---------------------------------------------------------------- |
+| Manifest not written         | `manifest` section missing in config | Add a `manifest` section with at least `path`                    |
+| Push fails silently          | `repository.name` not registered     | Verify the name matches a repo registered with `strata repo add` |
+| Manifest has empty `content` | Platform artifact not generated      | Run `strata build run` before `strata deploy run`                |
 
 ---
 
@@ -226,12 +199,12 @@ Manifests are **not** defined in the deployment YAML itself — they are control
 
 **Typical layout:**
 
-```
+```text
 config/
   configurations/
-    prod_manifest.yaml          ← defines manifest storage
+    prod_manifest.yaml          <- defines manifest storage
   deployments/
-    prod_deployment.yaml        ← references the configuration
+    prod_deployment.yaml        <- references the configuration
     staging_deployment.yaml
 ```
 

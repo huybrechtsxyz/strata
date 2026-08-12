@@ -437,7 +437,6 @@ meta:
   name: manifest_local
 spec:
   manifest:
-    type: local
     path: ".strata/deployments"
 ```
 
@@ -449,34 +448,27 @@ spec:
 - Not backed up (unless entire repo is)
 - No version history
 
-### GitOps (Production)
+### Shared repo, durable push (Production, ADR-0065 Phase 1)
 
 ```yaml
-# config/configurations/manifest-gitops.yaml
+# config/configurations/manifest-shared.yaml
 apiVersion: strata.huybrechts.xyz/v1
 kind: configuration
 meta:
-  name: manifest_gitops
+  name: manifest_shared
 spec:
-  repositories:
-    - name: xyz-state-repo
-      url: git@github.com:acme/xyz-state.git
-      branch: main
-      clone: true
-
   manifest:
-    type: gitops
     path: "deployments"
-    repository: xyz-state-repo
-    branch: manifests
-    tag: true  # Create git tags for each manifest
+    repository:
+      push: true
+      name: xyz-state-repo   # registered via `strata repo add`, not spec.remotes
+      path: history/manifest
 ```
 
 **Pros:**
 - Immutable via Git (can't be modified)
-- Automated backup (replicated to multiple remotes)
+- Automated backup (pushed to a remote repo, separate from the deployment repo)
 - Git history for audit trail
-- Tags for important milestones
 
 **Cons:**
 - Requires network (not available offline)
@@ -485,7 +477,6 @@ spec:
 **Compliance benefit:**
 - State repository is the source of truth
 - All changes tracked in Git (who, what, when)
-- Tags enable rollback to known-good versions
 
 ---
 

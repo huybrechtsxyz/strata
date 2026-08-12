@@ -35,9 +35,10 @@ spec:
       records:
         - name: <record>  # Required: hostname or "@" for the zone apex
           type: <type>    # Required: A, AAAA, CNAME, MX, TXT, SRV, NS, PTR, CAA
-          value: <value>  # one of: literal record value
-          var: <key>      # one of: variable key from spec.references.variables
-          secret: <key>   # one of: secret key from spec.references.secrets
+          value: <value>       # one of: literal record value
+          var: <key>           # one of: variable key from spec.references.variables
+          secret: <key>        # one of: secret key from spec.references.secrets
+          output_key: <key>    # one of: a preceding deployment stage's output name
           ttl: <seconds>  # Optional: per-record override of the zone TTL
           priority: <n>   # Optional: MX and SRV records only
 ```
@@ -70,17 +71,43 @@ any record uses `var:` or `secret:`.
 
 ## Record Fields
 
-| Field      | Type   | Required | Description                                                                         |
-| ---------- | ------ | -------- | ----------------------------------------------------------------------------------- |
-| `name`     | string | Yes      | Hostname, subdomain, or `@` for the zone apex.                                      |
-| `type`     | string | Yes      | Record type — see table below.                                                      |
-| `value`    | string | one of   | Literal record value. Written directly to `dns.auto.tfvars.json`.                   |
-| `var`      | string | one of   | Variable key from `spec.references.variables` — resolved at build time.             |
-| `secret`   | string | one of   | Secret key from `spec.references.secrets` — injected at deploy time via `TF_VAR_*`. |
-| `ttl`      | int    | No       | Per-record TTL. Overrides zone-level `ttl` if set.                                  |
-| `priority` | int    | No       | Required for MX and SRV; invalid on all other types.                                |
+| Field        | Type   | Required | Description                                                                                            |
+| ------------ | ------ | -------- | ------------------------------------------------------------------------------------------------------ |
+| `name`       | string | Yes      | Hostname, subdomain, or `@` for the zone apex.                                                         |
+| `type`       | string | Yes      | Record type — see table below.                                                                         |
+| `value`      | string | one of   | Literal record value. Written directly to `dns.auto.tfvars.json`.                                      |
+| `var`        | string | one of   | Variable key from `spec.references.variables` — resolved at build time.                                |
+| `secret`     | string | one of   | Secret key from `spec.references.secrets` — injected at deploy time via `TF_VAR_*`.                    |
+| `output_key` | string | one of   | A preceding deployment stage's output name (e.g. a VM's public IP). Not declared in `spec.references`. |
+| `ttl`        | int    | No       | Per-record TTL. Overrides zone-level `ttl` if set.                                                     |
+| `priority`   | int    | No       | Required for MX and SRV; invalid on all other types.                                                   |
 
-> Exactly one of `value`, `var`, or `secret` must be set per record.
+> Exactly one of `value`, `var`, `secret`, or `output_key` must be set per record.
+
+### `output_key:` — sourcing a record from a preceding stage's output
+
+Use `output_key:` to point a record at the output of an earlier deployment stage instead of a
+static `value:` — the common case is an `A`/`AAAA` record pointing at a VM's dynamically
+assigned public IP:
+
+```yaml
+records:
+  - name: "@"
+    type: A
+    output_key: hearth_public_ip   # matches an `output "hearth_public_ip" {}` in the infra stage
+```
+
+- **Not subject to `spec.references`** — unlike `var:`/`secret:`, `output_key:` doesn't name an
+  environment-declared value, so it is never required (or allowed) in `spec.references`.
+- **Never resolved into `dns.auto.tfvars.json` / `strata_dns.yml`** — build time happens before
+  any stage has applied, so the value can't exist yet. The record's coordinates are instead
+  bucketed into `dns_output_records` / `strata_dns_output_records` (see below).
+- **Only works within a single `strata deploy run` invocation**, where the DNS stage depends on
+  (and runs after) the stage that produced the output. It relies on strata's existing generic
+  stage-output injection — every resolved stage output is already auto-injected into every
+  subsequent stage's subprocess environment as `TF_VAR_<output_key>` (Terraform) or a bare
+  `<output_key>` env var (Ansible/Compose) — so the consuming Terraform module or playbook reads
+  it directly (`var.hearth_public_ip` / `lookup('env', 'hearth_public_ip')`).
 
 ## Record Type Reference
 
@@ -234,8 +261,11 @@ Running `strata build run` generates the following files in the build directory:
   terraform/
     dns.auto.tfvars.json              ← Terraform: dns_zones variable
     dns_secret_records.auto.tfvars.json  ← Terraform: secret record stubs (only when secrets present)
+    dns_output_records.auto.tfvars.json  ← Terraform: output record stubs (only when output_key: present)
   ansible/
     strata_dns.yml                    ← Ansible: strata_dns_zones variable
+    strata_dns_secrets.yml            ← Ansible: strata_dns_secret_records (only when secrets present)
+    strata_dns_outputs.yml            ← Ansible: strata_dns_output_records (only when output_key: present)
 ```
 
 ### Terraform — `dns.auto.tfvars.json`
@@ -272,6 +302,8 @@ Terraform DNS module declares `variable "dns_zones" {}` and loads it automatical
 - `value:` records are written literally.
 - `var:` records are resolved from `environment.yaml` at build time and written as the resolved string.
 - `secret:` records are emitted with `"value": null` — the actual value is never written to disk.
+- `output_key:` records are also emitted with `"value": null` — the value only exists once a
+  preceding stage has applied, which build time cannot know about.
 
 ### Terraform — `dns_secret_records.auto.tfvars.json`
 
@@ -309,6 +341,39 @@ variable "dns_secret_records" {
 
 At deploy time, set `TF_VAR_google_verify_token=<value>` so Terraform can resolve it.
 
+### Terraform — `dns_output_records.auto.tfvars.json`
+
+Only written when at least one record uses `output_key:`. Contains record stubs keyed by
+`{record_name}_{record_type}`, structurally identical to `dns_secret_records.auto.tfvars.json`
+but carrying `output_key` instead of `secret_key`.
+
+```json
+{
+  "dns_output_records": {
+    "haven_zones": {
+      "huybrechts.xyz": {
+        "@_A": {
+          "name": "@",
+          "type": "A",
+          "output_key": "hearth_public_ip",
+          "ttl": null,
+          "priority": null
+        }
+      }
+    }
+  }
+}
+```
+
+No new Terraform variable declaration is required to *consume* the value — every resolved stage
+output is already auto-injected as `TF_VAR_<output_key>` into every subsequent stage's `terraform
+apply` (the same generic mechanism used for `stage_outputs` everywhere else in strata). Declare
+`variable "hearth_public_ip" {}` in the DNS stage's Terraform module and reference `var.hearth_public_ip`
+directly — `dns_output_records` exists purely so the module knows *which record* needs *which*
+output key; use `tf_required_variables.json`-style tooling or read this file to wire the two
+together. This only resolves within a single `strata deploy run` invocation where the DNS stage
+depends on (and runs after) the stage that produced the output.
+
 ### Ansible — `strata_dns.yml`
 
 Written only when DNS zones are present. Contains one top-level variable `strata_dns_zones`
@@ -333,10 +398,77 @@ strata_dns_zones:
           - {name: "@",   type: TXT,   value: "v=spf1 include:...",  ttl: null, priority: null}
 ```
 
-> **Note:** Only `value:` records are emitted in the Ansible output. Records that use `var:`
-> or `secret:` are **omitted** — Ansible does not perform secret injection. If you need
-> sensitive records via Ansible, source them from Vault or another secrets backend at playbook
-> runtime and merge them into the zone structure yourself.
+- `value:` records are written literally.
+- `var:` records are resolved from `environment.yaml` at build time and written as the resolved
+  string, same as Terraform. If the variable has no resolved value, the `value` key is omitted
+  from the record (rather than the record being silently blank) and a build message is emitted.
+- `secret:` records never have their value written to `strata_dns.yml` — instead their
+  coordinates are written to `strata_dns_secrets.yml` (see below).
+- `output_key:` records behave the same way — coordinates are written to `strata_dns_outputs.yml`
+  (see below) instead of `strata_dns.yml`.
+
+### Ansible — `strata_dns_secrets.yml`
+
+Only written when at least one record uses `secret:`. Contains record stubs keyed by
+`{record_name}_{record_type}`, mirroring Terraform's `dns_secret_records.auto.tfvars.json`, so
+playbooks can look up the actual secret value from the process environment at runtime —
+`AnsibleDeployer` already injects every resolved secret verbatim (unprefixed) into the
+`ansible-playbook` subprocess environment.
+
+```yaml
+strata_dns_secret_records:
+  haven_zones:
+    huybrechts.xyz:
+      "@_TXT":
+        name: "@"
+        type: TXT
+        secret_key: google_verify_token
+        ttl: null
+        priority: null
+```
+
+```yaml
+- name: Resolve DNS secret record values
+  set_fact:
+    dns_secret_values: >-
+      {{ dns_secret_values | default({}) | combine({
+        item.key: lookup('env', item.value.secret_key)
+      }) }}
+  loop: "{{ strata_dns_secret_records.haven_zones['huybrechts.xyz'] | dict2items }}"
+```
+
+### Ansible — `strata_dns_outputs.yml`
+
+Only written when at least one record uses `output_key:`. Contains record stubs keyed by
+`{record_name}_{record_type}`, structurally identical to `strata_dns_secrets.yml` but carrying
+`output_key` instead of `secret_key`. Every resolved stage output is already injected verbatim
+(unprefixed) into the `ansible-playbook` subprocess environment by `AnsibleDeployer`, so a
+playbook resolves the value the same way it resolves secrets:
+
+```yaml
+strata_dns_output_records:
+  haven_zones:
+    huybrechts.xyz:
+      "@_A":
+        name: "@"
+        type: A
+        output_key: hearth_public_ip
+        ttl: null
+        priority: null
+```
+
+```yaml
+- name: Resolve DNS output record values
+  set_fact:
+    dns_output_values: >-
+      {{ dns_output_values | default({}) | combine({
+        item.key: lookup('env', item.value.output_key)
+      }) }}
+  loop: "{{ strata_dns_output_records.haven_zones['huybrechts.xyz'] | dict2items }}"
+```
+
+This only resolves within a single `strata deploy run` invocation where the DNS stage depends on
+(and runs after) the stage that produced the output.
 
 Reference the variable in a playbook task:
 
@@ -357,15 +489,15 @@ Reference the variable in a playbook task:
 
 ## Validation Rules
 
-| Rule                                                                      | Enforcement           |
-| ------------------------------------------------------------------------- | --------------------- |
-| `meta.name` must match `^[a-z][a-z0-9_]*$`                                | Pydantic / model load |
-| Each `dns_zones` entry name must be unique in the workspace               | Workspace validator   |
-| `priority` is only valid on MX and SRV records                            | Model validator       |
-| `type` must be one of the nine supported record types                     | Pydantic / model load |
-| CNAME must not be used at the zone apex (`name: "@"`)                     | Model validator       |
-| Exactly one of `value`, `var`, or `secret` must be set per record         | Model validator       |
-| Any key used in `var:` or `secret:` must be declared in `spec.references` | Model validator       |
+| Rule                                                                                                | Enforcement           |
+| --------------------------------------------------------------------------------------------------- | --------------------- |
+| `meta.name` must match `^[a-z][a-z0-9_]*$`                                                          | Pydantic / model load |
+| Each `dns_zones` entry name must be unique in the workspace                                         | Workspace validator   |
+| `priority` is only valid on MX and SRV records                                                      | Model validator       |
+| `type` must be one of the nine supported record types                                               | Pydantic / model load |
+| CNAME must not be used at the zone apex (`name: "@"`)                                               | Model validator       |
+| Exactly one of `value`, `var`, `secret`, or `output_key` must be set per record                     | Model validator       |
+| Any key used in `var:` or `secret:` must be declared in `spec.references` (`output_key:` is exempt) | Model validator       |
 
 ## Best Practices
 

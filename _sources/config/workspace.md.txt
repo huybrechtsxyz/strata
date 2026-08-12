@@ -71,7 +71,9 @@ provisioners:
     source:
       repository: <repository_name>    # optional — omit for single-repo workspaces
       source_path: <path>              # path within the repo (or workspace root when repository is absent)
+      reference: <git_ref>             # optional: override workspace remote default (branch, tag, commit SHA)
       target_path: <path>              # optional: path in the build output
+    inputs_from: []                    # optional: output passing from upstream provisioners (see Output Dependencies)
     backend:                           # Terraform only — state storage
       type: terraform_cloud | azurerm | s3 | ...
       configuration: {}
@@ -178,6 +180,18 @@ output:
   script: scripts/build_tfvars.py   # script receives STRATA_PROVISIONER too
 ```
 
+**Git reference pinning** — override the workspace remote's default reference per provisioner:
+
+```yaml
+provisioners:
+  - name: platform_baseline
+    provisioner: terraform
+    source:
+      repository: platform-modules
+      source_path: terraform
+      reference: v1.4.0        # pins this provisioner to v1.4.0 (overrides remote default)
+```
+
 **Single-repo form** — when IaC lives inside the workspace itself, omit `repository` and
 use `source_path` alone. strata resolves the path relative to the workspace root:
 
@@ -200,12 +214,102 @@ provisioners:
       source_path: deploy/terraform
 ```
 
+### Output Dependencies
+
+Team-owned provisioners can declare dependencies on outputs from upstream provisioners.
+This enables multi-team deployments where the platform baseline outputs are passed to team modules.
+
+```yaml
+provisioners:
+  - name: platform_baseline
+    provisioner: terraform
+    source:
+      repository: platform-modules
+      source_path: terraform/baseline
+      reference: v1.4.0
+
+  - name: team_module
+    provisioner: terraform
+    source:
+      repository: team-modules
+      source_path: terraform/team-features
+      reference: main
+    inputs_from:
+      - provisioner: platform_baseline  # explicit dependency
+        mode: prefix                     # prefix all outputs: "baseline_subnet_id", etc.
+```
+
+**`inputs_from` modes:**
+
+| Mode      | Behavior                                                                      |
+| --------- | ----------------------------------------------------------------------------- |
+| `mapping` | Rename specific outputs: `{ vpc_id: baseline_vpc_id, subnet_id: subnet }`     |
+| `prefix`  | Add prefix to all outputs: `baseline_` → `baseline_vpc_id`, `baseline_subnet` |
+| `select`  | Allowlist specific keys: `["vpc_id", "subnet_id"]` (others discarded)         |
+
+**Outputs are injected at deploy time** — the downstream provisioner receives them as Terraform variables.
+Cycles are detected at build time and cause an error.
+
 ### Provisioner types
 
 | Type        | Tool             | Deployer            | Stage types that activate it         |
 | ----------- | ---------------- | ------------------- | ------------------------------------ |
 | `terraform` | Terraform CLI    | `TerraformDeployer` | `infrastructure`, `terraform`        |
 | `ansible`   | ansible-playbook | `AnsibleDeployer`   | `configure`, `initialize`, `ansible` |
+
+## Resources
+
+Workspace-level resource references that participate in topology wiring. Each resource either points to a resource configuration file or is marked as provisioner-managed (resource details defined entirely in Terraform/Ansible).
+
+```yaml
+resources:
+  # Traditional: strata loads and validates a resource spec file
+  - name: <resource_name>
+    file: <resource_path>              # Path to resource configuration YAML
+    description: "Optional documentation"
+    enabled: true                      # Optional: default true
+    condition: "{{ environment }} == production"  # Optional: conditional inclusion
+    role: manager                      # Optional: role name (e.g. manager, worker, api)
+    count: 1                           # Optional: number of instances (1-100, default 1)
+    depends_on: []                     # Optional: resource names this depends on
+    references: {}                     # Optional: cross-resource value references
+    firewalls: []                      # Optional: firewall names to attach
+    subnet: network_name/subnet_name   # Optional: subnet reference
+    configuration: {}                  # Optional: workspace-specific config overrides
+    custom: {}                         # Optional: custom key-value data
+    modules: []                        # Optional: code/app references
+    labels: {}                         # Optional: classification key-value pairs
+    tags: []                           # Optional: categorization tags
+
+  # New: provisioner-managed resource (no file required)
+  - name: <resource_name>
+    managed_by: provisioner            # Indicates provisioner fully manages this resource
+    description: "Optional documentation"
+    enabled: true                      # Optional: default true
+    role: manager                      # Optional: role name
+    count: 1                           # Optional: number of instances
+```
+
+**`managed_by` values:**
+
+| Value         | Meaning                                                                              |
+| ------------- | ------------------------------------------------------------------------------------ |
+| (not set)     | Resource definition must be in `file:`; strata loads and validates the resource spec |
+| `provisioner` | Provisioner (Terraform/Ansible) fully defines the resource; no resource file needed  |
+
+**Validation rules:**
+
+- **XOR constraint:** A resource must have either a `file` reference OR `managed_by` set, but never both.
+- **Constraint violation examples:**
+  - ❌ No file and no `managed_by` → validation error: "must either specify a 'file' path or set 'managed_by: provisioner'"
+  - ❌ Both `file` and `managed_by` → validation error: "cannot both specify a 'file' and 'managed_by'"
+  - ✅ `file: @config/resources/vm.yaml` → valid (traditional approach)
+  - ✅ `managed_by: provisioner` → valid (provisioner-managed)
+
+**Use cases:**
+
+- **Provisioner-managed resources** are ideal for multi-tenant IaC deployments where infrastructure details (VMs, databases, networks) are entirely defined in Terraform/Ansible modules. The workspace YAML only needs to declare the resource name for topology participation, without duplicating resource specs.
+- **File-based resources** are useful when strata needs to validate resource properties, count cross-references, or when resources are portable across multiple provisioners.
 
 ## Topology
 

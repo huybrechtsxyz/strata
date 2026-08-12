@@ -292,6 +292,169 @@ spec:
 
 ---
 
+## Structured Variable Types
+
+> **Introduced:** v1.4.0 — Team-owned Terraform modules with structured inputs
+
+Variables support native YAML data types (`object`, `list`, `map`, etc.) in addition to simple strings. 
+This enables complex Terraform inputs without JSON string escaping.
+
+### Declaring structured types
+
+```yaml
+variables:
+  - key: REPLICA_CONFIG
+    type: object          # native YAML mapping
+    store: constant
+    value:
+      min_replicas: 2
+      max_replicas: 5
+      zones: ["us-east-1a", "us-east-1b"]
+
+  - key: AVAILABILITY_ZONES
+    type: list            # native YAML sequence
+    store: constant
+    value:
+      - us-east-1a
+      - us-east-1b
+      - us-east-1c
+
+  - key: FEATURE_MATRIX
+    type: map             # string-keyed mapping
+    store: constant
+    value:
+      autoscaling: "true"
+      backup_retention: "30"
+      encryption_enabled: "true"
+
+  - key: REPLICA_COUNT
+    type: number          # integer or float
+    store: constant
+    value: 3
+
+  - key: ENABLE_CACHE
+    type: bool            # boolean
+    store: constant
+    value: true
+```
+
+### Emission to Terraform
+
+When `type` is declared, variables are emitted as native JSON types in `.auto.tfvars.json`:
+
+**Without type (string, default):**
+```json
+{
+  "REPLICA_CONFIG": "{\"min_replicas\": 2, \"max_replicas\": 5}"
+}
+```
+Terraform receives a string; you must `jsondecode()` it in your module.
+
+**With type (object):**
+```json
+{
+  "REPLICA_CONFIG": {
+    "min_replicas": 2,
+    "max_replicas": 5,
+    "zones": ["us-east-1a", "us-east-1b"]
+  }
+}
+```
+Terraform receives a native object; you can use it directly in your module variables.
+
+### Backward compatibility
+
+Omitting `type` defaults to string (legacy behavior). Existing deployments continue to work unchanged.
+
+---
+
+## Input Validation
+
+> **Introduced:** v1.4.0 — Catch typos and missing Terraform variables before deploy
+
+Strata validates that declared variables match the Terraform module's expected inputs.
+This catches:
+
+- **Typos** — `replicas_count` when `replica_count` is declared in `variables.tf`
+- **Missing required variables** — When a Terraform variable has no default but isn't provided
+- **Extra variables** — When you've declared a variable that Terraform doesn't use (usually a typo)
+
+### Terraform input validation
+
+Run validation during the build phase:
+
+```bash
+strata build run -f deployments/prod.yaml
+```
+
+Strata automatically:
+
+1. Parses your module's `variables.tf` file (via HCL2 parsing)
+2. Extracts declared variable names, types, and defaults
+3. Cross-checks against your environment/workspace variables
+4. Reports discrepancies with fuzzy-match suggestions
+
+**Example error output:**
+
+```
+ERROR: Invalid input variable 'replicas_count' in workspace.yaml
+  Module expects 'replica_count' (type: number, default: 3)
+  Did you mean: replica_count?
+  Fix: Update workspace.yaml variable key from 'replicas_count' to 'replica_count'
+
+WARNING: Required variable 'db_host' not supplied
+  Module expects 'db_host' (type: string, no default)
+  Add to workspace.variables or environment.variables:
+    - key: DB_HOST
+      type: string
+      store: constant
+      value: "your-database-host"
+```
+
+### Helm input validation
+
+For local Helm charts, strata validates `values.yaml` keys:
+
+```bash
+strata build run -f deployments/prod.yaml
+```
+
+Strata checks:
+
+1. Top-level keys in `module.spec.configuration` against chart's `values.yaml` top-level keys
+2. One-level-deep nesting (e.g., `config.replicas`)
+3. Reports unknown keys with suggestions
+
+**Example:**
+
+```yaml
+# Workspace module config
+spec:
+  modules:
+    - name: my_api
+      configuration:
+        image_version: "2.0.0"      # OK - exists in values.yaml
+        replica_count: 3             # OK - exists in values.yaml
+        cache_enabled: true          # WARNING - not in chart's values.yaml
+```
+
+**Output:**
+
+```
+WARNING: Configuration key 'cache_enabled' not found in chart values.yaml
+  Chart supports: image_version, replica_count, environment, ...
+  Did you mean: caching_enabled?
+```
+
+### Skipped validations
+
+Strata skips validation for:
+- Remote/private Helm charts (validation only works for local charts)
+- Variables injected via `inputs_from` (output mapping)
+- Strata-managed keys (e.g., `strata_workspace`, `strata_environment`)
+
+---
+
 ## Practical Examples
 
 ### Example 1: Multi-environment database credentials
