@@ -1,0 +1,95 @@
+# syntax=docker/dockerfile:1
+
+# ============================================================
+# strata state-service server image (ADR-0065)
+#
+# This is a SEPARATE image from Dockerfile.cli: `strata serve run` is a
+# long-running foreground network service (not a run-once CLI invocation) and
+# needs the optional `server` dependency group (fastapi/uvicorn/sqlalchemy)
+# plus, here, the Postgres and MSSQL driver extras.
+#
+# Bind-safety (src/strata/server/config.py `validate_bind()`): the server
+# refuses to start on a non-loopback bind without TLS. This image keeps the
+# default `--host 127.0.0.1` (loopback) and does NOT terminate TLS itself —
+# put a reverse proxy in front that shares this container's network namespace
+# (same Kubernetes pod, or `docker run --network container:<this>`) so the
+# proxy can reach 127.0.0.1:8443 while still terminating TLS externally.
+# Alternatively, pass --tls-cert/--tls-key (and --host 0.0.0.0) to let the
+# server terminate TLS itself.
+# ============================================================
+
+# ============================================================
+# Stage 1 – builder: install dependencies with uv
+# ============================================================
+FROM python:3.13-slim AS builder
+
+# unixodbc-dev is needed to build/link pyodbc (server-mssql extra) from source
+# if no prebuilt wheel matches this Python/arch; not needed at runtime.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential unixodbc-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /app
+
+# Copy manifest and version first for layer caching
+COPY pyproject.toml VERSION.txt ./
+COPY src/ src/
+
+# Install production dependencies, including the server + DB driver extras,
+# into an in-project .venv
+RUN uv sync --no-dev --no-editable --extra server --extra server-postgres --extra server-mssql
+
+# ============================================================
+# Stage 2 – runtime: lean image with only the installed venv
+# ============================================================
+FROM python:3.13-slim
+
+ARG VERSION=dev
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH" \
+    APP_VERSION=${VERSION}
+
+LABEL org.opencontainers.image.title="strata-server" \
+      org.opencontainers.image.description="Strata state-service API server (ADR-0065)" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.licenses="AGPL-3.0-or-later" \
+      org.opencontainers.image.source="https://github.com/huybrechtsxyz/strata"
+
+# Runtime native libraries:
+#  - curl     : used by the HEALTHCHECK below
+#  - unixodbc : ODBC driver manager required by pyodbc (server-mssql extra)
+#  - msodbcsql18 : Microsoft's official SQL Server ODBC driver (proprietary EULA,
+#    accepted non-interactively via ACCEPT_EULA=Y below)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl gnupg \
+    && curl -sSL -O https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb \
+    && dpkg -i packages-microsoft-prod.deb \
+    && rm packages-microsoft-prod.deb \
+    && apt-get update \
+    && ACCEPT_EULA=Y apt-get install -y --no-install-recommends unixodbc msodbcsql18 \
+    && apt-get purge -y --auto-remove gnupg \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy the pre-built virtual environment from the builder stage
+COPY --from=builder /app/.venv /app/.venv
+
+# Run as non-root
+RUN useradd --no-create-home --shell /bin/bash appuser
+USER appuser
+
+EXPOSE 8443
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:8443/healthz || exit 1
+
+# Loopback bind by default — safe without TLS (see header note above).
+# Override --db-url via STRATA_SERVE_DB_URL to point at Postgres/MSSQL.
+ENTRYPOINT ["strata", "serve", "run"]
+CMD ["--host", "127.0.0.1", "--port", "8443"]

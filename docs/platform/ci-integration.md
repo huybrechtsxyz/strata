@@ -231,6 +231,58 @@ stages:
 
 ## Tips
 
+### Resolved-model cache for fast multi-deployment pipelines
+
+Every `strata build` and `strata deploy` command uses a SQLite cache (`.strata/cache.db`) to avoid redundant variable/feature/environment resolution and build artifact regeneration when configuration hasn't changed.
+
+Cache keys are based on deployment + environment + tenant YAML content hashes — changes invalidate automatically. Use `--refresh-cache` to force a rebuild, or `--no-cache` to bypass entirely.
+
+**Three cache kinds:**
+
+| Kind                   | What's cached                                                      | Used by                                                |
+| ---------------------- | ------------------------------------------------------------------ | ------------------------------------------------------ |
+| `deployment`           | Build artifacts (Terraform `.tfvars.json`, Helm values, etc.)      | `strata build run/plan`; `strata deploy run/plan`      |
+| `resolved_environment` | Merged environment model (variables/secrets/features declarations) | `strata deploy show`, `strata values *`                |
+| `resolved_values`      | Resolved variable and feature flag values (excludes secrets)       | `strata deploy show`, `strata values list/get/resolve` |
+
+**CI Pipeline Benefits:**
+
+1. **Warm the cache once** — First job (e.g. validation) writes cache entries
+2. **Subsequent jobs reuse** — Deploy and inspection jobs hit cache, skip store queries
+3. **Automatic invalidation** — YAML content hash changes = cache miss = fresh resolve
+4. **Optional refresh** — Use `--refresh-cache` in cleanup/refresh jobs if you need fresh secret values despite no config change
+
+**Example multi-stage GitHub Actions workflow:**
+
+```yaml
+jobs:
+  validate-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: strata validate -f deploy/deploy-prd.yaml --deep
+      - run: strata build run -f deploy/deploy-prd.yaml
+      # Cache is now warm for this deployment
+
+  deploy:
+    needs: validate-and-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # No --refresh-cache needed — same YAML hash hits cache from validate-and-build
+      - run: strata deploy run -f deploy/deploy-prd.yaml --force
+
+  inspect:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Cache hit — no store queries, instant values lookup
+      - run: strata values list -f deploy/deploy-prd.yaml --output json
+```
+
+For details, see [Caching](../guides/caching.md).
+
 ### Cache uv packages
 
 Speed up pipeline runs by caching the uv tool directory:
