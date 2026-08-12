@@ -18,6 +18,9 @@ ehthumbs.db
 *.key
 *.secret.yaml
 *.secrets.yaml
+
+# SQLite databases (state service, cache)
+*.sqlite3
 secrets/
 
 # Logs

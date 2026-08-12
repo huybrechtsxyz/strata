@@ -21,7 +21,7 @@
     A non-loopback host requires TLS (ADR-0065 Step 2.1) — not exposed by this
     script; use `strata serve run` directly with `--tls-cert`/`--tls-key` for that.
 .PARAMETER DbUrl
-    Event-store connection URL. Default: sqlite:///./strata-state.db.
+    Event-store connection URL. Default: sqlite:///.strata/state-service.db.
 .PARAMETER AdminToken
     Admin bearer token, enabling the /v1/tokens management routes. Omit to
     leave those routes unregistered (the dashboard doesn't need them today).
@@ -40,7 +40,7 @@
 param(
     [int]$Port = 8443,
     [string]$BindHost = "127.0.0.1",
-    [string]$DbUrl = "sqlite:///./strata-state.db",
+    [string]$DbUrl = "sqlite:///.strata/state-service.db",
     [string]$AdminToken,
     [switch]$NoWebapp,
     [switch]$NoMigrate

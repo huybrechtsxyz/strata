@@ -12,6 +12,9 @@ build/
 # Derived caches (model, cost, ai) — rebuildable from committed YAML, never commit
 cache/
 
+# SQLite databases (state service) — local runtime data, never commit
+*.db
+
 # Log output
 logs/
 *.log

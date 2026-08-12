@@ -2147,13 +2147,13 @@ strata serve run [--host HOST] [--port PORT] [--db-url URL] [--tls-cert PATH] [-
 
 Start the state service. Runs in the foreground; lifecycle (start, stop, restart) is managed by whatever launched it (container runtime, systemd, `Ctrl+C`).
 
-| Option            | Env Var                 | Default                       | Description                                            |
-| ----------------- | ----------------------- | ----------------------------- | ------------------------------------------------------ |
-| `--host HOST`     | `STRATA_SERVE_HOST`     | `127.0.0.1`                   | Bind address                                           |
-| `--port PORT`     | `STRATA_SERVE_PORT`     | `8000`                        | Bind port                                              |
-| `--db-url URL`    | `STRATA_SERVE_DB_URL`   | `sqlite:///./strata-state.db` | Database URL (SQLite, PostgreSQL, SQL Server)          |
-| `--tls-cert PATH` | `STRATA_SERVE_TLS_CERT` | —                             | TLS certificate file (required for non-loopback binds) |
-| `--tls-key PATH`  | `STRATA_SERVE_TLS_KEY`  | —                             | TLS private key file (required for non-loopback binds) |
+| Option            | Env Var                 | Default                              | Description                                            |
+| ----------------- | ----------------------- | ------------------------------------ | ------------------------------------------------------ |
+| `--host HOST`     | `STRATA_SERVE_HOST`     | `127.0.0.1`                          | Bind address                                           |
+| `--port PORT`     | `STRATA_SERVE_PORT`     | `8000`                               | Bind port                                              |
+| `--db-url URL`    | `STRATA_SERVE_DB_URL`   | `sqlite:///.strata/state-service.db` | Database URL (SQLite, PostgreSQL, SQL Server)          |
+| `--tls-cert PATH` | `STRATA_SERVE_TLS_CERT` | —                                    | TLS certificate file (required for non-loopback binds) |
+| `--tls-key PATH`  | `STRATA_SERVE_TLS_KEY`  | —                                    | TLS private key file (required for non-loopback binds) |
 
 **TLS requirement:** Binding to any address other than `127.0.0.1`, `::1`, or `localhost` mandates TLS — the server refuses to start insecurely.
 
@@ -2186,9 +2186,9 @@ strata serve migrate [--db-url URL] [standard options]
 
 Initialize the database schema. Run once before the first `serve run`, or re-run after upgrading strata. Idempotent — re-running is safe.
 
-| Option         | Env Var               | Default                       | Description  |
-| -------------- | --------------------- | ----------------------------- | ------------ |
-| `--db-url URL` | `STRATA_SERVE_DB_URL` | `sqlite:///./strata-state.db` | Database URL |
+| Option         | Env Var               | Default                              | Description  |
+| -------------- | --------------------- | ------------------------------------ | ------------ |
+| `--db-url URL` | `STRATA_SERVE_DB_URL` | `sqlite:///.strata/state-service.db` | Database URL |
 
 Creates the `events` table if it doesn't exist; does nothing if it already does.
 

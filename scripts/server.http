@@ -4,8 +4,8 @@
 # requests inline via the "Send Request" CodeLens.
 #
 # Start the server first (loopback bind, no TLS required):
-#   uv run strata serve migrate --db-url sqlite:///./strata-state.db
-#   uv run strata serve run --db-url sqlite:///./strata-state.db --admin-token dev-admin-token
+#   uv run strata serve migrate --db-url sqlite:///.strata/state-service.db
+#   uv run strata serve run --db-url sqlite:///.strata/state-service.db --admin-token dev-admin-token
 #
 # @host/@port/@adminToken below must match the flags/envvars used to start the
 # server. Ingest token is created by the "Create ingest token" request further
