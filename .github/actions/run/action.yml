@@ -1,0 +1,74 @@
+# ===============================================================================
+# Action Name  : run
+# Description  : Run any strata command. The extensibility escape hatch — use
+#                this for subcommands that don't have a dedicated composite
+#                action yet (e.g. schema export, secret generate, sln doctor).
+# ===============================================================================
+
+name: "Run"
+description: "Run any strata command. Use this for commands without a dedicated action."
+
+branding:
+  icon: "terminal"
+  color: "gray"
+
+inputs:
+  command:
+    description: "The strata command and arguments to run (e.g. 'schema get deployment')."
+    required: true
+  work_path:
+    description: "Workspace root directory."
+    required: false
+    default: "."
+  output_format:
+    description: "Output format: json, text, or console. Leave empty to omit --output."
+    required: false
+    default: "json"
+
+outputs:
+  exit_code:
+    description: "Numeric exit code."
+    value: ${{ steps.run.outputs.exit_code }}
+  result:
+    description: "Raw stdout from the command."
+    value: ${{ steps.run.outputs.result }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run strata ${{ inputs.command }}
+      id: run
+      shell: bash
+      env:
+        COMMAND: ${{ inputs.command }}
+        WORK_PATH: ${{ inputs.work_path }}
+        OUTPUT_FORMAT: ${{ inputs.output_format }}
+      run: |
+        OUTPUT_FLAG=""
+        if [ -n "$OUTPUT_FORMAT" ]; then
+          OUTPUT_FLAG="--output $OUTPUT_FORMAT"
+        fi
+
+        set +e
+        # shellcheck disable=SC2086
+        RESULT=$(strata $COMMAND --work-path "$WORK_PATH" $OUTPUT_FLAG 2>&1)
+        EXIT_CODE=$?
+        set -e
+
+        {
+          echo "exit_code=${EXIT_CODE}"
+          echo "result<<STRATA_EOF"
+          echo "${RESULT}"
+          echo "STRATA_EOF"
+        } >> "$GITHUB_OUTPUT"
+
+        {
+          echo "### strata ${COMMAND}"
+          if [ "${EXIT_CODE}" -eq 0 ]; then
+            echo "✅ **Success**"
+          else
+            echo "❌ **Failed** (exit code ${EXIT_CODE})"
+          fi
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        exit ${EXIT_CODE}

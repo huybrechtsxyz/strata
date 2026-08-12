@@ -13,7 +13,7 @@
                                     tag to receive non-breaking updates automatically
                                     without changing their workflow refs.
 
-    The @v0 refs inside deploy-workspace.yml and all composite actions resolve via the
+    The @v0 refs inside strata-deploy-workspace.yml and all composite actions resolve via the
     major tag — no file edits are needed on each release.
 .PARAMETER Version
     The version number to release (e.g. 0.0.5). Must be in X.Y.Z format.
@@ -156,7 +156,7 @@ $pkgContent = Get-Content $extensionPackageJson -Raw
 $pkgContent = $pkgContent -replace '("version"\s*:\s*")[^"]*(")', "`${1}$Version`${2}"
 Set-Content -Path $extensionPackageJson -Value $pkgContent -NoNewline
 
-# 3. Pin all @main action refs in deploy-workspace.yml to the release tag
+# 3. Pin all @main action refs in strata-deploy-workspace.yml to the release tag
 # 4. Stage and commit
 git add VERSION.txt src/vscode/package.json
 git commit -m "chore: release $tag"

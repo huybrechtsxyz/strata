@@ -53,8 +53,8 @@ jobs:
         uses: actions/checkout@v7
 
       # Install Python and uv, sync dependencies
-      - name: Install Python
-        uses: ./.github/actions/install-python
+      - name: Setup Python
+        uses: ./.github/actions/setup-python
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -93,8 +93,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Install Python
-        uses: ./.github/actions/install-python
+      - name: Setup Python
+        uses: ./.github/actions/setup-python
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -121,8 +121,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Install Python
-        uses: ./.github/actions/install-python
+      - name: Setup Python
+        uses: ./.github/actions/setup-python
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 

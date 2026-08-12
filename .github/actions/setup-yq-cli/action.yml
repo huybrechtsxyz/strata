@@ -1,0 +1,34 @@
+# ==============================================================================
+# Action name   : setup-yq
+# Description   : GitHub Action to install the 'yq' command-line tool (Mike Farah version) for YAML processing in CI workflows.
+# ==============================================================================
+
+name: Setup YQ
+description: Install YQ (Mike Farah version)
+
+branding:
+  icon: "code"
+  color: "yellow"
+
+inputs:
+  yq-version:
+    description: "yq version to install (e.g. 'v4.44.6'). Defaults to a known stable version."
+    required: false
+    default: "v4.44.6"
+
+runs:
+  using: composite
+  steps:
+    # Download the latest yq binary from GitHub releases
+    - name: Download YQ
+      shell: bash
+      env:
+        _YQ_VERSION: ${{ inputs.yq-version }}
+      run: |
+        curl -L "https://github.com/mikefarah/yq/releases/download/${_YQ_VERSION}/yq_linux_amd64" -o /usr/local/bin/yq
+        chmod +x /usr/local/bin/yq
+
+    # Verify the installed yq version to confirm installation success
+    - name: Verify YQ
+      shell: bash
+      run: yq --version

@@ -1,0 +1,45 @@
+# ===============================================================================
+# Action Name  : setup-bitwarden
+# Description  : Install and authenticate the Bitwarden Secrets Manager CLI
+#                (bws). Sets BWS_ACCESS_TOKEN for subsequent steps.
+# ===============================================================================
+
+name: "Setup Bitwarden"
+description: "Install and authenticate the Bitwarden Secrets Manager CLI (bws)."
+
+branding:
+  icon: "shield"
+  color: "green"
+
+inputs:
+  bitwarden_token:
+    description: "Bitwarden Secrets Manager access token."
+    required: true
+  bws-version:
+    description: "bws CLI version to install."
+    required: false
+    default: "2.0.0"
+
+runs:
+  using: composite
+  steps:
+    - name: Install Bitwarden Secrets Manager CLI
+      shell: bash
+      env:
+        BWS_VERSION: ${{ inputs.bws-version }}
+      run: |
+        curl -LO "https://github.com/bitwarden/sdk-sm/releases/download/bws-v${BWS_VERSION}/bws-x86_64-unknown-linux-gnu-${BWS_VERSION}.zip"
+        unzip "bws-x86_64-unknown-linux-gnu-${BWS_VERSION}.zip"
+        sudo mv bws /usr/local/bin/
+        bws --version
+
+    - name: Authenticate with Bitwarden Secrets Manager
+      shell: bash
+      env:
+        _BITWARDEN_TOKEN: ${{ inputs.bitwarden_token }}
+      run: |
+        echo "::add-mask::$_BITWARDEN_TOKEN"
+        printf 'BWS_ACCESS_TOKEN<<__BW_DELIM__\n%s\n__BW_DELIM__\n' "$_BITWARDEN_TOKEN" >> "$GITHUB_ENV"
+
+        # Verify authentication works before handing control back to the caller
+        BWS_ACCESS_TOKEN="$_BITWARDEN_TOKEN" bws run -- echo "[+] Bitwarden Secrets Manager authenticated"

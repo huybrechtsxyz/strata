@@ -1,6 +1,17 @@
-name: "Infrastructure Drift Detection"
+# ===============================================================================
+# Action Name  : drift-check
+# Description  : Detect infrastructure drift between Terraform state and the
+#                declared configuration. Self-contained — installs Python and
+#                strata itself (does not depend on setup-strata) so it can be
+#                used standalone in scheduled/nightly workflows.
+# ===============================================================================
+
+name: "Drift Check"
 description: "Detect infrastructure drift between Terraform state and declared configuration"
-author: "huybrechtsxyz"
+
+branding:
+  icon: "alert-triangle"
+  color: "orange"
 
 inputs:
   deployment:
@@ -28,11 +39,11 @@ inputs:
     default: ""
 
 outputs:
-  exit-code:
+  exit_code:
     description: "Exit code from drift detection (0 = clean, 3 = drift found)"
     value: ${{ steps.drift.outputs.exit_code }}
 
-  has-drift:
+  has_drift:
     description: "Boolean: true if drift detected above severity threshold"
     value: ${{ steps.drift.outputs.has_drift }}
 
