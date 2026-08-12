@@ -1,6 +1,6 @@
 from datetime import datetime as _dt
 from datetime import timezone as _tz
-from typing import Callable, List, Optional
+from typing import TYPE_CHECKING, Callable, List, Optional
 
 import click
 
@@ -21,6 +21,9 @@ from strata.models.deployment_manifest_model import (
     ManifestOutputsReferenceModel,
 )
 from strata.models.deployment_model import DeploymentStageModel
+
+if TYPE_CHECKING:
+    from strata.services.deployment_service import DeploymentService
 
 
 def _parse_ai_risk(content: str) -> tuple:
@@ -974,11 +977,13 @@ class RunDeployCommand(BaseDeployCommand):
         except Exception as exc:
             self.logger.debug("workitem_siem_forward_error", event_name=event_name, error=str(exc))
 
-    def _load_related_services(self) -> bool:
+    def _load_related_services(
+        self, deployment_service: Optional["DeploymentService"] = None, repo_map: Optional[dict[str, str]] = None
+    ) -> bool:
         """Services are already loaded by BaseDeployCommand._before_execute."""
         return True
 
-    def _resolve_values(self) -> bool:
+    def _resolve_values(self, strict: bool = False) -> bool:
         """Resolve variables, secrets, and feature flags from the environment.
 
         Populates ``self._resolved_values`` which is later passed to the
