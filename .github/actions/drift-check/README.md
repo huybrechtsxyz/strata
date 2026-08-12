@@ -44,7 +44,7 @@ jobs:
 
       # Optionally post results to Slack
       - name: Notify Slack on drift
-        if: steps.drift.outputs.has-drift == '1'
+        if: steps.drift.outputs.has_drift == '1'
         uses: slackapi/slack-github-action@v1
         with:
           payload: |
@@ -78,8 +78,8 @@ jobs:
 
 | Output      | Description                                          |
 | ----------- | ---------------------------------------------------- |
-| `exit-code` | Exit code: `0` = clean, `3` = drift found            |
-| `has-drift` | Boolean: `1` if drift above threshold, `0` otherwise |
+| `exit_code` | Exit code: `0` = clean, `3` = drift found            |
+| `has_drift` | Boolean: `1` if drift above threshold, `0` otherwise |
 | `total`     | Total number of drift entries                        |
 | `critical`  | Number of critical-severity entries                  |
 | `high`      | Number of high-severity entries                      |
@@ -142,7 +142,7 @@ steps:
     run: |
       echo "Checked ${{ matrix.deployment }}"
       echo "Drift entries: ${{ steps.drift.outputs.total }}"
-      if [ "${{ steps.drift.outputs.exit-code }}" != "0" ]; then
+      if [ "${{ steps.drift.outputs.exit_code }}" != "0" ]; then
         echo "::warning::Drift detected"
       fi
 ```

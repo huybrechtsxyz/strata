@@ -3,7 +3,7 @@
 # Description   : GitHub Action to install the 'yq' command-line tool (Mike Farah version) for YAML processing in CI workflows.
 # ==============================================================================
 
-name: Get YQ CLI
+name: Setup YQ
 description: Install YQ (Mike Farah version)
 
 branding:

@@ -1,0 +1,71 @@
+# ===============================================================================
+# Action Name  : has-changes
+# Description  : Check whether a directory's contents have changed since the
+#                last successful run, by hashing its files and comparing
+#                against a cached key. Useful for skipping validate/build/
+#                deploy steps for unchanged deployments in a monorepo/fleet
+#                CI matrix — no strata CLI call involved, pure directory hash.
+# ===============================================================================
+
+name: "Has Changes"
+description: "Check whether a directory's contents have changed since the last successful run."
+
+branding:
+  icon: "git-branch"
+  color: "purple"
+
+inputs:
+  workspace_name:
+    description: "Name of the workspace (used to scope the cache key)."
+    required: true
+  hashfile:
+    description: "Path to write the computed hash to."
+    required: true
+  dir:
+    description: "Directory to check for changes."
+    required: true
+
+outputs:
+  changed:
+    description: "'true' if directory contents have changed since the last run, 'false' otherwise."
+    value: ${{ steps.set-output.outputs.changed }}
+
+runs:
+  using: composite
+  steps:
+    # Compute a stable hash of all files in the target directory.
+    - name: Compute Directory Hash
+      id: hash
+      shell: bash
+      env:
+        DIR: ${{ inputs.dir }}
+        HASHFILE: ${{ inputs.hashfile }}
+      run: |
+        HASH=$(find "$DIR" -type f | sort | xargs sha256sum 2>/dev/null | sha256sum | cut -d' ' -f1)
+        echo "value=$HASH" >> "$GITHUB_OUTPUT"
+        mkdir -p "$(dirname "$HASHFILE")"
+        echo "$HASH" > "$HASHFILE"
+
+    # Cache hit  = same hash seen before = no changes.
+    # Cache miss = new hash             = changes detected; cache is saved at job end.
+    - name: Restore Hash from Cache
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ inputs.hashfile }}
+        key: strata-hash-${{ inputs.workspace_name }}-${{ inputs.dir }}-${{ steps.hash.outputs.value }}
+
+    - name: Set Changed Output
+      id: set-output
+      shell: bash
+      env:
+        CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
+        DIR: ${{ inputs.dir }}
+      run: |
+        if [ "$CACHE_HIT" = "true" ]; then
+          echo "changed=false" >> "$GITHUB_OUTPUT"
+          echo "[*] No changes detected in $DIR"
+        else
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "[*] Changes detected in $DIR"
+        fi

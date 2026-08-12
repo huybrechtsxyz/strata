@@ -1,0 +1,92 @@
+# ===============================================================================
+# Action Name  : destroy-deployment
+# Description  : Tear down provisioned infrastructure for a deployment. Requires
+#                --force for a real destroy (non-interactive CI). Use with caution.
+# ===============================================================================
+
+name: "Destroy Deployment"
+description: "Tear down infrastructure for a deployment. Requires force=true for a real destroy."
+
+branding:
+  icon: "trash-2"
+  color: "red"
+
+inputs:
+  deployment_file:
+    description: "Path to the strata deployment YAML file."
+    required: true
+  stage:
+    description: "Limit destruction to a single deployment stage."
+    required: false
+    default: ""
+  force:
+    description: "Auto-approve destruction (required for a non-interactive/real destroy)."
+    required: false
+    default: "false"
+  dry_run:
+    description: "Run 'terraform plan -destroy' only — nothing is destroyed."
+    required: false
+    default: "true"
+  work_path:
+    description: "Workspace root directory."
+    required: false
+    default: "."
+
+outputs:
+  exit_code:
+    description: "Numeric exit code from strata deploy destroy."
+    value: ${{ steps.run.outputs.exit_code }}
+  result:
+    description: "Raw JSON output (the full strata response envelope)."
+    value: ${{ steps.run.outputs.result }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run strata deploy destroy
+      id: run
+      shell: bash
+      env:
+        DEPLOYMENT_FILE: ${{ inputs.deployment_file }}
+        STAGE: ${{ inputs.stage }}
+        FORCE: ${{ inputs.force }}
+        DRY_RUN: ${{ inputs.dry_run }}
+        WORK_PATH: ${{ inputs.work_path }}
+      run: |
+        STAGE_FLAG=""
+        if [ -n "$STAGE" ]; then
+          STAGE_FLAG="--stage $STAGE"
+        fi
+
+        FORCE_FLAG=""
+        if [ "$FORCE" = "true" ]; then
+          FORCE_FLAG="--force"
+        fi
+
+        DRY_RUN_FLAG=""
+        if [ "$DRY_RUN" = "true" ]; then
+          DRY_RUN_FLAG="--dry-run"
+        fi
+
+        set +e
+        RESULT=$(strata deploy destroy --file "$DEPLOYMENT_FILE" --work-path "$WORK_PATH" --output json $STAGE_FLAG $FORCE_FLAG $DRY_RUN_FLAG 2>&1)
+        EXIT_CODE=$?
+        set -e
+
+        {
+          echo "exit_code=${EXIT_CODE}"
+          echo "result<<STRATA_EOF"
+          echo "${RESULT}"
+          echo "STRATA_EOF"
+        } >> "$GITHUB_OUTPUT"
+
+        {
+          echo "### Strata Deploy Destroy"
+          if [ "${EXIT_CODE}" -eq 0 ]; then
+            echo "✅ **Destroy succeeded** (dry_run=${DRY_RUN}, force=${FORCE})"
+          else
+            echo "❌ **Destroy failed** (exit code ${EXIT_CODE})"
+          fi
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        exit ${EXIT_CODE}

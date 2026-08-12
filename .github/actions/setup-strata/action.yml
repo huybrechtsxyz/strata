@@ -55,8 +55,12 @@ runs:
           uv tool install --from .
         elif [ "$_STRATA_VERSION" = "latest" ]; then
           uv tool install xyz-strata
-        else
+        elif [[ "$_STRATA_VERSION" =~ ^(==|!=|>=|<=|~=|>|<) ]]; then
+          # Already a valid PEP 440 specifier (e.g. '>=2.0') — use as-is.
           uv tool install "xyz-strata${_STRATA_VERSION}"
+        else
+          # Bare version (e.g. '2.1.0') — pin to an exact match.
+          uv tool install "xyz-strata==${_STRATA_VERSION}"
         fi
 
     - name: Verify installation

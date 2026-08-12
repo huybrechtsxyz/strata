@@ -1,14 +1,7 @@
 # GitHub pull request integration
 
-- Status: proposed
+- Status: implemented — reusable workflow (`strata-validate-pr.yml`) published with exit-code mapping and `gh pr comment` integration; GitHub Enterprise Server support verified (`gh` CLI respects `GITHUB_API_URL` as expected)
 - Date: 2026-07-11 (revised 2026-08-12 — scoped to CLI exit codes + reusable workflow templates, not a GitHub App)
-
-## Remaining Work
-
-- Publish a reusable GitHub Actions workflow (`.github/workflows/strata-pr.yaml`) that pipeline owners can call from their own repos
-- Document exit-code-to-annotation mapping (exit 3 → PR failure, exit 0 → success)
-- Verify `GITHUB_API_URL` usage for GitHub Enterprise Server support
-- Add a "PR comment" example using `gh pr comment` with strata's JSON output
 
 ## Context and Problem Statement
 
@@ -40,7 +33,7 @@ A registered GitHub App with its own webhook endpoint, private key, and bot user
 
 ### Option B — Reusable GitHub Actions workflow + exit-code contract (chosen)
 
-Publish a callable workflow (`strata-pr.yaml`) that teams reference from their own repos. The workflow runs strata commands, interprets exit codes, and optionally posts PR comments using `gh pr comment`. Teams can copy, fork, or ignore it — strata's CLI contract (exit codes + JSON output) is the real interface, the workflow is just a recipe.
+Publish a callable workflow (`strata-validate-pr.yml`) that teams reference from their own repos. The workflow runs strata commands, interprets exit codes, and optionally posts PR comments using `gh pr comment`. Teams can copy, fork, or ignore it — strata's CLI contract (exit codes + JSON output) is the real interface, the workflow is just a recipe.
 
 **Chosen because:**
 
@@ -67,7 +60,7 @@ strata's contribution to PR integration is:
 
 1. **Clear exit codes** — already implemented (exit 3 = validation failure, exit 0 = success)
 2. **Structured JSON output** — already implemented (`--output json` on every command)
-3. **A reusable workflow template** — a `.github/workflows/strata-pr.yaml` that teams `uses:` from their repos
+3. **A reusable workflow template** — a `.github/workflows/strata-validate-pr.yml` that teams `uses:` from their repos
 4. **Documentation** — showing how to wire exit codes to PR checks, `gh pr comment` with plan output, and optional merge-blocking
 
 strata does NOT:
@@ -91,7 +84,7 @@ Teams can choose to make exit 3 a **warning** (comment only, don't block) or a *
 ### Reusable workflow design
 
 ```yaml
-# .github/workflows/strata-pr.yaml (published by strata, called by consumer repos)
+# .github/workflows/strata-validate-pr.yml (published by strata, called by consumer repos)
 name: strata PR validation
 
 on:
@@ -219,7 +212,7 @@ on:
 
 jobs:
   strata:
-    uses: huybrechtsxyz/strata/.github/workflows/strata-pr.yaml@main
+    uses: huybrechtsxyz/strata/.github/workflows/strata-validate-pr.yml@main
     with:
       deployment-file: deploy/deploy-prd.yaml
       post-comment: true

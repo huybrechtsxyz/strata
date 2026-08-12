@@ -1,0 +1,206 @@
+# ==============================================================================
+# Workflow Name : Validate PR
+# Description   : Reusable workflow for pull request validation of strata
+#                 configuration workspaces. Validates deployment files, optionally
+#                 runs build plan, and posts results as a PR comment.
+#
+# Triggers :
+#     - [ ] push
+#     - [ ] pull_request
+#     - [ ] schedule
+#     - [ ] workflow_dispatch
+#     - [x] workflow_call
+#
+# Environment :
+#     - OS        : ubuntu-latest
+#     - Language  : Bash / Python
+#
+# Notes :
+#     - This workflow is designed to be called from consumer repositories.
+#     - Exit code 3 (validation failure) marks the check as failed.
+#     - Pipeline owners decide whether this check blocks merge (branch rules).
+#     - Works on github.com and GitHub Enterprise Server (gh CLI respects GITHUB_API_URL).
+# ==============================================================================
+
+name: Validate PR
+
+on:
+  workflow_call:
+    inputs:
+      # The deployment file to validate
+      deployment_file:
+        description: "Path to the deployment YAML file to validate"
+        required: true
+        type: string
+      # Whether to run build plan after validation passes
+      run_plan:
+        description: "Run strata build plan after validation (requires Terraform)"
+        required: false
+        type: boolean
+        default: false
+      # Whether to post results as a PR comment
+      post_comment:
+        description: "Post validation results as a PR comment"
+        required: false
+        type: boolean
+        default: true
+      # Whether to run deep validation (requires active profile + store access)
+      deep_validation:
+        description: "Run deep (cross-reference) validation. Requires store credentials."
+        required: false
+        type: boolean
+        default: false
+      # Azure store credentials (azure-keyvault, azure-appconfig)
+      azure_tenant_id:
+        description: "Azure tenant ID (for deep validation / build plan)"
+        required: false
+        type: string
+      azure_subscription_id:
+        description: "Azure subscription ID"
+        required: false
+        type: string
+      azure_client_id:
+        description: "Azure service principal client ID"
+        required: false
+        type: string
+    secrets:
+      # Azure store credentials
+      azure_client_secret:
+        required: false
+      # Bitwarden store
+      bitwarden_token:
+        required: false
+      # HashiCorp Vault
+      vault_token:
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Out
+        uses: actions/checkout@v7
+
+      - name: Setup YQ
+        uses: huybrechtsxyz/strata/.github/actions/setup-yq@v1
+
+      - name: Setup Strata
+        uses: huybrechtsxyz/strata/.github/actions/setup-strata@v1
+        with:
+          python-version: "3.13"
+
+      # ----------------------------------------------------------------
+      # Step 1: Validate deployment file
+      # ----------------------------------------------------------------
+      - name: Validate
+        id: validate
+        run: |
+          set +e
+          args="-f ${{ inputs.deployment_file }} --output json"
+          if [ "${{ inputs.deep_validation }}" = "true" ]; then
+            args="$args --deep"
+          fi
+          output=$(strata validate $args 2>&1)
+          exit_code=$?
+          {
+            echo "exit_code=$exit_code"
+            echo "output<<STRATA_EOF"
+            echo "$output"
+            echo "STRATA_EOF"
+          } >> "$GITHUB_OUTPUT"
+          exit $exit_code
+        continue-on-error: true
+
+      # ----------------------------------------------------------------
+      # Step 2: Azure login (only if needed for plan / deep validation)
+      # ----------------------------------------------------------------
+      - name: Azure Login
+        if: inputs.run_plan || inputs.deep_validation
+        uses: huybrechtsxyz/strata/.github/actions/azure-login@v1
+        with:
+          azure_tenant_id: ${{ inputs.azure_tenant_id }}
+          azure_subscription_id: ${{ inputs.azure_subscription_id }}
+          azure_client_id: ${{ inputs.azure_client_id }}
+          azure_client_secret: ${{ secrets.azure_client_secret }}
+
+      # ----------------------------------------------------------------
+      # Step 3: Build plan (only if validation passed and plan requested)
+      # ----------------------------------------------------------------
+      - name: Build Plan
+        if: inputs.run_plan && steps.validate.outputs.exit_code == '0'
+        id: plan
+        run: |
+          set +e
+          output=$(strata build plan -f "${{ inputs.deployment_file }}" --output json 2>&1)
+          exit_code=$?
+          {
+            echo "exit_code=$exit_code"
+            echo "output<<STRATA_EOF"
+            echo "$output"
+            echo "STRATA_EOF"
+          } >> "$GITHUB_OUTPUT"
+          exit $exit_code
+        continue-on-error: true
+
+      # ----------------------------------------------------------------
+      # Step 4: Post PR comment with results
+      # ----------------------------------------------------------------
+      - name: Post PR Comment
+        if: inputs.post_comment && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VALIDATE_CODE: ${{ steps.validate.outputs.exit_code }}
+          VALIDATE_OUTPUT: ${{ steps.validate.outputs.output }}
+          PLAN_OUTPUT: ${{ steps.plan.outputs.output }}
+          DEPLOYMENT_FILE: ${{ inputs.deployment_file }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "$VALIDATE_CODE" = "0" ]; then
+            icon="✅"
+            status="passed"
+          else
+            icon="❌"
+            status="failed (exit $VALIDATE_CODE)"
+          fi
+
+          {
+            echo "### ${icon} strata validation ${status}"
+            echo ""
+            echo "**File:** \`${DEPLOYMENT_FILE}\`"
+            echo ""
+            if [ "$VALIDATE_CODE" != "0" ]; then
+              echo "<details><summary>Validation errors</summary>"
+              echo ""
+              echo "\`\`\`json"
+              echo "$VALIDATE_OUTPUT"
+              echo "\`\`\`"
+              echo ""
+              echo "</details>"
+              echo ""
+            fi
+            if [ -n "$PLAN_OUTPUT" ]; then
+              echo "<details><summary>Build plan</summary>"
+              echo ""
+              echo "\`\`\`json"
+              echo "$PLAN_OUTPUT"
+              echo "\`\`\`"
+              echo ""
+              echo "</details>"
+            fi
+          } > /tmp/pr-comment.md
+
+          gh pr comment "$PR_NUMBER" --body-file /tmp/pr-comment.md
+
+      # ----------------------------------------------------------------
+      # Step 5: Final exit status (determines check pass/fail)
+      # ----------------------------------------------------------------
+      - name: Final Status
+        if: steps.validate.outputs.exit_code != '0'
+        run: |
+          echo "::error::strata validation failed with exit code ${{ steps.validate.outputs.exit_code }}"
+          exit 1

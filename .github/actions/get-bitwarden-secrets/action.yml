@@ -1,0 +1,58 @@
+# ===============================================================================
+# Action Name  : get-bitwarden-secrets
+# Description  : Fetch one or more secrets from Bitwarden Secrets Manager and
+#                expose them as masked environment variables. Generic — the
+#                caller supplies the item-id-to-variable-name mapping; nothing
+#                is hardcoded to a specific secret or organization.
+# ===============================================================================
+
+name: "Get Bitwarden Secrets"
+description: "Fetch secrets from Bitwarden Secrets Manager and expose them as masked environment variables."
+
+branding:
+  icon: "key"
+  color: "green"
+
+inputs:
+  bitwarden_token:
+    description: "Bitwarden Secrets Manager access token."
+    required: true
+  secrets:
+    description: |
+      Multi-line mapping of Bitwarden secret IDs to environment variable names,
+      one per line, in the format: <secret-id> > <ENV_VAR_NAME>
+
+      Example:
+        f16fffe2-77b7-4d20-bf6c-b2c9015c71d3 > DEPLOY_SSH_KEY
+        a1b2c3d4-5678-90ab-cdef-1234567890ab > DB_PASSWORD
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # Delegates the actual fetch to Bitwarden's own official action. It
+    # dynamically creates one step output per mapped variable name (lowercased) —
+    # e.g. "DEPLOY_SSH_KEY" becomes steps.fetch.outputs.deploy_ssh_key.
+    - name: Fetch Secrets
+      id: fetch
+      uses: bitwarden/sm-action@v3
+      with:
+        access_token: ${{ inputs.bitwarden_token }}
+        secrets: ${{ inputs.secrets }}
+
+    # Composite actions cannot declare a dynamic number of named outputs, so
+    # re-export each fetched value as an environment variable instead — masked
+    # first, then written via the heredoc delimiter format so values containing
+    # newlines are stored verbatim (same pattern as verify-integrations).
+    - name: Export Secrets to Environment
+      shell: bash
+      env:
+        FETCHED_OUTPUTS_JSON: ${{ toJSON(steps.fetch.outputs) }}
+      run: |
+        echo "$FETCHED_OUTPUTS_JSON" | jq -r 'to_entries[] | "\(.key)=\(.value)"' | while IFS='=' read -r key value; do
+          [ -z "$key" ] && continue
+          echo "::add-mask::$value"
+          VAR_NAME=$(echo "$key" | tr '[:lower:]' '[:upper:]')
+          printf '%s<<__BW_DELIM__\n%s\n__BW_DELIM__\n' "$VAR_NAME" "$value" >> "$GITHUB_ENV"
+          echo "[+] Exported $VAR_NAME"
+        done

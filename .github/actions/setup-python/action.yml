@@ -1,10 +1,10 @@
 # ===============================================================================
-# Action Name  : install-python
+# Action Name  : setup-python
 # Description  : Install Python, uv, and sync project dependencies from the
 #                local repo. Required before any strata dev/CI action.
 # ===============================================================================
 
-name: "Install Python"
+name: "Setup Python"
 description: "Install Python, uv, and sync project dependencies (uv sync --frozen)."
 
 inputs:

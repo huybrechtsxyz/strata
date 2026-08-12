@@ -1,7 +1,7 @@
 # ===============================================================================
 # Action Name  : test-python
 # Description  : Run ruff lint, ruff format check, mypy type-check, and pytest.
-#                Requires install-python to have run first.
+#                Requires setup-python to have run first.
 # ===============================================================================
 
 name: "Test Python"

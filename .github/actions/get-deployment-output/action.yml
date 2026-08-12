@@ -1,0 +1,117 @@
+# ===============================================================================
+# Action Name  : get-deployment-output
+# Description  : Retrieve Terraform outputs for a deployment via strata's own
+#                deploy output command — backend-agnostic (local, S3, GCS, Azure
+#                Blob, Consul, Terraform Cloud/HCP, etc.), with strata's own
+#                local cache (.tf-outputs.json). Replaces the archived
+#                HCP-specific get-tfoutput action, which called terraform pull/
+#                show directly and only worked against Terraform Cloud.
+# ===============================================================================
+
+name: "Get Deployment Output"
+description: "Retrieve Terraform output(s) for a deployment via strata deploy output. Requires setup-strata."
+
+branding:
+  icon: "download"
+  color: "blue"
+
+inputs:
+  deployment_file:
+    description: "Path to the strata deployment YAML file."
+    required: true
+  key:
+    description: "A single output key to retrieve (e.g. 'endpoint'). Leave empty to retrieve all outputs as JSON."
+    required: false
+    default: ""
+  stage:
+    description: "Limit to a single deployment stage."
+    required: false
+    default: ""
+  provisioner:
+    description: "Limit to stages that use a specific provisioner."
+    required: false
+    default: ""
+  refresh:
+    description: "Re-run 'terraform output -json' and update the cache instead of reading the local cache."
+    required: false
+    default: "false"
+  work_path:
+    description: "Workspace root directory."
+    required: false
+    default: "."
+
+outputs:
+  value:
+    description: "The bare output value, when 'key' is set (empty otherwise)."
+    value: ${{ steps.run.outputs.value }}
+  result:
+    description: "All outputs as JSON (strata's --json mode, bypasses the strata envelope), when 'key' is not set."
+    value: ${{ steps.run.outputs.result }}
+  exit_code:
+    description: "Numeric exit code from strata deploy output."
+    value: ${{ steps.run.outputs.exit_code }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run strata deploy output
+      id: run
+      shell: bash
+      env:
+        DEPLOYMENT_FILE: ${{ inputs.deployment_file }}
+        KEY: ${{ inputs.key }}
+        STAGE: ${{ inputs.stage }}
+        PROVISIONER: ${{ inputs.provisioner }}
+        REFRESH: ${{ inputs.refresh }}
+        WORK_PATH: ${{ inputs.work_path }}
+      run: |
+        STAGE_FLAG=""
+        if [ -n "$STAGE" ]; then
+          STAGE_FLAG="--stage $STAGE"
+        fi
+
+        PROVISIONER_FLAG=""
+        if [ -n "$PROVISIONER" ]; then
+          PROVISIONER_FLAG="--provisioner $PROVISIONER"
+        fi
+
+        REFRESH_FLAG=""
+        if [ "$REFRESH" = "true" ]; then
+          REFRESH_FLAG="--refresh"
+        fi
+
+        set +e
+        if [ -n "$KEY" ]; then
+          # Single key, bare value — no JSON, no strata chrome. Ideal for shell scripts.
+          VALUE=$(strata deploy output --file "$DEPLOYMENT_FILE" --work-path "$WORK_PATH" --key "$KEY" --raw $STAGE_FLAG $PROVISIONER_FLAG $REFRESH_FLAG 2>&1)
+          EXIT_CODE=$?
+          echo "::add-mask::$VALUE"
+          {
+            echo "exit_code=${EXIT_CODE}"
+            echo "value<<STRATA_EOF"
+            echo "${VALUE}"
+            echo "STRATA_EOF"
+          } >> "$GITHUB_OUTPUT"
+        else
+          # All outputs — --json bypasses the strata envelope (raw terraform outputs).
+          RESULT=$(strata deploy output --file "$DEPLOYMENT_FILE" --work-path "$WORK_PATH" --json $STAGE_FLAG $PROVISIONER_FLAG $REFRESH_FLAG 2>&1)
+          EXIT_CODE=$?
+          {
+            echo "exit_code=${EXIT_CODE}"
+            echo "result<<STRATA_EOF"
+            echo "${RESULT}"
+            echo "STRATA_EOF"
+          } >> "$GITHUB_OUTPUT"
+        fi
+        set -e
+
+        {
+          echo "### Strata Deploy Output"
+          if [ "${EXIT_CODE}" -eq 0 ]; then
+            echo "✅ **Retrieved successfully**"
+          else
+            echo "❌ **Failed** (exit code ${EXIT_CODE})"
+          fi
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        exit ${EXIT_CODE}

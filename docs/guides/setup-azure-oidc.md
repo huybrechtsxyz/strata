@@ -8,7 +8,7 @@ OIDC (OpenID Connect) lets GitHub Actions authenticate to Azure without storing 
 
 - An Azure subscription
 - Owner, or Contributor + Application Administrator role on the Entra ID tenant
-- A GitHub repository that calls the `deploy-workspace.yml` reusable workflow (or the `azure-login` composite action directly)
+- A GitHub repository that calls the `strata-deploy-workspace.yml` reusable workflow (or the `azure-login` composite action directly)
 
 ---
 
@@ -98,7 +98,7 @@ Pass the three variables to the reusable workflow. The absence of `azure_client_
 ```yaml
 jobs:
   deploy:
-    uses: huybrechtsxyz/strata/.github/workflows/deploy-workspace.yml@v0
+    uses: huybrechtsxyz/strata/.github/workflows/strata-deploy-workspace.yml@v0
     with:
       deployment_file: deploy/deploy-prd.yaml
       azure_tenant_id: ${{ vars.AZURE_TENANT_ID }}
