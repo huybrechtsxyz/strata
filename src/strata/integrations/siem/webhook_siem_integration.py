@@ -3,7 +3,7 @@
 Was the built-in ``type: webhook`` *sink* (``AuditController._send_webhook``); ADR-0066
 promotes it to a real integration, since "a sink is a connection to another system" and
 a webhook clearly is one — a sink is now only a routing reference (``sinks[].integration``).
-This is also ADR-0065's primary transport to a first-party audit ingest service.
+This is also ADR-0065's primary transport to a first-party strata state service.
 
 Config::
 

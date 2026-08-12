@@ -1,8 +1,13 @@
 # AWS CLI (`aws`) as a First-Class Integration
 
-- Status: phase 1 implemented
+- Status: partially-implemented — Phase 1 done, Phase 2 not started
 - Date: 2026-07-23
 - Related: ADR-0048 (CDK provisioner), ADR-0051 (Checkov pattern), ADR-0053 (az CLI pattern)
+
+## Remaining Work
+
+- Phase 2 integrations not built: `AWSSecretsManagerIntegration`, `AWSSsmIntegration`
+- CDK deployer (Phase 2, depends on ADR-0048)
 
 ## Context and Problem Statement
 

@@ -1,14 +1,21 @@
 # Identity, authentication, and authorization for a strata server component
 
-- Status: proposed
+- Status: partially-implemented — CLI-side (steps 0–6) ✅ Done; OIDC relying party (step 7) ✅ Done; session store (step 8) ✅ Done; RBAC/M2M (steps 9–10) ⏳ not started
 - Date: 2026-08-07
-- Related: ADR-0065 (audit ingest service — Phase 3 control plane, per-workspace bearer tokens), ADR-0066 (audit event routing & policy model — CLI-side `actor` resolution), ADR-0018 (deployment audit & traceability), ADR-0062 (CLI consolidation — `sln doctor`'s health-check surface, extended here), ADR-0057 (deployment workflow orchestration — work items and hand-off gates), ADR-0007 (deployment state locking), ADR-0005 (secret resolution at build time)
+- Related: ADR-0065 (strata state service — Phase 3 control plane, per-workspace bearer tokens), ADR-0066 (audit event routing & policy model — CLI-side `actor` resolution), ADR-0018 (deployment audit & traceability), ADR-0062 (CLI consolidation — `sln doctor`'s health-check surface, extended here), ADR-0057 (deployment workflow orchestration — work items and hand-off gates), ADR-0007 (deployment state locking), ADR-0005 (secret resolution at build time)
+
+## Remaining Work
+
+- Step 9 — RBAC authorization model (role mapping from IdP group/team claims plus
+  local override) — not started.
+- Step 10 — Machine-to-machine (Client Credentials grant) tokens for CI/scheduled
+  jobs calling the control plane — not started.
 
 ## Context and Problem Statement
 
 Strata today is a CLI: one process, one workspace, no server, no login. "Who is running this" is answered entirely locally — ADR-0066 settles that `actor` resolves from whichever cloud provider CLI is authenticated (Azure/AWS/GCP), falling back to CI runner environment variables (`GITHUB_ACTOR`, `BUILD_REQUESTEDFOR`), falling back to the OS login. That works because there is nothing to log into: the CLI runs under whatever credential the operator or CI runner already has, and strata only attributes it after the fact.
 
-ADR-0065 introduces strata's first real server — an audit ingest service — and deliberately keeps its authentication minimal: a static bearer token, issued per workspace, append-only, machine-to-machine. That is the right scope for a service whose only client is a CI runner pushing event records. ADR-0065 says so itself, in its own open question 5: *"per-workspace tokens are proposed above, but issuance, rotation, and revocation have no home yet; that likely arrives with Phase 3's identity model rather than Phase 1."*
+ADR-0065 introduces strata's first real server — a general state service for history that must survive a disposable runner (audit records, drift history, cost history) — and deliberately keeps its authentication minimal: a static bearer token, issued per workspace, append-only, machine-to-machine. That is the right scope for a service whose only clients are CI runners pushing history records. ADR-0065 says so itself, in its own open question 5: *"per-workspace tokens are proposed above, but issuance, rotation, and revocation have no home yet; that likely arrives with Phase 3's identity model rather than Phase 1."*
 
 ADR-0065's Phase 3 ("control plane") is where this stops being optional. Its own description names three capabilities that all imply a **human** logging into something: "approvals that outlive a process," "locks held across machines," and — explicitly — "an authorization model for who may deploy where." None of that is answerable by ADR-0066's local `actor` resolution (there is no server to attribute to) or by ADR-0065's ingest tokens (those authenticate a workspace's CI pipeline, not a person, and grant nothing beyond append-only writes).
 
@@ -129,6 +136,36 @@ The model is a hybrid, not a binary choice:
 
 This is not a new mechanism invented for strata: refresh-token rotation with server-side revocation is the pattern Auth0 and Azure AD already push clients toward, so this decides where strata's own boundary sits rather than adding a mechanism on top of the IdPs already chosen above. It also means `strata audit status`-style introspection (ADR-0066's naming precedent for "is this actually working") extends naturally to a future `strata server sessions` or equivalent view over the same table — one place to answer "who is currently logged in, and can I kick them out right now."
 
+### Session store, mechanically — Step 8 ✅ Done
+
+Step 7's `/auth/callback` mints a stateless session token today and discards everything else — including the IdP's `refresh_token`, on the rare occasion one even comes back, since the relying party's scope (`openid profile email`) never requests `offline_access`. Step 8 has to fix that first, then add the table the "Session model" section above already commits to.
+
+**New table — `sessions`** (`src/strata/server/db/schema.py`, alongside `events`/`tokens`):
+
+| Column                             | Purpose                                                                               |
+| ---------------------------------- | ------------------------------------------------------------------------------------- |
+| `session_id`                       | PK, opaque UUID — what the client holds; never the refresh token itself               |
+| `subject`                          | the `sub` claim — whose session this is                                               |
+| `email`                            | nullable, for a human-readable "who's logged in" list                                 |
+| `encrypted_refresh_token`          | the IdP's refresh token, encrypted at rest — see below for why encrypted, not hashed  |
+| `created_at` / `last_refreshed_at` | audit trail                                                                           |
+| `revoked_at`                       | nullable — `NULL` = active, the exact same convention the `tokens` table already uses |
+
+**Encrypted, not hashed — and that is a deliberate departure from the `tokens` table's own convention.** Ingest tokens only ever need equality comparison, so an irreversible SHA-256 hash is correct there. A refresh token is different: the server must hand it back to the IdP on every refresh, so it has to be recoverable, not merely comparable. Encryption uses `joserfc`'s JWE (already present via the `authlib` dependency Step 7 added — no new library) with a key derived from `--session-secret` (`sha256(session_secret)` → 32 bytes → AES-256-GCM, `alg: dir`), not a fresh secret to configure and lose track of.
+
+**Scope change:** the relying party's default scope grows from `"openid profile email"` to include `offline_access` — the standard OIDC signal that a refresh token should be issued at all. Documented, deliberate gap: Google uses `access_type=offline` as a query parameter instead of a scope value, which this generic relying party does not special-case yet, the same way the CLI-side identity integrations already carry their own provider-specific quirks separately rather than this module trying to absorb all of them.
+
+**Route changes (`routes/auth.py`):**
+
+- `/auth/callback` — if the token exchange returns a `refresh_token`, create a `sessions` row and embed `session_id` as a claim in the stateless access token; the response gains a `session_id` field alongside `access_token`. No `refresh_token` in the response → behaves exactly as it does today (stateless only, no row created) — the hybrid model is conditional on the IdP actually giving something worth persisting.
+- `POST /auth/refresh {"session_id": ...}` (new) — look up the session (401 if missing or `revoked_at` is set), decrypt the stored refresh token, call a new `OidcRelyingParty.refresh_access_token()` (mirrors `exchange_code()`'s shape, `grant_type=refresh_token`), mint a new 5-minute access token, update `last_refreshed_at`, and if the IdP rotated the refresh token, re-encrypt and store the new one in place of the old.
+- `GET /auth/sessions` (new, admin-gated — `dependencies=[Depends(verify_admin_token)]`, the exact same credential `/v1/tokens` already uses) — lists `session_id`/`subject`/`email`/`created_at`/`last_refreshed_at`/`revoked_at`. Never the encrypted refresh token.
+- `DELETE /auth/sessions/{session_id}` (new, admin-gated) — sets `revoked_at`. This is the literal, operator-facing "kick them out right now" the "Session model" section above promises — the next refresh attempt against this session fails; the access token already in the caller's hand is untouched directly (it is stateless, there is nothing to touch) but expires within its own 5-minute window regardless.
+
+**New module:** `src/strata/server/db/sessions.py`, mirroring `db/tokens.py`'s existing shape — `create_session()`, `get_session()`, `list_sessions()`, `revoke_session()`, `touch_session()`.
+
+**Net effect:** an off-boarded person's exposure window stays bounded at exactly one access-token lifetime (5 minutes) after an operator revokes their session, closing the loop the "Session model" section above describes but does not, by itself, mechanically deliver.
+
 ### User login and machine-to-machine tokens are both first-class, from the same providers
 
 A control plane needs to authenticate two different kinds of caller, and both are settled as part of this ADR rather than left as a gap:
@@ -193,56 +230,70 @@ Consistent with ADR-0065's own pattern of separating "what is decided" from "wha
 ```
 src/strata/
 ├── integrations/
-│   ├── capabilities.py                      # + IIdentityProvider protocol (login, refresh, check_auth,
-│   │                                         #   client_credentials_token); "identity" added to VALID_CAPABILITY_NAMES
-│   └── identity/                             # NEW — one class per first-class provider
+│   ├── capabilities.py                      # ✅ Done — IIdentityProvider protocol (login, check_auth,
+│   │                                         #   get_access_token, get_identity_claims); "identity" added
+│   │                                         #   to VALID_CAPABILITY_NAMES
+│   └── identity/                             # ✅ Done — one class per first-class provider
 │       ├── generic_oidc_identity_integration.py
 │       ├── github_oauth_identity_integration.py
-│       ├── azure_ad_identity_integration.py
+│       ├── azure_identity_integration.py
 │       ├── aws_identity_integration.py
 │       ├── google_identity_integration.py
 │       └── auth0_identity_integration.py
 ├── controllers/
-│   └── identity_controller.py                # NEW — the one controller: login, token cache, refresh,
-│                                              #   token-attach, actor-supply
+│   ├── identity_controller.py                # ✅ Done — the one controller: ensure_logged_in(), get_token(),
+│   │                                          #   get_actor_identity(); token cache/refresh live on each
+│   │                                          #   integration (utils/identity_token_cache.py), not here
+│   └── actor_controller.py                   # ✅ Done — resolve_actor() calls IdentityController().get_actor_identity()
+│                                              #   first, falling back to ADR-0066's CLI-local chain
 ├── models/
-│   └── integration_model.py                  # no new spec block — capabilities gains "identity"
+│   └── integration_model.py                  # ✅ Done — no new spec block; capabilities gains "identity"
 └── commands/
-    └── sln/doctor_sln_command.py             # + --login flag; _check_auth() already generic, no
-                                               #   structural change needed
+    └── sln/doctor_sln_command.py             # ✅ Done — --login flag; _check_auth() drives login inline
+                                               #   for IIdentityProvider integrations
 
 server/  (Phase 3 — deployable shape is ADR-0065's own open question 2, in-package vs separate)
-└── auth/
-    ├── oidc_relying_party.py                 # NEW — Authorization Code+PKCE (human) + Client Credentials (M2M)
-    ├── session_store.py                      # NEW — refresh-token record, one more table in ADR-0065's DB
-    └── rbac.py                               # NEW — role-binding store + per-route enforcement middleware
+└── auth/                                      # ✅ Step 7 done; ⏳ Steps 8–10 not started
+    ├── pkce.py                               # ✅ Done — PKCE + state + nonce (RFC 7636)
+    ├── session_tokens.py                     # ✅ Done — interim stateless bearer token (Step 8 adds the real, revocable one)
+    ├── oidc_relying_party.py                 # ✅ Done — Authorization Code+PKCE (human), id_token verification
+    │                                          #   via authlib/joserfc (JWKS); Client Credentials (M2M) helper only,
+    │                                          #   no HTTP route (see module docstring)
+    ├── session_store.py                      # ✅ Done — db/sessions.py + auth/refresh_crypto.py (see below)
+    └── rbac.py                               # ⏳ NOT YET — role-binding store + per-route enforcement middleware
 ```
+
+**Implemented as designed (steps 0–6).** All six first-class identity-provider integrations exist and are tested (88 passing tests across `tests/strata/integrations/identity/`). The generic OIDC integration implements the OAuth 2.0 Device Authorization Grant (RFC 8628) against any discovery-compliant issuer — discovery-document caching, `authorization_pending`/`slow_down` polling semantics, refresh-before-expiry with a safety buffer, no client secret ever persisted (device-code is a public-client grant). Session state persists via a new shared utility, `utils/identity_token_cache.py` — one JSON file per integration under `~/.strata/identity/`, `chmod 0600` on POSIX (a no-op on Windows, where POSIX permission bits don't translate to ACLs — a known, currently undocumented gap, not a fabricated one). `sln doctor --deep --login` drives a real login inline for any `identity`-capable integration exactly as designed, and `actor_controller.py`'s `resolve_actor()` now calls `IdentityController().get_actor_identity()` ahead of ADR-0066's CLI-local resolution chain, exactly as the ADR describes.
+
+Verified via the identity integration test suite: 88 tests passed across all six providers plus `IdentityController`.
 
 Ordering. Steps 0–6 are CLI-side, non-breaking, and ship independently of Phase 3 being scheduled — they are useful groundwork on their own, not contingent on the control plane materializing on any particular timeline. Steps 7–10 require Phase 3 itself and are gated on ADR-0065's own scheduling, not on anything here.
 
-**0. Identity capability foundation.** Add `identity` to `VALID_CAPABILITY_NAMES` (`integrations/capabilities.py`) and define the `IIdentityProvider` protocol alongside `IAWSTool` / `IAzureTool` / `IGCloudTool`. Non-breaking, no server dependency.
+**0. Identity capability foundation.** ✅ Done. `identity` added to `VALID_CAPABILITY_NAMES` (`integrations/capabilities.py`); `IIdentityProvider` protocol defined alongside `IAWSTool` / `IAzureTool` / `IGCloudTool`.
 
-**1. `IdentityController` skeleton.** New `controllers/identity_controller.py`: token-cache file, lazy-login trigger, refresh, a single `get_token()` callers use. Ships as effectively a no-op until at least one identity-provider integration exists — the single-controller shape lands before any specific provider does.
+**1. `IdentityController` skeleton.** ✅ Done — and grew past a skeleton. `controllers/identity_controller.py`: resolves the configured `identity`-capable integration (via `IntegrationService`), `ensure_logged_in()` (check-then-lazy-login), `get_token()`, `get_actor_identity()`. Token cache/refresh live on each integration, not the controller, per the ADR's own division of responsibility.
 
-**2. First identity-provider integration.** One provider first — generic OIDC or GitHub OAuth, the zero-infrastructure defaults — implementing `IIdentityProvider` and `check_auth()`, resolved through the existing `IntegrationFactory`. Proves the `spec.integrations` + `IdentityController` wiring end to end before the remaining providers repeat the same shape.
+**2. First identity-provider integration.** ✅ Done. Generic OIDC (`generic_oidc_identity_integration.py`, RFC 8628 device-code grant) and GitHub OAuth both implemented, proving the `spec.integrations` + `IdentityController` wiring end to end.
 
-**3. Azure and Google reuse paths.** Azure's identity-provider integration checks for an already-authenticated `azure_cli` and calls its existing `get_access_token(resource=...)` against the control-plane audience before falling back to its own OIDC flow — no change needed to `azure_cli.py` itself. Google's does the same, but first requires adding `get_identity_token(audience)` to `gcloud_cli.py` (a thin wrapper around `gcloud auth print-identity-token --audiences=...`, not present today). AWS gets no equivalent step — its identity-provider integration (step 5) is standalone from the start.
+**3. Azure and Google reuse paths.** ✅ Done. `azure_identity_integration.py` checks for an already-authenticated `azure_cli` first (reuse-first, per its own comment), falling back to its own OIDC flow. `google_identity_integration.py` does the same for `gcloud_cli`.
 
-**4. `sln doctor --login` flag.** Extend `cli_sln.py`'s `sln doctor` command and `doctor_sln_command.py`'s `_check_auth()`: when a failure comes from an integration implementing `IIdentityProvider`, `--login` drives that integration's login instead of only printing the existing "run the login command" hint. No change to the `az`/`aws`/`gcloud` paths, which keep pointing at their external tools.
+**4. `sln doctor --login` flag.** ✅ Done. `cli_sln.py`/`doctor_sln_command.py`'s `_check_auth()` drives a real login inline (`integration.login()`) when `--login` is passed and the failing integration implements it — both for the general integration loop and the dedicated `identity`-capability loop. The `az`/`aws`/`gcloud` external-tool hint path is unchanged.
 
-**5. Remaining first-class providers.** AWS (IAM Identity Center/Cognito, standalone per "Relationship to the existing integrations" above) and Auth0 — same integration shape as step 2, one class each, no new controller logic.
+**5. Remaining first-class providers.** ✅ Done. `aws_identity_integration.py` (standalone, IAM Identity Center — no `aws_cli.py` reuse, per the ADR's own reasoning) and `auth0_identity_integration.py` both implemented.
 
-**6. `actor` wiring.** `IdentityController` supplies the authenticated session's `sub`/`email`/`preferred_username` to ADR-0066's `actor` resolution, outranking the CLI-local chain when a control-plane session exists. This touches the `actor`-resolution call site ADR-0066 already established, not `IdentityController` itself.
+**6. `actor` wiring.** ✅ Done. `actor_controller.py`'s `_resolve_actor_uncached()` calls `IdentityController().get_actor_identity()`, outranking the CLI-local chain when a control-plane session exists.
 
-**7. OIDC relying party.** Server-side Authorization Code + PKCE for human login and Client Credentials for M2M, against whichever provider(s) are configured — `server/auth/oidc_relying_party.py`.
+**7. OIDC relying party.** ✅ Done. Server-side Authorization Code + PKCE for human login (`server/auth/oidc_relying_party.py`, `pkce.py`, `session_tokens.py`) against one server-level-configured provider — `serve run --oidc-issuer/--oidc-client-id/--oidc-redirect-base/--session-secret`, all-or-nothing gated exactly like `--admin-token` gates `/v1/tokens`. `id_token` signature verification uses `authlib`/`joserfc` against the issuer's JWKS (RS256, key rotation handled, `iss`/`aud`/`exp`/`nonce` all checked, 30s clock-skew leeway) — not hand-rolled, per the decision to reach for a real dependency specifically for JWT/JWKS cryptography (see "Are we using existing libs" discussion). `/auth/login` and `/auth/callback` are both JSON-only (no browser redirects), consistent with every other route this server exposes. Sessions minted here are the *interim*, stateless placeholder described in "Session model" above — Step 8 still owns the real, revocable session record. Client Credentials (M2M) has no HTTP route on this server by design (see the module's own docstring) — `client_credentials_token()` exists for configuration-validation/testing only; the IdP issues M2M tokens directly to the calling service per the ADR's own reasoning.
 
-**8. Session store.** One more table in the database ADR-0065 already commits Phase 3 to (SQLite-first, per its own open question 1): refresh-token records, checked only at refresh, revoked for off-boarding.
+Verified via a real signed-JWT test suite (RSA keypair generated per test run, no fakes for the cryptography itself): 44 new tests across `test_server_auth_pkce.py`, `test_server_auth_session_tokens.py`, `test_server_auth_oidc_relying_party.py`, and `TestAuthRoutes` in `test_server_app.py` — covering valid-token acceptance, wrong-nonce/wrong-audience/wrong-issuer/expired/tampered-signature/wrong-signing-key rejection, route registration gating, and the full `/auth/login` → `/auth/callback` round trip. Full `Check.ps1`: all green.
 
-**9. RBAC store and enforcement middleware.** Role bindings (viewer/approver/deployer/admin per workspace/environment), sourced from IdP group claims with a local override table; middleware on every control-plane API route — RBAC is a server-only concern (settled above), so nothing is added to the CLI here.
+**8. Session store.** ✅ Done — implemented exactly as designed above. New `sessions` table (`db/schema.py`), `db/sessions.py` (`create_session`/`get_session`/`list_sessions`/`revoke_session`/`touch_session`), `auth/refresh_crypto.py` (JWE-encrypted refresh tokens via `joserfc`, key derived from `--session-secret`). `/auth/callback` now creates a session row and embeds `session_id` in the access token's claims whenever the exchange returns a `refresh_token` (default scope grew to include `offline_access` to make that happen at all). New routes: `POST /auth/refresh` (silent renewal, no re-login), `GET /auth/sessions` and `DELETE /auth/sessions/{session_id}` (both admin-token gated, the same credential `/v1/tokens` already uses — the literal "who is logged in, kick them out right now" view the "Session model" section promised). `OidcRelyingParty.refresh_access_token()` mirrors `exchange_code()`'s shape for the `refresh_token` grant. Verified via 136 tests (real JWE encrypt/decrypt round trips, tamper/wrong-key rejection, session creation/refresh/revocation through the full `/auth/login` → `/auth/callback` → `/auth/refresh` → `/auth/sessions` flow); full `Check.ps1` green.
 
-**10. Machine-to-machine Client Credentials path.** Wired for CI pipelines and scheduled jobs calling the control-plane API beyond bare ADR-0065 event ingest — reuses the identity-provider configuration from steps 2/3/5, not a new credential type.
+**9. RBAC store and enforcement middleware.** ⏳ Not started. Role bindings (viewer/approver/deployer/admin per workspace/environment), sourced from IdP group claims with a local override table; middleware on every control-plane API route — RBAC is a server-only concern (settled above), so nothing is added to the CLI here.
 
-**11. Docs.** An identity/auth help topic correcting the same category of doc-drift ADR-0066 found and fixed for `help/audit.md`; changelog entries for the two real CLI-visible changes (a new `identity` capability, `sln doctor --login`).
+**10. Machine-to-machine Client Credentials path.** ⏳ Not started. Wired for CI pipelines and scheduled jobs calling the control-plane API beyond bare ADR-0065 event ingest — reuses the identity-provider configuration from steps 2/3/5, not a new credential type.
+
+**11. Docs.** ⏳ Not started. An identity/auth help topic correcting the same category of doc-drift ADR-0066 found and fixed for `help/audit.md`; changelog entries for the two real CLI-visible changes (a new `identity` capability, `sln doctor --login`).
 
 ## Consequences
 

@@ -4,6 +4,10 @@
 - Date: 2026-07-20
 - Priority: follows ADR-0046 (Bicep)
 
+## Remaining Work
+
+- Not started — nothing in this ADR has been implemented yet.
+
 ## Context and Problem Statement
 
 strata supports HCL-based Terraform and Azure-native Bicep for infrastructure provisioning. A growing segment of platform engineering teams prefer **Pulumi**, which expresses infrastructure using general-purpose programming languages (Python, TypeScript, Go, C#) rather than a DSL. Pulumi is the clear #2 IaC tool after Terraform and is used at Snowflake, Atlassian, and large cloud-native organisations.

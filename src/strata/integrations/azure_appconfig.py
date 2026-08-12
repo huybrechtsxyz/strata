@@ -92,6 +92,20 @@ class AzureAppConfigIntegration(StoreIntegration):
         self.subscription_id = self._get_env_var("AZURE_SUBSCRIPTION_ID")  # no model equivalent
         self.connection_string = self._get_env_var(self._get_connection_string_var_name())
 
+        # Lazy per-process cache of the whole kv namespace (key -> value), populated
+        # by one bulk list call on first get_variable()/get_feature() call instead of
+        # one App Configuration call per declared item. Mirrors
+        # FlagsmithIntegration._flags_cache / EtcdIntegration._kv_cache. Variables and
+        # feature flags share this single cache — feature flags are stored under a
+        # ".appconfig.featureflag/" key prefix in the same namespace. Keyed by the
+        # label the cache was warmed with; a request for a different label bypasses
+        # the cache rather than risk serving the wrong label's values. Invalidated on
+        # any successful write. Azure App Configuration's list API already returns
+        # values in the same call keys are listed with (previously discarded via a
+        # "[].key"-only projection), so this costs nothing extra.
+        self._kv_cache: Optional[Dict[str, str]] = None
+        self._kv_cache_label: Optional[str] = None
+
         logger.debug(
             "Azure App Configuration integration initialized",
             name=self.integration_name,
@@ -304,6 +318,12 @@ class AzureAppConfigIntegration(StoreIntegration):
 
         Implements IVariableStore interface.
 
+        Serves from the lazily-warmed whole-namespace cache (see ``__init__``)
+        when the requested label matches the one the cache was warmed with —
+        the first call triggers one bulk list call; every subsequent call (any
+        key, any deployment sharing this instance within the same process) is
+        a local dict lookup. Falls back to a direct per-key read otherwise.
+
         Args:
             key: The key name
             **kwargs: Additional arguments (label, prefer_cli, timeout)
@@ -314,6 +334,8 @@ class AzureAppConfigIntegration(StoreIntegration):
         label = kwargs.get("label")
         prefer_cli = kwargs.get("prefer_cli", True)
         timeout = kwargs.get("timeout", 60)
+        if self._warm_kv_cache(label, prefer_cli=prefer_cli, timeout=timeout):
+            return self._kv_cache.get(key)  # type: ignore[union-attr]
         return self._get_value(key, label=label, prefer_cli=prefer_cli, timeout=timeout)
 
     def list_variables(self, prefix: str = "", **kwargs) -> List[str]:
@@ -357,6 +379,10 @@ class AzureAppConfigIntegration(StoreIntegration):
 
         Implements IFeatureStore interface.
 
+        Serves from the same lazily-warmed whole-namespace cache as
+        :meth:`get_variable` (feature flags live under a
+        ``.appconfig.featureflag/`` key prefix in the same kv namespace).
+
         Args:
             key: The feature flag name
             **kwargs: Additional arguments (label, prefer_cli, timeout)
@@ -367,7 +393,17 @@ class AzureAppConfigIntegration(StoreIntegration):
         label = kwargs.get("label")
         prefer_cli = kwargs.get("prefer_cli", True)
         timeout = kwargs.get("timeout", 60)
-        result = self._get_flag(key, label=label, prefer_cli=prefer_cli, timeout=timeout)
+        feature_key = f".appconfig.featureflag/{key}"
+        if self._warm_kv_cache(label, prefer_cli=prefer_cli, timeout=timeout):
+            raw = self._kv_cache.get(feature_key)  # type: ignore[union-attr]
+            result: Optional[Any] = None
+            if raw is not None:
+                try:
+                    result = json.loads(raw)
+                except json.JSONDecodeError:
+                    result = None
+        else:
+            result = self._get_flag(key, label, prefer_cli, timeout)
         if result is None:
             return None
         # Extract enabled status from feature flag data
@@ -462,12 +498,14 @@ class AzureAppConfigIntegration(StoreIntegration):
         result = self._run_integration(args=args, timeout=timeout)
         if result.returncode == 0:
             logger.info("Variable written to Azure App Configuration via CLI", name=self.integration_name, key=key)
+            self._kv_cache = None  # invalidate — next read re-warms with the new value included
             return True
 
         # API fallback
         ok = self._set_value_via_api(key, str(value), label)
         if ok:
             logger.info("Variable written to Azure App Configuration via API", name=self.integration_name, key=key)
+            self._kv_cache = None
         else:
             logger.warning(
                 "Failed to write variable to Azure App Configuration",
@@ -567,6 +605,7 @@ class AzureAppConfigIntegration(StoreIntegration):
             logger.info(
                 "Feature flag written to Azure App Configuration", name=self.integration_name, key=key, enabled=value
             )
+            self._kv_cache = None  # invalidate — next read re-warms with the new flag included
             return True
         logger.warning(
             "Feature flag created but state change failed", name=self.integration_name, key=key, stderr=result.stderr
@@ -681,6 +720,98 @@ class AzureAppConfigIntegration(StoreIntegration):
             if result:
                 logger.info("Value retrieved from Azure App Configuration via CLI", name=self.integration_name, key=key)
             return result
+
+    def _warm_kv_cache(self, label: Optional[str], prefer_cli: bool = True, timeout: int = 60) -> bool:
+        """Ensure the whole-namespace cache is populated and scoped to *label*.
+
+        Returns ``True`` when the cache is usable (already warmed for this label,
+        or just warmed successfully) — callers may then trust ``self._kv_cache``
+        fully, including a miss meaning "confirmed not present". Returns ``False``
+        only when the backing bulk fetch itself failed, in which case callers must
+        fall back to a direct per-key read rather than conclude "not found".
+        """
+        if self._kv_cache is not None and self._kv_cache_label == label:
+            return True
+        fetched = self._fetch_all_keyvalues(label=label, prefer_cli=prefer_cli, timeout=timeout)
+        if fetched is None:
+            return False
+        self._kv_cache = fetched
+        self._kv_cache_label = label
+        return True
+
+    def _fetch_all_keyvalues(
+        self, label: Optional[str] = None, prefer_cli: bool = True, timeout: int = 60
+    ) -> Optional[Dict[str, str]]:
+        """Bulk-fetch every key+value in the store (optionally scoped to *label*) in one call.
+
+        Backs :meth:`_get_from_kv_cache`. Azure App Configuration's list API
+        (``az appconfig kv list`` / ``GET /kv``) already returns the ``value``
+        field for every entry in the same call keys are listed with — this was
+        previously discarded via a ``"[].key"``-only CLI query / manual key
+        extraction, so keeping it costs nothing extra. Returns ``None`` (not an
+        empty dict) on failure so callers never mistake "fetch failed" for "store
+        is genuinely empty".
+        """
+        if prefer_cli:
+            result = self._fetch_all_keyvalues_via_cli(label, timeout)
+            if result is not None:
+                return result
+            result = self._fetch_all_keyvalues_via_api(label, use_cli_token=True)
+            if result is not None:
+                return result
+            return self._fetch_all_keyvalues_via_api(label, use_cli_token=False)
+        else:
+            result = self._fetch_all_keyvalues_via_api(label, use_cli_token=False)
+            if result is not None:
+                return result
+            result = self._fetch_all_keyvalues_via_api(label, use_cli_token=True)
+            if result is not None:
+                return result
+            return self._fetch_all_keyvalues_via_cli(label, timeout)
+
+    def _fetch_all_keyvalues_via_cli(self, label: Optional[str], timeout: int = 60) -> Optional[Dict[str, str]]:
+        try:
+            if self.connection_string:
+                args = ["appconfig", "kv", "list", "--connection-string", self.connection_string]
+            else:
+                appconfig_name = self.appconfig_endpoint.replace("https://", "").replace(".azconfig.io", "").rstrip("/")
+                args = ["appconfig", "kv", "list", "--name", appconfig_name]
+            if label:
+                args.extend(["--label", label])
+            args.extend(["--query", "[].{key: key, value: value}", "-o", "json"])
+
+            result = self._run_integration(args=args, timeout=timeout)
+            if result.returncode != 0 or not result.stdout:
+                return None
+            entries = json.loads(result.stdout)
+            return {e["key"]: e.get("value") or "" for e in entries if e.get("key")}
+        except Exception as e:
+            logger.debug(
+                "Azure App Configuration CLI bulk fetch failed", error_type=type(e).__name__, name=self.integration_name
+            )
+            return None
+
+    def _fetch_all_keyvalues_via_api(self, label: Optional[str], use_cli_token: bool) -> Optional[Dict[str, str]]:
+        try:
+            access_token = self._get_access_token_via_cli() if use_cli_token else self._get_access_token_via_api()
+            if not access_token:
+                return None
+
+            kv_url = f"{self.appconfig_endpoint}kv?api-version=1.0"
+            if label:
+                kv_url += f"&label={urllib.parse.quote(label, safe='')}"
+
+            req = urllib.request.Request(kv_url)
+            req.add_header("Authorization", f"Bearer {access_token}")
+
+            with urllib.request.urlopen(req, timeout=10) as response:
+                kv_data = json.loads(response.read().decode("utf-8"))
+                return {item["key"]: item.get("value") or "" for item in kv_data.get("items", []) if item.get("key")}
+        except Exception as e:
+            logger.debug(
+                "Azure App Configuration API bulk fetch failed", error_type=type(e).__name__, name=self.integration_name
+            )
+            return None
 
     def _get_flag(
         self,

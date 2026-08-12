@@ -16,6 +16,7 @@ code/templates, often a directory or glob — out of scope for hash-based cache-
 purposes). ``--refresh-cache`` remains the escape hatch for any gap here.
 """
 
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -26,9 +27,11 @@ from strata.controllers.solution_controller import SolutionController
 from strata.services.cache_service import CacheService, CacheStatus
 from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_service import DeploymentService
+from strata.services.environment_service import EnvironmentService
 from strata.services.namespace_service import NamespaceService
 from strata.services.workspace_service import WorkspaceService
 from strata.utils.config import DEFAULT_BUILD_PATH
+from strata.utils.merge_provenance import MergeProvenance
 from strata.utils.system import resolve_path
 
 # NOTE on scope: a full resolve (warm) requires the same ConfigurationService
@@ -49,6 +52,16 @@ class CacheController(BaseController):
     """Warm, inspect, clear, and export the resolved-model cache."""
 
     KIND = "deployment"
+    # Second cache kind (ADR-0026 Path B): the merged EnvironmentModel + merge
+    # provenance only — no workspace/provider/resource/module resolution. Serves
+    # commands that only need declared variables/secrets/features (store type +
+    # reference, never resolved values — see get_or_resolve_environment docstring).
+    KIND_RESOLVED_ENVIRONMENT = "resolved_environment"
+    # Third cache kind (ADR-0026 OQ-4, phase 1): resolved variable/feature *values*
+    # (never secrets). Written/read by ValueController.resolve_values_via_cache() —
+    # kept here too (same literal) purely so `strata cache status`/`export` can
+    # label entries of this kind without importing the controller layer's ValueController.
+    KIND_RESOLVED_VALUES = "resolved_values"
 
     def __init__(self, work_path: Path) -> None:
         super().__init__()
@@ -360,6 +373,162 @@ class CacheController(BaseController):
 
         return paths
 
+    # ------------------------------------------------------------------
+    # Resolved-environment cache (ADR-0026 Path B — no workspace load)
+    # ------------------------------------------------------------------
+
+    def _collect_environment_input_paths(self, deployment_service: DeploymentService) -> List[str]:
+        """Cache-key scope for the ``resolved_environment`` kind.
+
+        Deliberately narrower than ``_collect_input_paths``: the deployment file,
+        its environment file(s), and its tenant file (if any) — the only inputs
+        that affect the merged environment (variables/secrets/features/overrides).
+        The workspace file and everything it references are irrelevant here and
+        are NOT hashed, which is what makes this cache kind cheap to warm.
+        """
+        paths: List[str] = []
+
+        if deployment_service.path:
+            paths.append(str(Path(deployment_service.path).resolve()))
+
+        repo_map: Dict[str, str] = {}
+        try:
+            repo_map = deployment_service._merged_repo_map(None)
+        except Exception:
+            pass
+
+        model = getattr(deployment_service, "model", None)
+        spec = getattr(model, "spec", None) if model else None
+
+        for ref in getattr(spec, "environments", None) or []:
+            try:
+                resolved = resolve_path(str(self._work_path), ref.file, repo_map=repo_map)
+                paths.append(str(Path(resolved).resolve()))
+            except Exception as exc:
+                self.logger.debug("Could not resolve environment file for cache key", file=ref.file, error=str(exc))
+
+        tenant_code = getattr(spec, "tenant", None) if spec else None
+        if tenant_code:
+            tenant_path = self._work_path / "tenants" / f"{tenant_code}.yaml"
+            if tenant_path.exists():
+                paths.append(str(tenant_path.resolve()))
+
+        return paths
+
+    def _resolve_environment_snapshot(
+        self, deployment_service: DeploymentService, repo_map: Dict[str, str]
+    ) -> Dict[str, Any]:
+        """Build the ``resolved_environment`` cache payload for *deployment_service*.
+
+        Contains only declarative data derived from YAML: the merged environment
+        model (meta, properties, custom, declared variables/secrets/features,
+        overrides.remotes) plus merge provenance and a couple of deployment-level
+        fields ``deploy show`` displays. Deliberately excludes anything
+        workspace-derived (providers, resources, modules) — that's the whole point
+        of this lighter cache kind.
+
+        Caches only *declarations* (store type + reference), never resolved secret
+        values — those always come from a live store call via ``ValueController``.
+        This sidesteps the store-value-cache correctness/at-rest-encryption problem
+        entirely (see ADR-0026 OQ-4): nothing sensitive is ever written to disk here.
+        """
+        if not deployment_service.load_environment_only(str(self._work_path), repo_map=repo_map):
+            raise RuntimeError("; ".join(deployment_service.get_validation_errors()) or "environment resolution failed")
+
+        deployment_model = deployment_service.model
+        env_service = deployment_service._environment_service
+        provenance = deployment_service.get_merge_provenance()
+
+        workspace_path: Optional[str] = None
+        workspace_ref = getattr(deployment_model.spec, "workspace", None) if deployment_model else None
+        if workspace_ref is not None and getattr(workspace_ref, "file", None):
+            try:
+                merged_repo_map = deployment_service._merged_repo_map(None)
+                workspace_path = str(
+                    Path(resolve_path(str(self._work_path), workspace_ref.file, repo_map=merged_repo_map)).resolve()
+                )
+            except Exception as exc:
+                self.logger.debug("Could not resolve workspace file for display", error=str(exc))
+
+        stages: List[Dict[str, Any]] = []
+        if deployment_model and deployment_model.spec.stages:
+            stages = [s.model_dump(mode="json") for s in deployment_model.spec.stages]
+
+        return {
+            "deployment_name": deployment_service.get_name(),
+            "stages": stages,
+            "workspace_path": workspace_path,
+            "environment": env_service.model.model_dump(mode="json") if env_service and env_service.model else None,
+            "merge_provenance": asdict(provenance) if provenance is not None else None,
+        }
+
+    def get_or_resolve_environment(
+        self,
+        deployment_service: DeploymentService,
+        repo_map: Dict[str, str],
+        no_cache: bool = False,
+        refresh_cache: bool = False,
+    ) -> Tuple[bool, Optional[Dict[str, Any]], str]:
+        """Return the ``resolved_environment`` snapshot for *deployment_service*.
+
+        *deployment_service* must already be Phase-1/Phase-2 validated (the caller's
+        normal deployment-loading flow) — this method never touches workspace or
+        ``ConfigurationService`` state; it reuses whatever is already active via
+        ``ConfigurationService.get_instance()``, exactly like a live
+        ``load_deploy_services()`` call would.
+
+        On a cache miss, *deployment_service* is mutated in place by the underlying
+        ``load_environment_only()`` call (its ``_environment_service`` and
+        ``_merge_provenance`` are populated) — the same side effect a live load
+        would have. On a cache hit, *deployment_service* is left untouched; callers
+        must call :meth:`apply_environment_snapshot` to populate it from the
+        returned snapshot.
+
+        Returns ``(success, snapshot, indicator)`` where ``indicator`` is one of
+        ``"cached"``, ``"refreshed"``, or ``"no-cache"``. On failure, ``snapshot``
+        is ``None`` and errors are available via ``get_errors()``.
+        """
+        name = deployment_service.get_name() or str(deployment_service.path)
+        input_paths = self._collect_environment_input_paths(deployment_service)
+
+        try:
+            snapshot, indicator = self._cache.get_or_resolve(
+                name=name,
+                kind=self.KIND_RESOLVED_ENVIRONMENT,
+                input_paths=input_paths,
+                resolve_fn=lambda: self._resolve_environment_snapshot(deployment_service, repo_map),
+                no_cache=no_cache,
+                refresh_cache=refresh_cache,
+            )
+        except Exception as exc:
+            self._add_error(f"Failed to resolve environment for '{name}': {exc}")
+            return False, None, "error"
+
+        return True, snapshot, indicator
+
+    @staticmethod
+    def apply_environment_snapshot(deployment_service: DeploymentService, snapshot: Dict[str, Any]) -> None:
+        """Rehydrate *deployment_service* from a cached ``resolved_environment`` snapshot.
+
+        Sets ``_environment_service`` and ``_merge_provenance`` exactly as a live
+        ``load_environment_only()`` call would — command code that only calls
+        ``get_environment_service()`` / ``get_merge_provenance()`` (``deploy show``,
+        ``values list/get/resolve``, ``ValueController.resolve_values``) works
+        unmodified against a cache hit. Does not touch the workspace service or
+        ``deployment_service.model`` (both already valid from the caller's own
+        Phase-1/Phase-2 load).
+        """
+        env_data = snapshot.get("environment")
+        if env_data is not None:
+            env_service = EnvironmentService(data=env_data)
+            env_service.validate()
+            deployment_service._environment_service = env_service
+        else:
+            deployment_service._environment_service = None
+
+        provenance_data = snapshot.get("merge_provenance")
+        deployment_service._merge_provenance = MergeProvenance(**provenance_data) if provenance_data else None
+
     def _resolve_platform_model(self, deployment_service: DeploymentService) -> Dict[str, Any]:
         """Build the platform artifact model in memory (no files written).
 
@@ -453,7 +622,7 @@ class CacheController(BaseController):
             name = deployment_service.model.meta.name if deployment_service.model else file_path
             input_paths = self._collect_input_paths(deployment_service)
             cache_key = self._cache.compute_cache_key(input_paths)
-            status = self._cache.status(name, cache_key) if cache_key else CacheStatus.COLD
+            status = self._cache.status(name, self.KIND, cache_key) if cache_key else CacheStatus.COLD
             return True, [{"name": name, "status": status}], []
 
         entries = self._cache.list_entries()

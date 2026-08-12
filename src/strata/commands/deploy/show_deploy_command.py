@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 import click
 
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
-from strata.controllers.value_controller import ValueController
+from strata.services.deployment_service import DeploymentService
 
 
 def _mask(value: Any) -> str:
@@ -39,6 +39,8 @@ class ShowDeployCommand(BaseDeployCommand):
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
+        no_cache: bool = False,
+        refresh_cache: bool = False,
     ):
         super().__init__(
             file=file,
@@ -46,6 +48,8 @@ class ShowDeployCommand(BaseDeployCommand):
             output=output,
             verbose=verbose,
             quiet=quiet,
+            no_cache=no_cache,
+            refresh_cache=refresh_cache,
         )
         self._stage = stage
         self._resolved_remotes: List[Dict[str, str]] = []
@@ -53,6 +57,15 @@ class ShowDeployCommand(BaseDeployCommand):
     # -------------------------------------------------------------------------
     # Core logic
     # -------------------------------------------------------------------------
+
+    def _load_related_services(self, deployment_service: DeploymentService, repo_map: Dict[str, str]) -> bool:
+        """ADR-0026: only the merged environment is needed here — never the workspace.
+
+        Effective remote references still need the environment's declared overrides
+        applied to the active ``ConfigurationService``, so ``apply_remote_overrides``
+        is requested explicitly.
+        """
+        return self._load_environment_related_services(deployment_service, repo_map, apply_remote_overrides=True)
 
     def _execute(self) -> bool:
         ok = self._collect()
@@ -74,7 +87,6 @@ class ShowDeployCommand(BaseDeployCommand):
         env_override_names: set[str] = set()
         env_name: Optional[str] = None
         env_path: Optional[str] = None
-        ws_path: Optional[str] = None
 
         env_service = None
         try:
@@ -89,9 +101,9 @@ class ShowDeployCommand(BaseDeployCommand):
         except Exception:
             pass
 
-        ws = self._deployment_service._workspace_service
-        if ws:
-            ws_path = str(ws.path) if ws.path else None
+        # ADR-0026: no workspace service is loaded for this command (environment-only
+        # load) — the resolved path comes from the resolved-environment cache snapshot.
+        ws_path = self._environment_snapshot.get("workspace_path") if self._environment_snapshot else None
 
         # Build remote rows — config_remote.reference is already the effective ref
         # because apply_environment_overrides() mutated it in-place before we get here
@@ -169,9 +181,8 @@ class ShowDeployCommand(BaseDeployCommand):
             if env_model.spec.custom:
                 env_data["custom"] = dict(env_model.spec.custom)
 
-        controller = ValueController()
         assert self._deployment_service is not None
-        _, resolved, _ = controller.resolve_values(self._deployment_service, strict=False)
+        _, resolved, _ = self._resolve_values(strict=False)
 
         declared_vars = env_service.get_variables()
         var_rows = []

@@ -52,18 +52,30 @@ class DnsRecordModel(PlatformBaseModel):
         None,
         description="Secret key from spec.references.secrets — resolved at deploy time via TF_VAR_*",
     )
+    output_key: Optional[str] = Field(
+        None,
+        description=(
+            "Key into a preceding deployment stage's provisioner outputs (e.g. a VM's public IP "
+            "from a Terraform 'output' block) that provides this record's value. Unlike var:/secret:, "
+            "this is NOT declared in spec.references — it names a cross-stage output, not an "
+            "environment-declared value, and is only resolvable at deploy time once that stage has "
+            "applied. Resolved the same way stage outputs already are for every other stage "
+            "(TF_VAR_<output_key> for Terraform, bare <output_key> env var for Ansible/Compose)."
+        ),
+    )
     ttl: Optional[int] = Field(None, ge=1, description="Record-level TTL override in seconds (>=1 if set)")
     priority: Optional[int] = Field(None, ge=1, le=65535, description="Priority for MX/SRV records (1–65535 if set)")
 
     @model_validator(mode="after")
     def validate_exactly_one_source(self) -> "DnsRecordModel":
-        """Exactly one of value / var / secret must be set."""
-        sources = [f for f in (self.value, self.var, self.secret) if f is not None]
+        """Exactly one of value / var / secret / output_key must be set."""
+        sources = [f for f in (self.value, self.var, self.secret, self.output_key) if f is not None]
         if len(sources) == 0:
-            raise ValueError(f"DNS record '{self.name}' must have exactly one of: value, var, secret.")
+            raise ValueError(f"DNS record '{self.name}' must have exactly one of: value, var, secret, output_key.")
         if len(sources) > 1:
             raise ValueError(
-                f"DNS record '{self.name}' has multiple sources set. Use exactly one of: value, var, secret."
+                f"DNS record '{self.name}' has multiple sources set. "
+                "Use exactly one of: value, var, secret, output_key."
             )
         return self
 

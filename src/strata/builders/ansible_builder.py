@@ -20,6 +20,8 @@ Output files (written to ``{provisioner_build_path}/``):
 | ``strata_namespaces.yml``    | ``strata_namespaces``  | ``{{ strata_namespaces[name] }}``                       |
 | ``strata_firewalls.yml``     | ``strata_firewalls``   | ``{{ strata_firewalls[name].rules }}``                  |
 | ``strata_dns.yml``           | ``strata_dns_zones``   | ``{{ strata_dns_zones[name].zones }}``                  |
+| ``strata_dns_secrets.yml``   | ``strata_dns_secret_records`` | ``{{ lookup('env', item.secret_key) }}`` (only when `secret:` records present) |
+| ``strata_dns_outputs.yml``   | ``strata_dns_output_records`` | ``{{ lookup('env', item.output_key) }}`` (only when `output_key:` records present) |
 | ``strata_networks.yml``      | ``strata_networks``    | ``{{ strata_networks[name] }}``                         |
 """
 
@@ -52,6 +54,11 @@ class AnsibleBuilder(BaseBuilder):
 
     def __init__(self, verbose: bool = False) -> None:
         super().__init__(verbose=verbose)
+
+        # Variables declared in the deployment's environment file (literal-store
+        # only), used to resolve DNS records sourced via `var:` — mirrors
+        # TerraformBuilder.variable_refs.
+        self.variable_refs: Dict[str, Dict[str, Any]] = {}
 
     # ------------------------------------------------------------------
     # BaseBuilder interface
@@ -141,7 +148,7 @@ class AnsibleBuilder(BaseBuilder):
                 self._errors.append("Platform model is None after loading")
                 return False
 
-            ansible_vars = self._build_ansible_vars(platform_model, [])
+            ansible_vars = self._build_ansible_vars(platform_model, deployment_service, [])
 
             if dry_run:
                 ansible_paths = self._resolve_ansible_paths(deployment_service, build_path, solution_controller)
@@ -227,9 +234,13 @@ class AnsibleBuilder(BaseBuilder):
     def _build_ansible_vars(
         self,
         platform: PlatformArtifactModel,
+        deployment_service: DeploymentService,
         messages: List[str],
     ) -> Dict[str, Any]:
         """Build all Ansible variable payloads."""
+        # Collect environment-declared variables so DNS `var:` records can be
+        # resolved at build time (mirrors TerraformBuilder._build_terraform_vars).
+        self._collect_environment_variables(deployment_service)
         return {
             "workspace": self._build_workspace_vars(platform, messages),
             "providers": self._build_provider_vars(platform, messages),
@@ -487,15 +498,62 @@ class AnsibleBuilder(BaseBuilder):
 
         return {"strata_firewalls": firewalls_dict}
 
+    def _collect_environment_variables(self, deployment_service: DeploymentService) -> None:
+        """Track literal-store variables declared in the deployment's environment file.
+
+        Mirrors ``TerraformBuilder._collect_environment_variables`` so that DNS
+        records sourced via ``var:`` can be resolved at build time instead of
+        being silently dropped.
+        """
+        try:
+            env_service = deployment_service.get_environment_service()
+        except Exception:
+            return
+        if env_service is None or env_service.model is None:
+            return
+        variables = env_service.model.spec.variables if env_service.model.spec else None
+        if not variables:
+            return
+        env_name = env_service.get_name() or "environment"
+        for variable in variables:
+            if variable.key not in self.variable_refs:
+                self.variable_refs[variable.key] = {
+                    "key": variable.key,
+                    "store": variable.store.value,
+                    "value": variable.value,
+                    "used_by": [env_name],
+                }
+
     def _build_dns_vars(self, platform: PlatformArtifactModel, messages: List[str]) -> Dict[str, Any]:
-        """Build DNS zone variable payload."""
+        """Build DNS zone variable payload.
+
+        Records sourced via ``value:`` are written literally. Records sourced via
+        ``var:`` are resolved from the environment's literal-store variables (like
+        ``TerraformBuilder``); unresolved vars omit the ``value`` key with a warning.
+        Records sourced via ``secret:`` never have their value written — instead
+        their coordinates (zone, record name/type, secret key) are bucketed into
+        ``strata_dns_secret_records`` so playbooks can resolve them via
+        ``lookup('env', secret_key)`` (secrets are already injected verbatim into
+        the ansible-playbook process env by ``AnsibleDeployer``).
+        Records sourced via ``output_key:`` behave the same way — their coordinates
+        are bucketed into ``strata_dns_output_records`` so playbooks can resolve
+        them via ``lookup('env', output_key)`` (every resolved stage output is
+        already injected verbatim into the ansible-playbook process env, same
+        mechanism used for secrets — see ``inject_compose_env``).
+        """
         dns_dict: Dict[str, Any] = {}
+        secret_records_dict: Dict[str, Any] = {}
+        output_records_dict: Dict[str, Any] = {}
 
         if platform.spec.dns_zones:
             for dns in platform.spec.dns_zones:
                 zones_dict: Dict[str, Any] = {}
+                dns_secret_zones: Dict[str, Any] = {}
+                dns_output_zones: Dict[str, Any] = {}
                 for zone in dns.zones:
                     records = []
+                    secret_records: Dict[str, Any] = {}
+                    output_records: Dict[str, Any] = {}
                     if zone.records:
                         for record in zone.records:
                             record_data: Dict[str, Any] = {
@@ -506,11 +564,45 @@ class AnsibleBuilder(BaseBuilder):
                             }
                             if record.value is not None:
                                 record_data["value"] = record.value
+                            elif record.var is not None:
+                                var_entry = self.variable_refs.get(record.var, {})
+                                resolved_value = var_entry.get("value")
+                                if resolved_value is not None:
+                                    record_data["value"] = resolved_value
+                                else:
+                                    messages.append(
+                                        f"DNS record '{record.name}' in zone '{zone.name}' uses "
+                                        f"var '{record.var}' which has no resolved value — "
+                                        "omitting value. Declare it as a literal-store variable "
+                                        "in the environment to resolve it at build time."
+                                    )
+                            elif record.secret is not None:
+                                coord_key = f"{record.name}_{record.type.value}"
+                                secret_records[coord_key] = {
+                                    "name": record.name,
+                                    "type": record.type.value,
+                                    "secret_key": record.secret,
+                                    "ttl": record.ttl,
+                                    "priority": record.priority,
+                                }
+                            elif record.output_key is not None:
+                                coord_key = f"{record.name}_{record.type.value}"
+                                output_records[coord_key] = {
+                                    "name": record.name,
+                                    "type": record.type.value,
+                                    "output_key": record.output_key,
+                                    "ttl": record.ttl,
+                                    "priority": record.priority,
+                                }
                             records.append(record_data)
                     zones_dict[zone.name] = {
                         "ttl": zone.ttl,
                         "records": records,
                     }
+                    if secret_records:
+                        dns_secret_zones[zone.name] = secret_records
+                    if output_records:
+                        dns_output_zones[zone.name] = output_records
                 dns_dict[str(dns.name)] = {
                     "description": (dns.annotations.get("description", "") if dns.annotations else ""),
                     "labels": dns.labels or {},
@@ -518,11 +610,19 @@ class AnsibleBuilder(BaseBuilder):
                     "provider": dns.provider,
                     "zones": zones_dict,
                 }
+                if dns_secret_zones:
+                    secret_records_dict[str(dns.name)] = dns_secret_zones
+                if dns_output_zones:
+                    output_records_dict[str(dns.name)] = dns_output_zones
 
         if self.verbose:
             messages.append(f"Built DNS vars: {len(dns_dict)} DNS zone configurations")
 
-        return {"strata_dns_zones": dns_dict}
+        return {
+            "strata_dns_zones": dns_dict,
+            "strata_dns_secret_records": secret_records_dict,
+            "strata_dns_output_records": output_records_dict,
+        }
 
     def _build_network_vars(self, platform: PlatformArtifactModel, messages: List[str]) -> Dict[str, Any]:
         """Build network variable payload."""
@@ -727,7 +827,32 @@ class AnsibleBuilder(BaseBuilder):
         ]:
             payload = ansible_vars.get(section_key, {})
             if payload.get(data_key):
-                files.append((f"{p}{filename_suffix}", payload))
+                # Only emit the section's primary key — e.g. "dns" also carries
+                # strata_dns_secret_records, which is written to its own file below.
+                files.append((f"{p}{filename_suffix}", {data_key: payload[data_key]}))
+
+        # DNS secret record coordinates are written to a separate file (mirrors
+        # Terraform's dns.auto.tfvars.json / dns_secret_records.auto.tfvars.json split)
+        # so playbooks can distinguish "no secret records" from "file not generated".
+        dns_payload = ansible_vars.get("dns", {})
+        if dns_payload.get("strata_dns_secret_records"):
+            files.append(
+                (
+                    f"{p}dns_secrets.yml",
+                    {"strata_dns_secret_records": dns_payload["strata_dns_secret_records"]},
+                )
+            )
+
+        # DNS output-key record coordinates (output_key: sources) — same rationale
+        # as the secrets split above; kept in its own file since it has different
+        # provenance/security semantics (stage outputs, not environment secrets).
+        if dns_payload.get("strata_dns_output_records"):
+            files.append(
+                (
+                    f"{p}dns_outputs.yml",
+                    {"strata_dns_output_records": dns_payload["strata_dns_output_records"]},
+                )
+            )
 
         for resource_type, resources in ansible_vars.get("resources_by_type", {}).items():
             files.append((f"{p}resx_{resource_type}.yml", {f"strata_{resource_type}": resources}))

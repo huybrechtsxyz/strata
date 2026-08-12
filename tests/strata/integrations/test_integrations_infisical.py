@@ -243,3 +243,58 @@ class TestInfisicalGetSetupInfo:
         env_names = [e["name"] for e in info["env_vars"]]
         assert "INFISICAL_TOKEN" in env_names
         assert "INFISICAL_PROJECT_ID" in env_names
+
+
+class TestInfisicalBulkValueCache:
+    """ADR-0026: Infisical's raw-secrets list endpoint already returns
+    secretValue for every entry in the same call list_secrets() uses to list
+    names — get_secret() should warm a per-scope cache once and serve every
+    subsequent HIT from it. A miss always falls through to the authoritative
+    per-key lookup (never treated as confirmed "not found") since a false
+    negative could trigger unwanted generate-on-missing secret creation."""
+
+    def setup_method(self):
+        BaseIntegration._instances.clear()
+
+    def _integration(self, monkeypatch) -> InfisicalIntegration:
+        monkeypatch.setenv("INFISICAL_PROJECT_ID", "proj-123")
+        monkeypatch.setenv("INFISICAL_TOKEN", "st.test.token")
+        BaseIntegration._instances.clear()
+        return InfisicalIntegration(_cfg())
+
+    def test_second_get_secret_call_does_not_refetch(self, monkeypatch):
+        i = self._integration(monkeypatch)
+        with patch.object(
+            i, "_fetch_all_secret_values", return_value={"DB_PASSWORD": "s3cr3t", "API_KEY": "abc"}
+        ) as mock_fetch:
+            assert i.get_secret("DB_PASSWORD") == "s3cr3t"
+            assert i.get_secret("API_KEY") == "abc"
+        mock_fetch.assert_called_once()
+
+    def test_cache_miss_falls_through_to_live_lookup(self, monkeypatch):
+        """A key absent from the bulk listing is NOT trusted as 'not found' —
+        secrets always get a live confirmation to avoid false generate-on-missing."""
+        i = self._integration(monkeypatch)
+        with patch.object(i, "_fetch_all_secret_values", return_value={"DB_PASSWORD": "s3cr3t"}):
+            with patch.object(i, "_get_secret_via_api", return_value="live-value") as mock_live:
+                with patch.object(i, "is_available", return_value=False):  # force CLI path skipped
+                    result = i.get_secret("OTHER_KEY", prefer_cli=False)
+        assert result == "live-value"
+        mock_live.assert_called_once()
+
+    def test_bulk_fetch_failure_falls_back_to_live_lookup(self, monkeypatch):
+        i = self._integration(monkeypatch)
+        with patch.object(i, "_fetch_all_secret_values", return_value=None):
+            with patch.object(i, "_get_secret_via_api", return_value="live-value") as mock_live:
+                result = i.get_secret("DB_PASSWORD", prefer_cli=False)
+        assert result == "live-value"
+        mock_live.assert_called_once()
+
+    def test_set_secret_invalidates_cache(self, monkeypatch):
+        i = self._integration(monkeypatch)
+        with patch.object(i, "_fetch_all_secret_values", return_value={"DB_PASSWORD": "s3cr3t"}) as mock_fetch:
+            i.get_secret("DB_PASSWORD")  # warm
+            with patch.object(i, "_set_secret_via_api", return_value=True):
+                i.set_secret("NEW_KEY", "value")
+            i.get_secret("DB_PASSWORD")  # should re-warm
+        assert mock_fetch.call_count == 2

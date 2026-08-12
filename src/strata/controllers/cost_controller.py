@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from strata.controllers.solution_controller import SolutionController
     from strata.models.workspace_model import WorkspaceIacModel
     from strata.services.deployment_service import DeploymentService
+    from strata.utils.cost_history import CostHistoryStore
 
 # Cache TTL: 7 days in seconds
 _CACHE_TTL_SECONDS = 7 * 24 * 3600
@@ -203,8 +204,154 @@ class CostController(BaseController):
             store.record_snapshot(cost_data=cost_data, version=version, currency=currency)
             store.save()
             self.logger.debug("cost_history_recorded", deployment=deployment_name)
+            self._push_cost_history(store, deployment_service, self._work_path)
+            self._forward_cost_audit_event(store, deployment_service, self._work_path)
+            self._forward_cost_recorded_event(store, deployment_service, self._work_path)
         except Exception as exc:
             self.logger.debug("cost_history_record_failed", error=str(exc))
+            # Non-fatal
+
+    def _push_cost_history(
+        self, store: "CostHistoryStore", deployment_service: "DeploymentService", work_path: Path
+    ) -> None:
+        """Push the cost-history file to a durable git repo, if configured (ADR-0065 Phase 1).
+
+        Best-effort — never raises, never affects the cost-recording result above.
+        """
+        try:
+            from strata.controllers.audit_controller import AuditController
+            from strata.services.configuration_service import ConfigurationService
+
+            config_model = ConfigurationService.get_instance().model
+            cost_cfg = getattr(getattr(config_model, "spec", None), "cost", None)
+            repo_cfg = getattr(getattr(cost_cfg, "history", None), "repository", None)
+            if not repo_cfg or not repo_cfg.push:
+                return
+
+            workspace_service = deployment_service.get_workspace_service() if deployment_service else None
+            workspace_name = (
+                str(workspace_service.model.meta.name) if workspace_service and workspace_service.model else "unknown"
+            )
+
+            AuditController(work_path=work_path).push_to_remote(
+                [store.history_file],
+                local_base=store.history_dir,
+                remote_path=repo_cfg.path or "cost",
+                repo_name=repo_cfg.name,
+                workspace=workspace_name,
+                commit_message="chore(cost): history update [skip ci]",
+            )
+        except Exception as exc:
+            self.logger.debug("cost_history_push_failed", error=str(exc))
+            # Non-fatal
+
+    def _forward_cost_audit_event(
+        self, store: "CostHistoryStore", deployment_service: "DeploymentService", work_path: Path
+    ) -> None:
+        """Forward a cost.threshold_exceeded event when the latest snapshot crosses a
+        configured threshold (ADR-0066 follow-up — drift.detected's cost counterpart).
+
+        Unlike drift, "any cost" is not inherently alert-worthy, so this requires an
+        actual threshold to be configured under spec.cost.history.alert — no config,
+        no event, ever. Best-effort — never raises, never affects the cost-recording
+        result above.
+        """
+        try:
+            from strata.controllers.audit_controller import AuditController
+            from strata.services.configuration_service import ConfigurationService
+
+            config_model = ConfigurationService.get_instance().model
+            cost_cfg = getattr(getattr(config_model, "spec", None), "cost", None)
+            alert_cfg = getattr(getattr(cost_cfg, "history", None), "alert", None)
+            if alert_cfg is None or (alert_cfg.max_monthly is None and alert_cfg.delta_percent is None):
+                return
+
+            latest = store.latest()
+            if latest is None:
+                return
+
+            total = latest.get("total_monthly")
+            delta = latest.get("delta_from_previous")
+            if total is None:
+                return
+
+            alert_reason: Optional[str] = None
+            if alert_cfg.max_monthly is not None and total > alert_cfg.max_monthly:
+                alert_reason = "ceiling"
+            elif alert_cfg.delta_percent is not None and delta is not None and delta > 0:
+                previous_total = total - delta
+                if previous_total > 0 and (delta / previous_total) * 100 >= alert_cfg.delta_percent:
+                    alert_reason = "delta"
+
+            if alert_reason is None:
+                return
+
+            audit_cfg = getattr(getattr(config_model, "spec", None), "audit", None)
+            deployment_name = deployment_service.get_name() if deployment_service else "unknown"
+
+            payload: Dict[str, Any] = {
+                "deployment": str(deployment_name),
+                "recorded_at": latest.get("recorded_at"),
+                "currency": latest.get("currency"),
+                "total_monthly": total,
+                "delta_from_previous": delta,
+                "alert_reason": alert_reason,
+                "provisioners": latest.get("provisioners"),
+            }
+            if latest.get("version"):
+                payload["version"] = latest["version"]
+
+            AuditController(work_path=work_path).forward("cost.threshold_exceeded", payload, audit_config=audit_cfg)
+        except Exception as exc:
+            self.logger.debug("cost_audit_forward_failed", error=str(exc))
+            # Non-fatal
+
+    def _forward_cost_recorded_event(
+        self, store: "CostHistoryStore", deployment_service: "DeploymentService", work_path: Path
+    ) -> None:
+        """Forward a cost.recorded event for every snapshot (ADR-0065 Phase 2 producer).
+
+        Unlike cost.threshold_exceeded (fires only when a configured threshold is
+        crossed), this fires unconditionally on every recorded snapshot — it's the
+        actual history record Step 2.2's schema was built for, not an alert signal.
+        Uses a deterministic execution_id (hash of deployment+recorded_at) rather
+        than a fresh UUID: CostController has no command-level execution_id to
+        reuse, and the record's identity is the snapshot itself, not which
+        invocation produced it — resending the same snapshot must be a no-op
+        under Step 2.3's idempotency, regardless of what re-sends it.
+
+        Best-effort — never raises, never affects the cost-recording result above.
+        """
+        try:
+            import hashlib
+
+            from strata.controllers.audit_controller import AuditController
+            from strata.services.configuration_service import ConfigurationService
+
+            latest = store.latest()
+            if latest is None:
+                return
+
+            config_model = ConfigurationService.get_instance().model
+            audit_cfg = getattr(getattr(config_model, "spec", None), "audit", None)
+            deployment_name = deployment_service.get_name() if deployment_service else "unknown"
+            recorded_at = latest.get("recorded_at")
+
+            payload: Dict[str, Any] = {
+                "execution_id": hashlib.sha256(f"{deployment_name}:{recorded_at}".encode()).hexdigest(),
+                "deployment": str(deployment_name),
+                "recorded_at": recorded_at,
+                "currency": latest.get("currency"),
+                "total_monthly": latest.get("total_monthly"),
+                "delta_from_previous": latest.get("delta_from_previous"),
+                "provisioners": latest.get("provisioners"),
+            }
+            if latest.get("version"):
+                payload["version"] = latest["version"]
+
+            AuditController(work_path=work_path).forward("cost.recorded", payload, audit_config=audit_cfg)
+        except Exception as exc:
+            self.logger.debug("cost_recorded_forward_failed", error=str(exc))
             # Non-fatal
 
     def invalidate_cache(self, work_path: Optional[Path] = None) -> int:

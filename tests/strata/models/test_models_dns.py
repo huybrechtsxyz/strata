@@ -255,3 +255,30 @@ def test_dns_secret_without_references_block_invalid():
     data = _dns_data(records=[{"name": "_verify", "type": "TXT", "secret": "verify_token"}])
     with pytest.raises(ValidationError):
         DnsModel.model_validate(data)
+
+
+def test_dns_record_output_key_valid():
+    """output_key: 'hearth_public_ip' is valid without any spec.references entry —
+    unlike var:/secret:, output_key names a cross-stage provisioner output, not an
+    environment-declared value, so it is never subject to the references check."""
+    data = _dns_data(records=[{"name": "@", "type": "A", "output_key": "hearth_public_ip"}])
+    model = DnsModel.model_validate(data)
+    record = model.spec.zones[0].records[0]
+    assert record.output_key == "hearth_public_ip"
+
+
+def test_dns_record_output_key_and_value_invalid():
+    """Record with both value and output_key set raises ValidationError."""
+    data = _dns_data(records=[{"name": "@", "type": "A", "value": "1.2.3.4", "output_key": "hearth_public_ip"}])
+    with pytest.raises(ValidationError):
+        DnsModel.model_validate(data)
+
+
+def test_dns_record_output_key_and_secret_invalid():
+    """Record with both secret and output_key set raises ValidationError."""
+    data = _dns_data(
+        records=[{"name": "@", "type": "TXT", "secret": "tok", "output_key": "hearth_public_ip"}],
+        references={"secrets": ["tok"]},
+    )
+    with pytest.raises(ValidationError):
+        DnsModel.model_validate(data)

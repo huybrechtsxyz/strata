@@ -78,6 +78,13 @@ AUDIT_EVENT_DEFAULTS: Dict[str, bool] = {
     "lock.acquired": False,
     "lock.released": False,
     "drift.detected": True,
+    "cost.threshold_exceeded": True,  # wired: CostController._forward_cost_audit_event() (ADR-0066 follow-up)
+    # cost.recorded / drift.recorded: the full history snapshot itself, forwarded on
+    # every check — not an alert (ADR-0065 Phase 2 producer, was a documented gap in
+    # the ADR's command-by-command review until this was wired).
+    "cost.recorded": True,  # wired: CostController._forward_cost_recorded_event()
+    "drift.recorded": True,  # wired: DriftDeployCommand._forward_drift_recorded_event()
+    "manifest.recorded": True,  # wired: BaseDeployCommand._forward_manifest_recorded_event()
 }
 
 
@@ -217,6 +224,37 @@ class AuditJournalModel(PlatformBaseModel):
     date_suffix: Optional[str] = Field(default=None, description="strftime suffix for daily-rotated backups")
 
 
+class RepositoryPushModel(PlatformBaseModel):
+    """Durable git-push destination for a local artifact (ADR-0065 Phase 1).
+
+    Shared, unified shape reused by every artifact kind that wants git-push
+    durability — audit's deploy-log, the deployment manifest, cost history, and
+    drift history. Local write locations are untouched by this model; it only
+    configures where (if anywhere) the artifact is *also* copied and pushed.
+    """
+
+    push: bool = Field(default=False, description="Whether to push this artifact to a git remote at all")
+    name: Optional[str] = Field(
+        default=None,
+        description=(
+            "Name of a registered solution repo (from 'strata repo add') to push to. "
+            "Omit to push to this workspace's own repo instead."
+        ),
+    )
+    path: Optional[str] = Field(
+        default=None,
+        description=(
+            "Where inside the target repo this artifact lands, relative to the repo root. "
+            "Supports Jinja2 templating scoped to {{ tenant }}/{{ environment }} only — "
+            "record-identity variables ({{ deployment }}, {{ timestamp }}, {{ date }}, "
+            "{{ stage }}) and {{ workspace }} are deliberately not available here (see "
+            "ADR-0065 'Distinguishing artifacts within a shared repo'). "
+            "Defaults to the artifact's own kind name (e.g. 'deploy-log', 'manifest', "
+            "'cost', 'drift') when omitted."
+        ),
+    )
+
+
 class AuditConfigModel(PlatformBaseModel):
     """Top-level audit configuration under spec.audit in environment YAML."""
 
@@ -235,13 +273,9 @@ class AuditConfigModel(PlatformBaseModel):
         default=None,
         description="Custom deploy-log base path relative to workspace root (defaults to .strata/deploy-log)",
     )
-    repository: Optional[str] = Field(
+    repository: Optional[RepositoryPushModel] = Field(
         default=None,
-        description=(
-            "Name of a registered solution repo (from 'strata repo add') to commit and push "
-            "deploy-log files to after each deployment. Omit to skip remote push. "
-            "Example: 'config' or 'state'."
-        ),
+        description="Durable git-push destination for the deploy-log (ADR-0065 Phase 1). Omit to skip.",
     )
 
     @model_validator(mode="after")

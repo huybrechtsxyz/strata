@@ -6,9 +6,11 @@ import click
 
 from strata.commands.cli_common import (
     click_file,
+    click_no_cache,
     click_output_format,
     click_output_quiet,
     click_output_verbose,
+    click_refresh_cache,
     click_work_path,
     handle_command_exit,
 )
@@ -294,6 +296,8 @@ def deploy_destroy(
     metavar="NAME",
     help="Filter secrets visibility to a specific stage's allowlist.",
 )
+@click_no_cache
+@click_refresh_cache
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -301,6 +305,8 @@ def deploy_show(
     file: Optional[str] = None,
     work_path: Optional[str] = None,
     stage: Optional[str] = None,
+    no_cache: bool = False,
+    refresh_cache: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -310,6 +316,8 @@ def deploy_show(
         file=file,
         work_path=work_path,
         stage=stage,
+        no_cache=no_cache,
+        refresh_cache=refresh_cache,
         output=output,
         verbose=verbose,
         quiet=quiet,

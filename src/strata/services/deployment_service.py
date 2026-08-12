@@ -880,6 +880,53 @@ class DeploymentService(BaseService["DeploymentModel"]):
             self.logger.debug("Applied provider override", provider=provider_name)
 
         # Apply remote reference overrides (pin a remote to a specific version/tag/branch)
+        _, remote_errors = self.apply_remote_overrides()
+        errors.extend(remote_errors)
+
+        # Success if no critical errors (skipped overrides are warnings, not failures)
+        critical_errors = [e for e in errors if "skipped" not in e.lower()]
+        success = len(critical_errors) == 0
+
+        if success:
+            self.logger.info(
+                "Environment overrides applied successfully",
+                deployment_name=self.get_name(),
+                environment_name=environment.get_name(),
+                warnings=len(errors),
+            )
+        else:
+            self.logger.error(
+                "Failed to apply environment overrides",
+                deployment_name=self.get_name(),
+                critical_error_count=len(critical_errors),
+            )
+
+        return success, errors
+
+    def apply_remote_overrides(self) -> Tuple[bool, List[str]]:
+        """Apply environment-declared remote reference overrides to the active configuration.
+
+        Unlike :meth:`apply_environment_overrides`, this only requires
+        ``self._environment_service`` — it never touches the workspace. This makes it
+        usable from the lightweight :meth:`load_environment_only` path (e.g. ``deploy
+        show``, which needs effective remote references but never reads workspace
+        resources/providers/modules).
+
+        Returns:
+            Tuple[bool, List[str]]: (success, list of error messages)
+
+        Raises:
+            ServiceNotValidatedError: If the environment service hasn't been loaded.
+        """
+        if self._environment_service is None:
+            raise ServiceNotValidatedError(
+                "DeploymentService",
+                reason="Call load_deploy_services() or load_environment_only() before apply_remote_overrides()",
+            )
+
+        errors: List[str] = []
+        environment = self._environment_service
+
         for remote_name in environment.get_overridden_remote_names():
             remote_override = environment.get_remote_override(remote_name)
             if not remote_override:
@@ -916,25 +963,106 @@ class DeploymentService(BaseService["DeploymentModel"]):
                 new_reference=remote_override.reference,
             )
 
-        # Success if no critical errors (skipped overrides are warnings, not failures)
-        critical_errors = [e for e in errors if "skipped" not in e.lower()]
-        success = len(critical_errors) == 0
+        return len(errors) == 0, errors
 
-        if success:
-            self.logger.info(
-                "Environment overrides applied successfully",
-                deployment_name=self.get_name(),
-                environment_name=environment.get_name(),
-                warnings=len(errors),
-            )
-        else:
+    def load_environment_only(self, objects_path: str, repo_map: Optional[Dict[str, str]] = None) -> bool:
+        """Load and merge this deployment's environment file(s) — no workspace load.
+
+        A lightweight alternative to :meth:`load_deploy_services` for commands that
+        only need declared variables/secrets/features and merge provenance (``deploy
+        show``, ``values list/get/resolve``) and never touch workspace resources,
+        providers, or modules. Skips the workspace load and infrastructure service
+        resolution entirely, which is the expensive part of ``load_deploy_services``
+        for a fleet of deployments that share the same workspace file.
+
+        Sets ``self._environment_service`` and ``self._merge_provenance`` exactly as
+        ``load_deploy_services`` does; leaves ``self._workspace_service`` as ``None``.
+        Callers that also need effective remote references should call
+        :meth:`apply_remote_overrides` afterwards (it only depends on the environment
+        service set here, not on the workspace).
+
+        Args:
+            objects_path: Base directory for resolving relative file paths
+            repo_map: Optional solution-level repo map for resolving @repo/... refs.
+                      Merged with the config-service repo map; solution names take precedence.
+
+        Returns:
+            bool: Success status
+        """
+        if self._environment_service is not None:
+            self.logger.debug("Returning cached environment service")
+            return True
+
+        if objects_path is None or not Path(objects_path).is_dir():
+            self.logger.error("Invalid objects_path: not a directory", objects_path=objects_path)
+            return False
+
+        self._ensure_validated()
+        if not self.model:
+            return False
+
+        config_repo_map: Dict[str, str] = ConfigurationService.get_instance().get_remote_map()
+        repo_map = {**config_repo_map, **(repo_map or {})}
+
+        try:
+            # Tenant environments are prepended so deployment environments take precedence.
+            tenant_env_paths: List[str] = []
+            if self.model.spec.tenant:
+                from strata.services.tenant_service import TenantService as _TenantService
+
+                tenant_file = Path(objects_path) / "tenants" / f"{self.model.spec.tenant}.yaml"
+                if tenant_file.exists():
+                    tenant_svc = _TenantService(str(tenant_file))
+                    is_valid_t, _ = tenant_svc.validate()
+                    if is_valid_t and tenant_svc.model:
+                        tenant_env_paths = [
+                            self._resolve_file_path(env_path, objects_path, repo_map)
+                            for env_path in tenant_svc.get_environments()
+                        ]
+
+            env_paths = tenant_env_paths + [
+                self._resolve_file_path(env_ref.file, objects_path, repo_map)
+                for env_ref in (self.model.spec.environments or [])
+            ]
+
+            self.logger.debug("Loading deployment environments (environment-only)", count=len(env_paths))
+
+            if len(env_paths) > 1:
+                work_path = Path(objects_path)
+                merged_env, merge_provenance = EnvironmentService.merge_envfiles(env_paths, work_path)
+                self._merge_provenance = merge_provenance
+                merged_env = self._apply_version_pins(merged_env, objects_path, repo_map)
+                env_service = EnvironmentService(data=merged_env.model_dump())
+                is_valid, errors = env_service.validate()
+                if not is_valid:
+                    self.logger.warning("Merged deployment environment validation failed", errors=errors)
+                    return False
+            elif len(env_paths) == 1:
+                env_service = EnvironmentService.load(env_paths[0], validate=True)
+                if env_service.model:
+                    patched = self._apply_version_pins(env_service.model, objects_path, repo_map)
+                    env_service = EnvironmentService(data=patched.model_dump())
+                    env_service.validate()
+            else:
+                self.logger.debug("Deployment has no environment references")
+                return True
+
+            if not env_service.is_validated():
+                self.logger.warning("Deployment environment validation failed", paths=env_paths)
+                return False
+
+            self._environment_service = env_service
+            self._objects_path = objects_path
+            self._load_repo_map = repo_map
+            return True
+
+        except Exception as e:
             self.logger.error(
-                "Failed to apply environment overrides",
-                deployment_name=self.get_name(),
-                critical_error_count=len(critical_errors),
+                "Failed to load deployment environment (environment-only)",
+                error=str(e),
+                exc_info=True,
             )
-
-        return success, errors
+            return False
 
     def load_deploy_services(self, objects_path: str, repo_map: Optional[Dict[str, str]] = None) -> bool:
         """

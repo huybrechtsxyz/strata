@@ -3,6 +3,10 @@
 - Status: proposed
 - Date: 2026-07-28
 
+## Remaining Work
+
+- Not started — nothing in this ADR has been implemented yet.
+
 ## Context and Problem Statement
 
 A partner team (not core maintainers) runs a layered deployment hierarchy — landscape →

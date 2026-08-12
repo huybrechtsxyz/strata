@@ -91,6 +91,15 @@ class ConsulIntegration(StoreIntegration):
         self.consul_token = self._get_env_var(self._get_token_var_name())
         self.consul_namespace = self._get_env_var("CONSUL_NAMESPACE")  # no model equivalent
 
+        # Lazy per-process cache of the full KV tree (key -> value), populated by
+        # one recursive read on first get_variable() call instead of one Consul
+        # call per declared variable. Mirrors FlagsmithIntegration._flags_cache /
+        # EtcdIntegration._kv_cache. Invalidated (not incrementally updated) on
+        # any successful write. Consul's KV API already returns values in the
+        # same recursive-read call keys are fetched with (previously requested
+        # keys-only via ``-keys``/``?keys``), so this costs nothing extra.
+        self._kv_cache: Optional[Dict[str, str]] = None
+
         logger.debug(
             "HashiCorp Consul integration initialized",
             name=self.integration_name,
@@ -233,6 +242,12 @@ class ConsulIntegration(StoreIntegration):
 
         Implements IVariableStore interface.
 
+        Serves from the lazily-warmed whole-tree cache (see ``__init__``) — the
+        first call for this integration instance triggers one recursive KV
+        read; every subsequent call (any key, any deployment sharing this
+        instance within the same process) is a local dict lookup. Falls back
+        to a direct per-key read if the bulk read failed.
+
         Args:
             key: The key path in KV store
             **kwargs: Additional arguments (prefer_cli, timeout)
@@ -242,6 +257,10 @@ class ConsulIntegration(StoreIntegration):
         """
         prefer_cli = kwargs.get("prefer_cli", True)
         timeout = kwargs.get("timeout", 60)
+        if self._kv_cache is None:
+            self._kv_cache = self._fetch_all_keyvalues(prefer_cli=prefer_cli, timeout=timeout)
+        if self._kv_cache is not None:
+            return self._kv_cache.get(key)
         return self.get_keyvalue(key, prefer_cli=prefer_cli, timeout=timeout)
 
     def list_variables(self, prefix: str = "", **kwargs) -> List[str]:
@@ -297,6 +316,7 @@ class ConsulIntegration(StoreIntegration):
         ok = self._put_keyvalue(key, str(value), prefer_cli=prefer_cli, timeout=timeout)
         if ok:
             logger.info("Variable written to HashiCorp Consul", name=self.integration_name, key=key)
+            self._kv_cache = None  # invalidate — next read re-warms with the new value included
         else:
             logger.warning("Failed to write variable to HashiCorp Consul", name=self.integration_name, key=key)
         return ok
@@ -613,6 +633,66 @@ class ConsulIntegration(StoreIntegration):
                 keys = json.loads(response.read().decode("utf-8"))
                 return keys if keys else []
         except Exception:
+            return None
+
+    def _fetch_all_keyvalues(self, prefer_cli: bool = True, timeout: int = 60) -> Optional[Dict[str, str]]:
+        """Bulk-fetch the entire KV tree (key -> value) in one recursive read.
+
+        Backs the lazy cache used by :meth:`get_variable`. Uses ``-recurse``/
+        ``?recurse=true`` instead of the keys-only ``-keys``/``?keys`` variant —
+        Consul's recursive read returns values in the identical call keys are
+        fetched with, so this costs nothing extra over the previous keys-only
+        list. Returns ``None`` (not an empty dict) on failure so callers can
+        distinguish "cache unavailable" from "tree is genuinely empty".
+        """
+        if prefer_cli:
+            result = self._fetch_all_keyvalues_via_cli(timeout)
+            if result is not None:
+                return result
+            return self._fetch_all_keyvalues_via_api()
+        else:
+            result = self._fetch_all_keyvalues_via_api()
+            if result is not None:
+                return result
+            return self._fetch_all_keyvalues_via_cli(timeout)
+
+    def _fetch_all_keyvalues_via_cli(self, timeout: int = 60) -> Optional[Dict[str, str]]:
+        try:
+            result = self._run_integration_with_env(
+                args=["kv", "get", "-recurse", "-format=json", ""],
+                timeout=timeout,
+            )
+            if result.returncode != 0 or not result.stdout.strip():
+                return None
+            entries = json.loads(result.stdout)
+            return {
+                e["Key"]: base64.b64decode(e["Value"]).decode("utf-8") if e.get("Value") else ""
+                for e in entries
+                if e.get("Key")
+            }
+        except Exception as e:
+            logger.debug("Consul CLI bulk fetch failed", error_type=type(e).__name__, name=self.integration_name)
+            return None
+
+    def _fetch_all_keyvalues_via_api(self) -> Optional[Dict[str, str]]:
+        try:
+            list_url = f"{self.consul_addr}/v1/kv/?recurse=true"
+            if self.consul_namespace:
+                list_url += f"&ns={self.consul_namespace}"
+
+            req = urllib.request.Request(list_url)
+            if self.consul_token:
+                req.add_header("X-Consul-Token", self.consul_token)
+
+            with urllib.request.urlopen(req, timeout=10) as response:
+                entries = json.loads(response.read().decode("utf-8"))
+                return {
+                    e["Key"]: base64.b64decode(e["Value"]).decode("utf-8") if e.get("Value") else ""
+                    for e in (entries or [])
+                    if e.get("Key")
+                }
+        except Exception as e:
+            logger.debug("Consul API bulk fetch failed", error_type=type(e).__name__, name=self.integration_name)
             return None
 
     # Command execution method override to inject environment variables

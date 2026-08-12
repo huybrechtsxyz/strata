@@ -63,30 +63,55 @@ class CacheService:
         get_model_cache_dir(self._work_path).mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(str(self._db_path), timeout=5.0)
         conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        self._migrate_legacy_schema(conn)
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS cache (
-                name            TEXT PRIMARY KEY,
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                name            TEXT NOT NULL,
                 kind            TEXT NOT NULL,
                 cache_version   INTEGER NOT NULL,
                 strata_version  TEXT NOT NULL,
                 cache_key       TEXT NOT NULL,
                 written_at      TEXT NOT NULL,
-                resolved        BLOB NOT NULL
+                resolved        BLOB NOT NULL,
+                UNIQUE (name, kind, cache_version)
             )
             """
         )
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS cache_inputs (
-                name        TEXT NOT NULL REFERENCES cache(name) ON DELETE CASCADE,
+                cache_id    INTEGER NOT NULL REFERENCES cache(id) ON DELETE CASCADE,
                 file_path   TEXT NOT NULL,
-                PRIMARY KEY (name, file_path)
+                PRIMARY KEY (cache_id, file_path)
             )
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_cache_kind ON cache (kind)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_cache_name_kind ON cache (name, kind)")
         return conn
+
+    @staticmethod
+    def _migrate_legacy_schema(conn: sqlite3.Connection) -> None:
+        """Drop the pre-surrogate-key ``cache``/``cache_inputs`` tables if found.
+
+        The original schema used ``name`` as the sole PRIMARY KEY, which cannot
+        support more than one cache ``kind`` per deployment name (e.g. the
+        ``"deployment"`` build-artifact cache and the ``"resolved_environment"``
+        cache both keyed by the same deployment name). Any local cache built
+        under that schema is dropped and rebuilt on next warm — the cache is
+        always fully rebuildable from committed YAML, so this is safe and
+        requires no data migration.
+        """
+        try:
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(cache)").fetchall()}
+        except sqlite3.Error:
+            return
+        if cols and "id" not in cols:
+            conn.execute("DROP TABLE IF EXISTS cache_inputs")
+            conn.execute("DROP TABLE IF EXISTS cache")
 
     # ------------------------------------------------------------------
     # Cache key computation
@@ -112,20 +137,23 @@ class CacheService:
     # Read path
     # ------------------------------------------------------------------
 
-    def get(self, name: str, cache_key: str) -> Optional[Dict[str, Any]]:
-        """Return the cached resolved model for *name* if fresh, else ``None``.
+    def get(self, name: str, kind: str, cache_key: str) -> Optional[Dict[str, Any]]:
+        """Return the cached resolved model for *(name, kind)* if fresh, else ``None``.
 
         Two-step read: cheap staleness check first (no BLOB deserialisation
-        unless the key matches).
+        unless the key matches). *kind* scopes the lookup so different cache
+        concepts for the same deployment name (e.g. the build-artifact
+        ``"deployment"`` cache and the ``"resolved_environment"`` cache) never
+        collide.
         """
         try:
             with closing(self._connect()) as conn:
                 row = conn.execute(
-                    "SELECT cache_key, cache_version, resolved FROM cache WHERE name = ?",
-                    (name,),
+                    "SELECT cache_key, cache_version, resolved FROM cache WHERE name = ? AND kind = ?",
+                    (name, kind),
                 ).fetchone()
         except sqlite3.Error as exc:
-            self.logger.warning("Cache read failed, treating as cold", name=name, error=str(exc))
+            self.logger.warning("Cache read failed, treating as cold", name=name, kind=kind, error=str(exc))
             return None
 
         if row is None:
@@ -138,11 +166,11 @@ class CacheService:
         try:
             return json.loads(zlib.decompress(resolved_blob).decode("utf-8"))
         except Exception as exc:
-            self.logger.warning("Cache entry corrupt, treating as cold", name=name, error=str(exc))
+            self.logger.warning("Cache entry corrupt, treating as cold", name=name, kind=kind, error=str(exc))
             return None
 
-    def status(self, name: str, cache_key: Optional[str] = None) -> str:
-        """Return :class:`CacheStatus` for *name* without deserialising ``resolved``.
+    def status(self, name: str, kind: str, cache_key: Optional[str] = None) -> str:
+        """Return :class:`CacheStatus` for *(name, kind)* without deserialising ``resolved``.
 
         When *cache_key* is ``None`` only presence is checked (used by ``strata
         cache status`` for entries whose source files can no longer be found).
@@ -150,8 +178,8 @@ class CacheService:
         try:
             with closing(self._connect()) as conn:
                 row = conn.execute(
-                    "SELECT cache_key, cache_version FROM cache WHERE name = ?",
-                    (name,),
+                    "SELECT cache_key, cache_version FROM cache WHERE name = ? AND kind = ?",
+                    (name, kind),
                 ).fetchone()
         except sqlite3.Error:
             return CacheStatus.COLD
@@ -166,14 +194,24 @@ class CacheService:
             return CacheStatus.STALE
         return CacheStatus.FRESH
 
-    def list_entries(self) -> List[Dict[str, Any]]:
-        """Return metadata (no ``resolved`` payload) for every cached entry."""
+    def list_entries(self, kind: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Return metadata (no ``resolved`` payload) for every cached entry.
+
+        With *kind*, restricts the listing to entries of that cache kind.
+        """
         try:
             with closing(self._connect()) as conn:
-                rows = conn.execute(
-                    "SELECT name, kind, cache_version, strata_version, cache_key, written_at, "
-                    "length(resolved) AS size_bytes FROM cache ORDER BY name"
-                ).fetchall()
+                if kind is None:
+                    rows = conn.execute(
+                        "SELECT name, kind, cache_version, strata_version, cache_key, written_at, "
+                        "length(resolved) AS size_bytes FROM cache ORDER BY name, kind"
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        "SELECT name, kind, cache_version, strata_version, cache_key, written_at, "
+                        "length(resolved) AS size_bytes FROM cache WHERE kind = ? ORDER BY name",
+                        (kind,),
+                    ).fetchall()
         except sqlite3.Error as exc:
             self.logger.warning("Cache list failed", error=str(exc))
             return []
@@ -219,34 +257,44 @@ class CacheService:
         try:
             with closing(self._connect()) as conn:
                 with conn:
-                    conn.execute(
+                    cur = conn.execute(
                         "INSERT OR REPLACE INTO cache "
                         "(name, kind, cache_version, strata_version, cache_key, written_at, resolved) "
                         "VALUES (?, ?, ?, ?, ?, ?, ?)",
                         (name, kind, CACHE_SCHEMA_VERSION, get_version(), cache_key, written_at, payload),
                     )
-                    conn.execute("DELETE FROM cache_inputs WHERE name = ?", (name,))
+                    cache_id = cur.lastrowid
+                    conn.execute("DELETE FROM cache_inputs WHERE cache_id = ?", (cache_id,))
                     conn.executemany(
-                        "INSERT OR IGNORE INTO cache_inputs (name, file_path) VALUES (?, ?)",
-                        [(name, p) for p in sorted(set(input_paths))],
+                        "INSERT OR IGNORE INTO cache_inputs (cache_id, file_path) VALUES (?, ?)",
+                        [(cache_id, p) for p in sorted(set(input_paths))],
                     )
             return True
         except sqlite3.Error as exc:
-            self.logger.warning("Cache warm failed (non-fatal, live result still returned)", name=name, error=str(exc))
+            self.logger.warning(
+                "Cache warm failed (non-fatal, live result still returned)", name=name, kind=kind, error=str(exc)
+            )
             return False
 
     # ------------------------------------------------------------------
     # Invalidation
     # ------------------------------------------------------------------
 
-    def invalidate(self, name: str) -> None:
-        """Remove the cache entry for *name*, if any."""
+    def invalidate(self, name: str, kind: Optional[str] = None) -> None:
+        """Remove the cache entry for *name*, if any.
+
+        With *kind*, only that cache kind is removed; without it, every kind
+        cached under *name* is removed.
+        """
         try:
             with closing(self._connect()) as conn:
                 with conn:
-                    conn.execute("DELETE FROM cache WHERE name = ?", (name,))
+                    if kind is None:
+                        conn.execute("DELETE FROM cache WHERE name = ?", (name,))
+                    else:
+                        conn.execute("DELETE FROM cache WHERE name = ? AND kind = ?", (name, kind))
         except sqlite3.Error as exc:
-            self.logger.warning("Cache invalidate failed", name=name, error=str(exc))
+            self.logger.warning("Cache invalidate failed", name=name, kind=kind, error=str(exc))
 
     def invalidate_all(self) -> None:
         """Remove every cache entry (``strata cache clear``)."""
@@ -268,7 +316,7 @@ class CacheService:
             with closing(self._connect()) as conn:
                 with conn:
                     cur = conn.execute(
-                        "DELETE FROM cache WHERE name IN (SELECT name FROM cache_inputs WHERE file_path LIKE ?)",
+                        "DELETE FROM cache WHERE id IN (SELECT cache_id FROM cache_inputs WHERE file_path LIKE ?)",
                         (f"{path_prefix}%",),
                     )
                     return cur.rowcount
@@ -300,7 +348,10 @@ class CacheService:
                 resolved = json.loads(zlib.decompress(resolved_blob).decode("utf-8"))
             except Exception:
                 resolved = None
-            entries[name] = {
+            # Keyed by "name::kind" (not just name) — a deployment can have more than
+            # one cache kind (e.g. "deployment" build artifact + "resolved_environment").
+            entries[f"{name}::{kind}"] = {
+                "name": name,
                 "kind": kind,
                 "cache_version": cache_version,
                 "strata_version": strata_version,
@@ -340,7 +391,7 @@ class CacheService:
             return resolve_fn(), "no-cache"
 
         if not refresh_cache:
-            cached = self.get(name, cache_key)
+            cached = self.get(name, kind, cache_key)
             if cached is not None:
                 return cached, "cached"
 

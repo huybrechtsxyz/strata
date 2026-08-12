@@ -30,11 +30,11 @@ def _sample_payload(**overrides) -> DeployLogModel:
 
 
 class TestPushToRemote:
-    """Tests for AuditController.push_to_remote()."""
+    """Tests for AuditController.push_to_remote() (ADR-0065 Phase 1 — copy-then-commit)."""
 
     def test_returns_false_when_no_paths(self, tmp_path: Path) -> None:
         controller = AuditController(work_path=tmp_path)
-        assert controller.push_to_remote(paths=[]) is False
+        assert controller.push_to_remote([], local_base=tmp_path, remote_path="deploy-log") is False
 
     @patch("strata.integrations.git.GitIntegration.push")
     @patch("strata.integrations.git.GitIntegration.commit")
@@ -49,13 +49,21 @@ class TestPushToRemote:
         git_mock.push.return_value = MagicMock(returncode=0)
         mock_factory.return_value = git_mock
 
+        local_base = tmp_path / "local"
+        local_base.mkdir()
+        src_file = local_base / "file.json"
+        src_file.write_text("{}", encoding="utf-8")
+
         controller = AuditController(work_path=tmp_path)
-        result = controller.push_to_remote(paths=[tmp_path / "file.json"])
+        result = controller.push_to_remote([src_file], local_base=local_base, remote_path="deploy-log")
 
         assert result is True
         git_mock.add.assert_called_once()
         git_mock.commit.assert_called_once()
         git_mock.push.assert_called_once()
+        # The file should have been copied into the workspace's own repo (repo_name=None)
+        # under {remote_path}/{workspace}/...
+        assert (tmp_path / "deploy-log" / "default" / "file.json").exists()
 
     @patch("strata.integrations.factory.IntegrationFactory.create_by_type")
     def test_returns_false_when_git_unavailable(self, mock_factory, tmp_path: Path) -> None:
@@ -64,7 +72,7 @@ class TestPushToRemote:
         mock_factory.return_value = git_mock
 
         controller = AuditController(work_path=tmp_path)
-        result = controller.push_to_remote(paths=[tmp_path / "file.json"])
+        result = controller.push_to_remote([tmp_path / "file.json"], local_base=tmp_path, remote_path="deploy-log")
         assert result is False
 
     @patch("strata.integrations.factory.IntegrationFactory.create_by_type")
@@ -75,8 +83,11 @@ class TestPushToRemote:
         git_mock.commit.return_value = MagicMock(returncode=1, stdout="nothing to commit", stderr="")
         mock_factory.return_value = git_mock
 
+        src_file = tmp_path / "file.json"
+        src_file.write_text("{}", encoding="utf-8")
+
         controller = AuditController(work_path=tmp_path)
-        result = controller.push_to_remote(paths=[tmp_path / "file.json"])
+        result = controller.push_to_remote([src_file], local_base=tmp_path, remote_path="deploy-log")
         assert result is True
 
     @patch("strata.integrations.factory.IntegrationFactory.create_by_type")
@@ -86,8 +97,31 @@ class TestPushToRemote:
         git_mock.add.return_value = MagicMock(returncode=1, stderr="fatal: not a git repo")
         mock_factory.return_value = git_mock
 
+        src_file = tmp_path / "file.json"
+        src_file.write_text("{}", encoding="utf-8")
+
         controller = AuditController(work_path=tmp_path)
-        result = controller.push_to_remote(paths=[tmp_path / "file.json"])
+        result = controller.push_to_remote([src_file], local_base=tmp_path, remote_path="deploy-log")
+        assert result is False
+
+    @patch("strata.integrations.factory.IntegrationFactory.create_by_type")
+    def test_returns_false_when_repo_name_not_found(self, mock_factory, tmp_path: Path) -> None:
+        """A named repository that isn't registered in the solution's repo map fails cleanly."""
+        git_mock = MagicMock()
+        git_mock.ensure_available.return_value = (True, "")
+        mock_factory.return_value = git_mock
+
+        src_file = tmp_path / "file.json"
+        src_file.write_text("{}", encoding="utf-8")
+
+        controller = AuditController(work_path=tmp_path)
+        with patch(
+            "strata.controllers.solution_controller.SolutionController.get_repo_map",
+            return_value={},
+        ):
+            result = controller.push_to_remote(
+                [src_file], local_base=tmp_path, remote_path="deploy-log", repo_name="nonexistent"
+            )
         assert result is False
 
 

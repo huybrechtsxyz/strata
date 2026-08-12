@@ -27,6 +27,24 @@ import type { StrataClient } from '../strataClient';
 
 const DEBOUNCE_MS = 500;
 
+// Directory segments never worth re-warming the cache over — vendored deps,
+// VCS internals, and build/output directories. `createFileSystemWatcher()`
+// does not apply `files.exclude`/`.gitignore` itself, so this is checked
+// per-event instead.
+const _EXCLUDED_SEGMENTS = [
+    /[\\/]node_modules[\\/]/,
+    /[\\/]\.git[\\/]/,
+    /[\\/]\.venv[\\/]/,
+    /[\\/]out[\\/]/,
+    /[\\/]dist[\\/]/,
+    /[\\/]build[\\/]/,
+    /[\\/]docs[\\/]_build[\\/]/,
+];
+
+function _isExcludedFromWatch(fsPath: string): boolean {
+    return _EXCLUDED_SEGMENTS.some((re) => re.test(fsPath));
+}
+
 export class CacheWarmerProvider implements vscode.Disposable {
     private readonly _item: vscode.StatusBarItem;
     private _client: StrataClient | undefined;
@@ -55,7 +73,14 @@ export class CacheWarmerProvider implements vscode.Disposable {
     /** Register the file watcher, status bar item, and manual refresh command. */
     register(context: vscode.ExtensionContext): void {
         this._watcher = vscode.workspace.createFileSystemWatcher('**/*.yaml');
-        const onSave = () => this._scheduleWarm();
+        const onSave = (uri: vscode.Uri) => {
+            // createFileSystemWatcher() does not respect files.exclude/.gitignore —
+            // without this guard, churn in vendored/build directories (e.g. `npm
+            // install`/`vsce package` touching src/vscode/node_modules/**/*.yaml)
+            // re-triggers a background warm on every unrelated file write.
+            if (_isExcludedFromWatch(uri.fsPath)) return;
+            this._scheduleWarm();
+        };
         this._watcher.onDidChange(onSave);
         this._watcher.onDidCreate(onSave);
 

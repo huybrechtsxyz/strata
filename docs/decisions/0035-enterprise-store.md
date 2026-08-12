@@ -20,6 +20,16 @@ The detailed design below is preserved for reference but should be re-read with 
 
 ---
 
+## Update (2026-08-11): ADR-0065's state service as an optional discovery layer
+
+[ADR-0065](0065-strata-state-service.md) adds a small, first-party HTTP+DB service that already exists and is already operated by any enterprise using it for audit/cost/drift/manifest history. That weakens the premise Option C was rejected on below ("requires infrastructure to host and operate," "overkill for most enterprises") — for organizations that have already stood the state service up for other reasons, it isn't new infrastructure. This does **not** revive Option C or the dropped `strata store` command surface: git remains the content transport (`strata repo add/sync`), and the manifest remains `catalog.yaml` in a git repo, exactly as the Revised Design Direction above settles.
+
+What it does change: the state service is a plausible, low-cost home for the thing Option A's own "Bad" column and the "Gaps vs Terraform Cloud registry" table both call out — search/browse UX and version indexing — without asking an enterprise to stand up anything new if it already runs the state service. Concretely: `strata repo sync` on a repo carrying a `catalog.yaml` could forward a `catalog.recorded` event (same envelope, same forward-on-write pattern ADR-0065 already uses for `cost.recorded`/`drift.recorded`/`manifest.recorded`) capturing which content types, paths, and versions that catalog exposed at sync time. A read command (`strata repo browse`, or a fleet-wide variant of it) could then query the state service instead of — or in addition to — walking the freshly cloned repo locally, giving cross-workspace discovery ("what catalogs, what content, what versions, across every workspace that has synced") for organizations that already run the service. Organizations that don't run it stay exactly where this ADR already leaves them: `strata repo browse` reading the local clone, no new infrastructure required either way.
+
+This is a candidate, not a commitment — the same status every future record kind carries in ADR-0065's own command-by-command review. It needs its own short design pass (record shape, forward call site, whether `catalog.recorded` belongs in ADR-0066's closed event enum) before implementation, not a decision this update resolves.
+
+---
+
 ## Context and Problem Statement
 
 Strata has three content distribution tiers today:

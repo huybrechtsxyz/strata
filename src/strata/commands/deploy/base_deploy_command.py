@@ -55,6 +55,8 @@ class BaseDeployCommand(BaseCommand):
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
+        no_cache: bool = False,
+        refresh_cache: bool = False,
     ):
         super().__init__(
             work_path=work_path,
@@ -82,6 +84,13 @@ class BaseDeployCommand(BaseCommand):
         self._dry_run: bool = False
         self._force_lock: bool = False
         self._force: bool = False
+        # ADR-0026 resolved-environment cache (only consumed by commands that
+        # override _load_related_services to use _load_environment_related_services,
+        # e.g. ShowDeployCommand, values list/get/resolve — unused elsewhere).
+        self._no_cache: bool = no_cache
+        self._refresh_cache: bool = refresh_cache
+        self._environment_snapshot: Optional[Dict[str, Any]] = None
+        self._cache_indicator: str = "no-cache"
 
     def get_required_integrations(self):
         return {}
@@ -462,27 +471,11 @@ class BaseDeployCommand(BaseCommand):
             return False
 
         # Load related services (workspace, environment, providers, resources, ...)
-        if not deployment_service.load_deploy_services(str(self._work_path), repo_map=repo_map):
-            self._errors.extend(deployment_service.get_validation_errors())
-            self._validation_failed = True
+        # Overridable hook: environment-only commands (deploy show, values
+        # list/get/resolve) skip the workspace load entirely — see
+        # _load_environment_related_services below.
+        if not self._load_related_services(deployment_service, repo_map):
             return False
-
-        # Cross-validate related services
-        ok, errors = deployment_service.validate_related_services()
-        if not ok:
-            self._errors.extend(errors)
-            self._validation_failed = True
-            return False
-
-        # Apply environment overrides
-        ok, errors = deployment_service.apply_environment_overrides()
-        if not ok:
-            critical = [e for e in errors if "skipped" not in e.lower()]
-            if critical:
-                self._errors.extend(critical)
-                self._validation_failed = True
-                return False
-            self._messages.extend(errors)  # non-critical warnings
 
         self._deployment_service = deployment_service
 
@@ -492,6 +485,131 @@ class BaseDeployCommand(BaseCommand):
             build_path=str(self._build_path),
         )
         return True
+
+    def _load_related_services(self, deployment_service: DeploymentService, repo_map: Dict[str, str]) -> bool:
+        """Load workspace + environment services and apply overrides.
+
+        Default hook used by commands that need full infrastructure resolution
+        (``deploy run``/``destroy``/``plan``/etc.). Override for lighter-weight,
+        environment-only commands that never touch workspace resources, providers,
+        or modules — see :meth:`_load_environment_related_services`.
+        """
+        if not deployment_service.load_deploy_services(str(self._work_path), repo_map=repo_map):
+            self._errors.extend(deployment_service.get_validation_errors())
+            self._validation_failed = True
+            return False
+
+        ok, errors = deployment_service.validate_related_services()
+        if not ok:
+            self._errors.extend(errors)
+            self._validation_failed = True
+            return False
+
+        ok, errors = deployment_service.apply_environment_overrides()
+        if not ok:
+            critical = [e for e in errors if "skipped" not in e.lower()]
+            if critical:
+                self._errors.extend(critical)
+                self._validation_failed = True
+                return False
+            self._messages.extend(errors)  # non-critical warnings
+
+        return True
+
+    def _load_environment_related_services(
+        self,
+        deployment_service: DeploymentService,
+        repo_map: Dict[str, str],
+        apply_remote_overrides: bool = False,
+    ) -> bool:
+        """Load only the merged environment (ADR-0026 ``resolved_environment`` cache) —
+        never the workspace.
+
+        Used by commands that only need declared variables/secrets/features and merge
+        provenance (``deploy show``, ``values list/get/resolve``). Skips workspace,
+        provider, resource, and module resolution entirely, which is the expensive
+        part of the default :meth:`_load_related_services` for a fleet of deployments
+        that share the same workspace file.
+
+        With *apply_remote_overrides*, also applies the environment's declared remote
+        reference overrides to the active ``ConfigurationService`` (needed by ``deploy
+        show`` to display effective remote references) — this only depends on the
+        environment service populated here, not on the workspace.
+
+        Populates ``self._environment_snapshot`` (the cache payload, for callers that
+        want to display cache provenance) and ``self._cache_indicator`` (``"cached"``
+        / ``"refreshed"`` / ``"no-cache"``).
+        """
+        from strata.controllers.cache_controller import CacheController
+
+        controller = CacheController(self._work_path)
+        ok, snapshot, indicator = controller.get_or_resolve_environment(
+            deployment_service,
+            repo_map,
+            no_cache=self._no_cache,
+            refresh_cache=self._refresh_cache,
+        )
+        if not ok or snapshot is None:
+            self._errors.extend(controller.get_errors())
+            self._validation_failed = True
+            return False
+
+        self._environment_snapshot = snapshot
+        self._cache_indicator = indicator
+        CacheController.apply_environment_snapshot(deployment_service, snapshot)
+
+        if apply_remote_overrides:
+            _, errors = deployment_service.apply_remote_overrides()
+            if errors:
+                self._messages.extend(errors)
+
+        return True
+
+    def _resolve_values(self, strict: bool = False):
+        """Resolve variables/secrets/features for ``self._deployment_service``.
+
+        Uses the ADR-0026 OQ-4 ``resolved_values`` cache for variables and
+        features (never secrets — always resolved live) when this command was
+        loaded via :meth:`_load_environment_related_services` (signalled by
+        ``self._environment_snapshot`` being set). Commands that load the full
+        workspace (``deploy run``/``destroy``/etc., where
+        ``_environment_snapshot`` is never populated) get a plain live
+        ``ValueController.resolve_values()`` call, completely unaffected by the
+        value cache.
+
+        Same ``--no-cache``/``--refresh-cache`` flags as every other ADR-0026
+        cache consumer — one cache, one set of semantics, for the user.
+
+        Returns ``(success, resolved, errors)`` — same shape as
+        ``ValueController.resolve_values()``. Also updates
+        ``self._cache_indicator`` when the cache-aware path is used.
+        """
+        from strata.controllers.cache_controller import CacheController
+        from strata.controllers.value_controller import ValueController
+        from strata.utils.resolved_values import ResolvedValues
+
+        if self._deployment_service is None:
+            return True, ResolvedValues(), []
+
+        controller = ValueController()
+
+        if self._environment_snapshot is None:
+            return controller.resolve_values(self._deployment_service, strict=strict)
+
+        cache_controller = CacheController(self._work_path)
+        name = self._deployment_service.get_name() or str(self._file_path)
+        input_paths = cache_controller._collect_environment_input_paths(self._deployment_service)
+        ok, resolved, errors, indicator = controller.resolve_values_via_cache(
+            self._deployment_service,
+            cache_controller.cache,
+            name,
+            input_paths,
+            no_cache=self._no_cache,
+            refresh_cache=self._refresh_cache,
+            strict=strict,
+        )
+        self._cache_indicator = indicator
+        return ok, resolved, errors
 
     def _create_deployer(self, stage: DeploymentStageModel):
         """Instantiate the deployer for *stage*, or None on failure.
@@ -666,6 +784,8 @@ class BaseDeployCommand(BaseCommand):
         Returns:
             Path to the written manifest, or None on skip/error.
         """
+        from strata.controllers.audit_controller import AuditController
+
         if dry_run:
             self.logger.debug("Dry-run — skipping deployment manifest write")
             return None
@@ -750,21 +870,68 @@ class BaseDeployCommand(BaseCommand):
             )
             self.logger.info("Deployment manifest written", path=str(path))
 
-            if manifest_config.push_manifest and path:
-                from strata.controllers.manifest_controller import ManifestController
+            repo_cfg = manifest_config.repository
+            should_push = manifest_config.push_manifest or (repo_cfg is not None and repo_cfg.push)
+            if should_push and path:
+                manifest_base = Path(manifest_config.path)
+                if not manifest_base.is_absolute():
+                    manifest_base = self._work_path / manifest_base
 
-                manifest_ctrl = ManifestController(work_path=self._work_path)
-                pushed = manifest_ctrl.push_to_remote([path])
+                audit_ctrl = AuditController(work_path=self._work_path)
+                pushed = audit_ctrl.push_to_remote(
+                    [path],
+                    local_base=manifest_base,
+                    remote_path=(repo_cfg.path if repo_cfg else None) or "manifest",
+                    repo_name=repo_cfg.name if repo_cfg else None,
+                    workspace=workspace_name,
+                    commit_message="chore(manifest): deployment manifest update [skip ci]",
+                )
                 if pushed:
                     self.logger.info("Deployment manifest pushed to remote", path=str(path))
                 else:
                     self.logger.warning("Deployment manifest push failed — continuing", path=str(path))
+
+            self._forward_manifest_recorded_event(manifest)
 
             return path
 
         except Exception as exc:
             self.logger.warning("Failed to write deployment manifest", error=str(exc))
             return None
+
+    def _forward_manifest_recorded_event(self, manifest: DeploymentManifestModel) -> None:
+        """Forward a manifest.recorded event for this deploy/destroy (ADR-0065 Phase 2 producer).
+
+        Unconditional — fires once per manifest write, independent of whether git-push
+        (``manifest_config.push_manifest``/``repository.push``) is configured; the two
+        delivery mechanisms are orthogonal, same as cost/drift's own recorded events.
+        Uses this command's own ``self._execution_id`` (not a derived hash): a manifest
+        is written exactly once per command run, so it's the same correlation key
+        ``deployment.completed``/``deployment.destroyed`` already use for events from
+        the same run — a resend of the persisted record keeps that same id.
+
+        Best-effort — never raises, never affects the deployment/destroy exit code.
+        """
+        try:
+            from strata.controllers.audit_controller import AuditController
+            from strata.services.configuration_service import ConfigurationService
+
+            audit_cfg = None
+            try:
+                config_model = ConfigurationService.get_instance().model
+                audit_cfg = getattr(getattr(config_model, "spec", None), "audit", None)
+            except Exception as e:
+                self.logger.debug(f"Failed to resolve spec.audit for manifest.recorded (non-fatal): {e}")
+
+            payload = manifest.model_dump(mode="json")
+            payload["execution_id"] = self._execution_id
+            payload["deployment"] = manifest.spec.deployment_name
+            payload["workspace"] = manifest.spec.workspace_name
+            payload["environment"] = manifest.spec.environment
+
+            AuditController(work_path=self._work_path).forward("manifest.recorded", payload, audit_config=audit_cfg)
+        except Exception as e:
+            self.logger.debug(f"Failed to forward manifest.recorded audit event (non-fatal): {e}")
 
     def _get_manifest_config(self):
         """Retrieve manifest configuration from the configuration service.
@@ -1175,23 +1342,17 @@ class BaseDeployCommand(BaseCommand):
                 # Uses the enriched payload so SIEM gets PR data when available.
                 controller.forward(event_type, enriched.model_dump(exclude_none=True), audit_config=resolved_audit_cfg)
 
-                # Layer 4c: Push to remote repo — best-effort, opt-in via audit.repository
-                if resolved_audit_cfg and resolved_audit_cfg.repository:
-                    from pathlib import Path as _Path
-
-                    from strata.controllers.solution_controller import SolutionController
-
-                    sol_ctrl = SolutionController(work_path=self._work_path)
-                    sol_ctrl.load()
-                    repo_map = sol_ctrl.get_repo_map()
-                    repo_path = repo_map.get(str(resolved_audit_cfg.repository))
-                    if repo_path:
-                        controller.push_to_remote([path], working_dir=_Path(repo_path))
-                    else:
-                        self.logger.warning(
-                            "deploy_log_push_repo_not_found",
-                            repository=str(resolved_audit_cfg.repository),
-                        )
+                # Layer 4c: Push to remote repo — best-effort, opt-in via audit.repository.push (ADR-0065 Phase 1)
+                repo_cfg = resolved_audit_cfg.repository if resolved_audit_cfg else None
+                if repo_cfg and repo_cfg.push:
+                    controller.push_to_remote(
+                        [path],
+                        local_base=base_path,
+                        remote_path=repo_cfg.path or "deploy-log",
+                        repo_name=repo_cfg.name,
+                        workspace=str(workspace_name or "default"),
+                        commit_message="chore(audit): deploy-log update [skip ci]",
+                    )
 
             if ok and path and self._is_console_output():
                 self._audit_log_path = str(path.relative_to(self._work_path))

@@ -5,12 +5,12 @@ from typing import Any, Dict, List, Optional
 import click
 
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
-from strata.controllers.value_controller import ValueController
 from strata.models.store_models import (
     FeatureStoreModel,
     SecretStoreModel,
     VariableStoreModel,
 )
+from strata.services.deployment_service import DeploymentService
 
 
 def _mask(value: Any) -> str:
@@ -49,6 +49,8 @@ class ListValuesDeployCommand(BaseDeployCommand):
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
+        no_cache: bool = False,
+        refresh_cache: bool = False,
     ):
         super().__init__(
             file=file,
@@ -56,6 +58,8 @@ class ListValuesDeployCommand(BaseDeployCommand):
             output=output,
             verbose=verbose,
             quiet=quiet,
+            no_cache=no_cache,
+            refresh_cache=refresh_cache,
         )
         self._stage = stage
         self._type_filter = type_filter  # "variables" | "secrets" | "features" | None (all)
@@ -63,6 +67,10 @@ class ListValuesDeployCommand(BaseDeployCommand):
         self._unresolved_only = unresolved_only
         self._trace = trace
         self._ai = ai
+
+    def _load_related_services(self, deployment_service: DeploymentService, repo_map: Dict[str, str]) -> bool:
+        """ADR-0026: only the merged environment is needed — never the workspace."""
+        return self._load_environment_related_services(deployment_service, repo_map)
 
     # ------------------------------------------------------------------
     # Core logic
@@ -85,9 +93,8 @@ class ListValuesDeployCommand(BaseDeployCommand):
         declared_secrets = env_service.get_secrets()
         declared_features = env_service.get_features()
 
-        # Resolve all using ValueController (does not raise on individual failures)
-        controller = ValueController()
-        _, resolved, _ = controller.resolve_values(self._deployment_service, strict=False)
+        # Resolve all using the cache-aware helper (does not raise on individual failures)
+        _, resolved, _ = self._resolve_values(strict=False)
 
         # Build per-type result rows
         var_rows = self._build_var_rows(

@@ -27,8 +27,14 @@ from strata.models.capabilities import ISiemSink
 logger = get_logger(__name__)
 
 _REQUESTS_TIMEOUT = 15  # seconds
-_MAX_RETRIES = 3
-_RETRY_BACKOFF = 1.0  # seconds, doubled each retry
+
+# Defaults for properties.max_retries / properties.retry_backoff_seconds
+# (ADR-0065 step 2.5). No retry by default — `strata audit resend` is the
+# real recovery path for every sink, so retrying hard here was never buying
+# real resilience, only a slower failure. Per-sink override via config, not
+# a hardcoded ceiling: a sink can still opt into more attempts if it needs to.
+_MAX_RETRIES = 1
+_RETRY_BACKOFF = 10.0  # seconds, doubled each retry — only matters if max_retries > 1
 
 
 class SiemBaseIntegration(BaseIntegration):
@@ -106,8 +112,12 @@ class SiemBaseIntegration(BaseIntegration):
     ) -> bool:
         """HTTP POST JSON body to *url*.
 
-        Retries up to ``_MAX_RETRIES`` times on transient errors (5xx, network).
-        Returns True on 2xx, False otherwise.
+        Retries up to ``properties.max_retries`` times (default 1 — no retry;
+        ADR-0065 step 2.5: `strata audit resend` is the real recovery path for
+        every sink, not just the first-party state service, so retrying hard
+        here was never buying real resilience). ``properties.retry_backoff_seconds``
+        (default 10, doubled per attempt) only matters once ``max_retries`` is
+        explicitly raised above 1. Returns True on 2xx, False otherwise.
         """
         if requests is None:
             logger.warning("siem_requests_unavailable", integration=self.integration_name)
@@ -119,9 +129,10 @@ class SiemBaseIntegration(BaseIntegration):
             headers.update(extra_headers)
 
         body_bytes = json.dumps(body, default=str).encode("utf-8")
-        backoff = _RETRY_BACKOFF
+        max_retries = max(1, int(self._prop("max_retries", _MAX_RETRIES)))
+        backoff = float(self._prop("retry_backoff_seconds", _RETRY_BACKOFF))
 
-        for attempt in range(1, _MAX_RETRIES + 1):
+        for attempt in range(1, max_retries + 1):
             try:
                 resp = requests.post(url, data=body_bytes, headers=headers, timeout=_REQUESTS_TIMEOUT)
                 if resp.ok:
@@ -149,7 +160,7 @@ class SiemBaseIntegration(BaseIntegration):
                     attempt=attempt,
                     error=str(exc),
                 )
-            if attempt < _MAX_RETRIES:
+            if attempt < max_retries:
                 time.sleep(backoff)
                 backoff *= 2
 

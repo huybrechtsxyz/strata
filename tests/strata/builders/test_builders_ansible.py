@@ -392,6 +392,107 @@ class TestAnsibleBuilderVarAssembly:
         assert result["strata_topologies"]["swarm"]["components"][0]["count"] == 3
 
 
+class TestAnsibleBuilderDnsVars:
+    """Regression tests: var:/secret: DNS record values must not be silently dropped."""
+
+    def test_collect_environment_variables_populates_variable_refs(self):
+        builder = AnsibleBuilder()
+        variable = MagicMock()
+        variable.key = "public_ip"
+        variable.store.value = "literal"
+        variable.value = "9.9.9.9"
+        env_service = MagicMock()
+        env_service.model.spec.variables = [variable]
+        env_service.get_name.return_value = "prod"
+        deployment_service = MagicMock()
+        deployment_service.get_environment_service.return_value = env_service
+
+        builder._collect_environment_variables(deployment_service)
+
+        assert builder.variable_refs["public_ip"]["value"] == "9.9.9.9"
+
+    def _make_platform(self, dns_zones):
+        platform = MagicMock()
+        platform.spec.dns_zones = dns_zones
+        return platform
+
+    def _make_record(
+        self, name="@", rtype="A", value=None, var=None, secret=None, output_key=None, ttl=None, priority=None
+    ):
+        record = MagicMock()
+        record.name = name
+        record.type = MagicMock(value=rtype)
+        record.value = value
+        record.var = var
+        record.secret = secret
+        record.output_key = output_key
+        record.ttl = ttl
+        record.priority = priority
+        return record
+
+    def _make_dns(self, name, zone_name, records):
+        zone = MagicMock()
+        zone.name = zone_name
+        zone.ttl = 3600
+        zone.records = records
+        dns = MagicMock()
+        dns.name = name
+        dns.annotations = {}
+        dns.labels = {}
+        dns.tags = []
+        dns.provider = "inwx"
+        dns.zones = [zone]
+        return dns
+
+    def test_literal_value_record_passes_through(self):
+        builder = AnsibleBuilder()
+        record = self._make_record(value="1.2.3.4")
+        platform = self._make_platform([self._make_dns("dns1", "example.com", [record])])
+        result = builder._build_dns_vars(platform, [])
+        rec = result["strata_dns_zones"]["dns1"]["zones"]["example.com"]["records"][0]
+        assert rec["value"] == "1.2.3.4"
+        assert result["strata_dns_secret_records"] == {}
+
+    def test_var_record_resolves_from_environment_variables(self):
+        builder = AnsibleBuilder()
+        builder.variable_refs = {"public_ip": {"value": "5.6.7.8"}}
+        record = self._make_record(var="public_ip")
+        platform = self._make_platform([self._make_dns("dns1", "example.com", [record])])
+        result = builder._build_dns_vars(platform, [])
+        rec = result["strata_dns_zones"]["dns1"]["zones"]["example.com"]["records"][0]
+        assert rec["value"] == "5.6.7.8"
+
+    def test_var_record_unresolved_omits_value_with_warning(self):
+        builder = AnsibleBuilder()
+        record = self._make_record(var="unknown_var")
+        platform = self._make_platform([self._make_dns("dns1", "example.com", [record])])
+        messages: list = []
+        result = builder._build_dns_vars(platform, messages)
+        rec = result["strata_dns_zones"]["dns1"]["zones"]["example.com"]["records"][0]
+        assert "value" not in rec
+        assert any("unknown_var" in m for m in messages)
+
+    def test_secret_record_bucketed_not_dropped(self):
+        builder = AnsibleBuilder()
+        record = self._make_record(name="@", rtype="TXT", secret="google_verify_token")
+        platform = self._make_platform([self._make_dns("dns1", "example.com", [record])])
+        result = builder._build_dns_vars(platform, [])
+        rec = result["strata_dns_zones"]["dns1"]["zones"]["example.com"]["records"][0]
+        assert "value" not in rec
+        secret_entry = result["strata_dns_secret_records"]["dns1"]["example.com"]["@_TXT"]
+        assert secret_entry["secret_key"] == "google_verify_token"
+
+    def test_output_key_record_bucketed_not_dropped(self):
+        builder = AnsibleBuilder()
+        record = self._make_record(name="@", rtype="A", output_key="hearth_public_ip")
+        platform = self._make_platform([self._make_dns("dns1", "example.com", [record])])
+        result = builder._build_dns_vars(platform, [])
+        rec = result["strata_dns_zones"]["dns1"]["zones"]["example.com"]["records"][0]
+        assert "value" not in rec
+        output_entry = result["strata_dns_output_records"]["dns1"]["example.com"]["@_A"]
+        assert output_entry["output_key"] == "hearth_public_ip"
+
+
 class TestAnsibleBuilderPlannedFiles:
     def test_base_files_list_empty_sections(self):
         """With all sections empty, only workspace.yml should be planned."""
@@ -415,3 +516,45 @@ class TestAnsibleBuilderPlannedFiles:
         assert "strata_resx_objectstorage.yml" in files
         assert "strata_resx_vm.yml" in files
         assert len(files) == 11  # 9 base + 2 type files
+
+    def test_dns_secrets_written_to_separate_file(self):
+        """strata_dns_secrets.yml is only planned when secret: records exist, and
+        strata_dns.yml does not duplicate the secret records bucket."""
+        builder = AnsibleBuilder()
+        vars_dict = _full_vars_dict()
+        vars_dict["dns"] = {
+            "strata_dns_zones": {"dns1": {}},
+            "strata_dns_secret_records": {"dns1": {"example.com": {"@_TXT": {"secret_key": "tok"}}}},
+        }
+        pairs = dict(builder._planned_file_pairs(vars_dict))
+        assert "strata_dns_secrets.yml" in pairs
+        assert pairs["strata_dns_secrets.yml"] == {
+            "strata_dns_secret_records": {"dns1": {"example.com": {"@_TXT": {"secret_key": "tok"}}}}
+        }
+        assert "strata_dns_secret_records" not in pairs["strata_dns.yml"]
+
+    def test_dns_secrets_file_absent_when_no_secret_records(self):
+        builder = AnsibleBuilder()
+        files = builder._get_planned_files(_full_vars_dict())
+        assert "strata_dns_secrets.yml" not in files
+
+    def test_dns_outputs_written_to_separate_file(self):
+        """strata_dns_outputs.yml is only planned when output_key: records exist, and
+        strata_dns.yml does not duplicate the output records bucket."""
+        builder = AnsibleBuilder()
+        vars_dict = _full_vars_dict()
+        vars_dict["dns"] = {
+            "strata_dns_zones": {"dns1": {}},
+            "strata_dns_output_records": {"dns1": {"example.com": {"@_A": {"output_key": "hearth_public_ip"}}}},
+        }
+        pairs = dict(builder._planned_file_pairs(vars_dict))
+        assert "strata_dns_outputs.yml" in pairs
+        assert pairs["strata_dns_outputs.yml"] == {
+            "strata_dns_output_records": {"dns1": {"example.com": {"@_A": {"output_key": "hearth_public_ip"}}}}
+        }
+        assert "strata_dns_output_records" not in pairs["strata_dns.yml"]
+
+    def test_dns_outputs_file_absent_when_no_output_records(self):
+        builder = AnsibleBuilder()
+        files = builder._get_planned_files(_full_vars_dict())
+        assert "strata_dns_outputs.yml" not in files

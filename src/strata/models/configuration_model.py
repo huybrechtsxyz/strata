@@ -6,7 +6,7 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
-from strata.models.audit_config_model import AuditConfigModel
+from strata.models.audit_config_model import AuditConfigModel, RepositoryPushModel
 from strata.models.common_models import (
     CommonLifecycleModel,
     PlatformBaseModel,
@@ -352,13 +352,6 @@ class ConfigurationLoggingModel(PlatformBaseModel):
     )
 
 
-class ManifestStoreType(str, Enum):
-    """Supported manifest storage backends."""
-
-    LOCAL = "local"
-    GITOPS = "gitops"
-
-
 class ConfigurationManifestModel(PlatformBaseModel):
     """Configuration for deployment manifest storage.
 
@@ -370,51 +363,37 @@ class ConfigurationManifestModel(PlatformBaseModel):
 
         {path}/{deployment_name}/{version}/{timestamp}.json
 
-    Example (local):
+    Example (local only):
         manifest:
-          type: local
           path: ".strata/deployments"
 
-    Example (gitops):
+    Example (local + durable git-push, ADR-0065 Phase 1):
         manifest:
-          type: gitops
-          repository: "state-repo"
-          branch: "manifests"
-          tag: true
           path: "deployments"
+          push_manifest: true
+          repository:
+            push: true
+            name: "state-repo"
+            path: "history/manifest"
     """
 
-    type: ManifestStoreType = Field(description="Storage backend: 'local' (filesystem) or 'gitops' (git repository)")
     path: str = Field(
         default=f"{SOLUTION_DIR}/{SOLUTION_DEPLOYMENTS_DIR}",
         description="Base path for manifests. Service appends /{deployment_name}/{version}/{timestamp}.json",
-    )
-    repository: Optional[str] = Field(
-        None,
-        description="Remote name from spec.remotes (required when type=gitops)",
-    )
-    branch: Optional[str] = Field(
-        None,
-        description="Target branch for manifest commits (required when type=gitops)",
-    )
-    tag: bool = Field(
-        default=True,
-        description="Create a git tag '{deployment_name}/{version}' after writing (gitops only)",
     )
     push_manifest: bool = Field(
         default=False,
         description="Commit and push the written manifest file to the git remote after writing.",
     )
-
-    @model_validator(mode="after")
-    def validate_gitops_fields(self) -> "ConfigurationManifestModel":
-        """Validate that gitops type has required repository and branch fields."""
-        if self.type == ManifestStoreType.GITOPS:
-            if not self.repository:
-                raise ValueError("manifest.repository is required when type='gitops'")
-            if not self.branch:
-                raise ValueError("manifest.branch is required when type='gitops'")
-        return self
+    repository: Optional[RepositoryPushModel] = Field(
+        default=None,
+        description=(
+            "Durable git-push destination for the manifest (ADR-0065 Phase 1). "
+            "When omitted but push_manifest is true, pushes to this workspace's own repo — "
+            "unchanged from previous behaviour. Set repository.name to push to a named "
+            "solution repo instead."
+        ),
+    )
 
 
 class SensitiveOutputHandling(str, Enum):
@@ -487,7 +466,6 @@ class ConfigurationDeploymentModel(PlatformBaseModel):
                 required: false
                 description: "Deployment region"
           manifest:
-            type: local
             path: ".strata/deployments"
           outputs:
             enabled: true
@@ -531,6 +509,77 @@ class ConfigurationZoneModel(PlatformBaseModel):
         ...,
         min_length=1,
         description="Provider regions belonging to this zone (e.g., 'westeurope', 'northeurope')",
+    )
+
+
+class CostAlertConfigModel(PlatformBaseModel):
+    """Threshold configuration for ``cost.threshold_exceeded`` alerts (ADR-0066 follow-up).
+
+    Either condition fires the alert; both are optional and independent.
+    """
+
+    max_monthly: Optional[float] = Field(
+        default=None,
+        description=(
+            "Fire an alert if the recorded total_monthly exceeds this value. "
+            "Same name and meaning as CostThresholdPolicy's max_monthly — deliberately "
+            "reusing that vocabulary rather than inventing a second one."
+        ),
+    )
+    delta_percent: Optional[float] = Field(
+        default=None,
+        description=(
+            "Fire an alert if total_monthly increased by at least this percent since the "
+            "previous snapshot. A decrease never fires this condition."
+        ),
+    )
+
+
+class CostHistoryConfigModel(PlatformBaseModel):
+    """Configuration for cost-history durable storage (ADR-0065 Phase 1).
+
+    The local history file itself (``.strata/cost/{deployment}.cost-history.json``)
+    is fixed and not configurable — only the optional durable git-push destination is.
+    """
+
+    repository: Optional[RepositoryPushModel] = Field(
+        default=None,
+        description="Durable git-push destination for cost history. Omit to skip.",
+    )
+    alert: Optional[CostAlertConfigModel] = Field(
+        default=None,
+        description="Threshold configuration for cost.threshold_exceeded alerts. Omit to skip.",
+    )
+
+
+class CostConfigModel(PlatformBaseModel):
+    """Top-level cost configuration under spec.cost in configuration YAML."""
+
+    history: Optional[CostHistoryConfigModel] = Field(
+        default=None,
+        description="Cost-history durable storage configuration.",
+    )
+
+
+class DriftHistoryConfigModel(PlatformBaseModel):
+    """Configuration for drift-history durable storage (ADR-0065 Phase 1).
+
+    The local history file itself (``.strata/drift/{deployment}.drift.json``)
+    is fixed and not configurable — only the optional durable git-push destination is.
+    """
+
+    repository: Optional[RepositoryPushModel] = Field(
+        default=None,
+        description="Durable git-push destination for drift history. Omit to skip.",
+    )
+
+
+class DriftConfigModel(PlatformBaseModel):
+    """Top-level drift configuration under spec.drift in configuration YAML."""
+
+    history: Optional[DriftHistoryConfigModel] = Field(
+        default=None,
+        description="Drift-history durable storage configuration.",
     )
 
 
@@ -592,6 +641,14 @@ class ConfigurationSpecModel(PlatformBaseModel):
     audit: Optional[AuditConfigModel] = Field(
         None,
         description="Audit and deploy-log configuration (structure, sinks, retention)",
+    )
+    cost: Optional[CostConfigModel] = Field(
+        None,
+        description="Cost configuration (currently only history durable storage, ADR-0065 Phase 1)",
+    )
+    drift: Optional[DriftConfigModel] = Field(
+        None,
+        description="Drift configuration (currently only history durable storage, ADR-0065 Phase 1)",
     )
     promotions: Optional[ConfigurationPromotionsModel] = Field(
         None,

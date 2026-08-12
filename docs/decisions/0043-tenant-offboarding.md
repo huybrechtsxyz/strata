@@ -2,7 +2,9 @@
 
 - Status: proposed
 - Date: 2026-07-15
+## Remaining Work
 
+- Not started — nothing in this ADR has been implemented yet.
 ## Context and Problem Statement
 
 ADR 0040 addressed tenant onboarding — creating the files needed to bring a new tenant

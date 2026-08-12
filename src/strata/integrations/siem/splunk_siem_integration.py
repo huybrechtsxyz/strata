@@ -172,7 +172,9 @@ class SplunkSiemIntegration(SiemBaseIntegration):
         """HTTP POST raw bytes to *url* with retry logic.
 
         Separate from ``_post_json`` in the base class because HEC uses
-        newline-delimited JSON (not a single JSON object/array).
+        newline-delimited JSON (not a single JSON object/array). Retry counts
+        still come from ``properties.max_retries``/``retry_backoff_seconds``
+        (ADR-0065 step 2.5), same as the base class's ``_post_json``.
         """
         if requests is None:
             logger.warning("splunk_requests_unavailable", integration=self.integration_name)
@@ -182,8 +184,9 @@ class SplunkSiemIntegration(SiemBaseIntegration):
         if extra_headers:
             headers.update(extra_headers)
 
-        backoff = _RETRY_BACKOFF
-        for attempt in range(1, _MAX_RETRIES + 1):
+        max_retries = max(1, int(self._prop("max_retries", _MAX_RETRIES)))
+        backoff = float(self._prop("retry_backoff_seconds", _RETRY_BACKOFF))
+        for attempt in range(1, max_retries + 1):
             try:
                 resp = requests.post(url, data=body, headers=headers, timeout=_REQUESTS_TIMEOUT)
                 if resp.ok:
@@ -209,7 +212,7 @@ class SplunkSiemIntegration(SiemBaseIntegration):
                     attempt=attempt,
                     error=str(exc),
                 )
-            if attempt < _MAX_RETRIES:
+            if attempt < max_retries:
                 time.sleep(backoff)
                 backoff *= 2
 

@@ -1,8 +1,12 @@
 # Google Cloud CLI (`gcloud`) as a First-Class Integration
 
-- Status: phase 1 implemented
+- Status: partially-implemented — Phase 1 done, Phase 2 not started
 - Date: 2026-07-23
 - Related: ADR-0048 (CDK pattern), ADR-0051 (Checkov pattern), ADR-0053 (az CLI pattern)
+
+## Remaining Work
+
+- Phase 2 integrations not built: GCP Secret Manager, RuntimeConfig
 
 ## Context and Problem Statement
 

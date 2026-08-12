@@ -260,3 +260,43 @@ class TestEtcdGetSetupInfo:
         assert info["command"] == "etcdctl"
         assert "env_vars" in info
         assert "auth_methods" in info
+
+
+class TestEtcdBulkValueCache:
+    """ADR-0026: etcd's range read already returns values in the same call keys
+    are fetched with — get_variable() should warm a whole-keyspace cache once
+    and serve every subsequent call from it, not one etcd call per key."""
+
+    def setup_method(self):
+        BaseIntegration._instances.clear()
+
+    def test_second_get_variable_call_does_not_refetch(self):
+        i = EtcdIntegration(_cfg())
+        with patch.object(i, "_fetch_all_keyvalues", return_value={"/a": "1", "/b": "2"}) as mock_fetch:
+            assert i.get_variable("/a") == "1"
+            assert i.get_variable("/b") == "2"
+        mock_fetch.assert_called_once()
+
+    def test_missing_key_in_bulk_cache_returns_none_without_extra_call(self):
+        i = EtcdIntegration(_cfg())
+        with patch.object(i, "_fetch_all_keyvalues", return_value={"/a": "1"}):
+            with patch.object(i, "get_keyvalue") as mock_direct:
+                assert i.get_variable("/missing") is None
+        mock_direct.assert_not_called()
+
+    def test_bulk_fetch_failure_falls_back_to_direct_get(self):
+        i = EtcdIntegration(_cfg())
+        with patch.object(i, "_fetch_all_keyvalues", return_value=None):
+            with patch.object(i, "get_keyvalue", return_value="direct-value") as mock_direct:
+                result = i.get_variable("/a")
+        assert result == "direct-value"
+        mock_direct.assert_called_once()
+
+    def test_set_variable_invalidates_cache(self):
+        i = EtcdIntegration(_cfg())
+        with patch.object(i, "_fetch_all_keyvalues", return_value={"/a": "1"}) as mock_fetch:
+            i.get_variable("/a")  # warm
+            with patch.object(i, "put_keyvalue", return_value=True):
+                i.set_variable("/a", "2")
+            i.get_variable("/a")  # should re-warm
+        assert mock_fetch.call_count == 2

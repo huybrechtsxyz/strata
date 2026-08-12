@@ -147,7 +147,7 @@ class DestroyDeployCommand(BaseDeployCommand):
     # Internal pipeline steps
     # -------------------------------------------------------------------------
 
-    def _resolve_values(self) -> bool:
+    def _resolve_values(self, strict: bool = False) -> bool:
         controller = ValueController()
         ok, resolved, errors = controller.resolve_values(
             self._deployment_service,  # type: ignore[arg-type]

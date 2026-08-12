@@ -348,6 +348,85 @@ class TestTerraformBuilderWorkspaceVars:
         assert result["environment"] == "production"
 
 
+class TestTerraformBuilderDnsVars:
+    """Regression tests: var:/secret:/output_key: DNS record values must resolve or be bucketed, never silently dropped."""
+
+    def _make_platform(self, dns_zones):
+        platform = MagicMock()
+        platform.spec.dns_zones = dns_zones
+        return platform
+
+    def _make_record(
+        self, name="@", rtype="A", value=None, var=None, secret=None, output_key=None, ttl=None, priority=None
+    ):
+        record = MagicMock()
+        record.name = name
+        record.type = MagicMock(value=rtype)
+        record.value = value
+        record.var = var
+        record.secret = secret
+        record.output_key = output_key
+        record.ttl = ttl
+        record.priority = priority
+        return record
+
+    def _make_dns(self, name, zone_name, records):
+        zone = MagicMock()
+        zone.name = zone_name
+        zone.ttl = 3600
+        zone.records = records
+        dns = MagicMock()
+        dns.name = name
+        dns.annotations = {}
+        dns.labels = {}
+        dns.tags = []
+        dns.provider = "inwx"
+        dns.zones = [zone]
+        return dns
+
+    def test_output_key_record_bucketed_not_dropped(self):
+        builder = TerraformBuilder()
+        record = self._make_record(name="@", rtype="A", output_key="hearth_public_ip")
+        platform = self._make_platform([self._make_dns("dns1", "example.com", [record])])
+        result = builder._build_dns_vars(platform, [])
+        rec = result["dns_zones"]["dns1"]["zones"]["example.com"]["records"][0]
+        assert rec["value"] is None
+        output_entry = result["dns_output_records"]["dns1"]["example.com"]["@_A"]
+        assert output_entry["output_key"] == "hearth_public_ip"
+
+    def test_no_output_records_when_no_output_key_used(self):
+        builder = TerraformBuilder()
+        record = self._make_record(value="1.2.3.4")
+        platform = self._make_platform([self._make_dns("dns1", "example.com", [record])])
+        result = builder._build_dns_vars(platform, [])
+        assert result["dns_output_records"] == {}
+
+    def test_planned_files_includes_dns_output_records_file(self):
+        builder = TerraformBuilder()
+        terraform_vars = {
+            "workspace": {},
+            "dns": {
+                "dns_zones": {"dns1": {}},
+                "dns_secret_records": {},
+                "dns_output_records": {"dns1": {"example.com": {"@_A": {"output_key": "hearth_public_ip"}}}},
+            },
+        }
+        files = dict(builder._planned_files(terraform_vars))
+        assert "dns_output_records.auto.tfvars.json" in files
+        assert files["dns_output_records.auto.tfvars.json"] == {
+            "dns_output_records": {"dns1": {"example.com": {"@_A": {"output_key": "hearth_public_ip"}}}}
+        }
+
+    def test_planned_files_omits_dns_output_records_file_when_empty(self):
+        builder = TerraformBuilder()
+        terraform_vars = {
+            "workspace": {},
+            "dns": {"dns_zones": {"dns1": {}}, "dns_secret_records": {}, "dns_output_records": {}},
+        }
+        files = dict(builder._planned_files(terraform_vars))
+        assert "dns_output_records.auto.tfvars.json" not in files
+
+
 def _make_provisioner(source_path: str, repository: str | None = None) -> WorkspaceIacModel:
     """Build a WorkspaceIacModel with a terraform provisioner for testing."""
     source = SourceModel(source_path=source_path, repository=repository)

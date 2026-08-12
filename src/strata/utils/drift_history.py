@@ -52,6 +52,16 @@ class DriftHistoryStore:
         self._data: Dict[str, Any] = {}
         self._loaded = False
 
+    @property
+    def history_dir(self) -> Path:
+        """Directory the history file lives in — the local base for durable push (ADR-0065)."""
+        return self._history_dir
+
+    @property
+    def history_file(self) -> Path:
+        """Absolute path to this deployment's drift-history file."""
+        return self._history_file
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------

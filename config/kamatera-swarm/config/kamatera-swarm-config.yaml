@@ -24,7 +24,6 @@ spec:
         description: "Target environment"
     # Deployment manifest storage
     manifest:
-      type: local
       path: ".strata/deployments"
 
   # Zones group provider regions for data residency enforcement

@@ -3,6 +3,10 @@
 - Status: proposed
 - Date: 2026-07-21
 
+## Remaining Work
+
+- Not started — nothing in this ADR has been implemented yet.
+
 ## Context and Problem Statement
 
 `.strata/workflow.yaml` exists today as an onboarding checklist: a sequence of steps,

@@ -1,9 +1,14 @@
 # Checkov as a first-class integration
 
-- Status: implemented (Phase 1)
+- Status: partially-implemented — Phase 1 done, Phase 2 not started
 - Date: 2026-07-22
 - Revised: 2026-07-23
 - Supersedes: Partial aspects of ADR-0006 (policy-engine-for-deployment-guardrails)
+
+## Remaining Work
+
+- Plan-phase scanning via `terraform show -json` — deferred to Phase 2
+- `DeploymentManifestModel.compliance_findings[]` — requires manifest model changes; deferred
 
 ## Context and Problem Statement
 

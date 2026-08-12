@@ -188,3 +188,61 @@ class TestVaultFeatureStore:
         ):
             i.list_features(prefix="payment-")
         assert captured["path"] == "features/payment-"
+
+
+class TestVaultPathDocumentCache:
+    """ADR-0026 OQ-4 follow-up (throttling mitigation): a single Vault KV read
+    returns the full multi-field document at a path regardless of whether one
+    field or all were requested — _get_secretvalue() should fetch the whole
+    document once per path and cache it, so multiple declared secrets/features
+    sharing the same path collapse from N Vault reads to 1."""
+
+    def setup_method(self):
+        BaseIntegration._instances.clear()
+
+    def _integration(self, monkeypatch) -> VaultIntegration:
+        monkeypatch.setenv("VAULT_TOKEN", "hvs.test")
+        BaseIntegration._instances.clear()
+        return VaultIntegration(_cfg(address="https://vault.example.com"))
+
+    def test_second_field_at_same_path_does_not_refetch(self, monkeypatch):
+        i = self._integration(monkeypatch)
+        with patch.object(i, "ensure_available", return_value=(True, "")):
+            with patch.object(
+                i, "_get_secret_via_cli", return_value={"username": "admin", "password": "s3cr3t"}
+            ) as mock_cli:
+                first = i.get_secret("secret/data/myapp", field="username")
+                second = i.get_secret("secret/data/myapp", field="password")
+        assert first == "admin"
+        assert second == "s3cr3t"
+        mock_cli.assert_called_once()
+        # The single call must have requested the FULL document, not one field —
+        # the (path, field) call signature always passes field=None internally.
+        assert mock_cli.call_args.args[1] is None
+
+    def test_different_paths_each_fetch_once(self, monkeypatch):
+        i = self._integration(monkeypatch)
+        with patch.object(i, "ensure_available", return_value=(True, "")):
+            with patch.object(
+                i,
+                "_get_secret_via_cli",
+                side_effect=lambda path, field, timeout: (
+                    {"password": "a"} if path == "secret/data/app1" else {"password": "b"}
+                ),
+            ) as mock_cli:
+                assert i.get_secret("secret/data/app1", field="password") == "a"
+                assert i.get_secret("secret/data/app2", field="password") == "b"
+        assert mock_cli.call_count == 2
+
+    def test_set_secret_invalidates_cache_on_new_write(self, monkeypatch):
+        i = self._integration(monkeypatch)
+        with patch.object(i, "ensure_available", return_value=(True, "")):
+            with patch.object(i, "_get_secret_via_cli", return_value={"password": "old"}):
+                i.get_secret("secret/data/app1", field="password")  # warm
+            assert "secret/data/app1" in i._path_cache
+
+            # Existence check for a field NOT in the cached document -> None -> proceeds to write.
+            with patch.object(i, "_run_integration_with_env", return_value=MagicMock(returncode=0)):
+                ok = i.set_secret("secret/data/app1", "new-value", field="new_field")
+        assert ok is True
+        assert "secret/data/app1" not in i._path_cache  # invalidated

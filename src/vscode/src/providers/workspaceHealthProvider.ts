@@ -77,10 +77,24 @@ export class WorkspaceHealthProvider
     private _tools: ToolsStatusRow[] | undefined;
     private _toolsLoading = false;
     private _toolsDeploymentFile: string | undefined;
+    private _stateServiceUrl: string | undefined;
+    private _stateServiceReachable: boolean | undefined;
 
     // ── Public API ────────────────────────────────────────────────────────────
 
     setClient(client: StrataClient): void { this._client = client; }
+
+    /**
+     * Reflect the state-service indicator's last health check (ADR-0065 Step 2.7)
+     * as an extra row in the Tools section — reuses the status bar's own poll
+     * rather than starting a second, independent one. Pass `url: undefined` to
+     * hide the row entirely (matches `strata.stateService.url` being unset).
+     */
+    setStateServiceStatus(url: string | undefined, reachable: boolean | undefined): void {
+        this._stateServiceUrl = url;
+        this._stateServiceReachable = reachable;
+        this._onChange.fire();
+    }
 
     update(status: WorkspaceStatus): void {
         this._status = status;
@@ -326,7 +340,7 @@ export class WorkspaceHealthProvider
             return td !== 0 ? td : a.name.localeCompare(b.name);
         });
 
-        return sorted.map(row => {
+        const items = sorted.map(row => {
             const configured = row.requirement != null;
             const reqLabel = row.requirement === 'required' ? '  req'
                 : row.requirement === 'optional' ? '  opt' : '';
@@ -367,7 +381,32 @@ export class WorkspaceHealthProvider
             );
             return item;
         });
+
+        // ADR-0065 Step 2.7 — an extra row for the configured state-service server,
+        // reusing the status bar indicator's own health check rather than polling
+        // independently a second time. Only shown when a URL is configured.
+        if (this._stateServiceUrl) {
+            const reachable = this._stateServiceReachable;
+            const item = new HealthTreeItem('state-service', 'tool');
+            item.description = reachable === undefined ? 'checking\u2026' : reachable ? 'reachable' : 'unreachable';
+            item.iconPath = reachable === undefined
+                ? new vscode.ThemeIcon('sync~spin')
+                : reachable
+                    ? new vscode.ThemeIcon('pass-filled', new vscode.ThemeColor('testing.iconPassed'))
+                    : new vscode.ThemeIcon('warning', new vscode.ThemeColor('list.warningForeground'));
+            item.contextValue = reachable ? 'tool' : 'tool-unavailable';
+            item.tooltip = new vscode.MarkdownString(
+                `**strata state service**\n\n${this._stateServiceUrl}\n\n` +
+                (reachable === undefined ? 'Checking\u2026' : reachable ? '\u2705 Reachable' : '\u26a0\ufe0f Unreachable') +
+                `\n\n*Click to show the tail view*`,
+            );
+            item.command = { command: 'strata.stateService.showTail', title: 'Show State Service Tail' };
+            items.push(item);
+        }
+
+        return items;
     }
+
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 

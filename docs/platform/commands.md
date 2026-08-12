@@ -1273,6 +1273,153 @@ my########
 
 ---
 
+## `values`
+
+Inspect and manage resolved deployment values (variables, features, secrets).
+
+All `values` subcommands accept `--file/-f PATH` and standard options like `--no-cache` and `--refresh-cache`.
+
+### `values list`
+
+List all declared variables and feature flags for a deployment, along with their current resolved values.
+
+```
+strata values list [-f FILE] [--stage NAME] [--no-cache] [--refresh-cache] [standard options]
+```
+
+| Option             | Description                                                    |
+| ------------------ | -------------------------------------------------------------- |
+| `-f / --file PATH` | Deployment file (required unless `STRATA_FILE` env var is set) |
+| `--stage NAME`     | Limit to values declared for a specific stage                  |
+| `--no-cache`       | Bypass the resolved-model cache; re-resolve all values live    |
+| `--refresh-cache`  | Invalidate cached values and re-resolve, then update the cache |
+
+Output includes value source (store type), store reference, current value (masked for secrets), and any resolution errors.
+
+```bash
+strata values list -f deploy/deploy-prd.yaml
+strata values list -f deploy/deploy-prd.yaml --stage production
+strata values list -f deploy/deploy-prd.yaml --refresh-cache
+strata values list -f deploy/deploy-prd.yaml --output json
+```
+
+**Console output columns:** `key`, `type` (variable/feature/secret), `store`, `value`, `status` (resolved/error/masked).
+
+**JSON output keys:** `deployment`, `values[]` — each: `key`, `type`, `store`, `reference`, `value`, `masked`, `status`, `error`.
+
+### `values get KEY`
+
+Retrieve the resolved value of a single variable or feature flag.
+
+```
+strata values get KEY [-f FILE] [--no-cache] [--refresh-cache] [--raw] [standard options]
+```
+
+| Option            | Description                                                    |
+| ----------------- | -------------------------------------------------------------- |
+| `KEY`             | Variable or feature name to retrieve                           |
+| `--raw`           | Print the bare value only (no JSON envelope, no masking label) |
+| `--no-cache`      | Bypass the resolved-model cache; re-resolve live               |
+| `--refresh-cache` | Invalidate cache and re-resolve, then update the cache         |
+
+```bash
+strata values get DATABASE_PASSWORD -f deploy/deploy-prd.yaml
+strata values get ENABLE_FEATURE_X -f deploy/deploy-prd.yaml --raw
+strata values get API_KEY -f deploy/deploy-prd.yaml --refresh-cache
+strata values get DATABASE_PASSWORD -f deploy/deploy-prd.yaml --output json
+```
+
+**Exit codes:** 0 success (value exists) · 3 key not found
+
+### `values set KEY VALUE`
+
+Set a team-shared template variable in the workspace (stored in `solution.json`). Unlike deployment-level variables, team variables persist across deployments.
+
+```
+strata values set KEY VALUE [standard options]
+```
+
+```bash
+strata values set app_version 1.2.3
+strata values set default_region us-east-1
+```
+
+### `values resolve`
+
+Resolve and display all variable and feature values for a deployment in a structured format. Useful for CI/CD pipelines that need to inject resolved values into subsequent stages.
+
+```
+strata values resolve [-f FILE] [--format json|ndjson|env] [--no-cache] [--refresh-cache] [standard options]
+```
+
+| Option             | Default | Description                                                    |
+| ------------------ | ------- | -------------------------------------------------------------- |
+| `-f / --file PATH` | —       | Deployment file (required unless `STRATA_FILE` env var is set) |
+| `--format FORMAT`  | `json`  | Output format: `json` (object), `ndjson` (one per line), `env` |
+| `--no-cache`       | off     | Bypass the resolved-model cache                                |
+| `--refresh-cache`  | off     | Invalidate and re-resolve, then update cache                   |
+
+Output formats:
+
+- **`json`** (default) — Complete structure with metadata (status, errors, store info)
+- **`ndjson`** — One line per value; useful for log pipelines and streaming
+- **`env`** — Bash/PowerShell env-var format (`KEY=value`), suitable for sourcing into shells
+
+```bash
+# JSON format (default) — full metadata
+strata values resolve -f deploy/deploy-prd.yaml
+
+# NDJSON format — one value per line for log pipelines
+strata values resolve -f deploy/deploy-prd.yaml --format ndjson
+
+# Env format — source into shell
+source <(strata values resolve -f deploy/deploy-prd.yaml --format env)
+# PowerShell
+strata values resolve -f deploy/deploy-prd.yaml --format env | ForEach-Object { $env:$_ = (iex $_).Split('=')[1] }
+
+# Refresh cache and re-resolve
+strata values resolve -f deploy/deploy-prd.yaml --refresh-cache
+
+# Integration with external tools
+strata values resolve -f deploy/deploy-prd.yaml --format json | jq '.values | map(select(.type=="secret")) | .[].key'
+```
+
+**JSON output example:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "deployment": "xyz-prd",
+    "values": [
+      {
+        "key": "DATABASE_PASSWORD",
+        "type": "secret",
+        "store": "azure-keyvault",
+        "value": "***",
+        "masked": true,
+        "status": "resolved"
+      },
+      {
+        "key": "ENABLE_FEATURE_X",
+        "type": "feature",
+        "store": "constant",
+        "value": "true",
+        "status": "resolved"
+      }
+    ],
+    "cache_hit": true,
+    "cache_age_seconds": 42
+  },
+  "errors": [],
+  "messages": []
+}
+```
+
+**Exit codes:** 0 success · 1 system error · 3 resolution failed (one or more values could not be resolved)
+
+---
+
 ## `deploy`
 
 > **Note:** Requires the CLI tool for the provisioner used by each stage (`terraform`, `helm`, `ansible-playbook`). Use `strata tools status` to verify availability. Configure integration credentials (Bitwarden, Vault, Azure Key Vault, etc.) before running. Use `--dry-run` to validate and plan without applying any changes.
@@ -1974,6 +2121,197 @@ Tear down a single service by name. Runs destroy provisioners for that service o
 ```bash
 strata service destroy -f xyz-deploy-prd.yaml core-services --force
 ```
+
+---
+
+## `serve`
+
+> **Note:** The state service is an optional feature. Install with `pip install xyz-strata[server]` (SQLite), `pip install xyz-strata[server,server-postgres]` (PostgreSQL), or `pip install xyz-strata[server,server-mssql]` (SQL Server).
+
+Run and manage a central strata state service — an HTTP server that accepts audit events, deployment metrics, cost history, and drift records from multiple workspaces and stores them durably in SQL.
+
+The state service is:
+- **Queryable** — operators can query the `events` table with `psql`, Grafana, Power BI, or any SQL tool
+- **Best-effort** — forwarding failures never block deployments or builds
+- **Bearer-token protected** — each workspace gets its own token; admin tokens control token creation/revocation
+- **Multi-backend** — SQLite (dev), PostgreSQL (production), SQL Server (enterprise)
+- **Optional** — runs as a standalone process, consumed by workspaces through the existing webhook sink mechanism (no required integration)
+
+See [Strata State Service guide](../guides/strata-state-service.md) for full operational details, Docker/Kubernetes examples, and database setup.
+
+### `serve run`
+
+```
+strata serve run [--host HOST] [--port PORT] [--db-url URL] [--tls-cert PATH] [--tls-key PATH] [standard options]
+```
+
+Start the state service. Runs in the foreground; lifecycle (start, stop, restart) is managed by whatever launched it (container runtime, systemd, `Ctrl+C`).
+
+| Option            | Env Var                 | Default                       | Description                                            |
+| ----------------- | ----------------------- | ----------------------------- | ------------------------------------------------------ |
+| `--host HOST`     | `STRATA_SERVE_HOST`     | `127.0.0.1`                   | Bind address                                           |
+| `--port PORT`     | `STRATA_SERVE_PORT`     | `8000`                        | Bind port                                              |
+| `--db-url URL`    | `STRATA_SERVE_DB_URL`   | `sqlite:///./strata-state.db` | Database URL (SQLite, PostgreSQL, SQL Server)          |
+| `--tls-cert PATH` | `STRATA_SERVE_TLS_CERT` | —                             | TLS certificate file (required for non-loopback binds) |
+| `--tls-key PATH`  | `STRATA_SERVE_TLS_KEY`  | —                             | TLS private key file (required for non-loopback binds) |
+
+**TLS requirement:** Binding to any address other than `127.0.0.1`, `::1`, or `localhost` mandates TLS — the server refuses to start insecurely.
+
+```bash
+# Local dev (SQLite, loopback, no TLS needed)
+strata serve run
+
+# Production (PostgreSQL, remote bind, TLS)
+strata serve run \
+  --host 0.0.0.0 \
+  --db-url postgresql+psycopg://user:pass@postgres:5432/strata_state \
+  --tls-cert /etc/certs/cert.pem \
+  --tls-key /etc/certs/key.pem
+
+# Environment variables (for Docker/Kubernetes)
+export STRATA_SERVE_HOST=0.0.0.0
+export STRATA_SERVE_DB_URL=postgresql+psycopg://...
+export STRATA_SERVE_TLS_CERT=/etc/certs/cert.pem
+export STRATA_SERVE_TLS_KEY=/etc/certs/key.pem
+strata serve run
+```
+
+**Exit codes:** 0 clean shutdown · 1 startup failure (e.g., bind error, database unreachable, TLS misconfiguration) · — (infinite foreground loop while running)
+
+### `serve migrate`
+
+```
+strata serve migrate [--db-url URL] [standard options]
+```
+
+Initialize the database schema. Run once before the first `serve run`, or re-run after upgrading strata. Idempotent — re-running is safe.
+
+| Option         | Env Var               | Default                       | Description  |
+| -------------- | --------------------- | ----------------------------- | ------------ |
+| `--db-url URL` | `STRATA_SERVE_DB_URL` | `sqlite:///./strata-state.db` | Database URL |
+
+Creates the `events` table if it doesn't exist; does nothing if it already does.
+
+```bash
+# Local SQLite
+strata serve migrate
+
+# PostgreSQL
+strata serve migrate --db-url postgresql+psycopg://user:pass@postgres:5432/strata_state
+
+# SQL Server
+strata serve migrate --db-url mssql+pyodbc://user:pass@hostname/strata_state
+```
+
+**Exit codes:** 0 success · 1 database error (connection failed, DDL error, etc.)
+
+### `serve health`
+
+```
+strata serve health URL [--timeout SECONDS] [standard options]
+```
+
+Health check against a remote state service. Tests connectivity, database availability, and response time.
+
+| Argument    | Description                                                    |
+| ----------- | -------------------------------------------------------------- |
+| `URL`       | State service URL (e.g. `http://127.0.0.1:8000` or `https://`) |
+| `--timeout` | HTTP timeout in seconds (default: 10)                          |
+
+```bash
+# Local loopback
+strata serve health http://127.0.0.1:8000
+
+# Remote HTTPS
+strata serve health https://state-service.internal:8000
+
+# With timeout
+strata serve health https://state-service.internal:8000 --timeout 30
+```
+
+**Response:** `{"status": "ok"}` on success (HTTP 200) · Error detail on failure (HTTP 503).
+
+**Exit codes:** 0 healthy · 1 unreachable or error
+
+### `serve token create`
+
+```
+strata serve token create --url URL --admin-token TOKEN --workspace WORKSPACE [standard options]
+```
+
+Create a new workspace-scoped bearer token for authentication to the ingest endpoint.
+
+| Option                  | Description                             |
+| ----------------------- | --------------------------------------- |
+| `--url URL`             | State service URL                       |
+| `--admin-token TOKEN`   | Admin token (for creating new tokens)   |
+| `--workspace WORKSPACE` | Workspace name (e.g. `prod`, `staging`) |
+
+```bash
+strata serve token create \
+  --url https://state-service.internal:8000 \
+  --admin-token $ADMIN_TOKEN \
+  --workspace prod
+
+# Output:
+# Token: strata_state_e1d3f6c9a2b4e7k...
+# Workspace: prod
+# Created: 2026-08-12T15:30:45Z
+```
+
+Store the token securely (Vault, GitHub Secrets, password manager) and use it in workspace webhook sink configuration (see [SIEM integration guide](siem-audit-forwarding.md#webhook--strata-state-service-reference)).
+
+**Exit codes:** 0 token created · 1 error (auth failure, network error, etc.)
+
+### `serve token list`
+
+```
+strata serve token list --url URL --admin-token TOKEN [standard options]
+```
+
+List all active workspace tokens.
+
+| Option                | Description       |
+| --------------------- | ----------------- |
+| `--url URL`           | State service URL |
+| `--admin-token TOKEN` | Admin token       |
+
+```bash
+strata serve token list \
+  --url https://state-service.internal:8000 \
+  --admin-token $ADMIN_TOKEN
+
+# Output:
+# Workspace  Token (first 20 chars)  Created            Last Used
+# ─────────────────────────────────────────────────────────────────
+# prod       strata_state_e1d3f6c9… 2026-08-12T15:30:00 2026-08-12T16:00:00
+# staging    strata_state_a1b2c3d4… 2026-08-10T10:15:00 —
+```
+
+**Exit codes:** 0 success · 1 error (auth failure, network error, etc.)
+
+### `serve token revoke`
+
+```
+strata serve token revoke --url URL --admin-token TOKEN --workspace WORKSPACE [standard options]
+```
+
+Revoke a workspace token. That workspace can no longer authenticate to the ingest endpoint.
+
+| Option                  | Description       |
+| ----------------------- | ----------------- |
+| `--url URL`             | State service URL |
+| `--admin-token TOKEN`   | Admin token       |
+| `--workspace WORKSPACE` | Workspace name    |
+
+```bash
+strata serve token revoke \
+  --url https://state-service.internal:8000 \
+  --admin-token $ADMIN_TOKEN \
+  --workspace prod
+```
+
+**Exit codes:** 0 token revoked (or was not found) · 1 error
 
 ---
 

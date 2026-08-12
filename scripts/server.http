@@ -1,0 +1,75 @@
+### strata state-service — manual test fixture (ADR-0065 Phase 2)
+#
+# Requires the VS Code "REST Client" extension (humao.rest-client) to run
+# requests inline via the "Send Request" CodeLens.
+#
+# Start the server first (loopback bind, no TLS required):
+#   uv run strata serve migrate --db-url sqlite:///./strata-state.db
+#   uv run strata serve run --db-url sqlite:///./strata-state.db --admin-token dev-admin-token
+#
+# @host/@port/@adminToken below must match the flags/envvars used to start the
+# server. Ingest token is created by the "Create ingest token" request further
+# down — copy the returned "token" value into @ingestToken.
+
+@host = 127.0.0.1
+@port = 8443
+@baseUrl = http://{{host}}:{{port}}
+@adminToken = dev-admin-token
+@ingestToken = REPLACE_WITH_TOKEN_FROM_CREATE_RESPONSE
+
+### Liveness check — also verifies DB connectivity (Step 2.2). No auth required.
+GET {{baseUrl}}/healthz
+
+### Create a per-workspace ingest token (Step 2.4, admin-only).
+# Copy the "token" field from the response into @ingestToken above.
+POST {{baseUrl}}/v1/tokens?workspace=my-workspace
+Authorization: Bearer {{adminToken}}
+
+### List tokens, optionally filtered by workspace (never returns the secret/hash).
+GET {{baseUrl}}/v1/tokens
+Authorization: Bearer {{adminToken}}
+
+### Revoke a token by id (replace {{tokenId}} with an id from the list response).
+@tokenId = REPLACE_WITH_TOKEN_ID
+DELETE {{baseUrl}}/v1/tokens/{{tokenId}}
+Authorization: Bearer {{adminToken}}
+
+### Ingest one event envelope (Step 2.3). Requires a valid ingest token.
+POST {{baseUrl}}/v1/events
+Authorization: Bearer {{ingestToken}}
+Content-Type: application/json
+
+{
+  "specversion": "1.0",
+  "type": "xyz.huybrechts.strata.deployment.completed",
+  "source": "/strata/my-workspace/my-deploy",
+  "id": "11111111-1111-1111-1111-111111111111",
+  "time": "2026-08-10T12:00:00+00:00",
+  "datacontenttype": "application/json",
+  "subject": "my-deploy",
+  "data": {
+    "event": { "kind": "event", "action": "deployment-completed", "outcome": "success" },
+    "user": { "name": "actor" },
+    "labels": {
+      "execution_id": "exec-123",
+      "workspace": "my-workspace",
+      "environment": "prd",
+      "deployment": "my-deploy",
+      "tenant": "acme"
+    },
+    "strata": { "execution_id": "exec-123", "deployment": "my-deploy" }
+  }
+}
+
+### Ingest request missing/invalid auth — expect 401.
+POST {{baseUrl}}/v1/events
+Content-Type: application/json
+
+{ "specversion": "1.0", "type": "xyz.huybrechts.strata.deployment.completed" }
+
+### Ingest request with malformed JSON body — expect 400.
+POST {{baseUrl}}/v1/events
+Authorization: Bearer {{ingestToken}}
+Content-Type: application/json
+
+not valid json

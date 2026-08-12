@@ -54,7 +54,7 @@ export class DeploymentContext implements vscode.Disposable {
      * and update the active file on selection.
      */
     async selectDeployment(status: WorkspaceStatus): Promise<void> {
-        const deployments = status.profiles.paths['deployment'] ?? [];
+        const deployments = status.deployments ?? [];
         if (deployments.length === 0) {
             void vscode.window.showWarningMessage(
                 'Strata: no deployment files found. Create one with Strata: New File.',
@@ -83,7 +83,7 @@ export class DeploymentContext implements vscode.Disposable {
      */
     autoSelect(status: WorkspaceStatus): void {
         if (this._activeFile) return;
-        const deployments = status.profiles.paths['deployment'] ?? [];
+        const deployments = status.deployments ?? [];
         if (deployments.length === 1) {
             this.setFile(deployments[0].path);
         }

@@ -1,6 +1,6 @@
 # Deploy status deprecation and env command clarity
 
-- Status: **superseded by [ADR-0062](0062-cli-consolidation-env-dissolves-into-deploy-rollout-sln.md)**
+- Status: superseded — see [ADR-0062](0062-cli-consolidation-env-dissolves-into-deploy-rollout-sln.md)
 - Date: 2026-07-28
 
 ## Summary

@@ -1,0 +1,46 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+*.egg
+pip-log.txt
+pip-wheel-metadata/
+
+# Virtual environments / build outputs
+.venv/
+venv/
+env/
+ENV/
+build/
+dist/
+html_docs/
+documentation_build/
+
+# Test / coverage
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# Docs source (not needed for server image)
+docs/
+
+# CI / version control / editor
+.git/
+.github/
+.squad/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs / databases
+*.log
+*.sqlite3
+*.db
