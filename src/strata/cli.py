@@ -33,6 +33,7 @@ from strata.commands.cli_config import config_group
 from strata.commands.cli_console import console_command
 from strata.commands.cli_cost import cost_group
 from strata.commands.cli_deploy import deploy as deploy_group
+from strata.commands.cli_diagram import diagram_group
 from strata.commands.cli_guide import guide_command
 from strata.commands.cli_help import help_command
 from strata.commands.cli_log import log_group
@@ -298,6 +299,7 @@ main.add_command(guide_command, name="guide")
 main.add_command(console_command, name="console")
 main.add_command(validate_command, name="validate")
 main.add_command(schema_group, name="schema")
+main.add_command(diagram_group, name="diagram")
 main.add_command(policy_group, name="policy")
 main.add_command(build_group, name="build")
 main.add_command(deploy_group, name="deploy")

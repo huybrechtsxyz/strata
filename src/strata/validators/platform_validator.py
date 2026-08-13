@@ -17,6 +17,7 @@ from strata.models.configuration_model import ConfigurationModel
 from strata.models.validation_error import ValidationError
 from strata.services.base_service import BaseService
 from strata.services.deployment_service import DeploymentService
+from strata.services.diagram_service import DiagramService
 from strata.services.dns_service import DnsService
 from strata.services.environment_service import EnvironmentService
 from strata.services.firewall_service import FirewallService
@@ -41,6 +42,7 @@ from strata.validators.base_validator import BaseValidator
 _KIND_TO_SERVICE: Dict[PlatformKind, Any] = {
     PlatformKind.TENANT: TenantService,
     PlatformKind.DEPLOYMENT: DeploymentService,
+    PlatformKind.DIAGRAM: DiagramService,
     PlatformKind.DNS: DnsService,
     PlatformKind.ENVIRONMENT: EnvironmentService,
     PlatformKind.FIREWALL: FirewallService,

@@ -294,6 +294,12 @@ def get_pkg_help_path() -> Path:
     return get_pkg_data_path() / "help"
 
 
+# Get the path to the built-in diagram definitions directory
+def get_pkg_diagrams_path() -> Path:
+    """Get the path to the shipped ``kind: diagram`` definitions directory."""
+    return get_pkg_data_path() / "diagrams"
+
+
 # Get the path to the default configuration file
 def get_pkg_config_path() -> Path:
     """Get the path to the default configuration file."""

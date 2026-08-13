@@ -1,0 +1,51 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: diagram
+meta:
+  name: topology
+  annotations:
+    description: "Logical infrastructure topology — resources, modules and namespaces grouped by topology"
+  labels:
+    version: "1.0.0"
+  tags:
+    - built-in
+spec:
+  sources:
+    - type: topology
+      as: topo
+  template: |
+    graph TD
+      classDef resource fill:#dbeafe,stroke:#2563eb
+      classDef module fill:#fef3c7,stroke:#d97706
+      classDef namespace fill:#d1fae5,stroke:#059669
+      classDef network fill:#e0e7ff,stroke:#4f46e5
+      classDef disabled fill:#e2e3e5,stroke:#6c757d
+      classDef dangling fill:#f8d7da,stroke:#dc3545
+    {%- set grouped = (topo.topologies | map(attribute='components') | sum(start=[]))
+                    + (topo.topologies | map(attribute='namespaces') | sum(start=[])) %}
+    {%- for t in topo.topologies %}
+      subgraph {{ t.id }}["{{ t.name }} ({{ t.provisioner }})"]
+      {%- for n in topo.nodes if n.id in t.components or n.id in t.namespaces %}
+        {{ n.id }}["{{ n.label }}"]:::{{ n.status if n.status in ['disabled', 'dangling'] else n.kind }}
+        click {{ n.id }} "{{ n.uri }}"
+      {%- endfor %}
+      end
+    {%- endfor %}
+    {%- if topo.nodes | rejectattr('id', 'in', grouped) | list %}
+      subgraph unassigned["(unassigned)"]
+      {%- for n in topo.nodes if n.id not in grouped %}
+        {{ n.id }}["{{ n.label }}"]:::{{ n.status if n.status in ['disabled', 'dangling'] else n.kind }}
+      {%- if n.uri %}
+        click {{ n.id }} "{{ n.uri }}"
+      {%- endif %}
+      {%- endfor %}
+      end
+    {%- endif %}
+    {%- for e in topo.edges %}
+    {%- if e.label.startswith('subnet') %}
+      {{ e.source }} -.->|{{ e.label }}| {{ e.target }}
+    {%- elif e.label %}
+      {{ e.source }} -->|{{ e.label }}| {{ e.target }}
+    {%- else %}
+      {{ e.source }} --> {{ e.target }}
+    {%- endif %}
+    {%- endfor %}

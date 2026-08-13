@@ -1,0 +1,13 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: diagram
+meta:
+  name: diagram_bad_syntax
+  annotations:
+    description: "spec.template has an unclosed {% for %} block"
+spec:
+  sources:
+    - type: topology
+  template: |
+    flowchart TD
+    {% for node in topology.nodes %}
+      {{ node.id }}["{{ node.label }}"]

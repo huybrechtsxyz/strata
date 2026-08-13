@@ -16,7 +16,9 @@ class GraphController(BaseController):
 
     def __init__(self, work_path: Path, entry: Optional[str] = None, no_validate: bool = False) -> None:
         super().__init__()
-        self._work_path = work_path
+        # Resolved because discovered file paths are resolved before being made
+        # relative to it; a relative work_path would make relative_to() raise.
+        self._work_path = Path(work_path).resolve()
         self._entry = entry
         self._no_validate = no_validate
         self._visited: set[str] = set()
@@ -62,6 +64,7 @@ class GraphController(BaseController):
         spec = ws_data.get("spec", {})
         ws_name = ws_data.get("meta", {}).get("name", ws_path.stem)
         result.entry_points = [str(ws_path.relative_to(self._work_path))]
+        result.workspace_name = ws_name
 
         # Extract resources
         resources = spec.get("resources") or []
@@ -163,6 +166,73 @@ class GraphController(BaseController):
             modules=sum(1 for n in result.nodes if n.kind == "module"),
         )
         return result
+
+    def resolve_workspace(self) -> Optional[tuple[Path, dict]]:
+        """Resolve the workspace file and return it alongside its parsed document.
+
+        Public wrapper around the same ``--entry`` handling ``build_resource_graph()``
+        uses, for callers that need the raw workspace document (e.g. to read
+        ``spec.networks[]`` / ``spec.firewalls[]`` / ``spec.dns_zones[]`` reference
+        lists) rather than the flattened resource graph.
+
+        Returns:
+            ``(workspace_path, parsed_document)``, or ``None`` if the workspace
+            file cannot be resolved or parsed. Appends the same error message
+            ``build_resource_graph()`` would in either case.
+        """
+        ws_path = self._resolve_workspace_path()
+        if not ws_path:
+            self._errors.append("Cannot resolve workspace file. Use --entry to specify a deployment or workspace file.")
+            return None
+        data = self._parse_yaml(ws_path)
+        if not data:
+            self._errors.append(f"Failed to parse workspace file: {ws_path}")
+            return None
+        return ws_path, data
+
+    def resolve_deployment(self) -> Optional[tuple[Path, dict]]:
+        """Resolve a deployment file and return it alongside its parsed document.
+
+        Unlike ``resolve_workspace()``, this does not follow a deployment's
+        ``spec.workspace.file`` reference — callers that need ``spec.stages[]`` /
+        ``spec.environments[]`` / ``spec.tenant`` want the deployment document
+        itself. Reuses the same entry-point discovery ``build_file_graph()`` uses:
+        ``--entry`` if given, otherwise the first deployment file found.
+
+        Returns:
+            ``(deployment_path, parsed_document)``, or ``None`` if no deployment
+            file can be resolved, parsed, or if the resolved entry is some other
+            document kind.
+        """
+        entry_paths = self._discover_entry_points()
+        if not entry_paths:
+            self._errors.append("No deployment file found. Use --entry to specify one.")
+            return None
+        deployment_path = entry_paths[0]
+        data = self._parse_yaml(deployment_path)
+        if not data:
+            self._errors.append(f"Failed to parse deployment file: {deployment_path}")
+            return None
+        if data.get("kind") != "deployment":
+            rel = deployment_path.relative_to(self._work_path)
+            self._errors.append(
+                f"'{rel}' is a '{data.get('kind')}' document, not a deployment. "
+                f"Use --entry to point at a deployment file."
+            )
+            return None
+        return deployment_path, data
+
+    def iter_yaml_files(self) -> list[Path]:
+        """Public wrapper: list every YAML file in the workspace (hidden dirs excluded)."""
+        return self._iter_yaml_files()
+
+    def parse_yaml(self, file_path: Path) -> Optional[dict]:
+        """Public wrapper: safely parse a YAML file, returning ``None`` on failure.
+
+        Only returns a dict — see ``_parse_yaml`` for why non-dict YAML (e.g. an
+        Ansible playbook) is treated the same as an unparseable file.
+        """
+        return self._parse_yaml(file_path)
 
     # ─── Private helpers ──────────────────────────────────────────────────────
 

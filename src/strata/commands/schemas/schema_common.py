@@ -6,6 +6,7 @@ from strata.models.common_models import PlatformKind
 from strata.models.configuration_model import ConfigurationModel
 from strata.models.deployment_manifest_model import DeploymentManifestModel
 from strata.models.deployment_model import DeploymentModel
+from strata.models.diagram_model import DiagramModel
 from strata.models.dns_model import DnsModel
 from strata.models.environment_model import EnvironmentModel
 from strata.models.firewall_model import FirewallModel
@@ -26,6 +27,7 @@ KIND_TO_MODEL: Dict[PlatformKind, Type] = {
     PlatformKind.TENANT: TenantModel,
     PlatformKind.DEPLOYMENT: DeploymentModel,
     PlatformKind.DEPLOYMENT_MANIFEST: DeploymentManifestModel,
+    PlatformKind.DIAGRAM: DiagramModel,
     PlatformKind.DNS: DnsModel,
     PlatformKind.ENVIRONMENT: EnvironmentModel,
     PlatformKind.FIREWALL: FirewallModel,
@@ -45,6 +47,7 @@ KIND_TO_MODEL: Dict[PlatformKind, Type] = {
 KIND_TO_GLOBS: Dict[PlatformKind, list[str]] = {
     PlatformKind.CONFIGURATION: ["config/**/*.yaml"],
     PlatformKind.DEPLOYMENT: ["deploy/**/*.yaml"],
+    PlatformKind.DIAGRAM: [".strata/diagrams/**/*.yaml"],
     PlatformKind.DNS: ["dns/**/*.yaml"],
     PlatformKind.ENVIRONMENT: ["envs/**/*.yaml", "environments/**/*.yaml"],
     PlatformKind.FIREWALL: ["firewalls/**/*.yaml"],
