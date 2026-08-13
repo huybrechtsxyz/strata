@@ -13,7 +13,6 @@ from strata.commands.cli_common import (
     click_work_path,
     handle_command_exit,
 )
-from strata.commands.validate.graph_validate_command import GraphCommand
 from strata.commands.validate.run_validate_command import ValidateCommand
 from strata.commands.validate.sbom_ignore_validate_command import SbomIgnoreValidateCommand
 
@@ -36,7 +35,7 @@ class _ValidateGroup(click.Group):
 
 @click.group(name="validate", cls=_ValidateGroup)
 def validate_group() -> None:
-    """Validate platform YAML files and visualize workspace dependencies."""
+    """Validate platform YAML files."""
 
 
 @validate_group.command(
@@ -142,90 +141,21 @@ def validate_run(
     handle_command_exit(command, success)
 
 
-@validate_group.command(name="graph")
-@click.option(
-    "--mode",
-    "-m",
-    type=click.Choice(["files", "resources"]),
-    default="files",
-    help="Graph type: 'files' shows YAML file dependency tree (default), 'resources' shows logical infrastructure topology.",
-)
-@click.option(
-    "--entry",
-    "-e",
-    default=None,
-    metavar="PATH",
-    help="Entry point file (deployment or workspace YAML). If omitted, discovers all deployments in the workspace.",
-)
-@click.option(
-    "--save",
-    "-s",
-    default=None,
-    metavar="PATH",
-    is_flag=False,
-    flag_value="graph.md",
-    help="Write Mermaid markdown to file (default: graph.md). Written in addition to console output.",
-)
-@click.option(
-    "--direction",
-    type=click.Choice(["LR", "TD", "BT", "RL"]),
-    default=None,
-    help="Mermaid graph direction. Default: LR for files, TD for resources.",
-)
-@click.option(
-    "--no-validate",
-    is_flag=True,
-    default=False,
-    help="Skip validation (all nodes shown as neutral). Faster for large workspaces.",
-)
-@click_file
-@click_work_path
-@click_output_format
-@click_output_verbose
-@click_output_quiet
-def validate_graph(
-    mode: str = "files",
-    entry: Optional[str] = None,
-    save: Optional[str] = None,
-    direction: Optional[str] = None,
-    no_validate: bool = False,
-    file: Optional[str] = None,
-    work_path: Optional[str] = None,
-    output: Optional[str] = None,
-    verbose: bool = False,
-    quiet: bool = False,
-) -> None:
-    """Build and render a workspace dependency graph.
+@validate_group.command(name="graph", hidden=True, add_help_option=False)
+@click.argument("args", nargs=-1, type=click.UNPROCESSED)
+def validate_graph_moved(args: tuple) -> None:
+    """Signpost for the removed 'validate graph' subcommand.
 
-    File mode (default): shows YAML file dependency tree.
-
-        strata validate graph
-        strata validate graph --entry deploy/deploy-prd.yaml
-
-    Resource mode: shows logical infrastructure topology.
-
-        strata validate graph --mode resources
-        strata validate graph --mode resources --entry stack/ws-platform.yaml
-
-    Save as Mermaid markdown:
-
-        strata validate graph --save graph.md
+    Without this, the group's backward-compatibility shim rewrites
+    'validate graph' to 'validate run graph' and reports the unhelpful
+    "Got unexpected extra argument (graph)".
     """
-    # --file/-f is an alias for --entry
-    resolved_entry = entry or file
-    command = GraphCommand(
-        mode=mode,
-        entry=resolved_entry,
-        save=save,
-        direction=direction,
-        no_validate=no_validate,
-        work_path=work_path,
-        output=output,
-        verbose=verbose,
-        quiet=quiet,
+    raise click.UsageError(
+        "'strata validate graph' has been replaced by the 'diagram' command group.\n"
+        "  strata diagram show -f refs        # the file reference graph\n"
+        "  strata diagram show -f topology    # the resource topology\n"
+        "  strata diagram list                # everything available"
     )
-    success = command.execute()
-    handle_command_exit(command, success)
 
 
 @validate_group.command(name="sbom-ignore")

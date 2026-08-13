@@ -90,7 +90,7 @@ Required on every strata document.
 
 ### kind
 The document type. Valid kinds: `configuration`, `workspace`, `deployment`, `environment`,
-`namespace`, `module`, `resource`, `provider`, `tenant`, `network`, `firewall`, `dns` (user-authored),
+`namespace`, `module`, `resource`, `provider`, `tenant`, `network`, `firewall`, `dns`, `diagram` (user-authored),
 plus `platform_model`, `deployment-manifest`, `version-lock`, `version`, `promotion-record`
 (internal, machine-generated build/promotion artifacts — never hand-authored).
 

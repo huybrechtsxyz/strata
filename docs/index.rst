@@ -86,6 +86,7 @@ strata
    config/configuration
    config/workspace
    config/deployment
+   config/diagram
    config/environment
    config/provider
    config/resource

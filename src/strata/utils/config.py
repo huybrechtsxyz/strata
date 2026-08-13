@@ -45,6 +45,7 @@ SOLUTION_TEMPLATES_DIR: str = "templates"
 SOLUTION_PLUGINS_DIR: str = "plugins"
 SOLUTION_LOCKFILE_PARSERS_DIR: str = "lockfile_parsers"
 SOLUTION_SCHEMAS_DIR: str = "schemas"
+SOLUTION_DIAGRAMS_DIR: str = "diagrams"
 SOLUTION_LOCKS_DIR: str = "locks"
 SOLUTION_DEPLOYMENTS_DIR: str = "deployments"
 SOLUTION_OUTPUTS_DIR: str = "outputs"
@@ -138,6 +139,11 @@ def get_policies_dir(work_path: Path) -> Path:
 def get_templates_dir(work_path: Path) -> Path:
     """Return the path to ``.strata/templates/``."""
     return work_path / SOLUTION_DIR / SOLUTION_TEMPLATES_DIR
+
+
+def get_diagrams_dir(work_path: Path) -> Path:
+    """Return the path to ``.strata/diagrams/``."""
+    return work_path / SOLUTION_DIR / SOLUTION_DIAGRAMS_DIR
 
 
 def get_plugins_dir(work_path: Path) -> Path:

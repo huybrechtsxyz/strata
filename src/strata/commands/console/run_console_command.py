@@ -105,8 +105,10 @@ class ConsoleCommand(BaseCommand):
                 self._handle_shell_command(f"strata new {args}")
             elif cmd in ("validate", "v"):
                 self._handle_shell_command(f"strata validate {args}" if args else "strata validate run")
-            elif cmd in ("graph", "g"):
-                self._handle_shell_command(f"strata validate graph {args}".strip())
+            elif cmd in ("diagram", "g"):
+                self._handle_shell_command(
+                    f"strata diagram show {args}".strip() if args else "strata diagram show -f topology"
+                )
             elif cmd in ("templates", "t"):
                 self._handle_shell_command("strata new --list")
             elif cmd == "tools":
@@ -334,7 +336,7 @@ class ConsoleCommand(BaseCommand):
             ("do", "d", "Execute the suggested next-step command"),
             ("new <template> [name]", "", "Scaffold a file via strata new"),
             ("validate [file|glob]", "v", "Run validation"),
-            ("graph [--mode]", "g", "Render dependency graph"),
+            ("diagram [-f NAME]", "g", "Render a workspace diagram"),
             ("templates", "t", "List available templates"),
             ("tools", "", "Check external tool availability"),
             ("open <file>", "o", "Open file in editor"),
@@ -394,7 +396,7 @@ class ConsoleCommand(BaseCommand):
                 ),
                 "validate": PathCompleter(),
                 "v": PathCompleter(),
-                "graph": None,
+                "diagram": None,
                 "g": None,
                 "templates": None,
                 "t": None,

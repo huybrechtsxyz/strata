@@ -1,0 +1,19 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: diagram
+meta:
+  name: diagram_layout_only
+  annotations:
+    description: "No template — generated from layout and style hints"
+spec:
+  sources:
+    - type: resources
+    - type: drift
+  layout:
+    type: flowchart
+    direction: TD
+  style:
+    color_by: status
+    group_by: namespace
+    highlight:
+      - condition: "drift.severity == critical"
+        token: critical

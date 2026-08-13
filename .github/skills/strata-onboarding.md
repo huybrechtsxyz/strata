@@ -227,8 +227,8 @@ strata validate run -f <file.yaml> --explain
 # Validate all deployment manifests
 strata validate run --pattern "deployments/**"
 
-# Visualize workspace dependency graph
-strata validate graph
+# Visualize workspace dependencies
+strata diagram show -f refs
 
 # Exit code 3 = validation failed — read the suggestions
 ```

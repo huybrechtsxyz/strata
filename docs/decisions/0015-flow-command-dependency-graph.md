@@ -1,8 +1,11 @@
 # `strata validate graph` — Workspace Dependency Graph
 
-- Status: completed
+- Status: superseded
 - Date: 2026-06-24
 - Parent: [0014-onboarding-experience.md](0014-onboarding-experience.md) (item #11)
+- Superseded by: [0034-diagram-visualization-in-vscode-extension.md](0034-diagram-visualization-in-vscode-extension.md)
+
+> **Superseded.** The `GraphController` and graph data model described here are still in use — ADR-0034 reuses them verbatim as the `files` and `topology` diagram source types. What was replaced is the *command surface*: `strata validate graph` exited `0`/`1` only, never `3`, so it never gated anything and did not belong under `validate`. Rendering moved from hand-written Mermaid string concatenation in `utils/graph.py` into shipped `kind: diagram` YAML definitions, reachable via `strata diagram show -f refs` (file mode) and `strata diagram show -f topology` (resource mode).
 
 ## Summary
 

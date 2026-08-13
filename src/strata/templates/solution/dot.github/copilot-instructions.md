@@ -5,7 +5,7 @@ This is a **strata** infrastructure workspace — a collection of YAML configura
 ## Key facts
 
 - All YAML files use `apiVersion: strata.huybrechts.xyz/v1` and a `kind` field.
-- Valid kinds: `workspace`, `configuration`, `deployment`, `namespace`, `module`, `environment`, `provider`, `resource`, `firewall`, `network`, `dns`, `tenant`.
+- Valid kinds: `workspace`, `configuration`, `deployment`, `diagram`, `namespace`, `module`, `environment`, `provider`, `resource`, `firewall`, `network`, `dns`, `tenant`.
 - The `meta.name` field must be lowercase, matching `^[a-z0-9][a-z0-9_-]*$`.
 - Cross-repo references use `@repo_name/relative/path.yaml` syntax.
 - Models use `extra="forbid"` — any unknown field causes a validation error. Only use fields that exist in the strata schema.

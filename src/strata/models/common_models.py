@@ -48,6 +48,7 @@ class PlatformKind(str, Enum):
     CONFIGURATION = "configuration"
     TENANT = "tenant"
     DEPLOYMENT = "deployment"
+    DIAGRAM = "diagram"
     DNS = "dns"
     ENVIRONMENT = "environment"
     FIREWALL = "firewall"

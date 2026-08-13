@@ -2,10 +2,21 @@
 
 import os
 from pathlib import Path
+from typing import Optional, Set
 
-from jinja2 import BaseLoader, DebugUndefined, Environment, StrictUndefined, UndefinedError
+from jinja2 import (
+    BaseLoader,
+    DebugUndefined,
+    Environment,
+    StrictUndefined,
+    TemplateSyntaxError,
+    UndefinedError,
+)
+from jinja2.meta import find_undeclared_variables
 
 from strata.logger import get_logger
+from strata.utils.design_tokens import mermaid_escape, resolve_token
+from strata.utils.graph import slugify_path
 
 logger = get_logger(__name__)
 
@@ -26,6 +37,17 @@ _LENIENT_ENV = Environment(
     keep_trailing_newline=True,
     autoescape=False,
 )
+
+# Filters shared by both environments (ADR-0034). Deliberately few — Jinja's
+# built-ins cover most needs; these are the three things a template cannot do
+# for itself because they depend on strata's own conventions.
+_STRATA_FILTERS = {
+    "slug": slugify_path,
+    "token": resolve_token,
+    "mermaid_escape": mermaid_escape,
+}
+for _env in (_STRICT_ENV, _LENIENT_ENV):
+    _env.filters.update(_STRATA_FILTERS)
 
 
 class TemplateProcessor:
@@ -214,3 +236,55 @@ class TemplateProcessor:
             return content
         template = _STRICT_ENV.from_string(content)
         return template.render(context)
+
+    @staticmethod
+    def check_syntax(content: str) -> Optional[str]:
+        """Return a human-readable error message if *content* is not a usable template.
+
+        Lets callers surface a template error at validation time rather than at
+        render time. Covers both malformed syntax (an unclosed ``{% for %}``) and
+        references to filters or tests the environment does not provide — the
+        latter because the variable-tracking pass resolves filter and test names,
+        raising ``TemplateAssertionError`` (a ``TemplateSyntaxError`` subclass)
+        for unknown ones.
+
+        Args:
+            content: Template string using Jinja2 syntax.
+
+        Returns:
+            ``None`` when the template is usable, otherwise a message including
+            the offending line number.
+        """
+        if not content:
+            return None
+        try:
+            # Called for its side effect: the tracking pass is what resolves
+            # filter and test names. Parsing alone would not catch them.
+            find_undeclared_variables(_LENIENT_ENV.parse(content))
+        except TemplateSyntaxError as e:
+            location = f" at line {e.lineno}" if e.lineno else ""
+            return f"{e.message}{location}"
+        return None
+
+    @staticmethod
+    def find_variables(content: str) -> Set[str]:
+        """Return the top-level variable names *content* references.
+
+        Only names the template expects from its context are returned — loop
+        variables, ``{% set %}`` assignments, filters, and tests are excluded
+        because Jinja resolves those itself.
+
+        Args:
+            content: Template string using Jinja2 syntax. Must pass
+                :meth:`check_syntax` first.
+
+        Raises:
+            jinja2.TemplateSyntaxError: If *content* does not parse, or references
+                a filter or test the environment does not provide.
+
+        Returns:
+            Set of undeclared variable names.
+        """
+        if not content:
+            return set()
+        return find_undeclared_variables(_LENIENT_ENV.parse(content))

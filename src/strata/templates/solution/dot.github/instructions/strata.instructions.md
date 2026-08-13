@@ -267,7 +267,7 @@ spec:
   ...
 ```
 
-Valid kinds: `deployment`, `workspace`, `configuration`, `environment`, `namespace`, `module`, `resource`, `provider`, `firewall`, `network`, `dns`, `tenant`.
+Valid kinds: `deployment`, `workspace`, `configuration`, `diagram`, `environment`, `namespace`, `module`, `resource`, `provider`, `firewall`, `network`, `dns`, `tenant`.
 
 ---
 

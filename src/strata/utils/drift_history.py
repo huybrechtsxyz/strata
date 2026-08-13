@@ -228,6 +228,12 @@ class DriftHistoryStore:
                 result.append({"address": address, **entry})
         return result
 
+    def list_entries(self) -> List[Dict[str, Any]]:
+        """Return every tracked address entry with its metadata, acknowledged or not."""
+        if not self._loaded:
+            self.load()
+        return [{"address": address, **entry} for address, entry in self._data.get("entries", {}).items()]
+
     def get_baseline_at(self) -> Optional[str]:
         """Return the baseline timestamp if one has been set, otherwise None."""
         if not self._loaded:

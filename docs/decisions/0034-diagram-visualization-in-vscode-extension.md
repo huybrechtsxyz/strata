@@ -1,7 +1,7 @@
 # Diagram visualization in VS Code extension
 
 - Status: proposed
-- Date: 2026-07-11
+- Date: 2026-07-11 (revised 2026-08-13 — repositioned from "strata owns a diagram system" to "strata generates Mermaid fragments and connects them to the workspace; users compose freely")
 
 ## Remaining Work
 
@@ -17,9 +17,29 @@ The gaps:
 - **No version promotion flow diagram** — Promotion rings (dev → test → qas → prd), gates, and policies lack visual representation; operators cannot see version progression across environments at a glance.
 - **No service dependency diagram** — Cross-module and cross-namespace service dependencies are difficult to reason about from YAML alone.
 - **Current dependency graph is file-focused** — `dependencyGraphProvider` shows YAML file references (`@repo/path` patterns) but doesn't visualize logical infrastructure relationships. ADR 0015 has since delivered `strata validate graph` with both file-reference and resource-topology modes; the VS Code extension should consume this rather than reimplement it.
-- **No user-composable diagrams** — Users cannot combine data sources to create custom views tailored to their specific needs.
+- **Diagrams are disconnected from the workspace** — even where a diagram exists, clicking a node does nothing. There is no path from "I see `api-gateway` in this picture" to "open the YAML where it's defined."
 
 This breaks the "visualize the YAML" principle: infrastructure configuration should be navigable as diagrams, not just as hierarchical text.
+
+### What this ADR is *not* trying to do
+
+Mermaid is a mature, expressive, well-documented diagramming language that already supports 10+ diagram types and is renderable by GitHub, VS Code, Mermaid Live, and most static site generators. **Strata should not wrap it in a proprietary abstraction.**
+
+This mirrors the position strata has already taken twice:
+
+- **ADR-0033 (GitHub PR integration):** don't build a GitHub App — expose exit codes + JSON output and let the pipeline owner compose. *"strata is a CLI that operators invoke; it doesn't own their pipeline."*
+- **[Value Proposition](../platform/value-proposition.md):** build output is plain Terraform. *"Copy it, run it yourself, and strata is out of the picture."*
+
+Mermaid is the Terraform of this ADR. The value strata adds is **not** a diagram DSL — it is:
+
+| Strata is genuinely good at                                                | Mermaid is already good at                  |
+| -------------------------------------------------------------------------- | ------------------------------------------- |
+| Knowing what's in the workspace (topology, drift, secrets, versions, refs) | Expressing any diagram shape the user wants |
+| Turning that into nodes/edges with **real identity** (file + line)         | Layout, styling, 10 diagram types           |
+| Keeping the picture **live** as config changes                             | Being writable by hand, by AI, by any tool  |
+| **Connecting a rendered node back to the workspace** (click → open file)   | (cannot do this — it renders an inert SVG)  |
+
+The last row is the defensible, non-duplicative value: Mermaid renders a picture, but it has no idea that `api-gateway` corresponds to line 42 of a namespace YAML. That connection is the feature.
 
 ## Decision Drivers
 
@@ -27,8 +47,9 @@ This breaks the "visualize the YAML" principle: infrastructure configuration sho
 - **Operational confidence** — Seeing stage flows and promotion gates visually increases confidence before deployment.
 - **Onboarding acceleration** — New team members learn infrastructure topology faster via diagrams than YAML exploration.
 - **Compliance visibility** — Promotion gates and approval workflows must be immediately visible to auditors and operators.
-- **Data availability** — Infrastructure topology and file-reference data is already available via `strata validate graph --output json` (ADR 0015, completed). The VS Code extension consumes CLI JSON output rather than re-extracting data in TypeScript.
-- **Customizability** — Every workspace is different; users need to compose their own views, not be limited to a fixed set.
+- **Data availability** — Infrastructure topology and file-reference data is already available from ADR 0015's graph controller (today via `strata validate graph --output json`; this ADR moves that surface to `strata diagram show`). The VS Code extension consumes CLI JSON output rather than re-extracting data in TypeScript.
+- **Don't reinvent Mermaid** — users who already know Mermaid must never be blocked by strata's abstraction. Any diagram Mermaid can express must remain expressible, with or without strata's help.
+- **No lock-in** — a generated diagram is plain Mermaid text. Copy it into a README, a Confluence page, or GitHub markdown and strata is out of the picture.
 
 ## Considered Options
 
@@ -41,39 +62,62 @@ Provide 3–5 hardcoded diagram types with no user customization.
 
 ### Option B: Comprehensive catalog with user-selectable diagrams
 
-Provide a large catalog of diagram types (see Appendix A) that users can browse, select, and save as favorites.
+Provide a large catalog of diagram types (see Part 2) that users can browse, select, and render.
 
 **Pros:** Broad coverage, still manageable complexity.
 **Cons:** Catalog grows stale; users are limited to what the developers thought of.
 
-### Option C: Catalog + Diagram Builder (composable)
+### Option C: A strata-owned diagram DSL that can express everything
 
-Everything in Option B, plus a **Diagram Builder** that lets users compose custom diagrams by picking data sources, layout types, and filters — then save them to the solution.
+A `kind: diagram` schema rich enough to express all 185 catalog diagrams — aggregation for pie charts, axis bindings for quadrant charts, participant/message roles for sequence diagrams, weighted edges for sankey, temporal binning for gantt, plus schema-introspection sources for type-hierarchy diagrams.
 
-**Pros:** Infinite flexibility, user-owned diagrams, covers use cases we can't predict.
-**Cons:** More complex UI, requires a diagram definition format.
+**Pros:** Fully declarative; one format for everything.
+**Cons:** **This is reimplementing Mermaid, badly.** Stress-testing a draft schema against the catalog showed it could express roughly the flowchart-family diagrams (~60–70%) and structurally could not express pie aggregation, sequence actor/message roles, quadrant axes, sankey edge weights, gantt temporal mapping, or static schema introspection — each of which would need its own `layout.type`-specific extension block. That is a permanent arms race against a format that already solved all of it.
+
+### Option D: Generate Mermaid fragments + connect them to the workspace *(chosen)*
+
+Strata generates Mermaid for the things it uniquely knows (topology, drift, refs, promotion state) and attaches node→workspace identity metadata. Users compose freely from there — embedding generated fragments into hand-written Mermaid, or ignoring strata's generation entirely and hand-writing the whole thing.
+
+**Pros:** No abstraction ceiling; strata does only what it's uniquely good at; every diagram Mermaid supports remains possible; generated output is portable plain text.
+**Cons:** Users wanting exotic diagram types write Mermaid themselves (with strata supplying the data, not the syntax).
 
 ## Decision Outcome
 
-**Option C: Catalog + Diagram Builder.**
+**Option D: generate Mermaid fragments, connect them to the workspace, get out of the way.**
 
-We provide:
-1. **Built-in diagrams** — A curated set of "Top 10" diagrams available out of the box (no configuration).
-2. **Diagram Catalog** — A browsable library of 185+ diagram types organized by category, any of which can be rendered on-demand.
-3. **Diagram Builder** — A visual composer where users pick topics (data sources), choose layout, apply filters, and save custom diagrams to `.strata/diagrams/`.
+Concretely, strata provides:
+
+1. **Generated diagrams from live workspace data** — the Top 10 (Part 1) rendered from real CLI JSON output, no authoring required.
+2. **Node → workspace connection** — click a node, open the YAML at the right line. The one thing plain Mermaid genuinely cannot do (see "Node Identity & Click Resolution").
+3. **Jinja as the composition mechanism** — a `kind: diagram` document whose template is Jinja, so generated loops and hand-drawn Mermaid coexist in one block and *every* Mermaid diagram type stays expressible.
+4. **No format ceiling** — a diagram with no `sources` is simply static Mermaid, in the same file format, still getting preview, theming, and opt-in click-to-open.
 
 ### Rationale
 
-1. **Maximum value surface**: 185 possible diagrams means users always find what they need.
-2. **User ownership**: Saved diagrams become part of the solution — versioned, shared, team-accessible.
-3. **Extensibility**: New data sources automatically create new diagram possibilities without code changes.
-4. **Progressive disclosure**: Start with built-in diagrams, discover catalog over time, graduate to builder for power users.
+1. **No abstraction ceiling.** Anything Mermaid can express stays expressible. Strata's schema never becomes the limiting factor.
+2. **Strata does only what it's uniquely positioned to do** — supply live workspace data and node identity. It does not compete with a mature diagramming language.
+3. **Portable output.** Generated Mermaid is plain text: paste it into a README, a GitHub comment, or Confluence and it renders without strata.
+4. **Radically cheaper to ship.** No Diagram Builder GUI is required for the core value; no 185 bespoke renderers; no schema arms race chasing Mermaid feature parity.
+
+### Consequences
+
+**Good:**
+- Users who know Mermaid are never blocked by strata's abstraction.
+- The catalog (Part 2) becomes an honest *cookbook* — worked examples of "here's the Mermaid, here's the strata command that feeds it" — not 185 features to build and maintain.
+- Click-to-open-file works for generated, hand-written, and mixed diagrams alike.
+
+**Bad:**
+- Diagram types beyond the common node-edge views require the user to write a Jinja template; strata supplies the data and the context, not the layout.
+- Jinja is now user-facing for diagram authoring — a modest learning curve, mitigated by `--print-template` and shipped built-ins to copy from.
+
+**Neutral:**
+- If demand later proves that a specific `layout.type` extension (e.g. pie aggregation) is worth owning, it can be added incrementally without invalidating anything here — the composition seam and click-resolution layer are unaffected.
 
 ---
 
 ## Related Work
 
-- **ADR 0015 — `strata validate graph`** (completed): delivers the data foundation for built-in diagrams #1 and #8. The VS Code extension consumes `strata validate graph --output json` via `strataClient.ts` and renders the returned Mermaid source in a webview. `dependencyGraphProvider.ts` should be updated to delegate to this CLI output rather than doing its own `@repo/` parsing.
+- **ADR 0015 — `strata validate graph`** (completed): delivers the data foundation for built-in diagrams #1 and #8. This ADR **replaces that command surface** with `strata diagram show` (see "CLI surface" in Part 3) while reusing its `GraphController` verbatim as the `topology` and `files` source types. `dependencyGraphProvider.ts` should be updated to delegate to this CLI output rather than doing its own `@repo/` parsing.
 - **ADR 0009 — Extended SBOM**: SBOM catalog diagrams (Category 26) use `strata build sbom --output json`.
 - **ADR 0007 — Deployment State Locking**: Category 25 diagrams use lock manifest data.
 - **ADR 0038 — Multi-Tenant Fleet**: Category 13 and 22 diagrams use fleet deployment data.
@@ -84,10 +128,10 @@ Not yet started. This is a proposal for prioritization and roadmap planning.
 
 ### What ADR 0015 already delivers (no VS Code work needed for data layer)
 
-| Built-in # | Diagram                        | CLI backing                                            | VS Code work remaining                                           |
-| ---------- | ------------------------------ | ------------------------------------------------------ | ---------------------------------------------------------------- |
-| 1          | Infrastructure Topology        | `strata validate graph --mode resources --output json` | Webview + Mermaid render                                         |
-| 8          | Deployment File Reference Tree | `strata validate graph --mode files --output json`     | Webview + Mermaid render (replaces `dependencyGraphProvider.ts`) |
+| Built-in # | Diagram                        | CLI backing                                                   | VS Code work remaining                                           |
+| ---------- | ------------------------------ | ------------------------------------------------------------- | ---------------------------------------------------------------- |
+| 1          | Infrastructure Topology        | `topology` source (ADR-0015 `GraphController`, resource mode) | Webview + Mermaid render                                         |
+| 8          | Deployment File Reference Tree | `files` source (ADR-0015 `GraphController`, file mode)        | Webview + Mermaid render (replaces `dependencyGraphProvider.ts`) |
 
 Catalog Cat.1 #1, #2 and Cat.6 #49 are also covered by ADR 0015's JSON output.
 
@@ -95,30 +139,173 @@ All other built-in diagrams (#2–7, #9–10) and the full catalog require new d
 
 ---
 
+## Design System — Status Colors, Icons & Theme Integration
+
+Before any of the 185 catalog diagrams or the Diagram Builder's `color_by`/`style` options can be implemented consistently, they need one shared palette to draw from. Two color systems already exist independently in `src/strata/utils/graph.py` and must be unified and extended, not replaced:
+
+### What already exists (and must be preserved as-is)
+
+**File-mode status palette** (`render_mermaid`, `_STATUS_CLASSES`) — colors by node *health*:
+
+| Status     | Token name | Hex (fill / stroke)            | Meaning                                                    |
+| ---------- | ---------- | ------------------------------ | ---------------------------------------------------------- |
+| `valid`    | success    | `#d4edda` / `#28a745`          | File exists and passes validation                          |
+| `invalid`  | warning    | `#fff3cd` / `#ffc107`          | File exists but fails validation (docs call this "orange") |
+| `missing`  | danger     | `#f8d7da` / `#dc3545`          | Referenced but not present on disk                         |
+| `external` | neutral    | `#e2e3e5` / `#6c757d`          | `@repo/path` reference to another repository               |
+| `orphan`   | muted      | `#f5f5f5` / `#adb5bd` (dashed) | Exists, valid, but unreferenced                            |
+
+**Resource-mode kind palette** (`render_mermaid_resources`) — colors by node *kind/taxonomy*, a completely different dimension from status:
+
+| Kind        | Hex (fill / stroke)                                      |
+| ----------- | -------------------------------------------------------- |
+| `resource`  | `#dbeafe` / `#2563eb` (blue)                             |
+| `module`    | `#fef3c7` / `#d97706` (amber)                            |
+| `namespace` | `#d1fae5` / `#059669` (green)                            |
+| `network`   | `#e0e7ff` / `#4f46e5` (indigo)                           |
+| `disabled`  | `#e2e3e5` / `#6c757d` (grey)                             |
+| `missing`   | `#f8d7da` / `#dc3545` (red — reused from status palette) |
+
+These two dimensions — **status** (health/validity) and **kind** (taxonomy/category) — are orthogonal and both correct. The design system below keeps them separate and gives each a name, rather than collapsing them into one ad-hoc `color_by` string per diagram.
+
+### Problem: hardcoded hex breaks in VS Code's dark/high-contrast themes
+
+Both palettes above are light-theme pastels (Bootstrap's classic `alert-success`/`alert-warning`/etc. palette) baked directly into the Mermaid `classDef` strings. Rendered inside a VS Code webview:
+- They ignore the user's active theme (Dark+, Dark High Contrast, Light+, and any custom theme) entirely.
+- Pastel fills that read fine on white look muddy or low-contrast on a dark editor background.
+- There's no way for a user's theme choice to propagate into the diagram at all.
+
+**Fix:** Mermaid supports runtime theming via `mermaid.initialize({ theme: 'base', themeVariables: {...} })`. The webview should read VS Code's own CSS custom properties (already injected into every webview automatically — `--vscode-charts-green`, `--vscode-charts-red`, `--vscode-charts-yellow`, `--vscode-charts-blue`, `--vscode-charts-purple`, `--vscode-charts-orange`, `--vscode-foreground`, `--vscode-editor-background`) and map them into Mermaid's `themeVariables` at render time, instead of hardcoding hex. This makes every diagram automatically theme-correct with zero per-diagram configuration — the CLI-side `graph.py` keeps its current hardcoded hex (it targets Mermaid Live/GitHub-rendered markdown, which don't have a VS Code theme), and only the **webview renderer** in the extension does the CSS-variable mapping.
+
+### Extended semantic token set (for the 185-diagram catalog)
+
+The file/resource palettes above only cover 2 of the ~8 semantic domains the catalog introduces. Each new domain gets its own **named token ramp**, never new raw hex:
+
+| Domain                   | Token ramp (low → high severity/priority)                               | Used by                                                    |
+| ------------------------ | ----------------------------------------------------------------------- | ---------------------------------------------------------- |
+| **Validity status**      | `valid` → `invalid` → `missing`                                         | Cat. 1, 6 (existing, unchanged)                            |
+| **Drift severity**       | `info` → `low` → `medium` → `high` → `critical`                         | Cat. 11 (#87–92), Diagram Builder `color_by: drift_status` |
+| **Policy enforcement**   | `audit` → `warn` → `deny`                                               | Cat. 12 (#93–98)                                           |
+| **CVE severity**         | `unknown` → `low` → `medium` → `high` → `critical`                      | Cat. 12 (#97–98), Cat. 26 (#177)                           |
+| **Lock/promotion state** | `unlocked` → `locked` → `held` → `expired`                              | Cat. 25 (#169–170), Cat. 3 (#25, #31)                      |
+| **Health check result**  | `unknown` → `passing` → `degraded` → `failing`                          | Cat. 2 (#18), Diagram Builder                              |
+| **Deployment outcome**   | `success` → `partial` → `failed`                                        | Cat. 10 (#78, #81)                                         |
+| **Taxonomy/kind**        | no ordering — categorical (`resource`/`module`/`namespace`/`network`/…) | Cat. 1 (existing), Diagram Builder `group_by`              |
+
+Severity ramps (drift, CVE) share **one 5-step color ramp** so a user who learns "red = critical" in the drift diagram doesn't have to relearn it for the CVE diagram:
+
+```
+info/unknown → low        → medium      → high         → critical
+  (grey)        (blue)       (amber)       (orange)        (red)
+--vscode-descriptionForeground → --vscode-charts-blue → --vscode-charts-yellow → --vscode-charts-orange → --vscode-charts-red
+```
+
+3-step ramps (policy enforcement) reuse the same low/medium/high slice of the ramp (`audit`→grey/blue, `warn`→amber, `deny`→red) rather than inventing a separate 3-color scheme.
+
+### Icon conventions
+
+The Diagram Builder mockup (Part 3) and chat commands use ad-hoc emoji (📊, 💾, 📋). These become a fixed, documented set — one icon per **data source type**, reused everywhere that source appears (sidebar catalog entry, chat command help, builder's data-source picker, node tooltips):
+
+| Data source (Part 3 table) | Icon | Rationale                              |
+| -------------------------- | ---- | -------------------------------------- |
+| `topology`                 | 🏗️    | Construction/building — infrastructure |
+| `modules`                  | 📦    | Package — deployable unit              |
+| `stages`                   | 🔀    | Flow/branching — pipeline stages       |
+| `promotion`                | 🚀    | Progression toward production          |
+| `network`                  | 🌐    | Network/connectivity                   |
+| `firewalls`                | 🛡️    | Protection/security                    |
+| `dns`                      | 🔤    | Name resolution                        |
+| `secrets`                  | 🔑    | Credential material                    |
+| `variables`                | 🔧    | Configuration values                   |
+| `features`                 | 🚩    | Feature flags                          |
+| `drift`                    | ⚠️    | Warning — unplanned change             |
+| `history`                  | 🕒    | Time/chronology                        |
+| `policies`                 | 📏    | Rule/measurement                       |
+| `tenants`                  | 🏢    | Organization/customer                  |
+| `environments`             | 🌱    | Environment/stage of growth            |
+| `repositories`             | 📁    | Source repository                      |
+| `sbom`                     | 📋    | Manifest/inventory list                |
+| `resources`                | ⚙️    | Infrastructure component               |
+| `approvals`                | ✅    | Sign-off/gate                          |
+| `locks`                    | 🔒    | Exclusive hold                         |
+| `outputs`                  | 📤    | Data leaving a stage                   |
+| `values`                   | 📊    | Resolved data                          |
+
+Reused, not new, per severity level (consistent with the token ramp above): `ℹ️` info · `🔵` low · `🟡` medium · `🟠` high · `🔴` critical.
+
+### Mermaid diagram-type styling constraints
+
+Not every one of the 10 Mermaid types (`flowchart`, `sequence`, `gantt`, `pie`, `mindmap`, `class`, `stateDiagram`, `timeline`, `quadrant`, `sankey`) supports `classDef`-based coloring the same way. This must be resolved per-type before Phase 2 (full Top 10) starts, not discovered ad-hoc per diagram:
+
+| Mermaid type   | Supports `classDef`?                                 | Coloring approach                                                                                                                  |
+| -------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `flowchart`    | Yes                                                  | Direct `classDef` + `:::class` per node (current pattern — no change)                                                              |
+| `stateDiagram` | Yes (`classDef`)                                     | Same pattern as flowchart                                                                                                          |
+| `class`        | Limited (per-class `style`)                          | Use `style ClassName fill:...` instead of `classDef`                                                                               |
+| `sequence`     | No                                                   | Use `Note over` styling or `rect rgb(...)` background blocks per severity zone                                                     |
+| `gantt`        | Partial (`section` + custom CSS classes)             | Section-level coloring only, not per-task                                                                                          |
+| `pie`          | No node coloring — Mermaid auto-assigns slice colors | Use a fixed, documented color order matching the token ramp so severity always renders in the same color regardless of slice order |
+| `mindmap`      | Limited (per-node `::icon`, no fill)                 | Icon-based differentiation (see icon table above) instead of color                                                                 |
+| `timeline`     | No                                                   | Section grouping only; rely on icons/labels for severity, not color                                                                |
+| `quadrant`     | No per-point styling                                 | Point labels + icons; quadrant position itself carries the meaning                                                                 |
+| `sankey`       | Flow-width only                                      | No node/severity color — width encodes volume, not health                                                                          |
+
+This means **not every diagram in the catalog can show severity via color** — pie/mindmap/timeline/quadrant/sankey diagrams must lean on icons and labels instead. This constraint should be called out per-category in Part 2 as those categories are implemented (Cat. 11 Drift Detection is entirely `pie`/`timeline` — severity will be icon-driven, not color-driven, there).
+
+### What this changes in Part 3 (Diagram Builder)
+
+The `style.color_by` and `style.highlight` fields in the `DiagramDefinition` schema (Part 3) should reference **token names**, not raw Mermaid CSS:
+
+```yaml
+style:
+  color_by: drift_status       # references the "Drift severity" token ramp above, not a hex value
+  highlight:
+    - condition: "drift.severity == critical"
+      token: critical           # was: style: "fill:#ff0000,stroke:#900"
+  group_by: namespace           # taxonomy dimension — uses the "Taxonomy/kind" palette, not severity
+```
+
+The webview renderer resolves `token: critical` → the theme-aware CSS variable at render time, so a saved `.strata/diagrams/*.yaml` definition stays portable across users with different VS Code themes — nobody's saved diagram has another person's hardcoded colors baked in.
+
+---
+
 ## Part 1: Built-In Diagrams (Top 10)
 
 These diagrams are available immediately with zero configuration — one click from command palette or chat.
 
-| #   | Name                           | Chat Command    | Mermaid Type | Purpose                                                                          |
-| --- | ------------------------------ | --------------- | ------------ | -------------------------------------------------------------------------------- |
-| #   | Name                           | Chat Command    | Mermaid Type | Purpose                                                                          | Data source                                                                   |
-| --- | ------------------------------ | --------------- | ------------ | -------------------------------------------------------------------------------- | ---                                                                           |
-| 1   | Infrastructure Topology        | `/topology`     | flowchart    | Workspace → topologies → namespaces → modules → services hierarchy               | `strata validate graph --mode resources --output json` (ADR 0015 ✅)           |
-| 2   | Deployment Stage Flow          | `/stages`       | flowchart    | Stage execution order, dependencies, failure handling                            | `strata deploy status --output json`                                          |
-| 3   | Version Promotion Flow         | `/promote`      | flowchart LR | Ring progression with gates and current versions                                 | `strata promote status --output json`                                         |
-| 4   | Network Topology               | `/network`      | flowchart    | Networks, subnets, peerings, firewalls, DNS zones combined                       | `strata validate run --output json` (network/firewall/dns models)             |
-| 5   | Service Dependency Graph       | `/services`     | flowchart    | Cross-module service dependencies and startup ordering                           | `strata validate graph --mode resources --output json` (ADR 0015 ✅)           |
-| 6   | Environment Composition        | `/envs`         | flowchart    | Base + override merge hierarchy producing final config                           | `strata values list --output json`                                            |
-| 7   | Secret Resolution Chain        | `/secrets`      | flowchart    | Store → generate → resolve → inject lifecycle                                    | `strata values list --output json` (secret entries)                           |
-| 8   | Deployment File Reference Tree | `/refs`         | flowchart    | All YAML files referenced by a deployment                                        | `strata validate graph --mode files --output json` (ADR 0015 ✅)               |
-| 9   | Stage Execution Timeline       | `/timeline`     | gantt        | Per-stage and per-step duration from deployment history                          | `strata deploy history --output json`                                         |
-| 10  | Full Platform Architecture     | `/architecture` | flowchart    | End-to-end: providers → topologies → resources → namespaces → modules → services | `strata validate graph --mode resources --output json` (ADR 0015 ✅, extended) |
+| #   | Name                           | Chat Command    | Mermaid Type | Purpose                                                                          | Data source                                                       |
+| --- | ------------------------------ | --------------- | ------------ | -------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| 1   | Infrastructure Topology        | `/topology`     | flowchart    | Workspace → topologies → namespaces → modules → services hierarchy               | `topology` source (ADR 0015 ✅)                                    |
+| 2   | Deployment Stage Flow          | `/stages`       | flowchart    | Stage execution order, dependencies, failure handling                            | `strata deploy status --output json`                              |
+| 3   | Version Promotion Flow         | `/promote`      | flowchart LR | Ring progression with gates and current versions                                 | `strata promote status --output json`                             |
+| 4   | Network Topology               | `/network`      | flowchart    | Networks, subnets, peerings, firewalls, DNS zones combined                       | `strata validate run --output json` (network/firewall/dns models) |
+| 5   | Service Dependency Graph       | `/services`     | flowchart    | Cross-module service dependencies and startup ordering                           | `topology` source (ADR 0015 ✅)                                    |
+| 6   | Environment Composition        | `/envs`         | flowchart    | Base + override merge hierarchy producing final config                           | `strata values list --output json`                                |
+| 7   | Secret Resolution Chain        | `/secrets`      | flowchart    | Store → generate → resolve → inject lifecycle                                    | `strata values list --output json` (secret entries)               |
+| 8   | Deployment File Reference Tree | `/refs`         | flowchart    | All YAML files referenced by a deployment                                        | `files` source (ADR 0015 ✅)                                       |
+| 9   | Stage Execution Timeline       | `/timeline`     | gantt        | Per-stage and per-step duration from deployment history                          | `strata deploy history --output json`                             |
+| 10  | Full Platform Architecture     | `/architecture` | flowchart    | End-to-end: providers → topologies → resources → namespaces → modules → services | `topology` source (ADR 0015 ✅, extended)                          |
 
 ---
 
-## Part 2: Diagram Catalog (185 Types)
+## Part 2: Diagram Cookbook (185 worked examples)
 
-The full catalog is organized into 27 categories. Users browse the catalog from the Architecture Hub sidebar or via `/diagram list` in chat. Any catalog entry can be rendered on-demand.
+The catalog below is a **cookbook, not a feature list.** Per the Decision Outcome, strata is not committing to implement 185 bespoke renderers — it is committing to make the *data* for each of these reachable, and to document what Mermaid you'd write with it.
+
+Each entry answers two questions:
+1. **What strata command gives me the data?** (the "Data Source" column)
+2. **What Mermaid shape does it become?** (the "Mermaid Type" column)
+
+How an entry is realized:
+
+| Entry style                                                 | How the user gets it                                                |
+| ----------------------------------------------------------- | ------------------------------------------------------------------- |
+| Common node-edge views (flowchart / stateDiagram / class)   | `layout`/`style` sugar — no Jinja needed                            |
+| Everything else (pie, sequence, gantt, quadrant, sankey, …) | A Jinja `template:` — same file format, strata supplies the context |
+
+Both use the **same `kind: diagram` document and the same pipeline** (see Part 3). The difference is only whether the user wrote the template or let the sugar generate one — `--print-template` converts between them. Unlike an earlier draft of this ADR, there is no category of catalog entry that the format cannot express.
+
+Users browse the cookbook from the Architecture Hub sidebar or via `/diagram list` in chat.
 
 ### Category 1: Infrastructure Topology (12 diagrams)
 
@@ -442,7 +629,234 @@ The full catalog is organized into 27 categories. Users browse the catalog from 
 
 ---
 
-## Part 3: Diagram Builder
+## Part 3: Authoring — how users create diagrams
+
+Per the Decision Outcome, strata does **not** own a diagram DSL that must express everything. It offers a spectrum of authoring paths, from "no authoring at all" to "raw Mermaid, strata stays out of it." Users pick the cheapest one that answers their question.
+
+### The render pipeline
+
+Everything below is one pipeline. Strata's job is the first two boxes; Mermaid's job is the last one:
+
+```
+  spec.sources[]          spec.template            Mermaid
+ ┌──────────────┐      ┌────────────────┐      ┌──────────────┐
+ │ CLI JSON     │ ───► │ Jinja2 renders │ ───► │ renders text │
+ │ → context    │      │ context → text │      │ → SVG        │
+ │   (dict)     │      │                │      │              │
+ └──────────────┘      └────────────────┘      └──────────────┘
+   strata knows          user controls           Mermaid owns
+   the workspace         the syntax              the picture
+```
+
+This reuses the Jinja2 engine [ADR-0017](0017-jinja2-template-engine.md) already standardised on across the whole codebase (`TemplateProcessor.render(content, context)`, `jinja2>=3.1`) — no new templating concept is introduced.
+
+**The consequence is important:** because the *user* writes the template and Jinja emits arbitrary text, **every Mermaid diagram type is expressible** — pie, gantt, sequence, quadrant, sankey, mindmap. There is no schema ceiling, because there is no schema doing the layout. Strata supplies data; Jinja supplies text; Mermaid supplies the picture.
+
+### The authoring spectrum
+
+| Path                    | What the user writes                                  | When to use it                                                | Requires VS Code? |
+| ----------------------- | ----------------------------------------------------- | ------------------------------------------------------------- | ----------------- |
+| **1. Shipped built-in** | Nothing — render a definition that ships with strata  | The stock view answers your question                          | No                |
+| **2. Own definition**   | `kind: diagram` — sources + a Jinja template          | You want a saved, refreshable, team-shared view of live data  | No                |
+| **3. Static Mermaid**   | The same file, template only, no `sources`            | Hand-drawn diagram; you just want preview + theming           | No                |
+| **4. Generator**        | Nothing — GUI or natural language emits a path-2 file | You don't want to write Jinja or learn the source field names | Yes               |
+
+Paths 1–3 are CLI-and-editor only. **The VS Code extension is a convenience layer, never a requirement.**
+
+Note that paths 2 and 3 are *the same file format* — a static diagram is simply one with no `sources`. There is no separate "raw Mermaid mode" to implement or document.
+
+### Path 2: `kind: diagram` — sources + template
+
+```yaml
+apiVersion: strata.huybrechts.xyz/v1
+kind: diagram
+meta:
+  name: prd_topology
+  annotations:
+    description: "Production topology, coloured by drift severity"
+spec:
+  sources:
+    - type: topology
+      as: topo                    # name it in the Jinja context
+      filter:
+        workspace: platform
+        environment: prd
+    - type: drift
+      as: drift
+      filter:
+        severity: [critical, high]
+
+  template: |
+    flowchart TD
+    {% for n in topo.nodes %}
+      {{ n.id }}["{{ n.label }}"]:::{{ n.status }}
+      click {{ n.id }} "{{ n.uri }}"
+    {% endfor %}
+    {% for e in topo.edges %}
+      {{ e.source }} --> {{ e.target }}
+    {% endfor %}
+```
+
+**The same format handles diagram types the old schema could not.** A pie chart — previously "structurally inexpressible" — is just Jinja's built-in `groupby` filter:
+
+```yaml
+spec:
+  sources:
+    - type: drift
+      as: drift
+  template: |
+    pie title Drift by severity
+    {% for severity, entries in drift.entries | groupby('severity') %}
+      "{{ severity }}" : {{ entries | length }}
+    {% endfor %}
+```
+
+A gantt chart, likewise:
+
+```yaml
+spec:
+  sources:
+    - type: history
+      as: hist
+  template: |
+    gantt
+      title Deployment stage timeline
+      dateFormat X
+    {% for s in hist.stages %}
+      {{ s.name }} : {{ s.start_ts }}, {{ s.duration_seconds }}s
+    {% endfor %}
+```
+
+No `aggregate:`, no `axes:`, no `participants_field:`, no per-type extension blocks. Jinja already has iteration, filtering, grouping, and conditionals — the exact primitives those would have reimplemented.
+
+#### The Jinja context
+
+Each entry in `spec.sources` is fetched, filtered, and bound into the context under its `as` name (defaulting to its `type`). The value is the plain JSON the CLI already emits — no new data model:
+
+```jsonc
+{
+  "topo": {
+    "nodes": [
+      {
+        "id": "app_server",            // Mermaid-safe, already slugified
+        "label": "app_server",
+        "kind": "resource",
+        "status": "valid",
+        "uri": "strata://workspace/platform/resource/app_server",
+        "location": { "file": "stack/workspace.yaml", "line": 42 }
+      }
+    ],
+    "edges": [ { "source": "app_server", "target": "api_gateway", "label": "hosts" } ]
+  },
+  "drift": { "entries": [ /* ... */ ], "summary": { "critical": 2, "high": 5 } }
+}
+```
+
+Because `uri` is part of the node data, emitting `click {{ n.id }} "{{ n.uri }}"` is all it takes to get the workspace connection — in a hand-written template just as much as a generated one.
+
+#### Template helpers
+
+Strata registers a small set of Jinja filters — deliberately few, since Jinja's built-ins cover most needs:
+
+| Filter              | Purpose                                                                    |
+| ------------------- | -------------------------------------------------------------------------- |
+| `\| slug`           | Make any string a Mermaid-safe node ID (wraps the existing `slugify_path`) |
+| `\| token`          | Resolve a Design System token name to a theme-aware colour                 |
+| `\| mermaid_escape` | Escape quotes/brackets inside node labels                                  |
+
+#### Optional sugar: omit the template
+
+For the common flowchart case, `template:` may be omitted and a default generated from declarative hints — progressive disclosure, so simple diagrams stay simple:
+
+```yaml
+spec:
+  sources:
+    - type: topology
+      as: topo
+  layout:
+    type: flowchart
+    direction: TD
+  style:
+    color_by: status        # Design System token ramp, never raw hex
+    group_by: namespace
+```
+
+Providing `template:` always wins; `layout`/`style` are a shorthand that *generates* a template. `strata diagram show --print-template` emits the generated template so a user can copy it as a starting point and then customise — the sugar is never a dead end.
+
+
+### Path 3: Static Mermaid — same file, no `sources`
+
+Hand-drawn diagrams need no separate format or mode. Omit `sources` and the template is simply static text:
+
+```yaml
+apiVersion: strata.huybrechts.xyz/v1
+kind: diagram
+meta:
+  name: platform_context_view
+spec:
+  template: |
+    flowchart TD
+      legacy[Legacy ERP] --> gw[API Gateway]
+      partner[Partner API] --> gw
+      click gw "strata://module/api-gateway"
+```
+
+Strata contributes preview, theming, and — if the author writes a `click ... "strata://..."` line — the same deterministic click-to-open that generated diagrams get. Nothing is inferred from node names.
+
+**Mixing hand-drawn and live data needs no special seam.** Because the whole `template` is Jinja, hand-written Mermaid and generated loops simply coexist in one block:
+
+```yaml
+spec:
+  sources:
+    - type: topology
+      as: topo
+      filter: { environment: prd }
+  template: |
+    flowchart TD
+      subgraph "Hand-drawn context"
+        legacy[Legacy ERP] --> gw
+      end
+
+      {% for n in topo.nodes %}
+      {{ n.id }}["{{ n.label }}"]
+      click {{ n.id }} "{{ n.uri }}"
+      {% endfor %}
+
+      gw --> api_gateway
+```
+
+This replaces the `{{ include: ... }}` seam an earlier draft proposed — Jinja already *is* the composition mechanism, so no bespoke include syntax is needed.
+
+### Path 4: Generators — Builder & AI chat
+
+The visual Builder and the AI chat participant are **generators that emit a path-2 file**. They are a convenience for users who don't want to write Jinja — never a parallel format, never the only way to do something.
+
+Anything the Builder produces must be hand-editable, and hand-written definitions must load back into the Builder. If those diverge, the Builder is wrong. Since the Builder emits `layout`/`style` sugar rather than raw Jinja, `--print-template` is the bridge for users who outgrow it.
+
+### CLI surface
+
+`strata validate graph` is **replaced**, not deprecated — it never behaved like a validation command (it exits `0`/`1` only, never `3`, so it does not gate anything). Visualization moves to its own group:
+
+```bash
+strata diagram show -f topology                          # shipped built-in, by name
+strata diagram show -f .strata/diagrams/prd.yaml         # user definition
+strata diagram show -f prd.yaml --output mermaid|svg|png
+strata diagram show -f topology --print-template         # emit the generated Jinja to customise
+
+strata diagram list                                      # built-ins + user definitions
+strata diagram resolve strata://workspace/platform/resource/app_server --output json
+
+strata new my_view --template diagram --output-file .strata/diagrams/
+strata validate .strata/diagrams/my_view.yaml            # normal document validation
+```
+
+There is no `show <topic>` positional — **built-in diagrams are shipped `kind: diagram` YAML files**, not hardcoded renderers. `show -f topology` and `show -f ./mine.yaml` take the identical code path, and a built-in can be copied into `.strata/diagrams/` and edited like any other definition.
+
+`validate` keeps only real gating validation (`validate run`, exit 3). "Validate *and* draw" is honestly two commands: `strata validate run && strata diagram show -f refs`.
+
+---
+
+## Diagram Builder UI (optional generator)
 
 The Diagram Builder is a visual composer that lets users create custom diagrams by combining data sources, choosing layouts, and applying filters. Custom diagrams are saved to the solution and become team-shared artifacts.
 
@@ -723,14 +1137,23 @@ export class ArchitectureHubProvider implements vscode.Disposable {
 
 ```typescript
 interface DiagramRenderer {
-    /** Generate Mermaid code from data sources + filters */
-    render(sources: DataSourceResult[], options: LayoutOptions): string;
+    /** Generate a Mermaid string plus the node map needed for click resolution.
+     *  See "Node Identity & Click Resolution" below — nodeMap is what makes
+     *  clicking an SVG node do something instead of nothing. */
+    render(sources: DataSourceResult[], options: LayoutOptions): {
+        mermaid: string;
+        nodeMap: Record<string, DiagramNodeData>;
+    };
 
-    /** Handle click events on diagram nodes */
-    handleClick(nodeId: string): DiagramAction;
+    /** Resolve a clicked node ID to its primary action (open-file, when
+     *  location is set) plus any secondary actions for a context menu. */
+    handleClick(nodeId: string, nodeMap: Record<string, DiagramNodeData>): {
+        primary?: DiagramAction;
+        secondary: DiagramAction[];
+    };
 
-    /** Get tooltip content for hover */
-    getTooltip(nodeId: string): string;
+    /** Get tooltip content for hover — from DiagramNodeData.tooltip. */
+    getTooltip(nodeId: string, nodeMap: Record<string, DiagramNodeData>): string;
 }
 ```
 
@@ -788,12 +1211,175 @@ const SOURCE_RESOLVERS: Record<string, (filter: any) => Promise<DataSourceResult
 };
 ```
 
+### Node Identity & Click Resolution
+
+The single hardest problem in this ADR is not rendering Mermaid — it's **connecting a rendered node back to the workspace**. A Mermaid diagram is just an SVG; clicking "api-gateway" does nothing unless something maps that node ID back to a file, a line, or an action. This connection must work in both directions, and every one of the 185 diagrams has a *different* notion of what a node's "identity" even is:
+
+| Diagram source          | Node identity              | What it resolves to                                                                                             |
+| ----------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| File-reference graph    | Relative file path         | Trivial — `vscode.workspace.openTextDocument(path)`, no line needed                                             |
+| Resource topology       | Logical resource name      | A reference *inside* `workspace.yaml` (`spec.resources[].name`) — often at a specific line, not just "the file" |
+| Module node             | Module name                | A reference inside a namespace YAML **and** a separate Helm/compose file — two locations, not one               |
+| Drift entry             | Terraform resource address | No YAML file at all — it's a *runtime result*, not a source. "Open file" doesn't apply; "run drift check" does  |
+| Secret resolution chain | Secret key                 | A declaration in `environment.yaml` under `spec.secrets[]`, at a specific line                                  |
+
+Because node identity means something different per data source, resolution **cannot be a single lookup function** — it has to be defined per source type, at data-fetch time, not guessed later from the node ID string alone.
+
+#### Durable identity: the `strata://` URI
+
+An in-memory node map alone is not enough, because it is **ephemeral extension state**. Copy the generated Mermaid into a README and the connection is gone. Save it as a `.mmd` file — gone. Close and reopen the panel — rebuilt from scratch. And in Path 4 (raw Mermaid), there is no map at all, which is why click-to-open there was described only as "best-effort."
+
+The fix is to encode identity **in the Mermaid text itself**, using Mermaid's native `click` directive:
+
+```mermaid
+flowchart TD
+  app_server["app_server"]
+  api_gateway["api-gateway"]
+
+  click app_server "strata://workspace/platform/resource/app_server"
+  click api_gateway "strata://module/api-gateway"
+```
+
+**URI shape** — structural, not positional:
+
+```
+strata://<kind>/<name>[/<child-kind>/<child-name>]
+```
+
+| Example URI                                         | Resolves to                                            |
+| --------------------------------------------------- | ------------------------------------------------------ |
+| `strata://file/deploy/deploy-prd.yaml`              | That file (no line)                                    |
+| `strata://workspace/platform/resource/app_server`   | `spec.resources[name=app_server]` inside the workspace |
+| `strata://deployment/acme_prd/stage/infrastructure` | `spec.stages[name=infrastructure]`                     |
+| `strata://environment/env-prd/secret/DB_PASSWORD`   | `spec.secrets[key=DB_PASSWORD]`                        |
+| `strata://module/api-gateway/service/web`           | `spec.services[name=web]` in that module               |
+
+This is consistent with strata already owning a reference notation — `@repo_name/path` for cross-repo file references. `strata://` is the same idea extended to *objects inside* files rather than files themselves.
+
+**Why this solves the problem:**
+
+| Property                       | Consequence                                                                                                              |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| **Travels with the text**      | Paste the Mermaid anywhere and the identity comes along — the connection is no longer trapped in extension memory        |
+| **Inert elsewhere**            | GitHub / Mermaid Live render it as a link to an unknown scheme: harmless no-op, no broken rendering                      |
+| **Structural, not positional** | No line numbers baked in — reformatting, reordering, or inserting YAML above the target does not break it                |
+| **Hand-writable**              | A user writing raw Mermaid (Path 4) can add `click` lines by hand and get *deterministic* click-to-open, not best-effort |
+| **Greppable**                  | `grep -r "strata://workspace/platform/resource/app_server"` finds every diagram referencing that resource                |
+| **Not VS Code-specific**       | `strata diagram resolve strata://... --output json` → `{ file, line }`. Works headless, in CI, in any editor             |
+
+**What this changes about the node map:** it stops being the *source* of the connection and becomes an in-memory **enrichment cache** — tooltips, extra `actions[]`, live status colouring. The durable link is the URI; the map adds the things a URI can't carry.
+
+**Reverse direction gets easier too.** "Cursor is on this YAML line — which node is that?" becomes: compute the URI for the object under the cursor, then match it against `click` directives in the rendered source. No positional guessing.
+
+**Validation.** Because a `strata://` URI is structural, `strata validate` can check it resolves — a diagram pointing at `resource/app_server` after that resource is renamed is a **broken link**, and is catchable at validate time rather than discovered by a user clicking a dead node.
+
+#### `DataSourceResult` — every resolver returns nodes *and* their metadata together
+
+```typescript
+interface DataSourceResult {
+    /** Mermaid fragment contributed by this source (nodes the renderer will place) */
+    nodes: DiagramNodeData[];
+    edges: DiagramEdgeData[];
+}
+
+interface DiagramNodeData {
+    /** Mermaid-safe node ID (slugified, unique within the diagram) */
+    id: string;
+    label: string;
+    kind: string;                 // resource | module | secret | drift | ... — for color_by/group_by
+    status?: string;               // for the status token ramp (see Design System section)
+
+    /** Durable identity, emitted into the Mermaid source as a `click` directive.
+     *  This is what survives copy/paste out of the extension — see "Durable
+     *  identity: the strata:// URI" above. Omitted for nodes with no workspace
+     *  object behind them (e.g. a hand-drawn context box). */
+    uri?: string;                  // strata://workspace/platform/resource/app_server
+
+    /** Primary "open this" location — omitted when there is none (e.g. drift entries) */
+    location?: {
+        file: string;               // workspace-relative path
+        line?: number;              // 1-based; omit for file-level (no specific line)
+    };
+
+    /** Secondary locations — "this node is also defined/referenced here" */
+    references?: Array<{ file: string; line?: number; label: string }>;
+
+    /** Actions beyond "open file" — populated per source type, not guessed generically */
+    actions?: DiagramAction[];
+
+    /** Hover tooltip content — plain text or a small key/value table */
+    tooltip?: string | Record<string, string>;
+}
+
+interface DiagramEdgeData {
+    source: string;    // node id
+    target: string;    // node id
+    label?: string;
+}
+```
+
+Each `SOURCE_RESOLVERS` entry is responsible for populating `location`/`references`/`actions` correctly for *its own* data — the resource-topology resolver knows how to find `spec.resources[].name` inside `workspace.yaml` and at what line; the drift resolver knows there is no file to open and instead offers a "re-run drift check" action. This is the only place in the system that needs source-specific knowledge — the renderer, the webview, and the click handler downstream are all generic.
+
+#### `DiagramAction` — what a click (or right-click) can do
+
+```typescript
+interface DiagramAction {
+    label: string;          // shown in tooltip / context menu, e.g. "Open file", "Show resolved values"
+    kind: 'open-file' | 'run-command' | 'show-panel';
+    // open-file
+    file?: string;
+    line?: number;
+    // run-command
+    command?: string;        // VS Code command ID, e.g. "strata.runDrift"
+    args?: unknown[];
+    // show-panel
+    panelId?: string;        // e.g. "strata.valuesPanel"
+}
+```
+
+Every node gets a **default primary action** derived from `location` (single click = open file at line, when `location` is set), plus zero or more secondary actions surfaced via right-click / hover menu (`actions[]`). A drift node with no `location` has no default click action — only its `actions[]` (e.g. "Re-run drift check", "Show before/after diff").
+
+#### Click flow, end to end
+
+```
+CLI JSON output                    Extension host                        Webview (SVG)
+──────────────────────            ───────────────────────────           ─────────────────────
+strata validate graph              SOURCE_RESOLVERS build a              mermaid.initialize({
+  --output json                    NodeMap: Record<string,                securityLevel: 'loose'
+  → nodes[] with                    DiagramNodeData> and hold it          })  // required for
+    identifier, path,               in ArchitectureHubProvider             click callbacks
+    kind, name, metadata            state for this panel                
+                                                                          User clicks node <g id="...">
+                                   On message from webview:                  ↓
+                                     resolve id → DiagramNodeData         window.vscode.postMessage({
+                                     → location set?                        type: 'nodeClick', id }))
+                                         → openTextDocument(file, line)
+                                     → else show actions[] as
+                                       quick-pick menu
+```
+
+`securityLevel: 'loose'` is required for Mermaid to attach `onclick` handlers to nodes at all (the default `'strict'` mode strips them) — this is a concrete, easy-to-miss implementation detail, not just a design nicety.
+
+#### Workspace → diagram (the reverse direction)
+
+The reverse — "I'm editing this YAML file, highlight the corresponding node in whatever diagram is open" — reuses the same `NodeMap`, just walked backward:
+
+1. Extension listens for `workspace.onDidChangeTextDocument` / cursor position changes.
+2. For the active file + line, scan the currently-held `NodeMap` for any `DiagramNodeData` whose `location.file` matches (and, if set, whose `location.line` is closest to the cursor).
+3. Post a `{ type: 'highlight', id }` message into the webview; the webview applies a CSS outline/glow class to that node's `<g>` element (no re-render needed — this is a pure client-side style toggle, not a Mermaid re-render).
+
+This only works for diagrams whose nodes carry `location` — drift/history/timeline-style diagrams have no file to reverse-map from, and simply don't participate in this feature. That's an acceptable, explicit limitation rather than something to force.
+
+#### What this means for custom (Diagram Builder) diagrams
+
+When a user composes a diagram from multiple sources in the Builder (Part 3), the builder doesn't need any new click-resolution logic of its own — it just concatenates the `nodes`/`edges` arrays that each selected source's `DataSourceResult` already returns, verbatim. Click resolution "just works" for user-composed diagrams because each contributing source already carries its own `location`/`actions` metadata; the builder never needs to know what a `topology` node's file path convention is versus a `secrets` node's.
+
 ### Mermaid Rendering
 
-- Use `mermaid.initialize({ startOnLoad: true, theme: 'default' })` to respect VS Code theme
-- Responsive sizing: diagram fills webview panel width, respects zoom levels
-- Click handlers use `window.vscode.postMessage()` to communicate back to extension
-- Builder provides live preview: re-render on every source/filter/layout change
+- Use `mermaid.initialize({ startOnLoad: true, theme: 'base', themeVariables: {...}, securityLevel: 'loose' })` — `theme: 'base'` + `themeVariables` populated from VS Code CSS custom properties per the Design System section above; `securityLevel: 'loose'` is required for node click callbacks to fire at all (default `'strict'` strips them).
+- Responsive sizing: diagram fills webview panel width, respects zoom levels.
+- Click handlers use `window.vscode.postMessage({ type: 'nodeClick', id })` to communicate back to the extension host, which resolves the ID against the `nodeMap` held for that panel — see "Node Identity & Click Resolution" above for the full resolution flow and the `DataSourceResult`/`DiagramNodeData`/`DiagramAction` types involved.
+- Builder provides live preview: re-render on every source/filter/layout change.
 
 ---
 
@@ -816,32 +1402,74 @@ const SOURCE_RESOLVERS: Record<string, (filter: any) => Promise<DataSourceResult
 
 ## Implementation Roadmap
 
-### Phase 1: Architecture Hub + Top 3 Built-In Diagrams (v1.1.0)
-- [ ] Create `ArchitectureHubProvider` with tabbed webview
-- [ ] Implement Topology, Stage Flow, and Promotion renderers
-- [ ] Wire into chat commands (`/topology`, `/stages`, `/promote`)
-- [ ] Add command palette entry ("Strata: Show Architecture")
-- [ ] Test with example workspaces in `config/`
+Ordered by the Decision Outcome's priorities: **CLI/YAML foundation first, workspace connection second, GUI conveniences last.** Phases 1–2 deliver the core value with no GUI Builder at all.
 
-### Phase 2: Full Top 10 Built-In Diagrams (v1.2.0)
-- [ ] Add Network, Services, Environments, Secrets, Refs, Timeline, Full Architecture
-- [ ] Add catalog browser in sidebar (search + filter by category)
-- [ ] Add `/diagram list` and `/diagram show` chat commands
+### Phase 1: CLI foundation + preview (v1.1.0)
+- [x] Define the `kind: diagram` schema — `sources` + Jinja `template`, plus optional `layout`/`style` sugar; add to `strata schema get diagram`
+- [x] Wire `TemplateProcessor.render()` (ADR-0017, already shipped) as the render step
+- [x] Register the `slug` / `token` / `mermaid_escape` filters
+- [x] `strata diagram show -f <name-or-path>` (`--print-template`, `--save`) — headless, CI, docs pipelines
+- [ ] `strata diagram show --output svg|png` (needs mermaid-cli); `strata new --template diagram`
+- [x] `strata diagram list`
+- [x] Ship built-ins **as `kind: diagram` YAML files**, not hardcoded renderers — one code path with user definitions (`refs`, `topology`; the remaining Top 10 are outstanding)
+- [x] Generate a template from `layout` / `style` when `spec.template` is omitted (flowchart and stateDiagram; other types are a template)
+- [x] **Remove `strata validate graph`** (no deprecation shim); reuse its `GraphController` as the `topology` / `files` source types
+- [ ] VS Code **preview pane** for `.strata/diagrams/*.yaml` — live render on save, Markdown-Preview-style. The only extension surface needed for authoring.
+- [ ] Theme integration per the Design System section (`theme: 'base'` + VS Code CSS variables)
+- [x] Test with example workspaces in `config/`
 
-### Phase 3: Diagram Builder MVP (v1.3.0)
-- [ ] Implement `DiagramDefinition` YAML schema (add to `strata schema get diagram`)
-- [ ] Implement builder UI (sources picker, layout selector, live preview)
-- [ ] Implement `strata diagram render` CLI command
-- [ ] Save/load from `.strata/diagrams/`
-- [ ] Add templates for quick-start
+### Phase 2: Workspace connection (v1.2.0) — *the differentiating feature*
+- [x] Define the `strata://` URI scheme (shape, kinds, resolution rules) — the durable identity that travels with the Mermaid text
+- [x] `strata diagram resolve strata://... --output json` → `{ file, line }`; headless, not VS Code-specific
+- [x] Emit `click <node> "strata://..."` directives into generated Mermaid
+- [ ] `strata validate` checks `strata://` URIs resolve (catch broken links at validate time, not on a dead click)
+- [ ] `DataSourceResult` / `DiagramNodeData` / `DiagramAction` types (see Node Identity & Click Resolution)
+- [ ] `nodeMap` as enrichment cache (tooltips, actions, status) for topology + file-reference sources (ADR-0015 data, already available)
+- [ ] Click → open file at line (`securityLevel: 'loose'` for Mermaid click callbacks)
+- [ ] Reverse direction: cursor in YAML → compute URI → highlight matching node
+- [ ] Hover tooltips from `DiagramNodeData.tooltip`
 
-### Phase 4: AI-Assisted + Full Catalog (v1.4.0)
+### Phase 3: Source coverage + cookbook (v1.3.0)
+*No composition-seam work needed — Jinja already handles mixing hand-written and generated content.*
+- [x] `resources` / `modules` / `namespaces` — single-kind views over the `topology` graph
+- [x] `network` / `firewalls` / `dns` — read the workspace's own reference lists (`spec.networks[]` etc.)
+- [x] `stages` / `environments` — read the resolved deployment's `spec.stages[]` / `spec.environments[]`
+- [x] `tenants` — full-tree scan for `kind: tenant` documents (no workspace-level reference list to read)
+- [x] `history` — reads `.strata/logs/` audit trail (deploy run/destroy), capped at 20 most recent, no `uri`/`location`
+- [x] `promotion` — reads `.strata/promotions/records/*.yaml`, capped at 20 most recent
+- [x] `approvals` — projects `spec.gates[]` off the same promotion records; no live gate re-evaluation
+- [x] `variables` / `secrets` / `features` / `values` — report what's **declared**, never a live-resolved
+      value; never call `ValueController.resolve_values()` (always live, returns actual secret values).
+      No node of any kind ever carries a value or store pointer, for any store type — not even
+      `constant`. `metadata` is exactly `{store, environment}` in every case
+- [x] `policies` — reads `configuration.spec.policies`. `strata diagram show` conditionally loads a
+      `ConfigurationService` the same way `strata policy list` does, only when a diagram declares this
+      source and only when actually rendering (not `--print-template`)
+- [x] `drift` — reads `.strata/drift/{deployment}.drift.json` (no live drift check); `drifting`/
+      `resolved`/`acknowledged` status, no `uri`/`location`, same reasoning as `history`
+- [x] `locks` — reports only the deployment's declared `spec.locking` block; never a live
+      "is a lock currently held" check against the backend
+- [x] `repositories` — reads `.strata/solution.json`'s repository list (declaration only); `status`
+      reflects local path existence, never a live `git fetch`/`status`; credentials embedded in a
+      repository URL are stripped before the URL is surfaced
+- [x] `outputs` / `sbom` — read cached artifacts from the deployment's own build directory
+      (`build/{name}-{version}/`, mirroring `DeploymentService.get_build_path()`); never trigger a
+      live `terraform output` or a fresh SBOM scan. `outputs` surfaces only an output's key, stage,
+      and sensitivity flag — never the value, regardless of the cache's own filtering. `sbom`
+      surfaces full component identity (name/version/purl/properties) — not secret-like
+- [ ] Remaining Top 10 built-ins, shipped as `kind: diagram` files
+- [ ] Cookbook browser in sidebar (search + filter by category) — recipes, not 185 renderers
+- [ ] Worked Jinja templates for the non-flowchart cookbook entries (pie/gantt/sequence/quadrant/sankey)
+- [ ] `/diagram list` and `/diagram show` chat commands
+
+### Phase 4: Generators — GUI Builder + AI chat (v1.4.0)
+*Both are convenience generators emitting a Phase-1 `kind: diagram` file — neither is required for any capability above.*
+- [ ] Visual Builder UI (sources picker, layout selector, live preview)
+- [ ] Round-trip guarantee: Builder output is hand-editable; hand-written definitions load back into the Builder; `--print-template` is the escape route for users who outgrow the sugar
 - [ ] Natural language → diagram definition in chat
-- [ ] Full 185 catalog browsable with search
-- [ ] Diagram filtering and highlighting rules
 - [ ] Export to SVG/PNG/Mermaid markdown
 
-### Phase 5: Advanced Builder Features (v1.5.0+)
+### Phase 5: Advanced features (v1.5.0+)
 - [ ] Diagram parameterization (`${profile}`, `${environment}`)
 - [ ] Comparison mode (two diagrams side by side)
 - [ ] Dashboard mode (pin multiple diagrams)

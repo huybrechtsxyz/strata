@@ -1,0 +1,23 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: diagram
+meta:
+  name: diagram_topology
+  annotations:
+    description: "Deployment topology rendered from an explicit Jinja template"
+  labels:
+    version: "1.0.0"
+  tags:
+    - diagram
+    - topology
+spec:
+  sources:
+    - type: topology
+      as: topo
+  template: |
+    flowchart LR
+    {% for node in topo.nodes %}
+      {{ node.id }}["{{ node.label }}"]
+    {% endfor %}
+    {% for edge in topo.edges %}
+      {{ edge.source }} --> {{ edge.target }}
+    {% endfor %}

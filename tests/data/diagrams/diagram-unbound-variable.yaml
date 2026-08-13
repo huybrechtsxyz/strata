@@ -1,0 +1,14 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: diagram
+meta:
+  name: diagram_unbound_source
+  annotations:
+    description: "spec.template references 'topolgy' — a typo for the bound name 'topology'"
+spec:
+  sources:
+    - type: topology
+  template: |
+    flowchart TD
+    {% for node in topolgy.nodes %}
+      {{ node.id }}["{{ node.label }}"]
+    {% endfor %}

@@ -1,0 +1,31 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: diagram
+meta:
+  name: refs
+  annotations:
+    description: "YAML file reference graph — which document references which, coloured by validation status"
+  labels:
+    version: "1.0.0"
+  tags:
+    - built-in
+spec:
+  sources:
+    - type: files
+  template: |
+    graph LR
+      classDef valid fill:#d4edda,stroke:#28a745
+      classDef invalid fill:#fff3cd,stroke:#ffc107
+      classDef missing fill:#f8d7da,stroke:#dc3545
+      classDef external fill:#e2e3e5,stroke:#6c757d
+      classDef orphan fill:#f5f5f5,stroke:#adb5bd,stroke-dasharray:5
+    {%- for n in files.nodes %}
+      {{ n.id }}["{{ n.label }}"]:::{{ n.status }}
+      click {{ n.id }} "{{ n.uri }}"
+    {%- endfor %}
+    {%- for e in files.edges %}
+    {%- if e.label %}
+      {{ e.source }} -->|{{ e.label }}| {{ e.target }}
+    {%- else %}
+      {{ e.source }} --> {{ e.target }}
+    {%- endif %}
+    {%- endfor %}

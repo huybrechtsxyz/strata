@@ -106,3 +106,61 @@ class TestTemplateProcessorRender:
         """Dollar-sign variables (VS Code, shell) pass through untouched."""
         result = TemplateProcessor.render("${input:cliArgs}", {"name": "val"})
         assert result == "${input:cliArgs}"
+
+
+# =============================================================================
+# TemplateProcessor.check_syntax / find_variables — introspection tests
+# =============================================================================
+
+
+class TestTemplateProcessorCheckSyntax:
+    def test_valid_template_returns_none(self):
+        assert TemplateProcessor.check_syntax("{% for x in items %}{{ x }}{% endfor %}") is None
+
+    def test_empty_template_returns_none(self):
+        assert TemplateProcessor.check_syntax("") is None
+
+    def test_unclosed_block_is_reported(self):
+        error = TemplateProcessor.check_syntax("{% for x in items %}{{ x }}")
+        assert error is not None
+        assert "for" in error
+
+    def test_error_includes_line_number(self):
+        error = TemplateProcessor.check_syntax("line one\n{% for x in items %}\n")
+        assert error is not None
+        assert "line 2" in error
+
+    def test_unknown_filter_is_reported(self):
+        """Filters resolve during the tracking pass, not during parse."""
+        error = TemplateProcessor.check_syntax("{{ name | no_such_filter }}")
+        assert error is not None
+        assert "no_such_filter" in error
+
+    def test_builtin_filter_is_accepted(self):
+        assert TemplateProcessor.check_syntax("{{ name | upper }}") is None
+
+
+class TestTemplateProcessorFindVariables:
+    def test_finds_top_level_variable(self):
+        assert TemplateProcessor.find_variables("{{ name }}") == {"name"}
+
+    def test_empty_template_returns_empty_set(self):
+        assert TemplateProcessor.find_variables("") == set()
+
+    def test_template_without_variables_returns_empty_set(self):
+        assert TemplateProcessor.find_variables("plain text") == set()
+
+    def test_attribute_access_reports_only_the_root(self):
+        assert TemplateProcessor.find_variables("{{ topology.nodes[0].id }}") == {"topology"}
+
+    def test_loop_variables_are_excluded(self):
+        assert TemplateProcessor.find_variables("{% for n in nodes %}{{ n.id }}{% endfor %}") == {"nodes"}
+
+    def test_set_assignments_are_excluded(self):
+        assert TemplateProcessor.find_variables("{% set total = count %}{{ total }}") == {"count"}
+
+    def test_filters_are_excluded(self):
+        assert TemplateProcessor.find_variables("{{ name | upper }}") == {"name"}
+
+    def test_multiple_variables(self):
+        assert TemplateProcessor.find_variables("{{ a }}{% if b %}{{ c }}{% endif %}") == {"a", "b", "c"}

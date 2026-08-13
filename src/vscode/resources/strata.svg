@@ -1,14 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
   <!--
-    Strata icon — bold "S" built from four offset, overlapping copies,
-    darkest/furthest in back and full-opacity in front. Rendered as a mask
-    in the VS Code activity bar, so only currentColor + opacity are used
-    here. See strata-color.svg for the full-color brand mark.
+    Strata icon — four offset parallelogram "slabs" in a basket-weave 2x2
+    grid, darkest/furthest in back and full-opacity in front. Rendered as
+    a mask in the VS Code activity bar, so only currentColor + opacity are
+    used here. See strata-color.svg for the full-color brand mark.
   -->
-  <g font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="15" text-anchor="middle">
-    <text x="11.6" y="17.0" transform="translate(-1.2,-1.2)" fill="currentColor" opacity="0.35">S</text>
-    <text x="11.6" y="17.0" transform="translate(-0.8,-0.8)" fill="currentColor" opacity="0.55">S</text>
-    <text x="11.6" y="17.0" transform="translate(-0.4,-0.4)" fill="currentColor" opacity="0.75">S</text>
-    <text x="11.6" y="17.0" fill="currentColor" opacity="1">S</text>
-  </g>
+  <polygon points="5,2 13,2 11,9 3,9" fill="currentColor" opacity="0.6"/>
+  <polygon points="13,6.3 21,6.3 19,13.3 11,13.3" fill="currentColor" opacity="0.75"/>
+  <polygon points="5,10.5 13,10.5 11,17.5 3,17.5" fill="currentColor" opacity="0.9"/>
+  <polygon points="13,14.8 21,14.8 19,21.8 11,21.8" fill="currentColor" opacity="1"/>
 </svg>

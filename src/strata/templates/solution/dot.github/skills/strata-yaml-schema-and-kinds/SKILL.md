@@ -1,6 +1,6 @@
 ---
 name: strata-yaml-schema-and-kinds
-description: 'Strata YAML schema, the 12 valid kinds, universal envelope rules, cross-file references, and anti-patterns. Use before writing or reviewing any strata YAML file.'
+description: 'Strata YAML schema, the valid kinds, universal envelope rules, cross-file references, and anti-patterns. Use before writing or reviewing any strata YAML file.'
 ---
 
 # Strata YAML Schema & Kinds
@@ -24,7 +24,7 @@ spec:
 
 **Rules:**
 - `apiVersion: strata.huybrechts.xyz/v1` — always this value, never change
-- `kind` — one of the 12 valid kinds listed below
+- `kind` — one of the valid kinds; run `strata schema list` for the authoritative set
 - `meta.name` — **MUST match `^[a-z0-9][a-z0-9_-]*$`** (lowercase, starts with a letter or digit, no spaces, no uppercase)
 - `meta.annotations.description` — optional but recommended
 - `meta.labels` — optional, for user-defined metadata
@@ -34,7 +34,7 @@ spec:
 
 ---
 
-## The 12 Valid Kinds
+## The Valid Kinds
 
 ### Root & Cross-Cutting
 

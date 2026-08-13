@@ -103,7 +103,7 @@ spec:
   ...
 ```
 
-Valid `kind` values: `workspace`, `configuration`, `deployment`, `namespace`, `module`, `environment`, `provider`, `resource`, `firewall`, `network`, `dns`, `tenant`.
+Valid `kind` values: `workspace`, `configuration`, `deployment`, `diagram`, `namespace`, `module`, `environment`, `provider`, `resource`, `firewall`, `network`, `dns`, `tenant`.
 
 `meta.name` must match `^[a-z0-9][a-z0-9_-]*$` — no spaces, no uppercase.
 
