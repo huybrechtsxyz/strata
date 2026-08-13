@@ -1147,6 +1147,15 @@ export function activate(context: vscode.ExtensionContext): void {
         }),
     );
 
+    // ── Reverse lookup: cursor in YAML → highlight matching node (ADR-0034) ───
+
+    context.subscriptions.push(
+        vscode.window.onDidChangeTextEditorSelection((e) => {
+            if (!_diagramPreview?.isOpen) return;
+            _diagramPreview.notifyCursor(e.textEditor.document.uri.fsPath, e.selections[0].active.line + 1);
+        }),
+    );
+
     // ── Subscriptions cleanup ──────────────────────────────────────────────────
 
     context.subscriptions.push(

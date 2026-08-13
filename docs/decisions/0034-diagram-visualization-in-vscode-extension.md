@@ -1,11 +1,11 @@
 # Diagram visualization in VS Code extension
 
-- Status: partially-implemented — Phase 1 CLI/YAML foundation ✅ Done (schema, `strata diagram show/list`, built-in `refs`/`topology`, `strata validate graph` removed, VS Code preview pane with live-render-on-save); Phase 2 workspace connection ⏳ URI scheme + `diagram resolve` + `click` directives + VS Code click-to-open-file done, `strata validate` URI checking/tooltips/reverse-lookup not started; Phase 3 source coverage ✅ Done (all built-in sources implemented), cookbook/sidebar/chat commands not started; Phase 4 GUI Builder + AI chat not started; Phase 5 advanced features not started
+- Status: partially-implemented — Phase 1 CLI/YAML foundation ✅ Done (schema, `strata diagram show/list`, built-in `refs`/`topology`, `strata validate graph` removed, VS Code preview pane with live-render-on-save and VS Code theme integration); Phase 2 workspace connection ⏳ URI scheme + `diagram resolve` + `click` directives + VS Code click-to-open-file + hover tooltips + reverse cursor→node lookup done, `strata validate` URI checking not started; Phase 3 source coverage ✅ Done (all built-in sources implemented), cookbook/sidebar/chat commands not started; Phase 4 GUI Builder + AI chat not started; Phase 5 advanced features not started
 - Date: 2026-07-11 (revised 2026-08-13 — repositioned from "strata owns a diagram system" to "strata generates Mermaid fragments and connects them to the workspace; users compose freely")
 
 ## Remaining Work
 
-- VS Code-side integration: preview pane (`diagramPreviewProvider.ts`) and click-to-open-file are implemented (`Strata: Show Dependency Graph` / `Strata: Show Infrastructure Topology` / `Strata: Preview Diagram`). Still outstanding: hover tooltips, reverse cursor→node lookup, `strata validate` checking `strata://` URIs resolve, full Design System theme integration (status color ramp, icons — only basic VS Code CSS variable mapping is done), GUI Builder, AI chat generation. See "Implementation Roadmap" for the authoritative checklist.
+- VS Code-side integration: preview pane, click-to-open-file, Design System theme integration, hover tooltips, and reverse cursor→node lookup are all implemented in `diagramPreviewProvider.ts` (`Strata: Show Dependency Graph` / `Strata: Show Infrastructure Topology` / `Strata: Preview Diagram`). Still outstanding: `strata validate` checking `strata://` URIs resolve, per-data-source icon conventions, secondary node actions beyond open-file, GUI Builder, AI chat generation. See "Implementation Roadmap" for the authoritative checklist.
 
 ## Context and Problem Statement
 
@@ -124,7 +124,7 @@ Concretely, strata provides:
 
 ## Implementation Status
 
-Partially implemented — see "Implementation Roadmap" below for the authoritative, phase-by-phase checklist. Summary: the CLI/data-layer foundation (schema, `strata diagram show`/`list`/`resolve`, `strata://` URIs, all built-in sources) is done; the VS Code-side preview pane and click-to-open (`diagramPreviewProvider.ts`) are done; hover tooltips, reverse cursor→node lookup, GUI Builder, and AI chat are not started.
+Partially implemented — see "Implementation Roadmap" below for the authoritative, phase-by-phase checklist. Summary: the CLI/data-layer foundation (schema, `strata diagram show`/`list`/`resolve`, `strata://` URIs, all built-in sources) is done; the VS Code-side preview pane, click-to-open, theme integration, hover tooltips, and reverse cursor→node lookup (`diagramPreviewProvider.ts`) are done; `strata validate` URI checking, GUI Builder, and AI chat are not started.
 
 ### What ADR 0015 already delivers (no VS Code work needed for data layer)
 
@@ -1415,7 +1415,7 @@ Ordered by the Decision Outcome's priorities: **CLI/YAML foundation first, works
 - [x] Generate a template from `layout` / `style` when `spec.template` is omitted (flowchart and stateDiagram; other types are a template)
 - [x] **Remove `strata validate graph`** (no deprecation shim); reuse its `GraphController` as the `topology` / `files` source types
 - [x] VS Code **preview pane** for `.strata/diagrams/*.yaml` — live render on save (`diagramPreviewProvider.ts`; also reachable via built-in `Strata: Show Dependency Graph` / `Strata: Show Infrastructure Topology` commands, which supersede the old `dependencyGraphProvider.ts`)
-- [ ] Theme integration per the Design System section (basic `theme: 'base'` + VS Code CSS variable mapping shipped; the full status-color-ramp/icon token set from the Design System section is not)
+- [x] Theme integration per the Design System section — `theme: 'base'` + VS Code CSS variable mapping for chrome/fonts, plus a hex-pair reverse-lookup in `diagramPreviewProvider.ts` that re-themes every `classDef` the CLI's `design_tokens.py` can emit (all ~40 token names collapse to 10 distinct hex pairs) onto `--vscode-charts-*`/`--vscode-descriptionForeground`. An unrecognized custom hex pair (a hand-authored diagram's own `classDef`) passes through unmodified. Icon conventions (per-data-source emoji) are not wired into the webview yet — no icons are rendered by `refs`/`topology` today, so there is nothing to theme there yet.
 - [x] Test with example workspaces in `config/`
 
 ### Phase 2: Workspace connection (v1.2.0) — *the differentiating feature*
@@ -1423,11 +1423,11 @@ Ordered by the Decision Outcome's priorities: **CLI/YAML foundation first, works
 - [x] `strata diagram resolve strata://... --output json` → `{ file, line }`; headless, not VS Code-specific
 - [x] Emit `click <node> "strata://..."` directives into generated Mermaid
 - [ ] `strata validate` checks `strata://` URIs resolve (catch broken links at validate time, not on a dead click)
-- [ ] `DataSourceResult` / `DiagramNodeData` / `DiagramAction` types (see Node Identity & Click Resolution) — not needed for click-to-open alone (the CLI-embedded `strata://` URI plus `diagram resolve` was sufficient); still needed for tooltips/secondary actions
-- [ ] `nodeMap` as enrichment cache (tooltips, actions, status) for topology + file-reference sources (ADR-0015 data, already available)
+- [x] ~~`DataSourceResult` / `DiagramNodeData` / `DiagramAction` types~~ — superseded by a simpler approach: tooltips read the classDef name already present on a node's rendered SVG element (no extra CLI round-trip); reverse-lookup matches by rendered label text rather than a typed node/action model. See Node Identity & Click Resolution for the originally-designed richer version (secondary actions beyond open-file are still unimplemented)
+- [ ] `nodeMap` as enrichment cache (tooltips, actions, status) for topology + file-reference sources (ADR-0015 data, already available) — superseded for tooltips/highlighting (see above); still relevant if secondary actions (`DiagramAction`) are ever added
 - [x] Click → open file at line (`securityLevel: 'loose'` for Mermaid click callbacks; webview intercepts `window.open()` on `strata://` URLs and resolves via `strata diagram resolve` — `diagramPreviewProvider.ts`)
-- [ ] Reverse direction: cursor in YAML → compute URI → highlight matching node
-- [ ] Hover tooltips from `DiagramNodeData.tooltip`
+- [x] Reverse direction: cursor in YAML → compute URI → highlight matching node — implemented via forward-resolving every node's URI once per render (`_buildReverseIndex()`, capped at 150 nodes) rather than a hypothetical inverse resolver (cursor→URI is not implementable from `location`+`line` alone without re-parsing YAML structure); indexed by `file`/`file:line`, matched to the webview by rendered label text
+- [x] Hover tooltips — shows the node's classDef name (status/kind token) and whether it's clickable; simpler than the originally-designed `DiagramNodeData.tooltip` (no secondary actions), see note above
 
 ### Phase 3: Source coverage + cookbook (v1.3.0)
 *No composition-seam work needed — Jinja already handles mixing hand-written and generated content.*
