@@ -95,14 +95,142 @@ All other built-in diagrams (#2–7, #9–10) and the full catalog require new d
 
 ---
 
+## Design System — Status Colors, Icons & Theme Integration
+
+Before any of the 185 catalog diagrams or the Diagram Builder's `color_by`/`style` options can be implemented consistently, they need one shared palette to draw from. Two color systems already exist independently in `src/strata/utils/graph.py` and must be unified and extended, not replaced:
+
+### What already exists (and must be preserved as-is)
+
+**File-mode status palette** (`render_mermaid`, `_STATUS_CLASSES`) — colors by node *health*:
+
+| Status     | Token name | Hex (fill / stroke)            | Meaning                                                    |
+| ---------- | ---------- | ------------------------------ | ---------------------------------------------------------- |
+| `valid`    | success    | `#d4edda` / `#28a745`          | File exists and passes validation                          |
+| `invalid`  | warning    | `#fff3cd` / `#ffc107`          | File exists but fails validation (docs call this "orange") |
+| `missing`  | danger     | `#f8d7da` / `#dc3545`          | Referenced but not present on disk                         |
+| `external` | neutral    | `#e2e3e5` / `#6c757d`          | `@repo/path` reference to another repository               |
+| `orphan`   | muted      | `#f5f5f5` / `#adb5bd` (dashed) | Exists, valid, but unreferenced                            |
+
+**Resource-mode kind palette** (`render_mermaid_resources`) — colors by node *kind/taxonomy*, a completely different dimension from status:
+
+| Kind        | Hex (fill / stroke)                                      |
+| ----------- | -------------------------------------------------------- |
+| `resource`  | `#dbeafe` / `#2563eb` (blue)                             |
+| `module`    | `#fef3c7` / `#d97706` (amber)                            |
+| `namespace` | `#d1fae5` / `#059669` (green)                            |
+| `network`   | `#e0e7ff` / `#4f46e5` (indigo)                           |
+| `disabled`  | `#e2e3e5` / `#6c757d` (grey)                             |
+| `missing`   | `#f8d7da` / `#dc3545` (red — reused from status palette) |
+
+These two dimensions — **status** (health/validity) and **kind** (taxonomy/category) — are orthogonal and both correct. The design system below keeps them separate and gives each a name, rather than collapsing them into one ad-hoc `color_by` string per diagram.
+
+### Problem: hardcoded hex breaks in VS Code's dark/high-contrast themes
+
+Both palettes above are light-theme pastels (Bootstrap's classic `alert-success`/`alert-warning`/etc. palette) baked directly into the Mermaid `classDef` strings. Rendered inside a VS Code webview:
+- They ignore the user's active theme (Dark+, Dark High Contrast, Light+, and any custom theme) entirely.
+- Pastel fills that read fine on white look muddy or low-contrast on a dark editor background.
+- There's no way for a user's theme choice to propagate into the diagram at all.
+
+**Fix:** Mermaid supports runtime theming via `mermaid.initialize({ theme: 'base', themeVariables: {...} })`. The webview should read VS Code's own CSS custom properties (already injected into every webview automatically — `--vscode-charts-green`, `--vscode-charts-red`, `--vscode-charts-yellow`, `--vscode-charts-blue`, `--vscode-charts-purple`, `--vscode-charts-orange`, `--vscode-foreground`, `--vscode-editor-background`) and map them into Mermaid's `themeVariables` at render time, instead of hardcoding hex. This makes every diagram automatically theme-correct with zero per-diagram configuration — the CLI-side `graph.py` keeps its current hardcoded hex (it targets Mermaid Live/GitHub-rendered markdown, which don't have a VS Code theme), and only the **webview renderer** in the extension does the CSS-variable mapping.
+
+### Extended semantic token set (for the 185-diagram catalog)
+
+The file/resource palettes above only cover 2 of the ~8 semantic domains the catalog introduces. Each new domain gets its own **named token ramp**, never new raw hex:
+
+| Domain                   | Token ramp (low → high severity/priority)                               | Used by                                                    |
+| ------------------------ | ----------------------------------------------------------------------- | ---------------------------------------------------------- |
+| **Validity status**      | `valid` → `invalid` → `missing`                                         | Cat. 1, 6 (existing, unchanged)                            |
+| **Drift severity**       | `info` → `low` → `medium` → `high` → `critical`                         | Cat. 11 (#87–92), Diagram Builder `color_by: drift_status` |
+| **Policy enforcement**   | `audit` → `warn` → `deny`                                               | Cat. 12 (#93–98)                                           |
+| **CVE severity**         | `unknown` → `low` → `medium` → `high` → `critical`                      | Cat. 12 (#97–98), Cat. 26 (#177)                           |
+| **Lock/promotion state** | `unlocked` → `locked` → `held` → `expired`                              | Cat. 25 (#169–170), Cat. 3 (#25, #31)                      |
+| **Health check result**  | `unknown` → `passing` → `degraded` → `failing`                          | Cat. 2 (#18), Diagram Builder                              |
+| **Deployment outcome**   | `success` → `partial` → `failed`                                        | Cat. 10 (#78, #81)                                         |
+| **Taxonomy/kind**        | no ordering — categorical (`resource`/`module`/`namespace`/`network`/…) | Cat. 1 (existing), Diagram Builder `group_by`              |
+
+Severity ramps (drift, CVE) share **one 5-step color ramp** so a user who learns "red = critical" in the drift diagram doesn't have to relearn it for the CVE diagram:
+
+```
+info/unknown → low        → medium      → high         → critical
+  (grey)        (blue)       (amber)       (orange)        (red)
+--vscode-descriptionForeground → --vscode-charts-blue → --vscode-charts-yellow → --vscode-charts-orange → --vscode-charts-red
+```
+
+3-step ramps (policy enforcement) reuse the same low/medium/high slice of the ramp (`audit`→grey/blue, `warn`→amber, `deny`→red) rather than inventing a separate 3-color scheme.
+
+### Icon conventions
+
+The Diagram Builder mockup (Part 3) and chat commands use ad-hoc emoji (📊, 💾, 📋). These become a fixed, documented set — one icon per **data source type**, reused everywhere that source appears (sidebar catalog entry, chat command help, builder's data-source picker, node tooltips):
+
+| Data source (Part 3 table) | Icon | Rationale                              |
+| -------------------------- | ---- | -------------------------------------- |
+| `topology`                 | 🏗️    | Construction/building — infrastructure |
+| `modules`                  | 📦    | Package — deployable unit              |
+| `stages`                   | 🔀    | Flow/branching — pipeline stages       |
+| `promotion`                | 🚀    | Progression toward production          |
+| `network`                  | 🌐    | Network/connectivity                   |
+| `firewalls`                | 🛡️    | Protection/security                    |
+| `dns`                      | 🔤    | Name resolution                        |
+| `secrets`                  | 🔑    | Credential material                    |
+| `variables`                | 🔧    | Configuration values                   |
+| `features`                 | 🚩    | Feature flags                          |
+| `drift`                    | ⚠️    | Warning — unplanned change             |
+| `history`                  | 🕒    | Time/chronology                        |
+| `policies`                 | 📏    | Rule/measurement                       |
+| `tenants`                  | 🏢    | Organization/customer                  |
+| `environments`             | 🌱    | Environment/stage of growth            |
+| `repositories`             | 📁    | Source repository                      |
+| `sbom`                     | 📋    | Manifest/inventory list                |
+| `resources`                | ⚙️    | Infrastructure component               |
+| `approvals`                | ✅    | Sign-off/gate                          |
+| `locks`                    | 🔒    | Exclusive hold                         |
+| `outputs`                  | 📤    | Data leaving a stage                   |
+| `values`                   | 📊    | Resolved data                          |
+
+Reused, not new, per severity level (consistent with the token ramp above): `ℹ️` info · `🔵` low · `🟡` medium · `🟠` high · `🔴` critical.
+
+### Mermaid diagram-type styling constraints
+
+Not every one of the 10 Mermaid types (`flowchart`, `sequence`, `gantt`, `pie`, `mindmap`, `class`, `stateDiagram`, `timeline`, `quadrant`, `sankey`) supports `classDef`-based coloring the same way. This must be resolved per-type before Phase 2 (full Top 10) starts, not discovered ad-hoc per diagram:
+
+| Mermaid type   | Supports `classDef`?                                 | Coloring approach                                                                                                                  |
+| -------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `flowchart`    | Yes                                                  | Direct `classDef` + `:::class` per node (current pattern — no change)                                                              |
+| `stateDiagram` | Yes (`classDef`)                                     | Same pattern as flowchart                                                                                                          |
+| `class`        | Limited (per-class `style`)                          | Use `style ClassName fill:...` instead of `classDef`                                                                               |
+| `sequence`     | No                                                   | Use `Note over` styling or `rect rgb(...)` background blocks per severity zone                                                     |
+| `gantt`        | Partial (`section` + custom CSS classes)             | Section-level coloring only, not per-task                                                                                          |
+| `pie`          | No node coloring — Mermaid auto-assigns slice colors | Use a fixed, documented color order matching the token ramp so severity always renders in the same color regardless of slice order |
+| `mindmap`      | Limited (per-node `::icon`, no fill)                 | Icon-based differentiation (see icon table above) instead of color                                                                 |
+| `timeline`     | No                                                   | Section grouping only; rely on icons/labels for severity, not color                                                                |
+| `quadrant`     | No per-point styling                                 | Point labels + icons; quadrant position itself carries the meaning                                                                 |
+| `sankey`       | Flow-width only                                      | No node/severity color — width encodes volume, not health                                                                          |
+
+This means **not every diagram in the catalog can show severity via color** — pie/mindmap/timeline/quadrant/sankey diagrams must lean on icons and labels instead. This constraint should be called out per-category in Part 2 as those categories are implemented (Cat. 11 Drift Detection is entirely `pie`/`timeline` — severity will be icon-driven, not color-driven, there).
+
+### What this changes in Part 3 (Diagram Builder)
+
+The `style.color_by` and `style.highlight` fields in the `DiagramDefinition` schema (Part 3) should reference **token names**, not raw Mermaid CSS:
+
+```yaml
+style:
+  color_by: drift_status       # references the "Drift severity" token ramp above, not a hex value
+  highlight:
+    - condition: "drift.severity == critical"
+      token: critical           # was: style: "fill:#ff0000,stroke:#900"
+  group_by: namespace           # taxonomy dimension — uses the "Taxonomy/kind" palette, not severity
+```
+
+The webview renderer resolves `token: critical` → the theme-aware CSS variable at render time, so a saved `.strata/diagrams/*.yaml` definition stays portable across users with different VS Code themes — nobody's saved diagram has another person's hardcoded colors baked in.
+
+---
+
 ## Part 1: Built-In Diagrams (Top 10)
 
 These diagrams are available immediately with zero configuration — one click from command palette or chat.
 
-| #   | Name                           | Chat Command    | Mermaid Type | Purpose                                                                          |
-| --- | ------------------------------ | --------------- | ------------ | -------------------------------------------------------------------------------- |
 | #   | Name                           | Chat Command    | Mermaid Type | Purpose                                                                          | Data source                                                                   |
-| --- | ------------------------------ | --------------- | ------------ | -------------------------------------------------------------------------------- | ---                                                                           |
+| --- | ------------------------------ | --------------- | ------------ | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | 1   | Infrastructure Topology        | `/topology`     | flowchart    | Workspace → topologies → namespaces → modules → services hierarchy               | `strata validate graph --mode resources --output json` (ADR 0015 ✅)           |
 | 2   | Deployment Stage Flow          | `/stages`       | flowchart    | Stage execution order, dependencies, failure handling                            | `strata deploy status --output json`                                          |
 | 3   | Version Promotion Flow         | `/promote`      | flowchart LR | Ring progression with gates and current versions                                 | `strata promote status --output json`                                         |
