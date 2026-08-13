@@ -86,10 +86,13 @@ class DeploymentExtensionResolver:
             child_spec.pop("extends", None)
             return {**child_raw, "spec": child_spec}
 
-        # Resolve the base file path
+        # Resolve the base file path — relative to the workspace root, not
+        # file_path's own directory. ADR-0039: "spec.extends accepts a single
+        # @repo/path reference (same resolution rules as all other cross-file
+        # references in strata)" — matches BaseService._resolve_file_path().
         try:
             base_path = resolve_path(
-                str(file_path.parent),
+                str(self._work_path),
                 extends_ref,
                 repo_map=self._repo_map,
             )

@@ -222,6 +222,16 @@
         "icon": "$(type-hierarchy)"
       },
       {
+        "command": "strata.showTopologyDiagram",
+        "title": "Strata: Show Infrastructure Topology",
+        "icon": "$(circuit-board)"
+      },
+      {
+        "command": "strata.previewDiagramFile",
+        "title": "Strata: Preview Diagram",
+        "icon": "$(preview)"
+      },
+      {
         "command": "strata.refreshTreeView",
         "title": "Refresh",
         "icon": "$(refresh)"
@@ -590,6 +600,16 @@
           "group": "strata@4"
         },
         {
+          "command": "strata.showDependencyGraph",
+          "when": "view == strataDeployments && viewItem == deployment-active",
+          "group": "strata@5"
+        },
+        {
+          "command": "strata.showTopologyDiagram",
+          "when": "view == strataDeployments && viewItem == deployment-active",
+          "group": "strata@6"
+        },
+        {
           "command": "strata.copyOutputValue",
           "when": "view == strataOperations && viewItem == output-entry",
           "group": "strata@1"
@@ -667,6 +687,21 @@
           "command": "strata.lockStatus",
           "when": "resourceExtname == .yaml && strata.workspaceActive",
           "group": "strata@9"
+        },
+        {
+          "command": "strata.showDependencyGraph",
+          "when": "resourceExtname == .yaml && strata.workspaceActive",
+          "group": "strata@10"
+        },
+        {
+          "command": "strata.showTopologyDiagram",
+          "when": "resourceExtname == .yaml && strata.workspaceActive",
+          "group": "strata@11"
+        },
+        {
+          "command": "strata.previewDiagramFile",
+          "when": "resourceExtname == .yaml && strata.workspaceActive",
+          "group": "strata@12"
         }
       ]
     },

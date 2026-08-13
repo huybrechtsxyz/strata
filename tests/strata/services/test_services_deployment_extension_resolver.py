@@ -87,6 +87,33 @@ class TestResolveNoExtends:
 
 
 # ---------------------------------------------------------------------------
+# resolve — relative extends path resolves against the workspace root
+# ---------------------------------------------------------------------------
+
+
+class TestResolveRelativePathIsWorkspaceRootRelative:
+    def test_relative_extends_from_nested_child_resolves_against_work_path(self, tmp_path: Path) -> None:
+        """Regression test: a relative spec.extends reference must resolve
+        against work_path, not the child file's own directory — ADR-0039:
+        'spec.extends accepts ... the same resolution rules as all other
+        cross-file references in strata', matching BaseService._resolve_file_path().
+        """
+        (tmp_path / "templates").mkdir()
+        (tmp_path / "deploy").mkdir()
+        _write(
+            tmp_path / "templates" / "ring-base.yaml",
+            {"partial": True, "workspace": {"name": "base-ws"}},
+        )
+        child = _write(
+            tmp_path / "deploy" / "child.yaml",
+            {"extends": "templates/ring-base.yaml", "workspace": {"name": "child-ws"}},
+        )
+        result = _resolver(tmp_path).resolve(child)
+
+        assert result["spec"]["workspace"] == {"name": "child-ws"}
+
+
+# ---------------------------------------------------------------------------
 # resolve — single-level extends
 # ---------------------------------------------------------------------------
 

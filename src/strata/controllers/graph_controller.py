@@ -269,7 +269,7 @@ class GraphController(BaseController):
             if data.get("kind") == "deployment":
                 ws_ref = data.get("spec", {}).get("workspace", {}).get("file")
                 if ws_ref:
-                    ws_path = (entry_path.parent / ws_ref).resolve()
+                    ws_path = (self._work_path / ws_ref).resolve()
                     if ws_path.exists():
                         return ws_path
             return None
@@ -419,8 +419,11 @@ class GraphController(BaseController):
                 )
             return
 
-        # Resolve relative path
-        target_path = (source_file.parent / ref).resolve()
+        # Resolve relative path — relative to the workspace root, not the
+        # referencing file's directory. File references in strata YAML are
+        # always workspace-root-relative (see _resolve_file_path in
+        # base_service.py), regardless of which file declares the reference.
+        target_path = (self._work_path / ref).resolve()
         try:
             target_rel = str(target_path.relative_to(self._work_path)).replace("\\", "/")
         except ValueError:

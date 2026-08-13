@@ -7,6 +7,15 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Fixed
+
+- **`GraphController` file-reference resolution used the wrong base directory (ADR-0015)**
+  - `_add_edge_and_walk()` (`src/strata/controllers/graph_controller.py`) resolved every `file:` reference (`spec.workspace.file`, resource/module/namespace/network/firewall/dns entries) as `source_file.parent / ref` — relative to the *referencing file's own directory* — instead of `self._work_path / ref` — relative to the *workspace root*, which is the convention used everywhere else (`BaseService._resolve_file_path()`, `resolve_path()` in `src/strata/utils/system.py`)
+  - Same bug in `_resolve_workspace_path()` when following a deployment's `spec.workspace.file` via `entry_path.parent`
+  - Effect: any workspace where the referencing file lives below the workspace root (the normal case, e.g. `config/deployment.yaml` referencing `config/stack/workspace.yaml`) produced a doubled path prefix (`config/config/stack/workspace.yaml`), which doesn't exist on disk — every such node rendered `:::missing` in `strata diagram show -f refs` and `-f topology`, even though `strata validate --deep` on the same files was clean
+  - Fix: both call sites now resolve against `self._work_path` unconditionally
+  - No test coverage previously caught this because existing fixture workspaces have their entry file directly at the workspace root (`source_file.parent == self._work_path`), masking the bug
+
 ### Breaking Changes
 
 - **Cost estimation gated behind declared `infracost` integration**

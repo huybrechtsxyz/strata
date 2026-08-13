@@ -118,6 +118,62 @@ def config_workspace(tmp_path):
     return tmp_path
 
 
+@pytest.fixture
+def nested_config_workspace(tmp_path):
+    """Regression fixture: workspace lives below the workspace root and its
+    network/firewall/dns references are workspace-root-relative — matching
+    every other cross-file reference in strata (BaseService._resolve_file_path()).
+    """
+    (tmp_path / "config" / "stack").mkdir(parents=True)
+    (tmp_path / "config" / "stack" / "workspace.yaml").write_text(
+        "apiVersion: strata.huybrechts.xyz/v1\n"
+        "kind: workspace\n"
+        "meta:\n"
+        "  name: sample_ws\n"
+        "spec:\n"
+        "  networks:\n"
+        "    - name: platform_net\n"
+        "      file: config/stack/net.yaml\n"
+        "  firewalls:\n"
+        "    - name: base_fw\n"
+        "      file: config/stack/fw.yaml\n"
+        "  dns_zones:\n"
+        "    - name: primary_zone\n"
+        "      file: config/stack/dns.yaml\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "config" / "stack" / "net.yaml").write_text(NETWORK_YAML, encoding="utf-8")
+    (tmp_path / "config" / "stack" / "fw.yaml").write_text(FIREWALL_YAML, encoding="utf-8")
+    (tmp_path / "config" / "stack" / "dns.yaml").write_text(DNS_YAML, encoding="utf-8")
+    return tmp_path
+
+
+class TestNestedWorkspaceRefsResolveAgainstWorkspaceRoot:
+    def test_network_ref_from_nested_workspace_resolves(self, nested_config_workspace):
+        controller = DiagramSourceController(
+            nested_config_workspace, entry="config/stack/workspace.yaml", no_validate=True
+        )
+        network = controller.resolve([_source("network")])["network"]
+        assert not controller.get_errors()
+        assert {n["id"] for n in network["nodes"]} == {"vnet_a", "vnet_b"}
+
+    def test_firewall_ref_from_nested_workspace_resolves(self, nested_config_workspace):
+        controller = DiagramSourceController(
+            nested_config_workspace, entry="config/stack/workspace.yaml", no_validate=True
+        )
+        firewalls = controller.resolve([_source("firewalls")])["firewalls"]
+        assert not controller.get_errors()
+        assert {n["id"] for n in firewalls["nodes"]} == {"base_fw"}
+
+    def test_dns_ref_from_nested_workspace_resolves(self, nested_config_workspace):
+        controller = DiagramSourceController(
+            nested_config_workspace, entry="config/stack/workspace.yaml", no_validate=True
+        )
+        dns = controller.resolve([_source("dns")])["dns"]
+        assert not controller.get_errors()
+        assert {n["id"] for n in dns["nodes"]} == {"example_com", "example_org"}
+
+
 class TestNetworkSource:
     @pytest.fixture
     def network(self, config_workspace):

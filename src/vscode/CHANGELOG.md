@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Diagram preview pane (ADR-0034, Phase 1 + 2)** — `Strata: Show Dependency Graph`, `Strata: Show Infrastructure Topology`, and `Strata: Preview Diagram` (for any `kind: diagram` YAML, including custom definitions under `.strata/diagrams/`) render `strata diagram show` output in a webview panel, live-reloading on save. Clicking a node resolves its `strata://` URI via `strata diagram resolve` and jumps to the exact file and line — the CLI is the single source of truth for both the graph and the click target, replacing the old `dependencyGraphProvider.ts`, which re-implemented `@repo/path` scanning in TypeScript.
+
 - **Help pane** (`strataHelp` tree view) — context-aware sidebar that detects the `kind:` of the active YAML file and shows suggested help topics, quick-action buttons (Validate, Schema, Guide), and a full A–Z topic list
   - Workspace override support: custom help files placed in `.strata/help/*.md` are discovered automatically and shown in a "Workspace" section with override indicators; file system watcher keeps the list live
   - 55 help topics bundled in the extension (`resources/help/`) so content is available without requiring the system CLI

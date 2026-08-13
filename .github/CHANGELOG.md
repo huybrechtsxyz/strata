@@ -23,6 +23,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 - **Output passing between provisioners (ADR-0063, Gap 4)** — Provisioners now accept an `inputs_from` field that declares explicit dependencies on other provisioners' outputs. Supports `mapping` (key rename), `prefix` (add prefix to all keys), and `select` (allowlist) modes. Validated at schema level: unknown provisioner references, self-references, and circular dependencies are rejected. Mapped keys are treated as "supplied" by Gap 3 input validation. The existing `stage_outputs` injection mechanism applies the mapping at deploy time.
 - **Combined deployment outputs artifact (ADR-0063, Gap 5)** — After a successful `deploy run`, strata now writes a `deployment-outputs.json` file that merges all stages' Terraform outputs into a single registry-consumable document. Outputs are keyed by stage name; sensitive output keys are listed but values omitted. Includes deployment metadata (name, version, workspace, environment, tenant) and provenance (completed stages). The artifact is the contract surface for service registry integration.
 
+### Fixed
+
+- **`strata diagram show -f refs` (and `-f topology`) resolved file references relative to the referencing file's directory instead of the workspace root** — `GraphController` joined `spec.workspace.file`, resource/module/namespace/network/firewall/dns `file:` references against `source_file.parent` rather than `work_path`, doubling the path prefix for any reference nested below the workspace root (e.g. `config/config/stack/workspace.yaml`) and marking every such node `:::missing`. File references in strata YAML are always workspace-root-relative, matching `BaseService._resolve_file_path()`. See ADR-0015.
+
 ---
 
 ## [1.6.1] - 2026-08-03

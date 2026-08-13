@@ -37,6 +37,7 @@ import { WorkItemsViewProvider } from './providers/workItemsViewProvider';
 import { CacheWarmerProvider } from './providers/cacheWarmerProvider';
 import { StateServiceStatusBarProvider } from './providers/stateServiceStatusBarProvider';
 import { StateServiceTailProvider } from './providers/stateServiceTailProvider';
+import { DiagramPreviewProvider } from './providers/diagramPreviewProvider';
 
 // ---------------------------------------------------------------------------
 // Extension state (singleton per VS Code window)
@@ -65,6 +66,7 @@ let _workItemsView: WorkItemsViewProvider | undefined;
 let _cacheWarmer: CacheWarmerProvider | undefined;
 let _stateServiceStatusBar: StateServiceStatusBarProvider | undefined;
 let _stateServiceTail: StateServiceTailProvider | undefined;
+let _diagramPreview: DiagramPreviewProvider | undefined;
 let _lastStatus: import('./strataClient').WorkspaceStatus | undefined;
 let _lastDriftTarget: string | undefined;
 let _lastDeployTarget: string | undefined;
@@ -234,6 +236,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
     _stateServiceTail = new StateServiceTailProvider();
     _stateServiceTail.setClient(_client);
+
+    _diagramPreview = new DiagramPreviewProvider();
 
     // Propagate deployment context changes to status bar
     context.subscriptions.push(
@@ -514,6 +518,27 @@ export function activate(context: vscode.ExtensionContext): void {
             const target = _resolveTarget(filePath);
             if (!target || !_client) { void vscode.window.showWarningMessage('No deployment selected or file open.'); return; }
             await BuildPlanProvider.show(target, _client);
+        }),
+
+        // ── Diagram (ADR-0034) ───────────────────────────────────────────────────
+
+        vscode.commands.registerCommand('strata.showDependencyGraph', async (filePath?: string) => {
+            if (!_client) return;
+            const target = _resolveTarget(filePath);
+            await _diagramPreview?.show(_client, 'refs', target);
+        }),
+
+        vscode.commands.registerCommand('strata.showTopologyDiagram', async (filePath?: string) => {
+            if (!_client) return;
+            const target = _resolveTarget(filePath);
+            await _diagramPreview?.show(_client, 'topology', target);
+        }),
+
+        vscode.commands.registerCommand('strata.previewDiagramFile', async (filePath?: string) => {
+            if (!_client) return;
+            const target = filePath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
+            if (!target) { void vscode.window.showWarningMessage('Strata: no diagram file open.'); return; }
+            await _diagramPreview?.show(_client, target);
         }),
 
         // ── Deploy ────────────────────────────────────────────────────────────
@@ -1110,6 +1135,18 @@ export function activate(context: vscode.ExtensionContext): void {
     solutionWatcher.onDidCreate(() => void _refreshAll());
     solutionWatcher.onDidDelete(() => void _refreshAll());
 
+    // ── File watcher: live diagram preview on save (ADR-0034 Phase 1) ─────────
+    // Only re-renders when the saved file is the exact definition the open
+    // preview panel was rendered from — see DiagramPreviewProvider.isPreviewing().
+
+    context.subscriptions.push(
+        vscode.workspace.onDidSaveTextDocument((doc) => {
+            if (_diagramPreview?.isOpen && _diagramPreview.isPreviewing(doc.uri.fsPath)) {
+                void _diagramPreview.refresh();
+            }
+        }),
+    );
+
     // ── Subscriptions cleanup ──────────────────────────────────────────────────
 
     context.subscriptions.push(
@@ -1117,6 +1154,7 @@ export function activate(context: vscode.ExtensionContext): void {
         _deployCtx, _diagnostics, _codeLens, _guideView, _crossRef, _snippets,
         _taskProvider, _fileDecorations, _chatParticipant, solutionWatcher,
         _auditView!, _valuesView!, _cacheWarmer, _stateServiceStatusBar, _stateServiceTail,
+        _diagramPreview,
     );
 
     // ── Context key ────────────────────────────────────────────────────────────

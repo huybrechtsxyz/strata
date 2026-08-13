@@ -1,11 +1,11 @@
 # Diagram visualization in VS Code extension
 
-- Status: proposed
+- Status: partially-implemented — Phase 1 CLI/YAML foundation ✅ Done (schema, `strata diagram show/list`, built-in `refs`/`topology`, `strata validate graph` removed, VS Code preview pane with live-render-on-save); Phase 2 workspace connection ⏳ URI scheme + `diagram resolve` + `click` directives + VS Code click-to-open-file done, `strata validate` URI checking/tooltips/reverse-lookup not started; Phase 3 source coverage ✅ Done (all built-in sources implemented), cookbook/sidebar/chat commands not started; Phase 4 GUI Builder + AI chat not started; Phase 5 advanced features not started
 - Date: 2026-07-11 (revised 2026-08-13 — repositioned from "strata owns a diagram system" to "strata generates Mermaid fragments and connects them to the workspace; users compose freely")
 
 ## Remaining Work
 
-- Not started — nothing in this ADR has been implemented yet.
+- VS Code-side integration: preview pane (`diagramPreviewProvider.ts`) and click-to-open-file are implemented (`Strata: Show Dependency Graph` / `Strata: Show Infrastructure Topology` / `Strata: Preview Diagram`). Still outstanding: hover tooltips, reverse cursor→node lookup, `strata validate` checking `strata://` URIs resolve, full Design System theme integration (status color ramp, icons — only basic VS Code CSS variable mapping is done), GUI Builder, AI chat generation. See "Implementation Roadmap" for the authoritative checklist.
 
 ## Context and Problem Statement
 
@@ -117,21 +117,21 @@ Concretely, strata provides:
 
 ## Related Work
 
-- **ADR 0015 — `strata validate graph`** (completed): delivers the data foundation for built-in diagrams #1 and #8. This ADR **replaces that command surface** with `strata diagram show` (see "CLI surface" in Part 3) while reusing its `GraphController` verbatim as the `topology` and `files` source types. `dependencyGraphProvider.ts` should be updated to delegate to this CLI output rather than doing its own `@repo/` parsing.
+- **ADR 0015 — `strata validate graph`** (completed): delivers the data foundation for built-in diagrams #1 and #8. This ADR **replaces that command surface** with `strata diagram show` (see "CLI surface" in Part 3) while reusing its `GraphController` verbatim as the `topology` and `files` source types. `dependencyGraphProvider.ts` was removed and replaced by `diagramPreviewProvider.ts`, which delegates to this CLI output rather than doing its own `@repo/` parsing.
 - **ADR 0009 — Extended SBOM**: SBOM catalog diagrams (Category 26) use `strata build sbom --output json`.
 - **ADR 0007 — Deployment State Locking**: Category 25 diagrams use lock manifest data.
 - **ADR 0038 — Multi-Tenant Fleet**: Category 13 and 22 diagrams use fleet deployment data.
 
 ## Implementation Status
 
-Not yet started. This is a proposal for prioritization and roadmap planning.
+Partially implemented — see "Implementation Roadmap" below for the authoritative, phase-by-phase checklist. Summary: the CLI/data-layer foundation (schema, `strata diagram show`/`list`/`resolve`, `strata://` URIs, all built-in sources) is done; the VS Code-side preview pane and click-to-open (`diagramPreviewProvider.ts`) are done; hover tooltips, reverse cursor→node lookup, GUI Builder, and AI chat are not started.
 
 ### What ADR 0015 already delivers (no VS Code work needed for data layer)
 
 | Built-in # | Diagram                        | CLI backing                                                   | VS Code work remaining                                           |
 | ---------- | ------------------------------ | ------------------------------------------------------------- | ---------------------------------------------------------------- |
-| 1          | Infrastructure Topology        | `topology` source (ADR-0015 `GraphController`, resource mode) | Webview + Mermaid render                                         |
-| 8          | Deployment File Reference Tree | `files` source (ADR-0015 `GraphController`, file mode)        | Webview + Mermaid render (replaces `dependencyGraphProvider.ts`) |
+| 1          | Infrastructure Topology        | `topology` source (ADR-0015 `GraphController`, resource mode) | ✅ Done — Webview + Mermaid render in `diagramPreviewProvider.ts` (`Strata: Show Infrastructure Topology`) |
+| 8          | Deployment File Reference Tree | `files` source (ADR-0015 `GraphController`, file mode)        | ✅ Done — Webview + Mermaid render in `diagramPreviewProvider.ts` (replaced `dependencyGraphProvider.ts`) |
 
 Catalog Cat.1 #1, #2 and Cat.6 #49 are also covered by ADR 0015's JSON output.
 
@@ -1414,8 +1414,8 @@ Ordered by the Decision Outcome's priorities: **CLI/YAML foundation first, works
 - [x] Ship built-ins **as `kind: diagram` YAML files**, not hardcoded renderers — one code path with user definitions (`refs`, `topology`; the remaining Top 10 are outstanding)
 - [x] Generate a template from `layout` / `style` when `spec.template` is omitted (flowchart and stateDiagram; other types are a template)
 - [x] **Remove `strata validate graph`** (no deprecation shim); reuse its `GraphController` as the `topology` / `files` source types
-- [ ] VS Code **preview pane** for `.strata/diagrams/*.yaml` — live render on save, Markdown-Preview-style. The only extension surface needed for authoring.
-- [ ] Theme integration per the Design System section (`theme: 'base'` + VS Code CSS variables)
+- [x] VS Code **preview pane** for `.strata/diagrams/*.yaml` — live render on save (`diagramPreviewProvider.ts`; also reachable via built-in `Strata: Show Dependency Graph` / `Strata: Show Infrastructure Topology` commands, which supersede the old `dependencyGraphProvider.ts`)
+- [ ] Theme integration per the Design System section (basic `theme: 'base'` + VS Code CSS variable mapping shipped; the full status-color-ramp/icon token set from the Design System section is not)
 - [x] Test with example workspaces in `config/`
 
 ### Phase 2: Workspace connection (v1.2.0) — *the differentiating feature*
@@ -1423,9 +1423,9 @@ Ordered by the Decision Outcome's priorities: **CLI/YAML foundation first, works
 - [x] `strata diagram resolve strata://... --output json` → `{ file, line }`; headless, not VS Code-specific
 - [x] Emit `click <node> "strata://..."` directives into generated Mermaid
 - [ ] `strata validate` checks `strata://` URIs resolve (catch broken links at validate time, not on a dead click)
-- [ ] `DataSourceResult` / `DiagramNodeData` / `DiagramAction` types (see Node Identity & Click Resolution)
+- [ ] `DataSourceResult` / `DiagramNodeData` / `DiagramAction` types (see Node Identity & Click Resolution) — not needed for click-to-open alone (the CLI-embedded `strata://` URI plus `diagram resolve` was sufficient); still needed for tooltips/secondary actions
 - [ ] `nodeMap` as enrichment cache (tooltips, actions, status) for topology + file-reference sources (ADR-0015 data, already available)
-- [ ] Click → open file at line (`securityLevel: 'loose'` for Mermaid click callbacks)
+- [x] Click → open file at line (`securityLevel: 'loose'` for Mermaid click callbacks; webview intercepts `window.open()` on `strata://` URLs and resolves via `strata diagram resolve` — `diagramPreviewProvider.ts`)
 - [ ] Reverse direction: cursor in YAML → compute URI → highlight matching node
 - [ ] Hover tooltips from `DiagramNodeData.tooltip`
 

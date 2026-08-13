@@ -182,6 +182,32 @@ class TestEnvironmentsSource:
         assert result["nodes"] == []
         assert "cross-repository" in controller.get_errors()[0]
 
+    def test_relative_ref_from_nested_deployment_resolves_against_work_path(self, tmp_path):
+        """Regression test: environments[].file must resolve against work_path,
+        not the deployment file's own directory — matching BaseService._resolve_file_path()."""
+        (tmp_path / "deploy").mkdir()
+        (tmp_path / "deploy" / "deploy.yaml").write_text(
+            "apiVersion: strata.huybrechts.xyz/v1\n"
+            "kind: deployment\n"
+            "meta:\n"
+            "  name: sample_deploy\n"
+            "spec:\n"
+            "  workspace:\n"
+            "    name: sample_ws\n"
+            "    file: workspace.yaml\n"
+            "  environments:\n"
+            "    - file: env-prd.yaml\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "workspace.yaml").write_text(WORKSPACE_YAML, encoding="utf-8")
+        (tmp_path / "env-prd.yaml").write_text(ENVIRONMENT_YAML, encoding="utf-8")
+
+        controller = DiagramSourceController(tmp_path, entry="deploy/deploy.yaml", no_validate=True)
+        result = controller.resolve([_source("environments")])["environments"]
+
+        assert not controller.get_errors()
+        assert {n["id"] for n in result["nodes"]} == {"env_prd"}
+
 
 class TestTenantsSource:
     @pytest.fixture
