@@ -249,6 +249,37 @@ class TestGraphController:
         result = controller.build_file_graph()
         assert controller.has_errors()
 
+    def test_file_graph_ignores_non_dict_yaml(self, tmp_path):
+        """A top-level YAML list (e.g. an Ansible playbook) must be skipped,
+        not crash — yaml.safe_load() can return any YAML type, not just a dict,
+        and _parse_yaml() call sites all assume dict semantics via .get()."""
+        (tmp_path / "playbook.yml").write_text(
+            "- name: a play\n  hosts: all\n  tasks:\n    - name: a task\n      debug:\n        msg: hi\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "deploy.yaml").write_text(
+            "apiVersion: strata.huybrechts.xyz/v1\n"
+            "kind: deployment\n"
+            "meta:\n"
+            "  name: sample_deploy\n"
+            "spec:\n"
+            "  workspace:\n"
+            "    file: workspace.yaml\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "workspace.yaml").write_text(
+            "apiVersion: strata.huybrechts.xyz/v1\nkind: workspace\nmeta:\n  name: sample_ws\nspec: {}\n",
+            encoding="utf-8",
+        )
+
+        controller = GraphController(work_path=tmp_path, no_validate=True)
+        result = controller.build_file_graph()
+
+        assert not controller.has_errors()
+        assert any(n.kind == "deployment" for n in result.nodes)
+        # The playbook is not a strata document — it must not appear as a node
+        assert all("playbook" not in n.identifier for n in result.nodes)
+
 
 class TestGraphCommand:
     def test_graph_help(self):

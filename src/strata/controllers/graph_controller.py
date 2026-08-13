@@ -421,12 +421,19 @@ class GraphController(BaseController):
             return "invalid", [str(e)]
 
     def _parse_yaml(self, file_path: Path) -> Optional[dict]:
-        """Safely parse a YAML file, returning None on failure."""
+        """Safely parse a YAML file, returning None on failure.
+
+        Only returns a dict — YAML files that parse to something else (a list,
+        e.g. an Ansible playbook; a scalar; or null) are not strata documents
+        and are treated the same as an unparseable file, since every strata
+        document is a top-level mapping (apiVersion/kind/meta/spec).
+        """
         try:
             with open(file_path, encoding="utf-8") as f:
-                return yaml.safe_load(f)
+                data = yaml.safe_load(f)
         except Exception:
             return None
+        return data if isinstance(data, dict) else None
 
     def _iter_yaml_files(self) -> list[Path]:
         """List all YAML files in the workspace (excluding hidden dirs)."""
