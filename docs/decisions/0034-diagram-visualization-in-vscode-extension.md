@@ -128,10 +128,10 @@ Partially implemented — see "Implementation Roadmap" below for the authoritati
 
 ### What ADR 0015 already delivers (no VS Code work needed for data layer)
 
-| Built-in # | Diagram                        | CLI backing                                                   | VS Code work remaining                                           |
-| ---------- | ------------------------------ | ------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Built-in # | Diagram                        | CLI backing                                                   | VS Code work remaining                                                                                    |
+| ---------- | ------------------------------ | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | 1          | Infrastructure Topology        | `topology` source (ADR-0015 `GraphController`, resource mode) | ✅ Done — Webview + Mermaid render in `diagramPreviewProvider.ts` (`Strata: Show Infrastructure Topology`) |
-| 8          | Deployment File Reference Tree | `files` source (ADR-0015 `GraphController`, file mode)        | ✅ Done — Webview + Mermaid render in `diagramPreviewProvider.ts` (replaced `dependencyGraphProvider.ts`) |
+| 8          | Deployment File Reference Tree | `files` source (ADR-0015 `GraphController`, file mode)        | ✅ Done — Webview + Mermaid render in `diagramPreviewProvider.ts` (replaced `dependencyGraphProvider.ts`)  |
 
 Catalog Cat.1 #1, #2 and Cat.6 #49 are also covered by ADR 0015's JSON output.
 
