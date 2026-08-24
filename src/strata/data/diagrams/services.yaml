@@ -1,0 +1,29 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: diagram
+meta:
+  name: services
+  annotations:
+    description: "Service (module) dependency graph — modules in the workspace topology and their depends_on relationships, coloured by validation status"
+  labels:
+    version: "1.0.0"
+  tags:
+    - built-in
+spec:
+  sources:
+    - type: modules
+      as: mods
+  template: |
+    flowchart TD
+    {%- set mod_ids = mods.nodes | map(attribute='id') | list %}
+    {%- for value in mods.nodes | map(attribute='status') | unique | sort %}
+      classDef {{ value }} {{ value | token }}
+    {%- endfor %}
+    {%- for n in mods.nodes %}
+      {{ n.id }}["{{ n.label | mermaid_escape }}"]:::{{ n.status }}
+    {%- if n.uri %}
+      click {{ n.id }} "{{ n.uri }}"
+    {%- endif %}
+    {%- endfor %}
+    {%- for e in mods.edges if e.label == 'depends_on' and e.source in mod_ids and e.target in mod_ids %}
+      {{ e.source }} -->|depends on| {{ e.target }}
+    {%- endfor %}

@@ -20,6 +20,7 @@
  *   /values   — inspect resolved deployment values
  *   /drift    — run drift detection on a deployment
  *   /repos    — show repository status with release/quality-gate tags
+ *   /diagram  — list diagrams, or show one: /diagram show <name>
  */
 
 import * as vscode from 'vscode';
@@ -29,7 +30,7 @@ import { AiPromptBuilder } from './aiPromptBuilder';
 const PARTICIPANT_ID = 'strata.chat';
 
 /** Slash-command metadata registered in package.json `chatParticipants[].commands`. */
-type SlashCommand = 'status' | 'validate' | 'guide' | 'build' | 'deploy' | 'stage' | 'values' | 'drift' | 'repos' | 'promote' | 'versions' | 'review' | 'diagnose' | 'sbom' | 'approvals';
+type SlashCommand = 'status' | 'validate' | 'guide' | 'build' | 'deploy' | 'stage' | 'values' | 'drift' | 'repos' | 'promote' | 'versions' | 'review' | 'diagnose' | 'sbom' | 'approvals' | 'diagram';
 
 export class StrataChatParticipant implements vscode.Disposable {
     private _participant: vscode.ChatParticipant | undefined;
@@ -108,6 +109,8 @@ export class StrataChatParticipant implements vscode.Disposable {
                     return await this._handleSbom(request, response, token);
                 case 'approvals':
                     return await this._handleApprovals(response, token);
+                case 'diagram':
+                    return await this._handleDiagram(request, response, token);
                 default:
                     return await this._handleFreeform(request, response, token);
             }
@@ -970,6 +973,67 @@ export class StrataChatParticipant implements vscode.Disposable {
         return { metadata: { command: 'approvals' } };
     }
 
+    // ── /diagram ───────────────────────────────────────────────────────────────
+
+    /**
+     * `/diagram` — bare or `list` shows the catalog (built-ins + workspace
+     * definitions under `.strata/diagrams/`); `/diagram show <name>` opens the
+     * named one in the preview pane (ADR-0034 Phase 3).
+     */
+    private async _handleDiagram(
+        request: vscode.ChatRequest,
+        response: vscode.ChatResponseStream,
+        _token: vscode.CancellationToken,
+    ): Promise<vscode.ChatResult> {
+        if (!this._client) {
+            response.markdown('⚠️ Strata CLI is not available.');
+            return { metadata: { command: 'diagram' } };
+        }
+
+        const args = request.prompt.trim().split(/\s+/).filter(Boolean);
+        const verb = (args[0] ?? 'list').toLowerCase();
+
+        if (verb === 'show' && args[1]) {
+            const name = args[1];
+            response.markdown(`Opening **${name}**…\n`);
+            await vscode.commands.executeCommand('strata.previewDiagramFile', name);
+            response.button({ title: `Reopen ${name}`, command: 'strata.previewDiagramFile', arguments: [name] });
+            return { metadata: { command: 'diagram' } };
+        }
+
+        response.progress('Loading diagram catalog…');
+
+        let diagrams: import('../strataClient').DiagramListEntry[] = [];
+        try {
+            diagrams = await this._client.listDiagrams();
+        } catch (err) {
+            response.markdown(`**Error loading diagrams:** ${err instanceof Error ? err.message : String(err)}`);
+            return { metadata: { command: 'diagram' } };
+        }
+
+        if (diagrams.length === 0) {
+            response.markdown('No diagram definitions found.\n');
+            return { metadata: { command: 'diagram' } };
+        }
+
+        response.markdown(`## 📊 Diagrams (${diagrams.length})\n\n`);
+        const builtIns = diagrams.filter(d => d.source === 'built-in');
+        const workspace = diagrams.filter(d => d.source !== 'built-in');
+
+        for (const [label, group] of [['Built-in', builtIns], ['Workspace', workspace]] as const) {
+            if (group.length === 0) continue;
+            response.markdown(`### ${label}\n\n`);
+            for (const d of group) {
+                response.markdown(`**${d.name}** — ${d.description || '*(no description)*'}\n\n`);
+                response.button({ title: `Show ${d.name}`, command: 'strata.previewDiagramFile', arguments: [d.name] });
+                response.markdown('\n');
+            }
+        }
+
+        response.markdown(`\n**CLI:** \`strata diagram show -f <name>\`\n`);
+        return { metadata: { command: 'diagram' } };
+    }
+
     // ── Follow-ups ─────────────────────────────────────────────────────────────
 
     private _provideFollowups(result: vscode.ChatResult): vscode.ChatFollowup[] {
@@ -981,6 +1045,11 @@ export class StrataChatParticipant implements vscode.Disposable {
                     { prompt: '', label: 'Show readiness guide', command: 'guide' },
                     { prompt: '', label: 'Check repositories', command: 'repos' },
                     { prompt: '', label: 'Inspect values', command: 'values' },
+                ];
+            case 'diagram':
+                return [
+                    { prompt: 'show topology', label: 'Show topology', command: 'diagram' },
+                    { prompt: 'show refs', label: 'Show file references', command: 'diagram' },
                 ];
             case 'validate':
                 return [

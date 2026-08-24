@@ -1,11 +1,11 @@
 # Diagram visualization in VS Code extension
 
-- Status: partially-implemented — Phase 1 CLI/YAML foundation ✅ Done; Phase 2 workspace connection ✅ Done (URI scheme, `diagram resolve`, `click` directives, VS Code click-to-open-file, hover tooltips, reverse cursor→node lookup, `strata validate --deep` link-rot check); Phase 3 source coverage ✅ Done (all built-in sources implemented), cookbook/sidebar/chat commands not started; Phase 4 GUI Builder + AI chat not started; Phase 5 advanced features not started
+- Status: partially-implemented — Phase 1 CLI/YAML foundation ✅ Done; Phase 2 workspace connection ✅ Done (URI scheme, `diagram resolve`, `click` directives, VS Code click-to-open-file, hover tooltips, reverse cursor→node lookup, `strata validate --deep` link-rot check); Phase 3 source coverage + cookbook ✅ Done (all built-in sources, all 10 Top-10 built-ins, `strataDiagrams` sidebar view, `/diagram` chat command — see checklist for what was honestly scoped down); Phase 4 GUI Builder + AI chat not started; Phase 5 advanced features not started
 - Date: 2026-07-11 (revised 2026-08-13 — repositioned from "strata owns a diagram system" to "strata generates Mermaid fragments and connects them to the workspace; users compose freely")
 
 ## Remaining Work
 
-- Phase 1, 2, and 3 are functionally complete. Remaining Phase 2 item (`nodeMap` enrichment cache) is deferred, not blocking — only needed if secondary node actions beyond open-file are added later. Still outstanding overall: per-data-source icon conventions, the rest of Phase 3's cookbook/sidebar/chat surface, GUI Builder, AI chat generation. See "Implementation Roadmap" for the authoritative checklist.
+- Phase 1, 2, and 3 are functionally complete. Remaining Phase 2 item (`nodeMap` enrichment cache) is deferred, not blocking — only needed if secondary node actions beyond open-file are added later. Phase 3's cookbook/sidebar/chat items are done but scoped down from their original description (see checklist: no 185-entry catalog data exists to browse, only 1 of 5 non-flowchart template types done, generic `/diagram` command instead of 10 bespoke ones). Still outstanding overall: per-data-source icon conventions, the remaining 4 non-flowchart cookbook templates, GUI Builder, AI chat generation. See "Implementation Roadmap" for the authoritative checklist.
 
 ## Context and Problem Statement
 
@@ -124,7 +124,7 @@ Concretely, strata provides:
 
 ## Implementation Status
 
-Partially implemented — see "Implementation Roadmap" below for the authoritative, phase-by-phase checklist. Summary: Phases 1–3 are functionally complete — CLI/data-layer foundation, VS Code preview pane, click-to-open, theme integration, hover tooltips, reverse cursor→node lookup (`diagramPreviewProvider.ts`), and `strata validate --deep` link-rot checking (`DiagramService._validate_dynamic()`) are all done. GUI Builder and AI chat generation (Phase 4) are not started.
+Partially implemented — see "Implementation Roadmap" below for the authoritative, phase-by-phase checklist. Summary: Phases 1–3 are functionally complete — CLI/data-layer foundation, VS Code preview pane, click-to-open, theme integration, hover tooltips, reverse cursor→node lookup (`diagramPreviewProvider.ts`), `strata validate --deep` link-rot checking (`DiagramService._validate_dynamic()`), all 10 Top-10 built-ins, the `strataDiagrams` sidebar (`diagramsViewProvider.ts`), and the `/diagram` chat command are all done. GUI Builder and AI chat generation (Phase 4) are not started.
 
 ### What ADR 0015 already delivers (no VS Code work needed for data layer)
 
@@ -1457,10 +1457,10 @@ Ordered by the Decision Outcome's priorities: **CLI/YAML foundation first, works
       live `terraform output` or a fresh SBOM scan. `outputs` surfaces only an output's key, stage,
       and sensitivity flag — never the value, regardless of the cache's own filtering. `sbom`
       surfaces full component identity (name/version/purl/properties) — not secret-like
-- [ ] Remaining Top 10 built-ins, shipped as `kind: diagram` files
-- [ ] Cookbook browser in sidebar (search + filter by category) — recipes, not 185 renderers
-- [ ] Worked Jinja templates for the non-flowchart cookbook entries (pie/gantt/sequence/quadrant/sankey)
-- [ ] `/diagram list` and `/diagram show` chat commands
+- [x] Remaining Top 10 built-ins, shipped as `kind: diagram` files — `stages` (#2), `promotion` (#3), `network` (#4, combines `network`/`firewalls`/`dns`), `services` (#5, module dependency graph — a "service" node kind doesn't exist in the data model, so this is honestly scoped to modules), `environments` (#6), `secrets` (#7), `timeline` (#9, gantt — see below), `architecture` (#10, combines `topology`/`environments`). 6 of the 8 use pure `layout`/`style` sugar (no `spec.template` authored at all — first real proof the generator works end-to-end); `services` and `timeline` needed hand-written templates (edge filtering / gantt is not sugar-generatable)
+- [x] Cookbook browser in sidebar — scoped down from the original ask: the ADR's Part 2 catalog (185 entries) is prose in this document, not machine-readable data the CLI serves, so there is nothing to browse there yet. Shipped instead: a `strataDiagrams` tree view listing `strata diagram list` output (built-ins + workspace definitions), grouped by source, with a text filter across name/description (`strata.filterDiagrams`) — not filter-by-category, since the data has no category field
+- [x] Worked Jinja templates for the non-flowchart cookbook entries — only `gantt` done (`timeline.yaml`, milestone-based since the audit trail has no per-stage duration data); `pie`/`sequence`/`quadrant`/`sankey` still outstanding
+- [x] `/diagram list` and `/diagram show` chat commands — one `/diagram` command (`/diagram` or `/diagram list` to browse, `/diagram show <name>` to open), not the ten bespoke per-diagram slash commands (`/topology`, `/stages`, ...) Part 1's table originally sketched
 
 ### Phase 4: Generators — GUI Builder + AI chat (v1.4.0)
 *Both are convenience generators emitting a Phase-1 `kind: diagram` file — neither is required for any capability above.*

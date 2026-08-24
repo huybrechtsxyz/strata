@@ -1,0 +1,21 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: diagram
+meta:
+  name: network
+  annotations:
+    description: "Network topology — networks (with peerings), firewalls, and DNS zones combined, grouped by kind"
+  labels:
+    version: "1.0.0"
+  tags:
+    - built-in
+spec:
+  sources:
+    - type: network
+    - type: firewalls
+    - type: dns
+  layout:
+    type: flowchart
+    direction: TD
+  style:
+    color_by: kind
+    group_by: kind

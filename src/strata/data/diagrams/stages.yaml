@@ -1,0 +1,16 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: diagram
+meta:
+  name: stages
+  annotations:
+    description: "Deployment stage flow — execution order and depends_on dependencies for the resolved deployment"
+  labels:
+    version: "1.0.0"
+  tags:
+    - built-in
+spec:
+  sources:
+    - type: stages
+  layout:
+    type: flowchart
+    direction: TD

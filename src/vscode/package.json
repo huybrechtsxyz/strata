@@ -96,6 +96,10 @@
           {
             "name": "approvals",
             "description": "Show pending work items (approval gates, cost reviews, security reviews)"
+          },
+          {
+            "name": "diagram",
+            "description": "List available diagrams, or show one: /diagram show <name>"
           }
         ]
       }
@@ -230,6 +234,16 @@
         "command": "strata.previewDiagramFile",
         "title": "Strata: Preview Diagram",
         "icon": "$(preview)"
+      },
+      {
+        "command": "strata.refreshDiagrams",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "strata.filterDiagrams",
+        "title": "Filter Diagrams",
+        "icon": "$(filter)"
       },
       {
         "command": "strata.refreshTreeView",
@@ -462,6 +476,11 @@
           "id": "strataHelp",
           "name": "Help",
           "contextualTitle": "Strata Help"
+        },
+        {
+          "id": "strataDiagrams",
+          "name": "Diagrams",
+          "contextualTitle": "Strata Diagrams"
         }
       ]
     },
@@ -515,6 +534,16 @@
         {
           "command": "strata.showHelp",
           "when": "view == strataHelp",
+          "group": "navigation"
+        },
+        {
+          "command": "strata.refreshDiagrams",
+          "when": "view == strataDiagrams",
+          "group": "navigation"
+        },
+        {
+          "command": "strata.filterDiagrams",
+          "when": "view == strataDiagrams",
           "group": "navigation"
         },
         {

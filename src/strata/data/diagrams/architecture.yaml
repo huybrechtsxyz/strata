@@ -1,0 +1,20 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: diagram
+meta:
+  name: architecture
+  annotations:
+    description: "Full platform architecture — the workspace's resource/module/namespace/network topology combined with the environments the resolved deployment references, grouped by kind"
+  labels:
+    version: "1.0.0"
+  tags:
+    - built-in
+spec:
+  sources:
+    - type: topology
+    - type: environments
+  layout:
+    type: flowchart
+    direction: TD
+  style:
+    color_by: kind
+    group_by: kind
