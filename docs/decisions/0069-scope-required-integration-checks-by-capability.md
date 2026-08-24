@@ -48,6 +48,29 @@ exactly the failure haven hit. Not urgent, not a regression — but worth closin
 the gap in the contract itself rather than relying on every future call site
 independently remembering to downgrade it to a warning.
 
+### Related gap: `is_available()` is PATH-only
+
+`BaseIntegration.is_available()`
+([src/strata/integrations/base_integration.py](../../src/strata/integrations/base_integration.py#L403))
+determines availability solely by running `get_version_command()` (e.g.
+`git --version`) and checking the exit code — i.e. "is the binary resolvable
+on `PATH`". There is currently no fallback that also recognizes an integration
+as available via an environment variable (e.g. an auth-token/endpoint env var
+indicating the integration is reachable through an API rather than a local
+CLI, or an env var pointing at a non-`PATH` executable location). This is a
+narrower, related blind spot to the scoping problem above: even once a
+`required: true` check is correctly scoped to the capability a command needs
+(Option B), it can still misreport "not available" for an integration whose
+presence is legitimately signaled by an env var instead of a `PATH` lookup.
+Confirmed real-world instance: `Dockerfile.cli` (`python:3.13-slim`) doesn't
+install `git`, so any command that reaches `initialize_integrations()` inside
+that image would fail the `git` `required: true` check today, regardless of
+capability-scoping — a PATH-and/or-env-var-aware `is_available()` would let
+such environments signal availability without installing the CLI. Should be
+addressed alongside the capability-filter work (Option B) rather than as a
+separate, uncoordinated change, since both touch the same availability
+contract.
+
 ## Considered Options
 
 - **A. Status quo.** Keep `validate_required_integrations()` global/config-wide.
@@ -76,7 +99,10 @@ picked up, **Option B** is the recommended direction: it keeps one config-wide
 sanity view for `sln doctor`/`strata tools status` while letting scoped callers
 (`ValueController`, future controllers) ask "are only the integrations *I* need
 okay?" instead of relying on downstream code to swallow an unrelated failure as
-a warning.
+a warning. The `is_available()` PATH-only gap noted above should be fixed in
+the same pass — checking a PATH-and/or-env-var signal — since a scoped check
+that still can't recognize env-var-signaled availability only half-closes the
+underlying "false not-available" problem.
 
 ### Consequences
 
