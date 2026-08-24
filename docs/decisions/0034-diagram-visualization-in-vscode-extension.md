@@ -1385,18 +1385,20 @@ When a user composes a diagram from multiple sources in the Builder (Part 3), th
 
 ## Open Questions
 
-1. Should the builder support **composed diagrams** (multiple sub-diagrams in a single view, e.g., topology + stage flow side by side)?
-2. Should saved diagrams support **parameterization** (e.g., `${environment}` resolved from active profile)?
-3. Should the builder support **comparison mode** (e.g., "show topology for dev vs prd side by side")?
-4. Should diagrams be **publishable** (export to Confluence, GitHub wiki, or docs folder)?
-5. Should we provide a **diagram gallery** in the extension marketplace for community-shared diagram definitions?
-6. Should there be a **dashboard mode** (pin 4–6 diagrams to a persistent panel, auto-refresh)?
-7. Should we cache diagram data or re-resolve on every render?
-8. How do we handle very large topologies (50+ modules, 200+ services)? Collapse/expand? Pagination? Zoom?
-9. Should the AI chat generate diagrams proactively (e.g., after a deployment, auto-show stage timeline)?
-10. Should we support Mermaid alternatives (D3.js, Elk.js) for complex layouts that Mermaid handles poorly?
-11. Should diagram definitions support **inheritance** (extend a base diagram with additional sources/filters)?
-12. Maximum Mermaid node count before performance degrades? Need benchmarks.
+> **2026-08-24 review:** questions #2/#3/#5/#6 were flagged as blocking Phase 4's Visual Builder scope, but the roadmap already answers them — they're verbatim Phase 5 checklist items. #1 turned out not to need a decision at all: Phase 3 built two diagrams (`network`, `architecture`) that already compose 2–3 sources into one view via `group_by` subgraphs, proving "composed diagrams" is just "the sources picker lets you add more than one source" — the Builder's basic mechanic, not a separate mode. Net effect: the Phase 4 Visual Builder only needs to compose **one** diagram (sources → layout/style → live preview) against **one** context; no composition/comparison/dashboard mode required for v1.
+
+1. ~~Should the builder support **composed diagrams**~~ — **Resolved, no**: already possible today via `spec.sources` (multiple entries) + `style.group_by`, demonstrated by `network.yaml`/`architecture.yaml` (Phase 3). Not a distinct Builder feature — it's the sources picker doing its normal job.
+2. ~~Should saved diagrams support **parameterization**~~ — **Resolved: deferred to Phase 5** (already listed there: `${profile}`, `${environment}`).
+3. ~~Should the builder support **comparison mode**~~ — **Resolved: deferred to Phase 5** (already listed there). Needs new design work Phase 4 doesn't: rendering the same definition against two different profile/entry contexts and a split-view UI.
+4. Should diagrams be **publishable** (export to Confluence, GitHub wiki, or docs folder)? — Still open; not a Phase 4 blocker.
+5. ~~Should we provide a **diagram gallery**~~ — **Resolved: deferred to Phase 5** (already listed there).
+6. ~~Should there be a **dashboard mode**~~ — **Resolved: deferred to Phase 5** (already listed there). A persistent multi-panel VS Code UI feature, unrelated to composing one diagram.
+7. Should we cache diagram data or re-resolve on every render? — Still open; not a Phase 4 blocker.
+8. How do we handle very large topologies (50+ modules, 200+ services)? Collapse/expand? Pagination? Zoom? — Still open; not a Phase 4 blocker.
+9. Should the AI chat generate diagrams proactively (e.g., after a deployment, auto-show stage timeline)? — Still open; not a Phase 4 blocker (Phase 4's chat item is reactive NL→diagram, not proactive).
+10. Should we support Mermaid alternatives (D3.js, Elk.js) for complex layouts that Mermaid handles poorly? — Still open; not a Phase 4 blocker.
+11. Should diagram definitions support **inheritance** (extend a base diagram with additional sources/filters)? — Still open; not a Phase 4 blocker.
+12. Maximum Mermaid node count before performance degrades? Need benchmarks. — Still open; not a Phase 4 blocker.
 
 ---
 
@@ -1464,9 +1466,12 @@ Ordered by the Decision Outcome's priorities: **CLI/YAML foundation first, works
 
 ### Phase 4: Generators — GUI Builder + AI chat (v1.4.0)
 *Both are convenience generators emitting a Phase-1 `kind: diagram` file — neither is required for any capability above.*
+
+**Scope, clarified 2026-08-24 (see Open Questions):** composition/comparison/dashboard modes are explicitly out of scope here — composition is just the sources picker accepting more than one source (already proven possible, no new mechanism needed); comparison and dashboard modes are Phase 5. The Builder targets **one** diagram, **one** context, **one** preview.
+
 - [ ] Visual Builder UI (sources picker, layout selector, live preview)
 - [ ] Round-trip guarantee: Builder output is hand-editable; hand-written definitions load back into the Builder; `--print-template` is the escape route for users who outgrow the sugar
-- [ ] Natural language → diagram definition in chat
+- [ ] Natural language → diagram definition in chat — **scoped 2026-08-24**: the LLM emits only `sources`/`layout`/`style` (the sugar), never a hand-written `spec.template` — a small closed vocabulary (~23 source `type` values, `color_by`/`group_by` as field names off the known node shape, small layout enums) is a bounded extraction task, not free-form code generation. Every proposal is run through the existing `DiagramService.validate()` pipeline (the same Phase 1/1.5/2 checks hand-authored diagrams already get, including the `--deep` link-rot check) before ever being rendered or offered for saving; an invalid result gets exactly one retry with the validation errors fed back to the LLM, then falls back to surfacing those errors to the user like any hand-authored typo — never a silently-broken diagram. This bounds the risk without needing the accuracy itself proven first (see Next Steps item 7).
 - [ ] Export to SVG/PNG/Mermaid markdown
 
 ### Phase 5: Advanced features (v1.5.0+)
@@ -1495,4 +1500,4 @@ Ordered by the Decision Outcome's priorities: **CLI/YAML foundation first, works
 4. Design the Diagram Builder UX — mockups and interaction patterns
 5. Define the `diagram` kind schema for `strata validate` support
 6. Plan CLI `strata diagram` command group implementation
-7. Evaluate AI-assisted diagram generation accuracy (natural language → YAML definition)
+7. Evaluate AI-assisted diagram generation accuracy (natural language → YAML definition) — **narrowed 2026-08-24**: only the `sources`/`layout`/`style` sugar is in scope for generation (see Phase 4 checklist), validated through the existing `DiagramService.validate()` pipeline with a one-retry repair loop; what's left to actually evaluate is prompt quality against real user phrasings, not whether unconstrained LLM-authored Jinja is safe (it was never going to be attempted).
