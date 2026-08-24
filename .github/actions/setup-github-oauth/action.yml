@@ -1,0 +1,48 @@
+# ===============================================================================
+# Action Name  : setup-github-oauth
+# Description  : Configure credentials for strata's github_oauth identity
+#                integration. API-only.
+# ===============================================================================
+
+name: "Setup GitHub OAuth"
+description: "Configure GitHub OAuth App credentials for strata's github_oauth identity integration."
+
+branding:
+  icon: "key"
+  color: "gray-dark"
+
+inputs:
+  client-id:
+    description: "GitHub OAuth App client ID."
+    required: true
+  client-secret:
+    description: "GitHub OAuth App client secret."
+    required: false
+    default: ""
+  client-id-env-var:
+    description: "Env var name the client ID is written to."
+    required: false
+    default: "GITHUB_OAUTH_CLIENT_ID"
+  client-secret-env-var:
+    description: "Env var name the client secret is written to."
+    required: false
+    default: "GITHUB_OAUTH_CLIENT_SECRET"
+
+runs:
+  using: composite
+  steps:
+    - name: Configure GitHub OAuth Environment Variables
+      shell: bash
+      env:
+        _CLIENT_ID: ${{ inputs.client-id }}
+        _CLIENT_SECRET: ${{ inputs.client-secret }}
+        _ID_VAR: ${{ inputs.client-id-env-var }}
+        _SECRET_VAR: ${{ inputs.client-secret-env-var }}
+      run: |
+        [ -n "$_CLIENT_SECRET" ] && echo "::add-mask::$_CLIENT_SECRET"
+        _write_env() {
+          printf '%s<<__STRATA_DELIM__\n%s\n__STRATA_DELIM__\n' "$1" "$2" >> "$GITHUB_ENV"
+        }
+        _write_env "$_ID_VAR" "$_CLIENT_ID"
+        [ -n "$_CLIENT_SECRET" ] && _write_env "$_SECRET_VAR" "$_CLIENT_SECRET"
+        echo "[+] GitHub OAuth configured"

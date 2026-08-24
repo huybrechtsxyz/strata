@@ -1,0 +1,31 @@
+# ===============================================================================
+# Action Name  : setup-helm
+# Description  : Install Helm for strata's helm integration. Wraps the
+#                official azure/setup-helm action (no Azure dependency —
+#                the action name is historical, it installs vanilla Helm).
+# ===============================================================================
+
+name: "Setup Helm"
+description: "Install Helm for strata's helm integration."
+
+branding:
+  icon: "package"
+  color: "blue"
+
+inputs:
+  helm-version:
+    description: "Helm version to install (e.g. 'v3.16.1'). Defaults to latest."
+    required: false
+    default: "latest"
+
+runs:
+  using: composite
+  steps:
+    - name: Install Helm
+      uses: azure/setup-helm@v4
+      with:
+        version: ${{ inputs.helm-version }}
+
+    - name: Verify Helm
+      shell: bash
+      run: helm version

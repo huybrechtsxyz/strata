@@ -1,0 +1,77 @@
+# ===============================================================================
+# Action Name  : setup-etcd
+# Description  : Install etcdctl and configure credentials for strata's etcd
+#                integration. The CLI is required.
+# ===============================================================================
+
+name: "Setup etcd"
+description: "Install etcdctl and configure authentication for strata's etcd integration."
+
+branding:
+  icon: "database"
+  color: "blue"
+
+inputs:
+  endpoints:
+    description: "Comma-separated etcd endpoints (ETCD_ENDPOINTS), e.g. 'https://etcd1:2379,https://etcd2:2379'."
+    required: true
+  username:
+    description: "etcd username (ETCD_USERNAME)."
+    required: false
+    default: ""
+  password:
+    description: "etcd password (ETCD_PASSWORD)."
+    required: false
+    default: ""
+  ca-file:
+    description: "Path to CA certificate file (ETCD_CA_FILE)."
+    required: false
+    default: ""
+  cert-file:
+    description: "Path to client certificate file (ETCD_CERT_FILE)."
+    required: false
+    default: ""
+  key-file:
+    description: "Path to client key file (ETCD_KEY_FILE)."
+    required: false
+    default: ""
+  etcd-version:
+    description: "etcd release version to install (without leading 'v'), e.g. '3.5.16'."
+    required: false
+    default: "3.5.16"
+
+runs:
+  using: composite
+  steps:
+    - name: Install etcdctl
+      shell: bash
+      env:
+        _VERSION: ${{ inputs.etcd-version }}
+      run: |
+        curl -Lo /tmp/etcd.tar.gz "https://github.com/etcd-io/etcd/releases/download/v${_VERSION}/etcd-v${_VERSION}-linux-amd64.tar.gz"
+        mkdir -p /tmp/etcd-extract
+        tar xzf /tmp/etcd.tar.gz -C /tmp/etcd-extract --strip-components=1
+        sudo mv /tmp/etcd-extract/etcdctl /usr/local/bin/etcdctl
+        etcdctl version
+
+    - name: Configure etcd Environment Variables
+      shell: bash
+      env:
+        _ENDPOINTS: ${{ inputs.endpoints }}
+        _USERNAME: ${{ inputs.username }}
+        _PASSWORD: ${{ inputs.password }}
+        _CA_FILE: ${{ inputs.ca-file }}
+        _CERT_FILE: ${{ inputs.cert-file }}
+        _KEY_FILE: ${{ inputs.key-file }}
+      run: |
+        [ -n "$_PASSWORD" ] && echo "::add-mask::$_PASSWORD"
+        _write_env() {
+          printf '%s<<__STRATA_DELIM__\n%s\n__STRATA_DELIM__\n' "$1" "$2" >> "$GITHUB_ENV"
+        }
+        _write_env ETCD_ENDPOINTS "$_ENDPOINTS"
+        [ -n "$_USERNAME" ]  && _write_env ETCD_USERNAME "$_USERNAME"
+        [ -n "$_PASSWORD" ]  && _write_env ETCD_PASSWORD "$_PASSWORD"
+        [ -n "$_CA_FILE" ]   && _write_env ETCD_CA_FILE "$_CA_FILE"
+        [ -n "$_CERT_FILE" ] && _write_env ETCD_CERT_FILE "$_CERT_FILE"
+        [ -n "$_KEY_FILE" ]  && _write_env ETCD_KEY_FILE "$_KEY_FILE"
+        echo "[+] etcd configured"

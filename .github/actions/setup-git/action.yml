@@ -1,0 +1,41 @@
+# ===============================================================================
+# Action Name  : setup-git
+# Description  : Verify git availability for strata's git integration. git is
+#                preinstalled on all GitHub-hosted runners — this action only
+#                confirms it and configures identity for automated commits.
+# ===============================================================================
+
+name: "Setup Git"
+description: "Verify git availability and optionally configure commit identity for strata's git integration."
+
+branding:
+  icon: "git-commit"
+  color: "gray-dark"
+
+inputs:
+  user-name:
+    description: "git user.name to configure for automated commits (e.g. workflow tags)."
+    required: false
+    default: ""
+  user-email:
+    description: "git user.email to configure for automated commits."
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Verify git
+      shell: bash
+      run: git --version
+
+    - name: Configure git identity
+      if: ${{ inputs.user-name != '' }}
+      shell: bash
+      env:
+        _NAME: ${{ inputs.user-name }}
+        _EMAIL: ${{ inputs.user-email }}
+      run: |
+        git config --global user.name "$_NAME"
+        [ -n "$_EMAIL" ] && git config --global user.email "$_EMAIL"
+        echo "[+] git identity configured ($_NAME)"

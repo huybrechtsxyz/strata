@@ -1,0 +1,41 @@
+# ===============================================================================
+# Action Name  : setup-otel
+# Description  : Configure credentials for strata's otel SIEM sink
+#                integration (OpenTelemetry collector). HTTP-based.
+# ===============================================================================
+
+name: "Setup OpenTelemetry"
+description: "Configure OpenTelemetry collector credentials for strata's otel integration."
+
+branding:
+  icon: "activity"
+  color: "purple"
+
+inputs:
+  endpoint:
+    description: "OTel collector endpoint URL (matches the deployment YAML's endpoints.address)."
+    required: true
+  auth-token:
+    description: "Bearer token for the collector, if authenticated. Leave empty for unauthenticated collectors."
+    required: false
+    default: ""
+  auth-token-env-var:
+    description: "Env var name the token is written to (referenced by the deployment YAML's secret_ref)."
+    required: false
+    default: "OTEL_AUTH_TOKEN"
+
+runs:
+  using: composite
+  steps:
+    - name: Configure OTel Environment Variables
+      shell: bash
+      env:
+        _TOKEN: ${{ inputs.auth-token }}
+        _TOKEN_VAR: ${{ inputs.auth-token-env-var }}
+        _ENDPOINT: ${{ inputs.endpoint }}
+      run: |
+        if [ -n "$_TOKEN" ]; then
+          echo "::add-mask::$_TOKEN"
+          printf '%s<<__STRATA_DELIM__\n%s\n__STRATA_DELIM__\n' "$_TOKEN_VAR" "$_TOKEN" >> "$GITHUB_ENV"
+        fi
+        echo "[+] OTel configured (endpoint: $_ENDPOINT)"

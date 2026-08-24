@@ -1,0 +1,96 @@
+# ===============================================================================
+# Action Name  : setup-openbao
+# Description  : Install the OpenBao CLI (`bao`) and configure credentials.
+#                OpenBaoIntegration subclasses VaultIntegration and reuses the
+#                same VAULT_* env vars and the CLI is REQUIRED, not optional.
+# ===============================================================================
+
+name: "Setup OpenBao"
+description: "Install the OpenBao CLI (bao) and configure authentication for strata's openbao integration."
+
+branding:
+  icon: "lock"
+  color: "gray-dark"
+
+inputs:
+  auth-method:
+    description: "Authentication method: 'token', 'approle', or 'kubernetes'."
+    required: false
+    default: "token"
+  address:
+    description: "OpenBao server address (VAULT_ADDR — OpenBao reuses Vault's env var names)."
+    required: true
+  token:
+    description: "OpenBao token (VAULT_TOKEN). Required when auth-method is token."
+    required: false
+    default: ""
+  role-id:
+    description: "AppRole role ID (VAULT_ROLE_ID). Required when auth-method is approle."
+    required: false
+    default: ""
+  secret-id:
+    description: "AppRole secret ID (VAULT_SECRET_ID). Required when auth-method is approle."
+    required: false
+    default: ""
+  k8s-role:
+    description: "Kubernetes auth role (VAULT_K8S_ROLE). Required when auth-method is kubernetes."
+    required: false
+    default: ""
+  openbao-version:
+    description: "OpenBao version to install (without leading 'v'), e.g. '2.1.0'."
+    required: false
+    default: "2.1.0"
+
+runs:
+  using: composite
+  steps:
+    - name: Install OpenBao CLI
+      shell: bash
+      env:
+        _VERSION: ${{ inputs.openbao-version }}
+      run: |
+        curl -Lo /tmp/bao.zip "https://github.com/openbao/openbao/releases/download/v${_VERSION}/bao_${_VERSION}_linux_amd64.zip"
+        sudo unzip -o /tmp/bao.zip -d /usr/local/bin
+        sudo chmod +x /usr/local/bin/bao
+        bao version
+
+    - name: Configure OpenBao Environment Variables
+      shell: bash
+      env:
+        _AUTH_METHOD: ${{ inputs.auth-method }}
+        _ADDRESS: ${{ inputs.address }}
+        _TOKEN: ${{ inputs.token }}
+        _ROLE_ID: ${{ inputs.role-id }}
+        _SECRET_ID: ${{ inputs.secret-id }}
+        _K8S_ROLE: ${{ inputs.k8s-role }}
+      run: |
+        [ -n "$_TOKEN" ] && echo "::add-mask::$_TOKEN"
+        [ -n "$_SECRET_ID" ] && echo "::add-mask::$_SECRET_ID"
+
+        _write_env() {
+          printf '%s<<__STRATA_DELIM__\n%s\n__STRATA_DELIM__\n' "$1" "$2" >> "$GITHUB_ENV"
+        }
+
+        _write_env VAULT_ADDR "$_ADDRESS"
+
+        case "$_AUTH_METHOD" in
+          token)
+            [ -z "$_TOKEN" ] && { echo "::error::setup-openbao: auth-method 'token' requires the 'token' input."; exit 1; }
+            _write_env VAULT_TOKEN "$_TOKEN"
+            ;;
+          approle)
+            [ -z "$_ROLE_ID" ] || [ -z "$_SECRET_ID" ] && { echo "::error::setup-openbao: auth-method 'approle' requires role-id and secret-id."; exit 1; }
+            _write_env VAULT_ROLE_ID "$_ROLE_ID"
+            _write_env VAULT_SECRET_ID "$_SECRET_ID"
+            ;;
+          kubernetes)
+            [ -z "$_K8S_ROLE" ] && { echo "::error::setup-openbao: auth-method 'kubernetes' requires k8s-role."; exit 1; }
+            _write_env VAULT_K8S_ROLE "$_K8S_ROLE"
+            ;;
+          *)
+            echo "::error::setup-openbao: unknown auth-method '$_AUTH_METHOD' (expected token|approle|kubernetes)."
+            exit 1
+            ;;
+        esac
+
+        echo "[+] OpenBao configured (auth-method: $_AUTH_METHOD)"

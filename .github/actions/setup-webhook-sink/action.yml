@@ -1,0 +1,41 @@
+# ===============================================================================
+# Action Name  : setup-webhook-sink
+# Description  : Configure credentials for strata's webhook SIEM sink
+#                integration (generic HTTP POST sink). HTTP-based.
+# ===============================================================================
+
+name: "Setup Webhook Sink"
+description: "Configure a generic webhook sink for strata's webhook integration."
+
+branding:
+  icon: "send"
+  color: "gray-dark"
+
+inputs:
+  url:
+    description: "Webhook URL (matches the deployment YAML's endpoints.address)."
+    required: true
+  auth-token:
+    description: "Bearer/API token for the webhook endpoint, if required."
+    required: false
+    default: ""
+  auth-token-env-var:
+    description: "Env var name the token is written to (referenced by the deployment YAML's secret_ref)."
+    required: false
+    default: "WEBHOOK_AUTH_TOKEN"
+
+runs:
+  using: composite
+  steps:
+    - name: Configure Webhook Environment Variables
+      shell: bash
+      env:
+        _TOKEN: ${{ inputs.auth-token }}
+        _TOKEN_VAR: ${{ inputs.auth-token-env-var }}
+        _URL: ${{ inputs.url }}
+      run: |
+        if [ -n "$_TOKEN" ]; then
+          echo "::add-mask::$_TOKEN"
+          printf '%s<<__STRATA_DELIM__\n%s\n__STRATA_DELIM__\n' "$_TOKEN_VAR" "$_TOKEN" >> "$GITHUB_ENV"
+        fi
+        echo "[+] Webhook sink configured (url: $_URL)"

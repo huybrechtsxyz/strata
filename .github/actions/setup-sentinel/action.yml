@@ -1,0 +1,47 @@
+# ===============================================================================
+# Action Name  : setup-sentinel
+# Description  : Configure credentials for strata's sentinel SIEM sink
+#                integration. HTTP-based — no CLI binary.
+# ===============================================================================
+
+name: "Setup Microsoft Sentinel"
+description: "Configure Microsoft Sentinel (Log Analytics) credentials for strata's sentinel integration."
+
+branding:
+  icon: "shield"
+  color: "blue"
+
+inputs:
+  workspace-id:
+    description: "Log Analytics workspace ID."
+    required: true
+  shared-key:
+    description: "Log Analytics shared key (primary or secondary)."
+    required: true
+  workspace-id-env-var:
+    description: "Env var name the workspace ID is written to."
+    required: false
+    default: "SENTINEL_WORKSPACE_ID"
+  shared-key-env-var:
+    description: "Env var name the shared key is written to (referenced by the deployment YAML's secret_ref)."
+    required: false
+    default: "SENTINEL_SHARED_KEY"
+
+runs:
+  using: composite
+  steps:
+    - name: Configure Sentinel Environment Variables
+      shell: bash
+      env:
+        _WORKSPACE_ID: ${{ inputs.workspace-id }}
+        _SHARED_KEY: ${{ inputs.shared-key }}
+        _WS_VAR: ${{ inputs.workspace-id-env-var }}
+        _KEY_VAR: ${{ inputs.shared-key-env-var }}
+      run: |
+        echo "::add-mask::$_SHARED_KEY"
+        _write_env() {
+          printf '%s<<__STRATA_DELIM__\n%s\n__STRATA_DELIM__\n' "$1" "$2" >> "$GITHUB_ENV"
+        }
+        _write_env "$_WS_VAR" "$_WORKSPACE_ID"
+        _write_env "$_KEY_VAR" "$_SHARED_KEY"
+        echo "[+] Sentinel configured"

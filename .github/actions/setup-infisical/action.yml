@@ -1,0 +1,112 @@
+# ===============================================================================
+# Action Name  : setup-infisical
+# Description  : Configure the Infisical secrets store integration. Infisical is
+#                resolved primarily via REST API (no CLI required at runtime),
+#                but the CLI can optionally be installed for local-parity testing
+#                or when `prefer_cli` is used. Sets env vars strata's
+#                InfisicalIntegration reads directly.
+# ===============================================================================
+
+name: "Setup Infisical"
+description: "Configure Infisical secrets store credentials, optionally installing the infisical CLI."
+
+branding:
+  icon: "unlock"
+  color: "purple"
+
+inputs:
+  auth-method:
+    description: "Authentication method: 'universal_auth' (client id/secret) or 'token' (service token)."
+    required: false
+    default: "universal_auth"
+  client-id:
+    description: "Infisical machine identity client ID (INFISICAL_CLIENT_ID). Required when auth-method is universal_auth."
+    required: false
+    default: ""
+  client-secret:
+    description: "Infisical machine identity client secret (INFISICAL_CLIENT_SECRET). Required when auth-method is universal_auth."
+    required: false
+    default: ""
+  token:
+    description: "Infisical service token (INFISICAL_TOKEN). Required when auth-method is token."
+    required: false
+    default: ""
+  project-id:
+    description: "Infisical project ID (INFISICAL_PROJECT_ID)."
+    required: true
+  environment:
+    description: "Infisical environment slug (INFISICAL_ENVIRONMENT)."
+    required: false
+    default: "prod"
+  address:
+    description: "Infisical server address (self-hosted). Defaults to Infisical Cloud."
+    required: false
+    default: ""
+  install-cli:
+    description: "Also install the infisical CLI binary. Not required — strata falls back to the REST API — but needed for `prefer_cli` or local parity testing."
+    required: false
+    default: "false"
+  cli-package-format:
+    description: "Package format to use when install-cli is true: 'deb' (Debian/Ubuntu runners) or 'rpm'."
+    required: false
+    default: "deb"
+
+runs:
+  using: composite
+  steps:
+    - name: Install Infisical CLI
+      if: ${{ inputs.install-cli == 'true' }}
+      shell: bash
+      env:
+        _FORMAT: ${{ inputs.cli-package-format }}
+      run: |
+        if [ "$_FORMAT" = "rpm" ]; then
+          curl -1sLf 'https://dl.cloudsmith.io/public/infisical/infisical-cli/setup.rpm.sh' | sudo -E bash
+          sudo yum install -y infisical
+        else
+          curl -1sLf 'https://dl.cloudsmith.io/public/infisical/infisical-cli/setup.deb.sh' | sudo -E bash
+          sudo apt-get update -y && sudo apt-get install -y infisical
+        fi
+        infisical --version
+
+    # Secrets are passed via env: (not interpolated into run:) to prevent command
+    # injection, and written to GITHUB_ENV via EOF delimiter to prevent newline
+    # injection — see verify-integrations action for the full rationale.
+    - name: Configure Infisical Environment Variables
+      shell: bash
+      env:
+        _AUTH_METHOD: ${{ inputs.auth-method }}
+        _CLIENT_ID: ${{ inputs.client-id }}
+        _CLIENT_SECRET: ${{ inputs.client-secret }}
+        _TOKEN: ${{ inputs.token }}
+        _PROJECT_ID: ${{ inputs.project-id }}
+        _ENVIRONMENT: ${{ inputs.environment }}
+        _ADDRESS: ${{ inputs.address }}
+      run: |
+        [ -n "$_CLIENT_SECRET" ] && echo "::add-mask::$_CLIENT_SECRET"
+        [ -n "$_TOKEN" ] && echo "::add-mask::$_TOKEN"
+
+        _write_env() {
+          printf '%s<<__STRATA_DELIM__\n%s\n__STRATA_DELIM__\n' "$1" "$2" >> "$GITHUB_ENV"
+        }
+
+        if [ "$_AUTH_METHOD" = "token" ]; then
+          if [ -z "$_TOKEN" ]; then
+            echo "::error::setup-infisical: auth-method is 'token' but 'token' input is empty."
+            exit 1
+          fi
+          _write_env INFISICAL_TOKEN "$_TOKEN"
+        else
+          if [ -z "$_CLIENT_ID" ] || [ -z "$_CLIENT_SECRET" ]; then
+            echo "::error::setup-infisical: auth-method is 'universal_auth' but client-id/client-secret are missing."
+            exit 1
+          fi
+          _write_env INFISICAL_CLIENT_ID "$_CLIENT_ID"
+          _write_env INFISICAL_CLIENT_SECRET "$_CLIENT_SECRET"
+        fi
+
+        _write_env INFISICAL_PROJECT_ID "$_PROJECT_ID"
+        _write_env INFISICAL_ENVIRONMENT "$_ENVIRONMENT"
+        [ -n "$_ADDRESS" ] && _write_env INFISICAL_ADDR "$_ADDRESS"
+
+        echo "[+] Infisical configured (auth-method: $_AUTH_METHOD)"

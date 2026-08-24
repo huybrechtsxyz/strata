@@ -1,0 +1,64 @@
+# ===============================================================================
+# Action Name  : setup-gcloud-cli
+# Description  : Install/authenticate the Google Cloud CLI for strata's
+#                gcloud_cli integration. Wraps google-github-actions/auth
+#                and google-github-actions/setup-gcloud.
+# ===============================================================================
+
+name: "Setup Google Cloud CLI"
+description: "Install and authenticate the Google Cloud CLI (gcloud) for strata's gcloud_cli integration."
+
+branding:
+  icon: "cloud"
+  color: "green"
+
+inputs:
+  auth-method:
+    description: "Authentication method: 'service_account_key' or 'workload_identity' (OIDC)."
+    required: false
+    default: "workload_identity"
+  service-account-key:
+    description: "Service account JSON key. Required when auth-method is service_account_key."
+    required: false
+    default: ""
+  workload-identity-provider:
+    description: "Workload Identity Federation provider resource name. Required when auth-method is workload_identity."
+    required: false
+    default: ""
+  service-account:
+    description: "Service account email to impersonate. Required when auth-method is workload_identity."
+    required: false
+    default: ""
+  project-id:
+    description: "GCP project ID."
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Authenticate (service account key)
+      if: ${{ inputs.auth-method == 'service_account_key' }}
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ inputs.service-account-key }}
+        project_id: ${{ inputs.project-id }}
+
+    - name: Authenticate (Workload Identity Federation)
+      if: ${{ inputs.auth-method == 'workload_identity' }}
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: ${{ inputs.workload-identity-provider }}
+        service_account: ${{ inputs.service-account }}
+        project_id: ${{ inputs.project-id }}
+
+    - name: Install gcloud CLI
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ inputs.project-id }}
+
+    - name: Verify gcloud CLI
+      shell: bash
+      run: |
+        gcloud --version
+        gcloud config get-value account
+        echo "[+] gcloud CLI authenticated"

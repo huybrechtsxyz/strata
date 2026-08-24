@@ -1,0 +1,79 @@
+# ===============================================================================
+# Action Name  : setup-azure-cli
+# Description  : Install and authenticate the Azure CLI (az) for strata's
+#                azure_cli integration. Shared foundation for AzureKeyVault,
+#                AzureAppConfig, and the Bicep deployer.
+# ===============================================================================
+
+name: "Setup Azure CLI"
+description: "Install and authenticate the Azure CLI (az) for strata's azure_cli integration."
+
+branding:
+  icon: "cloud"
+  color: "blue"
+
+inputs:
+  auth-method:
+    description: "Authentication method: 'client_secret' or 'oidc' (federated identity)."
+    required: false
+    default: "client_secret"
+  tenant-id:
+    description: "Azure tenant ID (AZURE_TENANT_ID)."
+    required: true
+  client-id:
+    description: "Azure service principal / app registration client ID (AZURE_CLIENT_ID)."
+    required: true
+  client-secret:
+    description: "Azure service principal client secret (AZURE_CLIENT_SECRET). Required when auth-method is client_secret."
+    required: false
+    default: ""
+  subscription-id:
+    description: "Azure subscription ID (AZURE_SUBSCRIPTION_ID)."
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Azure Login (client secret)
+      if: ${{ inputs.auth-method == 'client_secret' }}
+      uses: azure/login@v2
+      with:
+        creds: >-
+          {"clientId":"${{ inputs.client-id }}",
+          "clientSecret":"${{ inputs.client-secret }}",
+          "subscriptionId":"${{ inputs.subscription-id }}",
+          "tenantId":"${{ inputs.tenant-id }}"}
+
+    - name: Azure Login (OIDC)
+      if: ${{ inputs.auth-method == 'oidc' }}
+      uses: azure/login@v2
+      with:
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+
+    # Export the env vars strata's azure_cli / azure_keyvault / azure_appconfig
+    # integrations read directly (they use the REST API / az CLI independent of
+    # the azure/login session context).
+    - name: Configure Azure Environment Variables
+      shell: bash
+      env:
+        _TENANT_ID: ${{ inputs.tenant-id }}
+        _CLIENT_ID: ${{ inputs.client-id }}
+        _CLIENT_SECRET: ${{ inputs.client-secret }}
+        _SUBSCRIPTION_ID: ${{ inputs.subscription-id }}
+        _AUTH_METHOD: ${{ inputs.auth-method }}
+      run: |
+        [ -n "$_CLIENT_SECRET" ] && echo "::add-mask::$_CLIENT_SECRET"
+        _write_env() {
+          printf '%s<<__STRATA_DELIM__\n%s\n__STRATA_DELIM__\n' "$1" "$2" >> "$GITHUB_ENV"
+        }
+        _write_env AZURE_TENANT_ID "$_TENANT_ID"
+        _write_env AZURE_CLIENT_ID "$_CLIENT_ID"
+        _write_env AZURE_SUBSCRIPTION_ID "$_SUBSCRIPTION_ID"
+        [ -n "$_CLIENT_SECRET" ] && _write_env AZURE_CLIENT_SECRET "$_CLIENT_SECRET"
+        echo "[+] Azure CLI configured (auth-method: $_AUTH_METHOD)"
+
+    - name: Verify az CLI
+      shell: bash
+      run: az account show --output none && echo "[+] az CLI authenticated"
