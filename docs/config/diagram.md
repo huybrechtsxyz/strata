@@ -439,6 +439,16 @@ Layout-type and source-count problems are reported by `strata diagram show` rath
 `strata validate`, because whether a template can be *generated* is a rendering question, not a
 schema one.
 
+`strata validate --deep` additionally checks that every hand-authored `strata://` link in
+`spec.template` still resolves to something in the workspace — a `click a "strata://workspace/
+platform/resource/app_server"` line written by hand goes stale if `app_server` is later renamed,
+and this catches it at validate time instead of on a dead click. It only inspects the raw
+authored `spec.template` text, never renders the diagram: a *generated* template (no
+`spec.template`, built from `spec.layout`/`spec.style`) always emits a freshly-resolved URI at
+render time, by construction, so there is nothing to check there. Like every other cross-reference
+check in strata, this requires an active profile (`--deep` needs one) even though the check itself
+does not use the profile's configuration.
+
 ## Node Identity
 
 Every node a source produces carries a `uri` — a structural `strata://` identifier — and

@@ -1,11 +1,11 @@
 # Diagram visualization in VS Code extension
 
-- Status: partially-implemented — Phase 1 CLI/YAML foundation ✅ Done (schema, `strata diagram show/list`, built-in `refs`/`topology`, `strata validate graph` removed, VS Code preview pane with live-render-on-save and VS Code theme integration); Phase 2 workspace connection ⏳ URI scheme + `diagram resolve` + `click` directives + VS Code click-to-open-file + hover tooltips + reverse cursor→node lookup done, `strata validate` URI checking not started; Phase 3 source coverage ✅ Done (all built-in sources implemented), cookbook/sidebar/chat commands not started; Phase 4 GUI Builder + AI chat not started; Phase 5 advanced features not started
+- Status: partially-implemented — Phase 1 CLI/YAML foundation ✅ Done; Phase 2 workspace connection ✅ Done (URI scheme, `diagram resolve`, `click` directives, VS Code click-to-open-file, hover tooltips, reverse cursor→node lookup, `strata validate --deep` link-rot check); Phase 3 source coverage ✅ Done (all built-in sources implemented), cookbook/sidebar/chat commands not started; Phase 4 GUI Builder + AI chat not started; Phase 5 advanced features not started
 - Date: 2026-07-11 (revised 2026-08-13 — repositioned from "strata owns a diagram system" to "strata generates Mermaid fragments and connects them to the workspace; users compose freely")
 
 ## Remaining Work
 
-- VS Code-side integration: preview pane, click-to-open-file, Design System theme integration, hover tooltips, and reverse cursor→node lookup are all implemented in `diagramPreviewProvider.ts` (`Strata: Show Dependency Graph` / `Strata: Show Infrastructure Topology` / `Strata: Preview Diagram`). Still outstanding: `strata validate` checking `strata://` URIs resolve, per-data-source icon conventions, secondary node actions beyond open-file, GUI Builder, AI chat generation. See "Implementation Roadmap" for the authoritative checklist.
+- Phase 1, 2, and 3 are functionally complete. Remaining Phase 2 item (`nodeMap` enrichment cache) is deferred, not blocking — only needed if secondary node actions beyond open-file are added later. Still outstanding overall: per-data-source icon conventions, the rest of Phase 3's cookbook/sidebar/chat surface, GUI Builder, AI chat generation. See "Implementation Roadmap" for the authoritative checklist.
 
 ## Context and Problem Statement
 
@@ -124,7 +124,7 @@ Concretely, strata provides:
 
 ## Implementation Status
 
-Partially implemented — see "Implementation Roadmap" below for the authoritative, phase-by-phase checklist. Summary: the CLI/data-layer foundation (schema, `strata diagram show`/`list`/`resolve`, `strata://` URIs, all built-in sources) is done; the VS Code-side preview pane, click-to-open, theme integration, hover tooltips, and reverse cursor→node lookup (`diagramPreviewProvider.ts`) are done; `strata validate` URI checking, GUI Builder, and AI chat are not started.
+Partially implemented — see "Implementation Roadmap" below for the authoritative, phase-by-phase checklist. Summary: Phases 1–3 are functionally complete — CLI/data-layer foundation, VS Code preview pane, click-to-open, theme integration, hover tooltips, reverse cursor→node lookup (`diagramPreviewProvider.ts`), and `strata validate --deep` link-rot checking (`DiagramService._validate_dynamic()`) are all done. GUI Builder and AI chat generation (Phase 4) are not started.
 
 ### What ADR 0015 already delivers (no VS Code work needed for data layer)
 
@@ -1422,7 +1422,7 @@ Ordered by the Decision Outcome's priorities: **CLI/YAML foundation first, works
 - [x] Define the `strata://` URI scheme (shape, kinds, resolution rules) — the durable identity that travels with the Mermaid text
 - [x] `strata diagram resolve strata://... --output json` → `{ file, line }`; headless, not VS Code-specific
 - [x] Emit `click <node> "strata://..."` directives into generated Mermaid
-- [ ] `strata validate` checks `strata://` URIs resolve (catch broken links at validate time, not on a dead click)
+- [x] `strata validate` checks `strata://` URIs resolve (catch broken links at validate time, not on a dead click) — `DiagramService._validate_dynamic()` (`--deep` only), scoped to hand-authored `click` directives in `spec.template`; a *generated* template's URIs are always fresh by construction, so nothing to check there
 - [x] ~~`DataSourceResult` / `DiagramNodeData` / `DiagramAction` types~~ — superseded by a simpler approach: tooltips read the classDef name already present on a node's rendered SVG element (no extra CLI round-trip); reverse-lookup matches by rendered label text rather than a typed node/action model. See Node Identity & Click Resolution for the originally-designed richer version (secondary actions beyond open-file are still unimplemented)
 - [ ] `nodeMap` as enrichment cache (tooltips, actions, status) for topology + file-reference sources (ADR-0015 data, already available) — superseded for tooltips/highlighting (see above); still relevant if secondary actions (`DiagramAction`) are ever added
 - [x] Click → open file at line (`securityLevel: 'loose'` for Mermaid click callbacks; webview intercepts `window.open()` on `strata://` URLs and resolves via `strata diagram resolve` — `diagramPreviewProvider.ts`)

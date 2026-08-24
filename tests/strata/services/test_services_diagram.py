@@ -172,11 +172,90 @@ class TestDiagramServiceVariableBinding:
 
 
 class TestDiagramServiceDynamicValidation:
-    def test_dynamic_validation_is_a_noop(self):
-        """Diagrams are self-contained — no cross-file references to resolve."""
+    """ADR-0034 Phase 2: hand-authored 'strata://' links in spec.template must resolve."""
+
+    def test_generated_diagram_has_nothing_to_check(self):
+        """No spec.template (layout/style sugar generates one at render time) — a
+        generated diagram's strata:// URIs are always freshly computed, never stale."""
         service = _make_service([{"type": "topology"}], "{{ topology.nodes }}")
         service.validate()
-        assert service._validate_dynamic() == (True, [])
+        assert service._validate_dynamic(work_path="/irrelevant") == (True, [])
+
+    def test_no_work_path_is_a_noop(self):
+        """Resolving a URI needs to read other workspace files — skipped without
+        work_path, matching every other cross-reference check in strata."""
+        service = _make_service(None, 'flowchart TD\n  a["A"]\n  click a "strata://file/missing.yaml"\n')
+        service.validate()
+        assert service._validate_dynamic(work_path=None) == (True, [])
+
+    def test_template_with_no_click_directives_is_a_noop(self):
+        service = _make_service(None, "flowchart TD\n  a --> b\n")
+        service.validate()
+        assert service._validate_dynamic(work_path="/irrelevant") == (True, [])
+
+    def test_valid_hand_authored_link_passes(self, tmp_path):
+        (tmp_path / "deployment.yaml").write_text(
+            "apiVersion: strata.huybrechts.xyz/v1\nkind: deployment\nmeta:\n  name: d\nspec: {}\n",
+            encoding="utf-8",
+        )
+        service = _make_service(None, 'flowchart TD\n  a["A"]\n  click a "strata://file/deployment.yaml"\n')
+        service.validate()
+        is_valid, errors = service._validate_dynamic(work_path=str(tmp_path))
+        assert is_valid, f"Validation failed: {errors}"
+
+    def test_broken_hand_authored_link_is_rejected(self, tmp_path):
+        service = _make_service(None, 'flowchart TD\n  a["A"]\n  click a "strata://file/does-not-exist.yaml"\n')
+        service.validate()
+        is_valid, errors = service._validate_dynamic(work_path=str(tmp_path))
+        assert not is_valid
+        assert "does-not-exist.yaml" in errors[0]
+        assert "test_diagram" in errors[0]
+
+    def test_multiple_broken_links_are_all_reported(self, tmp_path):
+        service = _make_service(
+            None,
+            "flowchart TD\n"
+            '  a["A"]\n  click a "strata://file/one.yaml"\n'
+            '  b["B"]\n  click b "strata://file/two.yaml"\n',
+        )
+        service.validate()
+        is_valid, errors = service._validate_dynamic(work_path=str(tmp_path))
+        assert not is_valid
+        assert len(errors) == 2
+
+    def test_duplicate_links_are_checked_once(self, tmp_path, monkeypatch):
+        """Two nodes pointing at the same broken URI produce one error, not two."""
+        import strata.services.diagram_service as diagram_service_module
+
+        original = diagram_service_module.DiagramResolveController.resolve
+        calls: list = []
+
+        def counting_resolve(self, uri):
+            calls.append(uri)
+            return original(self, uri)
+
+        monkeypatch.setattr(diagram_service_module.DiagramResolveController, "resolve", counting_resolve)
+
+        service = _make_service(
+            None,
+            "flowchart TD\n"
+            '  a["A"]\n  click a "strata://file/missing.yaml"\n'
+            '  b["B"]\n  click b "strata://file/missing.yaml"\n',
+        )
+        service.validate()
+        is_valid, errors = service._validate_dynamic(work_path=str(tmp_path))
+        assert not is_valid
+        assert len(errors) == 1
+        assert len(calls) == 1
+
+    def test_full_validate_only_runs_the_check_with_configuration_model(self, tmp_path):
+        """Mirrors BaseService.validate()'s real gate: _validate_dynamic only runs
+        end-to-end (via validate()) when a configuration_model is supplied — i.e.
+        `strata validate --deep` with an active profile, same as every other
+        cross-reference check in strata."""
+        service = _make_service(None, 'flowchart TD\n  a["A"]\n  click a "strata://file/missing.yaml"\n')
+        is_valid, errors = service.validate(configuration_model=None, work_path=str(tmp_path))
+        assert is_valid, f"Validation should pass without --deep: {errors}"
 
 
 def _styled_service(highlight: list) -> DiagramService:
