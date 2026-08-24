@@ -85,7 +85,20 @@ class ShowDiagramCommand(BaseCommand):
             "diagram": model.meta.name,
             "definition": str(definition_path),
             "template" if self._print_template else "mermaid": content,
+            # Structured spec fields, always included alongside the rendered/template
+            # output (cheap — 'model' is already fully parsed at this point). This is
+            # what lets a GUI client round-trip a sugar-based (layout/style) diagram
+            # back into an editable form without re-parsing the YAML itself — see
+            # ADR-0034 Phase 4 "round-trip guarantee".
+            "has_template": bool(model.spec.template),
+            "sources": [
+                s.model_dump(mode="json", by_alias=True, exclude_none=True) for s in (model.spec.sources or [])
+            ],
         }
+        if model.spec.layout is not None:
+            self._output_data["layout"] = model.spec.layout.model_dump(mode="json", exclude_none=True)
+        if model.spec.style is not None:
+            self._output_data["style"] = model.spec.style.model_dump(mode="json", exclude_none=True)
 
         if self._save:
             self._save_content(content)

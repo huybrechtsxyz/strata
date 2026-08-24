@@ -639,12 +639,46 @@ export interface PromotionHistoryEntry {
 // Diagram types (ADR-0034)
 // ---------------------------------------------------------------------------
 
+/** One `spec.sources[]` entry — a workspace data source bound into the Jinja context. */
+export interface DiagramSourceSpec {
+    type: string;
+    as?: string;
+    filter?: Record<string, unknown>;
+}
+
+/** `spec.layout` — hints used to generate a template when `spec.template` is omitted. */
+export interface DiagramLayoutSpec {
+    type?: string;
+    direction?: string;
+}
+
+/** One `spec.style.highlight[]` conditional-emphasis rule. */
+export interface DiagramHighlightSpec {
+    condition: string;
+    token: string;
+}
+
+/** `spec.style` — styling hints used to generate a template when `spec.template` is omitted. */
+export interface DiagramStyleSpec {
+    color_by?: string;
+    group_by?: string;
+    highlight?: DiagramHighlightSpec[];
+}
+
 /** Matches `diagram show --output json` data */
 export interface DiagramShowData {
     diagram: string;
     definition: string;
     /** Present unless --print-template was used (not exposed by the client). */
     mermaid: string;
+    /** True when the definition has a hand-written `spec.template` (Jinja) rather than pure layout/style sugar. */
+    has_template: boolean;
+    /** Always present (possibly empty) — the parsed `spec.sources[]`, for round-tripping into the Diagram Builder. */
+    sources: DiagramSourceSpec[];
+    /** Present only when `spec.layout` is set. */
+    layout?: DiagramLayoutSpec;
+    /** Present only when `spec.style` is set. */
+    style?: DiagramStyleSpec;
 }
 
 /** A single entry from `diagram list --output json` data.diagrams[] */

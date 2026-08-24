@@ -20,12 +20,14 @@
  *   /values   — inspect resolved deployment values
  *   /drift    — run drift detection on a deployment
  *   /repos    — show repository status with release/quality-gate tags
- *   /diagram  — list diagrams, or show one: /diagram show <name>
+ *   /diagram  — list diagrams, show one (/diagram show <name>), or generate one from a
+ *               description via the Diagram Builder (/diagram create <description>)
  */
 
 import * as vscode from 'vscode';
 import type { StrataClient, WorkspaceStatus, ValidationResult, DriftData } from '../strataClient';
 import { AiPromptBuilder } from './aiPromptBuilder';
+import { DiagramBuilderProvider, validateBuilderState, SOURCE_TYPES, LAYOUT_TYPES, DIRECTIONS, type BuilderState } from './diagramBuilderProvider';
 
 const PARTICIPANT_ID = 'strata.chat';
 
@@ -36,11 +38,16 @@ export class StrataChatParticipant implements vscode.Disposable {
     private _participant: vscode.ChatParticipant | undefined;
     private _client: StrataClient | undefined;
     private _lastStatus: WorkspaceStatus | undefined;
+    private _diagramBuilder: DiagramBuilderProvider | undefined;
 
     // ── Public API ─────────────────────────────────────────────────────────────
 
     setClient(client: StrataClient): void {
         this._client = client;
+    }
+
+    setDiagramBuilder(builder: DiagramBuilderProvider): void {
+        this._diagramBuilder = builder;
     }
 
     update(status: WorkspaceStatus): void {
@@ -983,7 +990,7 @@ export class StrataChatParticipant implements vscode.Disposable {
     private async _handleDiagram(
         request: vscode.ChatRequest,
         response: vscode.ChatResponseStream,
-        _token: vscode.CancellationToken,
+        token: vscode.CancellationToken,
     ): Promise<vscode.ChatResult> {
         if (!this._client) {
             response.markdown('⚠️ Strata CLI is not available.');
@@ -999,6 +1006,11 @@ export class StrataChatParticipant implements vscode.Disposable {
             await vscode.commands.executeCommand('strata.previewDiagramFile', name);
             response.button({ title: `Reopen ${name}`, command: 'strata.previewDiagramFile', arguments: [name] });
             return { metadata: { command: 'diagram' } };
+        }
+
+        if (verb === 'create') {
+            const description = args.slice(1).join(' ').trim();
+            return this._handleDiagramCreate(request, response, token, description);
         }
 
         response.progress('Loading diagram catalog…');
@@ -1034,6 +1046,111 @@ export class StrataChatParticipant implements vscode.Disposable {
         return { metadata: { command: 'diagram' } };
     }
 
+    // ── /diagram create <description> (ADR-0034 Phase 4 — NL → diagram) ────────
+
+    private async _handleDiagramCreate(
+        request: vscode.ChatRequest,
+        response: vscode.ChatResponseStream,
+        token: vscode.CancellationToken,
+        description: string,
+    ): Promise<vscode.ChatResult> {
+        if (!description) {
+            response.markdown('**Usage:** `@strata /diagram create <description>`\n\nExample: `@strata /diagram create show all resources colored by drift status, grouped by namespace`\n');
+            return { metadata: { command: 'diagram' } };
+        }
+        if (!this._client || !this._diagramBuilder) {
+            response.markdown('⚠️ Diagram Builder is not available.');
+            return { metadata: { command: 'diagram' } };
+        }
+
+        response.progress('Generating diagram definition…');
+
+        let state = await this._generateDiagramState(request, token, description);
+        if (!state) {
+            response.markdown('Could not parse a diagram definition from the model response. Try rephrasing, or open the Diagram Builder manually.');
+            response.button({ title: 'Open Diagram Builder', command: 'strata.openDiagramBuilder' });
+            return { metadata: { command: 'diagram' } };
+        }
+
+        let result = await validateBuilderState(this._client, state);
+        if (!result.ok) {
+            response.progress('First attempt had validation errors — retrying once…');
+            const retryState = await this._generateDiagramState(request, token, description, result.errors);
+            state = retryState;
+            result = retryState ? await validateBuilderState(this._client, retryState) : { ok: false, errors: ['No response from the model.'] };
+        }
+
+        if (!state || !result.ok) {
+            const errors = result.ok ? [] : result.errors;
+            response.markdown(`**Could not generate a valid diagram after one retry:**\n\n${errors.map(e => `- ${e}`).join('\n')}\n\nOpen the Diagram Builder to build it by hand instead.`);
+            response.button({ title: 'Open Diagram Builder', command: 'strata.openDiagramBuilder' });
+            return { metadata: { command: 'diagram' } };
+        }
+
+        response.markdown(`Generated **${state.name}** — opening the Diagram Builder so you can preview, tweak, and save it.\n`);
+        await this._diagramBuilder.openWithState(this._client, state);
+        return { metadata: { command: 'diagram' } };
+    }
+
+    /**
+     * Ask the requesting model for a `sources`/`layout`/`style` JSON object
+     * (never a hand-written `spec.template`) matching the closed vocabulary
+     * `DiagramSourceType`/`MermaidDiagramType`/`MermaidDirection` expose — a
+     * bounded extraction task, not free-form code generation (ADR-0034 Phase 4).
+     * `priorErrors` feeds the one-retry repair loop.
+     */
+    private async _generateDiagramState(
+        request: vscode.ChatRequest,
+        token: vscode.CancellationToken,
+        description: string,
+        priorErrors?: string[],
+    ): Promise<BuilderState | undefined> {
+        const prompt = [
+            'You generate strata "kind: diagram" definitions from a natural-language description.',
+            'Respond with ONLY a single JSON object (no prose, no markdown fences) matching this shape:',
+            '{',
+            '  "name": "kebab-or-snake-case-name",',
+            '  "description": "short description",',
+            `  "sources": [{ "type": "<one of: ${SOURCE_TYPES.join(', ')}>", "as": "optional bind name", "filter": { "key": "value" } }],`,
+            `  "layout": { "type": "<one of: ${LAYOUT_TYPES.join(', ')}>", "direction": "<one of: ${DIRECTIONS.join(', ')}, optional>" },`,
+            '  "style": { "color_by": "optional field name", "group_by": "optional field name", "highlight": [{ "condition": "expr", "token": "design-system token name" }] }',
+            '}',
+            'Use at least one source. Prefer "flowchart" layout unless the description clearly asks for a timeline/sequence/pie/etc.',
+            `Description: ${description}`,
+            priorErrors?.length ? `The previous attempt failed strata's validation with these errors — fix them:\n${priorErrors.join('\n')}` : '',
+        ].filter(Boolean).join('\n\n');
+
+        try {
+            const chatResponse = await request.model.sendRequest([vscode.LanguageModelChatMessage.User(prompt)], {}, token);
+            let text = '';
+            for await (const fragment of chatResponse.text) text += fragment;
+            return this._parseDiagramJson(text);
+        } catch {
+            return undefined;
+        }
+    }
+
+    private _parseDiagramJson(text: string): BuilderState | undefined {
+        const match = text.match(/\{[\s\S]*\}/);
+        if (!match) return undefined;
+        try {
+            const parsed = JSON.parse(match[0]) as Partial<BuilderState> & { name?: string };
+            let name = (parsed.name ?? 'generated-diagram').toString();
+            if (!/^[a-z][a-z0-9_-]*$/.test(name)) {
+                name = name.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+/, '') || 'generated-diagram';
+            }
+            return {
+                name,
+                description: typeof parsed.description === 'string' ? parsed.description : '',
+                sources: Array.isArray(parsed.sources) ? parsed.sources : [],
+                layout: parsed.layout && typeof parsed.layout === 'object' ? parsed.layout : { type: 'flowchart', direction: 'TD' },
+                style: parsed.style && typeof parsed.style === 'object' ? parsed.style : {},
+            };
+        } catch {
+            return undefined;
+        }
+    }
+
     // ── Follow-ups ─────────────────────────────────────────────────────────────
 
     private _provideFollowups(result: vscode.ChatResult): vscode.ChatFollowup[] {
@@ -1050,6 +1167,7 @@ export class StrataChatParticipant implements vscode.Disposable {
                 return [
                     { prompt: 'show topology', label: 'Show topology', command: 'diagram' },
                     { prompt: 'show refs', label: 'Show file references', command: 'diagram' },
+                    { prompt: 'create ', label: 'Generate a diagram from a description', command: 'diagram' },
                 ];
             case 'validate':
                 return [

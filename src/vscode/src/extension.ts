@@ -39,6 +39,7 @@ import { StateServiceStatusBarProvider } from './providers/stateServiceStatusBar
 import { StateServiceTailProvider } from './providers/stateServiceTailProvider';
 import { DiagramPreviewProvider } from './providers/diagramPreviewProvider';
 import { DiagramsViewProvider } from './providers/diagramsViewProvider';
+import { DiagramBuilderProvider } from './providers/diagramBuilderProvider';
 
 // ---------------------------------------------------------------------------
 // Extension state (singleton per VS Code window)
@@ -69,6 +70,7 @@ let _stateServiceStatusBar: StateServiceStatusBarProvider | undefined;
 let _stateServiceTail: StateServiceTailProvider | undefined;
 let _diagramPreview: DiagramPreviewProvider | undefined;
 let _diagramsView: DiagramsViewProvider | undefined;
+let _diagramBuilder: DiagramBuilderProvider | undefined;
 let _lastStatus: import('./strataClient').WorkspaceStatus | undefined;
 let _lastDriftTarget: string | undefined;
 let _lastDeployTarget: string | undefined;
@@ -242,6 +244,7 @@ export function activate(context: vscode.ExtensionContext): void {
     _diagramPreview = new DiagramPreviewProvider();
     _diagramsView = new DiagramsViewProvider();
     _diagramsView.setClient(_client);
+    _diagramBuilder = new DiagramBuilderProvider(_diagramPreview);
 
     // Propagate deployment context changes to status bar
     context.subscriptions.push(
@@ -309,6 +312,7 @@ export function activate(context: vscode.ExtensionContext): void {
     _taskProvider.register(context);
     _fileDecorations.register();
     _chatParticipant.setClient(_client);
+    _chatParticipant.setDiagramBuilder(_diagramBuilder!);
     _chatParticipant.register(context);
     _helpView.register(context);
     _statusBar.show();
@@ -341,6 +345,22 @@ export function activate(context: vscode.ExtensionContext): void {
 
         vscode.commands.registerCommand('strata.filterDiagrams', () => {
             void _diagramsView?.setFilter();
+        }),
+
+        // ── Diagram Builder (ADR-0034 Phase 4) ───────────────────────────────────
+
+        vscode.commands.registerCommand('strata.openDiagramBuilder', () => {
+            if (!_client) return;
+            void _diagramBuilder?.open(_client);
+        }),
+
+        vscode.commands.registerCommand('strata.editDiagramInBuilder', (nameOrEntry?: string | { entry?: { name: string } }) => {
+            if (!_client) return;
+            const nameOrPath = typeof nameOrEntry === 'string'
+                ? nameOrEntry
+                : nameOrEntry?.entry?.name ?? vscode.window.activeTextEditor?.document.uri.fsPath;
+            if (!nameOrPath) { void vscode.window.showWarningMessage('Strata: no diagram selected.'); return; }
+            void _diagramBuilder?.open(_client, nameOrPath);
         }),
 
         // ── Work items ─────────────────────────────────────────────────────────

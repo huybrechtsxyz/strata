@@ -99,7 +99,7 @@
           },
           {
             "name": "diagram",
-            "description": "List available diagrams, or show one: /diagram show <name>"
+            "description": "List diagrams, show one (/diagram show <name>), or generate one from a description (/diagram create <description>)"
           }
         ]
       }
@@ -244,6 +244,16 @@
         "command": "strata.filterDiagrams",
         "title": "Filter Diagrams",
         "icon": "$(filter)"
+      },
+      {
+        "command": "strata.openDiagramBuilder",
+        "title": "Strata: New Diagram (Builder)",
+        "icon": "$(add)"
+      },
+      {
+        "command": "strata.editDiagramInBuilder",
+        "title": "Edit in Diagram Builder",
+        "icon": "$(edit)"
       },
       {
         "command": "strata.refreshTreeView",
@@ -547,12 +557,22 @@
           "group": "navigation"
         },
         {
+          "command": "strata.openDiagramBuilder",
+          "when": "view == strataDiagrams",
+          "group": "navigation"
+        },
+        {
           "command": "strata.refreshWorkItems",
           "when": "view == strataWorkItems",
           "group": "navigation"
         }
       ],
       "view/item/context": [
+        {
+          "command": "strata.editDiagramInBuilder",
+          "when": "view == strataDiagrams && viewItem == diagram",
+          "group": "inline"
+        },
         {
           "command": "strata.approveWorkItem",
           "when": "view == strataWorkItems && viewItem == workitem-pending",
