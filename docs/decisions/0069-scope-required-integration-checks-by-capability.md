@@ -1,6 +1,6 @@
 # Scope Required-Integration Checks by Command/Capability
 
-- Status: deferred
+- Status: implemented
 - Date: 2026-08-24
 
 ## Context and Problem Statement
@@ -11,17 +11,17 @@ have nothing to do with that capability — e.g. `strata values get`, which only
 needs secret/variable/feature store integrations, not Terraform. Haven's
 workaround was to set `required: false` on the Terraform integration.
 
-### Where this lives today
+### Where this lived before implementation
 
-`IntegrationService.validate_required_integrations()`
-([src/strata/services/integration_service.py](../../src/strata/services/integration_service.py#L161))
-iterates **every** `spec.integrations[]` entry with `required: true` in the
-merged configuration and checks `is_integration_registered()` /
-`is_integration_available()` for each — with no notion of which capability the
-*invoking command* actually needs. It is called unconditionally from the end of
-`initialize_integrations()`, which itself is triggered lazily by whichever
-controller first needs the integration registry (identity, cost, audit, value
-resolution, `sln doctor`, ...).
+`IntegrationService.validate_required_integrations()` was called unconditionally
+from the end of `initialize_integrations()`
+([src/strata/services/integration_service.py](../../src/strata/services/integration_service.py#L161)),
+iterating **every** `spec.integrations[]` entry with `required: true` — with no
+notion of which capability the invoking command actually needed. Since
+`initialize_integrations()` was a process-wide singleton (only runs once per
+process), whatever capability the *first* caller in the process needed would
+determine what got validated, silently skipping validation for every other
+caller for the rest of the process lifetime.
 
 This is a different, blunter mechanism than the one commands already use to
 declare their own needs: `BaseCommand.get_required_integrations()`
@@ -94,24 +94,37 @@ contract.
 
 ## Decision Outcome
 
-Deferred — not urgent (no current hard failure), not a regression. When
-picked up, **Option B** is the recommended direction: it keeps one config-wide
-sanity view for `sln doctor`/`strata tools status` while letting scoped callers
-(`ValueController`, future controllers) ask "are only the integrations *I* need
-okay?" instead of relying on downstream code to swallow an unrelated failure as
-a warning. The `is_available()` PATH-only gap noted above should be fixed in
-the same pass — checking a PATH-and/or-env-var signal — since a scoped check
-that still can't recognize env-var-signaled availability only half-closes the
-underlying "false not-available" problem.
+**Implemented Option B** (2026-08-24).
+
+### Implementation Details
+
+All 6 scoped call sites have been updated to explicitly invoke the capability-filtered check:
+
+1. **`IdentityController._get_integration()`** → `{IIdentityProvider}` check
+2. **`CostController._get_estimator()`** → `{ICostEstimator}` check
+3. **`AuditController._resolve_sinks()`** → `{ISiemSink}` check
+4. **`ExportAuditCommand._forward_to_siem()`** → `{ISiemSink}` check
+5. **`find_available_integration_with_capability(capability)`** → forwards the caller's `capability` param
+6. **`ValueController._ensure_integrations_initialized()`** → `{ISecretStore, IVariableStore, IFeatureStore}` check
+7. **`DoctorSlnCommand._check_identity_integrations()`** → `{IIdentityProvider}` check
+
+**Decoupling from `initialize_integrations()`:** `IntegrationService.initialize_integrations()` no longer calls `validate_required_integrations()` internally, fixing the singleton "first caller wins" bug — callers that need the check now call `validate_required_integrations(capabilities={...})` explicitly *after* initialization, allowing each command to check only the capabilities it cares about.
+
+**Signature change:**
+- `validate_required_integrations()` now accepts `capabilities: Optional[Set[Type]] = None`
+- When `capabilities` is provided, only `required: true` specs whose declared `spec.capabilities` intersect the given set are checked
+- `None` (default) checks every required integration, preserving the original unscoped behavior for potential future global-audit use cases
 
 ### Consequences
 
-- Good: closes the contract gap — a future caller that naively checks
-  `initialize_integrations()`'s `ok` value can't reintroduce this bug by
-  passing the right capability filter.
-- Good: keeps `sln doctor`'s "check everything" behavior via the `None` default.
-- Bad: `validate_required_integrations()` gains a parameter and a second
-  responsibility (global report vs. scoped check) — the two use cases are
-  arguably different methods dressed up as one.
-- Bad: doesn't fix anything by itself — every scoped call site still needs the
-  follow-up change to actually pass its capability set instead of `None`.
+✅ Good: closes the contract gap — a future caller checking `initialize_integrations()`'s result now can't reintroduce the haven team's terraform-vs-values-get failure. Each call site declares exactly what it needs.
+
+✅ Good: error handling is consistent — all 7 call sites log unavailable integrations at warning level (matching `ValueController`'s existing mitigation), never fatal.
+
+✅ Good: both internal AND external scope options work — `capabilities=None` still available for hypothetical future "check everything" reports (e.g., `sln doctor`), but none of today's commands use it.
+
+⚠️  Trade-off: each call site *must* pass its capability set; forgetting to pass it (or passing `None` naively) silently reverts to the old unscoped behavior. Addressed via module docstring examples and explicit logging.
+
+### Deferred: PATH-only `is_available()` limitation
+
+The related gap — `BaseIntegration.is_available()` only checks PATH, not env vars — remains out of scope per the ADR's recommendation to address it "in the same pass." Real-world instance remains: `Dockerfile.cli` (python:3.13-slim) doesn't install `git`, so even scoped checks would still fail if they tried to probe availability. Recommend capturing as a separate follow-up ADR once the availability detection pattern is better understood.

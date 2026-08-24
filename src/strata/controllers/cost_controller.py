@@ -456,6 +456,9 @@ class CostController(BaseController):
         svc = IntegrationService.get_instance()
         if not svc.is_initialized():
             svc.initialize_integrations()
+        ok, errors = svc.validate_required_integrations(capabilities={ICostEstimator})
+        if not ok:
+            self.logger.debug("required_cost_integration_unavailable", errors=errors)
         for name in svc.get_integrations_with_capability(ICostEstimator):
             integration = svc.get_integration(name)
             if integration is not None:

@@ -10,6 +10,7 @@ def _mock_service(capability_map):
     """capability_map: {capability_class: [(name, integration_or_None), ...]}"""
     svc = MagicMock()
     svc.is_initialized.return_value = True
+    svc.validate_required_integrations.return_value = (True, [])
 
     def get_integrations_with_capability(capability):
         return [name for name, _ in capability_map.get(capability, [])]

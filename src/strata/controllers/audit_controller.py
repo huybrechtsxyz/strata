@@ -618,6 +618,9 @@ class AuditController(BaseController):
             svc = IntegrationService.get_instance()
             if not svc.is_initialized():
                 svc.initialize_integrations()
+            ok, errors = svc.validate_required_integrations(capabilities={ISiemSink})
+            if not ok:
+                self.logger.warning("audit_sink_required_integration_unavailable", errors=errors)
         except Exception as exc:
             self.logger.warning("audit_sink_resolution_failed", error=str(exc))
             return resolved

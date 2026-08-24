@@ -13,6 +13,9 @@ identity provider directly, it only orchestrates.
 from typing import Any, Dict, Optional, Tuple
 
 from strata.controllers.base_controller import BaseController
+from strata.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class IdentityController(BaseController):
@@ -27,6 +30,9 @@ class IdentityController(BaseController):
         svc = IntegrationService.get_instance()
         if not svc.is_initialized():
             svc.initialize_integrations()
+        ok, errors = svc.validate_required_integrations(capabilities={IIdentityProvider})
+        if not ok:
+            logger.warning("Required identity integration unavailable", errors=errors)
 
         integration = None
         if name:

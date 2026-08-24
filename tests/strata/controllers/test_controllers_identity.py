@@ -9,6 +9,7 @@ from strata.controllers.identity_controller import IdentityController
 def _mock_service(integration=None, names=None):
     svc = MagicMock()
     svc.is_initialized.return_value = True
+    svc.validate_required_integrations.return_value = (True, [])
     svc.get_integrations_with_capability.return_value = names or (["idp"] if integration else [])
     svc.get_integration.return_value = integration
     return svc

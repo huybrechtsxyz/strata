@@ -16,6 +16,15 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   - Fix: both call sites now resolve against `self._work_path` unconditionally
   - No test coverage previously caught this because existing fixture workspaces have their entry file directly at the workspace root (`source_file.parent == self._work_path`), masking the bug
 
+- **Required-integration validation now scoped by capability (ADR-0069, Option B)**
+  - `IntegrationService.validate_required_integrations()` now accepts optional `capabilities: Optional[Set[Type]] = None` parameter
+  - When `capabilities` is provided, only `required: true` specs whose `spec.capabilities` intersect the given set are validated; `None` preserves the original global behavior
+  - **Decoupling fix:** `initialize_integrations()` no longer calls `validate_required_integrations()` internally, fixing the singleton "first caller wins" bug where only the capability of the *first* command in a process got validated
+  - **7 call sites updated:** `IdentityController`, `CostController`, `AuditController`, `ExportAuditCommand`, `find_available_integration_with_capability()`, `ValueController`, and `DoctorSlnCommand` now explicitly call the scoped validation with their required capabilities
+  - **Error handling:** unavailable integrations log at warning level (non-fatal), consistent with existing `ValueController` mitigation. Prevents false "terraform not available" failures on commands like `values get` that have nothing to do with IaC provisioning
+  - Problem reported by haven team: `strata values get` failed on `required: true` terraform integration even though it only needs secret/variable/feature stores, not Terraform. Workaround was to set `required: false`, which broke `strata build`/`deploy`. Fix enables both commands to validate only what they need.
+  - Backward-compatible: existing deployments with `required: true` integrations continue working unchanged
+
 ### Breaking Changes
 
 - **Cost estimation gated behind declared `infracost` integration**

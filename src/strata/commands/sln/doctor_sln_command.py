@@ -610,6 +610,9 @@ class DoctorSlnCommand(BaseCommand):
             svc = IntegrationService.get_instance()
             if not svc.is_initialized():
                 svc.initialize_integrations()
+            ok, errors = svc.validate_required_integrations(capabilities={IIdentityProvider})
+            if not ok:
+                self.logger.debug("doctor_identity_required_integration_unavailable", errors=errors)
 
             for name in svc.get_integrations_with_capability(IIdentityProvider):
                 integration = svc.get_integration(name)
