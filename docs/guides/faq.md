@@ -34,6 +34,34 @@ The core idea: **you write config, strata runs tools.** strata never replaces Te
 
 ---
 
+## Can I visualize my infrastructure without writing code?
+
+**Yes.** `strata diagram show` renders any workspace data as an interactive Mermaid diagram — topology, drift, SBOM, deployment stages, environments, repositories, and more. 24 data sources are available; pick which ones you need, and strata merges them with a Jinja2 template you write (or uses a built-in layout).
+
+```bash
+strata diagram show -f topology              # built-in visualization
+strata diagram show -f my-drift              # your own custom diagram (workspace YAML)
+```
+
+Diagrams live in version control as `.strata/diagrams/*.yaml` files. Store the diagram definition alongside the data it visualizes, so the team always sees the current picture.
+
+See the [Diagram Visualization](features.md#diagram-visualization) section in features.md for the full source list and templating guide.
+
+---
+
+## Does strata expose secret values in diagrams?
+
+**No.** Diagram nodes that reference secrets, variables, or features show metadata only — the declared `store` and `environment`, never the actual resolved value or even the lookup key. This is a hard rule, not a style choice. Diagrams are easy to screenshot and share, so they're the wrong place for any secret content to leak, even accidentally.
+
+Example:
+- **Secret node**: shows `store: "azure-keyvault"`, `environment: "prod"` — nothing more
+- **Variable node** (non-constant): shows `store: "vault"`, `pointer: "path/to/var"` (the lookup key)
+- **Constant variable**: shows `store: "constant"` only (even though it's safe, treating all variables uniformly avoids confusion)
+
+Deployment outputs (keys you can see after `terraform apply`) show their key names in diagrams, but never the values. Drift, repositories, SBOM, topology — all structured data that's safe for visualization — show in full.
+
+---
+
 ## How does strata work with Terraform?
 
 strata reads your YAML workspace and deployment files, then **generates complete, ready-to-run Terraform files** into `.strata/build/`. Terraform is invoked as a subprocess and operates exactly as it normally would — with its own state backend, provider configs, and modules.
