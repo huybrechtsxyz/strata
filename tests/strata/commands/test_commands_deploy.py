@@ -49,6 +49,40 @@ class TestDeployRun:
         assert result.exit_code != 0
 
 
+class TestRunDeployCommandLoadRelatedServices:
+    """Regression: `run_deploy_command.py` must not shadow
+    `BaseDeployCommand._load_related_services()` with a no-op. A stale no-op override
+    here previously left `DeploymentService._environment_service`/`_workspace_service`
+    unset for `deploy run`, causing `ServiceNotValidatedError: Service
+    'EnvironmentService' must be validated before use` the moment `_resolve_values()`
+    ran — even though `strata validate --deep` and `strata build run` on the same file
+    both succeeded first. Introduced when `_load_related_services()` became an
+    overridable hook (v1.7.0) — before that, `base_deploy_command.py` called
+    `deployment_service.load_deploy_services()` directly and unconditionally, so this
+    class's pre-existing no-op override was never actually invoked.
+    """
+
+    def test_does_not_override_load_related_services(self):
+        """`deploy run` needs the full workspace+environment load (unlike `deploy show`/
+        `values get`/etc., which legitimately override this hook for a lighter-weight,
+        environment-only load) — it must inherit the base class's implementation."""
+        assert "_load_related_services" not in RunDeployCommand.__dict__
+
+    def test_delegates_to_deployment_service_load(self, tmp_path):
+        """Behavioral check: the inherited method actually calls
+        deployment_service.load_deploy_services() and propagates its result, rather
+        than unconditionally returning True regardless of whether loading succeeded."""
+        cmd = _make_run_command(tmp_path)
+        deployment_service = MagicMock()
+        deployment_service.load_deploy_services.return_value = False
+        deployment_service.get_validation_errors.return_value = ["boom"]
+
+        ok = cmd._load_related_services(deployment_service, {})
+
+        deployment_service.load_deploy_services.assert_called_once()
+        assert ok is False
+
+
 class TestDeployDestroy:
     def test_destroy_dry_run(self, tmp_path):
         runner = CliRunner()

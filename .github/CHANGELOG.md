@@ -8,6 +8,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Fixed
+
+- **`strata deploy run` always failed with `ServiceNotValidatedError: Service 'EnvironmentService' must be validated before use` (regression since v1.7.0)** — `RunDeployCommand` had a stale no-op `_load_related_services()` override (`return True`, loading nothing) left over from before that method became an overridable hook for lightweight, environment-only commands (`deploy show`, `values get`/`list`/`resolve`). Once the base class started calling that hook instead of loading services directly, `deploy run`'s override silently skipped the entire workspace + environment load — `strata validate --deep` and `strata build run` on the same file both succeeded, masking the bug until `deploy run` crashed immediately on every invocation. Removed the incorrect override so `deploy run` inherits the base class's real, full-load implementation, matching its pre-v1.7.0 behavior.
+
 ## [1.8.2] - 2026-08-25
 
 ### Fixed

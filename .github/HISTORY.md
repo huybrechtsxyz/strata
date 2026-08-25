@@ -7,6 +7,16 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Fixed
+
+- **`strata deploy run` always failed with `ServiceNotValidatedError: Service 'EnvironmentService' must be validated before use` (regression since v1.7.0)**
+  - `RunDeployCommand._load_related_services()` (`src/strata/commands/deploy/run_deploy_command.py`) was a stale no-op override (`return True`) that never called `deployment_service.load_deploy_services()` — predates v1.7.0, originally harmless because `BaseDeployCommand._before_execute()` used to call `deployment_service.load_deploy_services()` directly and unconditionally
+  - Commit `0720edb3` (2026-08-12, shipped in v1.7.0) refactored `_load_related_services()` into an overridable hook so lightweight, environment-only commands (`deploy show`, `values get`/`list`/`resolve` — see their own `_load_environment_related_services()`-based overrides) could skip the full workspace load; from that point on, `RunDeployCommand`'s pre-existing no-op override silently intercepted the call instead of delegating to the base class
+  - Effect: `DeploymentService._environment_service`/`_workspace_service` were never populated for `deploy run`. `strata validate --deep` and `strata build run` against the same deployment file both succeeded (they use different loading paths), masking the bug until `deploy run` crashed on the very first call to `_resolve_values()` → `ValueController.resolve_values()` → `DeploymentService.get_environment_service()`, which raises `ServiceNotValidatedError` when `_environment_service is None`
+  - Fix: removed the override entirely — `RunDeployCommand` now inherits `BaseDeployCommand._load_related_services()` (full `load_deploy_services()` + `validate_related_services()` + `apply_environment_overrides()`), matching the pre-v1.7.0 behavior
+  - New tests in `tests/strata/commands/test_commands_deploy.py` (`TestRunDeployCommandLoadRelatedServices`): an identity check that the class no longer defines its own `_load_related_services`, plus a behavioral check that the inherited method actually calls `deployment_service.load_deploy_services()` and propagates its result
+  - No test previously caught this because existing `RunDeployCommand` tests mock `_deployment_service` (or `execute()` itself) rather than exercising the real `DeploymentService.load_deploy_services()` → `get_environment_service()` path end-to-end
+
 ## [1.8.2] - 2026-08-25
 
 ### Fixed
