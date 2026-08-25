@@ -7,45 +7,100 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [1.8.2] - 2026-08-25
+
 ### Fixed
 
-- **`GraphController` file-reference resolution used the wrong base directory (ADR-0015)**
+- **Terraform input validation flagged secrets belonging to a different provisioner as errors**
+  - `TerraformBuilder._collect_declared_input_keys()` (added v1.7.0, ADR-0063 Gap 3) swept every secret declared anywhere in `environment.yaml` into every Terraform provisioner's declared-inputs set, with no scoping by stage or provisioner
+  - New `TerraformBuilder._stages_for_provisioner()` resolves which deployment stages actually route to a given provisioner (`stage.provisioner` name → `stage.topology`/`topology.provisioner` → sole workspace provisioner fallback), mirroring `BaseDeployer._resolve_iac_model()`'s exact resolution order
+  - New `TerraformBuilder._allowed_secret_keys_for_stages()` unions those stages' `secrets:` allowlists (`['*']` = all), matching `ResolvedValues.for_stage()`'s identical deploy-time secret scoping
+  - `_collect_declared_input_keys()` now scopes only SECRETS this way; variables/features remain a global check (never stage-scoped at deploy time either — injected into every stage unfiltered)
+  - No stages defined at all, or no stage resolves to a given provisioner → falls back to the legacy unscoped behavior (no regression for single-provisioner workspaces without stage-level secret scoping)
+  - 19 new tests in `tests/strata/builders/test_builders_terraform.py`, including an end-to-end `_validate_inputs()` regression test reproducing the reported false-positive and confirming a genuine `variables.tf` typo is still caught
+
+- **Local Helm charts with standard Go-template syntax crashed the entire build**
+  - `HelmBuilder` copies a local chart's source directory then unconditionally Jinja2-renders every text file in it via `BaseBuilder._apply_templates_to_dir()` — Helm's own `templates/` files use Go-template syntax (e.g. `{{ .Release.Name }}`), which Jinja2 cannot parse (`TemplateSyntaxError: unexpected '.'`), aborting the entire build
+  - `_apply_templates_to_dir()` gained an `exclude_dirs` param to skip named subdirectories at any depth; `HelmBuilder` now excludes `templates/` when templating a copied local chart — that subtree is rendered by Helm itself at deploy time
+  - Defense in depth: both `_apply_templates_to_dir()` and `_apply_template_to_file()` now also catch `jinja2.TemplateError`, skipping and logging a warning for any one unparseable file instead of aborting the whole build
+  - Regression tests in `tests/strata/builders/test_builders_base.py` and `tests/strata/builders/test_builders_helm.py`, including the exact `{{ .Release.Name }}` repro and a nested-subchart case
+
+### Added
+
+- **Helm `${TOKEN}` secret substitution now works at any nesting depth, not just `entry.env.KEY`**
+  - `HelmDeployer._find_env_tokens()` previously only matched `values_doc[entry]['env'][key]` — exactly one level of nesting where `env` is a direct child of a top-level entry — so any real-world chart with chart-mandated deep nesting (e.g. Immich's `controllers.main.containers.main.env.DB_PASSWORD`) or a flat `{env: {...}, image: {...}}` shape had no way to opt into token substitution at all
+  - Generalized to a recursive walk that scans any dict node keyed literally `env` (dict-shaped only), at any nesting depth — still scoped to `env`-keyed dicts specifically, not an unrestricted tree walk, so a user-typed `${...}`-shaped string in unrelated `svc.configuration`/`module.spec.configuration` pass-through values is still never matched
+  - Strict superset of the old behavior — no existing token resolution changes
+  - Not implemented: the Kubernetes-native list env shape (`env: [{name: KEY, value: value}]`) — documented as an explicit non-goal
+  - 6 new tests in `tests/strata/deployers/test_deployers_helm.py` for deep nesting, top-level `env`, non-dict `env` values, and no-recursion-inside-a-matched-`env`-dict
+
+## [1.8.1] - 2026-08-25
+
+### Fixed
+
+- Corrected `VERSION.txt` (bumped to `1.8.0-alpha` in the Kroki integration commit) — setuptools' dynamic-version PEP 440 normalization turns this into `1.8.0a0` (no hyphen) at install time, which fails `strata`'s own strict-semver self-checks (`tests/strata/commands/test_version.py`). No prior release in this repo's history had ever used a prerelease suffix; reverted to the established plain `X.Y.Z` convention. No functional changes.
+
+## [1.8.0] - 2026-08-25
+
+### Added
+
+- **Diagram visualization in VS Code extension (ADR-0034)** — full implementation across 4 phases:
+  - Phase 1: `kind: diagram` YAML schema (`sources` + Jinja `template`, optional `layout`/`style` sugar), `strata diagram show`/`list`, VS Code preview pane with live theme integration
+  - Phase 2: `strata://` URI scheme, `strata diagram resolve`, click-to-open-file, hover tooltips, reverse cursor→node lookup, `strata validate --deep` link-rot checking for hand-authored `click` directives
+  - Phase 3: all built-in sources (`topology`/`files`/`resources`/`modules`/`namespaces`/`network`/`firewalls`/`dns`/`stages`/`environments`/`tenants`/`history`/`promotion`/`approvals`/`variables`/`secrets`/`features`/`values`/`policies`/`drift`/`locks`/`repositories`/`outputs`/`sbom`), the full "Top 10" built-in diagram set, `strataDiagrams` sidebar view, `/diagram` chat command, and 4 new cookbook diagrams completing the non-flowchart set (`drift-summary` pie, `gate-sequence` sequence, `environment-complexity` quadrant, `secret-store-flow` sankey)
+  - Phase 4: Visual Builder webview (`diagramBuilderProvider.ts`), round-trip guarantee (`--print-template` escape hatch), `/diagram create <description>` natural-language generation (via the chat request's own LLM, validated through the standard `DiagramService.validate()` pipeline with a one-retry repair loop), Mermaid-markdown/SVG/PNG export (SVG/PNG entirely client-side — DOM SVG extraction + canvas rasterization in the preview webview, no network round-trip)
+  - See ADR-0034's "Deferred (By Design)" section for what's intentionally out of scope (Phase 5: parameterization, comparison mode, dashboard mode, gallery, large-topology perf work)
+- **`strata diagram show --format svg|png` via Kroki** — new `kroki` integration (`diagram_render` capability) renders Mermaid diagrams to real SVG/PNG image files via `https://kroki.io` (zero-config) or a self-hosted instance (`STRATA_KROKI_ADDRESS` or a declared `type: kroki` integration). `--format` is distinct from `--output` (console/json/text response envelope). See `docs/help/kroki.md`.
+- **Required-integration validation scoped by capability (ADR-0069, Option B)**
+  - `IntegrationService.validate_required_integrations()` gains an optional `capabilities: Optional[Set[Type]] = None` parameter — when given, only `required: true` integrations whose `spec.capabilities` intersect that set are validated
+  - `initialize_integrations()` no longer calls `validate_required_integrations()` internally, fixing a singleton "first caller wins" bug where only the first command in a process got its integrations validated
+  - 7 call sites updated (`IdentityController`, `CostController`, `AuditController`, `ExportAuditCommand`, `find_available_integration_with_capability()`, `ValueController`, `DoctorSlnCommand`) to explicitly scope validation to their required capabilities
+  - Fixes a false failure reported by the haven team: `strata values get` previously failed on a `required: true` terraform integration it never needed (only secret/variable/feature stores); the workaround of setting `required: false` broke `strata build`/`deploy`, which do need it
+
+### Fixed
+
+- **`strata diagram show -f refs` (and `-f topology`) resolved file references relative to the referencing file's directory instead of the workspace root**
   - `_add_edge_and_walk()` (`src/strata/controllers/graph_controller.py`) resolved every `file:` reference (`spec.workspace.file`, resource/module/namespace/network/firewall/dns entries) as `source_file.parent / ref` — relative to the *referencing file's own directory* — instead of `self._work_path / ref` — relative to the *workspace root*, which is the convention used everywhere else (`BaseService._resolve_file_path()`, `resolve_path()` in `src/strata/utils/system.py`)
   - Same bug in `_resolve_workspace_path()` when following a deployment's `spec.workspace.file` via `entry_path.parent`
   - Effect: any workspace where the referencing file lives below the workspace root (the normal case, e.g. `config/deployment.yaml` referencing `config/stack/workspace.yaml`) produced a doubled path prefix (`config/config/stack/workspace.yaml`), which doesn't exist on disk — every such node rendered `:::missing` in `strata diagram show -f refs` and `-f topology`, even though `strata validate --deep` on the same files was clean
   - Fix: both call sites now resolve against `self._work_path` unconditionally
   - No test coverage previously caught this because existing fixture workspaces have their entry file directly at the workspace root (`source_file.parent == self._work_path`), masking the bug
+  - See ADR-0015
 
-- **Required-integration validation now scoped by capability (ADR-0069, Option B)**
-  - `IntegrationService.validate_required_integrations()` now accepts optional `capabilities: Optional[Set[Type]] = None` parameter
-  - When `capabilities` is provided, only `required: true` specs whose `spec.capabilities` intersect the given set are validated; `None` preserves the original global behavior
-  - **Decoupling fix:** `initialize_integrations()` no longer calls `validate_required_integrations()` internally, fixing the singleton "first caller wins" bug where only the capability of the *first* command in a process got validated
-  - **7 call sites updated:** `IdentityController`, `CostController`, `AuditController`, `ExportAuditCommand`, `find_available_integration_with_capability()`, `ValueController`, and `DoctorSlnCommand` now explicitly call the scoped validation with their required capabilities
-  - **Error handling:** unavailable integrations log at warning level (non-fatal), consistent with existing `ValueController` mitigation. Prevents false "terraform not available" failures on commands like `values get` that have nothing to do with IaC provisioning
-  - Problem reported by haven team: `strata values get` failed on `required: true` terraform integration even though it only needs secret/variable/feature stores, not Terraform. Workaround was to set `required: false`, which broke `strata build`/`deploy`. Fix enables both commands to validate only what they need.
-  - Backward-compatible: existing deployments with `required: true` integrations continue working unchanged
+## [1.7.0] - 2026-08-12
 
 ### Breaking Changes
 
 - **Cost estimation gated behind declared `infracost` integration**
-  - (detailed notes as before)
+  - `strata cost show`, `strata cost diff`, and the automatic post-plan cost diff in `deploy run --dry-run` previously worked off of any `infracost` binary found on PATH, regardless of `configuration.yaml`
+  - They now require an explicit `infracost` entry under `spec.integrations` (`capabilities: [cost]`, `enabled: true`), matching how every other integration (secret stores, provisioners) is gated
+  - An installed binary with no declaration no longer does anything; `strata cost history` is unaffected (reads past `cost show` snapshots, needs no estimator)
 
 ### Added
+
+- **CLI login for a control plane or any OIDC service (ADR-0067)** — new `identity` integration capability with six first-class providers (`azure_ad`, `google`, `aws_identity_center`, `auth0`, `github_oauth`, `generic_oidc`), declared under `spec.integrations` like any other integration. No dedicated `strata login` command — login triggers lazily via `strata sln doctor --deep --login`. A control-plane session's authenticated identity outranks the CLI-local `actor` resolution chain (ADR-0066). See `strata help --topic identity`.
 
 - **Provisioner-managed resources**
   - New field: `WorkspaceResourceModel.managed_by: Optional[Literal["provisioner"]]` (`src/strata/models/workspace_model.py`) — marks a resource as fully provisioner-owned
   - Sibling field `WorkspaceResourceModel.file: Optional[str]` now optional (was required)
   - New validator `validate_file_or_managed_by()` enforces strict XOR: resource must have `file` reference OR `managed_by` set, but never both
   - Validation rejects invalid `managed_by` values; only `"provisioner"` is currently allowed (extensible for future values like `"external"`, `"configuration"`, etc.)
-  - Workspace loading skip (_`src/strata/services/workspace_service.py`) skips file resolution/loading when `resource_ref.managed_by` is set; stores `None` in resource service cache to mark the resource as externally-managed
+  - Workspace loading skip (`src/strata/services/workspace_service.py`) skips file resolution/loading when `resource_ref.managed_by` is set; stores `None` in resource service cache to mark the resource as externally-managed
   - Builder skip (`src/strata/builders/platform_builder.py`) guards against `None` resource services in both resource emission loop and firewall merge loop
   - Use case: multi-tenant IaC deployments where Terraform modules fully define resources (VMs, databases, networks, etc.) and workspace YAML only needs to wire topology/provisioners without detailed resource specs. Eliminates stub resource files.
   - Backward-compatible: existing workspaces with `file: <path>` continue working unchanged
-  - Test coverage: all 5263 tests pass; 152 workspace-specific tests verified
-    - Deployment-service integration: 2 new tests in `tests/strata/services/test_services_deployment.py` covering custom convention resolution and proving old `tenants/` location NOT consulted once custom convention declared
-    - Full suite: 5263 passed / 16 skipped
 
 - **Git ref pinning on `SourceModel` (ADR-0063, Gap 1)** — Provisioner sources now accept an optional `reference` field (branch, tag, or commit SHA) that overrides the workspace-level remote default. This allows two provisioners referencing the same remote to pin different versions (e.g., platform baseline on `v1.4.0` and team module on `main`). Resolution priority: `source.reference` → environment remote override → remote default. When a ref is pinned, `git archive` extracts the subtree without mutating the working tree.
+
+- **Structured variable types (ADR-0063, Gap 2)** — `VariableStoreModel` now accepts an optional `type` field (`string`, `number`, `bool`, `object`, `list`, `map`) that declares the intended HCL type. When set, strata validates that the YAML value matches the declared type and emits it as a native JSON type in `.auto.tfvars.json` instead of always stringifying.
+
+- **Terraform input validation (ADR-0063, Gap 3)** — `strata build run` now cross-checks declared variable/feature/secret keys from environment YAML against the module's `variables.tf` declarations. Undeclared inputs (typos) are errors that block the build with fuzzy-match suggestions. Unsupplied required variables (no default) are reported as warnings.
+
+- **Helm values validation (ADR-0063, Gap 3)** — For local Helm charts, `strata build run` now cross-checks `module.spec.configuration` keys against the chart's default `values.yaml`. Typos in top-level and one-level-deep keys are reported with fuzzy-match suggestions. Warnings only (does not block build). Registry charts are skipped (not available at build time).
+
+- **Output passing between provisioners (ADR-0063, Gap 4)** — Provisioners now accept an `inputs_from` field that declares explicit dependencies on other provisioners' outputs. Supports `mapping` (key rename), `prefix` (add prefix to all keys), and `select` (allowlist) modes. Validated at schema level: unknown provisioner references, self-references, and circular dependencies are rejected.
+
+- **Combined deployment outputs artifact (ADR-0063, Gap 5)** — After a successful `deploy run`, strata now writes a `deployment-outputs.json` file that merges all stages' Terraform outputs into a single registry-consumable document. Outputs are keyed by stage name; sensitive output keys are listed but values omitted.
 
 ---
 
