@@ -620,8 +620,8 @@ class TestFindEnvTokens:
         assert _find_env_tokens(doc) == []
 
     def test_ignores_tokens_outside_env(self):
-        """Tokens in top-level/service configuration (not builder-emitted) are
-        deliberately not scanned — only entry['env'] is."""
+        """Tokens outside any dict literally keyed 'env' (raw pass-through
+        configuration, or a plain top-level string) are deliberately not scanned."""
         doc = {"nginx": {"configuration": {"image": "${SOME_TAG}"}}, "topLevel": "${OTHER}"}
         assert _find_env_tokens(doc) == []
 
@@ -642,6 +642,42 @@ class TestFindEnvTokens:
         assert ("nginx.env.DB_PASSWORD", "DB_PASSWORD") in tokens
         assert ("redis.env.API_KEY", "API_KEY") in tokens
         assert len(tokens) == 2
+
+    def test_finds_token_under_deeply_nested_env(self):
+        """Off-the-shelf/registry charts with chart-mandated deep nesting, e.g.
+        Immich's controllers.main.containers.main.env.DB_PASSWORD."""
+        doc = {"controllers": {"main": {"containers": {"main": {"env": {"DB_PASSWORD": "${DB_PASSWORD}"}}}}}}
+        tokens = _find_env_tokens(doc)
+        assert tokens == [("controllers.main.containers.main.env.DB_PASSWORD", "DB_PASSWORD")]
+
+    def test_finds_token_under_top_level_env_key(self):
+        """A flat {env: {...}, image: {...}} shape — env IS the top-level key."""
+        doc = {"env": {"DB_PASSWORD": "${DB_PASSWORD}"}, "image": {"tag": "1.0"}}
+        tokens = _find_env_tokens(doc)
+        assert tokens == [("env.DB_PASSWORD", "DB_PASSWORD")]
+
+    def test_does_not_recurse_inside_matched_env_dict(self):
+        """env maps are flat KEY: value — a nested dict inside env is not walked further."""
+        doc = {"nginx": {"env": {"NESTED": {"DB_PASSWORD": "${DB_PASSWORD}"}}}}
+        assert _find_env_tokens(doc) == []
+
+    def test_non_dict_env_key_is_not_treated_as_env_block(self):
+        """A key literally named 'env' whose value is a plain string (not a dict)
+        is not a strata env map and must not be scanned."""
+        doc = {"nginx": {"env": "production"}}
+        assert _find_env_tokens(doc) == []
+
+    def test_multiple_env_dicts_at_different_depths(self):
+        doc = {
+            "nginx": {"env": {"A": "${A}"}},
+            "controllers": {"main": {"containers": {"main": {"env": {"B": "${B}"}}}}},
+            "env": {"C": "${C}"},
+        }
+        tokens = _find_env_tokens(doc)
+        assert ("nginx.env.A", "A") in tokens
+        assert ("controllers.main.containers.main.env.B", "B") in tokens
+        assert ("env.C", "C") in tokens
+        assert len(tokens) == 3
 
 
 # ---------------------------------------------------------------------------
