@@ -260,7 +260,13 @@ class HelmBuilder(BaseBuilder):
                     module_dir.mkdir(parents=True, exist_ok=True)
                     shutil.copytree(src_dir, module_dir, dirs_exist_ok=True)
                     if template_context:
-                        self._apply_templates_to_dir(module_dir, template_context)
+                        # Skip templates/ — that subtree is Helm's own Go-template
+                        # syntax (e.g. `{{ .Release.Name }}`), rendered by Helm itself
+                        # at deploy time with its own .Values/.Release context, not
+                        # strata's Jinja2 pass. Applying Jinja2 there would either
+                        # crash on unparseable Go-template syntax or silently mangle
+                        # it (see the TemplateError handling in _apply_templates_to_dir).
+                        self._apply_templates_to_dir(module_dir, template_context, exclude_dirs={"templates"})
                     if self.verbose:
                         self._messages.append(f"Copied helm chart source: {src_dir} -> {module_dir}")
 

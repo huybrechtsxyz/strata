@@ -4,7 +4,9 @@ import os
 import shutil
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
+
+from jinja2 import TemplateError
 
 from strata.logger import get_logger
 from strata.models.store_models import FeatureStoreType, VariableStoreType
@@ -170,10 +172,25 @@ class BaseBuilder(ABC):
         )
         return ctx
 
-    def _apply_templates_to_dir(self, dest_dir: Path, context: Dict[str, Any]) -> None:
+    def _apply_templates_to_dir(
+        self,
+        dest_dir: Path,
+        context: Dict[str, Any],
+        exclude_dirs: Optional[Set[str]] = None,
+    ) -> None:
         """Apply template substitution to all text files under *dest_dir*.
 
-        Binary files and unreadable files are silently skipped.
+        Binary files and unreadable files are silently skipped. Files whose content
+        is not valid Jinja2 syntax (e.g. Helm's own Go-template files, which use
+        constructs like ``{{ .Release.Name }}`` that Jinja2 cannot parse) are also
+        skipped rather than aborting the whole build — logged at warning level so the
+        skip is visible without failing the build.
+
+        *exclude_dirs*, when given, is a set of directory names (matched against any
+        path component relative to *dest_dir*) to skip entirely — e.g. a copied Helm
+        chart's ``templates/`` subdirectory, which is rendered by Helm itself with its
+        own ``.Values``/``.Release`` context, not strata's.
+
         Only files whose content changes after rendering are written back.
         """
         if not context:
@@ -182,6 +199,8 @@ class BaseBuilder(ABC):
         changed = 0
         for path in sorted(dest_dir.rglob("*")):
             if not path.is_file():
+                continue
+            if exclude_dirs and set(path.relative_to(dest_dir).parent.parts) & exclude_dirs:
                 continue
             try:
                 content = path.read_text(encoding="utf-8")
@@ -195,6 +214,12 @@ class BaseBuilder(ABC):
                     )
             except (UnicodeDecodeError, PermissionError):
                 pass  # skip binary or unreadable files
+            except TemplateError as exc:
+                self.logger.warning(
+                    "Skipped file not parseable as a Jinja2 template",
+                    file=str(path.relative_to(dest_dir)),
+                    error=str(exc),
+                )
 
         if changed:
             self.logger.info(
@@ -218,6 +243,12 @@ class BaseBuilder(ABC):
                 self.logger.debug("Applied template substitution", file=str(path))
         except (UnicodeDecodeError, PermissionError):
             pass
+        except TemplateError as exc:
+            self.logger.warning(
+                "Skipped file not parseable as a Jinja2 template",
+                file=str(path),
+                error=str(exc),
+            )
 
     def _copy_module_files(
         self,

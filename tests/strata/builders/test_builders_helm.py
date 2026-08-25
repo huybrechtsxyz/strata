@@ -531,3 +531,63 @@ class TestHelmBuilderBuildErrors:
 
         assert ok is False
         assert any("validation failed" in e for e in builder.get_errors())
+
+
+# ---------------------------------------------------------------------------
+# build — local chart source (copytree + Jinja2 templating)
+# ---------------------------------------------------------------------------
+
+
+class TestHelmBuilderLocalChartTemplates:
+    """Regression tests: a copied local chart's templates/ dir must never be
+    Jinja2-rendered, since it uses Helm's own Go-template syntax
+    (e.g. `{{ .Release.Name }}`), which is invalid Jinja2 and previously
+    crashed the entire build (see `TemplateSyntaxError: unexpected '.'`)."""
+
+    def _build_with_local_chart(self, tmp_path, namespace="testns", module_name="mymod"):
+        chart_dir = tmp_path / "charts" / "mychart"
+        (chart_dir / "templates").mkdir(parents=True)
+        (chart_dir / "templates" / "deployment.yaml").write_text(
+            "metadata:\n  name: {{ .Release.Name }}\n",
+            encoding="utf-8",
+        )
+        (chart_dir / "Chart.yaml").write_text("name: mychart\nversion: 0.1.0\n", encoding="utf-8")
+
+        src = MagicMock()
+        src.chart_repository = None
+        src.chart_name = None
+        src.chart_version = None
+        src.source_path = "charts/mychart"
+        src.repository = None
+
+        helm_module = _make_helm_module(module_name, services=[], source=src)
+        mod_service = _make_mod_service(module=helm_module)
+        mod_ref = _module_ref(module_name, "module.yaml")
+        ns_svc = _mock_namespace_service([mod_ref])
+        dep_svc = _mock_deployment_service(build_path=tmp_path, namespace_services={namespace: ns_svc})
+
+        module_path = tmp_path / "module.yaml"
+        module_path.write_text("")
+
+        builder = HelmBuilder()
+        with (
+            patch("strata.builders.helm_builder.resolve_path") as mock_rp,
+            patch("strata.builders.helm_builder.ModuleService.load", return_value=mod_service),
+        ):
+            mock_rp.return_value = module_path
+            ok = builder.build(dep_svc, tmp_path, tmp_path)
+
+        return builder, ok, tmp_path / namespace / module_name
+
+    def test_build_succeeds_with_go_template_syntax_in_templates_dir(self, tmp_path):
+        builder, ok, _ = self._build_with_local_chart(tmp_path)
+        assert ok is True, builder.get_errors()
+
+    def test_templates_dir_left_untouched(self, tmp_path):
+        _, _, module_dir = self._build_with_local_chart(tmp_path)
+        rendered = (module_dir / "templates" / "deployment.yaml").read_text(encoding="utf-8")
+        assert rendered == "metadata:\n  name: {{ .Release.Name }}\n"
+
+    def test_files_outside_templates_dir_are_still_copied(self, tmp_path):
+        _, _, module_dir = self._build_with_local_chart(tmp_path)
+        assert (module_dir / "Chart.yaml").read_text(encoding="utf-8") == "name: mychart\nversion: 0.1.0\n"
