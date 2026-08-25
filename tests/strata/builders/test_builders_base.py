@@ -85,3 +85,70 @@ class TestBaseBuilderHelpers:
         b1._errors.append("only b1")
         assert b2.has_errors() is False
         assert b1.get_errors() == ["only b1"]
+
+
+class TestApplyTemplatesToDir:
+    """Regression tests for the Helm local-chart Jinja2 crash (Go-template syntax)."""
+
+    def test_renders_matching_placeholder(self, tmp_path):
+        (tmp_path / "values.yaml").write_text("name: {{ STRATA_DEPLOYMENT_NAME }}\n", encoding="utf-8")
+        builder = _ConcreteBuilder()
+
+        builder._apply_templates_to_dir(tmp_path, {"STRATA_DEPLOYMENT_NAME": "prd"})
+
+        assert (tmp_path / "values.yaml").read_text(encoding="utf-8") == "name: prd\n"
+
+    def test_go_template_syntax_does_not_raise(self, tmp_path):
+        """A Helm chart's templates/ file using `{{ .Release.Name }}` is invalid
+        Jinja2 syntax (leading '.' is not a valid expression start) and must not
+        crash the whole build — it should be skipped and logged instead."""
+        chart_file = tmp_path / "templates" / "deployment.yaml"
+        chart_file.parent.mkdir(parents=True)
+        chart_file.write_text("metadata:\n  name: {{ .Release.Name }}\n", encoding="utf-8")
+        builder = _ConcreteBuilder()
+
+        builder._apply_templates_to_dir(tmp_path, {"STRATA_DEPLOYMENT_NAME": "prd"})
+
+        # Untouched — rendering failed and the original file is left as-is.
+        assert chart_file.read_text(encoding="utf-8") == "metadata:\n  name: {{ .Release.Name }}\n"
+
+    def test_exclude_dirs_skips_helm_templates_subdirectory(self, tmp_path):
+        chart_file = tmp_path / "templates" / "deployment.yaml"
+        chart_file.parent.mkdir(parents=True)
+        chart_file.write_text("metadata:\n  name: {{ .Release.Name }}\n", encoding="utf-8")
+        values_file = tmp_path / "values.yaml"
+        values_file.write_text("name: {{ STRATA_DEPLOYMENT_NAME }}\n", encoding="utf-8")
+        builder = _ConcreteBuilder()
+
+        builder._apply_templates_to_dir(
+            tmp_path,
+            {"STRATA_DEPLOYMENT_NAME": "prd"},
+            exclude_dirs={"templates"},
+        )
+
+        # templates/ is Helm's own Go-template scope — left completely untouched.
+        assert chart_file.read_text(encoding="utf-8") == "metadata:\n  name: {{ .Release.Name }}\n"
+        # Files outside templates/ still get strata's substitution.
+        assert values_file.read_text(encoding="utf-8") == "name: prd\n"
+
+    def test_nested_templates_directory_excluded_at_any_depth(self, tmp_path):
+        """A subchart's templates/ (charts/foo/templates/) must also be excluded."""
+        chart_file = tmp_path / "charts" / "foo" / "templates" / "deployment.yaml"
+        chart_file.parent.mkdir(parents=True)
+        chart_file.write_text("{{ .Release.Name }}\n", encoding="utf-8")
+        builder = _ConcreteBuilder()
+
+        builder._apply_templates_to_dir(tmp_path, {"STRATA_DEPLOYMENT_NAME": "prd"}, exclude_dirs={"templates"})
+
+        assert chart_file.read_text(encoding="utf-8") == "{{ .Release.Name }}\n"
+
+
+class TestApplyTemplateToFile:
+    def test_go_template_syntax_does_not_raise(self, tmp_path):
+        f = tmp_path / "NOTES.txt"
+        f.write_text("Release: {{ .Release.Name }}\n", encoding="utf-8")
+        builder = _ConcreteBuilder()
+
+        builder._apply_template_to_file(f, {"STRATA_DEPLOYMENT_NAME": "prd"})
+
+        assert f.read_text(encoding="utf-8") == "Release: {{ .Release.Name }}\n"

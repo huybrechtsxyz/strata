@@ -23,10 +23,15 @@ Chart source resolution:
     - No chart fields → local chart path in build directory
 
 Value substitution:
-  ``${KEY}`` tokens written by the builder under a service's ``env`` map are
-  resolved against the deployer's ``resolved_values`` and passed to Helm as
-  ``--set-string <path>=<value>`` flags at check/plan/apply time — never
-  written back to values.yaml on disk. An unresolved or ambiguous (name
+  ``${KEY}`` tokens are resolved against the deployer's ``resolved_values`` and
+  passed to Helm as ``--set-string <path>=<value>`` flags at check/plan/apply
+  time — never written back to values.yaml on disk. Tokens are looked for
+  under any dict node keyed literally ``env`` (dict-shaped: ``env: {KEY:
+  value}``), at any nesting depth — this covers strata-generated
+  ``entry.env.KEY`` values (from ``svc.environment`` refs) as well as
+  hand-authored/registry-chart values with chart-mandated deep nesting (e.g.
+  ``controllers.main.containers.main.env.DB_PASSWORD``) or a flat top-level
+  ``env:`` block. See ``_find_env_tokens()``. An unresolved or ambiguous (name
   collides across secrets/variables/features) token fails the step.
 """
 
@@ -95,32 +100,48 @@ _TOKEN_RE = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$")
 
 
 def _find_env_tokens(values_doc: Dict[str, Any]) -> List[Tuple[str, str]]:
-    """Return (dotted_path, token_key) for every ``${TOKEN}`` leaf found under each
-    top-level entry's ``env`` sub-dict.
+    """Return (dotted_path, token_key) for every ``${TOKEN}`` leaf found under any
+    dict node keyed literally ``"env"``, anywhere in *values_doc* (any nesting depth).
 
-    Deliberately NOT a full-tree walk of ``values_doc``: ``helm_builder.py`` only
-    ever emits ``${KEY}`` tokens under ``entry['env']`` (from ``svc.environment``
-    ``var:``/``secret:``/``feature:`` refs). ``module.spec.configuration`` and
-    ``svc.configuration`` are raw, user-authored pass-through values merged
-    elsewhere in the same doc — walking those too would risk matching a
-    user-typed ``${...}``-shaped string that was never meant as a strata
-    substitution token.
+    Scoped to ``env``-keyed dicts specifically — NOT an unrestricted full-tree walk
+    of ``values_doc``: ``module.spec.configuration``/``svc.configuration`` are raw,
+    user-authored pass-through values merged elsewhere in the same doc, and walking
+    arbitrary keys there would risk matching a user-typed ``${...}``-shaped string
+    that was never meant as a strata substitution token. Restricting to ``env`` dicts
+    keeps that safety property while covering every real-world shape seen in practice:
+
+    - strata-managed services: ``values_doc[entry]["env"][KEY]`` — one level, from
+      ``svc.environment`` ``var:``/``secret:``/``feature:`` refs (``helm_builder.py``'s
+      own emitted shape).
+    - Off-the-shelf/registry charts with chart-mandated deep nesting, e.g. Immich's
+      ``controllers.main.containers.main.env.DB_PASSWORD``.
+    - A flat ``{env: {...}, image: {...}}`` shape, where ``env`` IS the top-level key.
+
+    Only dict-shaped ``env`` blocks (``env: {KEY: value}``) are matched — the
+    alternate Kubernetes-native list shape (``env: [{name: KEY, value: value}]``)
+    is a different data shape (list of name/value pairs, index-addressed for
+    ``--set``) and is intentionally not walked here.
     """
     tokens: List[Tuple[str, str]] = []
-    if not isinstance(values_doc, dict):
-        return tokens
-    for entry_name, entry in values_doc.items():
-        if not isinstance(entry, dict):
-            continue
-        env = entry.get("env")
-        if not isinstance(env, dict):
-            continue
-        for key, value in env.items():
-            if not isinstance(value, str):
+
+    def _walk(node: Any, path: List[str]) -> None:
+        if not isinstance(node, dict):
+            return
+        for key, value in node.items():
+            current_path = path + [str(key)]
+            if key == "env" and isinstance(value, dict):
+                for env_key, env_value in value.items():
+                    if not isinstance(env_value, str):
+                        continue
+                    match = _TOKEN_RE.match(env_value)
+                    if match:
+                        tokens.append((".".join(current_path + [str(env_key)]), match.group(1)))
+                # env maps are a flat KEY: value convention — don't recurse further
+                # inside a matched env dict itself.
                 continue
-            match = _TOKEN_RE.match(value)
-            if match:
-                tokens.append((f"{entry_name}.env.{key}", match.group(1)))
+            _walk(value, current_path)
+
+    _walk(values_doc, [])
     return tokens
 
 
