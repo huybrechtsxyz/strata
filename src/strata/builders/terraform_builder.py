@@ -1389,6 +1389,11 @@ class TerraformBuilder(BaseBuilder):
             return True
 
         provisioners = workspace_service.model.spec.provisioners or []
+        all_stages = (
+            deployment_service.model.spec.stages or []
+            if deployment_service.model and deployment_service.model.spec
+            else []
+        )
         has_errors = False
 
         for prov in provisioners:
@@ -1412,8 +1417,14 @@ class TerraformBuilder(BaseBuilder):
                 # No variables.tf found or no variables declared — skip
                 continue
 
-            # Collect all declared input keys for this provisioner
-            declared_keys = self._collect_declared_input_keys(deployment_service)
+            # Collect all declared input keys for this provisioner. Secrets are scoped to
+            # the stage(s) that actually resolve to *this* provisioner (mirroring
+            # ResolvedValues.for_stage(), which applies the same stage.secrets allowlist
+            # at deploy time) — a secret meant only for a different provisioner sharing
+            # this environment file (e.g. an Ansible/Helm-only app secret) is never
+            # injected here and must not be flagged as "not declared in variables.tf".
+            matching_stages = self._stages_for_provisioner(workspace_service.model, all_stages, prov)
+            declared_keys = self._collect_declared_input_keys(deployment_service, matching_stages)
 
             # Include keys that will be injected at deploy-time via inputs_from
             if prov.inputs_from:
@@ -1441,11 +1452,73 @@ class TerraformBuilder(BaseBuilder):
 
         return not has_errors
 
-    def _collect_declared_input_keys(self, deployment_service: DeploymentService) -> Set[str]:
+    def _stages_for_provisioner(self, workspace_model: Any, stages: List[Any], prov: Any) -> List[Any]:
+        """Return the deployment stages that resolve to *prov*.
+
+        Mirrors ``BaseDeployer._resolve_iac_model()``'s resolution order so build-time
+        validation scopes secrets exactly the way deploy-time injection does:
+
+        1. ``stage.provisioner`` — explicit provisioner name match.
+        2. ``stage.topology``    — topology name → ``topology.provisioner`` name match.
+        3. Sole workspace provisioner — every stage implicitly uses it when it's the
+           only one declared and neither of the above is set.
+        """
+        provisioners = workspace_model.spec.provisioners or []
+        topologies = workspace_model.spec.topology or []
+        sole_provisioner_name = provisioners[0].name if len(provisioners) == 1 else None
+
+        matched: List[Any] = []
+        for stage in stages:
+            resolved_name: Optional[str] = None
+            if stage.provisioner:
+                resolved_name = stage.provisioner
+            elif stage.topology:
+                topo = next((t for t in topologies if str(t.name) == stage.topology), None)
+                if topo:
+                    resolved_name = str(topo.provisioner)
+            elif sole_provisioner_name:
+                resolved_name = sole_provisioner_name
+
+            if resolved_name == prov.name:
+                matched.append(stage)
+
+        return matched
+
+    @staticmethod
+    def _allowed_secret_keys_for_stages(stages: List[Any], all_secret_keys: Set[str]) -> Set[str]:
+        """Scope declared secret keys to what ``ResolvedValues.for_stage()`` would inject.
+
+        - No matching stages at all (no ``stages:`` defined, or this provisioner isn't
+          referenced by any stage) — no per-stage scoping signal available, so fall back
+          to the legacy unscoped behavior rather than silently skipping validation.
+        - Any matching stage with ``secrets: ['*']`` — all secrets (escape hatch, same as
+          ``ResolvedValues.for_stage()``).
+        - Otherwise — the union of every matching stage's ``secrets:`` allowlist.
+        """
+        if not stages:
+            return set(all_secret_keys)
+
+        allowed: Set[str] = set()
+        for stage in stages:
+            stage_secrets = getattr(stage, "secrets", None)
+            if not stage_secrets:
+                continue
+            if stage_secrets == ["*"]:
+                return set(all_secret_keys)
+            allowed.update(stage_secrets)
+        return allowed
+
+    def _collect_declared_input_keys(
+        self, deployment_service: DeploymentService, matching_stages: Optional[List[Any]] = None
+    ) -> Set[str]:
         """Collect all variable and feature keys declared in the environment YAML.
 
-        These are the keys that will be emitted to tfvars files (either at build-time
-        for constant/env stores, or at deploy-time for integration stores).
+        Variables and features are never stage-scoped at deploy time (they're injected
+        into every stage unfiltered — see ``ResolvedValues.for_stage()``), so they are
+        collected unconditionally here too. Secrets ARE stage-scoped at deploy time via
+        each stage's ``secrets:`` allowlist, so when *matching_stages* is given, only
+        secrets reachable by those stages are included — see
+        ``_allowed_secret_keys_for_stages()``.
         """
         keys: Set[str] = set()
 
@@ -1461,10 +1534,11 @@ class TerraformBuilder(BaseBuilder):
         for feat in env_service.get_features():
             keys.add(feat.key)
 
-        # Secrets (injected as TF_VAR_* at deploy-time)
+        # Secrets (injected as TF_VAR_* at deploy-time) — scoped to what the matching
+        # stage(s)' secrets: allowlist would actually pass to this provisioner.
         if env_service.model.spec and env_service.model.spec.secrets:
-            for secret in env_service.model.spec.secrets:
-                keys.add(secret.key)
+            all_secret_keys = {secret.key for secret in env_service.model.spec.secrets}
+            keys.update(self._allowed_secret_keys_for_stages(matching_stages or [], all_secret_keys))
 
         return keys
 

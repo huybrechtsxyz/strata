@@ -650,3 +650,285 @@ class TestEmitVariableValue:
         var = VariableStoreModel(key="k", store="constant", value=val, type="map")
         result = TerraformBuilder._emit_variable_value(var)
         assert result == val
+
+
+# ---------------------------------------------------------------------------
+# Input validation — per-provisioner secret scoping regression tests
+#
+# _collect_declared_input_keys() previously swept EVERY secret declared anywhere
+# in environment.yaml into every Terraform provisioner's "declared inputs" set,
+# regardless of which stage(s)/provisioner actually use them. This false-positived
+# on any secret meant only for a different provisioner (Ansible/Compose/Helm)
+# sharing the same environment file. The fix scopes secrets to the stage(s) that
+# resolve to *this* provisioner, mirroring ResolvedValues.for_stage()'s deploy-time
+# stage.secrets allowlist.
+# ---------------------------------------------------------------------------
+
+
+def _make_stage(name="stage1", provisioner=None, topology=None, secrets=None):
+    stage = MagicMock()
+    stage.name = name
+    stage.provisioner = provisioner
+    stage.topology = topology
+    stage.secrets = secrets
+    return stage
+
+
+class TestStagesForProvisioner:
+    def test_explicit_stage_provisioner_match(self):
+        prov = _make_provisioner(source_path="terraform")
+        prov.name = "haven_iac"
+        other_prov = _make_provisioner(source_path="ansible")
+        other_prov.name = "haven_app"
+        workspace_model = MagicMock()
+        workspace_model.spec.provisioners = [prov, other_prov]
+        workspace_model.spec.topology = []
+
+        matching = _make_stage(name="provision", provisioner="haven_iac")
+        non_matching = _make_stage(name="configure", provisioner="haven_app")
+
+        builder = TerraformBuilder()
+        result = builder._stages_for_provisioner(workspace_model, [matching, non_matching], prov)
+
+        assert result == [matching]
+
+    def test_topology_resolves_to_provisioner(self):
+        prov = _make_provisioner(source_path="terraform")
+        prov.name = "haven_iac"
+        workspace_model = MagicMock()
+        workspace_model.spec.provisioners = [prov]
+        topo = MagicMock()
+        topo.name = "infra"
+        topo.provisioner = "haven_iac"
+        workspace_model.spec.topology = [topo]
+
+        stage = _make_stage(name="provision", topology="infra")
+
+        builder = TerraformBuilder()
+        result = builder._stages_for_provisioner(workspace_model, [stage], prov)
+
+        assert result == [stage]
+
+    def test_sole_provisioner_fallback_when_stage_has_neither(self):
+        prov = _make_provisioner(source_path="terraform")
+        prov.name = "haven_iac"
+        workspace_model = MagicMock()
+        workspace_model.spec.provisioners = [prov]
+        workspace_model.spec.topology = []
+
+        stage = _make_stage(name="provision", provisioner=None, topology=None)
+
+        builder = TerraformBuilder()
+        result = builder._stages_for_provisioner(workspace_model, [stage], prov)
+
+        assert result == [stage]
+
+    def test_no_fallback_when_multiple_provisioners_and_stage_unset(self):
+        prov = _make_provisioner(source_path="terraform")
+        prov.name = "haven_iac"
+        other_prov = _make_provisioner(source_path="ansible")
+        other_prov.name = "haven_app"
+        workspace_model = MagicMock()
+        workspace_model.spec.provisioners = [prov, other_prov]
+        workspace_model.spec.topology = []
+
+        stage = _make_stage(name="ambiguous", provisioner=None, topology=None)
+
+        builder = TerraformBuilder()
+        result = builder._stages_for_provisioner(workspace_model, [stage], prov)
+
+        assert result == []
+
+    def test_stage_referencing_other_provisioner_excluded(self):
+        prov = _make_provisioner(source_path="terraform")
+        prov.name = "haven_iac"
+        other_prov = _make_provisioner(source_path="ansible")
+        other_prov.name = "haven_app"
+        workspace_model = MagicMock()
+        workspace_model.spec.provisioners = [prov, other_prov]
+        workspace_model.spec.topology = []
+
+        stage = _make_stage(name="configure", provisioner="haven_app")
+
+        builder = TerraformBuilder()
+        result = builder._stages_for_provisioner(workspace_model, [stage], prov)
+
+        assert result == []
+
+
+class TestAllowedSecretKeysForStages:
+    def test_no_stages_falls_back_to_all_keys(self):
+        """No scoping signal available — legacy unscoped behavior, not silently empty."""
+        all_keys = {"A", "B", "C"}
+        result = TerraformBuilder._allowed_secret_keys_for_stages([], all_keys)
+        assert result == all_keys
+
+    def test_wildcard_returns_all_keys(self):
+        all_keys = {"A", "B", "C"}
+        stage = _make_stage(secrets=["*"])
+        result = TerraformBuilder._allowed_secret_keys_for_stages([stage], all_keys)
+        assert result == all_keys
+
+    def test_union_of_multiple_stages(self):
+        all_keys = {"A", "B", "C"}
+        stage1 = _make_stage(name="s1", secrets=["A"])
+        stage2 = _make_stage(name="s2", secrets=["B"])
+        result = TerraformBuilder._allowed_secret_keys_for_stages([stage1, stage2], all_keys)
+        assert result == {"A", "B"}
+
+    def test_stage_with_no_secrets_contributes_nothing(self):
+        all_keys = {"A", "B"}
+        stage = _make_stage(secrets=None)
+        result = TerraformBuilder._allowed_secret_keys_for_stages([stage], all_keys)
+        assert result == set()
+
+    def test_unrelated_secret_excluded(self):
+        """The core regression case: a secret meant for another provisioner
+        (not in this stage's allowlist) must not appear in the scoped result."""
+        all_keys = {"VAULTWARDEN_ADMIN_TOKEN", "TERRAFORM_ONLY_SECRET"}
+        stage = _make_stage(secrets=["TERRAFORM_ONLY_SECRET"])
+        result = TerraformBuilder._allowed_secret_keys_for_stages([stage], all_keys)
+        assert result == {"TERRAFORM_ONLY_SECRET"}
+        assert "VAULTWARDEN_ADMIN_TOKEN" not in result
+
+
+class TestCollectDeclaredInputKeysScoping:
+    def _mock_env_service(self, variables=None, features=None, secret_keys=None):
+        env_service = MagicMock()
+        env_service.model.spec.secrets = [MagicMock(key=k) for k in (secret_keys or [])]
+        env_service.get_variables.return_value = [MagicMock(key=k) for k in (variables or [])]
+        env_service.get_features.return_value = [MagicMock(key=k) for k in (features or [])]
+        return env_service
+
+    def test_variables_and_features_always_included_unscoped(self):
+        """Variables/features are never stage-scoped at deploy time (ResolvedValues.for_stage
+        passes them through unfiltered) — they must be collected regardless of matching_stages."""
+        deployment_service = MagicMock()
+        deployment_service.get_environment_service.return_value = self._mock_env_service(
+            variables=["region"], features=["dark_mode"], secret_keys=["OTHER_APP_SECRET"]
+        )
+        stage = _make_stage(secrets=["UNRELATED"])
+
+        builder = TerraformBuilder()
+        keys = builder._collect_declared_input_keys(deployment_service, [stage])
+
+        assert "region" in keys
+        assert "dark_mode" in keys
+
+    def test_secrets_scoped_to_matching_stage_allowlist(self):
+        deployment_service = MagicMock()
+        deployment_service.get_environment_service.return_value = self._mock_env_service(
+            secret_keys=["TF_SECRET", "ANSIBLE_ONLY_SECRET"]
+        )
+        stage = _make_stage(secrets=["TF_SECRET"])
+
+        builder = TerraformBuilder()
+        keys = builder._collect_declared_input_keys(deployment_service, [stage])
+
+        assert "TF_SECRET" in keys
+        assert "ANSIBLE_ONLY_SECRET" not in keys
+
+    def test_no_matching_stages_falls_back_to_all_secrets(self):
+        """No per-provisioner scoping signal (e.g. no stages: defined at all) —
+        preserves the legacy behavior rather than silently under-validating."""
+        deployment_service = MagicMock()
+        deployment_service.get_environment_service.return_value = self._mock_env_service(secret_keys=["ANY_SECRET"])
+
+        builder = TerraformBuilder()
+        keys = builder._collect_declared_input_keys(deployment_service, [])
+
+        assert "ANY_SECRET" in keys
+
+    def test_default_matching_stages_none_falls_back_to_all_secrets(self):
+        """Calling without matching_stages at all preserves pre-fix behavior."""
+        deployment_service = MagicMock()
+        deployment_service.get_environment_service.return_value = self._mock_env_service(secret_keys=["ANY_SECRET"])
+
+        builder = TerraformBuilder()
+        keys = builder._collect_declared_input_keys(deployment_service)
+
+        assert "ANY_SECRET" in keys
+
+
+class TestValidateInputsProvisionerScoping:
+    """End-to-end regression test for the reported bug: a Terraform provisioner's
+    variables.tf validation must not fail on a secret declared in environment.yaml
+    that's only ever allowlisted for a different (e.g. Ansible) provisioner's stage."""
+
+    def _write_variables_tf(self, prov_dir: Path, var_names):
+        prov_dir.mkdir(parents=True, exist_ok=True)
+        body = "\n".join(f'variable "{name}" {{\n  type = string\n}}\n' for name in var_names)
+        (prov_dir / "variables.tf").write_text(body, encoding="utf-8")
+
+    def _make_deployment_service(self, tmp_path, prov, other_prov, stages, secret_keys):
+        workspace_model = MagicMock()
+        workspace_model.spec.provisioners = [prov, other_prov]
+        workspace_model.spec.topology = []
+
+        workspace_service = MagicMock()
+        workspace_service.model = workspace_model
+
+        env_service = MagicMock()
+        env_service.model.spec.secrets = [MagicMock(key=k) for k in secret_keys]
+        env_service.get_variables.return_value = []
+        env_service.get_features.return_value = []
+
+        deployment_service = MagicMock()
+        deployment_service.get_workspace_service.return_value = workspace_service
+        deployment_service.get_environment_service.return_value = env_service
+        deployment_service.get_build_path.return_value = tmp_path
+        deployment_service.model.spec.stages = stages
+        return deployment_service
+
+    def test_ansible_only_secret_does_not_fail_terraform_validation(self, tmp_path):
+        prov = _make_provisioner(source_path="terraform")
+        prov.name = "haven_iac"
+        other_prov = _make_provisioner(source_path="ansible")
+        other_prov.name = "haven_app"
+
+        prov_dir = tmp_path / "terraform"
+        self._write_variables_tf(prov_dir, ["TF_ONLY_VAR"])
+
+        tf_stage = _make_stage(name="provision", provisioner="haven_iac", secrets=["TF_ONLY_VAR"])
+        ansible_stage = _make_stage(name="configure", provisioner="haven_app", secrets=["VAULTWARDEN_ADMIN_TOKEN"])
+
+        deployment_service = self._make_deployment_service(
+            tmp_path,
+            prov,
+            other_prov,
+            stages=[tf_stage, ansible_stage],
+            secret_keys=["TF_ONLY_VAR", "VAULTWARDEN_ADMIN_TOKEN"],
+        )
+
+        builder = TerraformBuilder()
+        ok = builder._validate_inputs(deployment_service, tmp_path)
+
+        assert ok is True, builder.get_errors()
+        assert not builder.get_errors()
+
+    def test_genuine_typo_still_reported_as_error(self, tmp_path):
+        """Regression safety: a secret allowlisted for THIS stage but genuinely
+        missing from variables.tf must still be reported."""
+        prov = _make_provisioner(source_path="terraform")
+        prov.name = "haven_iac"
+        other_prov = _make_provisioner(source_path="ansible")
+        other_prov.name = "haven_app"
+
+        prov_dir = tmp_path / "terraform"
+        self._write_variables_tf(prov_dir, ["SOME_OTHER_VAR"])
+
+        tf_stage = _make_stage(name="provision", provisioner="haven_iac", secrets=["TYPO_SECRET"])
+
+        deployment_service = self._make_deployment_service(
+            tmp_path,
+            prov,
+            other_prov,
+            stages=[tf_stage],
+            secret_keys=["TYPO_SECRET"],
+        )
+
+        builder = TerraformBuilder()
+        ok = builder._validate_inputs(deployment_service, tmp_path)
+
+        assert ok is False
+        assert any("TYPO_SECRET" in e for e in builder.get_errors())
