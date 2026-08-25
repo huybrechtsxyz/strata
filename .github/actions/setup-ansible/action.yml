@@ -1,0 +1,34 @@
+# ===============================================================================
+# Action Name  : setup-ansible
+# Description  : Install ansible-core for strata's ansible integration.
+#                CLI only — no credentials to configure here (SSH keys and
+#                inventory are handled by the deployment's own steps).
+# ===============================================================================
+
+name: "Setup Ansible"
+description: "Install ansible-core for strata's ansible integration."
+
+branding:
+  icon: "terminal"
+  color: "red"
+
+inputs:
+  ansible-version:
+    description: "ansible-core version to install (e.g. '2.17.5'). Defaults to latest."
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Install ansible-core
+      shell: bash
+      env:
+        _VERSION: ${{ inputs.ansible-version }}
+      run: |
+        if [ -n "$_VERSION" ]; then
+          pip install "ansible-core==${_VERSION}"
+        else
+          pip install ansible-core
+        fi
+        ansible-playbook --version

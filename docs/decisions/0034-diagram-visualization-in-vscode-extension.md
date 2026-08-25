@@ -1,11 +1,21 @@
 # Diagram visualization in VS Code extension
 
-- Status: proposed
-- Date: 2026-07-11 (revised 2026-08-13 — repositioned from "strata owns a diagram system" to "strata generates Mermaid fragments and connects them to the workspace; users compose freely")
+- Status: **Implemented** — Phases 1–4 (CLI/YAML foundation, workspace connection, source coverage + cookbook, GUI Builder + AI chat) are complete and shipped. Everything else is intentionally deferred, not unfinished — see "Deferred (By Design)" below for what's not done and why.
+- Date: 2026-07-11 (revised 2026-08-13 — repositioned from "strata owns a diagram system" to "strata generates Mermaid fragments and connects them to the workspace; users compose freely"; revised 2026-08-25 — Phases 1–4 completed, status changed from partially-implemented to implemented)
 
-## Remaining Work
+## Deferred (By Design)
 
-- Not started — nothing in this ADR has been implemented yet.
+Everything in Phases 1–4 below is implemented and shipped. Nothing in this list is an oversight — each item was evaluated (see "Open Questions" and the phase checklists in "Implementation Roadmap") and deliberately left undone, for the reason given.
+
+- **Phase 5 — advanced features (`v1.5.0+`, not started):** diagram parameterization (`${profile}`/`${environment}`), comparison mode (two diagrams side by side), dashboard mode (pin multiple diagrams), a community diagram gallery, and performance optimization for large topologies. Each is a genuinely separate design/UI effort from the Phase 4 Builder, which deliberately targets **one** diagram against **one** context — see Open Questions #2/#3/#5/#6/#11.
+- **`nodeMap` enrichment cache (Phase 2):** superseded for tooltips/highlighting by a simpler classDef/label-matching approach that needs no extra CLI round-trip. Only still relevant if secondary node actions beyond "open file" are ever added — nothing today needs it.
+- **Per-data-source icon conventions:** designed (see "Icon conventions" below) but not wired into the webview — no built-in source renders icons yet, so there is nothing to theme there.
+- **`strata new --template diagram` scaffold:** not implemented; `strata diagram show --print-template` already covers the "give me a starting template" need.
+- **Cookbook browser as structured, browsable data:** the 185-entry catalog in Part 2 is prose in this ADR, not CLI-served data. The sidebar ships the real `strata diagram list` catalog (built-ins + workspace definitions) instead of a hardcoded browse-by-category UI for entries that don't exist as files.
+- **Large-topology handling (collapse/expand, pagination, zoom) — Open Question #8, still genuinely open:** needs the node-count benchmark (#12) first; no workspace has reported hitting a performance wall yet.
+- **Proactive AI diagram suggestions — Open Question #9, still genuinely open:** deliberately unscheduled. Phase 4 ships reactive NL→diagram only (`/diagram create`); a proactive trigger needs its own design if/when users actually ask for it.
+- **Sugar-based diagram inheritance (base + override) — Open Question #11:** hand-written `spec.template` diagrams already get this for free via Jinja `{% include %}`/`{% extends %}` (ADR-0017); the `layout`/`style` sugar half stays deferred until cookbook diagrams show real duplication pain, not preemptively.
+
 
 ## Context and Problem Statement
 
@@ -117,21 +127,22 @@ Concretely, strata provides:
 
 ## Related Work
 
-- **ADR 0015 — `strata validate graph`** (completed): delivers the data foundation for built-in diagrams #1 and #8. This ADR **replaces that command surface** with `strata diagram show` (see "CLI surface" in Part 3) while reusing its `GraphController` verbatim as the `topology` and `files` source types. `dependencyGraphProvider.ts` should be updated to delegate to this CLI output rather than doing its own `@repo/` parsing.
+- **ADR 0015 — `strata validate graph`** (completed): delivers the data foundation for built-in diagrams #1 and #8. This ADR **replaces that command surface** with `strata diagram show` (see "CLI surface" in Part 3) while reusing its `GraphController` verbatim as the `topology` and `files` source types. `dependencyGraphProvider.ts` was removed and replaced by `diagramPreviewProvider.ts`, which delegates to this CLI output rather than doing its own `@repo/` parsing.
 - **ADR 0009 — Extended SBOM**: SBOM catalog diagrams (Category 26) use `strata build sbom --output json`.
 - **ADR 0007 — Deployment State Locking**: Category 25 diagrams use lock manifest data.
 - **ADR 0038 — Multi-Tenant Fleet**: Category 13 and 22 diagrams use fleet deployment data.
 
 ## Implementation Status
 
-Not yet started. This is a proposal for prioritization and roadmap planning.
+Implemented — see "Implementation Roadmap" below for the authoritative, phase-by-phase checklist, and "Deferred (By Design)" above for what's intentionally not built. Summary: Phases 1–3 are complete — CLI/data-layer foundation (including `strata diagram show --format svg|png` via Kroki), VS Code preview pane, click-to-open, theme integration, hover tooltips, reverse cursor→node lookup (`diagramPreviewProvider.ts`), `strata validate --deep` link-rot checking (`DiagramService._validate_dynamic()`), all 10 Top-10 built-ins, the `strataDiagrams` sidebar (`diagramsViewProvider.ts`), and the `/diagram` chat command are all done. Phase 4 (`diagramBuilderProvider.ts` — Visual Builder, round-trip, NL→diagram chat generation via `/diagram create`, Mermaid-markdown export, and client-side SVG/PNG export) is also done — Builder export needed no Kroki dependency since the preview webview already has the diagram rendered by Chromium.
+
 
 ### What ADR 0015 already delivers (no VS Code work needed for data layer)
 
-| Built-in # | Diagram                        | CLI backing                                                   | VS Code work remaining                                           |
-| ---------- | ------------------------------ | ------------------------------------------------------------- | ---------------------------------------------------------------- |
-| 1          | Infrastructure Topology        | `topology` source (ADR-0015 `GraphController`, resource mode) | Webview + Mermaid render                                         |
-| 8          | Deployment File Reference Tree | `files` source (ADR-0015 `GraphController`, file mode)        | Webview + Mermaid render (replaces `dependencyGraphProvider.ts`) |
+| Built-in # | Diagram                        | CLI backing                                                   | VS Code work remaining                                                                                    |
+| ---------- | ------------------------------ | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| 1          | Infrastructure Topology        | `topology` source (ADR-0015 `GraphController`, resource mode) | ✅ Done — Webview + Mermaid render in `diagramPreviewProvider.ts` (`Strata: Show Infrastructure Topology`) |
+| 8          | Deployment File Reference Tree | `files` source (ADR-0015 `GraphController`, file mode)        | ✅ Done — Webview + Mermaid render in `diagramPreviewProvider.ts` (replaced `dependencyGraphProvider.ts`)  |
 
 Catalog Cat.1 #1, #2 and Cat.6 #49 are also covered by ADR 0015's JSON output.
 
@@ -1385,18 +1396,22 @@ When a user composes a diagram from multiple sources in the Builder (Part 3), th
 
 ## Open Questions
 
-1. Should the builder support **composed diagrams** (multiple sub-diagrams in a single view, e.g., topology + stage flow side by side)?
-2. Should saved diagrams support **parameterization** (e.g., `${environment}` resolved from active profile)?
-3. Should the builder support **comparison mode** (e.g., "show topology for dev vs prd side by side")?
-4. Should diagrams be **publishable** (export to Confluence, GitHub wiki, or docs folder)?
-5. Should we provide a **diagram gallery** in the extension marketplace for community-shared diagram definitions?
-6. Should there be a **dashboard mode** (pin 4–6 diagrams to a persistent panel, auto-refresh)?
-7. Should we cache diagram data or re-resolve on every render?
-8. How do we handle very large topologies (50+ modules, 200+ services)? Collapse/expand? Pagination? Zoom?
-9. Should the AI chat generate diagrams proactively (e.g., after a deployment, auto-show stage timeline)?
-10. Should we support Mermaid alternatives (D3.js, Elk.js) for complex layouts that Mermaid handles poorly?
-11. Should diagram definitions support **inheritance** (extend a base diagram with additional sources/filters)?
-12. Maximum Mermaid node count before performance degrades? Need benchmarks.
+> **2026-08-24 review:** questions #2/#3/#5/#6 were flagged as blocking Phase 4's Visual Builder scope, but the roadmap already answers them — they're verbatim Phase 5 checklist items. #1 turned out not to need a decision at all: Phase 3 built two diagrams (`network`, `architecture`) that already compose 2–3 sources into one view via `group_by` subgraphs, proving "composed diagrams" is just "the sources picker lets you add more than one source" — the Builder's basic mechanic, not a separate mode. Net effect: the Phase 4 Visual Builder only needs to compose **one** diagram (sources → layout/style → live preview) against **one** context; no composition/comparison/dashboard mode required for v1.
+>
+> **2026-08-24 review, pass 2 (remaining #4, #7–#12):** none of these ever blocked Phase 4, but three had answers hiding in plain sight rather than being genuinely open. #4 (publishable) is just Phase 4's own Mermaid-export item — no bespoke publishing integration needed. #7 (cache vs re-resolve) was already answered by Phase 1's shipped behavior (live re-render on save) — nothing to decide. #10 (Mermaid alternatives) resolves to a hard no — it contradicts the ADR's own founding position that strata doesn't own a diagram DSL/renderer. #11 (inheritance) is half-answered for free by Jinja on the hand-written-template path; only the sugar-path half stays deferred to Phase 5. #8, #9, and #12 are genuinely still open — they need benchmark data, an actual user request, and a performance number (respectively) that don't exist yet, so they're left as real open questions rather than forced to a premature answer.
+
+1. ~~Should the builder support **composed diagrams**~~ — **Resolved, no**: already possible today via `spec.sources` (multiple entries) + `style.group_by`, demonstrated by `network.yaml`/`architecture.yaml` (Phase 3). Not a distinct Builder feature — it's the sources picker doing its normal job.
+2. ~~Should saved diagrams support **parameterization**~~ — **Resolved: deferred to Phase 5** (already listed there: `${profile}`, `${environment}`).
+3. ~~Should the builder support **comparison mode**~~ — **Resolved: deferred to Phase 5** (already listed there). Needs new design work Phase 4 doesn't: rendering the same definition against two different profile/entry contexts and a split-view UI.
+4. ~~Should diagrams be **publishable** (export to Confluence, GitHub wiki, or docs folder)?~~ — **Resolved: yes, via plain-text export only.** Phase 4's existing "Export to SVG/PNG/Mermaid markdown" checklist item *is* the answer — no bespoke Confluence/wiki push integration. That would make strata own a publishing pipeline, contradicting the "no lock-in" principle: a diagram is plain Mermaid text, and users paste it wherever they already publish.
+5. ~~Should we provide a **diagram gallery**~~ — **Resolved: deferred to Phase 5** (already listed there).
+6. ~~Should there be a **dashboard mode**~~ — **Resolved: deferred to Phase 5** (already listed there). A persistent multi-panel VS Code UI feature, unrelated to composing one diagram.
+7. ~~Should we cache diagram data or re-resolve on every render?~~ — **Resolved: re-resolve every render.** Already Phase 1's behavior (preview pane re-renders live on save). Every source is a cheap file/YAML read, not a live external call — Phase 3's checklist notes history/drift/promotion/etc. are all explicitly "never a live check." Caching only earns its complexity if #12's benchmarks find a real topology where re-resolution is slow — YAGNI until then.
+8. Should we handle very large topologies (50+ modules, 200+ services) via collapse/expand, pagination, or zoom? — **Still open** — genuinely needs the Next Steps #3 benchmark data before picking a mechanism; tracked by the Phase 5 "Performance optimization for large topologies" checklist item. Not a Phase 4 blocker since the Builder itself doesn't change how large diagrams render.
+9. Should the AI chat generate diagrams proactively (e.g., after a deployment, auto-show stage timeline)? — **Still open, deliberately unscheduled.** Phase 4's chat item is reactive NL→diagram only; proactive generation needs its own trigger design (which lifecycle hook fires it, how a suggestion surfaces without being intrusive) that hasn't been attempted. Revisit only if users ask for it after Phase 4 ships.
+10. ~~Should we support Mermaid alternatives (D3.js, Elk.js) for complex layouts that Mermaid handles poorly?~~ — **Resolved: no, permanently out of scope.** Contradicts the ADR's own foundational stance (see "What this ADR is not trying to do" — "Mermaid is the Terraform of this ADR"). If Mermaid's layout genuinely can't express a shape, Option D already answered this: the user was never restricted to strata's generation — hand-write it in whatever tool fits.
+11. Should diagram definitions support **inheritance** (extend a base diagram with additional sources/filters)? — **Partially resolved.** Hand-written `spec.template` diagrams already get this for free — `TemplateProcessor` is plain Jinja (ADR-0017), so `{% include %}` / `{% extends %}` work today with zero strata-specific feature work. Sugar-based (`layout`/`style`) inheritance would need real schema design (base+override merge semantics) and stays deferred to Phase 5 — revisit only if cookbook diagrams show actual duplication pain, not preemptively.
+12. Maximum Mermaid node count before performance degrades? Need benchmarks. — **Still open** — the actual prerequisite for #8; no benchmark has been run yet (Next Steps item 3). Blocks nothing today since no workspace has reported hitting a perf wall, but should be measured before Phase 5's "Performance optimization for large topologies" work starts.
 
 ---
 
@@ -1409,25 +1424,25 @@ Ordered by the Decision Outcome's priorities: **CLI/YAML foundation first, works
 - [x] Wire `TemplateProcessor.render()` (ADR-0017, already shipped) as the render step
 - [x] Register the `slug` / `token` / `mermaid_escape` filters
 - [x] `strata diagram show -f <name-or-path>` (`--print-template`, `--save`) — headless, CI, docs pipelines
-- [ ] `strata diagram show --output svg|png` (needs mermaid-cli); `strata new --template diagram`
+- [x] `strata diagram show --format svg|png` — **implemented via Kroki** (https://kroki.io), not mermaid-cli: a single HTTP POST of the Mermaid text, no CLI install, no account, no API key. Self-hostable (`STRATA_KROKI_ADDRESS` env var, or a declared `type: kroki` integration for endpoint override — see `docs/help/kroki.md`). Note the flag is `--format`, not `--output` — `--output` already means the JSON/console/text response envelope on every command, so it couldn't be reused for the image format too. `strata new --template diagram` is still outstanding.
 - [x] `strata diagram list`
 - [x] Ship built-ins **as `kind: diagram` YAML files**, not hardcoded renderers — one code path with user definitions (`refs`, `topology`; the remaining Top 10 are outstanding)
 - [x] Generate a template from `layout` / `style` when `spec.template` is omitted (flowchart and stateDiagram; other types are a template)
 - [x] **Remove `strata validate graph`** (no deprecation shim); reuse its `GraphController` as the `topology` / `files` source types
-- [ ] VS Code **preview pane** for `.strata/diagrams/*.yaml` — live render on save, Markdown-Preview-style. The only extension surface needed for authoring.
-- [ ] Theme integration per the Design System section (`theme: 'base'` + VS Code CSS variables)
+- [x] VS Code **preview pane** for `.strata/diagrams/*.yaml` — live render on save (`diagramPreviewProvider.ts`; also reachable via built-in `Strata: Show Dependency Graph` / `Strata: Show Infrastructure Topology` commands, which supersede the old `dependencyGraphProvider.ts`)
+- [x] Theme integration per the Design System section — `theme: 'base'` + VS Code CSS variable mapping for chrome/fonts, plus a hex-pair reverse-lookup in `diagramPreviewProvider.ts` that re-themes every `classDef` the CLI's `design_tokens.py` can emit (all ~40 token names collapse to 10 distinct hex pairs) onto `--vscode-charts-*`/`--vscode-descriptionForeground`. An unrecognized custom hex pair (a hand-authored diagram's own `classDef`) passes through unmodified. Icon conventions (per-data-source emoji) are not wired into the webview yet — no icons are rendered by `refs`/`topology` today, so there is nothing to theme there yet.
 - [x] Test with example workspaces in `config/`
 
 ### Phase 2: Workspace connection (v1.2.0) — *the differentiating feature*
 - [x] Define the `strata://` URI scheme (shape, kinds, resolution rules) — the durable identity that travels with the Mermaid text
 - [x] `strata diagram resolve strata://... --output json` → `{ file, line }`; headless, not VS Code-specific
 - [x] Emit `click <node> "strata://..."` directives into generated Mermaid
-- [ ] `strata validate` checks `strata://` URIs resolve (catch broken links at validate time, not on a dead click)
-- [ ] `DataSourceResult` / `DiagramNodeData` / `DiagramAction` types (see Node Identity & Click Resolution)
-- [ ] `nodeMap` as enrichment cache (tooltips, actions, status) for topology + file-reference sources (ADR-0015 data, already available)
-- [ ] Click → open file at line (`securityLevel: 'loose'` for Mermaid click callbacks)
-- [ ] Reverse direction: cursor in YAML → compute URI → highlight matching node
-- [ ] Hover tooltips from `DiagramNodeData.tooltip`
+- [x] `strata validate` checks `strata://` URIs resolve (catch broken links at validate time, not on a dead click) — `DiagramService._validate_dynamic()` (`--deep` only), scoped to hand-authored `click` directives in `spec.template`; a *generated* template's URIs are always fresh by construction, so nothing to check there
+- [x] ~~`DataSourceResult` / `DiagramNodeData` / `DiagramAction` types~~ — superseded by a simpler approach: tooltips read the classDef name already present on a node's rendered SVG element (no extra CLI round-trip); reverse-lookup matches by rendered label text rather than a typed node/action model. See Node Identity & Click Resolution for the originally-designed richer version (secondary actions beyond open-file are still unimplemented)
+- [ ] `nodeMap` as enrichment cache (tooltips, actions, status) for topology + file-reference sources (ADR-0015 data, already available) — superseded for tooltips/highlighting (see above); still relevant if secondary actions (`DiagramAction`) are ever added
+- [x] Click → open file at line (`securityLevel: 'loose'` for Mermaid click callbacks; webview intercepts `window.open()` on `strata://` URLs and resolves via `strata diagram resolve` — `diagramPreviewProvider.ts`)
+- [x] Reverse direction: cursor in YAML → compute URI → highlight matching node — implemented via forward-resolving every node's URI once per render (`_buildReverseIndex()`, capped at 150 nodes) rather than a hypothetical inverse resolver (cursor→URI is not implementable from `location`+`line` alone without re-parsing YAML structure); indexed by `file`/`file:line`, matched to the webview by rendered label text
+- [x] Hover tooltips — shows the node's classDef name (status/kind token) and whether it's clickable; simpler than the originally-designed `DiagramNodeData.tooltip` (no secondary actions), see note above
 
 ### Phase 3: Source coverage + cookbook (v1.3.0)
 *No composition-seam work needed — Jinja already handles mixing hand-written and generated content.*
@@ -1457,17 +1472,21 @@ Ordered by the Decision Outcome's priorities: **CLI/YAML foundation first, works
       live `terraform output` or a fresh SBOM scan. `outputs` surfaces only an output's key, stage,
       and sensitivity flag — never the value, regardless of the cache's own filtering. `sbom`
       surfaces full component identity (name/version/purl/properties) — not secret-like
-- [ ] Remaining Top 10 built-ins, shipped as `kind: diagram` files
-- [ ] Cookbook browser in sidebar (search + filter by category) — recipes, not 185 renderers
-- [ ] Worked Jinja templates for the non-flowchart cookbook entries (pie/gantt/sequence/quadrant/sankey)
-- [ ] `/diagram list` and `/diagram show` chat commands
+- [x] Remaining Top 10 built-ins, shipped as `kind: diagram` files — `stages` (#2), `promotion` (#3), `network` (#4, combines `network`/`firewalls`/`dns`), `services` (#5, module dependency graph — a "service" node kind doesn't exist in the data model, so this is honestly scoped to modules), `environments` (#6), `secrets` (#7), `timeline` (#9, gantt — see below), `architecture` (#10, combines `topology`/`environments`). 6 of the 8 use pure `layout`/`style` sugar (no `spec.template` authored at all — first real proof the generator works end-to-end); `services` and `timeline` needed hand-written templates (edge filtering / gantt is not sugar-generatable)
+- [x] Cookbook browser in sidebar — scoped down from the original ask: the ADR's Part 2 catalog (185 entries) is prose in this document, not machine-readable data the CLI serves, so there is nothing to browse there yet. Shipped instead: a `strataDiagrams` tree view listing `strata diagram list` output (built-ins + workspace definitions), grouped by source, with a text filter across name/description (`strata.filterDiagrams`) — not filter-by-category, since the data has no category field
+- [x] Worked Jinja templates for the non-flowchart cookbook entries — all 5 non-flowchart Mermaid types now have a shipped example: `gantt` (`timeline.yaml`, milestone-based since the audit trail has no per-stage duration data), `pie` (`drift-summary.yaml`, drift status distribution), `sequence` (`gate-sequence.yaml`, gate checks for the most recent promotion record), `quadrant` (`environment-complexity.yaml`, secrets vs variables per environment — honestly scoped to two metrics the `environments` source already exposes, not a literal catalog matrix), `sankey` (`secret-store-flow.yaml`, store→environment secret counts — honestly scoped to two tiers, since a third "→ deployment" hop needs data the `secrets` source doesn't expose today). None of the five are sugar-generatable (only `flowchart`/`stateDiagram` are), so all are hand-written `spec.template`, matching `services.yaml`/`timeline.yaml`'s precedent. Per the Mermaid styling-constraints table, none use `classDef` coloring — `pie`/`quadrant`/`sankey` lean on labels/order, `sequence` on ✅/❌ icons.
+- [x] `/diagram list` and `/diagram show` chat commands — one `/diagram` command (`/diagram` or `/diagram list` to browse, `/diagram show <name>` to open), not the ten bespoke per-diagram slash commands (`/topology`, `/stages`, ...) Part 1's table originally sketched
 
 ### Phase 4: Generators — GUI Builder + AI chat (v1.4.0)
 *Both are convenience generators emitting a Phase-1 `kind: diagram` file — neither is required for any capability above.*
-- [ ] Visual Builder UI (sources picker, layout selector, live preview)
-- [ ] Round-trip guarantee: Builder output is hand-editable; hand-written definitions load back into the Builder; `--print-template` is the escape route for users who outgrow the sugar
-- [ ] Natural language → diagram definition in chat
-- [ ] Export to SVG/PNG/Mermaid markdown
+
+**Scope, clarified 2026-08-24 (see Open Questions):** composition/comparison/dashboard modes are explicitly out of scope here — composition is just the sources picker accepting more than one source (already proven possible, no new mechanism needed); comparison and dashboard modes are Phase 5. The Builder targets **one** diagram, **one** context, **one** preview.
+
+- [x] Visual Builder UI (sources picker, layout selector, live preview) — `diagramBuilderProvider.ts`; a webview form (name/description, add/remove sources with a bind-name field, layout type/direction, style color_by/group_by/highlight rules) that stages the assembled `kind: diagram` YAML to a temp file and hands it to the existing `DiagramPreviewProvider` for live preview — no second Mermaid renderer, reuses Phase 1/2's theming and click handling as-is
+- [x] Round-trip guarantee: Builder output is hand-editable; hand-written definitions load back into the Builder; `--print-template` is the escape route for users who outgrow the sugar — `ShowDiagramCommand` now always includes the parsed `sources`/`layout`/`style`/`has_template` alongside the rendered output, so the Builder can reload a sugar-based definition without re-parsing YAML client-side; a definition with a hand-written `spec.template` is detected via `has_template` and the Builder declines to open it, pointing at `--print-template` instead
+- [x] Natural language → diagram definition in chat — **scoped 2026-08-24**: the LLM emits only `sources`/`layout`/`style` (the sugar), never a hand-written `spec.template` — a small closed vocabulary (~23 source `type` values, `color_by`/`group_by` as field names off the known node shape, small layout enums) is a bounded extraction task, not free-form code generation. Every proposal is run through the existing `DiagramService.validate()` pipeline (the same Phase 1/1.5/2 checks hand-authored diagrams already get, including the `--deep` link-rot check) before ever being rendered or offered for saving; an invalid result gets exactly one retry with the validation errors fed back to the LLM, then falls back to surfacing those errors to the user like any hand-authored typo — never a silently-broken diagram. Implemented as `/diagram create <description>` in `strataChatParticipant.ts`, using the chat request's own language model (`request.model`, no strata-side `ai_agent` integration involved) — a successful generation opens the Diagram Builder pre-filled rather than dropping raw YAML into the chat transcript.
+- [x] Export to Mermaid markdown, SVG, and PNG — "Copy Mermaid" copies the rendered Mermaid source to the clipboard (paste into a README/wiki/GitHub markdown, per the ADR's "no lock-in" principle). "Export SVG"/"Export PNG" produce real image files, entirely client-side: the Builder ensures the sibling preview panel is showing the current (possibly unsaved) state, then asks that webview for the diagram it already rendered — `DiagramPreviewProvider.requestExport()` serializes the live `<svg>` DOM node for SVG, or rasterizes it onto an offscreen `<canvas>` for PNG — and writes the result via a save dialog. No Kroki/network round trip for either: the diagram is already rendered by Chromium in the webview, so there's nothing to re-render externally. `strata diagram show --format svg|png` (Kroki) remains the equivalent for headless/CI use where no VS Code/browser is involved at all — a genuinely separate use case, not a redundant one.
+
 
 ### Phase 5: Advanced features (v1.5.0+)
 - [ ] Diagram parameterization (`${profile}`, `${environment}`)
@@ -1495,4 +1514,4 @@ Ordered by the Decision Outcome's priorities: **CLI/YAML foundation first, works
 4. Design the Diagram Builder UX — mockups and interaction patterns
 5. Define the `diagram` kind schema for `strata validate` support
 6. Plan CLI `strata diagram` command group implementation
-7. Evaluate AI-assisted diagram generation accuracy (natural language → YAML definition)
+7. Evaluate AI-assisted diagram generation accuracy (natural language → YAML definition) — **narrowed 2026-08-24**: only the `sources`/`layout`/`style` sugar is in scope for generation (see Phase 4 checklist), validated through the existing `DiagramService.validate()` pipeline with a one-retry repair loop; what's left to actually evaluate is prompt quality against real user phrasings, not whether unconstrained LLM-authored Jinja is safe (it was never going to be attempted).

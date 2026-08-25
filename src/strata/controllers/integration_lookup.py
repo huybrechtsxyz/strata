@@ -32,6 +32,13 @@ def find_available_integration_with_capability(capability: Type) -> Optional[Any
         svc = IntegrationService.get_instance()
         if not svc.is_initialized():
             svc.initialize_integrations()
+        ok, errors = svc.validate_required_integrations(capabilities={capability})
+        if not ok:
+            logger.debug(
+                "required_integration_unavailable",
+                capability=getattr(capability, "__name__", str(capability)),
+                errors=errors,
+            )
 
         for name in svc.get_integrations_with_capability(capability):
             integration = svc.get_integration(name)

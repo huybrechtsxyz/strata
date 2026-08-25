@@ -1,0 +1,28 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: diagram
+meta:
+  name: drift-summary
+  annotations:
+    description: "Drift status distribution — counts of drifting/resolved/acknowledged entries from the last recorded drift check. Mermaid pie charts don't support classDef coloring (ADR-0034 styling constraints), so status is distinguished by slice label only, in a fixed order for a stable legend across renders."
+  labels:
+    version: "1.0.0"
+  tags:
+    - built-in
+spec:
+  sources:
+    - type: drift
+      as: drift
+  template: |
+    pie title Drift Status Distribution
+    {%- set order = ['drifting', 'resolved', 'acknowledged'] %}
+    {%- set total = drift.nodes | length %}
+    {%- if total == 0 %}
+    "No drift entries recorded" : 1
+    {%- else %}
+    {%- for status in order %}
+    {%- set count = drift.nodes | selectattr('status', 'equalto', status) | list | length %}
+    {%- if count > 0 %}
+    "{{ status }}" : {{ count }}
+    {%- endif %}
+    {%- endfor %}
+    {%- endif %}

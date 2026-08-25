@@ -1,0 +1,48 @@
+# ===============================================================================
+# Action Name  : setup-flagsmith
+# Description  : Configure Flagsmith feature-flag credentials for strata's
+#                flagsmith integration. API-only — no CLI binary exists.
+# ===============================================================================
+
+name: "Setup Flagsmith"
+description: "Configure Flagsmith feature-flag credentials for strata's flagsmith integration."
+
+branding:
+  icon: "flag"
+  color: "purple"
+
+inputs:
+  environment-key:
+    description: "Flagsmith environment key (FLAGSMITH_ENVIRONMENT_KEY) — read access for a single environment."
+    required: false
+    default: ""
+  management-key:
+    description: "Flagsmith management API key (FLAGSMITH_MANAGEMENT_KEY) — required for write operations."
+    required: false
+    default: ""
+  api-url:
+    description: "Flagsmith API URL for self-hosted instances (FLAGSMITH_API_URL). Defaults to Flagsmith Cloud."
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Configure Flagsmith Environment Variables
+      shell: bash
+      env:
+        _ENV_KEY: ${{ inputs.environment-key }}
+        _MGMT_KEY: ${{ inputs.management-key }}
+        _API_URL: ${{ inputs.api-url }}
+      run: |
+        [ -z "$_ENV_KEY" ] && [ -z "$_MGMT_KEY" ] && { echo "::error::setup-flagsmith: at least one of environment-key or management-key must be set."; exit 1; }
+        [ -n "$_ENV_KEY" ]  && echo "::add-mask::$_ENV_KEY"
+        [ -n "$_MGMT_KEY" ] && echo "::add-mask::$_MGMT_KEY"
+
+        _write_env() {
+          printf '%s<<__STRATA_DELIM__\n%s\n__STRATA_DELIM__\n' "$1" "$2" >> "$GITHUB_ENV"
+        }
+        [ -n "$_ENV_KEY" ]  && _write_env FLAGSMITH_ENVIRONMENT_KEY "$_ENV_KEY"
+        [ -n "$_MGMT_KEY" ] && _write_env FLAGSMITH_MANAGEMENT_KEY "$_MGMT_KEY"
+        [ -n "$_API_URL" ]  && _write_env FLAGSMITH_API_URL "$_API_URL"
+        echo "[+] Flagsmith configured"

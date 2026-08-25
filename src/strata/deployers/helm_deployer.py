@@ -17,8 +17,17 @@ Chart source resolution:
   meta.yaml provides releaseName, namespace, and chart coordinates
   (chartName, chartVersion, chartRepository).  The chart reference is resolved
   from meta.yaml:
-    - chartRepository + chartName + optional chartVersion → registry chart
+    - chartRepository (http(s)://) + chartName + optional chartVersion → registry chart
+    - chartRepository (oci://) + chartName + optional chartVersion → OCI chart, no
+      ``helm repo add`` needed — Helm resolves oci:// refs natively.
     - No chart fields → local chart path in build directory
+
+Value substitution:
+  ``${KEY}`` tokens written by the builder under a service's ``env`` map are
+  resolved against the deployer's ``resolved_values`` and passed to Helm as
+  ``--set-string <path>=<value>`` flags at check/plan/apply time — never
+  written back to values.yaml on disk. An unresolved or ambiguous (name
+  collides across secrets/variables/features) token fails the step.
 """
 
 import re
@@ -67,6 +76,7 @@ class HelmModuleTarget:
     chart_version: Optional[str]
     repo_url: Optional[str]
     repo_name: Optional[str]
+    is_oci: bool = False
 
 
 def _sanitize_repo_name(url: str) -> str:
@@ -79,6 +89,120 @@ def _sanitize_repo_name(url: str) -> str:
     name = re.sub(r"[^a-zA-Z0-9]", "-", name)
     name = name.strip("-")
     return name[:20]
+
+
+_TOKEN_RE = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$")
+
+
+def _find_env_tokens(values_doc: Dict[str, Any]) -> List[Tuple[str, str]]:
+    """Return (dotted_path, token_key) for every ``${TOKEN}`` leaf found under each
+    top-level entry's ``env`` sub-dict.
+
+    Deliberately NOT a full-tree walk of ``values_doc``: ``helm_builder.py`` only
+    ever emits ``${KEY}`` tokens under ``entry['env']`` (from ``svc.environment``
+    ``var:``/``secret:``/``feature:`` refs). ``module.spec.configuration`` and
+    ``svc.configuration`` are raw, user-authored pass-through values merged
+    elsewhere in the same doc — walking those too would risk matching a
+    user-typed ``${...}``-shaped string that was never meant as a strata
+    substitution token.
+    """
+    tokens: List[Tuple[str, str]] = []
+    if not isinstance(values_doc, dict):
+        return tokens
+    for entry_name, entry in values_doc.items():
+        if not isinstance(entry, dict):
+            continue
+        env = entry.get("env")
+        if not isinstance(env, dict):
+            continue
+        for key, value in env.items():
+            if not isinstance(value, str):
+                continue
+            match = _TOKEN_RE.match(value)
+            if match:
+                tokens.append((f"{entry_name}.env.{key}", match.group(1)))
+    return tokens
+
+
+def _resolve_token(token: str, resolved: ResolvedValues) -> Tuple[Optional[str], Optional[str]]:
+    """Resolve a token name against resolved secrets/variables/features.
+
+    Returns ``(value, None)`` when the name appears in exactly one namespace,
+    or ``(None, error_message)`` when it appears in none OR in more than one.
+    A cross-namespace name collision is treated as fatal rather than resolved
+    via precedence — the ``${KEY}`` token carries no type prefix, so which
+    namespace it was meant to come from is not recoverable at deploy time.
+    """
+    found_in: List[str] = []
+    value: Optional[str] = None
+    if token in resolved.secrets:
+        found_in.append("secret")
+        value = str(resolved.secrets[token])
+    if token in resolved.variables:
+        found_in.append("variable")
+        value = str(resolved.variables[token])
+    if token in resolved.features and resolved.features[token] is not None:
+        found_in.append("feature")
+        value = str(resolved.features[token]).lower()
+    if not found_in:
+        return None, f"no matching variable, secret, or feature named '{token}'"
+    if len(found_in) > 1:
+        return None, f"ambiguous — '{token}' is declared as more than one of: {', '.join(found_in)}"
+    return value, None
+
+
+def _escape_set_value(value: str) -> str:
+    """Backslash-escape characters with special meaning in Helm's ``--set``
+    mini-language so a value survives as a literal string instead of being
+    parsed as additional ``--set`` assignments or nested paths.
+
+    Order matters: ``\\`` must be escaped first, before any other character,
+    or characters escaped afterwards would have their own backslash re-escaped.
+    """
+    for ch in ("\\", ",", ".", "=", "{", "}", "[", "]"):
+        value = value.replace(ch, f"\\{ch}")
+    return value
+
+
+def _build_value_overrides(
+    values_file: Path,
+    resolved: Optional[ResolvedValues],
+    ns_name: str,
+    module_name: str,
+) -> Tuple[List[str], List[str]]:
+    """Parse ``values_file``, resolve every ``${TOKEN}`` under an ``env`` sub-dict,
+    and return (``--set-string`` args, error messages).
+
+    Any unresolved or ambiguous token produces no ``--set-string`` arg and is
+    reported as an error — callers must treat a non-empty error list as fatal
+    rather than deploy with the literal token left in the values file.
+    """
+    try:
+        with values_file.open("r", encoding="utf-8") as fh:
+            values_doc = yaml.safe_load(fh) or {}
+    except Exception as exc:
+        return [], [f"Namespace '{ns_name}', module '{module_name}': cannot read values.yaml for substitution: {exc}"]
+
+    tokens = _find_env_tokens(values_doc)
+    if not tokens:
+        return [], []
+
+    if resolved is None:
+        return [], [
+            f"Namespace '{ns_name}', module '{module_name}': unresolved value '${{{token}}}' "
+            f"at '{path}' — no resolved values available"
+            for path, token in tokens
+        ]
+
+    args: List[str] = []
+    errors: List[str] = []
+    for path, token in tokens:
+        value, error = _resolve_token(token, resolved)
+        if error is not None:
+            errors.append(f"Namespace '{ns_name}', module '{module_name}': '${{{token}}}' at '{path}': {error}")
+            continue
+        args += ["--set-string", f"{path}={_escape_set_value(value)}"]  # type: ignore[arg-type]
+    return args, errors
 
 
 class HelmDeployer(BaseDeployer):
@@ -205,14 +329,21 @@ class HelmDeployer(BaseDeployer):
                 chart_version = meta_doc.get("chartVersion")
 
                 if chart_repository:
-                    repo_name = _sanitize_repo_name(chart_repository)
-                    chart_ref = f"{repo_name}/{chart_name}"
+                    if chart_repository.startswith("oci://"):
+                        chart_ref = f"{chart_repository.rstrip('/')}/{chart_name}"
+                        repo_name = None
+                        is_oci = True
+                    else:
+                        repo_name = _sanitize_repo_name(chart_repository)
+                        chart_ref = f"{repo_name}/{chart_name}"
+                        is_oci = False
                     repo_url = chart_repository
                 else:
                     chart_ref = str(deployment_build_path / ns_name_str / module_name)
                     repo_url = None
                     repo_name = None
                     chart_version = None
+                    is_oci = False
 
                 target = HelmModuleTarget(
                     ns_name=ns_name_str,
@@ -225,6 +356,7 @@ class HelmDeployer(BaseDeployer):
                     chart_version=chart_version,
                     repo_url=repo_url,
                     repo_name=repo_name,
+                    is_oci=is_oci,
                 )
                 modules.append(target)
 
@@ -301,14 +433,22 @@ class HelmDeployer(BaseDeployer):
         if not self._ready(messages):
             return False, messages
 
-        # Collect unique (repo_name, repo_url) pairs
+        # Collect unique (repo_name, repo_url) pairs — OCI refs need no alias,
+        # helm resolves them natively without a registered repo.
         seen: Dict[str, str] = {}
+        oci_count = 0
         for target in self._helm_modules:
+            if target.is_oci:
+                oci_count += 1
+                continue
             if target.repo_url and target.repo_name and target.repo_name not in seen:
                 seen[target.repo_name] = target.repo_url
 
         if not seen:
-            messages.append("No chart registries to update")
+            if oci_count:
+                messages.append(f"{oci_count} OCI chart(s) detected — no repo registration needed")
+            else:
+                messages.append("No chart registries to update")
             return True, messages
 
         for repo_name, repo_url in seen.items():
@@ -347,10 +487,17 @@ class HelmDeployer(BaseDeployer):
             # Skip lint for registry charts (repo_url set) — they're linted at
             # deploy time via --dry-run in plan().
             if target.repo_url is not None:
-                messages.append("  (registry chart — lint skipped; use plan for dry-run)")
+                kind = "OCI chart" if target.is_oci else "registry chart"
+                messages.append(f"  ({kind} — lint skipped; use plan for dry-run)")
                 continue
+            overrides, override_errors = _build_value_overrides(
+                target.values_file, self.resolved_values, target.ns_name, target.module_name
+            )
+            if override_errors:
+                messages.extend(override_errors)
+                return False, messages
             ok, run_messages = self._run_helm(
-                ["lint", "-f", str(target.values_file), target.chart_ref],
+                ["lint", "-f", str(target.values_file), *overrides, target.chart_ref],
                 line_callback=line_callback,
             )
             messages.extend(run_messages)
@@ -377,6 +524,12 @@ class HelmDeployer(BaseDeployer):
                 messages.append(
                     f"helm upgrade --dry-run --install {target.release_name} -n {target.chart_namespace} {target.chart_ref}"
                 )
+                overrides, override_errors = _build_value_overrides(
+                    target.values_file, self.resolved_values, target.ns_name, target.module_name
+                )
+                if override_errors:
+                    messages.extend(override_errors)
+                    return False, messages
                 args = [
                     "upgrade",
                     "--dry-run",
@@ -385,6 +538,7 @@ class HelmDeployer(BaseDeployer):
                     target.chart_namespace,
                     "-f",
                     str(target.values_file),
+                    *overrides,
                     target.release_name,
                     target.chart_ref,
                 ]
@@ -415,6 +569,12 @@ class HelmDeployer(BaseDeployer):
                 messages.append(
                     f"helm upgrade --install {target.release_name} -n {target.chart_namespace} {target.chart_ref}"
                 )
+                overrides, override_errors = _build_value_overrides(
+                    target.values_file, self.resolved_values, target.ns_name, target.module_name
+                )
+                if override_errors:
+                    messages.extend(override_errors)
+                    return False, messages
                 args = [
                     "upgrade",
                     "--install",
@@ -427,6 +587,7 @@ class HelmDeployer(BaseDeployer):
                     target.chart_namespace,
                     "-f",
                     str(target.values_file),
+                    *overrides,
                     target.release_name,
                     target.chart_ref,
                 ]

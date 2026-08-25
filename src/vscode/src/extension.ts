@@ -37,6 +37,9 @@ import { WorkItemsViewProvider } from './providers/workItemsViewProvider';
 import { CacheWarmerProvider } from './providers/cacheWarmerProvider';
 import { StateServiceStatusBarProvider } from './providers/stateServiceStatusBarProvider';
 import { StateServiceTailProvider } from './providers/stateServiceTailProvider';
+import { DiagramPreviewProvider } from './providers/diagramPreviewProvider';
+import { DiagramsViewProvider } from './providers/diagramsViewProvider';
+import { DiagramBuilderProvider } from './providers/diagramBuilderProvider';
 
 // ---------------------------------------------------------------------------
 // Extension state (singleton per VS Code window)
@@ -65,6 +68,9 @@ let _workItemsView: WorkItemsViewProvider | undefined;
 let _cacheWarmer: CacheWarmerProvider | undefined;
 let _stateServiceStatusBar: StateServiceStatusBarProvider | undefined;
 let _stateServiceTail: StateServiceTailProvider | undefined;
+let _diagramPreview: DiagramPreviewProvider | undefined;
+let _diagramsView: DiagramsViewProvider | undefined;
+let _diagramBuilder: DiagramBuilderProvider | undefined;
 let _lastStatus: import('./strataClient').WorkspaceStatus | undefined;
 let _lastDriftTarget: string | undefined;
 let _lastDeployTarget: string | undefined;
@@ -235,6 +241,11 @@ export function activate(context: vscode.ExtensionContext): void {
     _stateServiceTail = new StateServiceTailProvider();
     _stateServiceTail.setClient(_client);
 
+    _diagramPreview = new DiagramPreviewProvider();
+    _diagramsView = new DiagramsViewProvider();
+    _diagramsView.setClient(_client);
+    _diagramBuilder = new DiagramBuilderProvider(_diagramPreview);
+
     // Propagate deployment context changes to status bar
     context.subscriptions.push(
         _deployCtx.onDidChange((filePath) => {
@@ -277,6 +288,10 @@ export function activate(context: vscode.ExtensionContext): void {
             treeDataProvider: _helpView!,
             showCollapseAll: false,
         }),
+        vscode.window.createTreeView('strataDiagrams', {
+            treeDataProvider: _diagramsView!,
+            showCollapseAll: false,
+        }),
     );
 
     // Register the work-items view separately to capture the TreeView reference
@@ -297,6 +312,7 @@ export function activate(context: vscode.ExtensionContext): void {
     _taskProvider.register(context);
     _fileDecorations.register();
     _chatParticipant.setClient(_client);
+    _chatParticipant.setDiagramBuilder(_diagramBuilder!);
     _chatParticipant.register(context);
     _helpView.register(context);
     _statusBar.show();
@@ -319,6 +335,32 @@ export function activate(context: vscode.ExtensionContext): void {
 
         vscode.commands.registerCommand('strata.showHelp', () => {
             void vscode.commands.executeCommand('strataHelp.focus');
+        }),
+
+        // ── Diagrams (ADR-0034 Phase 3) ──────────────────────────────────────────
+
+        vscode.commands.registerCommand('strata.refreshDiagrams', () => {
+            void _diagramsView?.refresh();
+        }),
+
+        vscode.commands.registerCommand('strata.filterDiagrams', () => {
+            void _diagramsView?.setFilter();
+        }),
+
+        // ── Diagram Builder (ADR-0034 Phase 4) ───────────────────────────────────
+
+        vscode.commands.registerCommand('strata.openDiagramBuilder', () => {
+            if (!_client) return;
+            void _diagramBuilder?.open(_client);
+        }),
+
+        vscode.commands.registerCommand('strata.editDiagramInBuilder', (nameOrEntry?: string | { entry?: { name: string } }) => {
+            if (!_client) return;
+            const nameOrPath = typeof nameOrEntry === 'string'
+                ? nameOrEntry
+                : nameOrEntry?.entry?.name ?? vscode.window.activeTextEditor?.document.uri.fsPath;
+            if (!nameOrPath) { void vscode.window.showWarningMessage('Strata: no diagram selected.'); return; }
+            void _diagramBuilder?.open(_client, nameOrPath);
         }),
 
         // ── Work items ─────────────────────────────────────────────────────────
@@ -514,6 +556,27 @@ export function activate(context: vscode.ExtensionContext): void {
             const target = _resolveTarget(filePath);
             if (!target || !_client) { void vscode.window.showWarningMessage('No deployment selected or file open.'); return; }
             await BuildPlanProvider.show(target, _client);
+        }),
+
+        // ── Diagram (ADR-0034) ───────────────────────────────────────────────────
+
+        vscode.commands.registerCommand('strata.showDependencyGraph', async (filePath?: string) => {
+            if (!_client) return;
+            const target = _resolveTarget(filePath);
+            await _diagramPreview?.show(_client, 'refs', target);
+        }),
+
+        vscode.commands.registerCommand('strata.showTopologyDiagram', async (filePath?: string) => {
+            if (!_client) return;
+            const target = _resolveTarget(filePath);
+            await _diagramPreview?.show(_client, 'topology', target);
+        }),
+
+        vscode.commands.registerCommand('strata.previewDiagramFile', async (filePath?: string) => {
+            if (!_client) return;
+            const target = filePath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
+            if (!target) { void vscode.window.showWarningMessage('Strata: no diagram file open.'); return; }
+            await _diagramPreview?.show(_client, target);
         }),
 
         // ── Deploy ────────────────────────────────────────────────────────────
@@ -1110,6 +1173,35 @@ export function activate(context: vscode.ExtensionContext): void {
     solutionWatcher.onDidCreate(() => void _refreshAll());
     solutionWatcher.onDidDelete(() => void _refreshAll());
 
+    // ── File watcher: live diagram preview on save (ADR-0034 Phase 1) ─────────
+    // Only re-renders when the saved file is the exact definition the open
+    // preview panel was rendered from — see DiagramPreviewProvider.isPreviewing().
+
+    context.subscriptions.push(
+        vscode.workspace.onDidSaveTextDocument((doc) => {
+            if (_diagramPreview?.isOpen && _diagramPreview.isPreviewing(doc.uri.fsPath)) {
+                void _diagramPreview.refresh();
+            }
+        }),
+    );
+
+    // ── File watcher: keep the Diagrams sidebar in sync with .strata/diagrams/ ─
+
+    const diagramsWatcher = vscode.workspace.createFileSystemWatcher('**/.strata/diagrams/**/*.yaml');
+    diagramsWatcher.onDidChange(() => void _diagramsView?.refresh());
+    diagramsWatcher.onDidCreate(() => void _diagramsView?.refresh());
+    diagramsWatcher.onDidDelete(() => void _diagramsView?.refresh());
+    context.subscriptions.push(diagramsWatcher);
+
+    // ── Reverse lookup: cursor in YAML → highlight matching node (ADR-0034) ───
+
+    context.subscriptions.push(
+        vscode.window.onDidChangeTextEditorSelection((e) => {
+            if (!_diagramPreview?.isOpen) return;
+            _diagramPreview.notifyCursor(e.textEditor.document.uri.fsPath, e.selections[0].active.line + 1);
+        }),
+    );
+
     // ── Subscriptions cleanup ──────────────────────────────────────────────────
 
     context.subscriptions.push(
@@ -1117,6 +1209,7 @@ export function activate(context: vscode.ExtensionContext): void {
         _deployCtx, _diagnostics, _codeLens, _guideView, _crossRef, _snippets,
         _taskProvider, _fileDecorations, _chatParticipant, solutionWatcher,
         _auditView!, _valuesView!, _cacheWarmer, _stateServiceStatusBar, _stateServiceTail,
+        _diagramPreview, _diagramsView,
     );
 
     // ── Context key ────────────────────────────────────────────────────────────
@@ -1133,6 +1226,8 @@ export function activate(context: vscode.ExtensionContext): void {
     } else {
         void _refreshAll();
     }
+
+    void _diagramsView?.refresh();
 
     // ADR-0065 Step 2.7 — start the state-service indicator and detect whether
     // a deploy-*.yaml already forwards to a state-service-shaped webhook sink

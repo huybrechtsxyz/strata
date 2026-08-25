@@ -636,6 +636,82 @@ export interface PromotionHistoryEntry {
 }
 
 // ---------------------------------------------------------------------------
+// Diagram types (ADR-0034)
+// ---------------------------------------------------------------------------
+
+/** One `spec.sources[]` entry — a workspace data source bound into the Jinja context. */
+export interface DiagramSourceSpec {
+    type: string;
+    as?: string;
+    filter?: Record<string, unknown>;
+}
+
+/** `spec.layout` — hints used to generate a template when `spec.template` is omitted. */
+export interface DiagramLayoutSpec {
+    type?: string;
+    direction?: string;
+}
+
+/** One `spec.style.highlight[]` conditional-emphasis rule. */
+export interface DiagramHighlightSpec {
+    condition: string;
+    token: string;
+}
+
+/** `spec.style` — styling hints used to generate a template when `spec.template` is omitted. */
+export interface DiagramStyleSpec {
+    color_by?: string;
+    group_by?: string;
+    highlight?: DiagramHighlightSpec[];
+}
+
+/** Matches `diagram show --output json` data */
+export interface DiagramShowData {
+    diagram: string;
+    definition: string;
+    /** Present unless --print-template was used (not exposed by the client). */
+    mermaid: string;
+    /** True when the definition has a hand-written `spec.template` (Jinja) rather than pure layout/style sugar. */
+    has_template: boolean;
+    /** Always present (possibly empty) — the parsed `spec.sources[]`, for round-tripping into the Diagram Builder. */
+    sources: DiagramSourceSpec[];
+    /** Present only when `spec.layout` is set. */
+    layout?: DiagramLayoutSpec;
+    /** Present only when `spec.style` is set. */
+    style?: DiagramStyleSpec;
+}
+
+/** A single entry from `diagram list --output json` data.diagrams[] */
+export interface DiagramListEntry {
+    name: string;
+    description: string;
+    source: 'built-in' | 'workspace';
+    path: string;
+    sources: string[];
+}
+
+/** Matches `diagram list --output json` data */
+export interface DiagramListData {
+    diagrams: DiagramListEntry[];
+}
+
+/**
+ * Matches `diagram resolve <uri> --output json` data — what a Mermaid `click`
+ * directive's `strata://...` href resolves to. `line` is omitted (undefined)
+ * for a file-level reference, which points at a document rather than a
+ * position inside one.
+ */
+export interface DiagramResolveLocation {
+    uri: string;
+    kind: string;
+    name: string;
+    child_kind: string | null;
+    child_name: string | null;
+    file: string;
+    line?: number;
+}
+
+// ---------------------------------------------------------------------------
 // CLI response envelope
 // ---------------------------------------------------------------------------
 
@@ -685,6 +761,11 @@ export class StrataClient {
         private readonly cliPath: string,
         private readonly workPath: string,
     ) { }
+
+    /** The workspace root every CLI call is scoped to (`--work-path`). */
+    getWorkPath(): string {
+        return this.workPath;
+    }
 
     // ── Workspace ─────────────────────────────────────────────────────────────
 
@@ -906,6 +987,50 @@ export class StrataClient {
             'build', 'plan', '-f', filePath, '--output', 'json',
         ], 120_000);
         return resp.data;
+    }
+
+    // ── Diagram (ADR-0034) ────────────────────────────────────────────────────
+
+    /**
+     * Run `strata diagram show -f <nameOrPath> --output json` and return the
+     * rendered Mermaid source. Pass `entry` to scope graph-backed sources
+     * (`refs`/`topology`) to a single deployment instead of discovering all of
+     * them.
+     */
+    async showDiagram(nameOrPath: string, entry?: string): Promise<DiagramShowData> {
+        const args = ['diagram', 'show', '-f', nameOrPath, '--no-validate', '--output', 'json'];
+        if (entry) args.push('--entry', entry);
+        const resp = await this._run<DiagramShowData>(args);
+        return resp.data;
+    }
+
+    /** Run `strata diagram list --output json`. */
+    async listDiagrams(): Promise<DiagramListEntry[]> {
+        const resp = await this._run<DiagramListData>([
+            'diagram', 'list', '--output', 'json',
+        ]);
+        return resp.data.diagrams;
+    }
+
+    /**
+     * Run `strata diagram resolve <uri> --output json`. This is what a Mermaid
+     * `click <node> "strata://..."` directive resolves to — the CLI counterpart
+     * of "Node Identity & Click Resolution" in ADR-0034. Returns `null` when the
+     * URI is malformed or names nothing in the workspace (never throws for that
+     * case — it's a normal "dead link" outcome, not a CLI failure).
+     */
+    async resolveDiagramUri(uri: string): Promise<DiagramResolveLocation | null> {
+        try {
+            const resp = await this._run<DiagramResolveLocation>([
+                'diagram', 'resolve', uri, '--output', 'json',
+            ]);
+            return resp.data;
+        } catch (err) {
+            if (err instanceof StrataCLIError) {
+                return null;
+            }
+            throw err;
+        }
     }
 
     // ── Policy ────────────────────────────────────────────────────────────────

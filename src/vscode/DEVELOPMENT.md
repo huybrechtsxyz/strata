@@ -175,7 +175,7 @@ src/vscode/
 │       ├── guideViewProvider.ts      # Readiness guide
 │       ├── crossReferenceProvider.ts # Reference resolution
 │       ├── snippetProvider.ts        # YAML snippets
-│       ├── dependencyGraphProvider.ts # Dependency visualization
+│       ├── diagramPreviewProvider.ts # CLI-backed diagram rendering + click-to-open (ADR-0034)
 │       ├── fileDecorationProvider.ts # File badges
 │       ├── strataChatParticipant.ts  # Chat integration
 │       ├── strataTaskProvider.ts     # Task definitions

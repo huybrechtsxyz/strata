@@ -1,0 +1,58 @@
+# ===============================================================================
+# Action Name  : setup-aws-cli
+# Description  : Install/configure the AWS CLI for strata's aws_cli
+#                integration. Wraps aws-actions/configure-aws-credentials.
+# ===============================================================================
+
+name: "Setup AWS CLI"
+description: "Configure AWS CLI credentials for strata's aws_cli integration."
+
+branding:
+  icon: "cloud"
+  color: "orange"
+
+inputs:
+  auth-method:
+    description: "Authentication method: 'keys' (access key/secret) or 'oidc' (assume role via GitHub OIDC)."
+    required: false
+    default: "keys"
+  aws-access-key-id:
+    description: "AWS access key ID. Required when auth-method is keys."
+    required: false
+    default: ""
+  aws-secret-access-key:
+    description: "AWS secret access key. Required when auth-method is keys."
+    required: false
+    default: ""
+  role-to-assume:
+    description: "IAM role ARN to assume via GitHub OIDC. Required when auth-method is oidc."
+    required: false
+    default: ""
+  region:
+    description: "AWS region (AWS_DEFAULT_REGION)."
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Configure AWS Credentials (keys)
+      if: ${{ inputs.auth-method == 'keys' }}
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ inputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
+        aws-region: ${{ inputs.region }}
+
+    - name: Configure AWS Credentials (OIDC)
+      if: ${{ inputs.auth-method == 'oidc' }}
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.role-to-assume }}
+        aws-region: ${{ inputs.region }}
+
+    - name: Verify AWS CLI
+      shell: bash
+      run: |
+        aws --version
+        aws sts get-caller-identity --output text --query 'Account' > /dev/null
+        echo "[+] AWS CLI authenticated"

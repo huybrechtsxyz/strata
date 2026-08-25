@@ -1,0 +1,19 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: diagram
+meta:
+  name: promotion
+  annotations:
+    description: "Version promotion flow — completed promotion records grouped by ring, coloured by outcome"
+  labels:
+    version: "1.0.0"
+  tags:
+    - built-in
+spec:
+  sources:
+    - type: promotion
+  layout:
+    type: flowchart
+    direction: LR
+  style:
+    color_by: status
+    group_by: metadata.ring

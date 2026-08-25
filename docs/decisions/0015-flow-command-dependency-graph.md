@@ -7,6 +7,8 @@
 
 > **Superseded.** The `GraphController` and graph data model described here are still in use — ADR-0034 reuses them verbatim as the `files` and `topology` diagram source types. What was replaced is the *command surface*: `strata validate graph` exited `0`/`1` only, never `3`, so it never gated anything and did not belong under `validate`. Rendering moved from hand-written Mermaid string concatenation in `utils/graph.py` into shipped `kind: diagram` YAML definitions, reachable via `strata diagram show -f refs` (file mode) and `strata diagram show -f topology` (resource mode).
 
+> **Post-implementation fix (2026-08-13).** `GraphController._add_edge_and_walk()` and `_resolve_workspace_path()` resolved `file:` references (`spec.workspace.file`, resource/module/namespace/network/firewall/dns entries) relative to **the referencing file's own directory** (`source_file.parent` / `entry_path.parent`) instead of **the workspace root** (`self._work_path`). Every reference nested below the workspace root doubled its path prefix (e.g. `config/stack/workspace.yaml` referenced from a file in `config/` resolved to `config/config/stack/workspace.yaml`), which doesn't exist, so the node rendered `:::missing` in `strata diagram show -f refs`/`-f topology`. Fixed to resolve against `self._work_path`, matching the workspace-root-relative convention used everywhere else (`BaseService._resolve_file_path()` / `resolve_path()` in `utils/system.py`).
+
 ## Summary
 
 A new `strata validate graph` subcommand that generates Mermaid dependency diagrams of the workspace. Two graph modes:

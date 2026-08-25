@@ -1,0 +1,60 @@
+# ===============================================================================
+# Action Name  : setup-azure-ad-identity
+# Description  : Configure credentials for strata's azure_ad identity
+#                integration (CLI login via Azure AD / Entra ID). Distinct
+#                from setup-azure-cli / setup-azure-keyvault, which serve the
+#                azure_cli and azure_keyvault integration types respectively.
+# ===============================================================================
+
+name: "Setup Azure AD Identity"
+description: "Configure Azure AD (Entra ID) credentials for strata's azure_ad identity integration."
+
+branding:
+  icon: "key"
+  color: "blue"
+
+inputs:
+  tenant-id:
+    description: "Azure AD tenant ID."
+    required: true
+  client-id:
+    description: "Azure AD application (client) ID."
+    required: true
+  client-secret:
+    description: "Azure AD application client secret. Omit for public/native clients."
+    required: false
+    default: ""
+  tenant-id-env-var:
+    description: "Env var name the tenant ID is written to (must match the deployment YAML reference)."
+    required: false
+    default: "AZURE_AD_TENANT_ID"
+  client-id-env-var:
+    description: "Env var name the client ID is written to."
+    required: false
+    default: "AZURE_AD_CLIENT_ID"
+  client-secret-env-var:
+    description: "Env var name the client secret is written to."
+    required: false
+    default: "AZURE_AD_CLIENT_SECRET"
+
+runs:
+  using: composite
+  steps:
+    - name: Configure Azure AD Environment Variables
+      shell: bash
+      env:
+        _TENANT_ID: ${{ inputs.tenant-id }}
+        _CLIENT_ID: ${{ inputs.client-id }}
+        _CLIENT_SECRET: ${{ inputs.client-secret }}
+        _TENANT_VAR: ${{ inputs.tenant-id-env-var }}
+        _ID_VAR: ${{ inputs.client-id-env-var }}
+        _SECRET_VAR: ${{ inputs.client-secret-env-var }}
+      run: |
+        [ -n "$_CLIENT_SECRET" ] && echo "::add-mask::$_CLIENT_SECRET"
+        _write_env() {
+          printf '%s<<__STRATA_DELIM__\n%s\n__STRATA_DELIM__\n' "$1" "$2" >> "$GITHUB_ENV"
+        }
+        _write_env "$_TENANT_VAR" "$_TENANT_ID"
+        _write_env "$_ID_VAR" "$_CLIENT_ID"
+        [ -n "$_CLIENT_SECRET" ] && _write_env "$_SECRET_VAR" "$_CLIENT_SECRET"
+        echo "[+] Azure AD identity configured"

@@ -1,0 +1,16 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: diagram
+meta:
+  name: environments
+  annotations:
+    description: "Environment composition — every environment a deployment references, with variable/secret/feature counts and the scopes it was referenced under"
+  labels:
+    version: "1.0.0"
+  tags:
+    - built-in
+spec:
+  sources:
+    - type: environments
+  layout:
+    type: flowchart
+    direction: TD

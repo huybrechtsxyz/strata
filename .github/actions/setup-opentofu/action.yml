@@ -1,0 +1,51 @@
+# ===============================================================================
+# Action Name  : setup-opentofu
+# Description  : Install OpenTofu for strata's opentofu integration. Wraps
+#                the official opentofu/setup-opentofu action.
+# ===============================================================================
+
+name: "Setup OpenTofu"
+description: "Install OpenTofu (tofu) for strata's opentofu integration."
+
+branding:
+  icon: "layers"
+  color: "yellow"
+
+inputs:
+  tofu-version:
+    description: "OpenTofu version to install (e.g. '1.8.4'). Defaults to latest."
+    required: false
+    default: "latest"
+  cloud-hostname:
+    description: "Terraform Cloud/Enterprise-compatible hostname, if using remote state."
+    required: false
+    default: ""
+  cloud-token:
+    description: "API token for the remote backend hostname. Written as TF_TOKEN_<hostname_with_underscores>."
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Install OpenTofu
+      uses: opentofu/setup-opentofu@v1
+      with:
+        tofu_version: ${{ inputs.tofu-version }}
+        tofu_wrapper: false
+
+    - name: Configure Remote Backend Token
+      if: ${{ inputs.cloud-token != '' }}
+      shell: bash
+      env:
+        _TOKEN: ${{ inputs.cloud-token }}
+        _HOSTNAME: ${{ inputs.cloud-hostname }}
+      run: |
+        echo "::add-mask::$_TOKEN"
+        VAR_NAME="TF_TOKEN_$(echo "$_HOSTNAME" | tr '.' '_')"
+        printf '%s<<__STRATA_DELIM__\n%s\n__STRATA_DELIM__\n' "$VAR_NAME" "$_TOKEN" >> "$GITHUB_ENV"
+        echo "[+] OpenTofu remote backend token configured ($VAR_NAME)"
+
+    - name: Verify OpenTofu
+      shell: bash
+      run: tofu version

@@ -1,0 +1,30 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: diagram
+meta:
+  name: gate-sequence
+  annotations:
+    description: "Gate evaluation sequence for the most recent promotion record — which gates ran and whether each passed, in order. Mermaid sequence diagrams don't support classDef coloring (ADR-0034 styling constraints), so pass/fail is icon-driven (✅/❌) rather than color-driven."
+  labels:
+    version: "1.0.0"
+  tags:
+    - built-in
+spec:
+  sources:
+    - type: approvals
+      as: gates
+  template: |
+    sequenceDiagram
+        participant P as Promotion
+    {%- set latest = gates.nodes[0].metadata.promotion if gates.nodes else none %}
+    {%- set matched = (gates.nodes | selectattr('metadata.promotion', 'equalto', latest) | list) if latest else [] %}
+    {%- if matched | length == 0 %}
+        Note over P: No promotion records with gates found
+    {%- else %}
+    {%- for g in matched %}
+        participant {{ g.id }} as {{ g.label | mermaid_escape }}
+    {%- endfor %}
+    {%- for g in matched %}
+        P->>{{ g.id }}: check
+        {{ g.id }}-->>P: {{ '✅ passed' if g.status == 'passed' else '❌ failed' }}
+    {%- endfor %}
+    {%- endif %}

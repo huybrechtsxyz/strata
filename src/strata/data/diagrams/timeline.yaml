@@ -1,0 +1,22 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: diagram
+meta:
+  name: timeline
+  annotations:
+    description: "Stage execution timeline — recent deploy run/destroy executions from the audit trail, as milestones (the audit trail records one timestamp per execution, not a start/end duration per stage)"
+  labels:
+    version: "1.0.0"
+  tags:
+    - built-in
+spec:
+  sources:
+    - type: history
+      as: hist
+  template: |
+    gantt
+      dateFormat  YYYY-MM-DD HH:mm
+      title Deploy Execution History
+      section Executions
+    {%- for n in hist.nodes | reverse %}
+      {{ n.metadata.operation | mermaid_escape }} ({{ n.metadata.stage | default('all stages', true) }}) : {{ 'crit, milestone' if n.status == 'failed' else 'milestone' }}, {{ n.id }}, {{ n.metadata.when }}, 0d
+    {%- endfor %}

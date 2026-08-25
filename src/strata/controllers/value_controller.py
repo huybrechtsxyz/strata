@@ -666,6 +666,8 @@ class ValueController(BaseController):
     def _ensure_integrations_initialized() -> None:
         """Lazily initialise integrations (idempotent)."""
 
+        from strata.models.capabilities import IFeatureStore, ISecretStore, IVariableStore
+
         svc = IntegrationService.get_instance()
         if not svc.is_initialized():
             ok, errors = svc.initialize_integrations()
@@ -674,6 +676,12 @@ class ValueController(BaseController):
                     "Integration initialisation had errors",
                     errors=errors,
                 )
+        ok, errors = svc.validate_required_integrations(capabilities={ISecretStore, IVariableStore, IFeatureStore})
+        if not ok:
+            logger.warning(
+                "Required store integration unavailable",
+                errors=errors,
+            )
 
     @staticmethod
     def _get_integration_by_type(store_type: str):

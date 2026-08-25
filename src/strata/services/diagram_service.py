@@ -1,13 +1,22 @@
 #!/usr/bin/env python3
 """Service for loading and validating diagram definitions (ADR-0034)."""
 
+import re
+from pathlib import Path
 from typing import List, Optional, Tuple
 
+from strata.controllers.diagram_resolve_controller import DiagramResolveController
 from strata.models.diagram_model import DiagramModel
 from strata.services.base_service import BaseService
 from strata.utils.design_tokens import DESIGN_TOKENS
 from strata.utils.diagram_expressions import ConditionError, parse_condition
 from strata.utils.templater import TemplateProcessor
+
+# Matches the CLI's own 'click <id> "strata://..."' directive shape (see
+# DiagramTemplateBuilder / GraphController) — used to find hand-authored links
+# in spec.template, the one place a strata:// URI can go stale (see
+# _validate_dynamic docstring below).
+_CLICK_DIRECTIVE_RE = re.compile(r'click\s+\S+\s+"(strata://[^"]+)"')
 
 
 class DiagramService(BaseService["DiagramModel"]):
@@ -103,5 +112,43 @@ class DiagramService(BaseService["DiagramModel"]):
         configuration_model=None,
         work_path: Optional[str] = None,
     ) -> Tuple[bool, List[str]]:
-        """Diagrams have no cross-file references — self-contained."""
-        return True, []
+        """Phase 2 (``strata validate --deep`` only): check every hand-authored
+        ``strata://`` link in ``spec.template`` still resolves (ADR-0034).
+
+        Only a *hand-written* ``click <id> "strata://..."`` line in an authored
+        ``spec.template`` can go stale — a generated diagram (``spec.template``
+        omitted, built from ``spec.layout``/``spec.style``) always emits a
+        freshly-computed URI at render time, by construction, so there is
+        nothing to check there. This deliberately never renders the diagram:
+        rendering would additionally invoke every declared data source (drift,
+        sbom, history, ...), which is a slower, unrelated concern from simple
+        link-rot detection, and a source's own failure shouldn't be reported as
+        a broken link.
+
+        Only reachable when ``configuration_model`` is truthy (see
+        ``BaseService.validate()``) — i.e. under ``--deep`` with an active
+        profile, the same gate every other cross-reference check in strata
+        uses, even though this particular check does not itself need the
+        configuration model.
+        """
+        assert self.model is not None
+        template = self.model.spec.template
+        if not template or not work_path:
+            return True, []
+
+        diagram_name = self.model.meta.name
+        uris = sorted(set(_CLICK_DIRECTIVE_RE.findall(template)))
+        if not uris:
+            return True, []
+
+        resolver = DiagramResolveController(work_path=Path(work_path))
+        errors: List[str] = []
+        for uri in uris:
+            resolver.clear_errors()
+            if resolver.resolve(uri) is not None:
+                continue
+            reason = resolver.get_errors()[-1] if resolver.get_errors() else "no matching object found"
+            errors.append(
+                f"Diagram '{diagram_name}': hand-authored link '{uri}' in spec.template does not resolve — {reason}"
+            )
+        return not errors, errors

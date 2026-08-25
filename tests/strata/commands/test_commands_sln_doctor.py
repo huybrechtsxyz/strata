@@ -48,6 +48,7 @@ class TestCheckIdentityIntegrations:
 
         svc = MagicMock()
         svc.is_initialized.return_value = True
+        svc.validate_required_integrations.return_value = (True, [])
         svc.get_integrations_with_capability.return_value = ["idp"] if integration else []
         svc.get_integration.return_value = integration
 

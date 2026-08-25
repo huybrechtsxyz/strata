@@ -1,0 +1,30 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: diagram
+meta:
+  name: environment-complexity
+  annotations:
+    description: "Environments plotted by declared secret count vs variable count. Not a literal catalog matrix (e.g. ring/wave or policy/phase) — those need cross-reference data no source exposes yet; this uses the two numeric fields the 'environments' source already reports. Mermaid quadrant charts support no per-point styling (ADR-0034 styling constraints), so points carry labels only."
+  labels:
+    version: "1.0.0"
+  tags:
+    - built-in
+spec:
+  sources:
+    - type: environments
+      as: envs
+  template: |
+    quadrantChart
+        title Environment Complexity — Secrets vs Variables
+        x-axis Fewer Secrets --> More Secrets
+        y-axis Fewer Variables --> More Variables
+        quadrant-1 High complexity
+        quadrant-2 Variable-heavy
+        quadrant-3 Low complexity
+        quadrant-4 Secret-heavy
+    {%- set secret_counts = envs.nodes | map(attribute='metadata.secret_count') | list %}
+    {%- set variable_counts = envs.nodes | map(attribute='metadata.variable_count') | list %}
+    {%- set max_secrets = ([secret_counts | max, 1] | max) if secret_counts else 1 %}
+    {%- set max_variables = ([variable_counts | max, 1] | max) if variable_counts else 1 %}
+    {%- for n in envs.nodes %}
+        {{ n.label }}: [{{ '%.2f' | format(n.metadata.secret_count / max_secrets) }}, {{ '%.2f' | format(n.metadata.variable_count / max_variables) }}]
+    {%- endfor %}

@@ -1,0 +1,33 @@
+# ===============================================================================
+# Action Name  : setup-checkov
+# Description  : Install checkov for strata's checkov integration. CLI only,
+#                no credentials required for local IaC scanning.
+# ===============================================================================
+
+name: "Setup Checkov"
+description: "Install checkov for strata's checkov integration."
+
+branding:
+  icon: "shield"
+  color: "green"
+
+inputs:
+  checkov-version:
+    description: "checkov version to install (e.g. '3.2.257'). Defaults to latest."
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Install checkov
+      shell: bash
+      env:
+        _VERSION: ${{ inputs.checkov-version }}
+      run: |
+        if [ -n "$_VERSION" ]; then
+          pip install "checkov==${_VERSION}"
+        else
+          pip install checkov
+        fi
+        checkov --version

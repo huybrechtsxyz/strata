@@ -9,10 +9,17 @@ Usage::
     service.initialize_integrations()
     git = service.get_integration("git")
     stores = service.get_integrations_with_capability(ISecretStore)
+
+    # Scope the required-integration availability check to the capability the
+    # caller actually needs (ADR-0069) -- avoids failing on an unrelated
+    # required integration (e.g. `terraform`) when the caller only needs, say,
+    # `IIdentityProvider`. Pass ``capabilities=None`` for the unscoped,
+    # check-everything behavior.
+    ok, errors = service.validate_required_integrations(capabilities={ISecretStore})
 """
 
 import threading
-from typing import List, Optional, Tuple, Type
+from typing import List, Optional, Set, Tuple, Type
 
 from strata.logger import get_logger
 
@@ -152,20 +159,36 @@ class IntegrationService:
 
         self._integrations_loaded = True
 
-        # Validate required integrations
-        validation_success, validation_errors = self.validate_required_integrations()
-        errors.extend(validation_errors)
-
+        # NOTE (ADR-0069): required-integration *availability* validation is
+        # deliberately NOT run here anymore. This method is a process-wide
+        # singleton gate (`_integrations_loaded`) — running an unscoped
+        # `validate_required_integrations()` here would only ever check
+        # whatever capability the *first* caller in the process happened to
+        # need, silently skipping the check for every other caller for the
+        # rest of the process lifetime. Callers that need the required-
+        # integration check must call `validate_required_integrations()`
+        # explicitly with the capability set they actually care about (or
+        # `None` for the full, unscoped check — e.g. a future "check
+        # everything" report).
         return len(errors) == 0, errors
 
-    def validate_required_integrations(self) -> Tuple[bool, List[str]]:
+    def validate_required_integrations(self, capabilities: Optional[Set[Type]] = None) -> Tuple[bool, List[str]]:
         """
-        Validate that all required integrations are loaded and available.
+        Validate that required integrations are loaded and available.
+
+        Args:
+            capabilities: Optional set of capability protocol classes (e.g.
+                ``{IIdentityProvider}``). When provided, only ``required: true``
+                specs whose declared ``spec.capabilities`` intersect this set
+                are checked — scoping the check to what the calling command
+                actually needs (ADR-0069). ``None`` checks every required
+                integration regardless of capability (the original, unscoped
+                behavior).
 
         Returns:
             Tuple of (success, list of error messages)
         """
-        logger.debug("Validating required integrations")
+        logger.debug("Validating required integrations", capabilities=capabilities)
         errors = []
 
         # Get required integrations from config
@@ -174,6 +197,15 @@ class IntegrationService:
             return True, []
 
         required_integrations = [spec for spec in config_model.spec.integrations if spec.required and spec.enabled]
+
+        if capabilities is not None:
+            from strata.models.capabilities import get_capability_protocol
+
+            required_integrations = [
+                spec
+                for spec in required_integrations
+                if any(get_capability_protocol(name) in capabilities for name in (spec.capabilities or []))
+            ]
 
         logger.debug("Checking required integrations", count=len(required_integrations))
 

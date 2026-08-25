@@ -96,6 +96,10 @@
           {
             "name": "approvals",
             "description": "Show pending work items (approval gates, cost reviews, security reviews)"
+          },
+          {
+            "name": "diagram",
+            "description": "List diagrams, show one (/diagram show <name>), or generate one from a description (/diagram create <description>)"
           }
         ]
       }
@@ -220,6 +224,36 @@
         "command": "strata.showDependencyGraph",
         "title": "Strata: Show Dependency Graph",
         "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "strata.showTopologyDiagram",
+        "title": "Strata: Show Infrastructure Topology",
+        "icon": "$(circuit-board)"
+      },
+      {
+        "command": "strata.previewDiagramFile",
+        "title": "Strata: Preview Diagram",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "strata.refreshDiagrams",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "strata.filterDiagrams",
+        "title": "Filter Diagrams",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "strata.openDiagramBuilder",
+        "title": "Strata: New Diagram (Builder)",
+        "icon": "$(add)"
+      },
+      {
+        "command": "strata.editDiagramInBuilder",
+        "title": "Edit in Diagram Builder",
+        "icon": "$(edit)"
       },
       {
         "command": "strata.refreshTreeView",
@@ -452,6 +486,11 @@
           "id": "strataHelp",
           "name": "Help",
           "contextualTitle": "Strata Help"
+        },
+        {
+          "id": "strataDiagrams",
+          "name": "Diagrams",
+          "contextualTitle": "Strata Diagrams"
         }
       ]
     },
@@ -508,12 +547,32 @@
           "group": "navigation"
         },
         {
+          "command": "strata.refreshDiagrams",
+          "when": "view == strataDiagrams",
+          "group": "navigation"
+        },
+        {
+          "command": "strata.filterDiagrams",
+          "when": "view == strataDiagrams",
+          "group": "navigation"
+        },
+        {
+          "command": "strata.openDiagramBuilder",
+          "when": "view == strataDiagrams",
+          "group": "navigation"
+        },
+        {
           "command": "strata.refreshWorkItems",
           "when": "view == strataWorkItems",
           "group": "navigation"
         }
       ],
       "view/item/context": [
+        {
+          "command": "strata.editDiagramInBuilder",
+          "when": "view == strataDiagrams && viewItem == diagram",
+          "group": "inline"
+        },
         {
           "command": "strata.approveWorkItem",
           "when": "view == strataWorkItems && viewItem == workitem-pending",
@@ -588,6 +647,16 @@
           "command": "strata.checkPolicy",
           "when": "view == strataDeployments && viewItem == deployment-active",
           "group": "strata@4"
+        },
+        {
+          "command": "strata.showDependencyGraph",
+          "when": "view == strataDeployments && viewItem == deployment-active",
+          "group": "strata@5"
+        },
+        {
+          "command": "strata.showTopologyDiagram",
+          "when": "view == strataDeployments && viewItem == deployment-active",
+          "group": "strata@6"
         },
         {
           "command": "strata.copyOutputValue",
@@ -667,6 +736,21 @@
           "command": "strata.lockStatus",
           "when": "resourceExtname == .yaml && strata.workspaceActive",
           "group": "strata@9"
+        },
+        {
+          "command": "strata.showDependencyGraph",
+          "when": "resourceExtname == .yaml && strata.workspaceActive",
+          "group": "strata@10"
+        },
+        {
+          "command": "strata.showTopologyDiagram",
+          "when": "resourceExtname == .yaml && strata.workspaceActive",
+          "group": "strata@11"
+        },
+        {
+          "command": "strata.previewDiagramFile",
+          "when": "resourceExtname == .yaml && strata.workspaceActive",
+          "group": "strata@12"
         }
       ]
     },

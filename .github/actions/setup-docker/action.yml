@@ -1,0 +1,42 @@
+# ===============================================================================
+# Action Name  : setup-docker
+# Description  : Verify Docker (preinstalled on GitHub-hosted runners) and
+#                optionally log in to a registry for strata's docker
+#                integration.
+# ===============================================================================
+
+name: "Setup Docker"
+description: "Verify Docker availability and optionally authenticate to a registry for strata's docker integration."
+
+branding:
+  icon: "box"
+  color: "blue"
+
+inputs:
+  registry:
+    description: "Container registry hostname to log in to (e.g. 'ghcr.io'). Leave empty to skip login."
+    required: false
+    default: ""
+  username:
+    description: "Registry username. Required when registry is set."
+    required: false
+    default: ""
+  password:
+    description: "Registry password or token. Required when registry is set."
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Verify Docker
+      shell: bash
+      run: docker --version
+
+    - name: Log in to registry
+      if: ${{ inputs.registry != '' }}
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ inputs.registry }}
+        username: ${{ inputs.username }}
+        password: ${{ inputs.password }}

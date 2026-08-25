@@ -509,7 +509,7 @@ class DiagramSourceController(BaseController):
             order: List[str] = []
             document = self._get_deployment_document()
             if document is not None:
-                deployment_path, model = document
+                _deployment_path, model = document
                 for ref in model.spec.environments or []:
                     if ref.file.startswith("@"):
                         self._add_error(
@@ -517,7 +517,10 @@ class DiagramSourceController(BaseController):
                             f"sources cannot resolve @repo/ references yet — skipping."
                         )
                         continue
-                    path = (deployment_path.parent / ref.file).resolve()
+                    # Resolved relative to the workspace root, not deployment_path's
+                    # own directory — file references are always work_path-relative
+                    # (matches BaseService._resolve_file_path()).
+                    path = (self._work_path / ref.file).resolve()
                     if not path.is_file():
                         self._add_error(f"Environment reference '{ref.file}' does not exist.")
                         continue
@@ -1075,7 +1078,7 @@ class DiagramSourceController(BaseController):
         document = self._get_workspace_document()
         if document is None:
             return []
-        ws_path, data = document
+        _ws_path, data = document
 
         refs: List[Tuple[str, Path]] = []
         for entry in data.get("spec", {}).get(key) or []:
@@ -1089,7 +1092,10 @@ class DiagramSourceController(BaseController):
                     f"cannot resolve @repo/ references yet — skipping."
                 )
                 continue
-            resolved = (ws_path.parent / file_ref).resolve()
+            # Resolved relative to the workspace root, not ws_path's own
+            # directory — file references are always work_path-relative
+            # (matches BaseService._resolve_file_path()).
+            resolved = (self._work_path / file_ref).resolve()
             if not resolved.is_file():
                 self._add_error(f"'{name}' references '{file_ref}', which does not exist.")
                 continue

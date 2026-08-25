@@ -195,6 +195,9 @@ class ExportAuditCommand(SchemaBaseCommand):
             svc = IntegrationService.get_instance()
             if not svc.is_initialized():
                 svc.initialize_integrations()
+            ok, errors = svc.validate_required_integrations(capabilities={ISiemSink})
+            if not ok:
+                self.logger.warning("audit_export_required_integration_unavailable", errors=errors)
             instance = svc.get_integration(siem_name)
         except Exception as exc:
             self._errors.append(f"Failed to resolve integration '{siem_name}': {exc}")

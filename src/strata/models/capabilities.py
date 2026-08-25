@@ -21,6 +21,7 @@ __all__ = [
     "IAWSTool",
     "IGCloudTool",
     "IIdentityProvider",
+    "IDiagramRenderer",
     # Registry and mapping
     "CAPABILITY_REGISTRY",
     "CAPABILITY_MAP",
@@ -482,6 +483,38 @@ class ICostEstimator(Protocol):
         ...
 
 
+@runtime_checkable
+class IDiagramRenderer(Protocol):
+    """
+    Capability: Integration renders diagram text (e.g. Mermaid) to an image format.
+
+    Integrations implementing this interface convert diagram source text into
+    rendered bytes (SVG/PNG) for export from `strata diagram show --format`.
+
+    Examples: Kroki
+    """
+
+    def ensure_available(self) -> Tuple[bool, str]:
+        """Check if this integration is available and meets version requirements."""
+        ...
+
+    def render(self, diagram_source: str, diagram_type: str, output_format: str) -> bytes:
+        """Render diagram_source (e.g. Mermaid text) to output_format (e.g. 'svg'/'png') bytes.
+
+        Args:
+            diagram_source: Raw diagram text (e.g. Mermaid syntax).
+            diagram_type: Diagram language the source is written in (e.g. 'mermaid').
+            output_format: Desired output image format (e.g. 'svg', 'png').
+
+        Returns:
+            Rendered image bytes.
+
+        Raises:
+            RuntimeError: If the renderer is unreachable or returns an error.
+        """
+        ...
+
+
 # Capability registry for metadata
 # NOTE: ISiemSink is intentionally absent from CAPABILITY_REGISTRY — it is a
 # platform-wide forwarding protocol, not a data-store capability.  Sinks are
@@ -538,6 +571,11 @@ CAPABILITY_REGISTRY = {
         "methods": ["breakdown", "diff"],
         "examples": ["Infracost"],
     },
+    "IDiagramRenderer": {
+        "description": "Diagram text (e.g. Mermaid) to image (SVG/PNG) rendering",
+        "methods": ["render"],
+        "examples": ["Kroki"],
+    },
     "IAzureTool": {
         "description": "Azure CLI operations: auth check, subscription context, access tokens, az subcommands",
         "methods": ["ensure_available", "get_subscription", "get_access_token"],
@@ -578,6 +616,7 @@ CAPABILITY_MAP = {
     "aws": IAWSTool,
     "gcloud": IGCloudTool,
     "identity": IIdentityProvider,
+    "diagram_render": IDiagramRenderer,
 }
 
 

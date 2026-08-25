@@ -1,0 +1,108 @@
+# ===============================================================================
+# Action Name  : setup-vault
+# Description  : Install the HashiCorp Vault CLI and configure credentials.
+#                strata's VaultIntegration shells out to the real `vault`
+#                binary — the CLI is REQUIRED, not optional.
+# ===============================================================================
+
+name: "Setup Vault"
+description: "Install the HashiCorp Vault CLI and configure authentication for strata's hashicorp_vault integration."
+
+branding:
+  icon: "lock"
+  color: "black"
+
+inputs:
+  auth-method:
+    description: "Authentication method: 'token', 'approle', or 'kubernetes'."
+    required: false
+    default: "token"
+  address:
+    description: "Vault server address (VAULT_ADDR)."
+    required: true
+  token:
+    description: "Vault token (VAULT_TOKEN). Required when auth-method is token."
+    required: false
+    default: ""
+  role-id:
+    description: "AppRole role ID (VAULT_ROLE_ID). Required when auth-method is approle."
+    required: false
+    default: ""
+  secret-id:
+    description: "AppRole secret ID (VAULT_SECRET_ID). Required when auth-method is approle."
+    required: false
+    default: ""
+  k8s-role:
+    description: "Kubernetes auth role (VAULT_K8S_ROLE). Required when auth-method is kubernetes."
+    required: false
+    default: ""
+  namespace:
+    description: "Vault Enterprise namespace (VAULT_NAMESPACE)."
+    required: false
+    default: ""
+  vault-version:
+    description: "Vault CLI version to install (e.g. '1.17.2'). Defaults to latest from the HashiCorp apt repo."
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Install Vault CLI (HashiCorp apt repo)
+      shell: bash
+      env:
+        _VERSION: ${{ inputs.vault-version }}
+      run: |
+        wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+        echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" \
+          | sudo tee /etc/apt/sources.list.d/hashicorp.list
+        sudo apt-get update -y
+        if [ -n "$_VERSION" ]; then
+          sudo apt-get install -y "vault=${_VERSION}-1"
+        else
+          sudo apt-get install -y vault
+        fi
+        vault version
+
+    - name: Configure Vault Environment Variables
+      shell: bash
+      env:
+        _AUTH_METHOD: ${{ inputs.auth-method }}
+        _ADDRESS: ${{ inputs.address }}
+        _TOKEN: ${{ inputs.token }}
+        _ROLE_ID: ${{ inputs.role-id }}
+        _SECRET_ID: ${{ inputs.secret-id }}
+        _K8S_ROLE: ${{ inputs.k8s-role }}
+        _NAMESPACE: ${{ inputs.namespace }}
+      run: |
+        [ -n "$_TOKEN" ] && echo "::add-mask::$_TOKEN"
+        [ -n "$_SECRET_ID" ] && echo "::add-mask::$_SECRET_ID"
+
+        _write_env() {
+          printf '%s<<__STRATA_DELIM__\n%s\n__STRATA_DELIM__\n' "$1" "$2" >> "$GITHUB_ENV"
+        }
+
+        _write_env VAULT_ADDR "$_ADDRESS"
+        [ -n "$_NAMESPACE" ] && _write_env VAULT_NAMESPACE "$_NAMESPACE"
+
+        case "$_AUTH_METHOD" in
+          token)
+            [ -z "$_TOKEN" ] && { echo "::error::setup-vault: auth-method 'token' requires the 'token' input."; exit 1; }
+            _write_env VAULT_TOKEN "$_TOKEN"
+            ;;
+          approle)
+            [ -z "$_ROLE_ID" ] || [ -z "$_SECRET_ID" ] && { echo "::error::setup-vault: auth-method 'approle' requires role-id and secret-id."; exit 1; }
+            _write_env VAULT_ROLE_ID "$_ROLE_ID"
+            _write_env VAULT_SECRET_ID "$_SECRET_ID"
+            ;;
+          kubernetes)
+            [ -z "$_K8S_ROLE" ] && { echo "::error::setup-vault: auth-method 'kubernetes' requires k8s-role."; exit 1; }
+            _write_env VAULT_K8S_ROLE "$_K8S_ROLE"
+            ;;
+          *)
+            echo "::error::setup-vault: unknown auth-method '$_AUTH_METHOD' (expected token|approle|kubernetes)."
+            exit 1
+            ;;
+        esac
+
+        echo "[+] Vault configured (auth-method: $_AUTH_METHOD)"

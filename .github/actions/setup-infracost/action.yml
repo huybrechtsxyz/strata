@@ -1,0 +1,35 @@
+# ===============================================================================
+# Action Name  : setup-infracost
+# Description  : Install and authenticate Infracost for strata's infracost
+#                integration.
+# ===============================================================================
+
+name: "Setup Infracost"
+description: "Install and authenticate Infracost for strata's infracost integration."
+
+branding:
+  icon: "dollar-sign"
+  color: "green"
+
+inputs:
+  api-key:
+    description: "Infracost API key (INFRACOST_API_KEY)."
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install Infracost
+      shell: bash
+      run: |
+        curl -fsSL https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh | sh
+        infracost --version
+
+    - name: Configure Infracost API Key
+      shell: bash
+      env:
+        _API_KEY: ${{ inputs.api-key }}
+      run: |
+        echo "::add-mask::$_API_KEY"
+        printf 'INFRACOST_API_KEY<<__STRATA_DELIM__\n%s\n__STRATA_DELIM__\n' "$_API_KEY" >> "$GITHUB_ENV"
+        echo "[+] Infracost configured"

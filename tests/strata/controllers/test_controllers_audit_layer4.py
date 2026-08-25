@@ -185,6 +185,7 @@ def _mock_integration_service(integrations: dict):
     """integrations: {name: mock_instance_or_None}"""
     svc = MagicMock()
     svc.is_initialized.return_value = True
+    svc.validate_required_integrations.return_value = (True, [])
     svc.get_integration.side_effect = lambda name: integrations.get(name)
     return svc
 

@@ -147,3 +147,60 @@ class TestGraphController:
         assert any(n.kind == "deployment" for n in result.nodes)
         # The playbook is not a strata document — it must not appear as a node
         assert all("playbook" not in n.identifier for n in result.nodes)
+
+    def test_file_refs_resolve_relative_to_workspace_root_not_referencing_file(self, tmp_path):
+        """Regression test: file: references must resolve relative to work_path,
+        not to the referencing file's own directory — matching the convention
+        used by BaseService._resolve_file_path() / resolve_path(). A deployment
+        nested below the workspace root that references a workspace-root-relative
+        path must not have that path doubled with its own parent directory."""
+        (tmp_path / "config").mkdir()
+        (tmp_path / "config" / "stack").mkdir()
+        (tmp_path / "config" / "deployment.yaml").write_text(
+            "apiVersion: strata.huybrechts.xyz/v1\n"
+            "kind: deployment\n"
+            "meta:\n"
+            "  name: sample_deploy\n"
+            "spec:\n"
+            "  workspace:\n"
+            "    file: config/stack/workspace.yaml\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "config" / "stack" / "workspace.yaml").write_text(
+            "apiVersion: strata.huybrechts.xyz/v1\nkind: workspace\nmeta:\n  name: sample_ws\nspec: {}\n",
+            encoding="utf-8",
+        )
+
+        controller = GraphController(work_path=tmp_path, entry="config/deployment.yaml", no_validate=True)
+        result = controller.build_file_graph()
+
+        assert not controller.has_errors()
+        ws_node = next(n for n in result.nodes if n.kind == "workspace")
+        assert ws_node.path == "config/stack/workspace.yaml"
+        assert ws_node.status != "missing"
+
+    def test_resource_graph_refs_resolve_relative_to_workspace_root(self, tmp_path):
+        """Same regression as above, but via _resolve_workspace_path()'s
+        deployment -> workspace traversal used by build_resource_graph()."""
+        (tmp_path / "config").mkdir()
+        (tmp_path / "config" / "stack").mkdir()
+        (tmp_path / "config" / "deployment.yaml").write_text(
+            "apiVersion: strata.huybrechts.xyz/v1\n"
+            "kind: deployment\n"
+            "meta:\n"
+            "  name: sample_deploy\n"
+            "spec:\n"
+            "  workspace:\n"
+            "    file: config/stack/workspace.yaml\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "config" / "stack" / "workspace.yaml").write_text(
+            "apiVersion: strata.huybrechts.xyz/v1\nkind: workspace\nmeta:\n  name: sample_ws\nspec: {}\n",
+            encoding="utf-8",
+        )
+
+        controller = GraphController(work_path=tmp_path, entry="config/deployment.yaml", no_validate=True)
+        result = controller.build_resource_graph()
+
+        assert not controller.has_errors()
+        assert result.workspace_name == "sample_ws"

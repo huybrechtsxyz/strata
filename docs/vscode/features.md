@@ -79,7 +79,8 @@ Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on Mac) to open the Command Palette. Type
 - **Strata: Switch Profile** — quick-pick to activate a different profile
 - **Strata: Export Schemas** — export and wire JSON schemas to `.vscode/settings.json`
 - **Strata: Open Console** — open strata interactive console
-- **Strata: Show Dependency Graph** — visualize document relationships
+- **Strata: Show Dependency Graph** — visualize document relationships and infrastructure
+- **Strata: List Diagrams** — show all available diagrams (built-in + workspace)
 
 ## Diagnostics (Problems Panel)
 
@@ -155,9 +156,45 @@ strata:module        → module (with helm/compose/script choice)
 
 Snippets are generated from JSON schemas, so they stay in sync with your version.
 
-## Dependency Graph
+## Diagram Visualization
 
-Open `Strata: Show Dependency Graph` (Command Palette) to visualize how documents relate.
+The extension renders interactive Mermaid diagrams for any workspace data via `strata diagram show`.
+
+### Built-in diagrams
+- **topology** — resource topology, module dependencies, cross-references
+- **refs** — file cross-references and relationships
+
+### Custom diagrams
+Create `.strata/diagrams/<name>.yaml` files to visualize:
+
+**Workspace structure:** Topology, Files, Resources, Modules, Namespaces, Networks, Firewalls, DNS zones  
+**Deployment details:** Stages, Environments, Tenants, Policies  
+**History:** Execution records, Promotions, Approval gates  
+**Configuration:** Variables, Secrets, Feature flags, Values (metadata only, values never exposed)  
+**Live state:** Drift tracking, Deployment outputs, Deployment locks  
+**Tooling:** Repositories, Software Bill of Materials (SBOM)
+
+**Example diagram:**
+
+```yaml
+apiVersion: strata.huybrechts.xyz/v1
+kind: diagram
+meta:
+  name: deployment-flow
+spec:
+  sources:
+    - type: stages
+    - type: environments
+  layout: flowchart TD
+  style:
+    color_by: kind
+```
+
+Nodes are color-coded by status. Click a node to open its source file. VS Code shows the diagram inline; the CLI renders it as SVG or Mermaid source.
+
+### Dependency Graph
+
+The "Show Dependency Graph" command is a shorthand for the built-in `refs` diagram — visualizing all `@repo/path` cross-references in your workspace.
 
 Nodes are color-coded by kind:
 - 🔷 configuration

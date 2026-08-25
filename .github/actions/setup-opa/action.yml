@@ -1,0 +1,31 @@
+# ===============================================================================
+# Action Name  : setup-opa
+# Description  : Install the Open Policy Agent CLI for strata's opa
+#                integration. CLI only, no credentials required.
+# ===============================================================================
+
+name: "Setup OPA"
+description: "Install the Open Policy Agent (opa) CLI for strata's opa integration."
+
+branding:
+  icon: "shield"
+  color: "gray-dark"
+
+inputs:
+  opa-version:
+    description: "OPA version to install (without leading 'v'), e.g. '0.70.0'."
+    required: false
+    default: "0.70.0"
+
+runs:
+  using: composite
+  steps:
+    - name: Install OPA
+      shell: bash
+      env:
+        _VERSION: ${{ inputs.opa-version }}
+      run: |
+        curl -L -o /tmp/opa "https://openpolicyagent.org/downloads/v${_VERSION}/opa_linux_amd64_static"
+        sudo mv /tmp/opa /usr/local/bin/opa
+        sudo chmod +x /usr/local/bin/opa
+        opa version

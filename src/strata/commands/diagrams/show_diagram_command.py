@@ -10,6 +10,8 @@ from strata.controllers.diagram_controller import DiagramController
 from strata.models.diagram_model import DiagramSourceType
 from strata.services.configuration_service import ConfigurationService
 
+_IMAGE_FORMATS = ("svg", "png")
+
 
 class ShowDiagramCommand(BaseCommand):
     """Render a ``kind: diagram`` definition, by name or by path."""
@@ -23,6 +25,7 @@ class ShowDiagramCommand(BaseCommand):
         save: Optional[str] = None,
         print_template: bool = False,
         no_validate: bool = False,
+        format: str = "mmd",
         work_path: Optional[str] = None,
         output: Optional[str] = None,
         verbose: bool = False,
@@ -34,7 +37,9 @@ class ShowDiagramCommand(BaseCommand):
         self._save = save
         self._print_template = print_template
         self._no_validate = no_validate
+        self._format = format
         self._content: Optional[str] = None
+        self._image_bytes: Optional[bytes] = None
 
     def get_required_integrations(self) -> Dict[str, str]:
         return {}
@@ -44,6 +49,13 @@ class ShowDiagramCommand(BaseCommand):
         return self._initialize_session(show_header=show_header)
 
     def _execute(self) -> bool:
+        if self._format in _IMAGE_FORMATS and self._print_template:
+            self._errors.append(
+                "--format svg/png cannot be combined with --print-template "
+                "(there is no rendered image of a raw, unrendered template)."
+            )
+            return False
+
         controller = DiagramController(
             work_path=self._work_path,
             entry=self._entry,
@@ -85,19 +97,74 @@ class ShowDiagramCommand(BaseCommand):
             "diagram": model.meta.name,
             "definition": str(definition_path),
             "template" if self._print_template else "mermaid": content,
+            # Structured spec fields, always included alongside the rendered/template
+            # output (cheap — 'model' is already fully parsed at this point). This is
+            # what lets a GUI client round-trip a sugar-based (layout/style) diagram
+            # back into an editable form without re-parsing the YAML itself — see
+            # ADR-0034 Phase 4 "round-trip guarantee".
+            "has_template": bool(model.spec.template),
+            "sources": [
+                s.model_dump(mode="json", by_alias=True, exclude_none=True) for s in (model.spec.sources or [])
+            ],
         }
+        if model.spec.layout is not None:
+            self._output_data["layout"] = model.spec.layout.model_dump(mode="json", exclude_none=True)
+        if model.spec.style is not None:
+            self._output_data["style"] = model.spec.style.model_dump(mode="json", exclude_none=True)
 
-        if self._save:
+        if self._format in _IMAGE_FORMATS:
+            self._image_bytes = self._render_image(content)
+            if self._image_bytes is None:
+                return False
+
+        if self._save or self._format in _IMAGE_FORMATS:
             self._save_content(content)
         return True
 
     def _after_execute(self) -> bool:
-        if self._content is not None and self._is_console_output() and not self._output_quiet:
+        if (
+            self._format not in _IMAGE_FORMATS
+            and self._content is not None
+            and self._is_console_output()
+            and not self._output_quiet
+        ):
             click.echo(self._content)
         return super()._after_execute()
 
+    def _render_image(self, mermaid_source: str) -> Optional[bytes]:
+        """Render *mermaid_source* to image bytes via Kroki (ADR-0034).
+
+        Zero-config by default — no integration needs to be declared, this
+        renders through the public https://kroki.io instance out of the box.
+        Self-hosting: set the STRATA_KROKI_ADDRESS env var to point at your own
+        Kroki instance instead (see docs/help/kroki.md).
+        """
+        from strata.integrations.kroki import KrokiIntegration
+        from strata.models.integration_model import IntegrationModel
+
+        integration = KrokiIntegration(IntegrationModel(name="kroki", type="kroki", capabilities={"diagram_render"}))
+        available, message = integration.ensure_available()
+        if not available:
+            self._errors.append(f"Kroki integration unavailable: {message}")
+            return None
+        try:
+            return integration.render(mermaid_source, "mermaid", self._format)
+        except RuntimeError as exc:
+            self._errors.append(str(exc))
+            return None
+
     def _save_content(self, content: str) -> None:
-        """Write the rendered Mermaid (or template) verbatim so it can be piped onward."""
+        """Write the rendered output (Mermaid text, template text, or a rendered image) verbatim."""
+        if self._format in _IMAGE_FORMATS:
+            save_path = Path(self._save) if self._save else self._work_path / f"diagram.{self._format}"
+            if not save_path.is_absolute():
+                save_path = self._work_path / save_path
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            save_path.write_bytes(self._image_bytes or b"")
+            self._output_data["saved_to"] = str(save_path)
+            self._messages.append(f"Saved to: {save_path}")
+            return
+
         save_path = Path(self._save) if self._save else self._work_path / "diagram.mmd"
         if not save_path.is_absolute():
             save_path = self._work_path / save_path

@@ -153,6 +153,7 @@ class TestGetEstimator:
         ctrl = CostController()
         mock_service = MagicMock()
         mock_service.is_initialized.return_value = True
+        mock_service.validate_required_integrations.return_value = (True, [])
         mock_service.get_integrations_with_capability.return_value = []
         with patch(
             "strata.services.integration_service.IntegrationService.get_instance",
@@ -167,6 +168,7 @@ class TestGetEstimator:
         ctrl = CostController()
         mock_service = MagicMock()
         mock_service.is_initialized.return_value = True
+        mock_service.validate_required_integrations.return_value = (True, [])
         mock_service.get_integrations_with_capability.return_value = ["infracost"]
         mock_service.get_integration.return_value = mock_estimator
         with patch(
@@ -180,6 +182,7 @@ class TestGetEstimator:
         ctrl = CostController()
         mock_service = MagicMock()
         mock_service.is_initialized.return_value = True
+        mock_service.validate_required_integrations.return_value = (True, [])
         mock_service.get_integrations_with_capability.return_value = []
         with patch(
             "strata.services.integration_service.IntegrationService.get_instance",
@@ -194,6 +197,7 @@ class TestGetEstimator:
         ctrl = CostController()
         mock_service = MagicMock()
         mock_service.is_initialized.return_value = True
+        mock_service.validate_required_integrations.return_value = (True, [])
         mock_service.get_integrations_with_capability.return_value = []
         with (
             patch(
@@ -219,6 +223,7 @@ class TestIsAutoDiffEnabled:
         ctrl = CostController()
         mock_service = MagicMock()
         mock_service.is_initialized.return_value = True
+        mock_service.validate_required_integrations.return_value = (True, [])
         mock_service.get_integrations_with_capability.return_value = []
         with patch(
             "strata.services.integration_service.IntegrationService.get_instance",
@@ -233,6 +238,7 @@ class TestIsAutoDiffEnabled:
         ctrl = CostController()
         mock_service = MagicMock()
         mock_service.is_initialized.return_value = True
+        mock_service.validate_required_integrations.return_value = (True, [])
         mock_service.get_integrations_with_capability.return_value = ["infracost"]
         mock_service.get_integration.return_value = MagicMock(spec=ICostEstimator)
         with patch(
@@ -248,6 +254,7 @@ class TestIsAutoDiffEnabled:
         ctrl = CostController()
         mock_service = MagicMock()
         mock_service.is_initialized.return_value = True
+        mock_service.validate_required_integrations.return_value = (True, [])
         mock_service.get_integrations_with_capability.return_value = []
         with patch(
             "strata.services.integration_service.IntegrationService.get_instance",
@@ -259,6 +266,7 @@ class TestIsAutoDiffEnabled:
         ctrl = CostController()
         mock_service = MagicMock()
         mock_service.is_initialized.return_value = False
+        mock_service.validate_required_integrations.return_value = (True, [])
         mock_service.get_integrations_with_capability.return_value = []
         with patch(
             "strata.services.integration_service.IntegrationService.get_instance",
@@ -271,6 +279,7 @@ class TestIsAutoDiffEnabled:
         ctrl = CostController()
         mock_service = MagicMock()
         mock_service.is_initialized.return_value = True
+        mock_service.validate_required_integrations.return_value = (True, [])
         mock_service.get_integrations_with_capability.return_value = []
         with patch(
             "strata.services.integration_service.IntegrationService.get_instance",

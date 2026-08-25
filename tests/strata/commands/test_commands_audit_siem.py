@@ -185,6 +185,7 @@ class TestForwardEntriesToSiem:
 
         mock_svc = MagicMock()
         mock_svc.is_initialized.return_value = True
+        mock_svc.validate_required_integrations.return_value = (True, [])
         mock_svc.get_integration.return_value = None
 
         with patch("strata.services.integration_service.IntegrationService.get_instance", return_value=mock_svc):
@@ -203,6 +204,7 @@ class TestForwardEntriesToSiem:
         non_siem_instance = MagicMock(spec=[])  # no ISiemSink attributes
         mock_svc = MagicMock()
         mock_svc.is_initialized.return_value = True
+        mock_svc.validate_required_integrations.return_value = (True, [])
         mock_svc.get_integration.return_value = non_siem_instance
 
         cfg_dir = tmp_path / ".strata"
@@ -326,6 +328,7 @@ class TestForwardEntriesToSiem:
 
         mock_svc = MagicMock()
         mock_svc.is_initialized.return_value = True
+        mock_svc.validate_required_integrations.return_value = (True, [])
         mock_svc.get_integration.return_value = splunk_instance
 
         with (
@@ -386,6 +389,7 @@ class TestSbomIgnoreRulesForwarding:
         )
         mock_svc = MagicMock()
         mock_svc.is_initialized.return_value = True
+        mock_svc.validate_required_integrations.return_value = (True, [])
         mock_svc.get_integration.return_value = splunk_instance
 
         cmd = self._make_command(tmp_path, splunk_instance)
@@ -419,6 +423,7 @@ class TestSbomIgnoreRulesForwarding:
         )
         mock_svc = MagicMock()
         mock_svc.is_initialized.return_value = True
+        mock_svc.validate_required_integrations.return_value = (True, [])
         mock_svc.get_integration.return_value = splunk_instance
 
         cmd = self._make_command(tmp_path, splunk_instance)
@@ -455,6 +460,7 @@ class TestSbomIgnoreRulesForwarding:
         )
         mock_svc = MagicMock()
         mock_svc.is_initialized.return_value = True
+        mock_svc.validate_required_integrations.return_value = (True, [])
         mock_svc.get_integration.return_value = splunk_instance
 
         cmd = self._make_command(tmp_path, splunk_instance)
@@ -491,6 +497,7 @@ class TestSbomIgnoreRulesForwarding:
         )
         mock_svc = MagicMock()
         mock_svc.is_initialized.return_value = True
+        mock_svc.validate_required_integrations.return_value = (True, [])
         mock_svc.get_integration.return_value = splunk_instance
 
         cmd = self._make_command(tmp_path, splunk_instance)
