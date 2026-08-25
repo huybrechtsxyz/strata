@@ -1,7 +1,25 @@
 # Fix Helm OCI Chart Repository Support and `${KEY}` Value Substitution
 
-- Status: proposed
+- Status: implemented
 - Date: 2026-08-24
+
+## Implementation Notes
+
+**Completed 2026-08-25.** Both bugs fixed in `src/strata/deployers/helm_deployer.py`
+only (no changes needed in `helm_builder.py` — the builder's `${KEY}` emission was
+already correct, only the deployer's consumption of it was missing). 69/69 tests
+passing in `tests/strata/deployers/test_deployers_helm.py` (27 new), 32/32 unchanged
+in `tests/strata/builders/test_builders_helm.py`.
+
+- Bug 1: added `HelmModuleTarget.is_oci`, an `oci://` branch in `validate_workspace()`
+  (skips alias assignment, builds `chart_ref` directly from the OCI URL), an
+  `is_oci` skip in `setup()`'s repo-add loop (with a distinct "N OCI chart(s)
+  detected" message), and an `is_oci`-aware lint-skip message in `check()`.
+- Bug 2: added `_TOKEN_RE`, `_find_env_tokens()`, `_resolve_token()` (collision
+  across secrets/variables/features is fatal, not resolved via precedence),
+  `_escape_set_value()`, and `_build_value_overrides()`; wired into `check()`
+  (local charts only), `plan()`, and `apply()`, appending `--set-string` args
+  after `-f <values_file>`.
 
 ## Context and Problem Statement
 
@@ -153,22 +171,179 @@ for other deployers in this codebase.
   rendered values doc — a token whose key doesn't resolve (typo, deleted secret) needs
   explicit handling (fail loudly rather than silently leaving the literal token in
   place, which is exactly today's silent failure mode).
+- Bad: the `${KEY}` token format carries no type prefix, so a token cannot be traced
+  back to whether it came from `var:`, `secret:`, or `feature:` — if the same name is
+  declared in more than one of a module's `references.variables` /
+  `references.secrets` / `references.features` (nothing in the schema prevents this),
+  resolution is ambiguous and must fail rather than guess, adding another fatal-error
+  case beyond plain "not found".
 
-## Remaining Work
+## Design
 
-<!-- Required while Status is proposed / in-progress / partially-implemented.
-     Remove this section once Status becomes implemented. -->
+### Bug 1 design — OCI-aware chart resolution
 
-- Not started — nothing in this ADR has been implemented yet.
-- Bug 1: add an `oci://` scheme branch in `validate_workspace()` (chart_ref
-  construction) and `setup()` (skip `repo add`/`repo update` for OCI repo URLs);
-  `check()`'s existing `repo_url is not None` skip-lint branch should continue to cover
-  OCI charts unchanged.
-- Bug 2: walk the rendered `values.yaml` doc in `plan()`/`apply()` for `${KEY}` tokens,
-  cross-reference against `self.resolved_values` (variables/secrets/features), and
-  append `--set-string <dotted.path>=<value>` per match to the `helm upgrade` args;
-  decide and implement the failure mode for tokens that don't resolve to any known key.
-- Add regression tests: an OCI-repository module fixture (`setup()`/`chart_ref`
-  resolution without `repo add`), and a values-substitution fixture asserting the
-  final `helm upgrade` argv contains `--set-string` for each `${KEY}` token instead of
-  the literal token reaching disk or Helm unresolved.
+Add an `is_oci: bool` field to `HelmModuleTarget` rather than overloading `repo_url`
+(setting it to `None` for OCI would break `check()`'s existing
+`target.repo_url is not None` → "skip lint, it's a registry chart" branch, which must
+keep treating OCI charts as registry charts too — they still can't be `helm lint`ed as
+a local directory).
+
+```python
+@dataclass
+class HelmModuleTarget:
+    ...
+    repo_url: Optional[str]      # unchanged — set for BOTH classic and OCI registry charts
+    repo_name: Optional[str]     # None for OCI (no alias is ever registered)
+    is_oci: bool = False         # NEW — True when chart_repository starts with "oci://"
+```
+
+`validate_workspace()` branches on scheme when resolving `chart_ref`:
+
+```python
+if chart_repository:
+    if chart_repository.startswith("oci://"):
+        chart_ref = f"{chart_repository.rstrip('/')}/{chart_name}"
+        repo_name = None          # no alias — helm resolves oci:// refs natively
+        is_oci = True
+    else:
+        repo_name = _sanitize_repo_name(chart_repository)
+        chart_ref = f"{repo_name}/{chart_name}"
+        is_oci = False
+    repo_url = chart_repository
+else:
+    chart_ref = str(deployment_build_path / ns_name_str / module_name)
+    repo_url = repo_name = None
+    is_oci = False
+    chart_version = None
+```
+
+`setup()` only collects `(repo_name, repo_url)` pairs — and only calls `helm repo add` —
+for non-OCI targets:
+
+```python
+for target in self._helm_modules:
+    if target.is_oci:
+        continue  # OCI refs need no repo alias; helm resolves them natively
+    if target.repo_url and target.repo_name and target.repo_name not in seen:
+        seen[target.repo_name] = target.repo_url
+```
+
+`check()`'s existing `if target.repo_url is not None:` skip-lint branch needs no change
+(OCI targets still have `repo_url` set) — only its message is worth splitting for
+clarity: `"(OCI chart — lint skipped; use plan for dry-run)"` vs the existing
+`"(registry chart — lint skipped; use plan for dry-run)"`, using `target.is_oci` to pick
+the wording.
+
+`plan()`/`apply()` need **no changes** — they already just pass `target.chart_ref`
+straight to `helm upgrade`, and a full `oci://ghcr.io/org/charts/foo` ref is a valid
+`helm upgrade` chart argument on its own (Helm resolves OCI refs without a registered
+repo, only requiring `helm registry login` first for private registries — out of scope
+here, same as classic repos requiring credentials already aren't handled by this
+deployer today).
+
+### Bug 2 design — deploy-time `${KEY}` → `--set-string` injection
+
+New private helpers in `helm_deployer.py` (colocated like the existing
+`_sanitize_repo_name`, since there is a single caller module):
+
+```python
+_TOKEN_RE = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$")  # whole-string match only —
+                                                               # mirrors how the builder
+                                                               # emits tokens (never as a
+                                                               # substring of a larger value)
+
+def _find_env_tokens(values_doc: Dict[str, Any]) -> List[Tuple[str, str]]:
+    """Return (dotted_path, token_key) for every ${TOKEN} leaf found *only* under
+    each top-level entry's 'env' sub-dict (values_doc[entry]['env'][k] == '${TOKEN}').
+
+    Deliberately NOT a full-tree walk of values_doc. helm_builder.py only ever emits
+    ${KEY} tokens under entry['env'] (from svc.environment var:/secret:/feature:
+    refs) — module.spec.configuration and svc.configuration are raw, user-authored
+    pass-through values merged elsewhere in the same doc. Walking those too would
+    risk matching a user-typed '${...}'-shaped string (or content from a raw
+    values.yaml brought in via spec.files) that was never meant as a strata
+    substitution token, and forcing it through resolution/failure it doesn't need.
+    dotted_path uses Helm --set dot notation, e.g. 'myservice.env.POSTGRES_PASSWORD'."""
+    ...
+
+def _resolve_token(token: str, resolved: ResolvedValues) -> Tuple[Optional[str], Optional[str]]:
+    """Look up a token name in resolved.secrets, resolved.variables, and
+    resolved.features. Returns (value, None) if the name appears in exactly one
+    namespace, (None, error_message) if it appears in none OR in more than one.
+
+    IMPORTANT: unlike an earlier draft of this design, this is NOT a precedence
+    order (secrets-win-over-variables-etc). The builder emits ${KEY} with no type
+    prefix, so a token's origin (var: vs secret: vs feature:) is not recoverable
+    at deploy time. ModuleReferenceModel.variables / .secrets / .features
+    (module_model.py) are three independent Optional ref lists with no
+    cross-namespace uniqueness constraint — nothing stops the same name (e.g.
+    'DB_PASSWORD') from being declared as both a variable and a secret. Silently
+    picking one via precedence could deploy the wrong value with no error at all,
+    which is worse than today's bug (today's failure is at least visible as the
+    literal token). A same-name collision across namespaces is therefore treated
+    as an unresolved/ambiguous token — same fatal path as 'not found'. Feature
+    booleans render as 'true'/'false'."""
+    ...
+
+def _escape_set_value(value: str) -> str:
+    """Backslash-escape characters with special meaning in Helm's --set
+    mini-language (\\, ',', '.', '=', '{', '}', '[', ']') so secret values
+    containing them survive as literal strings instead of being parsed as
+    additional --set assignments or nested paths. Order matters: escape '\\'
+    first, before any other character, or characters escaped later would have
+    their own backslash re-escaped."""
+    ...
+
+def _build_value_overrides(
+    values_file: Path,
+    resolved: Optional[ResolvedValues],
+    ns_name: str,
+    module_name: str,
+) -> Tuple[List[str], List[str]]:
+    """Parse values_file, find all ${TOKEN}s under each entry's 'env' dict via
+    _find_env_tokens(), resolve each via _resolve_token(), and return
+    (['--set-string', 'path=value', ...], error_messages). A token that is
+    unresolved OR ambiguous (found in more than one of secrets/variables/
+    features) is reported as an error and produces no --set-string arg —
+    callers must treat any non-empty error_messages as fatal, not deploy with
+    the literal token left in place."""
+    ...
+```
+
+Integration points — `_build_value_overrides()` is called once per target,
+immediately before constructing the `helm` argv, in every step that reads
+`target.values_file`:
+
+- `check()` — only reached for local (non-registry, non-OCI) charts, since registry/OCI
+  charts already skip `lint` entirely; append the returned `--set-string` args to the
+  `lint` command.
+- `plan()` — append to the `--dry-run --install` argv, after `-f values_file`.
+- `apply()` — append to the `--install` argv, after `-f values_file`.
+
+Placement relative to `-f` doesn't affect correctness (Helm's `--set*` family always
+takes precedence over `-f` regardless of argument order), but appending immediately
+after `-f str(target.values_file)` keeps the values-related flags visually grouped in
+the logged command string.
+
+Failure handling: if `_build_value_overrides()` returns any error messages, the step
+returns `(False, messages)` immediately — the same pattern `_run_helm()` already uses —
+so a typo'd or deleted secret reference fails the deploy loudly instead of silently
+shipping the literal `${KEY}` string, which is the exact failure mode this ADR exists
+to close.
+
+`inject_compose_env(self.resolved_values)` around `plan()`/`apply()`/`destroy()` is kept
+as-is — it no longer does any of the substitution work (that was always a
+misunderstanding baked into the original docstring, since Helm never reads `${VAR}`
+from the process environment), but leaving plain OS env vars set around the `helm`
+subprocess call is harmless and matches the pattern used by other deployers; removing
+it is not required to fix either bug and is left out of scope.
+
+**Known adjacent inconsistency, not fixed by this ADR:** `ModuleServiceEnvironmentModel`'s
+own docstring claims `var:` is *"resolved at build time"*, but
+`_render_module_artifacts()` in `helm_builder.py` currently emits `var:` as the exact
+same `${KEY}` token as `secret:`/`feature:` — i.e. today's code already treats all three
+uniformly as deploy-time tokens. The design above preserves that uniform treatment
+(resolving `var` tokens via `--set-string` alongside secrets/features) rather than
+special-casing `var` to be baked into `values.yaml` at build time, since changing *when*
+`var` resolves is a separate, independent decision from fixing the two bugs in this
+ADR — flagged here so it isn't mistaken for an oversight.

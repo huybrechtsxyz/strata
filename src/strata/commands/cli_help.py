@@ -67,6 +67,7 @@ _TOPICS: dict[str, tuple[str, str]] = {
     "helm": ("Helm: Kubernetes package manager for chart deployments", "helm.md"),
     "infisical": ("Infisical: open-source secrets manager (cloud and self-hosted)", "infisical.md"),
     "infracost": ("Infracost: Terraform cost estimation and diff", "infracost.md"),
+    "kroki": ("Kroki: diagram-to-image (SVG/PNG) rendering, no account needed, self-hostable", "kroki.md"),
     "openbao": ("OpenBao: Linux Foundation Vault fork (MPL-2.0)", "openbao.md"),
     "opentofu": ("OpenTofu: Linux Foundation Terraform fork (MPL-2.0)", "opentofu.md"),
     "opa": ("OPA (Open Policy Agent): Rego policy evaluation via HTTP server or opa eval CLI", "opa.md"),

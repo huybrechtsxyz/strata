@@ -10,6 +10,7 @@ Description   : `strata diagram` command group tests for strata CLI (ADR-0034).
 """
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -291,6 +292,92 @@ class TestDiagramShowCommand:
         content = save_path.read_text(encoding="utf-8")
         assert content.startswith("graph LR")
         assert "# Workspace Dependency Graph" not in content
+
+    def test_format_svg_and_print_template_conflict(self):
+        result = CliRunner().invoke(
+            diagram_group,
+            ["show", "-f", "refs", "--print-template", "--format", "svg", "--work-path", str(AZURE_AKS_PATH)],
+        )
+        assert result.exit_code == 1
+        assert "--print-template" in result.output
+
+    def test_format_svg_renders_via_kroki_and_saves_bytes(self, tmp_path, monkeypatch):
+        """--format svg/png renders through Kroki (mocked HTTP call — no real network)."""
+        from unittest.mock import MagicMock
+
+        response = MagicMock(status_code=200, content=b"<svg>fake</svg>")
+        monkeypatch.setattr("strata.integrations.kroki.requests.post", MagicMock(return_value=response))
+
+        save_path = tmp_path / "out.svg"
+        result = CliRunner().invoke(
+            diagram_group,
+            [
+                "show",
+                "-f",
+                "refs",
+                "--no-validate",
+                "--format",
+                "svg",
+                "--save",
+                str(save_path),
+                "--output",
+                "json",
+                "--work-path",
+                str(AZURE_AKS_PATH),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert save_path.read_bytes() == b"<svg>fake</svg>"
+        data = _extract_json(result.output)
+        assert data["success"] is True
+        assert data["data"]["saved_to"] == str(save_path)
+
+    def test_format_svg_without_save_uses_default_filename(self, tmp_path, monkeypatch):
+        from unittest.mock import MagicMock
+
+        response = MagicMock(status_code=200, content=b"PNGBYTES")
+        monkeypatch.setattr("strata.integrations.kroki.requests.post", MagicMock(return_value=response))
+
+        # Isolated copy of the example workspace so the default 'diagram.png'
+        # output lands in tmp_path, never in the real repo's config/ folder.
+        workspace = tmp_path / "ws"
+        shutil.copytree(AZURE_AKS_PATH, workspace)
+
+        result = CliRunner().invoke(
+            diagram_group,
+            ["show", "-f", "refs", "--no-validate", "--format", "png", "--work-path", str(workspace)],
+        )
+        assert result.exit_code == 0, result.output
+        assert (workspace / "diagram.png").read_bytes() == b"PNGBYTES"
+
+    def test_format_svg_surfaces_kroki_error(self, tmp_path, monkeypatch):
+        from unittest.mock import MagicMock
+
+        import requests as requests_module
+
+        monkeypatch.setattr(
+            "strata.integrations.kroki.requests.post",
+            MagicMock(side_effect=requests_module.ConnectionError("network is down")),
+        )
+
+        result = CliRunner().invoke(
+            diagram_group,
+            [
+                "show",
+                "-f",
+                "refs",
+                "--no-validate",
+                "--format",
+                "svg",
+                "--save",
+                str(tmp_path / "out.svg"),
+                "--work-path",
+                str(AZURE_AKS_PATH),
+            ],
+        )
+        assert result.exit_code == 1
+        assert "Failed to reach Kroki" in result.output
+        assert not (tmp_path / "out.svg").exists()
 
     def test_policies_source_without_a_workspace_reports_a_clear_error(self, tmp_path):
         """'policies' is the one source needing an active profile — every other

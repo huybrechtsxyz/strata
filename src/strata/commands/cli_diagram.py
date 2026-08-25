@@ -55,6 +55,17 @@ def diagram_group() -> None:
     help="Emit the Jinja template instead of rendering it — a starting point for customisation.",
 )
 @click.option(
+    "--format",
+    "format_",
+    type=click.Choice(["mmd", "svg", "png"], case_sensitive=False),
+    default="mmd",
+    help=(
+        "Output format: 'mmd' (default, Mermaid source text) or 'svg'/'png' (rendered image, via "
+        "Kroki — https://kroki.io by default, no account needed; set STRATA_KROKI_ADDRESS to "
+        "self-host). 'svg'/'png' always writes to a file (see --save)."
+    ),
+)
+@click.option(
     "--no-validate",
     is_flag=True,
     default=False,
@@ -69,6 +80,7 @@ def diagram_show(
     entry: Optional[str] = None,
     save: Optional[str] = None,
     print_template: bool = False,
+    format_: str = "mmd",
     no_validate: bool = False,
     work_path: Optional[str] = None,
     output: Optional[str] = None,
@@ -86,12 +98,14 @@ def diagram_show(
         strata diagram show -f .strata/diagrams/prd.yaml --output json
         strata diagram show -f topology --print-template
         strata diagram show -f topology --save topology.mmd
+        strata diagram show -f topology --format svg --save topology.svg
     """
     command = ShowDiagramCommand(
         file=file,
         entry=entry,
         save=save,
         print_template=print_template,
+        format=format_,
         no_validate=no_validate,
         work_path=work_path,
         output=output,

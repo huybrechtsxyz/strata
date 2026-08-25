@@ -47,6 +47,7 @@ class IntegrationFactory:
         "opentofu": ("strata.integrations.opentofu", "OpenTofuIntegration"),
         "terraform": ("strata.integrations.terraform", "TerraformIntegration"),
         "infracost": ("strata.integrations.infracost", "InfracostIntegration"),
+        "kroki": ("strata.integrations.kroki", "KrokiIntegration"),
         "checkov": ("strata.integrations.checkov", "CheckovIntegration"),
         "opa": ("strata.integrations.opa", "OPAIntegration"),
         "azure_cli": ("strata.integrations.azure_cli", "AzureCLIIntegration"),
