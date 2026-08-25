@@ -59,7 +59,8 @@ export interface BuilderState {
 type HostMessage =
     | { type: 'preview'; state: BuilderState }
     | { type: 'save'; state: BuilderState }
-    | { type: 'exportMermaid'; state: BuilderState };
+    | { type: 'exportMermaid'; state: BuilderState }
+    | { type: 'exportImage'; state: BuilderState; format: 'svg' | 'png' };
 
 function emptyState(): BuilderState {
     return { name: '', description: '', sources: [], layout: { type: 'flowchart', direction: 'TD' }, style: {} };
@@ -250,6 +251,7 @@ export class DiagramBuilderProvider implements vscode.Disposable {
         if (msg.type === 'preview') await this._previewState(msg.state);
         else if (msg.type === 'save') await this._saveState(msg.state);
         else if (msg.type === 'exportMermaid') await this._exportMermaid(msg.state);
+        else if (msg.type === 'exportImage') await this._exportImage(msg.state, msg.format);
     }
 
     private async _stage(state: BuilderState): Promise<void> {
@@ -320,6 +322,38 @@ export class DiagramBuilderProvider implements vscode.Disposable {
         } catch (err) {
             void this._panel?.webview.postMessage({ type: 'exportResult', ok: false, errors: extractErrors(err) });
         }
+    }
+
+    /**
+     * Export the current state as SVG/PNG, produced entirely client-side by
+     * the preview webview from what it has already rendered (see
+     * `DiagramPreviewProvider.requestExport()`) — no Kroki/network round trip.
+     * `strata diagram show --format svg|png` (Kroki) remains the equivalent
+     * for headless/CI use with no VS Code involved at all.
+     */
+    private async _exportImage(state: BuilderState, format: 'svg' | 'png'): Promise<void> {
+        const client = this._client!;
+        await this._previewState(state); // ensures the preview panel is showing this exact state
+        const { data, error } = await this._preview.requestExport(format);
+        if (error || !data) {
+            void this._panel?.webview.postMessage({ type: 'exportResult', ok: false, errors: [error ?? 'Export failed.'] });
+            return;
+        }
+
+        const defaultName = `${state.name || 'diagram'}.${format}`;
+        const target = await vscode.window.showSaveDialog({
+            defaultUri: vscode.Uri.file(path.join(client.getWorkPath(), defaultName)),
+            filters: format === 'svg' ? { 'SVG image': ['svg'] } : { 'PNG image': ['png'] },
+        });
+        if (!target) {
+            void this._panel?.webview.postMessage({ type: 'exportResult', ok: false, errors: ['Export cancelled.'] });
+            return;
+        }
+
+        const bytes = format === 'svg' ? Buffer.from(data, 'utf-8') : Buffer.from(data.split(',')[1] ?? '', 'base64');
+        await vscode.workspace.fs.writeFile(target, bytes);
+        void this._panel?.webview.postMessage({ type: 'exportResult', ok: true });
+        void vscode.window.showInformationMessage(`Strata: exported ${format.toUpperCase()} to ${vscode.workspace.asRelativePath(target)}`);
     }
 
     // ── Webview HTML ──────────────────────────────────────────────────────────
@@ -430,6 +464,14 @@ export class DiagramBuilderProvider implements vscode.Disposable {
             "  setStatus('Rendering for export\\u2026', false);",
             "  vscode.postMessage({ type: 'exportMermaid', state: collect() });",
             "});",
+            "document.getElementById('export-svg-btn').addEventListener('click', function () {",
+            "  setStatus('Rendering SVG\\u2026', false);",
+            "  vscode.postMessage({ type: 'exportImage', format: 'svg', state: collect() });",
+            "});",
+            "document.getElementById('export-png-btn').addEventListener('click', function () {",
+            "  setStatus('Rendering PNG\\u2026', false);",
+            "  vscode.postMessage({ type: 'exportImage', format: 'png', state: collect() });",
+            "});",
             "",
             "window.addEventListener('message', function (event) {",
             "  const msg = event.data;",
@@ -438,7 +480,7 @@ export class DiagramBuilderProvider implements vscode.Disposable {
             "  } else if (msg.type === 'saveResult') {",
             "    setStatus(msg.ok ? 'Saved to ' + msg.path + '.' : msg.errors.join('; '), !msg.ok);",
             "  } else if (msg.type === 'exportResult') {",
-            "    setStatus(msg.ok ? 'Mermaid copied to clipboard.' : 'Export failed: ' + msg.errors.join('; '), !msg.ok);",
+            "    setStatus(msg.ok ? 'Export complete.' : 'Export failed: ' + msg.errors.join('; '), !msg.ok);",
             "  }",
             "});",
             "",
@@ -510,6 +552,8 @@ export class DiagramBuilderProvider implements vscode.Disposable {
   <button class="primary" id="preview-btn">Preview</button>
   <button class="primary" id="save-btn">Save</button>
   <button class="primary" id="export-btn">Copy Mermaid</button>
+  <button class="primary" id="export-svg-btn">Export SVG</button>
+  <button class="primary" id="export-png-btn">Export PNG</button>
   <div class="status" id="status"></div>
 
   <script>${script}</script>

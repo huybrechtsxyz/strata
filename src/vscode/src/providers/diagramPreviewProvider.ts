@@ -29,10 +29,20 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import type { StrataClient, DiagramResolveLocation } from '../strataClient';
 
-interface WebviewMessage {
+interface NodeClickMessage {
     type: 'nodeClick';
     uri: string;
 }
+
+interface ExportResponseMessage {
+    type: 'exportResponse';
+    requestId: string;
+    format: 'svg' | 'png';
+    data?: string;
+    error?: string;
+}
+
+type WebviewMessage = NodeClickMessage | ExportResponseMessage;
 
 /** Regex source `click <id> "strata://..."` directives the CLI embeds — captures the node id and its URI. */
 const CLICK_DIRECTIVE_RE = /^\s*click\s+(\S+)\s+"(strata:\/\/[^"]+)"/gm;
@@ -63,6 +73,8 @@ export class DiagramPreviewProvider implements vscode.Disposable {
     private _currentDefinitionPath: string | undefined;
     /** `"<relFile>"` or `"<relFile>:<line>"` → node label, for the reverse cursor→node lookup. Rebuilt on every refresh(). */
     private _reverseIndex: Map<string, string> = new Map();
+    /** In-flight `requestExport()` calls, keyed by request id — resolved when the webview posts back its `exportResponse`. */
+    private _pendingExports: Map<string, (result: { data?: string; error?: string }) => void> = new Map();
 
     /**
      * Show (or re-use) the diagram panel for `nameOrPath` — a built-in name
@@ -146,6 +158,47 @@ export class DiagramPreviewProvider implements vscode.Disposable {
         void this._panel.webview.postMessage({ type: 'highlight', label });
     }
 
+    /**
+     * Export the currently displayed diagram as `format` ('svg' or 'png'),
+     * produced entirely client-side by the webview from what's already
+     * rendered there (see the webview script's `handleExportRequest`) — no
+     * Kroki/network round trip. Returns `{ error }` if nothing is open, the
+     * webview doesn't respond in time, or rendering/serialization failed.
+     */
+    async requestExport(format: 'svg' | 'png'): Promise<{ data?: string; error?: string }> {
+        if (!this._panel) return { error: 'No diagram is currently open in the preview.' };
+
+        // mermaid.run() finishes asynchronously inside the webview, on its own
+        // timeline the host has no direct signal for — a caller that just awaited
+        // show()/refresh() can race ahead of the SVG actually existing in the DOM
+        // yet. A few short retries absorb that without needing a dedicated
+        // 'renderComplete' handshake for what's normally a sub-second gap.
+        let last: { data?: string; error?: string } = { error: 'No diagram is currently rendered.' };
+        for (let attempt = 0; attempt < 4; attempt++) {
+            last = await this._requestExportOnce(format);
+            if (last.data || !/no diagram is currently rendered/i.test(last.error ?? '')) return last;
+            await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+        return last;
+    }
+
+    private async _requestExportOnce(format: 'svg' | 'png'): Promise<{ data?: string; error?: string }> {
+        if (!this._panel) return { error: 'No diagram is currently open in the preview.' };
+
+        const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const responsePromise = new Promise<{ data?: string; error?: string }>((resolve) => {
+            this._pendingExports.set(requestId, resolve);
+        });
+        const timeoutPromise = new Promise<{ data?: string; error?: string }>((resolve) => {
+            setTimeout(() => resolve({ error: 'Timed out waiting for the preview to respond.' }), 5_000);
+        });
+
+        void this._panel.webview.postMessage({ type: 'exportRequest', requestId, format });
+        const result = await Promise.race([responsePromise, timeoutPromise]);
+        this._pendingExports.delete(requestId);
+        return result;
+    }
+
     dispose(): void {
         this._panel?.dispose();
         this._disposables.forEach((d) => d.dispose());
@@ -192,6 +245,12 @@ export class DiagramPreviewProvider implements vscode.Disposable {
     // ── Click resolution ─────────────────────────────────────────────────────
 
     private async _onMessage(msg: WebviewMessage): Promise<void> {
+        if (msg.type === 'exportResponse') {
+            const resolver = this._pendingExports.get(msg.requestId);
+            resolver?.({ data: msg.data, error: msg.error });
+            return;
+        }
+
         if (msg.type !== 'nodeClick' || !this._client) return;
 
         let location: DiagramResolveLocation | null;
@@ -386,6 +445,10 @@ export class DiagramPreviewProvider implements vscode.Disposable {
     let highlighted = null;
     window.addEventListener('message', function (event) {
         const msg = event.data;
+        if (msg && msg.type === 'exportRequest') {
+            handleExportRequest(msg.requestId, msg.format);
+            return;
+        }
         if (!msg || msg.type !== 'highlight') return;
         if (highlighted) {
             highlighted.classList.remove('strata-highlight');
@@ -401,6 +464,53 @@ export class DiagramPreviewProvider implements vscode.Disposable {
             }
         }
     });
+
+    // ── Export (ADR-0034 Phase 4 follow-up) ────────────────────────────────────
+    // Both formats are produced entirely client-side from the diagram that's
+    // already rendered here — no Kroki/network round trip needed for this path
+    // (Kroki is for the headless 'strata diagram show --format' CLI case, which
+    // has no browser to render into). SVG is just the live DOM node serialized;
+    // PNG is rasterized onto a canvas using the same rendered SVG as the source
+    // image, via a 'data:' URI ('img-src data:' is already permitted by this
+    // page's CSP — a 'blob:' URL would not be, so a data URI is used instead of
+    // URL.createObjectURL()).
+    function handleExportRequest(requestId, format) {
+        const svgEl = document.querySelector('#mermaid-pre svg');
+        if (!svgEl) {
+            vscode.postMessage({ type: 'exportResponse', requestId: requestId, format: format, error: 'No diagram is currently rendered.' });
+            return;
+        }
+        const serialized = new XMLSerializer().serializeToString(svgEl);
+        if (format === 'svg') {
+            vscode.postMessage({ type: 'exportResponse', requestId: requestId, format: format, data: serialized });
+            return;
+        }
+        try {
+            const svgDataUri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(serialized);
+            const img = new Image();
+            img.onload = function () {
+                const bbox = svgEl.getBoundingClientRect();
+                const scale = 2; // export at 2x for a sharper raster than the on-screen size
+                const width = Math.max(1, Math.round((bbox.width || img.width) * scale));
+                const height = Math.max(1, Math.round((bbox.height || img.height) * scale));
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = cssVar('--vscode-editor-background', '#ffffff');
+                ctx.fillRect(0, 0, width, height);
+                ctx.drawImage(img, 0, 0, width, height);
+                const dataUrl = canvas.toDataURL('image/png');
+                vscode.postMessage({ type: 'exportResponse', requestId: requestId, format: format, data: dataUrl });
+            };
+            img.onerror = function () {
+                vscode.postMessage({ type: 'exportResponse', requestId: requestId, format: format, error: 'Failed to rasterize the diagram to PNG.' });
+            };
+            img.src = svgDataUri;
+        } catch (err) {
+            vscode.postMessage({ type: 'exportResponse', requestId: requestId, format: format, error: String((err && err.message) || err) });
+        }
+    }
 `;
 
         return /* html */ `<!DOCTYPE html>
