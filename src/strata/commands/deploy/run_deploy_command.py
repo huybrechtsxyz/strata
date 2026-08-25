@@ -1,6 +1,6 @@
 from datetime import datetime as _dt
 from datetime import timezone as _tz
-from typing import TYPE_CHECKING, Callable, List, Optional
+from typing import Callable, List, Optional
 
 import click
 
@@ -21,9 +21,6 @@ from strata.models.deployment_manifest_model import (
     ManifestOutputsReferenceModel,
 )
 from strata.models.deployment_model import DeploymentStageModel
-
-if TYPE_CHECKING:
-    from strata.services.deployment_service import DeploymentService
 
 
 def _parse_ai_risk(content: str) -> tuple:
@@ -977,11 +974,17 @@ class RunDeployCommand(BaseDeployCommand):
         except Exception as exc:
             self.logger.debug("workitem_siem_forward_error", event_name=event_name, error=str(exc))
 
-    def _load_related_services(
-        self, deployment_service: Optional["DeploymentService"] = None, repo_map: Optional[dict[str, str]] = None
-    ) -> bool:
-        """Services are already loaded by BaseDeployCommand._before_execute."""
-        return True
+    # No _load_related_services() override here — `deploy run` needs the full
+    # workspace + environment load (topology, providers, resources, secrets),
+    # so it inherits BaseDeployCommand._load_related_services() unchanged. A
+    # stale no-op override (`return True`, loading nothing) used to live here
+    # and silently left `DeploymentService._environment_service`/`_workspace_service`
+    # unset, causing `ServiceNotValidatedError: Service 'EnvironmentService' must be
+    # validated before use` the moment `_resolve_values()` ran. Regression window:
+    # introduced when `_load_related_services()` became an overridable hook (v1.7.0,
+    # commit 0720edb3) — before that, `base_deploy_command.py` called
+    # `deployment_service.load_deploy_services()` directly and unconditionally, so
+    # this class's pre-existing no-op override was never actually invoked.
 
     def _resolve_values(self, strict: bool = False) -> bool:
         """Resolve variables, secrets, and feature flags from the environment.
