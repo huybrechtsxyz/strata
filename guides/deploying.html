@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../config/diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3626,28 +3671,28 @@ Audit record written to: .strata/deploy-log/2026-07-21T10-30-45Z-deploy-prd.json
 </div>
 <p>Returns a JSON envelope after completion:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>{
-  &quot;success&quot;: true,
-  &quot;data&quot;: {
-    &quot;deployment&quot;: &quot;xyz-deploy-prd&quot;,
-    &quot;environment&quot;: &quot;prd&quot;,
-    &quot;stages&quot;: [
+  "success": true,
+  "data": {
+    "deployment": "xyz-deploy-prd",
+    "environment": "prd",
+    "stages": [
       {
-        &quot;name&quot;: &quot;infrastructure&quot;,
-        &quot;provisioner&quot;: &quot;terraform&quot;,
-        &quot;status&quot;: &quot;success&quot;,
-        &quot;duration_seconds&quot;: 24,
-        &quot;resources&quot;: {
-          &quot;add&quot;: 12,
-          &quot;modify&quot;: 3,
-          &quot;delete&quot;: 0
+        "name": "infrastructure",
+        "provisioner": "terraform",
+        "status": "success",
+        "duration_seconds": 24,
+        "resources": {
+          "add": 12,
+          "modify": 3,
+          "delete": 0
         }
       },
       ...
     ],
-    &quot;total_duration_seconds&quot;: 195,
-    &quot;audit_record_path&quot;: &quot;.strata/deploy-log/2026-07-21T10-30-45Z-deploy-prd.json&quot;
+    "total_duration_seconds": 195,
+    "audit_record_path": ".strata/deploy-log/2026-07-21T10-30-45Z-deploy-prd.json"
   },
-  &quot;messages&quot;: []
+  "messages": []
 }
 </pre></div>
 </div>
@@ -3801,15 +3846,15 @@ outputs from earlier stages.</p>
 <span class="w">    </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ansible</span>
 <span class="w">    </span><span class="nt">configuration</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">extra_vars</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">web_servers</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">env.output.web_server_ips</span><span class="nv"> </span><span class="s">}}&quot;</span>
+<span class="w">        </span><span class="nt">web_servers</span><span class="p">:</span><span class="w"> </span><span class="s">"{{</span><span class="nv"> </span><span class="s">env.output.web_server_ips</span><span class="nv"> </span><span class="s">}}"</span>
 
 <span class="w">  </span><span class="c1"># Stage 3: health-check can reference both Stage 1 and 2 outputs</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">health-check</span>
 <span class="w">    </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">shell-script</span>
 <span class="w">    </span><span class="nt">script</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
 <span class="w">      </span><span class="no">#!/bin/bash</span>
-<span class="w">      </span><span class="no">API_ENDPOINT=&quot;{{ env.output.api_endpoint }}&quot;</span>
-<span class="w">      </span><span class="no">curl -f &quot;$API_ENDPOINT/health&quot; || exit 1</span>
+<span class="w">      </span><span class="no">API_ENDPOINT="{{ env.output.api_endpoint }}"</span>
+<span class="w">      </span><span class="no">curl -f "$API_ENDPOINT/health" || exit 1</span>
 </pre></div>
 </div>
 </section>
@@ -3825,7 +3870,7 @@ outputs from earlier stages.</p>
 <span class="w">      </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">configure</span>
 <span class="w">      </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ansible</span>
-<span class="w">      </span><span class="nt">skip</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">env.variables.skip_ansible</span><span class="nv"> </span><span class="s">}}&quot;</span><span class="w">   </span><span class="c1"># can be true/false</span>
+<span class="w">      </span><span class="nt">skip</span><span class="p">:</span><span class="w"> </span><span class="s">"{{</span><span class="nv"> </span><span class="s">env.variables.skip_ansible</span><span class="nv"> </span><span class="s">}}"</span><span class="w">   </span><span class="c1"># can be true/false</span>
 </pre></div>
 </div>
 <p>In <code class="docutils literal notranslate"><span class="pre">env-prd.yaml</span></code>:</p>
@@ -3833,7 +3878,7 @@ outputs from earlier stages.</p>
 <span class="w">  </span><span class="nt">variables</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">skip_ansible</span>
 <span class="w">      </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">constant</span>
-<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;false&quot;</span>
+<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">"false"</span>
 </pre></div>
 </div>
 </section>
@@ -3850,13 +3895,13 @@ outputs from earlier stages.</p>
 <span class="w">    </span><span class="nt">lifecycle_events</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">before_stage</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">script</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
-<span class="w">            </span><span class="no">echo &quot;About to provision infrastructure...&quot;</span>
+<span class="w">            </span><span class="no">echo "About to provision infrastructure..."</span>
 <span class="w">            </span><span class="no">terraform validate</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">script</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
-<span class="w">            </span><span class="no">notify-slack &quot;Starting infrastructure deploy&quot;</span>
+<span class="w">            </span><span class="no">notify-slack "Starting infrastructure deploy"</span>
 <span class="w">      </span><span class="nt">after_stage</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">script</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
-<span class="w">            </span><span class="no">echo &quot;Infrastructure provisioned. Running smoke tests...&quot;</span>
+<span class="w">            </span><span class="no">echo "Infrastructure provisioned. Running smoke tests..."</span>
 <span class="w">            </span><span class="no">./scripts/smoke-test.sh</span>
 </pre></div>
 </div>
@@ -3907,7 +3952,7 @@ strata<span class="w"> </span>validate<span class="w"> </span>-f<span class="w">
 strata<span class="w"> </span>validate<span class="w"> </span>-f<span class="w"> </span>deployments/deploy-prd.yaml<span class="w"> </span>--deep
 
 <span class="c1"># 3. Check if all required secrets exist</span>
-strata<span class="w"> </span>deploy<span class="w"> </span>show<span class="w"> </span>-f<span class="w"> </span>deployments/deploy-prd.yaml<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s2">&quot;status: required&quot;</span>
+strata<span class="w"> </span>deploy<span class="w"> </span>show<span class="w"> </span>-f<span class="w"> </span>deployments/deploy-prd.yaml<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s2">"status: required"</span>
 
 <span class="c1"># 4. Dry-run to see what will change</span>
 strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>deployments/deploy-prd.yaml<span class="w"> </span>--dry-run
@@ -4008,10 +4053,10 @@ strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> 
 <section id="scenario-4-re-run-a-deployment-exactly-as-it-was-before">
 <h3>Scenario 4: Re-run a deployment exactly as it was before<a class="headerlink" href="#scenario-4-re-run-a-deployment-exactly-as-it-was-before" title="Link to this heading"></a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Show the exact command that was run before (from audit)</span>
-strata<span class="w"> </span>audit<span class="w"> </span>changes<span class="w"> </span>--last<span class="w"> </span><span class="m">1</span><span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.data.stages[] | .provisioner&#39;</span>
+strata<span class="w"> </span>audit<span class="w"> </span>changes<span class="w"> </span>--last<span class="w"> </span><span class="m">1</span><span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">'.data.stages[] | .provisioner'</span>
 
 <span class="c1"># Re-run with the same deployment file</span>
-git<span class="w"> </span>checkout<span class="w"> </span>deploy-prd.yaml<span class="w">  </span><span class="c1"># if you&#39;ve made changes</span>
+git<span class="w"> </span>checkout<span class="w"> </span>deploy-prd.yaml<span class="w">  </span><span class="c1"># if you've made changes</span>
 strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>deployments/deploy-prd.yaml<span class="w"> </span>--force
 </pre></div>
 </div>

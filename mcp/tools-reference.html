@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../config/diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="../guides/features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../guides/faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3513,37 +3558,37 @@
 </table>
 <p><strong>Returns:</strong></p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;workspace_path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/path/to/workspace&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;readiness&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;phase&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;next_step&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;hint&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Initialize repositories with: strata repo add ...&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;command&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;strata repo add&quot;</span>
+<span class="w">  </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"workspace_path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/path/to/workspace"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"readiness"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"phase"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"next_step"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"hint"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Initialize repositories with: strata repo add ..."</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"command"</span><span class="p">:</span><span class="w"> </span><span class="s2">"strata repo add"</span>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">},</span>
-<span class="w">    </span><span class="nt">&quot;active_profile&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;production&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;repositories&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<span class="w">      </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;infrastructure&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;../infrastructure&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ok&quot;</span><span class="p">}</span>
+<span class="w">    </span><span class="nt">"active_profile"</span><span class="p">:</span><span class="w"> </span><span class="s2">"production"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"repositories"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="p">{</span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"infrastructure"</span><span class="p">,</span><span class="w"> </span><span class="nt">"path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"../infrastructure"</span><span class="p">,</span><span class="w"> </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ok"</span><span class="p">}</span>
 <span class="w">    </span><span class="p">],</span>
-<span class="w">    </span><span class="nt">&quot;tools&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;terraform&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;available&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;1.5.0&quot;</span><span class="p">},</span>
-<span class="w">      </span><span class="nt">&quot;helm&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;available&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;3.12.0&quot;</span><span class="p">},</span>
-<span class="w">      </span><span class="nt">&quot;ansible&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;available&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">}</span>
+<span class="w">    </span><span class="nt">"tools"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"terraform"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"available"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"1.5.0"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"helm"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"available"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"3.12.0"</span><span class="p">},</span>
+<span class="w">      </span><span class="nt">"ansible"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"available"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;errors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
-<span class="w">  </span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
+<span class="w">  </span><span class="nt">"errors"</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">  </span><span class="nt">"messages"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
 <span class="p">}</span>
 </pre></div>
 </div>
 <p><strong>Example:</strong></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">status</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">&quot;workspace_status&quot;</span><span class="p">)</span>
-<span class="k">if</span> <span class="n">status</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;readiness&quot;</span><span class="p">][</span><span class="s2">&quot;phase&quot;</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">4</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Ready to deploy!&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">status</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">"workspace_status"</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">status</span><span class="p">[</span><span class="s2">"data"</span><span class="p">][</span><span class="s2">"readiness"</span><span class="p">][</span><span class="s2">"phase"</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">4</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"Ready to deploy!"</span><span class="p">)</span>
 <span class="k">else</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Next step: </span><span class="si">{</span><span class="n">status</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">][</span><span class="s1">&#39;readiness&#39;</span><span class="p">][</span><span class="s1">&#39;next_step&#39;</span><span class="p">][</span><span class="s1">&#39;hint&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Next step: </span><span class="si">{</span><span class="n">status</span><span class="p">[</span><span class="s1">'data'</span><span class="p">][</span><span class="s1">'readiness'</span><span class="p">][</span><span class="s1">'next_step'</span><span class="p">][</span><span class="s1">'hint'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -3585,38 +3630,38 @@
 </table>
 <p><strong>Returns:</strong></p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;valid&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;kind&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;deployment&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;production-aks&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;errors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
-<span class="w">    </span><span class="nt">&quot;warnings&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<span class="w">      </span><span class="s2">&quot;Provisioner &#39;terraform&#39; not found in workspace configuration&quot;</span>
+<span class="w">  </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"valid"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"deployment"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"production-aks"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"errors"</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">    </span><span class="nt">"warnings"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="s2">"Provisioner 'terraform' not found in workspace configuration"</span>
 <span class="w">    </span><span class="p">]</span>
 <span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;errors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
-<span class="w">  </span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
+<span class="w">  </span><span class="nt">"errors"</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">  </span><span class="nt">"messages"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
 <span class="p">}</span>
 </pre></div>
 </div>
 <p><strong>Example:</strong></p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Phase 1: Quick validation</span>
-<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">&quot;validate_file&quot;</span><span class="p">,</span> <span class="p">{</span>
-    <span class="s2">&quot;file_path&quot;</span><span class="p">:</span> <span class="s2">&quot;deploy/deploy-prod.yaml&quot;</span>
+<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">"validate_file"</span><span class="p">,</span> <span class="p">{</span>
+    <span class="s2">"file_path"</span><span class="p">:</span> <span class="s2">"deploy/deploy-prod.yaml"</span>
 <span class="p">})</span>
 
 <span class="c1"># Phase 2: Deep validation (checks cross-references)</span>
-<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">&quot;validate_file&quot;</span><span class="p">,</span> <span class="p">{</span>
-    <span class="s2">&quot;file_path&quot;</span><span class="p">:</span> <span class="s2">&quot;deploy/deploy-prod.yaml&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;deep&quot;</span><span class="p">:</span> <span class="kc">True</span>
+<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">"validate_file"</span><span class="p">,</span> <span class="p">{</span>
+    <span class="s2">"file_path"</span><span class="p">:</span> <span class="s2">"deploy/deploy-prod.yaml"</span><span class="p">,</span>
+    <span class="s2">"deep"</span><span class="p">:</span> <span class="kc">True</span>
 <span class="p">})</span>
 
-<span class="k">if</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;valid&quot;</span><span class="p">]:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;✅ File is valid&quot;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">result</span><span class="p">[</span><span class="s2">"data"</span><span class="p">][</span><span class="s2">"valid"</span><span class="p">]:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"✅ File is valid"</span><span class="p">)</span>
 <span class="k">else</span><span class="p">:</span>
-    <span class="k">for</span> <span class="n">error</span> <span class="ow">in</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;errors&quot;</span><span class="p">]:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;❌ </span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">error</span> <span class="ow">in</span> <span class="n">result</span><span class="p">[</span><span class="s2">"data"</span><span class="p">][</span><span class="s2">"errors"</span><span class="p">]:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"❌ </span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -3627,31 +3672,31 @@
 <p><strong>Parameters:</strong> None</p>
 <p><strong>Returns:</strong></p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;kinds&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<span class="w">      </span><span class="s2">&quot;deployment&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="s2">&quot;configuration&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="s2">&quot;environment&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="s2">&quot;firewall&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="s2">&quot;module&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="s2">&quot;namespace&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="s2">&quot;network&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="s2">&quot;dns&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="s2">&quot;provider&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="s2">&quot;resource&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="s2">&quot;workspace&quot;</span>
+<span class="w">  </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"kinds"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="s2">"deployment"</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">"configuration"</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">"environment"</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">"firewall"</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">"module"</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">"namespace"</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">"network"</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">"dns"</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">"provider"</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">"resource"</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">"workspace"</span>
 <span class="w">    </span><span class="p">]</span>
 <span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;errors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
-<span class="w">  </span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
+<span class="w">  </span><span class="nt">"errors"</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">  </span><span class="nt">"messages"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
 <span class="p">}</span>
 </pre></div>
 </div>
 <p><strong>Example:</strong></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">&quot;list_schemas&quot;</span><span class="p">)</span>
-<span class="k">for</span> <span class="n">kind</span> <span class="ow">in</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;kinds&quot;</span><span class="p">]:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;- </span><span class="si">{</span><span class="n">kind</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">"list_schemas"</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">kind</span> <span class="ow">in</span> <span class="n">result</span><span class="p">[</span><span class="s2">"data"</span><span class="p">][</span><span class="s2">"kinds"</span><span class="p">]:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"- </span><span class="si">{</span><span class="n">kind</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -3678,29 +3723,29 @@
 </table>
 <p><strong>Returns:</strong> JSON Schema (OpenAPI 3.0 format)</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>{
-  &quot;success&quot;: true,
-  &quot;data&quot;: {
-    &quot;$schema&quot;: &quot;http://json-schema.org/draft-07/schema#&quot;,
-    &quot;type&quot;: &quot;object&quot;,
-    &quot;properties&quot;: {
-      &quot;apiVersion&quot;: {...},
-      &quot;kind&quot;: {...},
-      &quot;meta&quot;: {...},
-      &quot;spec&quot;: {...}
+  "success": true,
+  "data": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "apiVersion": {...},
+      "kind": {...},
+      "meta": {...},
+      "spec": {...}
     },
-    &quot;required&quot;: [&quot;apiVersion&quot;, &quot;kind&quot;, &quot;meta&quot;, &quot;spec&quot;]
+    "required": ["apiVersion", "kind", "meta", "spec"]
   },
-  &quot;errors&quot;: [],
-  &quot;messages&quot;: []
+  "errors": [],
+  "messages": []
 }
 </pre></div>
 </div>
 <p><strong>Example:</strong></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">schema</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">&quot;get_schema&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;kind&quot;</span><span class="p">:</span> <span class="s2">&quot;deployment&quot;</span><span class="p">})</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">schema</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">"get_schema"</span><span class="p">,</span> <span class="p">{</span><span class="s2">"kind"</span><span class="p">:</span> <span class="s2">"deployment"</span><span class="p">})</span>
 
 <span class="c1"># Use schema to validate YAML locally</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">jsonschema</span><span class="w"> </span><span class="kn">import</span> <span class="n">validate</span>
-<span class="n">validate</span><span class="p">(</span><span class="n">instance</span><span class="o">=</span><span class="n">yaml_doc</span><span class="p">,</span> <span class="n">schema</span><span class="o">=</span><span class="n">schema</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">])</span>
+<span class="n">validate</span><span class="p">(</span><span class="n">instance</span><span class="o">=</span><span class="n">yaml_doc</span><span class="p">,</span> <span class="n">schema</span><span class="o">=</span><span class="n">schema</span><span class="p">[</span><span class="s2">"data"</span><span class="p">])</span>
 </pre></div>
 </div>
 </section>
@@ -3737,33 +3782,33 @@
 </table>
 <p><strong>Returns:</strong></p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;deploy-prod.yaml&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;stages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="s2">"deploy-prod.yaml"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"stages"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">      </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;infrastructure&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;provisioned&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;outputs&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">          </span><span class="nt">&quot;kubernetes_cluster_fqdn&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;prod-aks.eastus.cloudapp.azure.com&quot;</span><span class="p">,</span>
-<span class="w">          </span><span class="nt">&quot;load_balancer_ip&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;20.45.123.45&quot;</span><span class="p">,</span>
-<span class="w">          </span><span class="nt">&quot;resource_group_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/subscriptions/.../resourceGroups/prod&quot;</span>
+<span class="w">        </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"infrastructure"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"provisioned"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"outputs"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">"kubernetes_cluster_fqdn"</span><span class="p">:</span><span class="w"> </span><span class="s2">"prod-aks.eastus.cloudapp.azure.com"</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">"load_balancer_ip"</span><span class="p">:</span><span class="w"> </span><span class="s2">"20.45.123.45"</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">"resource_group_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/subscriptions/.../resourceGroups/prod"</span>
 <span class="w">        </span><span class="p">}</span>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">]</span>
 <span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;errors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
-<span class="w">  </span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
+<span class="w">  </span><span class="nt">"errors"</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">  </span><span class="nt">"messages"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
 <span class="p">}</span>
 </pre></div>
 </div>
 <p><strong>Example:</strong></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">status</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">&quot;deploy_status&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;file&quot;</span><span class="p">:</span> <span class="s2">&quot;deploy/deploy-prod.yaml&quot;</span><span class="p">})</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">status</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">"deploy_status"</span><span class="p">,</span> <span class="p">{</span><span class="s2">"file"</span><span class="p">:</span> <span class="s2">"deploy/deploy-prod.yaml"</span><span class="p">})</span>
 
-<span class="k">for</span> <span class="n">stage</span> <span class="ow">in</span> <span class="n">status</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;stages&quot;</span><span class="p">]:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Stage: </span><span class="si">{</span><span class="n">stage</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">stage</span><span class="p">[</span><span class="s2">&quot;outputs&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">stage</span> <span class="ow">in</span> <span class="n">status</span><span class="p">[</span><span class="s2">"data"</span><span class="p">][</span><span class="s2">"stages"</span><span class="p">]:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Stage: </span><span class="si">{</span><span class="n">stage</span><span class="p">[</span><span class="s1">'name'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">stage</span><span class="p">[</span><span class="s2">"outputs"</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"  </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -3800,31 +3845,31 @@
 </table>
 <p><strong>Returns:</strong></p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;entries&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"entries"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">      </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;timestamp&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-07-05T14:23:45Z&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;deploy-prod.yaml&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;operation&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;run&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;duration_seconds&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">514</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;stages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;infrastructure&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;services&quot;</span><span class="p">]</span>
+<span class="w">        </span><span class="nt">"timestamp"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-07-05T14:23:45Z"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="s2">"deploy-prod.yaml"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"operation"</span><span class="p">:</span><span class="w"> </span><span class="s2">"run"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"duration_seconds"</span><span class="p">:</span><span class="w"> </span><span class="mi">514</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"stages"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"infrastructure"</span><span class="p">,</span><span class="w"> </span><span class="s2">"services"</span><span class="p">]</span>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">],</span>
-<span class="w">    </span><span class="nt">&quot;count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span>
+<span class="w">    </span><span class="nt">"count"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span>
 <span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;errors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
-<span class="w">  </span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
+<span class="w">  </span><span class="nt">"errors"</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">  </span><span class="nt">"messages"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
 <span class="p">}</span>
 </pre></div>
 </div>
 <p><strong>Example:</strong></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">history</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">&quot;deploy_history&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;lines&quot;</span><span class="p">:</span> <span class="mi">10</span><span class="p">})</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">history</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">"deploy_history"</span><span class="p">,</span> <span class="p">{</span><span class="s2">"lines"</span><span class="p">:</span> <span class="mi">10</span><span class="p">})</span>
 
-<span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">history</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;entries&quot;</span><span class="p">]:</span>
-    <span class="n">status</span> <span class="o">=</span> <span class="s2">&quot;✅&quot;</span> <span class="k">if</span> <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]</span> <span class="k">else</span> <span class="s2">&quot;❌&quot;</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">status</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">entry</span><span class="p">[</span><span class="s1">&#39;timestamp&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2"> - </span><span class="si">{</span><span class="n">entry</span><span class="p">[</span><span class="s1">&#39;deployment&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">entry</span><span class="p">[</span><span class="s1">&#39;duration_seconds&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">s)&quot;</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">history</span><span class="p">[</span><span class="s2">"data"</span><span class="p">][</span><span class="s2">"entries"</span><span class="p">]:</span>
+    <span class="n">status</span> <span class="o">=</span> <span class="s2">"✅"</span> <span class="k">if</span> <span class="n">entry</span><span class="p">[</span><span class="s2">"success"</span><span class="p">]</span> <span class="k">else</span> <span class="s2">"❌"</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">status</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">entry</span><span class="p">[</span><span class="s1">'timestamp'</span><span class="p">]</span><span class="si">}</span><span class="s2"> - </span><span class="si">{</span><span class="n">entry</span><span class="p">[</span><span class="s1">'deployment'</span><span class="p">]</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">entry</span><span class="p">[</span><span class="s1">'duration_seconds'</span><span class="p">]</span><span class="si">}</span><span class="s2">s)"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -3866,37 +3911,37 @@
 </table>
 <p><strong>Returns:</strong></p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;entries&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"entries"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">      </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;timestamp&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-07-05T14:23:45Z&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;deploy-prod.yaml&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;stage&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;infrastructure&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;operation&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;run&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;duration_seconds&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">514</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;user&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;alice@example.com&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;error&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span>
+<span class="w">        </span><span class="nt">"timestamp"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-07-05T14:23:45Z"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="s2">"deploy-prod.yaml"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"stage"</span><span class="p">:</span><span class="w"> </span><span class="s2">"infrastructure"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"operation"</span><span class="p">:</span><span class="w"> </span><span class="s2">"run"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"duration_seconds"</span><span class="p">:</span><span class="w"> </span><span class="mi">514</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"user"</span><span class="p">:</span><span class="w"> </span><span class="s2">"alice@example.com"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"error"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">],</span>
-<span class="w">    </span><span class="nt">&quot;count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span>
+<span class="w">    </span><span class="nt">"count"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span>
 <span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;errors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
-<span class="w">  </span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
+<span class="w">  </span><span class="nt">"errors"</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">  </span><span class="nt">"messages"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
 <span class="p">}</span>
 </pre></div>
 </div>
 <p><strong>Example:</strong></p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Get last 50 failed deployments</span>
-<span class="n">query</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">&quot;audit_query&quot;</span><span class="p">,</span> <span class="p">{</span>
-    <span class="s2">&quot;last&quot;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span>
-    <span class="s2">&quot;since&quot;</span><span class="p">:</span> <span class="s2">&quot;2026-06-01T00:00:00&quot;</span>
+<span class="n">query</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">"audit_query"</span><span class="p">,</span> <span class="p">{</span>
+    <span class="s2">"last"</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span>
+    <span class="s2">"since"</span><span class="p">:</span> <span class="s2">"2026-06-01T00:00:00"</span>
 <span class="p">})</span>
 
-<span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">query</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;entries&quot;</span><span class="p">]:</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed: </span><span class="si">{</span><span class="n">entry</span><span class="p">[</span><span class="s1">&#39;deployment&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2"> - </span><span class="si">{</span><span class="n">entry</span><span class="p">[</span><span class="s1">&#39;error&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">query</span><span class="p">[</span><span class="s2">"data"</span><span class="p">][</span><span class="s2">"entries"</span><span class="p">]:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">entry</span><span class="p">[</span><span class="s2">"success"</span><span class="p">]:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Failed: </span><span class="si">{</span><span class="n">entry</span><span class="p">[</span><span class="s1">'deployment'</span><span class="p">]</span><span class="si">}</span><span class="s2"> - </span><span class="si">{</span><span class="n">entry</span><span class="p">[</span><span class="s1">'error'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -3932,38 +3977,38 @@
 </table>
 <p><strong>Returns:</strong></p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;deploy-prod.yaml&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;artifacts&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;platform&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;generated&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;terraform&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;main.tf&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;variables.tf&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;outputs.tf&quot;</span><span class="p">],</span>
-<span class="w">      </span><span class="nt">&quot;configs&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;azure-aks.yaml&quot;</span><span class="p">]</span>
+<span class="w">  </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="s2">"deploy-prod.yaml"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"artifacts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"platform"</span><span class="p">:</span><span class="w"> </span><span class="s2">"generated"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"terraform"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"main.tf"</span><span class="p">,</span><span class="w"> </span><span class="s2">"variables.tf"</span><span class="p">,</span><span class="w"> </span><span class="s2">"outputs.tf"</span><span class="p">],</span>
+<span class="w">      </span><span class="nt">"configs"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"azure-aks.yaml"</span><span class="p">]</span>
 <span class="w">    </span><span class="p">},</span>
-<span class="w">    </span><span class="nt">&quot;stages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="nt">"stages"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">      </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;infrastructure&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;provisioner&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;terraform&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;modules&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<span class="w">          </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;azure/aks&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;1.2.3&quot;</span><span class="p">},</span>
-<span class="w">          </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;azure/network&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;1.1.0&quot;</span><span class="p">}</span>
+<span class="w">        </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"infrastructure"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"provisioner"</span><span class="p">:</span><span class="w"> </span><span class="s2">"terraform"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"modules"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">          </span><span class="p">{</span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"azure/aks"</span><span class="p">,</span><span class="w"> </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"1.2.3"</span><span class="p">},</span>
+<span class="w">          </span><span class="p">{</span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"azure/network"</span><span class="p">,</span><span class="w"> </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"1.1.0"</span><span class="p">}</span>
 <span class="w">        </span><span class="p">]</span>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">],</span>
-<span class="w">    </span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;terraform modules will be installed from registry&quot;</span><span class="p">]</span>
+<span class="w">    </span><span class="nt">"messages"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"terraform modules will be installed from registry"</span><span class="p">]</span>
 <span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;errors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
-<span class="w">  </span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
+<span class="w">  </span><span class="nt">"errors"</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">  </span><span class="nt">"messages"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
 <span class="p">}</span>
 </pre></div>
 </div>
 <p><strong>Example:</strong></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">plan</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">&quot;build_plan&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;file&quot;</span><span class="p">:</span> <span class="s2">&quot;deploy/deploy-prod.yaml&quot;</span><span class="p">})</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">plan</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">"build_plan"</span><span class="p">,</span> <span class="p">{</span><span class="s2">"file"</span><span class="p">:</span> <span class="s2">"deploy/deploy-prod.yaml"</span><span class="p">})</span>
 
-<span class="k">if</span> <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Build would generate: </span><span class="si">{</span><span class="n">plan</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">][</span><span class="s1">&#39;artifacts&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">plan</span><span class="p">[</span><span class="s2">"success"</span><span class="p">]:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Build would generate: </span><span class="si">{</span><span class="n">plan</span><span class="p">[</span><span class="s1">'data'</span><span class="p">][</span><span class="s1">'artifacts'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 <span class="k">else</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Build would fail: </span><span class="si">{</span><span class="n">plan</span><span class="p">[</span><span class="s1">&#39;errors&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Build would fail: </span><span class="si">{</span><span class="n">plan</span><span class="p">[</span><span class="s1">'errors'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -4001,54 +4046,54 @@
 </table>
 <p><strong>Returns:</strong></p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;deploy-prod.yaml&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;stages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="s2">"deploy-prod.yaml"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"stages"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">      </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;infrastructure&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;provisioner&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;terraform&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;plan&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">          </span><span class="nt">&quot;add&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">11</span><span class="p">,</span>
-<span class="w">          </span><span class="nt">&quot;change&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
-<span class="w">          </span><span class="nt">&quot;destroy&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
-<span class="w">          </span><span class="nt">&quot;resources&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">        </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"infrastructure"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"provisioner"</span><span class="p">:</span><span class="w"> </span><span class="s2">"terraform"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"plan"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">"add"</span><span class="p">:</span><span class="w"> </span><span class="mi">11</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">"change"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">"destroy"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">"resources"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">            </span><span class="p">{</span>
-<span class="w">              </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;azurerm_resource_group&quot;</span><span class="p">,</span>
-<span class="w">              </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;prod&quot;</span><span class="p">,</span>
-<span class="w">              </span><span class="nt">&quot;action&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;add&quot;</span>
+<span class="w">              </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"azurerm_resource_group"</span><span class="p">,</span>
+<span class="w">              </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"prod"</span><span class="p">,</span>
+<span class="w">              </span><span class="nt">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"add"</span>
 <span class="w">            </span><span class="p">},</span>
 <span class="w">            </span><span class="p">{</span>
-<span class="w">              </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;azurerm_kubernetes_cluster&quot;</span><span class="p">,</span>
-<span class="w">              </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;prod&quot;</span><span class="p">,</span>
-<span class="w">              </span><span class="nt">&quot;action&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;add&quot;</span>
+<span class="w">              </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"azurerm_kubernetes_cluster"</span><span class="p">,</span>
+<span class="w">              </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"prod"</span><span class="p">,</span>
+<span class="w">              </span><span class="nt">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"add"</span>
 <span class="w">            </span><span class="p">}</span>
 <span class="w">          </span><span class="p">]</span>
 <span class="w">        </span><span class="p">},</span>
-<span class="w">        </span><span class="nt">&quot;estimated_cost&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;$2,340/month&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;estimated_duration&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;15 minutes&quot;</span>
+<span class="w">        </span><span class="nt">"estimated_cost"</span><span class="p">:</span><span class="w"> </span><span class="s2">"$2,340/month"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"estimated_duration"</span><span class="p">:</span><span class="w"> </span><span class="s2">"15 minutes"</span>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">]</span>
 <span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;errors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
-<span class="w">  </span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
+<span class="w">  </span><span class="nt">"errors"</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">  </span><span class="nt">"messages"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
 <span class="p">}</span>
 </pre></div>
 </div>
 <p><strong>⚠️ Important:</strong> Show this plan to the user. <strong>Only CLI can execute</strong> <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span></code>.</p>
 <p><strong>Example:</strong></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">plan</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">&quot;deploy_plan&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;file&quot;</span><span class="p">:</span> <span class="s2">&quot;deploy/deploy-prod.yaml&quot;</span><span class="p">})</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">plan</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">"deploy_plan"</span><span class="p">,</span> <span class="p">{</span><span class="s2">"file"</span><span class="p">:</span> <span class="s2">"deploy/deploy-prod.yaml"</span><span class="p">})</span>
 
-<span class="k">if</span> <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]:</span>
-    <span class="k">for</span> <span class="n">stage</span> <span class="ow">in</span> <span class="n">plan</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;stages&quot;</span><span class="p">]:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Stage: </span><span class="si">{</span><span class="n">stage</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  Changes: +</span><span class="si">{</span><span class="n">stage</span><span class="p">[</span><span class="s1">&#39;plan&#39;</span><span class="p">][</span><span class="s1">&#39;add&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2"> resources&quot;</span><span class="p">)</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  Cost: </span><span class="si">{</span><span class="n">stage</span><span class="p">[</span><span class="s1">&#39;estimated_cost&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  Duration: </span><span class="si">{</span><span class="n">stage</span><span class="p">[</span><span class="s1">&#39;estimated_duration&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">✅ Preview complete. Review above and run:&quot;</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  strata deploy run -f deploy/deploy-prod.yaml&quot;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">plan</span><span class="p">[</span><span class="s2">"success"</span><span class="p">]:</span>
+    <span class="k">for</span> <span class="n">stage</span> <span class="ow">in</span> <span class="n">plan</span><span class="p">[</span><span class="s2">"data"</span><span class="p">][</span><span class="s2">"stages"</span><span class="p">]:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Stage: </span><span class="si">{</span><span class="n">stage</span><span class="p">[</span><span class="s1">'name'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"  Changes: +</span><span class="si">{</span><span class="n">stage</span><span class="p">[</span><span class="s1">'plan'</span><span class="p">][</span><span class="s1">'add'</span><span class="p">]</span><span class="si">}</span><span class="s2"> resources"</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"  Cost: </span><span class="si">{</span><span class="n">stage</span><span class="p">[</span><span class="s1">'estimated_cost'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"  Duration: </span><span class="si">{</span><span class="n">stage</span><span class="p">[</span><span class="s1">'estimated_duration'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">✅ Preview complete. Review above and run:"</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"  strata deploy run -f deploy/deploy-prod.yaml"</span><span class="p">)</span>
 <span class="k">else</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;❌ Deployment would fail: </span><span class="si">{</span><span class="n">plan</span><span class="p">[</span><span class="s1">&#39;errors&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"❌ Deployment would fail: </span><span class="si">{</span><span class="n">plan</span><span class="p">[</span><span class="s1">'errors'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -4089,36 +4134,36 @@
 </table>
 <p><strong>Returns:</strong></p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;kind&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;deployment&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;production-aks&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;apiVersion: strata.huybrechts.xyz/v1\nkind: deployment\n...&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;suggested_path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;deployments/production-aks.yaml&quot;</span>
+<span class="w">  </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"deployment"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"production-aks"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"content"</span><span class="p">:</span><span class="w"> </span><span class="s2">"apiVersion: strata.huybrechts.xyz/v1\nkind: deployment\n..."</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"suggested_path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"deployments/production-aks.yaml"</span>
 <span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;errors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
-<span class="w">  </span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
+<span class="w">  </span><span class="nt">"errors"</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">  </span><span class="nt">"messages"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
 <span class="p">}</span>
 </pre></div>
 </div>
 <p><strong>Example:</strong></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">scaffold</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">&quot;scaffold_file&quot;</span><span class="p">,</span> <span class="p">{</span>
-    <span class="s2">&quot;kind&quot;</span><span class="p">:</span> <span class="s2">&quot;deployment&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;staging-gke&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;extra_vars&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;owner&quot;</span><span class="p">:</span> <span class="s2">&quot;platform-team&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;version&quot;</span><span class="p">:</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;region&quot;</span><span class="p">:</span> <span class="s2">&quot;us-central1&quot;</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">scaffold</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">"scaffold_file"</span><span class="p">,</span> <span class="p">{</span>
+    <span class="s2">"kind"</span><span class="p">:</span> <span class="s2">"deployment"</span><span class="p">,</span>
+    <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"staging-gke"</span><span class="p">,</span>
+    <span class="s2">"extra_vars"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"owner"</span><span class="p">:</span> <span class="s2">"platform-team"</span><span class="p">,</span>
+        <span class="s2">"version"</span><span class="p">:</span> <span class="s2">"1.0.0"</span><span class="p">,</span>
+        <span class="s2">"region"</span><span class="p">:</span> <span class="s2">"us-central1"</span>
     <span class="p">}</span>
 <span class="p">})</span>
 
-<span class="k">if</span> <span class="n">scaffold</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]:</span>
-    <span class="n">yaml_content</span> <span class="o">=</span> <span class="n">scaffold</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;content&quot;</span><span class="p">]</span>
-    <span class="n">suggested_path</span> <span class="o">=</span> <span class="n">scaffold</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;suggested_path&quot;</span><span class="p">]</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Save this content to: </span><span class="si">{</span><span class="n">suggested_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">scaffold</span><span class="p">[</span><span class="s2">"success"</span><span class="p">]:</span>
+    <span class="n">yaml_content</span> <span class="o">=</span> <span class="n">scaffold</span><span class="p">[</span><span class="s2">"data"</span><span class="p">][</span><span class="s2">"content"</span><span class="p">]</span>
+    <span class="n">suggested_path</span> <span class="o">=</span> <span class="n">scaffold</span><span class="p">[</span><span class="s2">"data"</span><span class="p">][</span><span class="s2">"suggested_path"</span><span class="p">]</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Save this content to: </span><span class="si">{</span><span class="n">suggested_path</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
     <span class="nb">print</span><span class="p">(</span><span class="n">yaml_content</span><span class="p">)</span>
 <span class="k">else</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Scaffold generation failed: </span><span class="si">{</span><span class="n">scaffold</span><span class="p">[</span><span class="s1">&#39;errors&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Scaffold generation failed: </span><span class="si">{</span><span class="n">scaffold</span><span class="p">[</span><span class="s1">'errors'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -4151,31 +4196,31 @@
 </table>
 <p><strong>Returns:</strong></p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;deploy-prod.yaml&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;artifacts_path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;build/deploy-prod&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;artifacts&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;platform&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;build/deploy-prod/platform.json&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;terraform&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;build/deploy-prod/terraform/main.tf&quot;</span><span class="p">],</span>
-<span class="w">      </span><span class="nt">&quot;configs&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;build/deploy-prod/configs/azure-aks.yaml&quot;</span><span class="p">]</span>
+<span class="w">  </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="s2">"deploy-prod.yaml"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"artifacts_path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"build/deploy-prod"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"artifacts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"platform"</span><span class="p">:</span><span class="w"> </span><span class="s2">"build/deploy-prod/platform.json"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"terraform"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"build/deploy-prod/terraform/main.tf"</span><span class="p">],</span>
+<span class="w">      </span><span class="nt">"configs"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"build/deploy-prod/configs/azure-aks.yaml"</span><span class="p">]</span>
 <span class="w">    </span><span class="p">},</span>
-<span class="w">    </span><span class="nt">&quot;duration_seconds&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">45</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;stages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;infrastructure&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;success&quot;</span><span class="p">}]</span>
+<span class="w">    </span><span class="nt">"duration_seconds"</span><span class="p">:</span><span class="w"> </span><span class="mi">45</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"stages"</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"infrastructure"</span><span class="p">,</span><span class="w"> </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"success"</span><span class="p">}]</span>
 <span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;errors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
-<span class="w">  </span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
+<span class="w">  </span><span class="nt">"errors"</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">  </span><span class="nt">"messages"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
 <span class="p">}</span>
 </pre></div>
 </div>
 <p><strong>Example:</strong></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">build</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">&quot;build_run&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;file&quot;</span><span class="p">:</span> <span class="s2">&quot;deploy/deploy-prod.yaml&quot;</span><span class="p">})</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">build</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">"build_run"</span><span class="p">,</span> <span class="p">{</span><span class="s2">"file"</span><span class="p">:</span> <span class="s2">"deploy/deploy-prod.yaml"</span><span class="p">})</span>
 
-<span class="k">if</span> <span class="n">build</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;✅ Build complete: </span><span class="si">{</span><span class="n">build</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">][</span><span class="s1">&#39;artifacts_path&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Duration: </span><span class="si">{</span><span class="n">build</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">][</span><span class="s1">&#39;duration_seconds&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">s&quot;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">build</span><span class="p">[</span><span class="s2">"success"</span><span class="p">]:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"✅ Build complete: </span><span class="si">{</span><span class="n">build</span><span class="p">[</span><span class="s1">'data'</span><span class="p">][</span><span class="s1">'artifacts_path'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Duration: </span><span class="si">{</span><span class="n">build</span><span class="p">[</span><span class="s1">'data'</span><span class="p">][</span><span class="s1">'duration_seconds'</span><span class="p">]</span><span class="si">}</span><span class="s2">s"</span><span class="p">)</span>
 <span class="k">else</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;❌ Build failed: </span><span class="si">{</span><span class="n">build</span><span class="p">[</span><span class="s1">&#39;errors&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"❌ Build failed: </span><span class="si">{</span><span class="n">build</span><span class="p">[</span><span class="s1">'errors'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -4222,51 +4267,51 @@
 </table>
 <p><strong>Returns (inventory mode):</strong></p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;deploy-prod.yaml&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;components&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="s2">"deploy-prod.yaml"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"components"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">      </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;container-image&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;azure-cli&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2.50.0&quot;</span>
+<span class="w">        </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"container-image"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"azure-cli"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2.50.0"</span>
 <span class="w">      </span><span class="p">},</span>
 <span class="w">      </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;helm-chart&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;nginx-ingress&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;4.8.3&quot;</span>
+<span class="w">        </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"helm-chart"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"nginx-ingress"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"4.8.3"</span>
 <span class="w">      </span><span class="p">},</span>
 <span class="w">      </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;python-library&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;requests&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2.31.0&quot;</span>
+<span class="w">        </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"python-library"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"requests"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2.31.0"</span>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">],</span>
-<span class="w">    </span><span class="nt">&quot;vulnerabilities&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<span class="w">      </span><span class="p">{</span><span class="nt">&quot;component&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;base-image&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;cve&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;CVE-2023-1234&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;severity&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;high&quot;</span><span class="p">}</span>
+<span class="w">    </span><span class="nt">"vulnerabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="p">{</span><span class="nt">"component"</span><span class="p">:</span><span class="w"> </span><span class="s2">"base-image"</span><span class="p">,</span><span class="w"> </span><span class="nt">"cve"</span><span class="p">:</span><span class="w"> </span><span class="s2">"CVE-2023-1234"</span><span class="p">,</span><span class="w"> </span><span class="nt">"severity"</span><span class="p">:</span><span class="w"> </span><span class="s2">"high"</span><span class="p">}</span>
 <span class="w">    </span><span class="p">]</span>
 <span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;errors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
-<span class="w">  </span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
+<span class="w">  </span><span class="nt">"errors"</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">  </span><span class="nt">"messages"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
 <span class="p">}</span>
 </pre></div>
 </div>
 <p><strong>Example:</strong></p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Generate inventory for deployment</span>
-<span class="n">sbom</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">&quot;build_sbom&quot;</span><span class="p">,</span> <span class="p">{</span>
-    <span class="s2">&quot;file&quot;</span><span class="p">:</span> <span class="s2">&quot;deploy/deploy-prod.yaml&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;report&quot;</span><span class="p">:</span> <span class="s2">&quot;inventory&quot;</span>
+<span class="n">sbom</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">"build_sbom"</span><span class="p">,</span> <span class="p">{</span>
+    <span class="s2">"file"</span><span class="p">:</span> <span class="s2">"deploy/deploy-prod.yaml"</span><span class="p">,</span>
+    <span class="s2">"report"</span><span class="p">:</span> <span class="s2">"inventory"</span>
 <span class="p">})</span>
 
 <span class="c1"># Or scan a directory directly</span>
-<span class="n">sbom</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">&quot;build_sbom&quot;</span><span class="p">,</span> <span class="p">{</span>
-    <span class="s2">&quot;scan&quot;</span><span class="p">:</span> <span class="s2">&quot;/path/to/repo&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;report&quot;</span><span class="p">:</span> <span class="s2">&quot;cyclonedx&quot;</span>
+<span class="n">sbom</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">"build_sbom"</span><span class="p">,</span> <span class="p">{</span>
+    <span class="s2">"scan"</span><span class="p">:</span> <span class="s2">"/path/to/repo"</span><span class="p">,</span>
+    <span class="s2">"report"</span><span class="p">:</span> <span class="s2">"cyclonedx"</span>
 <span class="p">})</span>
 
-<span class="k">if</span> <span class="n">sbom</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]:</span>
-    <span class="k">for</span> <span class="n">component</span> <span class="ow">in</span> <span class="n">sbom</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;components&quot;</span><span class="p">]:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">component</span><span class="p">[</span><span class="s1">&#39;type&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">component</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">component</span><span class="p">[</span><span class="s1">&#39;version&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">sbom</span><span class="p">[</span><span class="s2">"success"</span><span class="p">]:</span>
+    <span class="k">for</span> <span class="n">component</span> <span class="ow">in</span> <span class="n">sbom</span><span class="p">[</span><span class="s2">"data"</span><span class="p">][</span><span class="s2">"components"</span><span class="p">]:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">component</span><span class="p">[</span><span class="s1">'type'</span><span class="p">]</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">component</span><span class="p">[</span><span class="s1">'name'</span><span class="p">]</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">component</span><span class="p">[</span><span class="s1">'version'</span><span class="p">]</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -4304,48 +4349,48 @@
 </table>
 <p><strong>Returns:</strong></p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;deploy-prod.yaml&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;overall_status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;healthy&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;stages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="s2">"deploy-prod.yaml"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"overall_status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"healthy"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"stages"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">      </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;infrastructure&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;checks&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">        </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"infrastructure"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"checks"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">          </span><span class="p">{</span>
-<span class="w">            </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;api-endpoint&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;target&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://api.example.com/health&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;pass&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;response_time_ms&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">45</span>
+<span class="w">            </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"api-endpoint"</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http"</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"target"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://api.example.com/health"</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"pass"</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"response_time_ms"</span><span class="p">:</span><span class="w"> </span><span class="mi">45</span>
 <span class="w">          </span><span class="p">},</span>
 <span class="w">          </span><span class="p">{</span>
-<span class="w">            </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;database&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;tcp&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;target&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;db.example.com:5432&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;pass&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;response_time_ms&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span>
+<span class="w">            </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"database"</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tcp"</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"target"</span><span class="p">:</span><span class="w"> </span><span class="s2">"db.example.com:5432"</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"pass"</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"response_time_ms"</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span>
 <span class="w">          </span><span class="p">}</span>
 <span class="w">        </span><span class="p">],</span>
-<span class="w">        </span><span class="nt">&quot;passed&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;failed&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">        </span><span class="nt">"passed"</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"failed"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">]</span>
 <span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;errors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
-<span class="w">  </span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
+<span class="w">  </span><span class="nt">"errors"</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">  </span><span class="nt">"messages"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
 <span class="p">}</span>
 </pre></div>
 </div>
 <p><strong>Example:</strong></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">health</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">&quot;deploy_health&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;file&quot;</span><span class="p">:</span> <span class="s2">&quot;deploy/deploy-prod.yaml&quot;</span><span class="p">})</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">health</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">"deploy_health"</span><span class="p">,</span> <span class="p">{</span><span class="s2">"file"</span><span class="p">:</span> <span class="s2">"deploy/deploy-prod.yaml"</span><span class="p">})</span>
 
-<span class="k">if</span> <span class="n">health</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Overall: </span><span class="si">{</span><span class="n">health</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">][</span><span class="s1">&#39;overall_status&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="k">for</span> <span class="n">stage</span> <span class="ow">in</span> <span class="n">health</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;stages&quot;</span><span class="p">]:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  </span><span class="si">{</span><span class="n">stage</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">stage</span><span class="p">[</span><span class="s1">&#39;passed&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">stage</span><span class="p">[</span><span class="s1">&#39;passed&#39;</span><span class="p">]</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">stage</span><span class="p">[</span><span class="s1">&#39;failed&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2"> checks passed&quot;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">health</span><span class="p">[</span><span class="s2">"success"</span><span class="p">]:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Overall: </span><span class="si">{</span><span class="n">health</span><span class="p">[</span><span class="s1">'data'</span><span class="p">][</span><span class="s1">'overall_status'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">stage</span> <span class="ow">in</span> <span class="n">health</span><span class="p">[</span><span class="s2">"data"</span><span class="p">][</span><span class="s2">"stages"</span><span class="p">]:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"  </span><span class="si">{</span><span class="n">stage</span><span class="p">[</span><span class="s1">'name'</span><span class="p">]</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">stage</span><span class="p">[</span><span class="s1">'passed'</span><span class="p">]</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">stage</span><span class="p">[</span><span class="s1">'passed'</span><span class="p">]</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">stage</span><span class="p">[</span><span class="s1">'failed'</span><span class="p">]</span><span class="si">}</span><span class="s2"> checks passed"</span><span class="p">)</span>
 <span class="k">else</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Health check failed: </span><span class="si">{</span><span class="n">health</span><span class="p">[</span><span class="s1">&#39;errors&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Health check failed: </span><span class="si">{</span><span class="n">health</span><span class="p">[</span><span class="s1">'errors'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -4359,7 +4404,7 @@
 <p><strong>Automatically loaded into AI context.</strong></p>
 <p><strong>Example:</strong></p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Claude/AI automatically loads this</span>
-<span class="n">schema</span> <span class="o">=</span> <span class="n">resource</span><span class="p">(</span><span class="s2">&quot;strata://schema/deployment&quot;</span><span class="p">)</span>
+<span class="n">schema</span> <span class="o">=</span> <span class="n">resource</span><span class="p">(</span><span class="s2">"strata://schema/deployment"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -4369,7 +4414,7 @@
 <p><strong>Automatically loaded into AI context.</strong></p>
 <p><strong>Example:</strong></p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Claude/AI automatically loads this</span>
-<span class="n">workspace</span> <span class="o">=</span> <span class="n">resource</span><span class="p">(</span><span class="s2">&quot;strata://workspace&quot;</span><span class="p">)</span>
+<span class="n">workspace</span> <span class="o">=</span> <span class="n">resource</span><span class="p">(</span><span class="s2">"strata://workspace"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -4380,13 +4425,13 @@
 <section id="success-field">
 <h3>Success Field<a class="headerlink" href="#success-field" title="Link to this heading"></a></h3>
 <p>Always check <code class="docutils literal notranslate"><span class="pre">success</span></code> first:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">&quot;validate_file&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;file_path&quot;</span><span class="p">:</span> <span class="s2">&quot;deploy.yaml&quot;</span><span class="p">})</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mcp</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="s2">"validate_file"</span><span class="p">,</span> <span class="p">{</span><span class="s2">"file_path"</span><span class="p">:</span> <span class="s2">"deploy.yaml"</span><span class="p">})</span>
 
-<span class="k">if</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">])</span>
+<span class="k">if</span> <span class="n">result</span><span class="p">[</span><span class="s2">"success"</span><span class="p">]:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">"data"</span><span class="p">])</span>
 <span class="k">else</span><span class="p">:</span>
     <span class="c1"># Handle error</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error: </span><span class="si">{</span><span class="n">result</span><span class="p">[</span><span class="s1">&#39;errors&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Error: </span><span class="si">{</span><span class="n">result</span><span class="p">[</span><span class="s1">'errors'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -4422,13 +4467,13 @@
 <section id="example-error-response">
 <h3>Example Error Response<a class="headerlink" href="#example-error-response" title="Link to this heading"></a></h3>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;errors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<span class="w">    </span><span class="s2">&quot;File not found: deploy/deploy-prod.yaml&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;Expected absolute or relative path&quot;</span>
+<span class="w">  </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"errors"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="s2">"File not found: deploy/deploy-prod.yaml"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"Expected absolute or relative path"</span>
 <span class="w">  </span><span class="p">],</span>
-<span class="w">  </span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;Validation failed during file loading&quot;</span><span class="p">]</span>
+<span class="w">  </span><span class="nt">"messages"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"Validation failed during file loading"</span><span class="p">]</span>
 <span class="p">}</span>
 </pre></div>
 </div>

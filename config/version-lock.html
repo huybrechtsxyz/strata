@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="../guides/features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../guides/faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3460,7 +3505,7 @@
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v1</span>
 <span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">version-lock</span>
 <span class="nt">meta</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;ring_name&gt;</span><span class="w">              </span><span class="c1"># Required: ring.scope identifier (e.g., &#39;prd&#39;, &#39;prd.us-east-1&#39;)</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;ring_name&gt;</span><span class="w">              </span><span class="c1"># Required: ring.scope identifier (e.g., 'prd', 'prd.us-east-1')</span>
 <span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;description&gt;</span>
 <span class="w">  </span><span class="nt">labels</span><span class="p">:</span>
@@ -3468,7 +3513,7 @@
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">ring</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;ring_name&gt;</span><span class="w">              </span><span class="c1"># Required: ring being locked</span>
 <span class="w">  </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;path&gt;</span><span class="w">                 </span><span class="c1"># Optional: relative path to version manifest (thin reference)</span>
-<span class="w">  </span><span class="nt">hash</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;sha256&gt;</span><span class="w">                 </span><span class="c1"># Optional: SHA-256 of the source manifest&#39;s spec.pins</span>
+<span class="w">  </span><span class="nt">hash</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;sha256&gt;</span><span class="w">                 </span><span class="c1"># Optional: SHA-256 of the source manifest's spec.pins</span>
 <span class="w">  </span><span class="nt">pins</span><span class="p">:</span><span class="w">                          </span><span class="c1"># Optional (if source omitted): inline version pins</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">target</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">image | helm_chart | remote | tool</span>
@@ -3492,17 +3537,17 @@
 <span class="nt">meta</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prd</span>
 <span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Production</span><span class="nv"> </span><span class="s">lock&quot;</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Production</span><span class="nv"> </span><span class="s">lock"</span>
 <span class="w">  </span><span class="nt">labels</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">environment</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">production</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">ring</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prd</span>
 <span class="w">  </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prd.yaml</span><span class="w">               </span><span class="c1"># Points to version manifest</span>
-<span class="w">  </span><span class="nt">hash</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;abc123def456...&quot;</span><span class="w">        </span><span class="c1"># Hash of the manifest&#39;s spec.pins</span>
+<span class="w">  </span><span class="nt">hash</span><span class="p">:</span><span class="w"> </span><span class="s">"abc123def456..."</span><span class="w">        </span><span class="c1"># Hash of the manifest's spec.pins</span>
 <span class="w">  </span><span class="nt">previous</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prd.yaml</span>
 <span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v2.0.0</span>
-<span class="w">    </span><span class="nt">hash</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;old_hash...&quot;</span>
+<span class="w">    </span><span class="nt">hash</span><span class="p">:</span><span class="w"> </span><span class="s">"old_hash..."</span>
 </pre></div>
 </div>
 </section>
@@ -3520,13 +3565,13 @@
 <span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app</span>
 <span class="w">      </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v2.1.0</span>
 <span class="w">      </span><span class="nt">track</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">exact</span>
-<span class="w">      </span><span class="nt">resolved_sha</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;sha256:abc123...&quot;</span>
+<span class="w">      </span><span class="nt">resolved_sha</span><span class="p">:</span><span class="w"> </span><span class="s">"sha256:abc123..."</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">target</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">helm_chart</span>
 <span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">traefik</span>
-<span class="w">      </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;28.2.0&quot;</span>
+<span class="w">      </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">"28.2.0"</span>
 <span class="w">      </span><span class="nt">track</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">exact</span>
-<span class="w">      </span><span class="nt">resolved_sha</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;sha256:def456...&quot;</span>
+<span class="w">      </span><span class="nt">resolved_sha</span><span class="p">:</span><span class="w"> </span><span class="s">"sha256:def456..."</span>
 </pre></div>
 </div>
 </section>

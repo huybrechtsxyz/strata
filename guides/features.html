@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../config/diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3806,9 +3851,9 @@ phase — no wrappers, no external policy server.</p>
 </div>
 <p>Returns exit code <code class="docutils literal notranslate"><span class="pre">3</span></code> on schema violations, with structured error output:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;errors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;code&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;VALIDATION_ERROR&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Field &#39;spec.provider&#39; is required&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;line&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span><span class="w"> </span><span class="p">}</span>
+<span class="w">  </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"errors"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"VALIDATION_ERROR"</span><span class="p">,</span><span class="w"> </span><span class="nt">"message"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Field 'spec.provider' is required"</span><span class="p">,</span><span class="w"> </span><span class="nt">"line"</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span><span class="w"> </span><span class="p">}</span>
 <span class="w">  </span><span class="p">]</span>
 <span class="p">}</span>
 </pre></div>
@@ -3848,7 +3893,7 @@ strata<span class="w"> </span>secret<span class="w"> </span>generate<span class=
 strata<span class="w"> </span>secret<span class="w"> </span>generate<span class="w"> </span>--type<span class="w"> </span>password<span class="w"> </span>--length<span class="w"> </span><span class="m">32</span>
 
 <span class="c1"># Mask a secret value in a string (replaces it with ***)</span>
-strata<span class="w"> </span>secret<span class="w"> </span>mask<span class="w"> </span><span class="s2">&quot;my text containing secretvalue123&quot;</span>
+strata<span class="w"> </span>secret<span class="w"> </span>mask<span class="w"> </span><span class="s2">"my text containing secretvalue123"</span>
 </pre></div>
 </div>
 <p>Useful for seeding Key Vault or Bitwarden from a setup script.</p>
@@ -3860,7 +3905,7 @@ strata<span class="w"> </span>secret<span class="w"> </span>mask<span class="w">
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>build<span class="w"> </span>plan<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--output<span class="w"> </span>json
 </pre></div>
 </div>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;changes&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;additions&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;deletions&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="nt">&quot;errors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">}</span>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="w"> </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"changes"</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="nt">"additions"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="nt">"deletions"</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="nt">"errors"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">}</span>
 </pre></div>
 </div>
 <p><strong>Environment variable config:</strong></p>
@@ -3946,7 +3991,7 @@ strata<span class="w"> </span>schema<span class="w"> </span>get<span class="w"> 
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>config<span class="w"> </span><span class="nb">set</span><span class="w"> </span>output<span class="w"> </span>json<span class="w">           </span><span class="c1"># always use JSON output</span>
 strata<span class="w"> </span>config<span class="w"> </span><span class="nb">set</span><span class="w"> </span>verbose<span class="w"> </span><span class="nb">true</span><span class="w">          </span><span class="c1"># always show verbose logs</span>
 strata<span class="w"> </span>config<span class="w"> </span><span class="nb">set</span><span class="w"> </span>file<span class="w"> </span>deploy/prd.yaml<span class="w">  </span><span class="c1"># default deployment file</span>
-strata<span class="w"> </span>config<span class="w"> </span>list<span class="w">                      </span><span class="c1"># verify what&#39;s set</span>
+strata<span class="w"> </span>config<span class="w"> </span>list<span class="w">                      </span><span class="c1"># verify what's set</span>
 strata<span class="w"> </span>config<span class="w"> </span><span class="nb">unset</span><span class="w"> </span>verbose<span class="w">             </span><span class="c1"># remove a default</span>
 </pre></div>
 </div>
@@ -4033,6 +4078,67 @@ artifact, and (for the plan phase) the raw <code class="docutils literal notrans
 with pass/fail and structured violations.</p>
 <p>A starter template is scaffolded at <code class="docutils literal notranslate"><span class="pre">.strata/policies/my_policy.py</span></code> by <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">sln</span> <span class="pre">init</span></code>.</p>
 </section>
+</section>
+<hr class="docutils" />
+<section id="diagram-visualization">
+<h2>Diagram visualization<a class="headerlink" href="#diagram-visualization" title="Link to this heading"></a></h2>
+<p>Visualize any workspace data as an interactive Mermaid diagram without writing a script:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>diagram<span class="w"> </span>show<span class="w"> </span>-f<span class="w"> </span>topology<span class="w">          </span><span class="c1"># built-in: resource topology + dependencies</span>
+strata<span class="w"> </span>diagram<span class="w"> </span>show<span class="w"> </span>-f<span class="w"> </span>deploy-prd<span class="w">        </span><span class="c1"># custom: point at your own diagram definition</span>
+strata<span class="w"> </span>diagram<span class="w"> </span>list<span class="w">                      </span><span class="c1"># show all available diagrams</span>
+strata<span class="w"> </span>diagram<span class="w"> </span>resolve<span class="w"> </span>strata://deployment/deploy-prd/stage/infrastructure<span class="w">  </span><span class="c1"># find line numbers</span>
+</pre></div>
+</div>
+<p><strong>All 24 diagram source types:</strong></p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Category</p></th>
+<th class="head"><p>Sources</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Workspace</p></td>
+<td><p>Topology, Files, Resources, Modules, Namespaces, Networks, Firewalls, DNS zones</p></td>
+</tr>
+<tr class="row-odd"><td><p>Deployment</p></td>
+<td><p>Stages, Environments, Tenants</p></td>
+</tr>
+<tr class="row-even"><td><p>History</p></td>
+<td><p>Execution history, Promotions, Approval gates</p></td>
+</tr>
+<tr class="row-odd"><td><p>Config &amp; rules</p></td>
+<td><p>Variables, Secrets, Feature flags, Policies (metadata only, values never exposed)</p></td>
+</tr>
+<tr class="row-even"><td><p>Live state</p></td>
+<td><p>Drift tracking, Deployment outputs, Deployment locks</p></td>
+</tr>
+<tr class="row-odd"><td><p>Artifacts</p></td>
+<td><p>Repositories, Software Bill of Materials (SBOM)</p></td>
+</tr>
+<tr class="row-even"><td><p>Aggregates</p></td>
+<td><p>Values (union of variables + secrets + features)</p></td>
+</tr>
+</tbody>
+</table>
+<p>Every diagram is a YAML file (kind: diagram). Declare which data you want, how to filter it, what
+layout to use (flowchart / state diagram), and how to color/highlight nodes. strata generates
+Mermaid and pipes it to VS Code or renders it as SVG.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">diagram</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment-stages</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">sources</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">stages</span>
+<span class="w">  </span><span class="nt">layout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">flowchart LR</span>
+<span class="w">  </span><span class="nt">style</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">color_by</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">status</span>
+<span class="w">    </span><span class="nt">highlight</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">status != "active"</span>
+</pre></div>
+</div>
+<p>Diagrams are scanned from <code class="docutils literal notranslate"><span class="pre">.strata/diagrams/</span></code> (workspace-local) before falling back to built-ins.
+Use <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">new</span> <span class="pre">deployment-stages</span> <span class="pre">--template</span> <span class="pre">diagram</span></code> to scaffold a starter. Store diagrams in
+version control so the team shares the same picture.</p>
 </section>
 <hr class="docutils" />
 <section id="the-escape-hatch">

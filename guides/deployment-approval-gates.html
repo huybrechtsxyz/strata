@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../config/diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3464,18 +3509,18 @@
 <span class="w">      </span><span class="nt">approvers</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">ops-team</span><span class="p">:</span>
 <span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">github-team</span>
-<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;org/ops-team&quot;</span>
+<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">"org/ops-team"</span>
 <span class="w">      </span><span class="nt">timeout_minutes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">60</span>
 
 <span class="w">    </span><span class="c1"># Cost review when monthly delta exceeds $1,000 (post-plan, applies to all stages)</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cost-guard</span>
 <span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cost_review</span>
 <span class="w">      </span><span class="nt">when</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">cost_delta_monthly</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&gt;=</span><span class="nv"> </span><span class="s">1000&quot;</span>
+<span class="w">        </span><span class="nt">cost_delta_monthly</span><span class="p">:</span><span class="w"> </span><span class="s">"&gt;=</span><span class="nv"> </span><span class="s">1000"</span>
 <span class="w">      </span><span class="nt">approvers</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">finance</span><span class="p">:</span>
 <span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">user</span>
-<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;finance@example.com&quot;</span>
+<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">"finance@example.com"</span>
 <span class="w">      </span><span class="nt">timeout_minutes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">240</span>
 
 <span class="w">    </span><span class="c1"># Security team review when critical CVEs found — audit only, external SOC handles it</span>
@@ -3483,13 +3528,13 @@
 <span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">security_review</span>
 <span class="w">      </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">declare</span>
 <span class="w">      </span><span class="nt">when</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">cve_critical</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&gt;=</span><span class="nv"> </span><span class="s">1&quot;</span>
+<span class="w">        </span><span class="nt">cve_critical</span><span class="p">:</span><span class="w"> </span><span class="s">"&gt;=</span><span class="nv"> </span><span class="s">1"</span>
 
 <span class="w">    </span><span class="c1"># Only allow deploys during maintenance window (pre-plan, auto-resolves)</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">maintenance-window</span>
 <span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">scheduled</span>
 <span class="w">      </span><span class="nt">when</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">time_utc</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;02:00-04:00&quot;</span>
+<span class="w">        </span><span class="nt">time_utc</span><span class="p">:</span><span class="w"> </span><span class="s">"02:00-04:00"</span>
 <span class="w">      </span><span class="nt">auto_resolve</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 
 <span class="w">    </span><span class="c1"># Manual verification after deploy applied (post-apply)</span>
@@ -3497,7 +3542,7 @@
 <span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">verify</span>
 <span class="w">      </span><span class="nt">when</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">always</span>
 <span class="w">      </span><span class="nt">timeout_minutes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Verify</span><span class="nv"> </span><span class="s">application</span><span class="nv"> </span><span class="s">health</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">smoke</span><span class="nv"> </span><span class="s">tests</span><span class="nv"> </span><span class="s">pass</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">prod&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Verify</span><span class="nv"> </span><span class="s">application</span><span class="nv"> </span><span class="s">health</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">smoke</span><span class="nv"> </span><span class="s">tests</span><span class="nv"> </span><span class="s">pass</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">prod"</span>
 
 <span class="w">  </span><span class="nt">stages</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">staging</span>
@@ -3621,8 +3666,8 @@
 <span class="w">   </span>ID:<span class="w">   </span>approval/deploy-prd-abc1234d-20260727T1430
 <span class="w">   </span>Expires:<span class="w"> </span><span class="m">2026</span>-07-27<span class="w"> </span><span class="m">15</span>:30:00<span class="w"> </span>UTC
 
-<span class="w">   </span>Resolve:<span class="w">  </span>strata<span class="w"> </span>workitem<span class="w"> </span>approve<span class="w"> </span><span class="s1">&#39;approval/deploy-prd-abc1234d-20260727T1430&#39;</span>
-<span class="w">   </span>Resume:<span class="w">   </span>strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>deploy/production.yaml<span class="w"> </span>--resume<span class="w"> </span><span class="s1">&#39;approval/deploy-prd-abc1234d-20260727T1430&#39;</span>
+<span class="w">   </span>Resolve:<span class="w">  </span>strata<span class="w"> </span>workitem<span class="w"> </span>approve<span class="w"> </span><span class="s1">'approval/deploy-prd-abc1234d-20260727T1430'</span>
+<span class="w">   </span>Resume:<span class="w">   </span>strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>deploy/production.yaml<span class="w"> </span>--resume<span class="w"> </span><span class="s1">'approval/deploy-prd-abc1234d-20260727T1430'</span>
 
 $<span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="nv">$?</span>
 <span class="m">5</span>
@@ -3633,18 +3678,18 @@ $<span class="w"> </span><span class="nb">echo</span><span class="w"> </span><sp
 <section id="step-2-approve-or-reject">
 <h3>Step 2: Approve (or Reject)<a class="headerlink" href="#step-2-approve-or-reject" title="Link to this heading"></a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Approve the gate</span>
-$<span class="w"> </span>strata<span class="w"> </span>workitem<span class="w"> </span>approve<span class="w"> </span><span class="s1">&#39;approval/deploy-prd-abc1234d-20260727T1430&#39;</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--note<span class="w"> </span><span class="s2">&quot;Approved by on-call engineer&quot;</span>
+$<span class="w"> </span>strata<span class="w"> </span>workitem<span class="w"> </span>approve<span class="w"> </span><span class="s1">'approval/deploy-prd-abc1234d-20260727T1430'</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--note<span class="w"> </span><span class="s2">"Approved by on-call engineer"</span>
 
 ✅<span class="w"> </span>Approved:<span class="w"> </span>approval/deploy-prd-abc1234d-20260727T1430
 <span class="w">   </span>Resolved<span class="w"> </span>by:<span class="w"> </span>github.com/alice
 <span class="w">   </span>Note:<span class="w"> </span>Approved<span class="w"> </span>by<span class="w"> </span>on-call<span class="w"> </span>engineer
 
-<span class="w">   </span>Resume<span class="w"> </span>deploy<span class="w"> </span>with:<span class="w"> </span>strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>deploy/production.yaml<span class="w"> </span>--resume<span class="w"> </span><span class="s1">&#39;approval/deploy-prd-abc1234d-20260727T1430&#39;</span>
+<span class="w">   </span>Resume<span class="w"> </span>deploy<span class="w"> </span>with:<span class="w"> </span>strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>deploy/production.yaml<span class="w"> </span>--resume<span class="w"> </span><span class="s1">'approval/deploy-prd-abc1234d-20260727T1430'</span>
 
 <span class="c1"># Or reject it</span>
-$<span class="w"> </span>strata<span class="w"> </span>workitem<span class="w"> </span>reject<span class="w"> </span><span class="s1">&#39;approval/deploy-prd-abc1234d-20260727T1430&#39;</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--reason<span class="w"> </span><span class="s2">&quot;Insufficient testing coverage — blocked by 3 failing tests&quot;</span>
+$<span class="w"> </span>strata<span class="w"> </span>workitem<span class="w"> </span>reject<span class="w"> </span><span class="s1">'approval/deploy-prd-abc1234d-20260727T1430'</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--reason<span class="w"> </span><span class="s2">"Insufficient testing coverage — blocked by 3 failing tests"</span>
 
 ❌<span class="w"> </span>Rejected:<span class="w"> </span>approval/deploy-prd-abc1234d-20260727T1430
 <span class="w">   </span>Resolved<span class="w"> </span>by:<span class="w"> </span>github.com/bob
@@ -3655,7 +3700,7 @@ $<span class="w"> </span>strata<span class="w"> </span>workitem<span class="w"> 
 <section id="step-3-resume-if-approved">
 <h3>Step 3: Resume (if approved)<a class="headerlink" href="#step-3-resume-if-approved" title="Link to this heading"></a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>deploy/production.yaml<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--resume<span class="w"> </span><span class="s1">&#39;approval/deploy-prd-abc1234d-20260727T1430&#39;</span>
+<span class="w">  </span>--resume<span class="w"> </span><span class="s1">'approval/deploy-prd-abc1234d-20260727T1430'</span>
 
 <span class="o">[</span>*<span class="o">]</span><span class="w"> </span>Verifying<span class="w"> </span>work<span class="w"> </span>item:<span class="w"> </span>approval/deploy-prd-abc1234d-20260727T1430
 <span class="o">[</span>+<span class="o">]</span><span class="w"> </span>Gate<span class="w"> </span>cleared<span class="w"> </span><span class="o">(</span>approved<span class="w"> </span>by<span class="w"> </span>github.com/alice<span class="w"> </span>at<span class="w"> </span><span class="m">2026</span>-07-27<span class="w"> </span><span class="m">14</span>:32:00<span class="w"> </span>UTC<span class="o">)</span>
@@ -3680,18 +3725,18 @@ strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> 
 <span class="nv">EXIT_CODE</span><span class="o">=</span><span class="nv">$?</span>
 
 <span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span><span class="nv">$EXIT_CODE</span><span class="w"> </span>-eq<span class="w"> </span><span class="m">5</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
-<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Gate pending — deployment paused (hand-off required)&quot;</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">"Gate pending — deployment paused (hand-off required)"</span>
 <span class="w">    </span><span class="c1"># Trigger an external approval workflow (Slack, PagerDuty, email, etc.)</span>
 <span class="w">    </span><span class="c1"># Approver uses strata workitem approve/reject</span>
 <span class="w">    </span><span class="c1"># Then CI re-runs this script with --resume flag</span>
-<span class="w">    </span><span class="nb">exit</span><span class="w"> </span><span class="m">0</span><span class="w">  </span><span class="c1"># Don&#39;t fail the pipeline; wait for human decision</span>
+<span class="w">    </span><span class="nb">exit</span><span class="w"> </span><span class="m">0</span><span class="w">  </span><span class="c1"># Don't fail the pipeline; wait for human decision</span>
 <span class="k">fi</span>
 
 <span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span><span class="nv">$EXIT_CODE</span><span class="w"> </span>-eq<span class="w"> </span><span class="m">0</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
-<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Deployment succeeded&quot;</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">"Deployment succeeded"</span>
 <span class="w">    </span><span class="nb">exit</span><span class="w"> </span><span class="m">0</span>
 <span class="k">else</span>
-<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Deployment failed&quot;</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">"Deployment failed"</span>
 <span class="w">    </span><span class="nb">exit</span><span class="w"> </span><span class="m">1</span>
 <span class="k">fi</span>
 </pre></div>
@@ -3699,8 +3744,8 @@ strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> 
 <p>When the human approves (via <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">workitem</span> <span class="pre">approve</span></code>), a separate CI job resumes:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash</span>
 <span class="c1"># Called after approval is received</span>
-<span class="nv">WORK_ITEM_ID</span><span class="o">=</span><span class="s2">&quot;approval/deploy-prd-abc1234d-20260727T1430&quot;</span>
-strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>deploy/production.yaml<span class="w"> </span>--resume<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$WORK_ITEM_ID</span><span class="s2">&quot;</span>
+<span class="nv">WORK_ITEM_ID</span><span class="o">=</span><span class="s2">"approval/deploy-prd-abc1234d-20260727T1430"</span>
+strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>deploy/production.yaml<span class="w"> </span>--resume<span class="w"> </span><span class="s2">"</span><span class="nv">$WORK_ITEM_ID</span><span class="s2">"</span>
 </pre></div>
 </div>
 </section>
@@ -3748,8 +3793,8 @@ $<span class="w"> </span>strata<span class="w"> </span>deploy<span class="w"> </
 <section id="asserted-identity-as">
 <h3>Asserted Identity (<code class="docutils literal notranslate"><span class="pre">--as</span></code>)<a class="headerlink" href="#asserted-identity-as" title="Link to this heading"></a></h3>
 <p>Approve or reject <strong>as</strong> a specific identity:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>workitem<span class="w"> </span>approve<span class="w"> </span>&lt;id&gt;<span class="w"> </span>--as<span class="w"> </span><span class="s2">&quot;automation-service&quot;</span>
-<span class="c1"># Tagged in audit log as &quot;automation-service [asserted]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>workitem<span class="w"> </span>approve<span class="w"> </span>&lt;id&gt;<span class="w"> </span>--as<span class="w"> </span><span class="s2">"automation-service"</span>
+<span class="c1"># Tagged in audit log as "automation-service [asserted]"</span>
 </pre></div>
 </div>
 <p>Use for automated approvals (e.g., “auto-approve if tests pass”). The <code class="docutils literal notranslate"><span class="pre">[asserted]</span></code> tag marks that the approver was asserted by code, not a direct human action.</p>
@@ -3757,7 +3802,7 @@ $<span class="w"> </span>strata<span class="w"> </span>deploy<span class="w"> </
 <section id="audit-trail">
 <h3>Audit Trail<a class="headerlink" href="#audit-trail" title="Link to this heading"></a></h3>
 <p>All work-item events are logged:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>audit<span class="w"> </span>list<span class="w"> </span>--filter<span class="w"> </span><span class="s2">&quot;workitem&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>audit<span class="w"> </span>list<span class="w"> </span>--filter<span class="w"> </span><span class="s2">"workitem"</span>
 </pre></div>
 </div>
 <p>See <code class="docutils literal notranslate"><span class="pre">docs/guides/siem-audit-forwarding.md</span></code> for SIEM integration (Sentinel, Splunk, ELK).</p>
@@ -3777,21 +3822,21 @@ $<span class="w"> </span>strata<span class="w"> </span>deploy<span class="w"> </
 <span class="w">      </span><span class="nt">approvers</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">ops-lead</span><span class="p">:</span>
 <span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">user</span>
-<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ops-lead@example.com&quot;</span>
+<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">"ops-lead@example.com"</span>
 <span class="w">      </span><span class="nt">timeout_minutes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
 
 <span class="w">    </span><span class="c1"># 2. Post-plan: Cost review (if significant delta)</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cost-review</span>
 <span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cost_review</span>
 <span class="w">      </span><span class="nt">when</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">cost_delta_monthly</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&gt;=</span><span class="nv"> </span><span class="s">5000&quot;</span>
+<span class="w">        </span><span class="nt">cost_delta_monthly</span><span class="p">:</span><span class="w"> </span><span class="s">"&gt;=</span><span class="nv"> </span><span class="s">5000"</span>
 <span class="w">      </span><span class="nt">approvers</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">cfo</span><span class="p">:</span>
 <span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">user</span>
-<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;cfo@example.com&quot;</span>
+<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">"cfo@example.com"</span>
 <span class="w">        </span><span class="nt">vp-engineering</span><span class="p">:</span>
 <span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">user</span>
-<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;vpe@example.com&quot;</span>
+<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">"vpe@example.com"</span>
 <span class="w">      </span><span class="nt">timeout_minutes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">240</span>
 
 <span class="w">    </span><span class="c1"># 3. Post-apply: Smoke test verification</span>
@@ -3799,7 +3844,7 @@ $<span class="w"> </span>strata<span class="w"> </span>deploy<span class="w"> </
 <span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">verify</span>
 <span class="w">      </span><span class="nt">when</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">always</span>
 <span class="w">      </span><span class="nt">timeout_minutes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Run</span><span class="nv"> </span><span class="s">prod</span><span class="nv"> </span><span class="s">smoke</span><span class="nv"> </span><span class="s">tests;</span><span class="nv"> </span><span class="s">confirm</span><span class="nv"> </span><span class="s">no</span><span class="nv"> </span><span class="s">alerts</span><span class="nv"> </span><span class="s">spike&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Run</span><span class="nv"> </span><span class="s">prod</span><span class="nv"> </span><span class="s">smoke</span><span class="nv"> </span><span class="s">tests;</span><span class="nv"> </span><span class="s">confirm</span><span class="nv"> </span><span class="s">no</span><span class="nv"> </span><span class="s">alerts</span><span class="nv"> </span><span class="s">spike"</span>
 </pre></div>
 </div>
 <p>Deployment pauses at each gate:</p>
@@ -3816,7 +3861,7 @@ $<span class="w"> </span>strata<span class="w"> </span>deploy<span class="w"> </
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">maintenance-window</span>
 <span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">scheduled</span>
 <span class="w">      </span><span class="nt">when</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">time_utc</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;22:00-06:00&quot;</span><span class="w">  </span><span class="c1"># Only between 10 PM and 6 AM UTC</span>
+<span class="w">        </span><span class="nt">time_utc</span><span class="p">:</span><span class="w"> </span><span class="s">"22:00-06:00"</span><span class="w">  </span><span class="c1"># Only between 10 PM and 6 AM UTC</span>
 <span class="w">      </span><span class="nt">auto_resolve</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">         </span><span class="c1"># Auto-resume outside window? Or block?</span>
 </pre></div>
 </div>
@@ -3830,25 +3875,25 @@ $<span class="w"> </span>strata<span class="w"> </span>deploy<span class="w"> </
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">critical-cve-gate</span>
 <span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">security_review</span>
 <span class="w">      </span><span class="nt">when</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">cve_critical</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&gt;=</span><span class="nv"> </span><span class="s">1&quot;</span>
+<span class="w">        </span><span class="nt">cve_critical</span><span class="p">:</span><span class="w"> </span><span class="s">"&gt;=</span><span class="nv"> </span><span class="s">1"</span>
 <span class="w">      </span><span class="nt">approvers</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">security-team</span><span class="p">:</span>
 <span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">github-team</span>
-<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;org/security-team&quot;</span>
+<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">"org/security-team"</span>
 <span class="w">      </span><span class="nt">timeout_minutes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">480</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Critical</span><span class="nv"> </span><span class="s">CVE(s)</span><span class="nv"> </span><span class="s">detected</span><span class="nv"> </span><span class="s">—</span><span class="nv"> </span><span class="s">security</span><span class="nv"> </span><span class="s">team</span><span class="nv"> </span><span class="s">review</span><span class="nv"> </span><span class="s">required&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Critical</span><span class="nv"> </span><span class="s">CVE(s)</span><span class="nv"> </span><span class="s">detected</span><span class="nv"> </span><span class="s">—</span><span class="nv"> </span><span class="s">security</span><span class="nv"> </span><span class="s">team</span><span class="nv"> </span><span class="s">review</span><span class="nv"> </span><span class="s">required"</span>
 
 <span class="w">    </span><span class="c1"># Block if AI risk is moderate or higher</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ai-risk-gate</span>
 <span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">security_review</span>
 <span class="w">      </span><span class="nt">when</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">ai_risk</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&gt;=</span><span class="nv"> </span><span class="s">medium&quot;</span>
+<span class="w">        </span><span class="nt">ai_risk</span><span class="p">:</span><span class="w"> </span><span class="s">"&gt;=</span><span class="nv"> </span><span class="s">medium"</span>
 <span class="w">      </span><span class="nt">approvers</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">security-team</span><span class="p">:</span>
 <span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">github-team</span>
-<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;org/security-team&quot;</span>
+<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">"org/security-team"</span>
 <span class="w">      </span><span class="nt">timeout_minutes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">240</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Elevated</span><span class="nv"> </span><span class="s">AI</span><span class="nv"> </span><span class="s">risk</span><span class="nv"> </span><span class="s">score</span><span class="nv"> </span><span class="s">—</span><span class="nv"> </span><span class="s">security</span><span class="nv"> </span><span class="s">review</span><span class="nv"> </span><span class="s">required&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Elevated</span><span class="nv"> </span><span class="s">AI</span><span class="nv"> </span><span class="s">risk</span><span class="nv"> </span><span class="s">score</span><span class="nv"> </span><span class="s">—</span><span class="nv"> </span><span class="s">security</span><span class="nv"> </span><span class="s">review</span><span class="nv"> </span><span class="s">required"</span>
 </pre></div>
 </div>
 </section>

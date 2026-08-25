@@ -56,7 +56,8 @@ This table answers: *"If this command fails, is it safe to re-run without manual
 | `ref` †      | `env` `config` `data` `secret`                                                        | Manage file references within profiles                    |
 | `repo` †     | `add` `remove` `list` `sync` `status`                                                 | Manage repositories in the solution                       |
 | `build` †    | `run` `plan` `clean` `sbom`                                                           | Build platform and Terraform artifacts; generate SBOMs    |
-| `validate`   | `run` `graph`                                                                         | Validate YAML files and visualize workspace dependencies  |
+| `validate`   | `run`                                                                                 | Validate YAML files against their kind-specific schema    |
+| `diagram`    | `show` `list` `resolve`                                                               | Render workspace diagrams as Mermaid                      |
 | `guide`      | —                                                                                     | Show workspace setup progress and suggest the next action |
 | `console` †  | —                                                                                     | Interactive workspace REPL                                |
 | `schema`     | `list` `get`                                                                          | Inspect JSON schemas for platform YAML kinds              |
@@ -879,11 +880,10 @@ strata build clean --dry-run
 
 ## `validate`
 
-`validate` is a command group with two subcommands. Bare invocation (`strata validate -f file.yaml`) delegates to `run` for backward compatibility.
+`validate` is a command group. Bare invocation (`strata validate -f file.yaml`) delegates to `run` for backward compatibility.
 
 ```
 strata validate run [OPTIONS]     ← validate a YAML file
-strata validate graph [OPTIONS]   ← build a dependency graph
 strata validate -f FILE           ← shorthand; equivalent to `validate run -f FILE`
 ```
 
@@ -911,26 +911,58 @@ strata validate run --pattern "deployments/**"
 strata validate -f config/xyz-config.yaml        # backward compat
 ```
 
-### `validate graph`
+> `strata validate graph` has been **replaced** by the [`diagram`](#diagram) command group. It exited `0`/`1` only, never `3`, so it never gated anything — visualization was not validation. Use `strata diagram show -f refs` for the old file mode and `strata diagram show -f topology` for the old resource mode.
 
-Build a Mermaid dependency diagram of the workspace. Two modes:
+---
 
-- **`--mode files`** (default) — nodes are YAML files, edges are cross-file references. Shows which files wire together and highlights missing or invalid files.
-- **`--mode resources`** — nodes are logical resources/modules/namespaces, edges are `depends_on` chains, module attachments, and subnet assignments. Shows the infrastructure topology organized by provisioner.
+## `diagram`
+
+Render workspace diagrams as Mermaid. Built-in diagrams are shipped `kind: diagram` YAML files, not hardcoded renderers — `show -f topology` and `show -f ./mine.yaml` take the identical code path, so a built-in can be copied into `.strata/diagrams/` and edited like any other definition.
 
 ```
-strata validate graph [--mode files|resources] [--entry PATH] [--save PATH] [--direction LR|TD|BT|RL] [--no-validate] [standard options]
+strata diagram show -f NAME_OR_PATH [OPTIONS]   ← render a definition to Mermaid
+strata diagram list [OPTIONS]                   ← list built-ins and workspace definitions
+strata diagram resolve URI [OPTIONS]            ← strata:// URI → file and line
 ```
 
-| Option              | Default                    | Description                                                                            |
-| ------------------- | -------------------------- | -------------------------------------------------------------------------------------- |
-| `--mode`            | `files`                    | Graph type: `files` or `resources`.                                                    |
-| `--entry / -e PATH` | auto-detect                | Entry point file (deployment or workspace YAML). Discovers all deployments if omitted. |
-| `--save / -s PATH`  | —                          | Write Mermaid markdown to file. Defaults to `graph.md` when flag used without a value. |
-| `--direction`       | LR (files), TD (resources) | Mermaid graph direction: `LR`, `TD`, `BT`, `RL`.                                       |
-| `--no-validate`     | off                        | Skip validation — all nodes shown as neutral. Faster for large workspaces.             |
+See [Diagram Configuration](../config/diagram.md) for the file format.
 
-**Node status colours (file mode):**
+### `diagram show`
+
+```
+strata diagram show -f NAME_OR_PATH [--entry PATH] [--save PATH] [--print-template] [--no-validate] [standard options]
+```
+
+| Option              | Default     | Description                                                                                                     |
+| ------------------- | ----------- | --------------------------------------------------------------------------------------------------------------- |
+| `-f / --file NAME`  | required    | Built-in name, a name in `.strata/diagrams/`, or a path to a `kind: diagram` file.                              |
+| `--entry / -e PATH` | auto-detect | Entry point file (deployment or workspace YAML) for graph sources. Discovers all deployments if omitted.        |
+| `--save / -s PATH`  | —           | Write the rendered Mermaid verbatim to a file. Defaults to `diagram.mmd` when the flag is used without a value. |
+| `--print-template`  | off         | Emit the Jinja template instead of rendering it — a starting point for customisation.                           |
+| `--no-validate`     | off         | Skip validation of the documents being graphed. Faster for large workspaces.                                    |
+
+Console output is the Mermaid source itself; `--output json` wraps it in the standard envelope under `data.mermaid`.
+
+**Resolution order for `-f`:** an existing file path, then `.strata/diagrams/<name>.yaml`, then a shipped built-in. A workspace definition shadows a built-in of the same name, so you can override one without renaming it.
+
+**Exit codes:** 0 success · 1 definition not found, invalid, or unrenderable
+
+```bash
+strata diagram show -f refs
+strata diagram show -f topology --entry stack/ws-platform.yaml
+strata diagram show -f .strata/diagrams/prd.yaml --output json
+strata diagram show -f topology --print-template
+strata diagram show -f refs --save refs.mmd
+```
+
+### Shipped built-ins
+
+| Name       | Source     | Shows                                                                           |
+| ---------- | ---------- | ------------------------------------------------------------------------------- |
+| `refs`     | `files`    | YAML file reference graph, coloured by validation status                        |
+| `topology` | `topology` | Logical infrastructure topology — resources, modules and namespaces by topology |
+
+**Node status colours (`refs`):**
 
 | Status   | Colour | Condition                                                 |
 | -------- | ------ | --------------------------------------------------------- |
@@ -940,14 +972,53 @@ strata validate graph [--mode files|resources] [--entry PATH] [--save PATH] [--d
 | External | grey   | `@repo/path` reference to a file in another repository    |
 | Orphan   | dashed | File exists and validates but no other file references it |
 
-**Exit codes:** 0 success (including missing nodes — graph always produces output) · 1 system failure
+### `diagram list`
+
+```
+strata diagram list [standard options]
+```
+
+Lists shipped built-ins and any definitions in `.strata/diagrams/`.
 
 ```bash
-strata validate graph
-strata validate graph --entry deploy/deploy-prd.yaml
-strata validate graph --mode resources --entry stack/ws-platform.yaml
-strata validate graph --save graph.md
-strata validate graph --output json
+strata diagram list
+strata diagram list --output json
+```
+
+### `diagram resolve`
+
+Resolve a `strata://` URI to the file and line it names.
+
+```
+strata diagram resolve URI [standard options]
+```
+
+Diagram nodes carry a `strata://` URI as a Mermaid `click` directive, so the connection back to
+the workspace travels with the text — paste the Mermaid into a README and the identity comes
+along. The URI is **structural, not positional**: it encodes no line number, so reformatting or
+reordering YAML above the target does not break it. This command is what turns one into a
+concrete location, on demand and headless.
+
+```
+strata://<kind>/<name>[/<child-kind>/<child-name>]
+```
+
+| Example URI                                       | Resolves to                                            |
+| ------------------------------------------------- | ------------------------------------------------------ |
+| `strata://file/deploy/deploy-prd.yaml`            | That file (no line)                                    |
+| `strata://workspace/platform/resource/app_server` | `spec.resources[name=app_server]` inside the workspace |
+| `strata://workspace/platform/module/api_gateway`  | A module nested under `spec.resources[].modules`       |
+| `strata://environment/env-prd/secret/DB_PASSWORD` | `spec.secrets[key=DB_PASSWORD]`                        |
+
+Console output is `path:line`, or just `path` for a file reference. `--output json` returns the
+full record including `kind`, `name`, `child_kind` and `child_name`.
+
+**Exit codes:** 0 resolved · 1 malformed URI, or nothing in the workspace matches
+
+```bash
+strata diagram resolve strata://file/deploy/deploy-prd.yaml
+strata diagram resolve strata://workspace/platform/resource/app_server
+strata diagram resolve strata://environment/env-prd/secret/DB_PASSWORD --output json
 ```
 
 ---
@@ -1105,7 +1176,7 @@ strata schema get KIND [--output FORMAT]
 
 Default and `--output json` both emit the complete Pydantic-generated JSON Schema. `--output text` shows a compact summary (required fields and top-level property names).
 
-**Valid kinds:** `configuration` `deployment` `dns` `environment` `firewall` `module` `namespace` `network` `provider` `resource` `tenant` `workspace`
+**Valid kinds:** `configuration` `deployment` `diagram` `dns` `environment` `firewall` `module` `namespace` `network` `provider` `resource` `tenant` `workspace`
 
 **Exit codes:** 0 success · 2 unknown kind
 

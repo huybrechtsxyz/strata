@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../config/diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#minimal-layout-only-no-template">Minimal â€” layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template â€” a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="../guides/features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../guides/faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3465,13 +3510,13 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 <span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Kamatera Cloud platform â€” Terraform + Docker Swarm</span>
 <span class="w">  </span><span class="nt">labels</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1.0.0&quot;</span>
+<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">"1.0.0"</span>
 <span class="w">  </span><span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">kamatera</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">swarm</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">configuration</span><span class="p p-Indicator">]</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="c1"># Deployment hierarchy</span>
 <span class="w">  </span><span class="nt">layering</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Deployment</span><span class="nv"> </span><span class="s">environment</span><span class="nv"> </span><span class="s">(dev,</span><span class="nv"> </span><span class="s">staging,</span><span class="nv"> </span><span class="s">prd)&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Deployment</span><span class="nv"> </span><span class="s">environment</span><span class="nv"> </span><span class="s">(dev,</span><span class="nv"> </span><span class="s">staging,</span><span class="nv"> </span><span class="s">prd)"</span>
 <span class="w">      </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 
 <span class="w">  </span><span class="c1"># Deployment properties schema â€” defines required properties for all deployments</span>
@@ -3479,22 +3524,22 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 <span class="w">    </span><span class="nt">additional_properties</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="w">    </span><span class="nt">properties</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">environment</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;^(dev|staging|prd)$&quot;</span>
+<span class="w">        </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^(dev|staging|prd)$"</span>
 <span class="w">        </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">        </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Target</span><span class="nv"> </span><span class="s">environment&quot;</span>
+<span class="w">        </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Target</span><span class="nv"> </span><span class="s">environment"</span>
 <span class="w">    </span><span class="c1"># Deployment manifest storage</span>
 <span class="w">    </span><span class="nt">manifest</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;.strata/deployments&quot;</span>
+<span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="s">".strata/deployments"</span>
 
 <span class="w">  </span><span class="c1"># Zones group provider regions for data residency enforcement</span>
 <span class="w">  </span><span class="nt">zones</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">eu_west</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Western</span><span class="nv"> </span><span class="s">Europe</span><span class="nv"> </span><span class="s">(France,</span><span class="nv"> </span><span class="s">Belgium,</span><span class="nv"> </span><span class="s">Netherlands)&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Western</span><span class="nv"> </span><span class="s">Europe</span><span class="nv"> </span><span class="s">(France,</span><span class="nv"> </span><span class="s">Belgium,</span><span class="nv"> </span><span class="s">Netherlands)"</span>
 <span class="w">      </span><span class="nt">regions</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fr-par</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">be-bru</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">eu_central</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Central</span><span class="nv"> </span><span class="s">Europe</span><span class="nv"> </span><span class="s">(Germany,</span><span class="nv"> </span><span class="s">Austria)&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Central</span><span class="nv"> </span><span class="s">Europe</span><span class="nv"> </span><span class="s">(Germany,</span><span class="nv"> </span><span class="s">Austria)"</span>
 <span class="w">      </span><span class="nt">regions</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">de-fra</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">at-vie</span>
@@ -3516,7 +3561,7 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 <span class="w">      </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">      </span><span class="nt">validation</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">git --version</span>
-<span class="w">        </span><span class="nt">min_version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2.30.0&quot;</span>
+<span class="w">        </span><span class="nt">min_version</span><span class="p">:</span><span class="w"> </span><span class="s">"2.30.0"</span>
 <span class="w">      </span><span class="nt">authentication</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cli</span>
 
@@ -3526,7 +3571,7 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 <span class="w">      </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">      </span><span class="nt">validation</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform version</span>
-<span class="w">        </span><span class="nt">min_version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1.0.0&quot;</span>
+<span class="w">        </span><span class="nt">min_version</span><span class="p">:</span><span class="w"> </span><span class="s">"1.0.0"</span>
 <span class="w">      </span><span class="nt">authentication</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cli</span>
 <span class="w">        </span><span class="nt">env_vars</span><span class="p">:</span>
@@ -3538,7 +3583,7 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 <span class="w">      </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">      </span><span class="nt">validation</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker --version</span>
-<span class="w">        </span><span class="nt">min_version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;24.0.0&quot;</span>
+<span class="w">        </span><span class="nt">min_version</span><span class="p">:</span><span class="w"> </span><span class="s">"24.0.0"</span>
 <span class="w">      </span><span class="nt">authentication</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cli</span>
 
@@ -3548,7 +3593,7 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 <span class="w">      </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="w">      </span><span class="nt">validation</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bws --version</span>
-<span class="w">        </span><span class="nt">min_version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0.3.0&quot;</span>
+<span class="w">        </span><span class="nt">min_version</span><span class="p">:</span><span class="w"> </span><span class="s">"0.3.0"</span>
 <span class="w">      </span><span class="nt">endpoints</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">address</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://bitwarden.com/api</span>
 <span class="w">      </span><span class="nt">authentication</span><span class="p">:</span>
@@ -3577,33 +3622,33 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 <span class="w">          </span><span class="nt">additional_configurations</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="w">          </span><span class="nt">configuration</span><span class="p">:</span>
 <span class="w">            </span><span class="nt">os_name</span><span class="p">:</span>
-<span class="w">              </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;^[A-Za-z0-9_\\-]{2,32}$&quot;</span>
+<span class="w">              </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^[A-Za-z0-9_\\-]{2,32}$"</span>
 <span class="w">              </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">              </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Operating</span><span class="nv"> </span><span class="s">system</span><span class="nv"> </span><span class="s">name&quot;</span>
+<span class="w">              </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Operating</span><span class="nv"> </span><span class="s">system</span><span class="nv"> </span><span class="s">name"</span>
 <span class="w">            </span><span class="nt">os_code</span><span class="p">:</span>
-<span class="w">              </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;^[A-Za-z0-9.\\-</span><span class="nv"> </span><span class="s">]{2,32}$&quot;</span>
+<span class="w">              </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^[A-Za-z0-9.\\-</span><span class="nv"> </span><span class="s">]{2,32}$"</span>
 <span class="w">              </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">              </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Operating</span><span class="nv"> </span><span class="s">system</span><span class="nv"> </span><span class="s">version</span><span class="nv"> </span><span class="s">code&quot;</span>
+<span class="w">              </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Operating</span><span class="nv"> </span><span class="s">system</span><span class="nv"> </span><span class="s">version</span><span class="nv"> </span><span class="s">code"</span>
 <span class="w">            </span><span class="nt">cpu_type</span><span class="p">:</span>
-<span class="w">              </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;^(A|B|P|T)$&quot;</span>
+<span class="w">              </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^(A|B|P|T)$"</span>
 <span class="w">              </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">              </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;CPU</span><span class="nv"> </span><span class="s">type:</span><span class="nv"> </span><span class="s">A</span><span class="nv"> </span><span class="s">(Availability),</span><span class="nv"> </span><span class="s">B</span><span class="nv"> </span><span class="s">(Balanced),</span><span class="nv"> </span><span class="s">P</span><span class="nv"> </span><span class="s">(Performance),</span><span class="nv"> </span><span class="s">T</span><span class="nv"> </span><span class="s">(Turbo)&quot;</span>
+<span class="w">              </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"CPU</span><span class="nv"> </span><span class="s">type:</span><span class="nv"> </span><span class="s">A</span><span class="nv"> </span><span class="s">(Availability),</span><span class="nv"> </span><span class="s">B</span><span class="nv"> </span><span class="s">(Balanced),</span><span class="nv"> </span><span class="s">P</span><span class="nv"> </span><span class="s">(Performance),</span><span class="nv"> </span><span class="s">T</span><span class="nv"> </span><span class="s">(Turbo)"</span>
 <span class="w">            </span><span class="nt">cpu_cores</span><span class="p">:</span>
-<span class="w">              </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;^[1-9][0-9]?$&quot;</span>
+<span class="w">              </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^[1-9][0-9]?$"</span>
 <span class="w">              </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">              </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Number</span><span class="nv"> </span><span class="s">of</span><span class="nv"> </span><span class="s">CPU</span><span class="nv"> </span><span class="s">cores</span><span class="nv"> </span><span class="s">(1-99)&quot;</span>
+<span class="w">              </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Number</span><span class="nv"> </span><span class="s">of</span><span class="nv"> </span><span class="s">CPU</span><span class="nv"> </span><span class="s">cores</span><span class="nv"> </span><span class="s">(1-99)"</span>
 <span class="w">            </span><span class="nt">ram_mb</span><span class="p">:</span>
-<span class="w">              </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;^(512|1024|2048|4096|8192|16384|32768)$&quot;</span>
+<span class="w">              </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^(512|1024|2048|4096|8192|16384|32768)$"</span>
 <span class="w">              </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">              </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;RAM</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">MB&quot;</span>
+<span class="w">              </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"RAM</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">MB"</span>
 <span class="w">            </span><span class="nt">billing</span><span class="p">:</span>
-<span class="w">              </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;^(hourly|monthly)$&quot;</span>
+<span class="w">              </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^(hourly|monthly)$"</span>
 <span class="w">              </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">              </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Billing</span><span class="nv"> </span><span class="s">frequency&quot;</span>
+<span class="w">              </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Billing</span><span class="nv"> </span><span class="s">frequency"</span>
 <span class="w">            </span><span class="nt">disk_size</span><span class="p">:</span>
-<span class="w">              </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;^[1-9][0-9]*$&quot;</span>
+<span class="w">              </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^[1-9][0-9]*$"</span>
 <span class="w">              </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-<span class="w">              </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Optional</span><span class="nv"> </span><span class="s">custom</span><span class="nv"> </span><span class="s">disk</span><span class="nv"> </span><span class="s">size</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">GB&quot;</span>
+<span class="w">              </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Optional</span><span class="nv"> </span><span class="s">custom</span><span class="nv"> </span><span class="s">disk</span><span class="nv"> </span><span class="s">size</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">GB"</span>
 
 <span class="w">  </span><span class="c1"># Topologies define supported deployment topologies</span>
 <span class="w">  </span><span class="nt">additional_topologies</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
@@ -3639,12 +3684,12 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 <span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Kamatera Docker Swarm platform workspace</span>
 <span class="w">  </span><span class="nt">labels</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1.0.0&quot;</span>
+<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">"1.0.0"</span>
 <span class="w">  </span><span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">kamatera</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">swarm</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">workspace</span><span class="p p-Indicator">]</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">providers</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kamatera_eu_fr</span>
-<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;@kamatera_swarm/stack/kamatera-provider-eu-fr.yaml&quot;</span>
+<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">"@kamatera_swarm/stack/kamatera-provider-eu-fr.yaml"</span>
 
 <span class="w">  </span><span class="nt">provisioners</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform</span>
@@ -3676,19 +3721,19 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 
 <span class="w">  </span><span class="nt">resources</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kamatera_vm_manager</span>
-<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;@kamatera_swarm/stack/kamatera-res-vm-manager.yaml&quot;</span>
+<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">"@kamatera_swarm/stack/kamatera-res-vm-manager.yaml"</span>
 <span class="w">      </span><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">manager</span>
 <span class="w">      </span><span class="nt">count</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 <span class="w">      </span><span class="nt">firewalls</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kamatera_fw</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kamatera_vm_infra</span>
-<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;@kamatera_swarm/stack/kamatera-res-vm-infra.yaml&quot;</span>
+<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">"@kamatera_swarm/stack/kamatera-res-vm-infra.yaml"</span>
 <span class="w">      </span><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">worker</span>
 <span class="w">      </span><span class="nt">count</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">      </span><span class="nt">firewalls</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kamatera_fw</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kamatera_vm_worker</span>
-<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;@kamatera_swarm/stack/kamatera-res-vm-worker.yaml&quot;</span>
+<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">"@kamatera_swarm/stack/kamatera-res-vm-worker.yaml"</span>
 <span class="w">      </span><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">worker</span>
 <span class="w">      </span><span class="nt">count</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">      </span><span class="nt">firewalls</span><span class="p">:</span>
@@ -3696,11 +3741,11 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 
 <span class="w">  </span><span class="nt">namespaces</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kamatera_ns_base</span>
-<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;@kamatera_swarm/stack/kamatera-ns-base.yaml&quot;</span>
+<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">"@kamatera_swarm/stack/kamatera-ns-base.yaml"</span>
 
 <span class="w">  </span><span class="nt">firewalls</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kamatera_fw</span>
-<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;@kamatera_swarm/stack/kamatera-fw-base.yaml&quot;</span>
+<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">"@kamatera_swarm/stack/kamatera-fw-base.yaml"</span>
 </pre></div>
 </div>
 </section>
@@ -3714,7 +3759,7 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 <span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Kamatera Cloud â€” France datacenter</span>
 <span class="w">  </span><span class="nt">labels</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1.0.0&quot;</span>
+<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">"1.0.0"</span>
 <span class="w">  </span><span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">kamatera</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">provider</span><span class="p p-Indicator">]</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
@@ -3734,7 +3779,7 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 <span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Firewall rules for Docker Swarm cluster</span>
 <span class="w">  </span><span class="nt">labels</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1.0.0&quot;</span>
+<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">"1.0.0"</span>
 <span class="w">  </span><span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">kamatera</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">firewall</span><span class="p p-Indicator">]</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">reset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
@@ -3899,7 +3944,7 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 <span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Kamatera Virtual Machine â€” Docker Swarm manager node</span>
 <span class="w">  </span><span class="nt">labels</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1.0.0&quot;</span>
+<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">"1.0.0"</span>
 <span class="w">  </span><span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">kamatera</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">vm</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">manager</span><span class="p p-Indicator">]</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
@@ -3907,12 +3952,12 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 <span class="w">    </span><span class="nt">resource_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">virtualmachine</span>
 <span class="w">    </span><span class="nt">unit_cost</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.00</span><span class="w"> </span><span class="c1"># USD per month</span>
 <span class="w">  </span><span class="nt">configuration</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">os_name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Ubuntu&quot;</span>
-<span class="w">    </span><span class="nt">os_code</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;24.04</span><span class="nv"> </span><span class="s">64bit&quot;</span>
-<span class="w">    </span><span class="nt">cpu_type</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;A&quot;</span>
+<span class="w">    </span><span class="nt">os_name</span><span class="p">:</span><span class="w"> </span><span class="s">"Ubuntu"</span>
+<span class="w">    </span><span class="nt">os_code</span><span class="p">:</span><span class="w"> </span><span class="s">"24.04</span><span class="nv"> </span><span class="s">64bit"</span>
+<span class="w">    </span><span class="nt">cpu_type</span><span class="p">:</span><span class="w"> </span><span class="s">"A"</span>
 <span class="w">    </span><span class="nt">cpu_cores</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 <span class="w">    </span><span class="nt">ram_mb</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1024</span>
-<span class="w">    </span><span class="nt">billing</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;hourly&quot;</span>
+<span class="w">    </span><span class="nt">billing</span><span class="p">:</span><span class="w"> </span><span class="s">"hourly"</span>
 <span class="w">  </span><span class="nt">storage</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">install_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/opt/install/app</span>
 <span class="w">    </span><span class="nt">disks</span><span class="p">:</span>
@@ -3942,7 +3987,7 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 <span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Kamatera Virtual Machine â€” Docker Swarm infrastructure node</span>
 <span class="w">  </span><span class="nt">labels</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1.0.0&quot;</span>
+<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">"1.0.0"</span>
 <span class="w">  </span><span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">kamatera</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">vm</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">infra</span><span class="p p-Indicator">]</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
@@ -3950,12 +3995,12 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 <span class="w">    </span><span class="nt">resource_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">virtualmachine</span>
 <span class="w">    </span><span class="nt">unit_cost</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">11.00</span><span class="w"> </span><span class="c1"># USD per month</span>
 <span class="w">  </span><span class="nt">configuration</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">os_name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Ubuntu&quot;</span>
-<span class="w">    </span><span class="nt">os_code</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;24.04</span><span class="nv"> </span><span class="s">64bit&quot;</span>
-<span class="w">    </span><span class="nt">cpu_type</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;A&quot;</span>
+<span class="w">    </span><span class="nt">os_name</span><span class="p">:</span><span class="w"> </span><span class="s">"Ubuntu"</span>
+<span class="w">    </span><span class="nt">os_code</span><span class="p">:</span><span class="w"> </span><span class="s">"24.04</span><span class="nv"> </span><span class="s">64bit"</span>
+<span class="w">    </span><span class="nt">cpu_type</span><span class="p">:</span><span class="w"> </span><span class="s">"A"</span>
 <span class="w">    </span><span class="nt">cpu_cores</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 <span class="w">    </span><span class="nt">ram_mb</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4096</span>
-<span class="w">    </span><span class="nt">billing</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;hourly&quot;</span>
+<span class="w">    </span><span class="nt">billing</span><span class="p">:</span><span class="w"> </span><span class="s">"hourly"</span>
 <span class="w">    </span><span class="nt">disk_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">40</span>
 <span class="w">  </span><span class="nt">storage</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">install_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/opt/install/app</span>
@@ -3989,7 +4034,7 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 <span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Kamatera Virtual Machine â€” Docker Swarm worker node</span>
 <span class="w">  </span><span class="nt">labels</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1.0.0&quot;</span>
+<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">"1.0.0"</span>
 <span class="w">  </span><span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">kamatera</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">vm</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">worker</span><span class="p p-Indicator">]</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
@@ -3997,12 +4042,12 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 <span class="w">    </span><span class="nt">resource_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">virtualmachine</span>
 <span class="w">    </span><span class="nt">unit_cost</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6.00</span><span class="w"> </span><span class="c1"># USD per month</span>
 <span class="w">  </span><span class="nt">configuration</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">os_name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Ubuntu&quot;</span>
-<span class="w">    </span><span class="nt">os_code</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;24.04</span><span class="nv"> </span><span class="s">64bit&quot;</span>
-<span class="w">    </span><span class="nt">cpu_type</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;A&quot;</span>
+<span class="w">    </span><span class="nt">os_name</span><span class="p">:</span><span class="w"> </span><span class="s">"Ubuntu"</span>
+<span class="w">    </span><span class="nt">os_code</span><span class="p">:</span><span class="w"> </span><span class="s">"24.04</span><span class="nv"> </span><span class="s">64bit"</span>
+<span class="w">    </span><span class="nt">cpu_type</span><span class="p">:</span><span class="w"> </span><span class="s">"A"</span>
 <span class="w">    </span><span class="nt">cpu_cores</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 <span class="w">    </span><span class="nt">ram_mb</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2048</span>
-<span class="w">    </span><span class="nt">billing</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;hourly&quot;</span>
+<span class="w">    </span><span class="nt">billing</span><span class="p">:</span><span class="w"> </span><span class="s">"hourly"</span>
 <span class="w">  </span><span class="nt">storage</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">install_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/opt/install/app</span>
 <span class="w">    </span><span class="nt">disks</span><span class="p">:</span>
@@ -4034,12 +4079,12 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 <span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Base infrastructure stack for the Kamatera Swarm platform</span>
 <span class="w">  </span><span class="nt">labels</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1.0.0&quot;</span>
+<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">"1.0.0"</span>
 <span class="w">  </span><span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">kamatera</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">namespace</span><span class="p p-Indicator">]</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">modules</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">traefik</span>
-<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;@kamatera_swarm/stack/kamatera-mod-traefik.yaml&quot;</span>
+<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">"@kamatera_swarm/stack/kamatera-mod-traefik.yaml"</span>
 </pre></div>
 </div>
 </section>
@@ -4055,7 +4100,7 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 <span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Traefik reverse proxy module for routing and load balancing</span>
 <span class="w">  </span><span class="nt">labels</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1.0.0&quot;</span>
+<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">"1.0.0"</span>
 <span class="w">  </span><span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">kamatera</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">traefik</span><span class="p p-Indicator">]</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">source</span><span class="p">:</span>
@@ -4067,31 +4112,31 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 <span class="w">      </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">traefik:v3.1</span>
 <span class="w">      </span><span class="nt">restart</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">unless-stopped</span>
 <span class="w">      </span><span class="nt">ports</span><span class="p">:</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;80:80&quot;</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;443:443&quot;</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;8080:8080&quot;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"80:80"</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"443:443"</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"8080:8080"</span>
 <span class="w">      </span><span class="nt">mounts</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">configuration_files</span>
 <span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">config</span>
 <span class="w">          </span><span class="nt">target_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${TRAEFIK_PATH_CONFIG}</span>
-<span class="w">          </span><span class="nt">chmod</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0644&quot;</span>
+<span class="w">          </span><span class="nt">chmod</span><span class="p">:</span><span class="w"> </span><span class="s">"0644"</span>
 <span class="w">          </span><span class="nt">source_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">config</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">certificates</span>
 <span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">config</span>
-<span class="w">          </span><span class="nt">chmod</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0600&quot;</span>
+<span class="w">          </span><span class="nt">chmod</span><span class="p">:</span><span class="w"> </span><span class="s">"0600"</span>
 <span class="w">          </span><span class="nt">target_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${TRAEFIK_PATH_CERTS}</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">datafiles</span>
 <span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">data</span>
-<span class="w">          </span><span class="nt">chmod</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0600&quot;</span>
+<span class="w">          </span><span class="nt">chmod</span><span class="p">:</span><span class="w"> </span><span class="s">"0600"</span>
 <span class="w">          </span><span class="nt">target_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${TRAEFIK_PATH_DATA}</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">logging</span>
 <span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">logs</span>
-<span class="w">          </span><span class="nt">chmod</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0644&quot;</span>
+<span class="w">          </span><span class="nt">chmod</span><span class="p">:</span><span class="w"> </span><span class="s">"0644"</span>
 <span class="w">          </span><span class="nt">target_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${TRAEFIK_PATH_LOGS}</span>
 <span class="w">      </span><span class="nt">healthcheck</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">traefik_http_check</span>
 <span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http</span>
-<span class="w">        </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;traefik&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;healthcheck&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;--ping&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"traefik"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"healthcheck"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"--ping"</span><span class="p p-Indicator">]</span>
 <span class="w">        </span><span class="nt">interval</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">60s</span>
 <span class="w">        </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5s</span>
 <span class="w">        </span><span class="nt">retries</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
@@ -4099,7 +4144,7 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 <span class="w">      </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nginx:alpine</span>
 <span class="w">      </span><span class="nt">restart</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">unless-stopped</span>
 <span class="w">      </span><span class="nt">ports</span><span class="p">:</span>
-<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;8081:80&quot;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"8081:80"</span>
 <span class="w">      </span><span class="nt">depends_on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">traefik</span><span class="p p-Indicator">]</span>
 <span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">endpoints</span><span class="p">:</span>
@@ -4121,7 +4166,7 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 <span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Production environment for Kamatera Docker Swarm</span>
 <span class="w">  </span><span class="nt">labels</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1.0.0&quot;</span>
+<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">"1.0.0"</span>
 <span class="w">  </span><span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">kamatera</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">swarm</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">production</span><span class="p p-Indicator">]</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">variables</span><span class="p">:</span>
@@ -4166,7 +4211,7 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 <span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Production deployment for Kamatera Docker Swarm platform</span>
 <span class="w">  </span><span class="nt">labels</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1.0.0&quot;</span>
+<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">"1.0.0"</span>
 <span class="w">  </span><span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">kamatera</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">swarm</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">production</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">deployment</span><span class="p p-Indicator">]</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">layers</span><span class="p">:</span>
@@ -4178,10 +4223,10 @@ Provisions a Swarm cluster â€” one manager, two infra workers, two app workers â
 <span class="w">  </span><span class="nt">workspace</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kamatera_swarm_platform</span>
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Kamatera Docker Swarm Platform Workspace</span>
-<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;@kamatera_swarm/stack/kamatera-ws-platform.yaml&quot;</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">"@kamatera_swarm/stack/kamatera-ws-platform.yaml"</span>
 
 <span class="w">  </span><span class="nt">environments</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;@kamatera_swarm/environments/kamatera-swarm-env-prd.yaml&quot;</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"@kamatera_swarm/environments/kamatera-swarm-env-prd.yaml"</span>
 
 <span class="w">  </span><span class="nt">stages</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infrastructure</span>

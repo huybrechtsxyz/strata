@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../config/diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3465,26 +3510,26 @@
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">PipenvLockParser</span><span class="p">(</span><span class="n">LockfileParser</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse Pipenv lock files.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""Parse Pipenv lock files."""</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">ecosystem</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-        <span class="k">return</span> <span class="s2">&quot;pypi&quot;</span>
+        <span class="k">return</span> <span class="s2">"pypi"</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">filename_patterns</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;Pipenv.lock&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"Pipenv.lock"</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">RawDependency</span><span class="p">]:</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">))</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8"</span><span class="p">))</span>
         <span class="k">except</span> <span class="p">(</span><span class="ne">OSError</span><span class="p">,</span> <span class="n">json</span><span class="o">.</span><span class="n">JSONDecodeError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
 
         <span class="n">deps</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">RawDependency</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">section</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;default&quot;</span><span class="p">,</span> <span class="s2">&quot;develop&quot;</span><span class="p">]:</span>
+        <span class="k">for</span> <span class="n">section</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">"default"</span><span class="p">,</span> <span class="s2">"develop"</span><span class="p">]:</span>
             <span class="n">packages</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">section</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{}</span>
             <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">info</span> <span class="ow">in</span> <span class="n">packages</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                <span class="n">version</span> <span class="o">=</span> <span class="n">info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;version&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">lstrip</span><span class="p">(</span><span class="s2">&quot;=&quot;</span><span class="p">)</span>
+                <span class="n">version</span> <span class="o">=</span> <span class="n">info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"version"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span><span class="o">.</span><span class="n">lstrip</span><span class="p">(</span><span class="s2">"="</span><span class="p">)</span>
                 <span class="n">deps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">RawDependency</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="n">version</span> <span class="ow">or</span> <span class="kc">None</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">deps</span>
 </pre></div>
@@ -3509,10 +3554,10 @@
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">CustomBinaryCollector</span><span class="p">(</span><span class="n">BaseSbomCollector</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Collect custom binary components.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""Collect custom binary components."""</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">get_collector_name</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-        <span class="k">return</span> <span class="s2">&quot;custom_binary&quot;</span>
+        <span class="k">return</span> <span class="s2">"custom_binary"</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">collect</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -3553,8 +3598,8 @@
 <p>Return a purl type identifier:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@property</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">ecosystem</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return purl type: &#39;pypi&#39;, &#39;npm&#39;, &#39;golang&#39;, &#39;maven&#39;, &#39;gem&#39;, &#39;crate&#39;, etc.&quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="s2">&quot;pypi&quot;</span>
+<span class="w">    </span><span class="sd">"""Return purl type: 'pypi', 'npm', 'golang', 'maven', 'gem', 'crate', etc."""</span>
+    <span class="k">return</span> <span class="s2">"pypi"</span>
 </pre></div>
 </div>
 <p><strong>Common purl types:</strong></p>
@@ -3606,17 +3651,17 @@
 <h4>2. <code class="docutils literal notranslate"><span class="pre">filename_patterns()</span></code> method<a class="headerlink" href="#filename-patterns-method" title="Link to this heading"></a></h4>
 <p>Return a list of glob patterns matched against filenames (not full paths):</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">filename_patterns</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return glob patterns to match manifest files.&quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;requirements*.txt&quot;</span><span class="p">,</span> <span class="s2">&quot;requirements-*.txt&quot;</span><span class="p">]</span>
+<span class="w">    </span><span class="sd">"""Return glob patterns to match manifest files."""</span>
+    <span class="k">return</span> <span class="p">[</span><span class="s2">"requirements*.txt"</span><span class="p">,</span> <span class="s2">"requirements-*.txt"</span><span class="p">]</span>
 </pre></div>
 </div>
 <p>Patterns are matched case-insensitively against the <strong>filename only</strong>, not the directory path. Examples:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="s2">&quot;Pipenv.lock&quot;</span><span class="p">]</span>              <span class="c1"># Match only Pipenv.lock</span>
-<span class="p">[</span><span class="s2">&quot;package-lock.json&quot;</span><span class="p">]</span>        <span class="c1"># npm lockfile</span>
-<span class="p">[</span><span class="s2">&quot;requirements*.txt&quot;</span><span class="p">]</span>        <span class="c1"># requirements.txt, requirements-dev.txt, etc.</span>
-<span class="p">[</span><span class="s2">&quot;go.sum&quot;</span><span class="p">]</span>                   <span class="c1"># Go module dependencies</span>
-<span class="p">[</span><span class="s2">&quot;Gemfile.lock&quot;</span><span class="p">]</span>             <span class="c1"># Ruby Bundler</span>
-<span class="p">[</span><span class="s2">&quot;*.toml&quot;</span><span class="p">]</span>                   <span class="c1"># Any TOML file (risky; use specific names)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="s2">"Pipenv.lock"</span><span class="p">]</span>              <span class="c1"># Match only Pipenv.lock</span>
+<span class="p">[</span><span class="s2">"package-lock.json"</span><span class="p">]</span>        <span class="c1"># npm lockfile</span>
+<span class="p">[</span><span class="s2">"requirements*.txt"</span><span class="p">]</span>        <span class="c1"># requirements.txt, requirements-dev.txt, etc.</span>
+<span class="p">[</span><span class="s2">"go.sum"</span><span class="p">]</span>                   <span class="c1"># Go module dependencies</span>
+<span class="p">[</span><span class="s2">"Gemfile.lock"</span><span class="p">]</span>             <span class="c1"># Ruby Bundler</span>
+<span class="p">[</span><span class="s2">"*.toml"</span><span class="p">]</span>                   <span class="c1"># Any TOML file (risky; use specific names)</span>
 </pre></div>
 </div>
 </section>
@@ -3624,20 +3669,20 @@
 <h4>3. <code class="docutils literal notranslate"><span class="pre">parse(path:</span> <span class="pre">Path)</span> <span class="pre">-&gt;</span> <span class="pre">List[RawDependency]</span></code> method<a class="headerlink" href="#parse-path-path-list-rawdependency-method" title="Link to this heading"></a></h4>
 <p>Extract (name, version) pairs from the file. <strong>Must raise <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> on parse failure</strong> — the collector catches it, logs a warning, and continues.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">RawDependency</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Extract dependency pairs from the manifest file.</span>
+<span class="w">    </span><span class="sd">"""Extract dependency pairs from the manifest file.</span>
 <span class="sd">    </span>
 <span class="sd">    Raise ValueError on parse failure (file not found, invalid format, etc.).</span>
 <span class="sd">    Never raise other exceptions.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">content</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span>
+        <span class="n">content</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8"</span><span class="p">)</span>
     <span class="k">except</span> <span class="ne">OSError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not read </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Could not read </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
     
     <span class="n">deps</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">RawDependency</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">content</span><span class="o">.</span><span class="n">splitlines</span><span class="p">():</span>
         <span class="n">line</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">line</span> <span class="ow">or</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;#&quot;</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">line</span> <span class="ow">or</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"#"</span><span class="p">):</span>
             <span class="k">continue</span>
         <span class="n">name</span><span class="p">,</span> <span class="n">version</span> <span class="o">=</span> <span class="n">parse_line</span><span class="p">(</span><span class="n">line</span><span class="p">)</span>  <span class="c1"># Your parsing logic</span>
         <span class="n">deps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">RawDependency</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">))</span>
@@ -3664,7 +3709,7 @@
 <h3>Auto-Registration<a class="headerlink" href="#auto-registration" title="Link to this heading"></a></h3>
 <p>Parsers <strong>auto-register</strong> when the module is imported — you don’t call any registration function:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">MyParser</span><span class="p">(</span><span class="n">LockfileParser</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Subclass of LockfileParser with all abstractmethods implemented.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""Subclass of LockfileParser with all abstractmethods implemented."""</span>
     <span class="c1"># This class is automatically registered into DEFAULT_REGISTRY</span>
     <span class="c1"># when the module is imported.</span>
     <span class="o">...</span>
@@ -3675,7 +3720,7 @@
 </div>
 <p><strong>To skip auto-registration</strong> (for abstract base classes or test stubs):</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">MyAbstractParser</span><span class="p">(</span><span class="n">LockfileParser</span><span class="p">,</span> <span class="n">register</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;This will NOT be registered.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""This will NOT be registered."""</span>
     <span class="o">...</span>
 </pre></div>
 </div>
@@ -3696,8 +3741,8 @@
 <h4>1. <code class="docutils literal notranslate"><span class="pre">get_collector_name()</span></code> method<a class="headerlink" href="#get-collector-name-method" title="Link to this heading"></a></h4>
 <p>Return a short identifier:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">get_collector_name</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return identifier: &#39;image&#39;, &#39;helm&#39;, &#39;custom_scanner&#39;, etc.&quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="s2">&quot;my_collector&quot;</span>
+<span class="w">    </span><span class="sd">"""Return identifier: 'image', 'helm', 'custom_scanner', etc."""</span>
+    <span class="k">return</span> <span class="s2">"my_collector"</span>
 </pre></div>
 </div>
 <p>Used in logs and in the <code class="docutils literal notranslate"><span class="pre">source_collector</span></code> field of components.</p>
@@ -3711,7 +3756,7 @@
     <span class="n">work_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
     <span class="n">deployment_build_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">SbomComponentModel</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Extract components from the platform artifact.</span>
+<span class="w">    </span><span class="sd">"""Extract components from the platform artifact.</span>
 <span class="sd">    </span>
 <span class="sd">    Args:</span>
 <span class="sd">        platform: Assembled platform artifact model (contains spec.modules, etc.)</span>
@@ -3720,7 +3765,7 @@
 <span class="sd">    </span>
 <span class="sd">    Returns:</span>
 <span class="sd">        List of SbomComponentModel instances. Empty list if no components found.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">_reset_warnings</span><span class="p">()</span>  <span class="c1"># Clear warnings from previous call</span>
     <span class="n">components</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">SbomComponentModel</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
     
@@ -3741,14 +3786,14 @@
     <span class="c1"># ... collection logic ...</span>
     
     <span class="k">if</span> <span class="n">missing_file</span><span class="p">:</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_warnings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;Optional config file not found: /path/to/file&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_warnings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"Optional config file not found: /path/to/file"</span><span class="p">)</span>
     
     <span class="k">return</span> <span class="n">components</span>
 
 <span class="c1"># After calling collect(), caller reads warnings:</span>
 <span class="n">components</span> <span class="o">=</span> <span class="n">my_collector</span><span class="o">.</span><span class="n">collect</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
 <span class="k">for</span> <span class="n">warning</span> <span class="ow">in</span> <span class="n">my_collector</span><span class="o">.</span><span class="n">get_warnings</span><span class="p">():</span>
-    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Collector warning&quot;</span><span class="p">,</span> <span class="n">msg</span><span class="o">=</span><span class="n">warning</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"Collector warning"</span><span class="p">,</span> <span class="n">msg</span><span class="o">=</span><span class="n">warning</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -3756,22 +3801,22 @@
 <section id="sbomcomponentmodel-return-type">
 <h3><code class="docutils literal notranslate"><span class="pre">SbomComponentModel</span></code> — Return Type<a class="headerlink" href="#sbomcomponentmodel-return-type" title="Link to this heading"></a></h3>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">SbomComponentModel</span><span class="p">:</span>
-    <span class="n">component_type</span><span class="p">:</span> <span class="nb">str</span>           <span class="c1"># &quot;container&quot; | &quot;library&quot; | &quot;framework&quot;</span>
+    <span class="n">component_type</span><span class="p">:</span> <span class="nb">str</span>           <span class="c1"># "container" | "library" | "framework"</span>
     <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>                     <span class="c1"># Component name</span>
     <span class="n">version</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>        <span class="c1"># Version string or None</span>
     <span class="n">purl</span><span class="p">:</span> <span class="nb">str</span>                     <span class="c1"># Package URL (pkg:docker/..., pkg:helm/..., etc.)</span>
-    <span class="n">properties</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span>    <span class="c1"># Metadata (e.g., {&quot;strata:tag-stability&quot;: &quot;floating&quot;})</span>
+    <span class="n">properties</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span>    <span class="c1"># Metadata (e.g., {"strata:tag-stability": "floating"})</span>
     <span class="n">source_collector</span><span class="p">:</span> <span class="nb">str</span>         <span class="c1"># Collector name that produced this component</span>
 </pre></div>
 </div>
 <p><strong>Example:</strong></p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">components</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
     <span class="n">SbomComponentModel</span><span class="p">(</span>
-        <span class="n">component_type</span><span class="o">=</span><span class="s2">&quot;container&quot;</span><span class="p">,</span>
-        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;nginx&quot;</span><span class="p">,</span>
-        <span class="n">version</span><span class="o">=</span><span class="s2">&quot;1.25.0&quot;</span><span class="p">,</span>
-        <span class="n">purl</span><span class="o">=</span><span class="s2">&quot;pkg:docker/library/nginx@1.25.0&quot;</span><span class="p">,</span>
-        <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;strata:tag-stability&quot;</span><span class="p">:</span> <span class="s2">&quot;floating&quot;</span><span class="p">},</span>
+        <span class="n">component_type</span><span class="o">=</span><span class="s2">"container"</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">"nginx"</span><span class="p">,</span>
+        <span class="n">version</span><span class="o">=</span><span class="s2">"1.25.0"</span><span class="p">,</span>
+        <span class="n">purl</span><span class="o">=</span><span class="s2">"pkg:docker/library/nginx@1.25.0"</span><span class="p">,</span>
+        <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">"strata:tag-stability"</span><span class="p">:</span> <span class="s2">"floating"</span><span class="p">},</span>
         <span class="n">source_collector</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">get_collector_name</span><span class="p">(),</span>
     <span class="p">)</span>
 <span class="p">)</span>
@@ -3784,7 +3829,7 @@
 <h2>Complete Example: Python Private Index Parser<a class="headerlink" href="#complete-example-python-private-index-parser" title="Link to this heading"></a></h2>
 <p>Support a private package index with a custom lockfile format:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># .strata/lockfile_parsers/private_pypi.py</span>
-<span class="sd">&quot;&quot;&quot;Parse private PyPI JSON index files.&quot;&quot;&quot;</span>
+<span class="sd">"""Parse private PyPI JSON index files."""</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
@@ -3794,40 +3839,40 @@
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">PrivatePyPiParser</span><span class="p">(</span><span class="n">LockfileParser</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse private PyPI JSON index (internal tool format).</span>
+<span class="w">    </span><span class="sd">"""Parse private PyPI JSON index (internal tool format).</span>
 <span class="sd">    </span>
 <span class="sd">    File format:</span>
 <span class="sd">    {</span>
-<span class="sd">      &quot;packages&quot;: {</span>
-<span class="sd">        &quot;mylib&quot;: {&quot;version&quot;: &quot;1.0.2&quot;, &quot;url&quot;: &quot;https://private-index/mylib-1.0.2.tar.gz&quot;},</span>
-<span class="sd">        &quot;otherlib&quot;: {&quot;version&quot;: &quot;2.1.0&quot;, ...}</span>
+<span class="sd">      "packages": {</span>
+<span class="sd">        "mylib": {"version": "1.0.2", "url": "https://private-index/mylib-1.0.2.tar.gz"},</span>
+<span class="sd">        "otherlib": {"version": "2.1.0", ...}</span>
 <span class="sd">      }</span>
 <span class="sd">    }</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">ecosystem</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-        <span class="k">return</span> <span class="s2">&quot;pypi&quot;</span>
+        <span class="k">return</span> <span class="s2">"pypi"</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">filename_patterns</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;private-index.json&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"private-index.json"</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">RawDependency</span><span class="p">]:</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">))</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8"</span><span class="p">))</span>
         <span class="k">except</span> <span class="p">(</span><span class="ne">OSError</span><span class="p">,</span> <span class="n">json</span><span class="o">.</span><span class="n">JSONDecodeError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to parse </span><span class="si">{</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Failed to parse </span><span class="si">{</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected JSON object, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Expected JSON object, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
-        <span class="n">packages</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;packages&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{}</span>
+        <span class="n">packages</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"packages"</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{}</span>
         <span class="n">deps</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">RawDependency</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
 
         <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">info</span> <span class="ow">in</span> <span class="n">packages</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">info</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
                 <span class="k">continue</span>
-            <span class="n">version</span> <span class="o">=</span> <span class="n">info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;version&quot;</span><span class="p">)</span>
+            <span class="n">version</span> <span class="o">=</span> <span class="n">info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"version"</span><span class="p">)</span>
             <span class="n">deps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">RawDependency</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">),</span> <span class="n">version</span><span class="o">=</span><span class="n">version</span> <span class="ow">or</span> <span class="kc">None</span><span class="p">))</span>
 
         <span class="k">return</span> <span class="n">deps</span>
@@ -3839,7 +3884,7 @@
 <h2>Complete Example: Custom Collector — Terraform Variables<a class="headerlink" href="#complete-example-custom-collector-terraform-variables" title="Link to this heading"></a></h2>
 <p>Extract version constraints from Terraform variable defaults:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># .strata/collectors/terraform_vars_collector.py</span>
-<span class="sd">&quot;&quot;&quot;Collect Terraform provider version constraints.&quot;&quot;&quot;</span>
+<span class="sd">"""Collect Terraform provider version constraints."""</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
@@ -3851,14 +3896,14 @@
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">TerraformVarsCollector</span><span class="p">(</span><span class="n">BaseSbomCollector</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Extract version constraints from Terraform provider requirements.</span>
+<span class="w">    </span><span class="sd">"""Extract version constraints from Terraform provider requirements.</span>
 <span class="sd">    </span>
 <span class="sd">    Scans platform artifact for declared Terraform providers and their</span>
 <span class="sd">    required versions, producing a component per provider.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">get_collector_name</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-        <span class="k">return</span> <span class="s2">&quot;terraform_vars&quot;</span>
+        <span class="k">return</span> <span class="s2">"terraform_vars"</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">collect</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -3876,30 +3921,30 @@
 
         <span class="c1"># Iterate through all modules</span>
         <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">platform</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">modules</span><span class="p">:</span>
-            <span class="c1"># Assume module has a &#39;terraform_providers&#39; field</span>
+            <span class="c1"># Assume module has a 'terraform_providers' field</span>
             <span class="c1"># (This is an example; adjust to your actual structure)</span>
-            <span class="n">providers</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="s2">&quot;terraform_providers&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">[]</span>
+            <span class="n">providers</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="s2">"terraform_providers"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">[]</span>
 
             <span class="k">for</span> <span class="n">provider</span> <span class="ow">in</span> <span class="n">providers</span><span class="p">:</span>
-                <span class="c1"># provider: {&quot;name&quot;: &quot;aws&quot;, &quot;version&quot;: &quot;~&gt; 5.0&quot;}</span>
-                <span class="n">provider_name</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">provider</span><span class="p">,</span> <span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-                <span class="n">provider_version</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">provider</span><span class="p">,</span> <span class="s2">&quot;version&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="c1"># provider: {"name": "aws", "version": "~&gt; 5.0"}</span>
+                <span class="n">provider_name</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">provider</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>
+                <span class="n">provider_version</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">provider</span><span class="p">,</span> <span class="s2">"version"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
                 <span class="k">if</span> <span class="ow">not</span> <span class="n">provider_name</span><span class="p">:</span>
                     <span class="k">continue</span>
 
-                <span class="n">purl_key</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;terraform:</span><span class="si">{</span><span class="n">provider_name</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="n">purl_key</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"terraform:</span><span class="si">{</span><span class="n">provider_name</span><span class="si">}</span><span class="s2">"</span>
                 <span class="k">if</span> <span class="n">purl_key</span> <span class="ow">in</span> <span class="n">seen_providers</span><span class="p">:</span>
                     <span class="k">continue</span>
                 <span class="n">seen_providers</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">purl_key</span><span class="p">)</span>
 
                 <span class="n">components</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
                     <span class="n">SbomComponentModel</span><span class="p">(</span>
-                        <span class="n">component_type</span><span class="o">=</span><span class="s2">&quot;framework&quot;</span><span class="p">,</span>
-                        <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;terraform-provider-</span><span class="si">{</span><span class="n">provider_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                        <span class="n">component_type</span><span class="o">=</span><span class="s2">"framework"</span><span class="p">,</span>
+                        <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">"terraform-provider-</span><span class="si">{</span><span class="n">provider_name</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
                         <span class="n">version</span><span class="o">=</span><span class="n">provider_version</span><span class="p">,</span>
-                        <span class="n">purl</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;pkg:terraform/hashicorp/</span><span class="si">{</span><span class="n">provider_name</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="n">provider_version</span><span class="w"> </span><span class="ow">or</span><span class="w"> </span><span class="s1">&#39;unknown&#39;</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-                        <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;provider_type&quot;</span><span class="p">:</span> <span class="s2">&quot;terraform&quot;</span><span class="p">},</span>
+                        <span class="n">purl</span><span class="o">=</span><span class="sa">f</span><span class="s2">"pkg:terraform/hashicorp/</span><span class="si">{</span><span class="n">provider_name</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="n">provider_version</span><span class="w"> </span><span class="ow">or</span><span class="w"> </span><span class="s1">'unknown'</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+                        <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">"provider_type"</span><span class="p">:</span> <span class="s2">"terraform"</span><span class="p">},</span>
                         <span class="n">source_collector</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">get_collector_name</span><span class="p">(),</span>
                     <span class="p">)</span>
                 <span class="p">)</span>
@@ -3930,49 +3975,49 @@
 
 <span class="k">class</span><span class="w"> </span><span class="nc">TestPrivatePyPiParser</span><span class="p">:</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">test_parse_valid</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tmp_path</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Parse a valid private PyPI index.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Parse a valid private PyPI index."""</span>
         <span class="n">parser</span> <span class="o">=</span> <span class="n">PrivatePyPiParser</span><span class="p">()</span>
         
-        <span class="n">index_file</span> <span class="o">=</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">&quot;private-index.json&quot;</span>
-        <span class="n">index_file</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="s1">&#39;&#39;&#39;{</span>
-<span class="s1">            &quot;packages&quot;: {</span>
-<span class="s1">                &quot;mylib&quot;: {&quot;version&quot;: &quot;1.0.2&quot;},</span>
-<span class="s1">                &quot;otherlib&quot;: {&quot;version&quot;: &quot;2.1.0&quot;}</span>
+        <span class="n">index_file</span> <span class="o">=</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">"private-index.json"</span>
+        <span class="n">index_file</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="s1">'''{</span>
+<span class="s1">            "packages": {</span>
+<span class="s1">                "mylib": {"version": "1.0.2"},</span>
+<span class="s1">                "otherlib": {"version": "2.1.0"}</span>
 <span class="s1">            }</span>
-<span class="s1">        }&#39;&#39;&#39;</span><span class="p">)</span>
+<span class="s1">        }'''</span><span class="p">)</span>
         
         <span class="n">deps</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">index_file</span><span class="p">)</span>
         <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">deps</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span>
-        <span class="k">assert</span> <span class="n">deps</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;mylib&quot;</span>
-        <span class="k">assert</span> <span class="n">deps</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">version</span> <span class="o">==</span> <span class="s2">&quot;1.0.2&quot;</span>
+        <span class="k">assert</span> <span class="n">deps</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"mylib"</span>
+        <span class="k">assert</span> <span class="n">deps</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">version</span> <span class="o">==</span> <span class="s2">"1.0.2"</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">test_parse_missing_version</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tmp_path</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Handle packages without explicit version.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Handle packages without explicit version."""</span>
         <span class="n">parser</span> <span class="o">=</span> <span class="n">PrivatePyPiParser</span><span class="p">()</span>
         
-        <span class="n">index_file</span> <span class="o">=</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">&quot;private-index.json&quot;</span>
-        <span class="n">index_file</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="s1">&#39;&#39;&#39;{</span>
-<span class="s1">            &quot;packages&quot;: {&quot;mylib&quot;: </span><span class="si">{}</span><span class="s1">}</span>
-<span class="s1">        }&#39;&#39;&#39;</span><span class="p">)</span>
+        <span class="n">index_file</span> <span class="o">=</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">"private-index.json"</span>
+        <span class="n">index_file</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="s1">'''{</span>
+<span class="s1">            "packages": {"mylib": </span><span class="si">{}</span><span class="s1">}</span>
+<span class="s1">        }'''</span><span class="p">)</span>
         
         <span class="n">deps</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">index_file</span><span class="p">)</span>
         <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">deps</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
         <span class="k">assert</span> <span class="n">deps</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">version</span> <span class="ow">is</span> <span class="kc">None</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">test_parse_invalid_json</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tmp_path</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Invalid JSON raises ValueError.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Invalid JSON raises ValueError."""</span>
         <span class="n">parser</span> <span class="o">=</span> <span class="n">PrivatePyPiParser</span><span class="p">()</span>
         
-        <span class="n">index_file</span> <span class="o">=</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">&quot;private-index.json&quot;</span>
-        <span class="n">index_file</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="s2">&quot;not valid json&quot;</span><span class="p">)</span>
+        <span class="n">index_file</span> <span class="o">=</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">"private-index.json"</span>
+        <span class="n">index_file</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="s2">"not valid json"</span><span class="p">)</span>
         
         <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">):</span>
             <span class="n">parser</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">index_file</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">test_filename_patterns</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Parser matches correct filename patterns.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Parser matches correct filename patterns."""</span>
         <span class="n">parser</span> <span class="o">=</span> <span class="n">PrivatePyPiParser</span><span class="p">()</span>
-        <span class="k">assert</span> <span class="s2">&quot;private-index.json&quot;</span> <span class="ow">in</span> <span class="n">parser</span><span class="o">.</span><span class="n">filename_patterns</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="s2">"private-index.json"</span> <span class="ow">in</span> <span class="n">parser</span><span class="o">.</span><span class="n">filename_patterns</span><span class="p">()</span>
 </pre></div>
 </div>
 </section>
@@ -3989,28 +4034,28 @@
 
 <span class="k">class</span><span class="w"> </span><span class="nc">TestTerraformVarsCollector</span><span class="p">:</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">test_collect_empty_platform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tmp_path</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Collector returns empty list when no modules.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Collector returns empty list when no modules."""</span>
         <span class="n">collector</span> <span class="o">=</span> <span class="n">TerraformVarsCollector</span><span class="p">()</span>
         
         <span class="c1"># Mock a minimal platform with no modules</span>
         <span class="n">platform</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">(</span><span class="n">spec</span><span class="o">=</span><span class="n">PlatformArtifactModel</span><span class="p">)</span>
         <span class="n">platform</span><span class="o">.</span><span class="n">spec</span> <span class="o">=</span> <span class="kc">None</span>
         
-        <span class="n">components</span> <span class="o">=</span> <span class="n">collector</span><span class="o">.</span><span class="n">collect</span><span class="p">(</span><span class="n">platform</span><span class="p">,</span> <span class="n">tmp_path</span><span class="p">,</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">&quot;build&quot;</span><span class="p">)</span>
+        <span class="n">components</span> <span class="o">=</span> <span class="n">collector</span><span class="o">.</span><span class="n">collect</span><span class="p">(</span><span class="n">platform</span><span class="p">,</span> <span class="n">tmp_path</span><span class="p">,</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">"build"</span><span class="p">)</span>
         <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">components</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">test_collect_providers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tmp_path</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract provider components.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Extract provider components."""</span>
         <span class="n">collector</span> <span class="o">=</span> <span class="n">TerraformVarsCollector</span><span class="p">()</span>
         
         <span class="c1"># Build a mock platform with providers</span>
         <span class="n">provider1</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">()</span>
-        <span class="n">provider1</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;aws&quot;</span>
-        <span class="n">provider1</span><span class="o">.</span><span class="n">version</span> <span class="o">=</span> <span class="s2">&quot;~&gt; 5.0&quot;</span>
+        <span class="n">provider1</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s2">"aws"</span>
+        <span class="n">provider1</span><span class="o">.</span><span class="n">version</span> <span class="o">=</span> <span class="s2">"~&gt; 5.0"</span>
         
         <span class="n">provider2</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">()</span>
-        <span class="n">provider2</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;kubernetes&quot;</span>
-        <span class="n">provider2</span><span class="o">.</span><span class="n">version</span> <span class="o">=</span> <span class="s2">&quot;2.20.0&quot;</span>
+        <span class="n">provider2</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s2">"kubernetes"</span>
+        <span class="n">provider2</span><span class="o">.</span><span class="n">version</span> <span class="o">=</span> <span class="s2">"2.20.0"</span>
         
         <span class="n">module</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">()</span>
         <span class="n">module</span><span class="o">.</span><span class="n">terraform_providers</span> <span class="o">=</span> <span class="p">[</span><span class="n">provider1</span><span class="p">,</span> <span class="n">provider2</span><span class="p">]</span>
@@ -4019,11 +4064,11 @@
         <span class="n">platform</span><span class="o">.</span><span class="n">spec</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">()</span>
         <span class="n">platform</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">modules</span> <span class="o">=</span> <span class="p">[</span><span class="n">module</span><span class="p">]</span>
         
-        <span class="n">components</span> <span class="o">=</span> <span class="n">collector</span><span class="o">.</span><span class="n">collect</span><span class="p">(</span><span class="n">platform</span><span class="p">,</span> <span class="n">tmp_path</span><span class="p">,</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">&quot;build&quot;</span><span class="p">)</span>
+        <span class="n">components</span> <span class="o">=</span> <span class="n">collector</span><span class="o">.</span><span class="n">collect</span><span class="p">(</span><span class="n">platform</span><span class="p">,</span> <span class="n">tmp_path</span><span class="p">,</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">"build"</span><span class="p">)</span>
         
         <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">components</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span>
-        <span class="k">assert</span> <span class="n">components</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;terraform-provider-aws&quot;</span>
-        <span class="k">assert</span> <span class="n">components</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;terraform-provider-kubernetes&quot;</span>
+        <span class="k">assert</span> <span class="n">components</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"terraform-provider-aws"</span>
+        <span class="k">assert</span> <span class="n">components</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"terraform-provider-kubernetes"</span>
 </pre></div>
 </div>
 </section>
@@ -4100,10 +4145,10 @@ uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </sp
 <p><strong>Parse errors are gracefully handled:</strong></p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">RawDependency</span><span class="p">]:</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">))</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8"</span><span class="p">))</span>
     <span class="k">except</span> <span class="n">json</span><span class="o">.</span><span class="n">JSONDecodeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
         <span class="c1"># Raise ValueError — collector will catch it</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid JSON: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Invalid JSON: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
     <span class="c1"># ... continue parsing ...</span>
 </pre></div>
 </div>
@@ -4132,7 +4177,7 @@ strata<span class="w"> </span>build<span class="w"> </span>sbom<span class="w"> 
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">DEBUG</span> <span class="n">Auto</span><span class="o">-</span><span class="n">discovered</span> <span class="n">lockfile</span> <span class="n">parser</span> <span class="o">|</span> <span class="n">file</span><span class="o">=</span><span class="n">private_pypi</span><span class="o">.</span><span class="n">py</span>
 <span class="n">DEBUG</span> <span class="n">Loaded</span> <span class="n">lockfile_parser</span> <span class="n">plugin</span> <span class="n">module</span> <span class="o">|</span> <span class="n">plugin</span><span class="o">=</span><span class="n">cargo</span><span class="o">-</span><span class="n">parser</span>
 <span class="n">DEBUG</span> <span class="n">Scanning</span> <span class="k">for</span> <span class="n">dependency</span> <span class="n">files</span> <span class="o">|</span> <span class="n">pattern</span><span class="o">=</span><span class="n">private</span><span class="o">-</span><span class="n">index</span><span class="o">.</span><span class="n">json</span>
-<span class="n">DEBUG</span> <span class="n">Failed</span> <span class="n">to</span> <span class="n">parse</span> <span class="n">dependency</span> <span class="n">file</span> <span class="o">|</span> <span class="n">file</span><span class="o">=</span><span class="n">private</span><span class="o">-</span><span class="n">index</span><span class="o">.</span><span class="n">json</span> <span class="n">error</span><span class="o">=</span><span class="s2">&quot;Invalid JSON&quot;</span>
+<span class="n">DEBUG</span> <span class="n">Failed</span> <span class="n">to</span> <span class="n">parse</span> <span class="n">dependency</span> <span class="n">file</span> <span class="o">|</span> <span class="n">file</span><span class="o">=</span><span class="n">private</span><span class="o">-</span><span class="n">index</span><span class="o">.</span><span class="n">json</span> <span class="n">error</span><span class="o">=</span><span class="s2">"Invalid JSON"</span>
 </pre></div>
 </div>
 </section>
@@ -4142,7 +4187,7 @@ strata<span class="w"> </span>build<span class="w"> </span>sbom<span class="w"> 
 <span class="kn">from</span><span class="w"> </span><span class="nn">strata.builders.sbom.lockfile_parsers</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEFAULT_REGISTRY</span>
 
 <span class="k">for</span> <span class="n">parser</span> <span class="ow">in</span> <span class="n">DEFAULT_REGISTRY</span><span class="o">.</span><span class="n">all_parsers</span><span class="p">():</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Ecosystem: </span><span class="si">{</span><span class="n">parser</span><span class="o">.</span><span class="n">ecosystem</span><span class="si">}</span><span class="s2">, Patterns: </span><span class="si">{</span><span class="n">parser</span><span class="o">.</span><span class="n">filename_patterns</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Ecosystem: </span><span class="si">{</span><span class="n">parser</span><span class="o">.</span><span class="n">ecosystem</span><span class="si">}</span><span class="s2">, Patterns: </span><span class="si">{</span><span class="n">parser</span><span class="o">.</span><span class="n">filename_patterns</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -4152,14 +4197,14 @@ strata<span class="w"> </span>build<span class="w"> </span>sbom<span class="w"> 
 <span class="kn">from</span><span class="w"> </span><span class="nn">strata.builders.sbom.lockfile_parsers.private_pypi</span><span class="w"> </span><span class="kn">import</span> <span class="n">PrivatePyPiParser</span>
 
 <span class="n">parser</span> <span class="o">=</span> <span class="n">PrivatePyPiParser</span><span class="p">()</span>
-<span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;path/to/private-index.json&quot;</span><span class="p">)</span>
+<span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">"path/to/private-index.json"</span><span class="p">)</span>
 
 <span class="k">try</span><span class="p">:</span>
     <span class="n">deps</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">dep</span> <span class="ow">in</span> <span class="n">deps</span><span class="p">:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">dep</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">==</span><span class="si">{</span><span class="n">dep</span><span class="o">.</span><span class="n">version</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">dep</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">==</span><span class="si">{</span><span class="n">dep</span><span class="o">.</span><span class="n">version</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Parse error: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Parse error: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -4170,7 +4215,7 @@ strata<span class="w"> </span>validate<span class="w"> </span>.strata/collectors
 
 <span class="c1"># Run SBOM build with debug output</span>
 <span class="nb">export</span><span class="w"> </span><span class="nv">STRATA_VERBOSE</span><span class="o">=</span><span class="m">1</span>
-strata<span class="w"> </span>build<span class="w"> </span>sbom<span class="w"> </span>-f<span class="w"> </span>deploy.yaml<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-i<span class="w"> </span><span class="s2">&quot;custom\|collector&quot;</span>
+strata<span class="w"> </span>build<span class="w"> </span>sbom<span class="w"> </span>-f<span class="w"> </span>deploy.yaml<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-i<span class="w"> </span><span class="s2">"custom\|collector"</span>
 </pre></div>
 </div>
 </section>
@@ -4192,14 +4237,14 @@ strata<span class="w"> </span>build<span class="w"> </span>sbom<span class="w"> 
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">try</span><span class="p">:</span>
     <span class="n">data</span> <span class="o">=</span> <span class="n">parse_file</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
 <span class="k">except</span> <span class="ne">IOError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not read file: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>  <span class="c1"># ✓ Correct</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Could not read file: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>  <span class="c1"># ✓ Correct</span>
 <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
     <span class="k">raise</span> <span class="n">exc</span>  <span class="c1"># ✗ Wrong — not caught by collector</span>
 </pre></div>
 </div>
 </li>
 <li><p><strong>Handle missing/unpinned versions</strong> — Use <code class="docutils literal notranslate"><span class="pre">version=None</span></code>:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">deps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">RawDependency</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;flask&quot;</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="kc">None</span><span class="p">))</span>  <span class="c1"># ✓ Unpinned</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">deps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">RawDependency</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"flask"</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="kc">None</span><span class="p">))</span>  <span class="c1"># ✓ Unpinned</span>
 </pre></div>
 </div>
 </li>
@@ -4217,7 +4262,7 @@ strata<span class="w"> </span>build<span class="w"> </span>sbom<span class="w"> 
 </li>
 <li><p><strong>Use <code class="docutils literal notranslate"><span class="pre">self._warnings.append(msg)</span></code> for non-fatal issues</strong>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">if</span> <span class="n">file_not_found</span><span class="p">:</span>
-    <span class="bp">self</span><span class="o">.</span><span class="n">_warnings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;Optional config not found: /path/to/file&quot;</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_warnings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"Optional config not found: /path/to/file"</span><span class="p">)</span>
 </pre></div>
 </div>
 </li>
@@ -4269,11 +4314,11 @@ strata<span class="w"> </span>build<span class="w"> </span>sbom<span class="w"> 
 </div>
 <p>Each manifest includes a reference to the SBOM:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;metadata&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;sbom&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;build/prod-1.0.0/sbom.json&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;format&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;cyclonedx-1.6&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;component_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">42</span>
+<span class="w">  </span><span class="nt">"metadata"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"sbom"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"build/prod-1.0.0/sbom.json"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"format"</span><span class="p">:</span><span class="w"> </span><span class="s2">"cyclonedx-1.6"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"component_count"</span><span class="p">:</span><span class="w"> </span><span class="mi">42</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>

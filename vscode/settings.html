@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../config/diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="../guides/features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../guides/faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3482,11 +3527,11 @@
 <strong>Default:</strong> <code class="docutils literal notranslate"><span class="pre">&quot;strata&quot;</span></code><br />
 <strong>Description:</strong> Path to the strata CLI executable.</p>
 <p><strong>Examples:</strong></p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;strata.cliPath&quot;</span><span class="p">:</span><span class="w"> </span><span class="nt">&quot;strata&quot;</span><span class="w">           </span><span class="c1">// CLI in $PATH</span>
-<span class="nt">&quot;strata.cliPath&quot;</span><span class="p">:</span><span class="w"> </span><span class="nt">&quot;/usr/local/bin/strata&quot;</span><span class="w">  </span><span class="c1">// Full path</span>
-<span class="nt">&quot;strata.cliPath&quot;</span><span class="p">:</span><span class="w"> </span><span class="nt">&quot;uv run strata&quot;</span><span class="w">    </span><span class="c1">// Via uv</span>
-<span class="nt">&quot;strata.cliPath&quot;</span><span class="p">:</span><span class="w"> </span><span class="nt">&quot;poetry run strata&quot;</span><span class="c1">// Via poetry</span>
-<span class="nt">&quot;strata.cliPath&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;C:\\tools\\strata.exe&quot;</span><span class="w">  </span><span class="c1">// Windows</span>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">"strata.cliPath"</span><span class="p">:</span><span class="w"> </span><span class="nt">"strata"</span><span class="w">           </span><span class="c1">// CLI in $PATH</span>
+<span class="nt">"strata.cliPath"</span><span class="p">:</span><span class="w"> </span><span class="nt">"/usr/local/bin/strata"</span><span class="w">  </span><span class="c1">// Full path</span>
+<span class="nt">"strata.cliPath"</span><span class="p">:</span><span class="w"> </span><span class="nt">"uv run strata"</span><span class="w">    </span><span class="c1">// Via uv</span>
+<span class="nt">"strata.cliPath"</span><span class="p">:</span><span class="w"> </span><span class="nt">"poetry run strata"</span><span class="c1">// Via poetry</span>
+<span class="nt">"strata.cliPath"</span><span class="p">:</span><span class="w"> </span><span class="s2">"C:\\tools\\strata.exe"</span><span class="w">  </span><span class="c1">// Windows</span>
 </pre></div>
 </div>
 <p><strong>How it’s used:</strong></p>
@@ -3590,7 +3635,7 @@ pip<span class="w"> </span>install<span class="w"> </span>--user<span class="w">
 </ul>
 <p><strong>Manual alternative:</strong></p>
 <p>If you keep this <code class="docutils literal notranslate"><span class="pre">false</span></code>, you can manually export + wire via:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Command Palette → &quot;Strata: Export Schemas&quot;
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Command Palette → "Strata: Export Schemas"
 </pre></div>
 </div>
 </section>
@@ -3614,9 +3659,9 @@ pip<span class="w"> </span>install<span class="w"> </span>--user<span class="w">
 <strong>Default:</strong> <code class="docutils literal notranslate"><span class="pre">&quot;&quot;</span></code> (empty)<br />
 <strong>Description:</strong> Profile to activate automatically on workspace open.</p>
 <p><strong>Examples:</strong></p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;strata.defaultProfile&quot;</span><span class="p">:</span><span class="w"> </span><span class="nt">&quot;&quot;</span><span class="w">          </span><span class="c1">// Don&#39;t auto-activate (use last active)</span>
-<span class="nt">&quot;strata.defaultProfile&quot;</span><span class="p">:</span><span class="w"> </span><span class="nt">&quot;dev&quot;</span><span class="w">       </span><span class="c1">// Auto-activate &#39;dev&#39; profile</span>
-<span class="nt">&quot;strata.defaultProfile&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;production&quot;</span><span class="c1">// Auto-activate &#39;production&#39; profile</span>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">"strata.defaultProfile"</span><span class="p">:</span><span class="w"> </span><span class="nt">""</span><span class="w">          </span><span class="c1">// Don't auto-activate (use last active)</span>
+<span class="nt">"strata.defaultProfile"</span><span class="p">:</span><span class="w"> </span><span class="nt">"dev"</span><span class="w">       </span><span class="c1">// Auto-activate 'dev' profile</span>
+<span class="nt">"strata.defaultProfile"</span><span class="p">:</span><span class="w"> </span><span class="s2">"production"</span><span class="c1">// Auto-activate 'production' profile</span>
 </pre></div>
 </div>
 <p><strong>How it works:</strong></p>
@@ -3646,7 +3691,7 @@ pip<span class="w"> </span>install<span class="w"> </span>--user<span class="w">
 <p><strong>Example: per-workspace CLI path</strong></p>
 <p>Workspace <code class="docutils literal notranslate"><span class="pre">.vscode/settings.json</span></code>:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;strata.cliPath&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;uv run strata&quot;</span>
+<span class="w">  </span><span class="nt">"strata.cliPath"</span><span class="p">:</span><span class="w"> </span><span class="s2">"uv run strata"</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -3658,7 +3703,7 @@ pip<span class="w"> </span>install<span class="w"> </span>--user<span class="w">
 <p>Settings can also be set via VS Code CLI:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>code<span class="w"> </span>--user-data-dir<span class="w"> </span>/tmp/vscode-data<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--install-extension<span class="w"> </span>strata<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--settings<span class="w"> </span>strata.cliPath<span class="o">=</span><span class="s2">&quot;uv run strata&quot;</span>
+<span class="w">  </span>--settings<span class="w"> </span>strata.cliPath<span class="o">=</span><span class="s2">"uv run strata"</span>
 </pre></div>
 </div>
 </section>
@@ -3666,8 +3711,8 @@ pip<span class="w"> </span>install<span class="w"> </span>--user<span class="w">
 <h2>Programmatic Access<a class="headerlink" href="#programmatic-access" title="Link to this heading"></a></h2>
 <p>In the extension code, settings are read with:</p>
 <div class="highlight-typescript notranslate"><div class="highlight"><pre><span></span><span class="kd">const</span><span class="w"> </span><span class="nx">setting</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">vscode</span><span class="p">.</span><span class="nx">workspace</span>
-<span class="w">  </span><span class="p">.</span><span class="nx">getConfiguration</span><span class="p">(</span><span class="s1">&#39;strata&#39;</span><span class="p">)</span>
-<span class="w">  </span><span class="p">.</span><span class="nx">get</span><span class="o">&lt;</span><span class="kt">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s1">&#39;cliPath&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;strata&#39;</span><span class="p">);</span>
+<span class="w">  </span><span class="p">.</span><span class="nx">getConfiguration</span><span class="p">(</span><span class="s1">'strata'</span><span class="p">)</span>
+<span class="w">  </span><span class="p">.</span><span class="nx">get</span><span class="o">&lt;</span><span class="kt">string</span><span class="o">&gt;</span><span class="p">(</span><span class="s1">'cliPath'</span><span class="p">,</span><span class="w"> </span><span class="s1">'strata'</span><span class="p">);</span>
 </pre></div>
 </div>
 <p>Changes to settings are picked up immediately (no reload needed) because the extension listens to <code class="docutils literal notranslate"><span class="pre">onDidChangeConfiguration</span></code>.</p>

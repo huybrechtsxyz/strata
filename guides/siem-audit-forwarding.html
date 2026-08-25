@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../config/diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3665,7 +3710,7 @@ strata<span class="w"> </span>audit<span class="w"> </span><span class="nb">expo
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">syslog_cef</span>
 <span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">syslog</span>
 <span class="w">        </span><span class="nt">address</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">siem.acme.com:514</span>
-<span class="w">        </span><span class="nt">format</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cef</span><span class="w">          </span><span class="c1"># &quot;json&quot; (default) or &quot;cef&quot;</span>
+<span class="w">        </span><span class="nt">format</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cef</span><span class="w">          </span><span class="c1"># "json" (default) or "cef"</span>
 </pre></div>
 </div>
 <section id="cef-message-structure">
@@ -3697,20 +3742,20 @@ strata<span class="w"> </span>audit<span class="w"> </span><span class="nb">expo
 <p><strong>Example (success):</strong></p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">&lt;</span><span class="mi">14</span><span class="o">&gt;</span><span class="n">CEF</span><span class="p">:</span><span class="mi">0</span><span class="o">|</span><span class="n">strata</span><span class="o">|</span><span class="n">strata</span><span class="o">-</span><span class="n">audit</span><span class="o">|</span><span class="mf">1.2.0</span><span class="o">|</span><span class="n">deploy_audit</span><span class="o">|</span><span class="n">Deployment</span> <span class="n">Audit</span> <span class="n">Event</span><span class="o">|</span><span class="mi">3</span><span class="o">|</span>
   <span class="n">rt</span><span class="o">=</span><span class="mi">2024</span><span class="o">-</span><span class="mi">06</span><span class="o">-</span><span class="mi">17</span><span class="n">T10</span><span class="p">:</span><span class="mi">45</span><span class="p">:</span><span class="mi">33</span><span class="n">Z</span> <span class="n">src</span><span class="o">=</span><span class="n">ops</span><span class="nd">@acme</span><span class="o">.</span><span class="n">com</span> <span class="n">dst</span><span class="o">=</span><span class="n">prod</span> <span class="n">act</span><span class="o">=</span><span class="n">success</span>
-  <span class="n">externalId</span><span class="o">=</span><span class="n">abc</span><span class="o">-</span><span class="mi">123</span> <span class="n">msg</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;deployment&quot;</span><span class="p">:</span><span class="s2">&quot;prod&quot;</span><span class="p">,</span><span class="s2">&quot;success&quot;</span><span class="p">:</span><span class="n">true</span><span class="p">,</span><span class="o">...</span><span class="p">}</span>
+  <span class="n">externalId</span><span class="o">=</span><span class="n">abc</span><span class="o">-</span><span class="mi">123</span> <span class="n">msg</span><span class="o">=</span><span class="p">{</span><span class="s2">"deployment"</span><span class="p">:</span><span class="s2">"prod"</span><span class="p">,</span><span class="s2">"success"</span><span class="p">:</span><span class="n">true</span><span class="p">,</span><span class="o">...</span><span class="p">}</span>
 </pre></div>
 </div>
 <p><strong>Example (failure):</strong></p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">&lt;</span><span class="mi">14</span><span class="o">&gt;</span><span class="n">CEF</span><span class="p">:</span><span class="mi">0</span><span class="o">|</span><span class="n">strata</span><span class="o">|</span><span class="n">strata</span><span class="o">-</span><span class="n">audit</span><span class="o">|</span><span class="mf">1.2.0</span><span class="o">|</span><span class="n">deploy_audit</span><span class="o">|</span><span class="n">Deployment</span> <span class="n">Audit</span> <span class="n">Event</span><span class="o">|</span><span class="mi">7</span><span class="o">|</span>
   <span class="n">rt</span><span class="o">=</span><span class="mi">2024</span><span class="o">-</span><span class="mi">06</span><span class="o">-</span><span class="mi">17</span><span class="n">T11</span><span class="p">:</span><span class="mi">02</span><span class="p">:</span><span class="mi">01</span><span class="n">Z</span> <span class="n">src</span><span class="o">=</span><span class="n">ops</span><span class="nd">@acme</span><span class="o">.</span><span class="n">com</span> <span class="n">dst</span><span class="o">=</span><span class="n">prod</span> <span class="n">act</span><span class="o">=</span><span class="n">failure</span>
-  <span class="n">externalId</span><span class="o">=</span><span class="n">def</span><span class="o">-</span><span class="mi">456</span> <span class="n">msg</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;deployment&quot;</span><span class="p">:</span><span class="s2">&quot;prod&quot;</span><span class="p">,</span><span class="s2">&quot;success&quot;</span><span class="p">:</span><span class="n">false</span><span class="p">,</span><span class="o">...</span><span class="p">}</span>
+  <span class="n">externalId</span><span class="o">=</span><span class="n">def</span><span class="o">-</span><span class="mi">456</span> <span class="n">msg</span><span class="o">=</span><span class="p">{</span><span class="s2">"deployment"</span><span class="p">:</span><span class="s2">"prod"</span><span class="p">,</span><span class="s2">"success"</span><span class="p">:</span><span class="n">false</span><span class="p">,</span><span class="o">...</span><span class="p">}</span>
 </pre></div>
 </div>
 </section>
 <section id="default-syslog-json">
 <h3>Default syslog (JSON)<a class="headerlink" href="#default-syslog-json" title="Link to this heading"></a></h3>
 <p>Without <code class="docutils literal notranslate"><span class="pre">format:</span> <span class="pre">cef</span></code>, syslog sends raw JSON:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">&lt;</span><span class="mi">14</span><span class="o">&gt;</span><span class="p">{</span><span class="s2">&quot;execution_id&quot;</span><span class="p">:</span><span class="s2">&quot;abc-123&quot;</span><span class="p">,</span><span class="s2">&quot;deployment&quot;</span><span class="p">:</span><span class="s2">&quot;prod&quot;</span><span class="p">,</span><span class="s2">&quot;success&quot;</span><span class="p">:</span><span class="n">true</span><span class="p">,</span><span class="o">...</span><span class="p">}</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">&lt;</span><span class="mi">14</span><span class="o">&gt;</span><span class="p">{</span><span class="s2">"execution_id"</span><span class="p">:</span><span class="s2">"abc-123"</span><span class="p">,</span><span class="s2">"deployment"</span><span class="p">:</span><span class="s2">"prod"</span><span class="p">,</span><span class="s2">"success"</span><span class="p">:</span><span class="n">true</span><span class="p">,</span><span class="o">...</span><span class="p">}</span>
 </pre></div>
 </div>
 </section>
@@ -3782,20 +3827,20 @@ strata<span class="w"> </span>audit<span class="w"> </span><span class="nb">expo
 <h3>Event Structure<a class="headerlink" href="#event-structure" title="Link to this heading"></a></h3>
 <p>Each event sent to Splunk:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>{
-  &quot;event&quot;: {
-    &quot;execution_id&quot;: &quot;abc-123&quot;,
-    &quot;timestamp&quot;: &quot;2024-06-17T10:45:33Z&quot;,
-    &quot;version&quot;: &quot;1.2.0&quot;,
-    &quot;deployment&quot;: &quot;prod&quot;,
-    &quot;file&quot;: &quot;deploy/prod.yaml&quot;,
-    &quot;success&quot;: true,
-    &quot;duration_seconds&quot;: 215.3,
-    &quot;stages&quot;: [...],
-    &quot;_log_type&quot;: &quot;deploy_audit&quot;
+  "event": {
+    "execution_id": "abc-123",
+    "timestamp": "2024-06-17T10:45:33Z",
+    "version": "1.2.0",
+    "deployment": "prod",
+    "file": "deploy/prod.yaml",
+    "success": true,
+    "duration_seconds": 215.3,
+    "stages": [...],
+    "_log_type": "deploy_audit"
   },
-  &quot;index&quot;: &quot;infra_audit&quot;,
-  &quot;source&quot;: &quot;strata&quot;,
-  &quot;sourcetype&quot;: &quot;_json&quot;
+  "index": "infra_audit",
+  "source": "strata",
+  "sourcetype": "_json"
 }
 </pre></div>
 </div>
@@ -3809,12 +3854,12 @@ strata<span class="w"> </span>audit<span class="w"> </span><span class="nb">expo
 </section>
 <section id="environment-variable">
 <h3>Environment Variable<a class="headerlink" href="#environment-variable" title="Link to this heading"></a></h3>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">SPLUNK_HEC_TOKEN</span><span class="o">=</span><span class="s2">&quot;your-hec-token-here&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">SPLUNK_HEC_TOKEN</span><span class="o">=</span><span class="s2">"your-hec-token-here"</span>
 strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>deploy/prod.yaml
 </pre></div>
 </div>
 <p>Or store permanently in <code class="docutils literal notranslate"><span class="pre">.strata/cli.yaml</span></code>:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>config<span class="w"> </span><span class="nb">set</span><span class="w"> </span>SPLUNK_HEC_TOKEN<span class="w"> </span><span class="s2">&quot;your-token&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>config<span class="w"> </span><span class="nb">set</span><span class="w"> </span>SPLUNK_HEC_TOKEN<span class="w"> </span><span class="s2">"your-token"</span>
 </pre></div>
 </div>
 </section>
@@ -3967,7 +4012,7 @@ strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> 
 <span class="w">    </span><span class="nt">authentication</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">oauth2</span>
 <span class="w">      </span><span class="nt">oauth2</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">client_secret</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;${secret:strata_ingest_token}&quot;</span><span class="w">   </span><span class="c1"># from `strata serve token create`</span>
+<span class="w">        </span><span class="nt">client_secret</span><span class="p">:</span><span class="w"> </span><span class="s">"${secret:strata_ingest_token}"</span><span class="w">   </span><span class="c1"># from `strata serve token create`</span>
 <span class="w">    </span><span class="nt">properties</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">max_retries</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span><span class="w">              </span><span class="c1"># default — no retry; `strata audit resend` is the recovery path</span>
 <span class="w">      </span><span class="nt">retry_backoff_seconds</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span><span class="w">   </span><span class="c1"># only relevant if max_retries is raised above 1</span>
@@ -4108,7 +4153,7 @@ strata<span class="w"> </span>audit<span class="w"> </span>resend<span class="w"
 <h2>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading"></a></h2>
 <section id="siem-integration-not-found">
 <h3>SIEM integration not found<a class="headerlink" href="#siem-integration-not-found" title="Link to this heading"></a></h3>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">SIEM</span> <span class="n">integration</span> <span class="s1">&#39;splunk_hec&#39;</span> <span class="ow">not</span> <span class="n">found</span> <span class="ow">in</span> <span class="n">configuration</span><span class="o">.</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">SIEM</span> <span class="n">integration</span> <span class="s1">'splunk_hec'</span> <span class="ow">not</span> <span class="n">found</span> <span class="ow">in</span> <span class="n">configuration</span><span class="o">.</span>
 </pre></div>
 </div>
 <p>Check that:</p>
@@ -4118,7 +4163,7 @@ strata<span class="w"> </span>audit<span class="w"> </span>resend<span class="w"
 <li><p>The configuration YAML is in the workspace</p></li>
 </ol>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># List all loaded configurations</span>
-strata<span class="w"> </span>validate<span class="w"> </span>config/<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.data.files&#39;</span>
+strata<span class="w"> </span>validate<span class="w"> </span>config/<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">'.data.files'</span>
 </pre></div>
 </div>
 </section>
@@ -4128,7 +4173,7 @@ strata<span class="w"> </span>validate<span class="w"> </span>config/<span class
 strata<span class="w"> </span>tools<span class="w"> </span>check<span class="w"> </span>splunk_hec
 
 <span class="c1"># Check Splunk HEC token</span>
-strata<span class="w"> </span>tools<span class="w"> </span>status<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.data.integrations[] | select(.name == &quot;splunk_hec&quot;)&#39;</span>
+strata<span class="w"> </span>tools<span class="w"> </span>status<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">'.data.integrations[] | select(.name == "splunk_hec")'</span>
 </pre></div>
 </div>
 </section>
@@ -4144,7 +4189,7 @@ strata<span class="w"> </span>tools<span class="w"> </span>status<span class="w"
 <h3>CEF messages not parsed<a class="headerlink" href="#cef-messages-not-parsed" title="Link to this heading"></a></h3>
 <p>Ensure your syslog receiver is configured for CEF:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Validate CEF format manually</span>
-<span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;&lt;14&gt;CEF:0|strata|strata-audit|1.0|deploy_audit|Deployment Audit Event|3|rt=2024-01-01T00:00:00Z src=user dst=prod act=success externalId=abc msg={}&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s1">'&lt;14&gt;CEF:0|strata|strata-audit|1.0|deploy_audit|Deployment Audit Event|3|rt=2024-01-01T00:00:00Z src=user dst=prod act=success externalId=abc msg={}'</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span><span class="p">|</span><span class="w"> </span>nc<span class="w"> </span>-u<span class="w"> </span>siem.host<span class="w"> </span><span class="m">514</span>
 </pre></div>
 </div>

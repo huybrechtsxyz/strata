@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../config/diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="../guides/features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../guides/faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3567,78 +3612,82 @@
 <td><p>Build platform and Terraform artifacts; generate SBOMs</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">validate</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">run</span></code> <code class="docutils literal notranslate"><span class="pre">graph</span></code></p></td>
-<td><p>Validate YAML files and visualize workspace dependencies</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">run</span></code></p></td>
+<td><p>Validate YAML files against their kind-specific schema</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">guide</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">diagram</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">show</span></code> <code class="docutils literal notranslate"><span class="pre">list</span></code> <code class="docutils literal notranslate"><span class="pre">resolve</span></code></p></td>
+<td><p>Render workspace diagrams as Mermaid</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">guide</span></code></p></td>
 <td><p>—</p></td>
 <td><p>Show workspace setup progress and suggest the next action</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">console</span></code> †</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">console</span></code> †</p></td>
 <td><p>—</p></td>
 <td><p>Interactive workspace REPL</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">schema</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">schema</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">list</span></code> <code class="docutils literal notranslate"><span class="pre">get</span></code></p></td>
 <td><p>Inspect JSON schemas for platform YAML kinds</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">policy</span></code> †</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">policy</span></code> †</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">list</span></code> <code class="docutils literal notranslate"><span class="pre">check</span></code></p></td>
 <td><p>Inspect and evaluate deployment guardrails</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">secret</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">secret</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">generate</span></code> <code class="docutils literal notranslate"><span class="pre">mask</span></code></p></td>
 <td><p>Generate and manage secret values</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">audit</span></code> †</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">audit</span></code> †</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">changes</span></code> <code class="docutils literal notranslate"><span class="pre">resend</span></code> <code class="docutils literal notranslate"><span class="pre">export</span></code> <code class="docutils literal notranslate"><span class="pre">diff</span></code></p></td>
 <td><p>Query deploy-log evidence and forward to audit sinks</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">deploy</span></code> †</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">deploy</span></code> †</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">run</span></code> <code class="docutils literal notranslate"><span class="pre">destroy</span></code> <code class="docutils literal notranslate"><span class="pre">show</span></code> <code class="docutils literal notranslate"><span class="pre">status</span></code> <code class="docutils literal notranslate"><span class="pre">plan</span></code> <code class="docutils literal notranslate"><span class="pre">history</span></code> <code class="docutils literal notranslate"><span class="pre">health</span></code> <code class="docutils literal notranslate"><span class="pre">drift</span> <span class="pre">*</span></code> <code class="docutils literal notranslate"><span class="pre">output</span></code> <code class="docutils literal notranslate"><span class="pre">lock</span> <span class="pre">*</span></code></p></td>
 <td><p>Deploy platform using provisioners</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">rollout</span></code> †</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">rollout</span></code> †</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">status</span></code></p></td>
 <td><p>Manage fleet-wide, multi-deployment rollouts</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">service</span></code> †</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">service</span></code> †</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">list</span></code> <code class="docutils literal notranslate"><span class="pre">status</span></code> <code class="docutils literal notranslate"><span class="pre">deploy</span></code> <code class="docutils literal notranslate"><span class="pre">destroy</span></code></p></td>
 <td><p>Deploy and manage individual services</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">manifest</span></code> †</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">manifest</span></code> †</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">list</span></code> <code class="docutils literal notranslate"><span class="pre">show</span></code> <code class="docutils literal notranslate"><span class="pre">export</span></code></p></td>
 <td><p>Query and export deployment manifests</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">mcp</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">mcp</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">serve</span></code></p></td>
 <td><p>Model Context Protocol server for AI integration</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">values</span></code> †</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">values</span></code> †</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">list</span></code> <code class="docutils literal notranslate"><span class="pre">get</span></code> <code class="docutils literal notranslate"><span class="pre">set</span></code> <code class="docutils literal notranslate"><span class="pre">resolve</span></code></p></td>
 <td><p>Inspect and manage resolved deployment values</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vars</span></code> †</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">vars</span></code> †</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">set</span></code> <code class="docutils literal notranslate"><span class="pre">unset</span></code> <code class="docutils literal notranslate"><span class="pre">list</span></code></p></td>
 <td><p>Manage team-shared template variables</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">tools</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">tools</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">status</span></code> <code class="docutils literal notranslate"><span class="pre">check</span></code> <code class="docutils literal notranslate"><span class="pre">install</span></code></p></td>
 <td><p>Manage and inspect external tool integrations</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">new</span></code> †</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">new</span></code> †</p></td>
 <td><p>—</p></td>
 <td><p>Create a platform config file from a template</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">version</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">version</span></code></p></td>
 <td><p>—</p></td>
 <td><p>Show CLI version</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">completion</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">completion</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">bash</span></code> <code class="docutils literal notranslate"><span class="pre">zsh</span></code> <code class="docutils literal notranslate"><span class="pre">fish</span></code> <code class="docutils literal notranslate"><span class="pre">powershell</span></code></p></td>
 <td><p>Output shell completion script for the given shell</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">help</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">help</span></code></p></td>
 <td><p>—</p></td>
 <td><p>Show help topics</p></td>
 </tr>
@@ -4477,24 +4526,24 @@ repo simply shows no tags section.</p></li>
 </div>
 <p><strong>JSON output</strong> (with <code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">json</span></code>) includes full tag metadata:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;repos&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span>
-<span class="w">    </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;my-service&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;tags&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;latest_release&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;v1.2.0&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;commit&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;abc1234567890abcdef&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;short_commit&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;abc1234&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;created&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-06-20T10:30:00+00:00&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;age_days&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">14</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;age_str&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;14 days ago&quot;</span>
+<span class="w">  </span><span class="nt">"repos"</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span>
+<span class="w">    </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"my-service"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"tags"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"latest_release"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"v1.2.0"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"commit"</span><span class="p">:</span><span class="w"> </span><span class="s2">"abc1234567890abcdef"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"short_commit"</span><span class="p">:</span><span class="w"> </span><span class="s2">"abc1234"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"created"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-06-20T10:30:00+00:00"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"age_days"</span><span class="p">:</span><span class="w"> </span><span class="mi">14</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"age_str"</span><span class="p">:</span><span class="w"> </span><span class="s2">"14 days ago"</span>
 <span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">&quot;latest_quality&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;tested&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;commit&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;def567890123&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;short_commit&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;def5678&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;created&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-07-01T10:15:00+00:00&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;age_days&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;age_str&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2 days ago&quot;</span>
+<span class="w">      </span><span class="nt">"latest_quality"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tested"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"commit"</span><span class="p">:</span><span class="w"> </span><span class="s2">"def567890123"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"short_commit"</span><span class="p">:</span><span class="w"> </span><span class="s2">"def5678"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"created"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-07-01T10:15:00+00:00"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"age_days"</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"age_str"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2 days ago"</span>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">}]</span>
@@ -4518,7 +4567,7 @@ repo simply shows no tags section.</p></li>
 </tbody>
 </table>
 <p><strong>Discovering release candidates:</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>repo<span class="w"> </span>status<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.repos[] | select(.tags.latest_quality) | .tags.latest_quality&#39;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>repo<span class="w"> </span>status<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">'.repos[] | select(.tags.latest_quality) | .tags.latest_quality'</span>
 </pre></div>
 </div>
 <p><strong>Usage:</strong></p>
@@ -4733,9 +4782,8 @@ strata<span class="w"> </span>build<span class="w"> </span>clean<span class="w">
 <hr class="docutils" />
 <section id="validate">
 <h2><code class="docutils literal notranslate"><span class="pre">validate</span></code><a class="headerlink" href="#validate" title="Link to this heading"></a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">validate</span></code> is a command group with two subcommands. Bare invocation (<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span> <span class="pre">-f</span> <span class="pre">file.yaml</span></code>) delegates to <code class="docutils literal notranslate"><span class="pre">run</span></code> for backward compatibility.</p>
+<p><code class="docutils literal notranslate"><span class="pre">validate</span></code> is a command group. Bare invocation (<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span> <span class="pre">-f</span> <span class="pre">file.yaml</span></code>) delegates to <code class="docutils literal notranslate"><span class="pre">run</span></code> for backward compatibility.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>strata validate run [OPTIONS]     ← validate a YAML file
-strata validate graph [OPTIONS]   ← build a dependency graph
 strata validate -f FILE           ← shorthand; equivalent to `validate run -f FILE`
 </pre></div>
 </div>
@@ -4769,19 +4817,28 @@ strata validate -f FILE           ← shorthand; equivalent to `validate run -f 
 <p><strong>Exit codes:</strong> 0 valid · 1 system failure · 2 missing argument · 3 schema-invalid</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>validate<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>config/xyz-config.yaml
 strata<span class="w"> </span>validate<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>config/xyz-ws-platform.yaml<span class="w"> </span>--deep
-strata<span class="w"> </span>validate<span class="w"> </span>run<span class="w"> </span>--pattern<span class="w"> </span><span class="s2">&quot;deployments/**&quot;</span>
+strata<span class="w"> </span>validate<span class="w"> </span>run<span class="w"> </span>--pattern<span class="w"> </span><span class="s2">"deployments/**"</span>
 strata<span class="w"> </span>validate<span class="w"> </span>-f<span class="w"> </span>config/xyz-config.yaml<span class="w">        </span><span class="c1"># backward compat</span>
 </pre></div>
 </div>
+<blockquote>
+<div><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span> <span class="pre">graph</span></code> has been <strong>replaced</strong> by the <a class="reference internal" href="#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a> command group. It exited <code class="docutils literal notranslate"><span class="pre">0</span></code>/<code class="docutils literal notranslate"><span class="pre">1</span></code> only, never <code class="docutils literal notranslate"><span class="pre">3</span></code>, so it never gated anything — visualization was not validation. Use <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">diagram</span> <span class="pre">show</span> <span class="pre">-f</span> <span class="pre">refs</span></code> for the old file mode and <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">diagram</span> <span class="pre">show</span> <span class="pre">-f</span> <span class="pre">topology</span></code> for the old resource mode.</p>
+</div></blockquote>
 </section>
-<section id="validate-graph">
-<h3><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code><a class="headerlink" href="#validate-graph" title="Link to this heading"></a></h3>
-<p>Build a Mermaid dependency diagram of the workspace. Two modes:</p>
-<ul class="simple">
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">--mode</span> <span class="pre">files</span></code></strong> (default) — nodes are YAML files, edges are cross-file references. Shows which files wire together and highlights missing or invalid files.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">--mode</span> <span class="pre">resources</span></code></strong> — nodes are logical resources/modules/namespaces, edges are <code class="docutils literal notranslate"><span class="pre">depends_on</span></code> chains, module attachments, and subnet assignments. Shows the infrastructure topology organized by provisioner.</p></li>
-</ul>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">validate</span> <span class="n">graph</span> <span class="p">[</span><span class="o">--</span><span class="n">mode</span> <span class="n">files</span><span class="o">|</span><span class="n">resources</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">entry</span> <span class="n">PATH</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">save</span> <span class="n">PATH</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">direction</span> <span class="n">LR</span><span class="o">|</span><span class="n">TD</span><span class="o">|</span><span class="n">BT</span><span class="o">|</span><span class="n">RL</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">no</span><span class="o">-</span><span class="n">validate</span><span class="p">]</span> <span class="p">[</span><span class="n">standard</span> <span class="n">options</span><span class="p">]</span>
+</section>
+<hr class="docutils" />
+<section id="diagram">
+<h2><code class="docutils literal notranslate"><span class="pre">diagram</span></code><a class="headerlink" href="#diagram" title="Link to this heading"></a></h2>
+<p>Render workspace diagrams as Mermaid. Built-in diagrams are shipped <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">diagram</span></code> YAML files, not hardcoded renderers — <code class="docutils literal notranslate"><span class="pre">show</span> <span class="pre">-f</span> <span class="pre">topology</span></code> and <code class="docutils literal notranslate"><span class="pre">show</span> <span class="pre">-f</span> <span class="pre">./mine.yaml</span></code> take the identical code path, so a built-in can be copied into <code class="docutils literal notranslate"><span class="pre">.strata/diagrams/</span></code> and edited like any other definition.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>strata diagram show -f NAME_OR_PATH [OPTIONS]   ← render a definition to Mermaid
+strata diagram list [OPTIONS]                   ← list built-ins and workspace definitions
+strata diagram resolve URI [OPTIONS]            ← strata:// URI → file and line
+</pre></div>
+</div>
+<p>See <a class="reference internal" href="../config/diagram.html"><span class="std std-doc">Diagram Configuration</span></a> for the file format.</p>
+<section id="diagram-show">
+<h3><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code><a class="headerlink" href="#diagram-show" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">diagram</span> <span class="n">show</span> <span class="o">-</span><span class="n">f</span> <span class="n">NAME_OR_PATH</span> <span class="p">[</span><span class="o">--</span><span class="n">entry</span> <span class="n">PATH</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">save</span> <span class="n">PATH</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="nb">print</span><span class="o">-</span><span class="n">template</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">no</span><span class="o">-</span><span class="n">validate</span><span class="p">]</span> <span class="p">[</span><span class="n">standard</span> <span class="n">options</span><span class="p">]</span>
 </pre></div>
 </div>
 <table class="docutils align-default">
@@ -4792,29 +4849,60 @@ strata<span class="w"> </span>validate<span class="w"> </span>-f<span class="w">
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--mode</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">files</span></code></p></td>
-<td><p>Graph type: <code class="docutils literal notranslate"><span class="pre">files</span></code> or <code class="docutils literal notranslate"><span class="pre">resources</span></code>.</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-f</span> <span class="pre">/</span> <span class="pre">--file</span> <span class="pre">NAME</span></code></p></td>
+<td><p>required</p></td>
+<td><p>Built-in name, a name in <code class="docutils literal notranslate"><span class="pre">.strata/diagrams/</span></code>, or a path to a <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">diagram</span></code> file.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--entry</span> <span class="pre">/</span> <span class="pre">-e</span> <span class="pre">PATH</span></code></p></td>
 <td><p>auto-detect</p></td>
-<td><p>Entry point file (deployment or workspace YAML). Discovers all deployments if omitted.</p></td>
+<td><p>Entry point file (deployment or workspace YAML) for graph sources. Discovers all deployments if omitted.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--save</span> <span class="pre">/</span> <span class="pre">-s</span> <span class="pre">PATH</span></code></p></td>
 <td><p>—</p></td>
-<td><p>Write Mermaid markdown to file. Defaults to <code class="docutils literal notranslate"><span class="pre">graph.md</span></code> when flag used without a value.</p></td>
+<td><p>Write the rendered Mermaid verbatim to a file. Defaults to <code class="docutils literal notranslate"><span class="pre">diagram.mmd</span></code> when the flag is used without a value.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--direction</span></code></p></td>
-<td><p>LR (files), TD (resources)</p></td>
-<td><p>Mermaid graph direction: <code class="docutils literal notranslate"><span class="pre">LR</span></code>, <code class="docutils literal notranslate"><span class="pre">TD</span></code>, <code class="docutils literal notranslate"><span class="pre">BT</span></code>, <code class="docutils literal notranslate"><span class="pre">RL</span></code>.</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--print-template</span></code></p></td>
+<td><p>off</p></td>
+<td><p>Emit the Jinja template instead of rendering it — a starting point for customisation.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--no-validate</span></code></p></td>
 <td><p>off</p></td>
-<td><p>Skip validation — all nodes shown as neutral. Faster for large workspaces.</p></td>
+<td><p>Skip validation of the documents being graphed. Faster for large workspaces.</p></td>
 </tr>
 </tbody>
 </table>
-<p><strong>Node status colours (file mode):</strong></p>
+<p>Console output is the Mermaid source itself; <code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">json</span></code> wraps it in the standard envelope under <code class="docutils literal notranslate"><span class="pre">data.mermaid</span></code>.</p>
+<p><strong>Resolution order for <code class="docutils literal notranslate"><span class="pre">-f</span></code>:</strong> an existing file path, then <code class="docutils literal notranslate"><span class="pre">.strata/diagrams/&lt;name&gt;.yaml</span></code>, then a shipped built-in. A workspace definition shadows a built-in of the same name, so you can override one without renaming it.</p>
+<p><strong>Exit codes:</strong> 0 success · 1 definition not found, invalid, or unrenderable</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>diagram<span class="w"> </span>show<span class="w"> </span>-f<span class="w"> </span>refs
+strata<span class="w"> </span>diagram<span class="w"> </span>show<span class="w"> </span>-f<span class="w"> </span>topology<span class="w"> </span>--entry<span class="w"> </span>stack/ws-platform.yaml
+strata<span class="w"> </span>diagram<span class="w"> </span>show<span class="w"> </span>-f<span class="w"> </span>.strata/diagrams/prd.yaml<span class="w"> </span>--output<span class="w"> </span>json
+strata<span class="w"> </span>diagram<span class="w"> </span>show<span class="w"> </span>-f<span class="w"> </span>topology<span class="w"> </span>--print-template
+strata<span class="w"> </span>diagram<span class="w"> </span>show<span class="w"> </span>-f<span class="w"> </span>refs<span class="w"> </span>--save<span class="w"> </span>refs.mmd
+</pre></div>
+</div>
+</section>
+<section id="shipped-built-ins">
+<h3>Shipped built-ins<a class="headerlink" href="#shipped-built-ins" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Name</p></th>
+<th class="head"><p>Source</p></th>
+<th class="head"><p>Shows</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">refs</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">files</span></code></p></td>
+<td><p>YAML file reference graph, coloured by validation status</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">topology</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">topology</span></code></p></td>
+<td><p>Logical infrastructure topology — resources, modules and namespaces by topology</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Node status colours (<code class="docutils literal notranslate"><span class="pre">refs</span></code>):</strong></p>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Status</p></th>
@@ -4845,12 +4933,59 @@ strata<span class="w"> </span>validate<span class="w"> </span>-f<span class="w">
 </tr>
 </tbody>
 </table>
-<p><strong>Exit codes:</strong> 0 success (including missing nodes — graph always produces output) · 1 system failure</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>validate<span class="w"> </span>graph
-strata<span class="w"> </span>validate<span class="w"> </span>graph<span class="w"> </span>--entry<span class="w"> </span>deploy/deploy-prd.yaml
-strata<span class="w"> </span>validate<span class="w"> </span>graph<span class="w"> </span>--mode<span class="w"> </span>resources<span class="w"> </span>--entry<span class="w"> </span>stack/ws-platform.yaml
-strata<span class="w"> </span>validate<span class="w"> </span>graph<span class="w"> </span>--save<span class="w"> </span>graph.md
-strata<span class="w"> </span>validate<span class="w"> </span>graph<span class="w"> </span>--output<span class="w"> </span>json
+</section>
+<section id="diagram-list">
+<h3><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code><a class="headerlink" href="#diagram-list" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">diagram</span> <span class="nb">list</span> <span class="p">[</span><span class="n">standard</span> <span class="n">options</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>Lists shipped built-ins and any definitions in <code class="docutils literal notranslate"><span class="pre">.strata/diagrams/</span></code>.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>diagram<span class="w"> </span>list
+strata<span class="w"> </span>diagram<span class="w"> </span>list<span class="w"> </span>--output<span class="w"> </span>json
+</pre></div>
+</div>
+</section>
+<section id="diagram-resolve">
+<h3><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code><a class="headerlink" href="#diagram-resolve" title="Link to this heading"></a></h3>
+<p>Resolve a <code class="docutils literal notranslate"><span class="pre">strata://</span></code> URI to the file and line it names.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">diagram</span> <span class="n">resolve</span> <span class="n">URI</span> <span class="p">[</span><span class="n">standard</span> <span class="n">options</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>Diagram nodes carry a <code class="docutils literal notranslate"><span class="pre">strata://</span></code> URI as a Mermaid <code class="docutils literal notranslate"><span class="pre">click</span></code> directive, so the connection back to
+the workspace travels with the text — paste the Mermaid into a README and the identity comes
+along. The URI is <strong>structural, not positional</strong>: it encodes no line number, so reformatting or
+reordering YAML above the target does not break it. This command is what turns one into a
+concrete location, on demand and headless.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span><span class="p">:</span><span class="o">//&lt;</span><span class="n">kind</span><span class="o">&gt;/&lt;</span><span class="n">name</span><span class="o">&gt;</span><span class="p">[</span><span class="o">/&lt;</span><span class="n">child</span><span class="o">-</span><span class="n">kind</span><span class="o">&gt;/&lt;</span><span class="n">child</span><span class="o">-</span><span class="n">name</span><span class="o">&gt;</span><span class="p">]</span>
+</pre></div>
+</div>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Example URI</p></th>
+<th class="head"><p>Resolves to</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">strata://file/deploy/deploy-prd.yaml</span></code></p></td>
+<td><p>That file (no line)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">strata://workspace/platform/resource/app_server</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.resources[name=app_server]</span></code> inside the workspace</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">strata://workspace/platform/module/api_gateway</span></code></p></td>
+<td><p>A module nested under <code class="docutils literal notranslate"><span class="pre">spec.resources[].modules</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">strata://environment/env-prd/secret/DB_PASSWORD</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.secrets[key=DB_PASSWORD]</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>Console output is <code class="docutils literal notranslate"><span class="pre">path:line</span></code>, or just <code class="docutils literal notranslate"><span class="pre">path</span></code> for a file reference. <code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">json</span></code> returns the
+full record including <code class="docutils literal notranslate"><span class="pre">kind</span></code>, <code class="docutils literal notranslate"><span class="pre">name</span></code>, <code class="docutils literal notranslate"><span class="pre">child_kind</span></code> and <code class="docutils literal notranslate"><span class="pre">child_name</span></code>.</p>
+<p><strong>Exit codes:</strong> 0 resolved · 1 malformed URI, or nothing in the workspace matches</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>diagram<span class="w"> </span>resolve<span class="w"> </span>strata://file/deploy/deploy-prd.yaml
+strata<span class="w"> </span>diagram<span class="w"> </span>resolve<span class="w"> </span>strata://workspace/platform/resource/app_server
+strata<span class="w"> </span>diagram<span class="w"> </span>resolve<span class="w"> </span>strata://environment/env-prd/secret/DB_PASSWORD<span class="w"> </span>--output<span class="w"> </span>json
 </pre></div>
 </div>
 </section>
@@ -4966,7 +5101,7 @@ Setup progress:
   ⚠️  Repositories on disk (2/3 cloned — xyz-svc-traefik not found)
   ✅ Profile created (prd, stg, dev)
   ✅ Profile activated (prd)
-  ⚠️  File references (0 registered on active profile &#39;prd&#39;)
+  ⚠️  File references (0 registered on active profile 'prd')
   ⬜ Build artifact
 
 → Next step: Register config files with your active profile:
@@ -5073,8 +5208,8 @@ File structure:
 <p>Create <code class="docutils literal notranslate"><span class="pre">.strata/guide.yaml</span></code> to override the default next-step hints and <code class="docutils literal notranslate"><span class="pre">see_also</span></code> links for any phase:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">hints</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">phase_6</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata</span><span class="nv"> </span><span class="s">ref</span><span class="nv"> </span><span class="s">config</span><span class="nv"> </span><span class="s">add</span><span class="nv"> </span><span class="s">infra-config</span><span class="nv"> </span><span class="s">@infra/config/infra.yaml</span><span class="nv"> </span><span class="s">--profile</span><span class="nv"> </span><span class="s">prd&quot;</span>
-<span class="w">    </span><span class="nt">see_also</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata</span><span class="nv"> </span><span class="s">help</span><span class="nv"> </span><span class="s">--topic</span><span class="nv"> </span><span class="s">environments&quot;</span>
+<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">"strata</span><span class="nv"> </span><span class="s">ref</span><span class="nv"> </span><span class="s">config</span><span class="nv"> </span><span class="s">add</span><span class="nv"> </span><span class="s">infra-config</span><span class="nv"> </span><span class="s">@infra/config/infra.yaml</span><span class="nv"> </span><span class="s">--profile</span><span class="nv"> </span><span class="s">prd"</span>
+<span class="w">    </span><span class="nt">see_also</span><span class="p">:</span><span class="w"> </span><span class="s">"strata</span><span class="nv"> </span><span class="s">help</span><span class="nv"> </span><span class="s">--topic</span><span class="nv"> </span><span class="s">environments"</span>
 </pre></div>
 </div>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>guide
@@ -5108,7 +5243,7 @@ strata<span class="w"> </span>schema<span class="w"> </span>list<span class="w">
 </pre></div>
 </div>
 <p>Default and <code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">json</span></code> both emit the complete Pydantic-generated JSON Schema. <code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">text</span></code> shows a compact summary (required fields and top-level property names).</p>
-<p><strong>Valid kinds:</strong> <code class="docutils literal notranslate"><span class="pre">configuration</span></code> <code class="docutils literal notranslate"><span class="pre">deployment</span></code> <code class="docutils literal notranslate"><span class="pre">dns</span></code> <code class="docutils literal notranslate"><span class="pre">environment</span></code> <code class="docutils literal notranslate"><span class="pre">firewall</span></code> <code class="docutils literal notranslate"><span class="pre">module</span></code> <code class="docutils literal notranslate"><span class="pre">namespace</span></code> <code class="docutils literal notranslate"><span class="pre">network</span></code> <code class="docutils literal notranslate"><span class="pre">provider</span></code> <code class="docutils literal notranslate"><span class="pre">resource</span></code> <code class="docutils literal notranslate"><span class="pre">tenant</span></code> <code class="docutils literal notranslate"><span class="pre">workspace</span></code></p>
+<p><strong>Valid kinds:</strong> <code class="docutils literal notranslate"><span class="pre">configuration</span></code> <code class="docutils literal notranslate"><span class="pre">deployment</span></code> <code class="docutils literal notranslate"><span class="pre">diagram</span></code> <code class="docutils literal notranslate"><span class="pre">dns</span></code> <code class="docutils literal notranslate"><span class="pre">environment</span></code> <code class="docutils literal notranslate"><span class="pre">firewall</span></code> <code class="docutils literal notranslate"><span class="pre">module</span></code> <code class="docutils literal notranslate"><span class="pre">namespace</span></code> <code class="docutils literal notranslate"><span class="pre">network</span></code> <code class="docutils literal notranslate"><span class="pre">provider</span></code> <code class="docutils literal notranslate"><span class="pre">resource</span></code> <code class="docutils literal notranslate"><span class="pre">tenant</span></code> <code class="docutils literal notranslate"><span class="pre">workspace</span></code></p>
 <p><strong>Exit codes:</strong> 0 success · 2 unknown kind</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>schema<span class="w"> </span>get<span class="w"> </span>deployment
 strata<span class="w"> </span>schema<span class="w"> </span>get<span class="w"> </span>deployment<span class="w"> </span>--output<span class="w"> </span>json
@@ -5308,22 +5443,22 @@ strata<span class="w"> </span>secret<span class="w"> </span>generate<span class=
 </ul>
 <p><strong>Exit codes:</strong> 0 success · 1 invalid arguments</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Show first 4 chars of a token, mask the rest with asterisks</span>
-strata<span class="w"> </span>secret<span class="w"> </span>mask<span class="w"> </span><span class="s2">&quot;akiaiosfodnn7example&quot;</span><span class="w"> </span>--show<span class="w"> </span><span class="m">4</span>
+strata<span class="w"> </span>secret<span class="w"> </span>mask<span class="w"> </span><span class="s2">"akiaiosfodnn7example"</span><span class="w"> </span>--show<span class="w"> </span><span class="m">4</span>
 
 <span class="c1"># Show first 2 chars with custom mask character</span>
-strata<span class="w"> </span>secret<span class="w"> </span>mask<span class="w"> </span><span class="s2">&quot;s3cr3t_p@ssw0rd&quot;</span><span class="w"> </span>--show<span class="w"> </span><span class="m">2</span><span class="w"> </span>--char<span class="w"> </span><span class="s1">&#39;#&#39;</span>
+strata<span class="w"> </span>secret<span class="w"> </span>mask<span class="w"> </span><span class="s2">"s3cr3t_p@ssw0rd"</span><span class="w"> </span>--show<span class="w"> </span><span class="m">2</span><span class="w"> </span>--char<span class="w"> </span><span class="s1">'#'</span>
 
 <span class="c1"># Get structured JSON output</span>
-strata<span class="w"> </span>secret<span class="w"> </span>mask<span class="w"> </span><span class="s2">&quot;mysecretvalue&quot;</span><span class="w"> </span>--show<span class="w"> </span><span class="m">3</span><span class="w"> </span>--output<span class="w"> </span>json
+strata<span class="w"> </span>secret<span class="w"> </span>mask<span class="w"> </span><span class="s2">"mysecretvalue"</span><span class="w"> </span>--show<span class="w"> </span><span class="m">3</span><span class="w"> </span>--output<span class="w"> </span>json
 </pre></div>
 </div>
 <p><strong>Output examples:</strong></p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span># Token with 4 visible chars (default)
-$ strata secret mask &quot;token_abc123xyz789&quot;
+$ strata secret mask "token_abc123xyz789"
 token****
 
 # Password with 2 visible chars and custom replacement
-$ strata secret mask &quot;myP@ssw0rd&quot; --show 2 --char &#39;#&#39;
+$ strata secret mask "myP@ssw0rd" --show 2 --char '#'
 my########
 </pre></div>
 </div>
@@ -5464,42 +5599,42 @@ strata<span class="w"> </span>values<span class="w"> </span>resolve<span class="
 <span class="c1"># Env format — source into shell</span>
 <span class="nb">source</span><span class="w"> </span>&lt;<span class="o">(</span>strata<span class="w"> </span>values<span class="w"> </span>resolve<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--format<span class="w"> </span>env<span class="o">)</span>
 <span class="c1"># PowerShell</span>
-strata<span class="w"> </span>values<span class="w"> </span>resolve<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--format<span class="w"> </span>env<span class="w"> </span><span class="p">|</span><span class="w"> </span>ForEach-Object<span class="w"> </span><span class="o">{</span><span class="w"> </span><span class="nv">$env</span>:<span class="nv">$_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">(</span>iex<span class="w"> </span><span class="nv">$_</span><span class="o">)</span>.Split<span class="o">(</span><span class="s1">&#39;=&#39;</span><span class="o">)[</span><span class="m">1</span><span class="o">]</span><span class="w"> </span><span class="o">}</span>
+strata<span class="w"> </span>values<span class="w"> </span>resolve<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--format<span class="w"> </span>env<span class="w"> </span><span class="p">|</span><span class="w"> </span>ForEach-Object<span class="w"> </span><span class="o">{</span><span class="w"> </span><span class="nv">$env</span>:<span class="nv">$_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">(</span>iex<span class="w"> </span><span class="nv">$_</span><span class="o">)</span>.Split<span class="o">(</span><span class="s1">'='</span><span class="o">)[</span><span class="m">1</span><span class="o">]</span><span class="w"> </span><span class="o">}</span>
 
 <span class="c1"># Refresh cache and re-resolve</span>
 strata<span class="w"> </span>values<span class="w"> </span>resolve<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--refresh-cache
 
 <span class="c1"># Integration with external tools</span>
-strata<span class="w"> </span>values<span class="w"> </span>resolve<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.values | map(select(.type==&quot;secret&quot;)) | .[].key&#39;</span>
+strata<span class="w"> </span>values<span class="w"> </span>resolve<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">'.values | map(select(.type=="secret")) | .[].key'</span>
 </pre></div>
 </div>
 <p><strong>JSON output example:</strong></p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;xyz-prd&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;values&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="s2">"xyz-prd"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"values"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">      </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;key&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;DATABASE_PASSWORD&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;secret&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;store&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;azure-keyvault&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;value&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;***&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;masked&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;resolved&quot;</span>
+<span class="w">        </span><span class="nt">"key"</span><span class="p">:</span><span class="w"> </span><span class="s2">"DATABASE_PASSWORD"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"secret"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"store"</span><span class="p">:</span><span class="w"> </span><span class="s2">"azure-keyvault"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"value"</span><span class="p">:</span><span class="w"> </span><span class="s2">"***"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"masked"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"resolved"</span>
 <span class="w">      </span><span class="p">},</span>
 <span class="w">      </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;key&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ENABLE_FEATURE_X&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;feature&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;store&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;constant&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;value&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;true&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;resolved&quot;</span>
+<span class="w">        </span><span class="nt">"key"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ENABLE_FEATURE_X"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"feature"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"store"</span><span class="p">:</span><span class="w"> </span><span class="s2">"constant"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"value"</span><span class="p">:</span><span class="w"> </span><span class="s2">"true"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"resolved"</span>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">],</span>
-<span class="w">    </span><span class="nt">&quot;cache_hit&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;cache_age_seconds&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">42</span>
+<span class="w">    </span><span class="nt">"cache_hit"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"cache_age_seconds"</span><span class="p">:</span><span class="w"> </span><span class="mi">42</span>
 <span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;errors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
-<span class="w">  </span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
+<span class="w">  </span><span class="nt">"errors"</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">  </span><span class="nt">"messages"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -5640,25 +5775,25 @@ strata<span class="w"> </span>deploy<span class="w"> </span>list<span class="w">
 </div>
 <p>Example JSON output (inside the standard <code class="docutils literal notranslate"><span class="pre">data</span></code> envelope):</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;deployments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="nt">"deployments"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">    </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;file&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/repos/xyz-config/deployments/acme-prd.yaml&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;acme_deploy_prd&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;environment&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;prd&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;zone&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;eu&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;customer&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;acme&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;workspace&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;xyz_platform&quot;</span>
+<span class="w">      </span><span class="nt">"file"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/repos/xyz-config/deployments/acme-prd.yaml"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"acme_deploy_prd"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"environment"</span><span class="p">:</span><span class="w"> </span><span class="s2">"prd"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"zone"</span><span class="p">:</span><span class="w"> </span><span class="s2">"eu"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"customer"</span><span class="p">:</span><span class="w"> </span><span class="s2">"acme"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"workspace"</span><span class="p">:</span><span class="w"> </span><span class="s2">"xyz_platform"</span>
 <span class="w">    </span><span class="p">},</span>
 <span class="w">    </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;file&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/repos/xyz-config/deployments/globex-dev.yaml&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;globex_deploy_dev&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;environment&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;dev&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;zone&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;eu&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;customer&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;globex&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;workspace&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;xyz_platform&quot;</span>
+<span class="w">      </span><span class="nt">"file"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/repos/xyz-config/deployments/globex-dev.yaml"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"globex_deploy_dev"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"environment"</span><span class="p">:</span><span class="w"> </span><span class="s2">"dev"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"zone"</span><span class="p">:</span><span class="w"> </span><span class="s2">"eu"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"customer"</span><span class="p">:</span><span class="w"> </span><span class="s2">"globex"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"workspace"</span><span class="p">:</span><span class="w"> </span><span class="s2">"xyz_platform"</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">],</span>
-<span class="w">  </span><span class="nt">&quot;count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span>
+<span class="w">  </span><span class="nt">"count"</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -5671,8 +5806,8 @@ strata<span class="w"> </span>deploy<span class="w"> </span>list<span class="w">
 <span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">list</span>
 <span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
-<span class="w">          </span><span class="no">matrix=$(strata deploy list -p deployments/ --output json | jq -c &#39;.data.deployments&#39;)</span>
-<span class="w">          </span><span class="no">echo &quot;matrix=$matrix&quot; &gt;&gt; $GITHUB_OUTPUT</span>
+<span class="w">          </span><span class="no">matrix=$(strata deploy list -p deployments/ --output json | jq -c '.data.deployments')</span>
+<span class="w">          </span><span class="no">echo "matrix=$matrix" &gt;&gt; $GITHUB_OUTPUT</span>
 
 <span class="w">  </span><span class="nt">deploy</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">needs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">matrix</span>
@@ -5680,7 +5815,7 @@ strata<span class="w"> </span>deploy<span class="w"> </span>list<span class="w">
 <span class="w">      </span><span class="nt">matrix</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">deployment</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ fromJson(needs.matrix.outputs.matrix) }}</span>
 <span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata deploy run --file &quot;${{ matrix.deployment.file }}&quot;</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata deploy run --file "${{ matrix.deployment.file }}"</span>
 </pre></div>
 </div>
 </section>
@@ -5962,7 +6097,7 @@ strata<span class="w"> </span>audit<span class="w"> </span>changes
 <span class="c1"># Show all deployments in the last 7 days</span>
 strata<span class="w"> </span>audit<span class="w"> </span>changes<span class="w"> </span>--since<span class="w"> </span><span class="m">2026</span>-06-25T00:00:00Z
 
-<span class="c1"># Show deployments that ran the &#39;infrastructure&#39; stage</span>
+<span class="c1"># Show deployments that ran the 'infrastructure' stage</span>
 strata<span class="w"> </span>audit<span class="w"> </span>changes<span class="w"> </span>--stage<span class="w"> </span>infrastructure
 
 <span class="c1"># Machine-readable output for CI / compliance tooling</span>
@@ -6047,7 +6182,7 @@ strata<span class="w"> </span>audit<span class="w"> </span><span class="nb">expo
 strata<span class="w"> </span>audit<span class="w"> </span><span class="nb">export</span><span class="w"> </span>--format<span class="w"> </span>ndjson<span class="w"> </span>--out<span class="w"> </span>audit-<span class="k">$(</span>date<span class="w"> </span>+%Y%m<span class="k">)</span>.ndjson
 
 <span class="c1"># Export the last 30 days and pipe into jq</span>
-strata<span class="w"> </span>audit<span class="w"> </span><span class="nb">export</span><span class="w"> </span>--since<span class="w"> </span><span class="m">2026</span>-06-01T00:00:00Z<span class="w"> </span>--format<span class="w"> </span>ndjson<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;select(.success == false)&#39;</span>
+strata<span class="w"> </span>audit<span class="w"> </span><span class="nb">export</span><span class="w"> </span>--since<span class="w"> </span><span class="m">2026</span>-06-01T00:00:00Z<span class="w"> </span>--format<span class="w"> </span>ndjson<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">'select(.success == false)'</span>
 </pre></div>
 </div>
 </section>
@@ -6077,7 +6212,7 @@ strata<span class="w"> </span>audit<span class="w"> </span><span class="nb">expo
 strata<span class="w"> </span>audit<span class="w"> </span>diff<span class="w"> </span><span class="m">12345678</span>-aabb-ccdd-eeff-000000000001<span class="w"> </span><span class="m">12345678</span>-aabb-ccdd-eeff-000000000002
 
 <span class="c1"># Machine-readable — check whether configuration changed</span>
-strata<span class="w"> </span>audit<span class="w"> </span>diff<span class="w"> </span><span class="nv">$FROM_ID</span><span class="w"> </span><span class="nv">$TO_ID</span><span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.has_changes&#39;</span>
+strata<span class="w"> </span>audit<span class="w"> </span>diff<span class="w"> </span><span class="nv">$FROM_ID</span><span class="w"> </span><span class="nv">$TO_ID</span><span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">'.has_changes'</span>
 
 <span class="c1"># Use as a CI gate — exits 3 if configuration changed</span>
 strata<span class="w"> </span>audit<span class="w"> </span>diff<span class="w"> </span><span class="nv">$FROM_ID</span><span class="w"> </span><span class="nv">$TO_ID</span>
@@ -6092,8 +6227,8 @@ strata<span class="w"> </span>audit<span class="w"> </span>diff<span class="w"> 
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">deployment</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">paths</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">by-execution</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">deployment</span><span class="nv"> </span><span class="s">}}/{{</span><span class="nv"> </span><span class="s">timestamp</span><span class="nv"> </span><span class="s">}}&quot;</span>
-<span class="w">      </span><span class="nt">by-tenant</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">tenant</span><span class="nv"> </span><span class="s">}}/{{</span><span class="nv"> </span><span class="s">deployment</span><span class="nv"> </span><span class="s">}}/{{</span><span class="nv"> </span><span class="s">timestamp</span><span class="nv"> </span><span class="s">}}&quot;</span>
+<span class="w">      </span><span class="nt">by-execution</span><span class="p">:</span><span class="w"> </span><span class="s">"{{</span><span class="nv"> </span><span class="s">deployment</span><span class="nv"> </span><span class="s">}}/{{</span><span class="nv"> </span><span class="s">timestamp</span><span class="nv"> </span><span class="s">}}"</span>
+<span class="w">      </span><span class="nt">by-tenant</span><span class="p">:</span><span class="w">    </span><span class="s">"{{</span><span class="nv"> </span><span class="s">tenant</span><span class="nv"> </span><span class="s">}}/{{</span><span class="nv"> </span><span class="s">deployment</span><span class="nv"> </span><span class="s">}}/{{</span><span class="nv"> </span><span class="s">timestamp</span><span class="nv"> </span><span class="s">}}"</span>
 
 <span class="w">    </span><span class="nt">audit</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">.strata/deploy-log</span><span class="w">         </span><span class="c1"># base directory (relative to workspace root)</span>
@@ -6205,12 +6340,12 @@ strata<span class="w"> </span>audit<span class="w"> </span>diff<span class="w"> 
 <span class="w">        </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">        </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://hooks.example.com/audit</span>
 <span class="w">        </span><span class="nt">headers</span><span class="p">:</span>
-<span class="w">          </span><span class="nt">X-API-Key</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;${WEBHOOK_SECRET}&quot;</span>
+<span class="w">          </span><span class="nt">X-API-Key</span><span class="p">:</span><span class="w"> </span><span class="s">"${WEBHOOK_SECRET}"</span>
 
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">syslog-server</span>
 <span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">syslog</span>
 <span class="w">        </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">        </span><span class="nt">address</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;syslog.internal:514&quot;</span><span class="w">      </span><span class="c1"># UDP</span>
+<span class="w">        </span><span class="nt">address</span><span class="p">:</span><span class="w"> </span><span class="s">"syslog.internal:514"</span><span class="w">      </span><span class="c1"># UDP</span>
 </pre></div>
 </div>
 <p><strong>Integration-backed sinks</strong> (<code class="docutils literal notranslate"><span class="pre">sentinel</span></code>, <code class="docutils literal notranslate"><span class="pre">elk</span></code>, <code class="docutils literal notranslate"><span class="pre">otel</span></code>) — reference an integration declared in <code class="docutils literal notranslate"><span class="pre">spec.integrations[]</span></code>:</p>
@@ -6232,9 +6367,9 @@ strata<span class="w"> </span>audit<span class="w"> </span>diff<span class="w"> 
 <span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">elk</span>
 <span class="w">      </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">      </span><span class="nt">endpoints</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">address</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;logstash.internal:5000&quot;</span><span class="w">   </span><span class="c1"># host:port for TCP</span>
+<span class="w">        </span><span class="nt">address</span><span class="p">:</span><span class="w"> </span><span class="s">"logstash.internal:5000"</span><span class="w">   </span><span class="c1"># host:port for TCP</span>
 <span class="w">      </span><span class="nt">properties</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">protocol</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tcp</span><span class="w">                        </span><span class="c1"># or &quot;http&quot; for Elasticsearch Bulk API</span>
+<span class="w">        </span><span class="nt">protocol</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tcp</span><span class="w">                        </span><span class="c1"># or "http" for Elasticsearch Bulk API</span>
 
 <span class="w">    </span><span class="c1"># OpenTelemetry — OTLP/HTTP to any OTel-compatible backend</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">otel-audit</span>
@@ -6794,11 +6929,11 @@ strata<span class="w"> </span>manifest<span class="w"> </span><span class="nb">e
 <p><strong>Setup (VS Code):</strong></p>
 <p>Add to <code class="docutils literal notranslate"><span class="pre">.vscode/settings.json</span></code> or user settings:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;mcp-servers&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;strata&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;command&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;uv&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;args&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;run&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;strata&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;mcp&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;serve&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;--transport&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;stdio&quot;</span><span class="p">],</span>
-<span class="w">      </span><span class="nt">&quot;cwd&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;${workspaceFolder}&quot;</span>
+<span class="w">  </span><span class="nt">"mcp-servers"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"strata"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"command"</span><span class="p">:</span><span class="w"> </span><span class="s2">"uv"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"args"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"run"</span><span class="p">,</span><span class="w"> </span><span class="s2">"strata"</span><span class="p">,</span><span class="w"> </span><span class="s2">"mcp"</span><span class="p">,</span><span class="w"> </span><span class="s2">"serve"</span><span class="p">,</span><span class="w"> </span><span class="s2">"--transport"</span><span class="p">,</span><span class="w"> </span><span class="s2">"stdio"</span><span class="p">],</span>
+<span class="w">      </span><span class="nt">"cwd"</span><span class="p">:</span><span class="w"> </span><span class="s2">"${workspaceFolder}"</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
@@ -6808,11 +6943,11 @@ strata<span class="w"> </span>manifest<span class="w"> </span><span class="nb">e
 <p><strong>Setup (Claude Desktop):</strong></p>
 <p>Add to <code class="docutils literal notranslate"><span class="pre">~/.config/claude/claude.json</span></code> (macOS) or <code class="docutils literal notranslate"><span class="pre">%APPDATA%\Claude\claude.json</span></code> (Windows):</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;mcpServers&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;strata&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;command&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;uv&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;args&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;run&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;strata&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;mcp&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;serve&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;--transport&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;stdio&quot;</span><span class="p">],</span>
-<span class="w">      </span><span class="nt">&quot;cwd&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/path/to/workspace&quot;</span>
+<span class="w">  </span><span class="nt">"mcpServers"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"strata"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"command"</span><span class="p">:</span><span class="w"> </span><span class="s2">"uv"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"args"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"run"</span><span class="p">,</span><span class="w"> </span><span class="s2">"strata"</span><span class="p">,</span><span class="w"> </span><span class="s2">"mcp"</span><span class="p">,</span><span class="w"> </span><span class="s2">"serve"</span><span class="p">,</span><span class="w"> </span><span class="s2">"--transport"</span><span class="p">,</span><span class="w"> </span><span class="s2">"stdio"</span><span class="p">],</span>
+<span class="w">      </span><span class="nt">"cwd"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/path/to/workspace"</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
@@ -6905,7 +7040,7 @@ strata<span class="w"> </span>values<span class="w"> </span>get<span class="w"> 
 </tbody>
 </table>
 <p>Multiline values (SSH keys, certificates) use <code class="docutils literal notranslate"><span class="pre">--from-file</span></code> or <code class="docutils literal notranslate"><span class="pre">--stdin</span></code>:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>values<span class="w"> </span><span class="nb">set</span><span class="w"> </span>-f<span class="w"> </span>xyz-deploy-prd.yaml<span class="w"> </span>-k<span class="w"> </span>DB_HOST<span class="w"> </span>--value<span class="w"> </span><span class="s2">&quot;new-host.example.com&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>values<span class="w"> </span><span class="nb">set</span><span class="w"> </span>-f<span class="w"> </span>xyz-deploy-prd.yaml<span class="w"> </span>-k<span class="w"> </span>DB_HOST<span class="w"> </span>--value<span class="w"> </span><span class="s2">"new-host.example.com"</span>
 strata<span class="w"> </span>values<span class="w"> </span><span class="nb">set</span><span class="w"> </span>-f<span class="w"> </span>xyz-deploy-prd.yaml<span class="w"> </span>-k<span class="w"> </span>TLS_CERT<span class="w"> </span>--from-file<span class="w"> </span>cert.pem
 cat<span class="w"> </span>key.pem<span class="w"> </span><span class="p">|</span><span class="w"> </span>strata<span class="w"> </span>values<span class="w"> </span><span class="nb">set</span><span class="w"> </span>-f<span class="w"> </span>xyz-deploy-prd.yaml<span class="w"> </span>-k<span class="w"> </span>SSH_KEY<span class="w"> </span>--stdin
 </pre></div>

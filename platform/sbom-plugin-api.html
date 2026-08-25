@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../config/diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="../guides/features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../guides/faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3451,13 +3496,13 @@
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@property</span>
 <span class="nd">@abstractmethod</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">ecosystem</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the purl type identifier for this ecosystem.</span>
+<span class="w">    </span><span class="sd">"""Return the purl type identifier for this ecosystem.</span>
 <span class="sd">    </span>
-<span class="sd">    Examples: &quot;pypi&quot;, &quot;npm&quot;, &quot;golang&quot;, &quot;maven&quot;, &quot;gem&quot;, &quot;crate&quot;, &quot;nuget&quot;, &quot;composer&quot;</span>
+<span class="sd">    Examples: "pypi", "npm", "golang", "maven", "gem", "crate", "nuget", "composer"</span>
 <span class="sd">    </span>
 <span class="sd">    Returns:</span>
 <span class="sd">        str: Purl type identifier</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 </pre></div>
 </div>
 <p>Used to construct the Package URL (purl) for each dependency.</p>
@@ -3469,24 +3514,24 @@
 <h5><code class="docutils literal notranslate"><span class="pre">filename_patterns()</span> <span class="pre">-&gt;</span> <span class="pre">List[str]</span></code><a class="headerlink" href="#filename-patterns-list-str" title="Link to this heading"></a></h5>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@abstractmethod</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">filename_patterns</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return glob patterns to match against manifest filenames.</span>
+<span class="w">    </span><span class="sd">"""Return glob patterns to match against manifest filenames.</span>
 <span class="sd">    </span>
 <span class="sd">    Patterns are matched case-insensitively against the **filename** </span>
 <span class="sd">    (not the full path). The DependencyFileCollector scans all </span>
 <span class="sd">    workspaces using fnmatch and rglob.</span>
 <span class="sd">    </span>
 <span class="sd">    Examples:</span>
-<span class="sd">        [&quot;requirements*.txt&quot;]           # requirements.txt, requirements-dev.txt</span>
-<span class="sd">        [&quot;package-lock.json&quot;]           # npm lockfile</span>
-<span class="sd">        [&quot;Pipenv.lock&quot;]                 # Pipenv lock</span>
-<span class="sd">        [&quot;go.sum&quot;]                      # Go dependencies</span>
-<span class="sd">        [&quot;Gemfile.lock&quot;]                # Ruby Bundler</span>
-<span class="sd">        [&quot;pom.xml&quot;]                     # Maven</span>
-<span class="sd">        [&quot;Cargo.lock&quot;]                  # Rust</span>
+<span class="sd">        ["requirements*.txt"]           # requirements.txt, requirements-dev.txt</span>
+<span class="sd">        ["package-lock.json"]           # npm lockfile</span>
+<span class="sd">        ["Pipenv.lock"]                 # Pipenv lock</span>
+<span class="sd">        ["go.sum"]                      # Go dependencies</span>
+<span class="sd">        ["Gemfile.lock"]                # Ruby Bundler</span>
+<span class="sd">        ["pom.xml"]                     # Maven</span>
+<span class="sd">        ["Cargo.lock"]                  # Rust</span>
 <span class="sd">    </span>
 <span class="sd">    Returns:</span>
 <span class="sd">        List[str]: List of glob patterns</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 </pre></div>
 </div>
 <p><strong>Important:</strong> Patterns are case-insensitive and matched against filenames only.</p>
@@ -3495,7 +3540,7 @@
 <h5><code class="docutils literal notranslate"><span class="pre">parse(path:</span> <span class="pre">Path)</span> <span class="pre">-&gt;</span> <span class="pre">List[RawDependency]</span></code><a class="headerlink" href="#parse-path-path-list-rawdependency" title="Link to this heading"></a></h5>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@abstractmethod</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">RawDependency</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Extract dependencies from a manifest file.</span>
+<span class="w">    </span><span class="sd">"""Extract dependencies from a manifest file.</span>
 <span class="sd">    </span>
 <span class="sd">    The DependencyFileCollector calls this method for every file matching</span>
 <span class="sd">    filename_patterns(). Parse failures **must raise ValueError** — </span>
@@ -3514,16 +3559,16 @@
 <span class="sd">    Examples:</span>
 <span class="sd">        Parse success with pinned versions:</span>
 <span class="sd">            &gt;&gt;&gt; return [</span>
-<span class="sd">            ...     RawDependency(&quot;flask&quot;, &quot;2.3.1&quot;),</span>
-<span class="sd">            ...     RawDependency(&quot;requests&quot;, &quot;2.31.0&quot;),</span>
+<span class="sd">            ...     RawDependency("flask", "2.3.1"),</span>
+<span class="sd">            ...     RawDependency("requests", "2.31.0"),</span>
 <span class="sd">            ... ]</span>
 <span class="sd">        </span>
 <span class="sd">        Parse with unpinned version:</span>
 <span class="sd">            &gt;&gt;&gt; return [</span>
-<span class="sd">            ...     RawDependency(&quot;flask&quot;, &quot;2.3.1&quot;),</span>
-<span class="sd">            ...     RawDependency(&quot;six&quot;, None),  # Version not specified</span>
+<span class="sd">            ...     RawDependency("flask", "2.3.1"),</span>
+<span class="sd">            ...     RawDependency("six", None),  # Version not specified</span>
 <span class="sd">            ... ]</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 </pre></div>
 </div>
 </section>
@@ -3544,13 +3589,13 @@
 <section id="construction">
 <h4>Construction<a class="headerlink" href="#construction" title="Link to this heading"></a></h4>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Pinned version</span>
-<span class="n">RawDependency</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;flask&quot;</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="s2">&quot;2.3.1&quot;</span><span class="p">)</span>
+<span class="n">RawDependency</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"flask"</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="s2">"2.3.1"</span><span class="p">)</span>
 
 <span class="c1"># Unpinned (no version specified in manifest)</span>
-<span class="n">RawDependency</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;requests&quot;</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+<span class="n">RawDependency</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"requests"</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
 
 <span class="c1"># Version constraint</span>
-<span class="n">RawDependency</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;six&quot;</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="s2">&quot;&gt;=1.16.0,&lt;2.0&quot;</span><span class="p">)</span>
+<span class="n">RawDependency</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"six"</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="s2">"&gt;=1.16.0,&lt;2.0"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -3592,15 +3637,15 @@
 <h5><code class="docutils literal notranslate"><span class="pre">get_collector_name()</span> <span class="pre">-&gt;</span> <span class="pre">str</span></code><a class="headerlink" href="#get-collector-name-str" title="Link to this heading"></a></h5>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@abstractmethod</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">get_collector_name</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the short identifier for this collector.</span>
+<span class="w">    </span><span class="sd">"""Return the short identifier for this collector.</span>
 <span class="sd">    </span>
 <span class="sd">    Used in logs and in the source_collector field of components.</span>
 <span class="sd">    </span>
-<span class="sd">    Examples: &quot;image&quot;, &quot;helm&quot;, &quot;terraform&quot;, &quot;ansible&quot;, &quot;custom_scanner&quot;</span>
+<span class="sd">    Examples: "image", "helm", "terraform", "ansible", "custom_scanner"</span>
 <span class="sd">    </span>
 <span class="sd">    Returns:</span>
 <span class="sd">        str: Unique, short identifier (alphanumeric + underscore)</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 </pre></div>
 </div>
 </section>
@@ -3613,7 +3658,7 @@
     <span class="n">work_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
     <span class="n">deployment_build_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">SbomComponentModel</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Extract components from the platform artifact.</span>
+<span class="w">    </span><span class="sd">"""Extract components from the platform artifact.</span>
 <span class="sd">    </span>
 <span class="sd">    Called once per build. Should call _reset_warnings() at the start</span>
 <span class="sd">    to clear warnings from any previous invocation.</span>
@@ -3640,7 +3685,7 @@
 <span class="sd">                for service in module.services:</span>
 <span class="sd">                    components.append(</span>
 <span class="sd">                        SbomComponentModel(</span>
-<span class="sd">                            component_type=&quot;container&quot;,</span>
+<span class="sd">                            component_type="container",</span>
 <span class="sd">                            name=service.name,</span>
 <span class="sd">                            version=service.version,</span>
 <span class="sd">                            purl=build_purl(service),</span>
@@ -3649,7 +3694,7 @@
 <span class="sd">                    )</span>
 <span class="sd">            </span>
 <span class="sd">            return components</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 </pre></div>
 </div>
 </section>
@@ -3659,7 +3704,7 @@
 <section id="reset-warnings-none">
 <h5><code class="docutils literal notranslate"><span class="pre">_reset_warnings()</span> <span class="pre">-&gt;</span> <span class="pre">None</span></code><a class="headerlink" href="#reset-warnings-none" title="Link to this heading"></a></h5>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">_reset_warnings</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Clear the warnings list before collecting.</span>
+<span class="w">    </span><span class="sd">"""Clear the warnings list before collecting.</span>
 <span class="sd">    </span>
 <span class="sd">    Should be called at the start of collect() to remove warnings</span>
 <span class="sd">    from any previous invocation.</span>
@@ -3670,7 +3715,7 @@
 <span class="sd">            components: List[SbomComponentModel] = []</span>
 <span class="sd">            # ... collection logic ...</span>
 <span class="sd">            return components</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 </pre></div>
 </div>
 </section>
@@ -3680,7 +3725,7 @@
 </pre></div>
 </div>
 <p>Access directly to append warnings:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="bp">self</span><span class="o">.</span><span class="n">_warnings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;Optional file not found: /path/to/file&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="bp">self</span><span class="o">.</span><span class="n">_warnings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"Optional file not found: /path/to/file"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -3690,9 +3735,9 @@
 <section id="get-warnings-list-str">
 <h5><code class="docutils literal notranslate"><span class="pre">get_warnings()</span> <span class="pre">-&gt;</span> <span class="pre">List[str]</span></code><a class="headerlink" href="#get-warnings-list-str" title="Link to this heading"></a></h5>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">get_warnings</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return accumulated warnings from the most recent collect() call.</span>
+<span class="w">    </span><span class="sd">"""Return accumulated warnings from the most recent collect() call.</span>
 <span class="sd">    </span>
-<span class="sd">    Returns a **copy** of the warnings list (modifications don&#39;t affect internal state).</span>
+<span class="sd">    Returns a **copy** of the warnings list (modifications don't affect internal state).</span>
 <span class="sd">    </span>
 <span class="sd">    Returns:</span>
 <span class="sd">        List[str]: List of warning messages</span>
@@ -3700,8 +3745,8 @@
 <span class="sd">    Example:</span>
 <span class="sd">        components = collector.collect(platform, work_path, build_path)</span>
 <span class="sd">        for warning in collector.get_warnings():</span>
-<span class="sd">            logger.warning(&quot;Collector warning&quot;, msg=warning)</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">            logger.warning("Collector warning", msg=warning)</span>
+<span class="sd">    """</span>
 </pre></div>
 </div>
 </section>
@@ -3721,34 +3766,34 @@
 <h4>Fields<a class="headerlink" href="#fields" title="Link to this heading"></a></h4>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">SbomComponentModel</span><span class="p">:</span>
     <span class="n">component_type</span><span class="p">:</span> <span class="nb">str</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;CycloneDX component type.</span>
+<span class="w">    </span><span class="sd">"""CycloneDX component type.</span>
 <span class="sd">    </span>
-<span class="sd">    Allowed values: &quot;container&quot;, &quot;library&quot;, &quot;framework&quot;</span>
+<span class="sd">    Allowed values: "container", "library", "framework"</span>
 <span class="sd">    </span>
 <span class="sd">    - container: Docker/container images (e.g., nginx, postgres)</span>
 <span class="sd">    - library: Application dependencies (e.g., npm packages, Python modules)</span>
 <span class="sd">    - framework: Infrastructure code (e.g., Terraform modules, Helm charts)</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Component name.</span>
+<span class="w">    </span><span class="sd">"""Component name.</span>
 <span class="sd">    </span>
-<span class="sd">    Examples: &quot;nginx&quot;, &quot;flask&quot;, &quot;hashicorp/aws&quot;, &quot;bitnami/nginx&quot;</span>
+<span class="sd">    Examples: "nginx", "flask", "hashicorp/aws", "bitnami/nginx"</span>
 <span class="sd">    Should be human-readable and descriptive.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="n">version</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Version string, version constraint, or None if unpinned.</span>
+<span class="w">    </span><span class="sd">"""Version string, version constraint, or None if unpinned.</span>
 <span class="sd">    </span>
 <span class="sd">    Examples:</span>
-<span class="sd">    - &quot;1.25.0&quot; (pinned)</span>
-<span class="sd">    - &quot;~&gt; 5.0&quot; (constraint)</span>
-<span class="sd">    - &quot;main&quot; (branch ref)</span>
+<span class="sd">    - "1.25.0" (pinned)</span>
+<span class="sd">    - "~&gt; 5.0" (constraint)</span>
+<span class="sd">    - "main" (branch ref)</span>
 <span class="sd">    - None (unpinned, no version in source)</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="n">purl</span><span class="p">:</span> <span class="nb">str</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Package URL (purl) per RFC.</span>
+<span class="w">    </span><span class="sd">"""Package URL (purl) per RFC.</span>
 <span class="sd">    </span>
 <span class="sd">    Format: pkg:&lt;type&gt;/&lt;namespace&gt;/&lt;name&gt;@&lt;version&gt;</span>
 <span class="sd">    </span>
@@ -3760,29 +3805,29 @@
 <span class="sd">    - pkg:helm/bitnami/nginx@14.0.0</span>
 <span class="sd">    </span>
 <span class="sd">    See: https://github.com/package-url/purl-spec</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="n">properties</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Additional metadata properties.</span>
+<span class="w">    </span><span class="sd">"""Additional metadata properties.</span>
 <span class="sd">    </span>
 <span class="sd">    Used to attach collector-specific information or warnings.</span>
 <span class="sd">    </span>
 <span class="sd">    Examples:</span>
-<span class="sd">    - {&quot;strata:tag-stability&quot;: &quot;floating&quot;}</span>
-<span class="sd">    - {&quot;deprecated&quot;: &quot;true&quot;}</span>
-<span class="sd">    - {&quot;provider_type&quot;: &quot;terraform&quot;}</span>
+<span class="sd">    - {"strata:tag-stability": "floating"}</span>
+<span class="sd">    - {"deprecated": "true"}</span>
+<span class="sd">    - {"provider_type": "terraform"}</span>
 <span class="sd">    </span>
 <span class="sd">    Keys are arbitrary strings; values are always strings.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="n">source_collector</span><span class="p">:</span> <span class="nb">str</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Name of the collector that produced this component.</span>
+<span class="w">    </span><span class="sd">"""Name of the collector that produced this component.</span>
 <span class="sd">    </span>
 <span class="sd">    Should match get_collector_name().</span>
 <span class="sd">    </span>
-<span class="sd">    Examples: &quot;image&quot;, &quot;helm&quot;, &quot;terraform&quot;, &quot;custom_scanner&quot;</span>
+<span class="sd">    Examples: "image", "helm", "terraform", "custom_scanner"</span>
 <span class="sd">    Used in logs and for debugging.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 </pre></div>
 </div>
 </section>
@@ -3791,12 +3836,12 @@
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">strata.models.sbom_model</span><span class="w"> </span><span class="kn">import</span> <span class="n">SbomComponentModel</span>
 
 <span class="n">component</span> <span class="o">=</span> <span class="n">SbomComponentModel</span><span class="p">(</span>
-    <span class="n">component_type</span><span class="o">=</span><span class="s2">&quot;container&quot;</span><span class="p">,</span>
-    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;nginx&quot;</span><span class="p">,</span>
-    <span class="n">version</span><span class="o">=</span><span class="s2">&quot;1.25.0&quot;</span><span class="p">,</span>
-    <span class="n">purl</span><span class="o">=</span><span class="s2">&quot;pkg:docker/library/nginx@1.25.0&quot;</span><span class="p">,</span>
-    <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;strata:tag-stability&quot;</span><span class="p">:</span> <span class="s2">&quot;floating&quot;</span><span class="p">},</span>
-    <span class="n">source_collector</span><span class="o">=</span><span class="s2">&quot;image&quot;</span><span class="p">,</span>
+    <span class="n">component_type</span><span class="o">=</span><span class="s2">"container"</span><span class="p">,</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">"nginx"</span><span class="p">,</span>
+    <span class="n">version</span><span class="o">=</span><span class="s2">"1.25.0"</span><span class="p">,</span>
+    <span class="n">purl</span><span class="o">=</span><span class="s2">"pkg:docker/library/nginx@1.25.0"</span><span class="p">,</span>
+    <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">"strata:tag-stability"</span><span class="p">:</span> <span class="s2">"floating"</span><span class="p">},</span>
+    <span class="n">source_collector</span><span class="o">=</span><span class="s2">"image"</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
 </div>
@@ -3843,7 +3888,7 @@
 <h5><code class="docutils literal notranslate"><span class="pre">load(work_path:</span> <span class="pre">Path)</span> <span class="pre">-&gt;</span> <span class="pre">List[BaseSbomCollector]</span></code> (static)<a class="headerlink" href="#load-work-path-path-list-basesbomcollector-static" title="Link to this heading"></a></h5>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">load</span><span class="p">(</span><span class="n">work_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseSbomCollector</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Load collector plugins and auto-discover lockfile parsers.</span>
+<span class="w">    </span><span class="sd">"""Load collector plugins and auto-discover lockfile parsers.</span>
 <span class="sd">    </span>
 <span class="sd">    This is called automatically by SbomBuilder. You rarely need to call</span>
 <span class="sd">    it directly unless testing plugin loading in isolation.</span>
@@ -3864,11 +3909,11 @@
 <span class="sd">        from pathlib import Path</span>
 <span class="sd">        from strata.builders.sbom.collector_plugin_loader import CollectorPluginLoader</span>
 <span class="sd">        </span>
-<span class="sd">        work_path = Path(&quot;/workspace&quot;)</span>
+<span class="sd">        work_path = Path("/workspace")</span>
 <span class="sd">        extra_collectors = CollectorPluginLoader.load(work_path)</span>
 <span class="sd">        for collector in extra_collectors:</span>
-<span class="sd">            print(f&quot;Loaded: {collector.get_collector_name()}&quot;)</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">            print(f"Loaded: {collector.get_collector_name()}")</span>
+<span class="sd">    """</span>
 </pre></div>
 </div>
 </section>
@@ -3888,12 +3933,12 @@
 
 <span class="c1"># Iterate all parsers</span>
 <span class="k">for</span> <span class="n">parser</span> <span class="ow">in</span> <span class="n">DEFAULT_REGISTRY</span><span class="o">.</span><span class="n">all_parsers</span><span class="p">():</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">parser</span><span class="o">.</span><span class="n">ecosystem</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">parser</span><span class="o">.</span><span class="n">filename_patterns</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">parser</span><span class="o">.</span><span class="n">ecosystem</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">parser</span><span class="o">.</span><span class="n">filename_patterns</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
 <span class="c1"># Find parser for a filename</span>
-<span class="n">parser</span> <span class="o">=</span> <span class="n">DEFAULT_REGISTRY</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s2">&quot;package-lock.json&quot;</span><span class="p">)</span>
+<span class="n">parser</span> <span class="o">=</span> <span class="n">DEFAULT_REGISTRY</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s2">"package-lock.json"</span><span class="p">)</span>
 <span class="k">if</span> <span class="n">parser</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Found parser: </span><span class="si">{</span><span class="n">parser</span><span class="o">.</span><span class="n">ecosystem</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Found parser: </span><span class="si">{</span><span class="n">parser</span><span class="o">.</span><span class="n">ecosystem</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -3902,7 +3947,7 @@
 <section id="find-filename-str-optional-lockfileparser">
 <h5><code class="docutils literal notranslate"><span class="pre">find(filename:</span> <span class="pre">str)</span> <span class="pre">-&gt;</span> <span class="pre">Optional[LockfileParser]</span></code><a class="headerlink" href="#find-filename-str-optional-lockfileparser" title="Link to this heading"></a></h5>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">find</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">LockfileParser</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Find a parser matching the filename.</span>
+<span class="w">    </span><span class="sd">"""Find a parser matching the filename.</span>
 <span class="sd">    </span>
 <span class="sd">    Matching is case-insensitive and uses fnmatch glob patterns.</span>
 <span class="sd">    Returns the first parser whose patterns match the filename.</span>
@@ -3914,34 +3959,34 @@
 <span class="sd">        Optional[LockfileParser]: Parser if found, None otherwise</span>
 <span class="sd">    </span>
 <span class="sd">    Example:</span>
-<span class="sd">        parser = DEFAULT_REGISTRY.find(&quot;requirements.txt&quot;)</span>
+<span class="sd">        parser = DEFAULT_REGISTRY.find("requirements.txt")</span>
 <span class="sd">        if parser:</span>
-<span class="sd">            deps = parser.parse(Path(&quot;requirements.txt&quot;))</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">            deps = parser.parse(Path("requirements.txt"))</span>
+<span class="sd">    """</span>
 </pre></div>
 </div>
 </section>
 <section id="all-patterns-list-str">
 <h5><code class="docutils literal notranslate"><span class="pre">all_patterns()</span> <span class="pre">-&gt;</span> <span class="pre">List[str]</span></code><a class="headerlink" href="#all-patterns-list-str" title="Link to this heading"></a></h5>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">all_patterns</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return all registered filename patterns.</span>
+<span class="w">    </span><span class="sd">"""Return all registered filename patterns.</span>
 <span class="sd">    </span>
 <span class="sd">    Used by DependencyFileCollector to scan the workspace.</span>
 <span class="sd">    </span>
 <span class="sd">    Returns:</span>
 <span class="sd">        List[str]: All glob patterns from all parsers</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 </pre></div>
 </div>
 </section>
 <section id="all-parsers-list-lockfileparser">
 <h5><code class="docutils literal notranslate"><span class="pre">all_parsers()</span> <span class="pre">-&gt;</span> <span class="pre">List[LockfileParser]</span></code><a class="headerlink" href="#all-parsers-list-lockfileparser" title="Link to this heading"></a></h5>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">all_parsers</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">LockfileParser</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return all registered parsers.</span>
+<span class="w">    </span><span class="sd">"""Return all registered parsers.</span>
 <span class="sd">    </span>
 <span class="sd">    Returns:</span>
 <span class="sd">        List[LockfileParser]: All parsers in registration order</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 </pre></div>
 </div>
 </section>
@@ -4011,9 +4056,9 @@
     <span class="bp">self</span><span class="o">.</span><span class="n">_reset_warnings</span><span class="p">()</span>
     <span class="n">components</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">SbomComponentModel</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
     
-    <span class="n">config_path</span> <span class="o">=</span> <span class="n">work_path</span> <span class="o">/</span> <span class="s2">&quot;config&quot;</span> <span class="o">/</span> <span class="s2">&quot;optional.yaml&quot;</span>
+    <span class="n">config_path</span> <span class="o">=</span> <span class="n">work_path</span> <span class="o">/</span> <span class="s2">"config"</span> <span class="o">/</span> <span class="s2">"optional.yaml"</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">config_path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_warnings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Optional config not found: </span><span class="si">{</span><span class="n">config_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_warnings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Optional config not found: </span><span class="si">{</span><span class="n">config_path</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">components</span>
     
     <span class="c1"># ... use config ...</span>
@@ -4025,15 +4070,15 @@
 <h3>Add Custom Properties (Warnings/Metadata)<a class="headerlink" href="#add-custom-properties-warnings-metadata" title="Link to this heading"></a></h3>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">components</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
     <span class="n">SbomComponentModel</span><span class="p">(</span>
-        <span class="n">component_type</span><span class="o">=</span><span class="s2">&quot;container&quot;</span><span class="p">,</span>
-        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;nginx&quot;</span><span class="p">,</span>
-        <span class="n">version</span><span class="o">=</span><span class="s2">&quot;latest&quot;</span><span class="p">,</span>  <span class="c1"># Floating tag!</span>
-        <span class="n">purl</span><span class="o">=</span><span class="s2">&quot;pkg:docker/library/nginx@latest&quot;</span><span class="p">,</span>
-        <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;strata:tag-stability&quot;</span><span class="p">:</span> <span class="s2">&quot;floating&quot;</span><span class="p">},</span>
+        <span class="n">component_type</span><span class="o">=</span><span class="s2">"container"</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">"nginx"</span><span class="p">,</span>
+        <span class="n">version</span><span class="o">=</span><span class="s2">"latest"</span><span class="p">,</span>  <span class="c1"># Floating tag!</span>
+        <span class="n">purl</span><span class="o">=</span><span class="s2">"pkg:docker/library/nginx@latest"</span><span class="p">,</span>
+        <span class="n">properties</span><span class="o">=</span><span class="p">{</span><span class="s2">"strata:tag-stability"</span><span class="p">:</span> <span class="s2">"floating"</span><span class="p">},</span>
         <span class="n">source_collector</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">get_collector_name</span><span class="p">(),</span>
     <span class="p">)</span>
 <span class="p">)</span>
-<span class="bp">self</span><span class="o">.</span><span class="n">_warnings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;Floating tag detected: nginx:latest&quot;</span><span class="p">)</span>
+<span class="bp">self</span><span class="o">.</span><span class="n">_warnings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"Floating tag detected: nginx:latest"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -4041,17 +4086,17 @@
 <h3>Parse with Graceful Fallback<a class="headerlink" href="#parse-with-graceful-fallback" title="Link to this heading"></a></h3>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">RawDependency</span><span class="p">]:</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">))</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8"</span><span class="p">))</span>
     <span class="k">except</span> <span class="p">(</span><span class="ne">OSError</span><span class="p">,</span> <span class="n">json</span><span class="o">.</span><span class="n">JSONDecodeError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to parse </span><span class="si">{</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Failed to parse </span><span class="si">{</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
     
     <span class="n">deps</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">RawDependency</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">packages</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;packages&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{}</span>
+    <span class="n">packages</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"packages"</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{}</span>
     
     <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">info</span> <span class="ow">in</span> <span class="n">packages</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">info</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-            <span class="k">continue</span>  <span class="c1"># Skip malformed entries, don&#39;t raise</span>
-        <span class="n">version</span> <span class="o">=</span> <span class="n">info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;version&quot;</span><span class="p">)</span>
+            <span class="k">continue</span>  <span class="c1"># Skip malformed entries, don't raise</span>
+        <span class="n">version</span> <span class="o">=</span> <span class="n">info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"version"</span><span class="p">)</span>
         <span class="n">deps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">RawDependency</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">),</span> <span class="n">version</span><span class="o">=</span><span class="n">version</span> <span class="ow">or</span> <span class="kc">None</span><span class="p">))</span>
     
     <span class="k">return</span> <span class="n">deps</span>
@@ -4069,10 +4114,10 @@
         <span class="n">data</span> <span class="o">=</span> <span class="n">process_file</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
         <span class="c1"># ✓ Collector catches and logs this</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Parse failed: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Parse failed: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
     
     <span class="c1"># ✗ Collector does NOT catch other exceptions</span>
-    <span class="c1"># raise RuntimeError(&quot;...&quot;)  # NOT caught — will crash the build</span>
+    <span class="c1"># raise RuntimeError("...")  # NOT caught — will crash the build</span>
 </pre></div>
 </div>
 </section>
@@ -4107,7 +4152,7 @@
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">module</span><span class="o">.</span><span class="n">name</span>                      <span class="c1"># Module name</span>
 <span class="n">module</span><span class="o">.</span><span class="n">services</span>                  <span class="c1"># List of service specs</span>
   <span class="n">service</span><span class="o">.</span><span class="n">name</span>
-  <span class="n">service</span><span class="o">.</span><span class="n">image</span>                  <span class="c1"># Docker image ref (e.g., &quot;nginx:1.25.0&quot;)</span>
+  <span class="n">service</span><span class="o">.</span><span class="n">image</span>                  <span class="c1"># Docker image ref (e.g., "nginx:1.25.0")</span>
   <span class="n">service</span><span class="o">.</span><span class="n">version</span>
 <span class="n">module</span><span class="o">.</span><span class="n">terraform_providers</span>       <span class="c1"># List of provider specs (if applicable)</span>
 <span class="n">module</span><span class="o">.</span><span class="n">helm_releases</span>             <span class="c1"># List of helm release specs (if applicable)</span>

@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../config/diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3486,7 +3531,7 @@ multi-stage production pipeline.</p>
 <span class="w">        </span><span class="nt">ssh_private_key_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssh_private_key</span>
 
 <span class="w">  </span><span class="nt">topology</span><span class="p">:</span>
-<span class="w">    </span><span class="c1"># &quot;my_server&quot; is a name for the concept &quot;one server managed by my_iac&quot;.</span>
+<span class="w">    </span><span class="c1"># "my_server" is a name for the concept "one server managed by my_iac".</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_server</span>
 <span class="w">      </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_iac</span><span class="w">           </span><span class="c1"># which provisioner created it</span>
 </pre></div>
@@ -3509,13 +3554,13 @@ multi-stage production pipeline.</p>
 <span class="w">  </span><span class="nt">stages</span><span class="p">:</span>
 <span class="w">    </span><span class="c1"># Stage 1 — create the server</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infrastructure</span>
-<span class="w">      </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_iac</span><span class="w">        </span><span class="c1"># direct: &quot;use this provisioner by name&quot;</span>
+<span class="w">      </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_iac</span><span class="w">        </span><span class="c1"># direct: "use this provisioner by name"</span>
 <span class="w">      </span><span class="nt">secrets</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hetzner_api_token</span><span class="w">      </span><span class="c1"># only this secret is available</span>
 
 <span class="w">    </span><span class="c1"># Stage 2 — configure the server</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">configure</span>
-<span class="w">      </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_ansible</span><span class="w">    </span><span class="c1"># direct: &quot;use this provisioner by name&quot;</span>
+<span class="w">      </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_ansible</span><span class="w">    </span><span class="c1"># direct: "use this provisioner by name"</span>
 <span class="w">      </span><span class="nt">secrets</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssh_private_key</span><span class="w">        </span><span class="c1"># only SSH key, not the API token</span>
 <span class="w">      </span><span class="c1"># OR — using topology (see below):</span>
@@ -3527,7 +3572,7 @@ multi-stage production pipeline.</p>
 <h3>Terraform outputs.tf (simple)<a class="headerlink" href="#terraform-outputs-tf-simple" title="Link to this heading"></a></h3>
 <p>This is the file inside your Terraform source that produces the output:</p>
 <div class="highlight-hcl notranslate"><div class="highlight"><pre><span></span><span class="c1"># terraform/outputs.tf</span>
-<span class="kr">output</span><span class="w"> </span><span class="nv">&quot;server_ip&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="kr">output</span><span class="w"> </span><span class="nv">"server_ip"</span><span class="w"> </span><span class="p">{</span>
 <span class="w">  </span><span class="na">value</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">hcloud_server.main.ipv4_address</span>
 <span class="p">}</span>
 </pre></div>
@@ -3542,15 +3587,15 @@ multi-stage production pipeline.</p>
 │                                                         │
 │  Reads:   environment variables (HETZNER_TOKEN, etc.)   │
 │  Does:    terraform init → plan → apply                 │
-│  Outputs: { &quot;server_ip&quot;: &quot;10.0.1.42&quot; }   ← from outputs.tf│
-│           → stored in stage_outputs[&quot;server_ip&quot;]        │
+│  Outputs: { "server_ip": "10.0.1.42" }   ← from outputs.tf│
+│           → stored in stage_outputs["server_ip"]        │
 └────────────────────┬────────────────────────────────────┘
                      │  stage_outputs flows down
                      ▼
 ┌─────────────────────────────────────────────────────────┐
 │  Stage: configure   (Ansible deployer)                  │
 │                                                         │
-│  Reads:   stage_outputs[&quot;server_ip&quot;] = &quot;10.0.1.42&quot;      │
+│  Reads:   stage_outputs["server_ip"] = "10.0.1.42"      │
 │           (when using topology:, this becomes the       │
 │            inline Ansible inventory automatically)      │
 │  Does:    ansible-galaxy install → ansible-playbook     │
@@ -3639,7 +3684,7 @@ multi-stage production pipeline.</p>
 <span class="w">        </span><span class="nt">source_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ansible/smoketest</span>
 
 <span class="w">  </span><span class="nt">topology</span><span class="p">:</span>
-<span class="w">    </span><span class="c1"># The &quot;app_servers&quot; topology: servers created by server_iac.</span>
+<span class="w">    </span><span class="c1"># The "app_servers" topology: servers created by server_iac.</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app_servers</span>
 <span class="w">      </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">server_iac</span>
 </pre></div>
@@ -3660,7 +3705,7 @@ multi-stage production pipeline.</p>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cloud_api_key</span>
 
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">configure</span>
-<span class="w">      </span><span class="nt">topology</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app_servers</span><span class="w">       </span><span class="c1"># ← no static inventory; IPs come from stage &#39;servers&#39;</span>
+<span class="w">      </span><span class="nt">topology</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app_servers</span><span class="w">       </span><span class="c1"># ← no static inventory; IPs come from stage 'servers'</span>
 <span class="w">      </span><span class="nt">secrets</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssh_private_key</span>
 
@@ -3678,16 +3723,16 @@ multi-stage production pipeline.</p>
 <section id="terraform-outputs-tf-complex">
 <h3>Terraform outputs.tf (complex)<a class="headerlink" href="#terraform-outputs-tf-complex" title="Link to this heading"></a></h3>
 <div class="highlight-hcl notranslate"><div class="highlight"><pre><span></span><span class="c1"># terraform/network/outputs.tf</span>
-<span class="kr">output</span><span class="w"> </span><span class="nv">&quot;vpc_id&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="kr">output</span><span class="w"> </span><span class="nv">"vpc_id"</span><span class="w"> </span><span class="p">{</span>
 <span class="w">  </span><span class="na">value</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_vpc.main.id</span>
 <span class="p">}</span>
-<span class="kr">output</span><span class="w"> </span><span class="nv">&quot;subnet_id&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="kr">output</span><span class="w"> </span><span class="nv">"subnet_id"</span><span class="w"> </span><span class="p">{</span>
 <span class="w">  </span><span class="na">value</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">aws_subnet.app.id</span>
 <span class="p">}</span>
 </pre></div>
 </div>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># terraform/servers/outputs.tf</span>
-<span class="n">output</span> <span class="s2">&quot;server_ips&quot;</span> <span class="p">{</span>
+<span class="n">output</span> <span class="s2">"server_ips"</span> <span class="p">{</span>
   <span class="n">value</span> <span class="o">=</span> <span class="p">[</span><span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">aws_instance</span><span class="o">.</span><span class="n">app</span> <span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">private_ip</span><span class="p">]</span>  <span class="c1"># list of IPs</span>
 <span class="p">}</span>
 </pre></div>
@@ -3702,8 +3747,8 @@ Ansible inline inventory format: <code class="docutils literal notranslate"><spa
 │                                                              │
 │  Reads:   env vars — cloud credentials, region              │
 │  Does:    creates VPC, subnets, firewall rules               │
-│  Outputs: { &quot;vpc_id&quot;: &quot;vpc-abc123&quot;,       ← from outputs.tf  │
-│             &quot;subnet_id&quot;: &quot;sub-def456&quot; }                      │
+│  Outputs: { "vpc_id": "vpc-abc123",       ← from outputs.tf  │
+│             "subnet_id": "sub-def456" }                      │
 └────────────────────┬─────────────────────────────────────────┘
                      │
                      ▼
@@ -3711,20 +3756,20 @@ Ansible inline inventory format: <code class="docutils literal notranslate"><spa
 │  Stage 2: servers   (Terraform)                              │
 │                                                              │
 │  Inputs:  env vars + stage_outputs from stage 1:            │
-│           TF_VAR_vpc_id    = &quot;vpc-abc123&quot;                    │
-│           TF_VAR_subnet_id = &quot;sub-def456&quot;                    │
+│           TF_VAR_vpc_id    = "vpc-abc123"                    │
+│           TF_VAR_subnet_id = "sub-def456"                    │
 │  Does:    creates 3 VMs inside the VPC                       │
-│  Outputs: { &quot;server_ips&quot;: [&quot;10.0.1.10&quot;,&quot;10.0.1.11&quot;,         │
-│                             &quot;10.0.1.12&quot;] }                   │
+│  Outputs: { "server_ips": ["10.0.1.10","10.0.1.11",         │
+│                             "10.0.1.12"] }                   │
 └────────────────────┬─────────────────────────────────────────┘
                      │
                      ▼
 ┌──────────────────────────────────────────────────────────────┐
 │  Stage 3: configure   (Ansible, via topology: app_servers)   │
 │                                                              │
-│  Inputs:  stage_outputs[&quot;server_ips&quot;]                        │
-│           → _dynamic_inventory = &quot;10.0.1.10,10.0.1.11,      │
-│                                   10.0.1.12,&quot;                │
+│  Inputs:  stage_outputs["server_ips"]                        │
+│           → _dynamic_inventory = "10.0.1.10,10.0.1.11,      │
+│                                   10.0.1.12,"                │
 │  Does:    runs site.yml against all three servers            │
 │  Outputs: (none)                                             │
 └────────────────────┬─────────────────────────────────────────┘
@@ -3744,8 +3789,8 @@ Ansible inline inventory format: <code class="docutils literal notranslate"><spa
 │  Stage 5: smoketest   (Ansible, via topology: app_servers)   │
 │                                                              │
 │  Inputs:  same dynamic inventory as stage 3                  │
-│           (built again from stage_outputs[&quot;server_ips&quot;])     │
-│  Does:    runs smoketest.yml — hits each server&#39;s /health    │
+│           (built again from stage_outputs["server_ips"])     │
+│  Does:    runs smoketest.yml — hits each server's /health    │
 │  Outputs: (none)                                             │
 └──────────────────────────────────────────────────────────────┘
 </pre></div>

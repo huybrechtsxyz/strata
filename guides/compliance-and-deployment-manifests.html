@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../config/diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3436,7 +3481,7 @@
 <p><strong>Example query:</strong></p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># What was deployed by whom and when?</span>
 strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w"> </span>--deployment<span class="w"> </span>prod<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>jq<span class="w"> </span><span class="s1">&#39;.[] | select(.action == &quot;deploy&quot;) | {timestamp, user, repositories: .artifacts.repositories}&#39;</span>
+<span class="w">  </span>jq<span class="w"> </span><span class="s1">'.[] | select(.action == "deploy") | {timestamp, user, repositories: .artifacts.repositories}'</span>
 </pre></div>
 </div>
 </section>
@@ -3478,7 +3523,7 @@ strata<span class="w"> </span>manifest<span class="w"> </span><span class="nb">e
 <p><strong>Example compliance check:</strong></p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Ensure all deployments used SBOM scanning</span>
 strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w"> </span>--deployment<span class="w"> </span>prod<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>jq<span class="w"> </span><span class="s1">&#39;.[] | select(.action == &quot;deploy&quot;) | {timestamp, user, sbom: .artifacts.sbom}&#39;</span>
+<span class="w">  </span>jq<span class="w"> </span><span class="s1">'.[] | select(.action == "deploy") | {timestamp, user, sbom: .artifacts.sbom}'</span>
 
 <span class="c1"># Verify no manual changes bypassed scanning</span>
 <span class="c1"># (Expectation: all manifests have SBOM reference)</span>
@@ -3573,21 +3618,21 @@ strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w
 <p><strong>Answer:</strong></p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Export all manifests from the past 30 days</span>
 strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>jq<span class="w"> </span>--arg<span class="w"> </span>cutoff<span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span>date<span class="w"> </span>-d<span class="w"> </span><span class="s1">&#39;30 days ago&#39;</span><span class="w"> </span>--iso-8601<span class="k">)</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="s1">&#39;.[] | select(.timestamp &gt; $cutoff)&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>jq<span class="w"> </span><span class="s1">&#39;group_by(.deployment) | .[] | {</span>
+<span class="w">  </span>jq<span class="w"> </span>--arg<span class="w"> </span>cutoff<span class="w"> </span><span class="s2">"</span><span class="k">$(</span>date<span class="w"> </span>-d<span class="w"> </span><span class="s1">'30 days ago'</span><span class="w"> </span>--iso-8601<span class="k">)</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="s1">'.[] | select(.timestamp &gt; $cutoff)'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>jq<span class="w"> </span><span class="s1">'group_by(.deployment) | .[] | {</span>
 <span class="s1">    deployment: .[0].deployment,</span>
 <span class="s1">    total_changes: length,</span>
-<span class="s1">    builds: [.[] | select(.action == &quot;build&quot;)] | length,</span>
-<span class="s1">    deploys: [.[] | select(.action == &quot;deploy&quot;)] | length</span>
-<span class="s1">  }&#39;</span>
+<span class="s1">    builds: [.[] | select(.action == "build")] | length,</span>
+<span class="s1">    deploys: [.[] | select(.action == "deploy")] | length</span>
+<span class="s1">  }'</span>
 
 <span class="c1"># Result:</span>
 <span class="c1"># {</span>
-<span class="c1">#   &quot;deployment&quot;: &quot;prod&quot;,</span>
-<span class="c1">#   &quot;total_changes&quot;: 12,</span>
-<span class="c1">#   &quot;builds&quot;: 7,</span>
-<span class="c1">#   &quot;deploys&quot;: 5</span>
+<span class="c1">#   "deployment": "prod",</span>
+<span class="c1">#   "total_changes": 12,</span>
+<span class="c1">#   "builds": 7,</span>
+<span class="c1">#   "deploys": 5</span>
 <span class="c1"># }</span>
 </pre></div>
 </div>
@@ -3616,14 +3661,14 @@ cat<span class="w"> </span>&gt;<span class="w"> </span>audit_report.md<span clas
 
 <span class="c1"># 3. For each build manifest, verify policy approval</span>
 strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w"> </span>--deployment<span class="w"> </span>prod<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>jq<span class="w"> </span><span class="s1">&#39;.[] | select(.action == &quot;build&quot;) | </span>
-<span class="s1">  &quot;Build \(.timestamp): \(.user) - Policy Status: \(.policy_results.status)&quot;&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>jq<span class="w"> </span><span class="s1">'.[] | select(.action == "build") | </span>
+<span class="s1">  "Build \(.timestamp): \(.user) - Policy Status: \(.policy_results.status)"'</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>&gt;&gt;<span class="w"> </span>audit_report.md
 
 <span class="c1"># 4. For each deploy manifest, verify execution success</span>
 strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w"> </span>--deployment<span class="w"> </span>prod<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>jq<span class="w"> </span><span class="s1">&#39;.[] | select(.action == &quot;deploy&quot;) | </span>
-<span class="s1">  &quot;Deploy \(.timestamp): \(.user) - Status: \(.status)&quot;&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>jq<span class="w"> </span><span class="s1">'.[] | select(.action == "deploy") | </span>
+<span class="s1">  "Deploy \(.timestamp): \(.user) - Status: \(.status)"'</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>&gt;&gt;<span class="w"> </span>audit_report.md
 
 <span class="c1"># 5. Package for auditor</span>
@@ -3641,24 +3686,24 @@ zip<span class="w"> </span>-r<span class="w"> </span>audit-evidence-<span class=
 <p><strong>Answer:</strong></p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Find deployments around that time</span>
 strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w"> </span>--deployment<span class="w"> </span>prod<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>jq<span class="w"> </span><span class="s1">&#39;.[] | select(.timestamp &gt; &quot;2024-06-17T10:00:00Z&quot; and .timestamp &lt; &quot;2024-06-17T11:00:00Z&quot;) | {</span>
+<span class="w">  </span>jq<span class="w"> </span><span class="s1">'.[] | select(.timestamp &gt; "2024-06-17T10:00:00Z" and .timestamp &lt; "2024-06-17T11:00:00Z") | {</span>
 <span class="s1">    timestamp,</span>
 <span class="s1">    action,</span>
 <span class="s1">    user,</span>
 <span class="s1">    status</span>
-<span class="s1">  }&#39;</span>
+<span class="s1">  }'</span>
 
 <span class="c1"># Result:</span>
 <span class="c1"># {</span>
-<span class="c1">#   &quot;timestamp&quot;: &quot;2024-06-17T10:35:20Z&quot;,</span>
-<span class="c1">#   &quot;action&quot;: &quot;build&quot;,</span>
-<span class="c1">#   &quot;user&quot;: &quot;alice@acme.com&quot;</span>
+<span class="c1">#   "timestamp": "2024-06-17T10:35:20Z",</span>
+<span class="c1">#   "action": "build",</span>
+<span class="c1">#   "user": "alice@acme.com"</span>
 <span class="c1"># }</span>
 <span class="c1"># {</span>
-<span class="c1">#   &quot;timestamp&quot;: &quot;2024-06-17T10:45:33Z&quot;,</span>
-<span class="c1">#   &quot;action&quot;: &quot;deploy&quot;,</span>
-<span class="c1">#   &quot;user&quot;: &quot;bob@acme.com&quot;,</span>
-<span class="c1">#   &quot;status&quot;: &quot;success&quot;</span>
+<span class="c1">#   "timestamp": "2024-06-17T10:45:33Z",</span>
+<span class="c1">#   "action": "deploy",</span>
+<span class="c1">#   "user": "bob@acme.com",</span>
+<span class="c1">#   "status": "success"</span>
 <span class="c1"># }</span>
 
 <span class="c1"># Get full deploy manifest</span>
@@ -3666,7 +3711,7 @@ strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w
 
 <span class="c1"># Extract what changed</span>
 strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w"> </span>.strata/deployments/prod/v2.3.0/2024-06-17T10:45:33Z.json<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>jq<span class="w"> </span><span class="s1">&#39;.spec.artifacts.repositories&#39;</span>
+<span class="w">  </span>jq<span class="w"> </span><span class="s1">'.spec.artifacts.repositories'</span>
 
 <span class="c1"># Compare to previous deployment</span>
 <span class="c1"># (look for changes in commits, configurations, or stage failures)</span>
@@ -3689,19 +3734,19 @@ strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w
 <span class="w">  </span><span class="nt">rule</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
 <span class="w">    </span><span class="no"># Only deploy if:</span>
 <span class="w">    </span><span class="no"># 1. Build manifest exists</span>
-<span class="w">    </span><span class="no"># 2. Policy results show &quot;passed&quot;</span>
+<span class="w">    </span><span class="no"># 2. Policy results show "passed"</span>
 <span class="w">    </span><span class="no"># 3. Build ran within last 24 hours</span>
 <span class="w">    </span>
 <span class="w">    </span><span class="no">build_manifest=$(ls -t .strata/build/prod/manifest.json | head -1)</span>
-<span class="w">    </span><span class="no">policy_status=$(jq &#39;.spec.policy_results.status&#39; $build_manifest)</span>
-<span class="w">    </span><span class="no">build_age=$(jq &#39;.spec.timestamp&#39; $build_manifest)</span>
+<span class="w">    </span><span class="no">policy_status=$(jq '.spec.policy_results.status' $build_manifest)</span>
+<span class="w">    </span><span class="no">build_age=$(jq '.spec.timestamp' $build_manifest)</span>
 <span class="w">    </span>
-<span class="w">    </span><span class="no">if [[ &quot;$policy_status&quot; != &quot;passed&quot; ]]; then</span>
-<span class="w">      </span><span class="no">echo &quot;ERROR: Build did not pass policy review&quot;</span>
+<span class="w">    </span><span class="no">if [[ "$policy_status" != "passed" ]]; then</span>
+<span class="w">      </span><span class="no">echo "ERROR: Build did not pass policy review"</span>
 <span class="w">      </span><span class="no">exit 1</span>
 <span class="w">    </span><span class="no">fi</span>
 <span class="w">    </span>
-<span class="w">    </span><span class="no">echo &quot;OK: Build approved for deployment&quot;</span>
+<span class="w">    </span><span class="no">echo "OK: Build approved for deployment"</span>
 <span class="w">    </span><span class="no">exit 0</span>
 </pre></div>
 </div>
@@ -3725,18 +3770,18 @@ strata<span class="w"> </span>policy<span class="w"> </span>apply<span class="w"
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash</span>
 <span class="c1"># Ensure deploys only happen during maintenance windows</span>
 
-<span class="nv">manifest</span><span class="o">=</span><span class="k">$(</span>strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w"> </span>--deployment<span class="w"> </span>prod<span class="w"> </span>--last<span class="w"> </span><span class="m">1</span><span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">&#39;.[0].path&#39;</span><span class="k">)</span>
-<span class="nv">deploy_time</span><span class="o">=</span><span class="k">$(</span>strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w"> </span><span class="nv">$manifest</span><span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">&#39;.spec.timestamp&#39;</span><span class="k">)</span>
+<span class="nv">manifest</span><span class="o">=</span><span class="k">$(</span>strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w"> </span>--deployment<span class="w"> </span>prod<span class="w"> </span>--last<span class="w"> </span><span class="m">1</span><span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">'.[0].path'</span><span class="k">)</span>
+<span class="nv">deploy_time</span><span class="o">=</span><span class="k">$(</span>strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w"> </span><span class="nv">$manifest</span><span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">'.spec.timestamp'</span><span class="k">)</span>
 
-<span class="nv">hour</span><span class="o">=</span><span class="k">$(</span>date<span class="w"> </span>-d<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$deploy_time</span><span class="s2">&quot;</span><span class="w"> </span>+%H<span class="k">)</span>
+<span class="nv">hour</span><span class="o">=</span><span class="k">$(</span>date<span class="w"> </span>-d<span class="w"> </span><span class="s2">"</span><span class="nv">$deploy_time</span><span class="s2">"</span><span class="w"> </span>+%H<span class="k">)</span>
 
-<span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$hour</span><span class="s2">&quot;</span><span class="w"> </span>-lt<span class="w"> </span><span class="m">22</span><span class="w"> </span><span class="o">]</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="o">[</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$hour</span><span class="s2">&quot;</span><span class="w"> </span>-ge<span class="w"> </span><span class="m">6</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
-<span class="w">  </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;ERROR: Deployment outside maintenance window (10 PM - 6 AM)&quot;</span>
+<span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span><span class="s2">"</span><span class="nv">$hour</span><span class="s2">"</span><span class="w"> </span>-lt<span class="w"> </span><span class="m">22</span><span class="w"> </span><span class="o">]</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="o">[</span><span class="w"> </span><span class="s2">"</span><span class="nv">$hour</span><span class="s2">"</span><span class="w"> </span>-ge<span class="w"> </span><span class="m">6</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">  </span><span class="nb">echo</span><span class="w"> </span><span class="s2">"ERROR: Deployment outside maintenance window (10 PM - 6 AM)"</span>
 <span class="w">  </span>strata<span class="w"> </span>deploy<span class="w"> </span>destroy<span class="w"> </span>-f<span class="w"> </span>deploy.yaml<span class="w"> </span>--force
 <span class="w">  </span><span class="nb">exit</span><span class="w"> </span><span class="m">1</span>
 <span class="k">fi</span>
 
-<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;OK: Deployment within maintenance window&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">"OK: Deployment within maintenance window"</span>
 </pre></div>
 </div>
 </section>
@@ -3749,26 +3794,26 @@ strata<span class="w"> </span>policy<span class="w"> </span>apply<span class="w"
 <span class="nv">deployment</span><span class="o">=</span><span class="nv">$1</span>
 
 <span class="c1"># Step 1: Build</span>
-<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Building...&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">"Building..."</span>
 strata<span class="w"> </span>build<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>deploy/<span class="nv">$deployment</span>.yaml
 
 <span class="c1"># Step 2: Show build manifest for review</span>
-<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Review the build manifest:&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">"Review the build manifest:"</span>
 strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w"> </span>.strata/build/<span class="nv">$deployment</span>/manifest.json
 
 <span class="c1"># Step 3: Require approval</span>
-<span class="nb">read</span><span class="w"> </span>-p<span class="w"> </span><span class="s2">&quot;Approve deployment (y/n)? &quot;</span><span class="w"> </span>approve
-<span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$approve</span><span class="s2">&quot;</span><span class="w"> </span>!<span class="o">=</span><span class="w"> </span><span class="s2">&quot;y&quot;</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
-<span class="w">  </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Deployment cancelled&quot;</span>
+<span class="nb">read</span><span class="w"> </span>-p<span class="w"> </span><span class="s2">"Approve deployment (y/n)? "</span><span class="w"> </span>approve
+<span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span><span class="s2">"</span><span class="nv">$approve</span><span class="s2">"</span><span class="w"> </span>!<span class="o">=</span><span class="w"> </span><span class="s2">"y"</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">  </span><span class="nb">echo</span><span class="w"> </span><span class="s2">"Deployment cancelled"</span>
 <span class="w">  </span><span class="nb">exit</span><span class="w"> </span><span class="m">1</span>
 <span class="k">fi</span>
 
 <span class="c1"># Step 4: Deploy</span>
-<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Deploying...&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">"Deploying..."</span>
 strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>deploy/<span class="nv">$deployment</span>.yaml
 
 <span class="c1"># Step 5: Report</span>
-<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Deployment complete. Manifest:&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">"Deployment complete. Manifest:"</span>
 strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w"> </span>--deployment<span class="w"> </span><span class="nv">$deployment</span><span class="w"> </span>--last<span class="w"> </span><span class="m">1</span>
 </pre></div>
 </div>
@@ -3783,10 +3828,10 @@ strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash</span>
 <span class="c1"># Generate quarterly compliance report</span>
 
-<span class="nv">quarter</span><span class="o">=</span><span class="nv">$1</span><span class="w">  </span><span class="c1"># &quot;Q2&quot; or similar</span>
+<span class="nv">quarter</span><span class="o">=</span><span class="nv">$1</span><span class="w">  </span><span class="c1"># "Q2" or similar</span>
 <span class="nv">year</span><span class="o">=</span><span class="k">$(</span>date<span class="w"> </span>+%Y<span class="k">)</span>
 
-<span class="nv">report</span><span class="o">=</span><span class="s2">&quot;audit-report-</span><span class="nv">$year</span><span class="s2">-</span><span class="nv">$quarter</span><span class="s2">.md&quot;</span>
+<span class="nv">report</span><span class="o">=</span><span class="s2">"audit-report-</span><span class="nv">$year</span><span class="s2">-</span><span class="nv">$quarter</span><span class="s2">.md"</span>
 
 cat<span class="w"> </span>&gt;<span class="w"> </span><span class="nv">$report</span><span class="w"> </span><span class="s">&lt;&lt; EOF</span>
 <span class="s"># Compliance Audit Report — $quarter $year</span>
@@ -3803,15 +3848,15 @@ cat<span class="w"> </span>&gt;<span class="w"> </span><span class="nv">$report<
 
 <span class="c1"># Count by deployment</span>
 strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>jq<span class="w"> </span>--arg<span class="w"> </span>cutoff_start<span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span>date<span class="w"> </span>-d<span class="w"> </span><span class="s2">&quot;90 days ago&quot;</span><span class="w"> </span>--iso-8601<span class="k">)</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
-<span class="w">     </span>--arg<span class="w"> </span>cutoff_end<span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span>date<span class="w"> </span>--iso-8601<span class="k">)</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="s1">&#39;[.[] | select(.timestamp &gt; $cutoff_start and .timestamp &lt; $cutoff_end)] | </span>
+<span class="w">  </span>jq<span class="w"> </span>--arg<span class="w"> </span>cutoff_start<span class="w"> </span><span class="s2">"</span><span class="k">$(</span>date<span class="w"> </span>-d<span class="w"> </span><span class="s2">"90 days ago"</span><span class="w"> </span>--iso-8601<span class="k">)</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">     </span>--arg<span class="w"> </span>cutoff_end<span class="w"> </span><span class="s2">"</span><span class="k">$(</span>date<span class="w"> </span>--iso-8601<span class="k">)</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="s1">'[.[] | select(.timestamp &gt; $cutoff_start and .timestamp &lt; $cutoff_end)] | </span>
 <span class="s1">   group_by(.deployment) | </span>
 <span class="s1">   .[] | </span>
-<span class="s1">   {deployment: .[0].deployment, builds: [.[] | select(.action==&quot;build&quot;)] | length, deploys: [.[] | select(.action==&quot;deploy&quot;)] | length}&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">&#39;.[] | &quot;- \(.deployment): \(.builds) builds, \(.deploys) deployments&quot;&#39;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span><span class="nv">$report</span>
+<span class="s1">   {deployment: .[0].deployment, builds: [.[] | select(.action=="build")] | length, deploys: [.[] | select(.action=="deploy")] | length}'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">'.[] | "- \(.deployment): \(.builds) builds, \(.deploys) deployments"'</span><span class="w"> </span>&gt;&gt;<span class="w"> </span><span class="nv">$report</span>
 
-cat<span class="w"> </span>&gt;&gt;<span class="w"> </span><span class="nv">$report</span><span class="w"> </span><span class="s">&lt;&lt; &#39;EOF&#39;</span>
+cat<span class="w"> </span>&gt;&gt;<span class="w"> </span><span class="nv">$report</span><span class="w"> </span><span class="s">&lt;&lt; 'EOF'</span>
 
 <span class="s">---</span>
 
@@ -3823,11 +3868,11 @@ cat<span class="w"> </span>&gt;&gt;<span class="w"> </span><span class="nv">$rep
 
 <span class="c1"># List all recent manifests</span>
 strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>jq<span class="w"> </span>--arg<span class="w"> </span>cutoff<span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span>date<span class="w"> </span>-d<span class="w"> </span><span class="s1">&#39;90 days ago&#39;</span><span class="w"> </span>--iso-8601<span class="k">)</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="s1">&#39;.[] | select(.timestamp &gt; $cutoff) | &quot;| \(.timestamp) | \(.deployment) | \(.action) | \(.status) | \(.user) |&quot;&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>jq<span class="w"> </span>--arg<span class="w"> </span>cutoff<span class="w"> </span><span class="s2">"</span><span class="k">$(</span>date<span class="w"> </span>-d<span class="w"> </span><span class="s1">'90 days ago'</span><span class="w"> </span>--iso-8601<span class="k">)</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="s1">'.[] | select(.timestamp &gt; $cutoff) | "| \(.timestamp) | \(.deployment) | \(.action) | \(.status) | \(.user) |"'</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>&gt;&gt;<span class="w"> </span><span class="nv">$report</span>
 
-cat<span class="w"> </span>&gt;&gt;<span class="w"> </span><span class="nv">$report</span><span class="w"> </span><span class="s">&lt;&lt; &#39;EOF&#39;</span>
+cat<span class="w"> </span>&gt;&gt;<span class="w"> </span><span class="nv">$report</span><span class="w"> </span><span class="s">&lt;&lt; 'EOF'</span>
 
 <span class="s">---</span>
 
@@ -3863,7 +3908,7 @@ cat<span class="w"> </span>&gt;&gt;<span class="w"> </span><span class="nv">$rep
 <span class="s">Report generated: $(date)</span>
 <span class="s">EOF</span>
 
-<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Audit report: </span><span class="nv">$report</span><span class="s2">&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">"Audit report: </span><span class="nv">$report</span><span class="s2">"</span>
 </pre></div>
 </div>
 </section>
@@ -3880,7 +3925,7 @@ cat<span class="w"> </span>&gt;&gt;<span class="w"> </span><span class="nv">$rep
 <span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">manifest_local</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">manifest</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;.strata/deployments&quot;</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="s">".strata/deployments"</span>
 </pre></div>
 </div>
 <p><strong>Pros:</strong></p>
@@ -3903,7 +3948,7 @@ cat<span class="w"> </span>&gt;&gt;<span class="w"> </span><span class="nv">$rep
 <span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">manifest_shared</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">manifest</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;deployments&quot;</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="s">"deployments"</span>
 <span class="w">    </span><span class="nt">repository</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">push</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">xyz-state-repo</span><span class="w">   </span><span class="c1"># registered via `strata repo add`, not spec.remotes</span>
@@ -3946,13 +3991,13 @@ strata<span class="w"> </span>audit<span class="w"> </span>resend<span class="w"
 </div>
 <p><strong>Show what changed between two deployments (<code class="docutils literal notranslate"><span class="pre">audit</span> <span class="pre">diff</span></code>):</strong></p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Get execution IDs from the deploy-log</span>
-strata<span class="w"> </span>audit<span class="w"> </span>changes<span class="w"> </span>--last<span class="w"> </span><span class="m">5</span><span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">&#39;.[].execution_id&#39;</span>
+strata<span class="w"> </span>audit<span class="w"> </span>changes<span class="w"> </span>--last<span class="w"> </span><span class="m">5</span><span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">'.[].execution_id'</span>
 
 <span class="c1"># Compare consecutive deployments — shows unified YAML diff</span>
 strata<span class="w"> </span>audit<span class="w"> </span>diff<span class="w"> </span>&lt;from-execution-id&gt;<span class="w"> </span>&lt;to-execution-id&gt;
 
 <span class="c1"># Use as a CI gate — exit code 3 if configuration changed</span>
-strata<span class="w"> </span>audit<span class="w"> </span>diff<span class="w"> </span><span class="nv">$FROM_ID</span><span class="w"> </span><span class="nv">$TO_ID</span><span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.has_changes&#39;</span>
+strata<span class="w"> </span>audit<span class="w"> </span>diff<span class="w"> </span><span class="nv">$FROM_ID</span><span class="w"> </span><span class="nv">$TO_ID</span><span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">'.has_changes'</span>
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">audit</span> <span class="pre">diff</span></code> uses the <code class="docutils literal notranslate"><span class="pre">commit_sha</span></code> fields in the deploy-log to run <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">diff</span></code> on the deployment YAML — providing auditors with the exact before/after values for every ISO 27001 control walkthrough.</p>
@@ -3985,17 +4030,17 @@ strata<span class="w"> </span>audit<span class="w"> </span>diff<span class="w"> 
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash</span>
 <span class="c1"># GitHub Actions: On new manifest commit</span>
 
-<span class="nv">event_type</span><span class="o">=</span><span class="k">$(</span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">&#39;.action&#39;</span><span class="w"> </span>deploy_manifest.json<span class="k">)</span>
-<span class="nv">status</span><span class="o">=</span><span class="k">$(</span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">&#39;.spec.status&#39;</span><span class="w"> </span>deploy_manifest.json<span class="k">)</span>
+<span class="nv">event_type</span><span class="o">=</span><span class="k">$(</span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">'.action'</span><span class="w"> </span>deploy_manifest.json<span class="k">)</span>
+<span class="nv">status</span><span class="o">=</span><span class="k">$(</span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">'.spec.status'</span><span class="w"> </span>deploy_manifest.json<span class="k">)</span>
 
-<span class="k">if</span><span class="w"> </span><span class="o">[[</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$event_type</span><span class="s2">&quot;</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="s2">&quot;deploy&quot;</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$status</span><span class="s2">&quot;</span><span class="w"> </span>!<span class="o">=</span><span class="w"> </span><span class="s2">&quot;success&quot;</span><span class="w"> </span><span class="o">]]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="k">if</span><span class="w"> </span><span class="o">[[</span><span class="w"> </span><span class="s2">"</span><span class="nv">$event_type</span><span class="s2">"</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="s2">"deploy"</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="s2">"</span><span class="nv">$status</span><span class="s2">"</span><span class="w"> </span>!<span class="o">=</span><span class="w"> </span><span class="s2">"success"</span><span class="w"> </span><span class="o">]]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
 <span class="w">  </span><span class="c1"># Failed deployment → alert security team</span>
 <span class="w">  </span>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>https://slack.com/api/chat.postMessage<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: Bearer </span><span class="nv">$SLACK_TOKEN</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
-<span class="w">    </span>-d<span class="w"> </span><span class="s2">&quot;{</span>
-<span class="s2">      \&quot;channel\&quot;: \&quot;#security-alerts\&quot;,</span>
-<span class="s2">      \&quot;text\&quot;: \&quot;❌ Failed deployment detected in manifest: </span><span class="k">$(</span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">&#39;.metadata.name&#39;</span><span class="w"> </span>deploy_manifest.json<span class="k">)</span><span class="s2">\&quot;</span>
-<span class="s2">    }&quot;</span>
+<span class="w">    </span>-H<span class="w"> </span><span class="s2">"Authorization: Bearer </span><span class="nv">$SLACK_TOKEN</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>-d<span class="w"> </span><span class="s2">"{</span>
+<span class="s2">      \"channel\": \"#security-alerts\",</span>
+<span class="s2">      \"text\": \"❌ Failed deployment detected in manifest: </span><span class="k">$(</span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">'.metadata.name'</span><span class="w"> </span>deploy_manifest.json<span class="k">)</span><span class="s2">\"</span>
+<span class="s2">    }"</span>
 <span class="k">fi</span>
 </pre></div>
 </div>
@@ -4005,20 +4050,20 @@ strata<span class="w"> </span>audit<span class="w"> </span>diff<span class="w"> 
 <p><strong>Link manifests to change tickets:</strong></p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Jira integration: Create ticket with manifest evidence</span>
 
-<span class="nv">manifest</span><span class="o">=</span><span class="k">$(</span>strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w"> </span>--deployment<span class="w"> </span>prod<span class="w"> </span>--last<span class="w"> </span><span class="m">1</span><span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">&#39;.[0].path&#39;</span><span class="k">)</span>
-<span class="nv">user</span><span class="o">=</span><span class="k">$(</span>strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w"> </span><span class="nv">$manifest</span><span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">&#39;.spec.user&#39;</span><span class="k">)</span>
+<span class="nv">manifest</span><span class="o">=</span><span class="k">$(</span>strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w"> </span>--deployment<span class="w"> </span>prod<span class="w"> </span>--last<span class="w"> </span><span class="m">1</span><span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">'.[0].path'</span><span class="k">)</span>
+<span class="nv">user</span><span class="o">=</span><span class="k">$(</span>strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w"> </span><span class="nv">$manifest</span><span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">'.spec.user'</span><span class="k">)</span>
 
-curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;https://jira.acme.com/rest/api/2/issue&quot;</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: Basic </span><span class="k">$(</span><span class="nb">echo</span><span class="w"> </span>-n<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$JIRA_USER</span><span class="s2">:</span><span class="nv">$JIRA_TOKEN</span><span class="s2">&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>base64<span class="k">)</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>-d<span class="w"> </span><span class="s2">&quot;{</span>
-<span class="s2">    \&quot;fields\&quot;: {</span>
-<span class="s2">      \&quot;project\&quot;: {\&quot;key\&quot;: \&quot;INFRA\&quot;},</span>
-<span class="s2">      \&quot;summary\&quot;: \&quot;Infrastructure deployment: </span><span class="nv">$user</span><span class="s2">\&quot;,</span>
-<span class="s2">      \&quot;description\&quot;: \&quot;Manifest: </span><span class="nv">$manifest</span><span class="s2">\&quot;,</span>
-<span class="s2">      \&quot;labels\&quot;: [\&quot;infrastructure-change\&quot;, \&quot;production\&quot;]</span>
+curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">"https://jira.acme.com/rest/api/2/issue"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">"Content-Type: application/json"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-H<span class="w"> </span><span class="s2">"Authorization: Basic </span><span class="k">$(</span><span class="nb">echo</span><span class="w"> </span>-n<span class="w"> </span><span class="s2">"</span><span class="nv">$JIRA_USER</span><span class="s2">:</span><span class="nv">$JIRA_TOKEN</span><span class="s2">"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>base64<span class="k">)</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-d<span class="w"> </span><span class="s2">"{</span>
+<span class="s2">    \"fields\": {</span>
+<span class="s2">      \"project\": {\"key\": \"INFRA\"},</span>
+<span class="s2">      \"summary\": \"Infrastructure deployment: </span><span class="nv">$user</span><span class="s2">\",</span>
+<span class="s2">      \"description\": \"Manifest: </span><span class="nv">$manifest</span><span class="s2">\",</span>
+<span class="s2">      \"labels\": [\"infrastructure-change\", \"production\"]</span>
 <span class="s2">    }</span>
-<span class="s2">  }&quot;</span>
+<span class="s2">  }"</span>
 </pre></div>
 </div>
 </section>

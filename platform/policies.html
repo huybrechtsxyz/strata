@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../config/diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="../guides/features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../guides/faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3472,7 +3517,7 @@
 <span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer_zone</span>
 <span class="w">      </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">plan</span>
 <span class="w">      </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Reject</span><span class="nv"> </span><span class="s">any</span><span class="nv"> </span><span class="s">Terraform</span><span class="nv"> </span><span class="s">resource</span><span class="nv"> </span><span class="s">targeting</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">disallowed</span><span class="nv"> </span><span class="s">region&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Reject</span><span class="nv"> </span><span class="s">any</span><span class="nv"> </span><span class="s">Terraform</span><span class="nv"> </span><span class="s">resource</span><span class="nv"> </span><span class="s">targeting</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">disallowed</span><span class="nv"> </span><span class="s">region"</span>
 </pre></div>
 </div>
 <section id="fields">
@@ -3693,7 +3738,7 @@
 <span class="w">  </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">validate</span>
 <span class="w">  </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">warn</span>
 <span class="w">  </span><span class="nt">configuration</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;^[a-z][a-z0-9-]*$&quot;</span>
+<span class="w">    </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^[a-z][a-z0-9-]*$"</span>
 </pre></div>
 </div>
 </section>
@@ -3702,7 +3747,7 @@
 <p>Delegates policy evaluation to an external command — OPA, Checkov, a custom shell script, or any executable that can read JSON from stdin.</p>
 <p>strata launches the command, writes a JSON context object to its standard input, and waits for it to exit. Exit code <code class="docutils literal notranslate"><span class="pre">0</span></code> is a pass; any non-zero exit code is a failure. Stdout is captured as the violation message.</p>
 <p><strong>Context sent on stdin:</strong></p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="nt">&quot;phase&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;plan&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;work_path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/path/to/workspace&quot;</span><span class="p">}</span>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="nt">"phase"</span><span class="p">:</span><span class="w"> </span><span class="s2">"plan"</span><span class="p">,</span><span class="w"> </span><span class="nt">"work_path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/path/to/workspace"</span><span class="p">}</span>
 </pre></div>
 </div>
 <p>The <code class="docutils literal notranslate"><span class="pre">script</span></code> type can run at any phase — set <code class="docutils literal notranslate"><span class="pre">phase</span></code> to whichever phase you want the evaluation to occur. Timeout defaults to <code class="docutils literal notranslate"><span class="pre">30</span></code> seconds. Skipped gracefully when no <code class="docutils literal notranslate"><span class="pre">command</span></code> is configured.</p>
@@ -3711,7 +3756,7 @@
 <span class="w">  </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">plan</span>
 <span class="w">  </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span>
 <span class="w">  </span><span class="nt">configuration</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;opa</span><span class="nv"> </span><span class="s">eval</span><span class="nv"> </span><span class="s">--data</span><span class="nv"> </span><span class="s">policy.rego</span><span class="nv"> </span><span class="s">--input</span><span class="nv"> </span><span class="s">/dev/stdin</span><span class="nv"> </span><span class="s">-&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">"opa</span><span class="nv"> </span><span class="s">eval</span><span class="nv"> </span><span class="s">--data</span><span class="nv"> </span><span class="s">policy.rego</span><span class="nv"> </span><span class="s">--input</span><span class="nv"> </span><span class="s">/dev/stdin</span><span class="nv"> </span><span class="s">-"</span>
 <span class="w">    </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
 </pre></div>
 </div>
@@ -3727,13 +3772,13 @@
 <span class="w">      </span><span class="nt">repository</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/acme/my-service</span>
 <span class="w">      </span><span class="nt">reference</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">main</span>
 <span class="w">      </span><span class="nt">conventions</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">release_pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;^v\\d+\\.\\d+\\.\\d+$&quot;</span><span class="w">    </span><span class="c1"># semver only</span>
-<span class="w">        </span><span class="nt">quality_pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;^tested(-\\d+)?$&quot;</span><span class="w">          </span><span class="c1"># quality gate tags</span>
+<span class="w">        </span><span class="nt">release_pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^v\\d+\\.\\d+\\.\\d+$"</span><span class="w">    </span><span class="c1"># semver only</span>
+<span class="w">        </span><span class="nt">quality_pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^tested(-\\d+)?$"</span><span class="w">          </span><span class="c1"># quality gate tags</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tf-landscape</span>
 <span class="w">      </span><span class="nt">repository</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/acme/tf-landscape</span>
 <span class="w">      </span><span class="nt">reference</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">main</span>
 <span class="w">      </span><span class="nt">conventions</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">release_pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;^v\\d+\\.\\d+\\.\\d+$&quot;</span>
+<span class="w">        </span><span class="nt">release_pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^v\\d+\\.\\d+\\.\\d+$"</span>
 
 <span class="w">  </span><span class="nt">policies</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">release_tag_conventions</span>
@@ -3771,10 +3816,10 @@
 <li><p>Report a violation if the reference matches neither pattern</p></li>
 </ol>
 <p><strong>Example violations:</strong></p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>environment &#39;production&#39; → remote &#39;my-service&#39; reference &#39;main&#39; 
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>environment 'production' → remote 'my-service' reference 'main' 
   does not match expected pattern (release: ^v\d+\.\d+\.\d+$ or quality: ^tested(-\d+)?$)
 
-deployment &#39;acme&#39; → remote &#39;tf-landscape&#39; reference &#39;abc1234f&#39; 
+deployment 'acme' → remote 'tf-landscape' reference 'abc1234f' 
   does not match expected pattern (release: ^v\d+\.\d+\.\d+$)
 </pre></div>
 </div>
@@ -3889,10 +3934,10 @@ deployment &#39;acme&#39; → remote &#39;tf-landscape&#39; reference &#39;abc12
 <span class="w">  </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span>
 <span class="w">  </span><span class="nt">configuration</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">denied</span><span class="p">:</span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;pkg:pypi/setuptools@&lt;70.0.0&quot;</span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;pkg:npm/event-stream@*&quot;</span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;log4j*&quot;</span>
-<span class="w">    </span><span class="nt">reason</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Blocked</span><span class="nv"> </span><span class="s">by</span><span class="nv"> </span><span class="s">security</span><span class="nv"> </span><span class="s">policy</span><span class="nv"> </span><span class="s">SEC-2026-041&quot;</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"pkg:pypi/setuptools@&lt;70.0.0"</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"pkg:npm/event-stream@*"</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"log4j*"</span>
+<span class="w">    </span><span class="nt">reason</span><span class="p">:</span><span class="w"> </span><span class="s">"Blocked</span><span class="nv"> </span><span class="s">by</span><span class="nv"> </span><span class="s">security</span><span class="nv"> </span><span class="s">policy</span><span class="nv"> </span><span class="s">SEC-2026-041"</span>
 </pre></div>
 </div>
 </section>
@@ -4029,7 +4074,7 @@ The policy reads the pre-computed cost file — it does not call Infracost itsel
 <span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cost_threshold</span>
 <span class="w">  </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">plan</span>
 <span class="w">  </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span>
-<span class="w">  </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Block</span><span class="nv"> </span><span class="s">deployments</span><span class="nv"> </span><span class="s">with</span><span class="nv"> </span><span class="s">monthly</span><span class="nv"> </span><span class="s">cost</span><span class="nv"> </span><span class="s">over</span><span class="nv"> </span><span class="s">€10,000&quot;</span>
+<span class="w">  </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Block</span><span class="nv"> </span><span class="s">deployments</span><span class="nv"> </span><span class="s">with</span><span class="nv"> </span><span class="s">monthly</span><span class="nv"> </span><span class="s">cost</span><span class="nv"> </span><span class="s">over</span><span class="nv"> </span><span class="s">€10,000"</span>
 <span class="w">  </span><span class="nt">configuration</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">max_monthly</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10000</span>
 <span class="w">    </span><span class="nt">currency</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">EUR</span>
@@ -4041,7 +4086,7 @@ The policy reads the pre-computed cost file — it does not call Infracost itsel
 <span class="w">  </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">warn</span>
 <span class="w">  </span><span class="nt">configuration</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">max_monthly</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">500</span>
-<span class="w">    </span><span class="nt">environment_pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;dev*&quot;</span>
+<span class="w">    </span><span class="nt">environment_pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"dev*"</span>
 <span class="w">    </span><span class="nt">currency</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">EUR</span>
 </pre></div>
 </div>
@@ -4128,7 +4173,7 @@ The policy reads the pre-computed cost file — it does not call Infracost itsel
 <span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer_zone</span>
 <span class="w">      </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">plan</span>
 <span class="w">      </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;All</span><span class="nv"> </span><span class="s">provisioned</span><span class="nv"> </span><span class="s">resources</span><span class="nv"> </span><span class="s">must</span><span class="nv"> </span><span class="s">be</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">customer-allowed</span><span class="nv"> </span><span class="s">zones&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"All</span><span class="nv"> </span><span class="s">provisioned</span><span class="nv"> </span><span class="s">resources</span><span class="nv"> </span><span class="s">must</span><span class="nv"> </span><span class="s">be</span><span class="nv"> </span><span class="s">in</span><span class="nv"> </span><span class="s">customer-allowed</span><span class="nv"> </span><span class="s">zones"</span>
 </pre></div>
 </div>
 <p>With this configuration, running <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span></code> will evaluate every resource in the Terraform plan against the customer’s declared zones. If any resource targets <code class="docutils literal notranslate"><span class="pre">us-east-1</span></code> or another region outside the allowed set, the deploy stops before apply with exit code <code class="docutils literal notranslate"><span class="pre">3</span></code>.</p>
@@ -4140,13 +4185,13 @@ The policy reads the pre-computed cost file — it does not call Infracost itsel
 <span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer_zone</span>
 <span class="w">      </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">plan</span>
 <span class="w">      </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Block</span><span class="nv"> </span><span class="s">resources</span><span class="nv"> </span><span class="s">outside</span><span class="nv"> </span><span class="s">customer</span><span class="nv"> </span><span class="s">zones&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Block</span><span class="nv"> </span><span class="s">resources</span><span class="nv"> </span><span class="s">outside</span><span class="nv"> </span><span class="s">customer</span><span class="nv"> </span><span class="s">zones"</span>
 
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">require_standard_labels</span>
 <span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">required_tags</span>
 <span class="w">      </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build</span>
 <span class="w">      </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">warn</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Warn</span><span class="nv"> </span><span class="s">when</span><span class="nv"> </span><span class="s">required</span><span class="nv"> </span><span class="s">labels</span><span class="nv"> </span><span class="s">are</span><span class="nv"> </span><span class="s">missing&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Warn</span><span class="nv"> </span><span class="s">when</span><span class="nv"> </span><span class="s">required</span><span class="nv"> </span><span class="s">labels</span><span class="nv"> </span><span class="s">are</span><span class="nv"> </span><span class="s">missing"</span>
 <span class="w">      </span><span class="nt">configuration</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">required_labels</span><span class="p">:</span>
 <span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
@@ -4174,16 +4219,16 @@ The policy reads the pre-computed cost file — it does not call Infracost itsel
 <span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">naming_pattern</span>
 <span class="w">      </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">validate</span>
 <span class="w">      </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">warn</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Names</span><span class="nv"> </span><span class="s">must</span><span class="nv"> </span><span class="s">be</span><span class="nv"> </span><span class="s">lowercase,</span><span class="nv"> </span><span class="s">start</span><span class="nv"> </span><span class="s">with</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">letter&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Names</span><span class="nv"> </span><span class="s">must</span><span class="nv"> </span><span class="s">be</span><span class="nv"> </span><span class="s">lowercase,</span><span class="nv"> </span><span class="s">start</span><span class="nv"> </span><span class="s">with</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">letter"</span>
 <span class="w">      </span><span class="nt">configuration</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;^[a-z][a-z0-9-]*$&quot;</span>
+<span class="w">        </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^[a-z][a-z0-9-]*$"</span>
 
 <span class="w">    </span><span class="c1"># build phase: checked after `strata build run` completes</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">require_standard_labels</span>
 <span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">required_tags</span>
 <span class="w">      </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build</span>
 <span class="w">      </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;All</span><span class="nv"> </span><span class="s">namespaces</span><span class="nv"> </span><span class="s">must</span><span class="nv"> </span><span class="s">carry</span><span class="nv"> </span><span class="s">standard</span><span class="nv"> </span><span class="s">cost-tracking</span><span class="nv"> </span><span class="s">labels&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"All</span><span class="nv"> </span><span class="s">namespaces</span><span class="nv"> </span><span class="s">must</span><span class="nv"> </span><span class="s">carry</span><span class="nv"> </span><span class="s">standard</span><span class="nv"> </span><span class="s">cost-tracking</span><span class="nv"> </span><span class="s">labels"</span>
 <span class="w">      </span><span class="nt">configuration</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">required_labels</span><span class="p">:</span>
 <span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
@@ -4194,7 +4239,7 @@ The policy reads the pre-computed cost file — it does not call Infracost itsel
 <span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sbom_pinned_versions</span>
 <span class="w">      </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build</span>
 <span class="w">      </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Reject</span><span class="nv"> </span><span class="s">floating</span><span class="nv"> </span><span class="s">image</span><span class="nv"> </span><span class="s">tags</span><span class="nv"> </span><span class="s">—</span><span class="nv"> </span><span class="s">all</span><span class="nv"> </span><span class="s">images</span><span class="nv"> </span><span class="s">must</span><span class="nv"> </span><span class="s">be</span><span class="nv"> </span><span class="s">pinned&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Reject</span><span class="nv"> </span><span class="s">floating</span><span class="nv"> </span><span class="s">image</span><span class="nv"> </span><span class="s">tags</span><span class="nv"> </span><span class="s">—</span><span class="nv"> </span><span class="s">all</span><span class="nv"> </span><span class="s">images</span><span class="nv"> </span><span class="s">must</span><span class="nv"> </span><span class="s">be</span><span class="nv"> </span><span class="s">pinned"</span>
 <span class="w">      </span><span class="nt">configuration</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">collectors</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">image</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">compose</span><span class="p p-Indicator">]</span>
 <span class="w">        </span><span class="nt">allow_latest</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
@@ -4203,7 +4248,7 @@ The policy reads the pre-computed cost file — it does not call Infracost itsel
 <span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sbom_allowed_registries</span>
 <span class="w">      </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build</span>
 <span class="w">      </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Images</span><span class="nv"> </span><span class="s">must</span><span class="nv"> </span><span class="s">come</span><span class="nv"> </span><span class="s">from</span><span class="nv"> </span><span class="s">approved</span><span class="nv"> </span><span class="s">registries&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Images</span><span class="nv"> </span><span class="s">must</span><span class="nv"> </span><span class="s">come</span><span class="nv"> </span><span class="s">from</span><span class="nv"> </span><span class="s">approved</span><span class="nv"> </span><span class="s">registries"</span>
 <span class="w">      </span><span class="nt">configuration</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">allowed</span><span class="p">:</span>
 <span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ghcr.io/myorg</span>
@@ -4214,17 +4259,17 @@ The policy reads the pre-computed cost file — it does not call Infracost itsel
 <span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sbom_denied_packages</span>
 <span class="w">      </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build</span>
 <span class="w">      </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Block</span><span class="nv"> </span><span class="s">packages</span><span class="nv"> </span><span class="s">on</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">security</span><span class="nv"> </span><span class="s">blocklist&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Block</span><span class="nv"> </span><span class="s">packages</span><span class="nv"> </span><span class="s">on</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">security</span><span class="nv"> </span><span class="s">blocklist"</span>
 <span class="w">      </span><span class="nt">configuration</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">denied</span><span class="p">:</span>
-<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;pkg:npm/event-stream@*&quot;</span>
-<span class="w">        </span><span class="nt">reason</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Supply-chain</span><span class="nv"> </span><span class="s">attack</span><span class="nv"> </span><span class="s">risk&quot;</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"pkg:npm/event-stream@*"</span>
+<span class="w">        </span><span class="nt">reason</span><span class="p">:</span><span class="w"> </span><span class="s">"Supply-chain</span><span class="nv"> </span><span class="s">attack</span><span class="nv"> </span><span class="s">risk"</span>
 
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">complexity_budget</span>
 <span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sbom_max_components</span>
 <span class="w">      </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build</span>
 <span class="w">      </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">warn</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Alert</span><span class="nv"> </span><span class="s">when</span><span class="nv"> </span><span class="s">component</span><span class="nv"> </span><span class="s">count</span><span class="nv"> </span><span class="s">exceeds</span><span class="nv"> </span><span class="s">budget&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Alert</span><span class="nv"> </span><span class="s">when</span><span class="nv"> </span><span class="s">component</span><span class="nv"> </span><span class="s">count</span><span class="nv"> </span><span class="s">exceeds</span><span class="nv"> </span><span class="s">budget"</span>
 <span class="w">      </span><span class="nt">configuration</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">max_count</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200</span>
 
@@ -4232,10 +4277,10 @@ The policy reads the pre-computed cost file — it does not call Infracost itsel
 <span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sbom_license</span>
 <span class="w">      </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build</span>
 <span class="w">      </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Only</span><span class="nv"> </span><span class="s">permissive</span><span class="nv"> </span><span class="s">open-source</span><span class="nv"> </span><span class="s">licenses</span><span class="nv"> </span><span class="s">allowed&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Only</span><span class="nv"> </span><span class="s">permissive</span><span class="nv"> </span><span class="s">open-source</span><span class="nv"> </span><span class="s">licenses</span><span class="nv"> </span><span class="s">allowed"</span>
 <span class="w">      </span><span class="nt">configuration</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">allowed</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">MIT</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">Apache-2.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;BSD-*&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">ISC</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">Unlicense</span><span class="p p-Indicator">]</span>
-<span class="w">        </span><span class="nt">denied</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;GPL-*&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;AGPL-*&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">allowed</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">MIT</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">Apache-2.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"BSD-*"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">ISC</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">Unlicense</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">denied</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"GPL-*"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"AGPL-*"</span><span class="p p-Indicator">]</span>
 <span class="w">        </span><span class="nt">unknown_action</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">warn</span>
 
 <span class="w">    </span><span class="c1"># plan phase: checked after `terraform plan`, before `terraform apply`</span>
@@ -4243,16 +4288,16 @@ The policy reads the pre-computed cost file — it does not call Infracost itsel
 <span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer_zone</span>
 <span class="w">      </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">plan</span>
 <span class="w">      </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Resources</span><span class="nv"> </span><span class="s">must</span><span class="nv"> </span><span class="s">stay</span><span class="nv"> </span><span class="s">within</span><span class="nv"> </span><span class="s">customer-allowed</span><span class="nv"> </span><span class="s">regions&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Resources</span><span class="nv"> </span><span class="s">must</span><span class="nv"> </span><span class="s">stay</span><span class="nv"> </span><span class="s">within</span><span class="nv"> </span><span class="s">customer-allowed</span><span class="nv"> </span><span class="s">regions"</span>
 
 <span class="w">    </span><span class="c1"># plan phase: delegate to OPA for additional compliance checks</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">opa_compliance</span>
 <span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">script</span>
 <span class="w">      </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">plan</span>
 <span class="w">      </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span>
-<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;OPA</span><span class="nv"> </span><span class="s">baseline</span><span class="nv"> </span><span class="s">security</span><span class="nv"> </span><span class="s">policy&quot;</span>
+<span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"OPA</span><span class="nv"> </span><span class="s">baseline</span><span class="nv"> </span><span class="s">security</span><span class="nv"> </span><span class="s">policy"</span>
 <span class="w">      </span><span class="nt">configuration</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;opa</span><span class="nv"> </span><span class="s">eval</span><span class="nv"> </span><span class="s">--data</span><span class="nv"> </span><span class="s">policy.rego</span><span class="nv"> </span><span class="s">--input</span><span class="nv"> </span><span class="s">/dev/stdin</span><span class="nv"> </span><span class="s">-&quot;</span>
+<span class="w">        </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">"opa</span><span class="nv"> </span><span class="s">eval</span><span class="nv"> </span><span class="s">--data</span><span class="nv"> </span><span class="s">policy.rego</span><span class="nv"> </span><span class="s">--input</span><span class="nv"> </span><span class="s">/dev/stdin</span><span class="nv"> </span><span class="s">-"</span>
 <span class="w">        </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
 </pre></div>
 </div>

@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="../guides/features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../guides/faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3537,63 +3582,63 @@
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspace_init</span>
 <span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Workspace initialized</span>
 <span class="w">    </span><span class="nt">check</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">solution_exists</span>
-<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata</span><span class="nv"> </span><span class="s">sln</span><span class="nv"> </span><span class="s">init</span><span class="nv"> </span><span class="s">{name}&quot;</span>
-<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Initialize</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">workspace</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">create</span><span class="nv"> </span><span class="s">.strata/</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">solution.json&quot;</span>
-<span class="w">    </span><span class="nt">see_also</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata</span><span class="nv"> </span><span class="s">help</span><span class="nv"> </span><span class="s">--topic</span><span class="nv"> </span><span class="s">quickstart&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">"strata</span><span class="nv"> </span><span class="s">sln</span><span class="nv"> </span><span class="s">init</span><span class="nv"> </span><span class="s">{name}"</span>
+<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">"Initialize</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">workspace</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">create</span><span class="nv"> </span><span class="s">.strata/</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">solution.json"</span>
+<span class="w">    </span><span class="nt">see_also</span><span class="p">:</span><span class="w"> </span><span class="s">"strata</span><span class="nv"> </span><span class="s">help</span><span class="nv"> </span><span class="s">--topic</span><span class="nv"> </span><span class="s">quickstart"</span>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">repos_registered</span>
 <span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Repositories registered</span>
 <span class="w">    </span><span class="nt">check</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">repos_registered</span>
 <span class="w">    </span><span class="nt">depends_on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">workspace_init</span><span class="p p-Indicator">]</span>
-<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata</span><span class="nv"> </span><span class="s">repo</span><span class="nv"> </span><span class="s">add</span><span class="nv"> </span><span class="s">{name}</span><span class="nv"> </span><span class="s">{url}&quot;</span>
-<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Register</span><span class="nv"> </span><span class="s">at</span><span class="nv"> </span><span class="s">least</span><span class="nv"> </span><span class="s">one</span><span class="nv"> </span><span class="s">configuration</span><span class="nv"> </span><span class="s">repository&quot;</span>
-<span class="w">    </span><span class="nt">see_also</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata</span><span class="nv"> </span><span class="s">help</span><span class="nv"> </span><span class="s">--topic</span><span class="nv"> </span><span class="s">repos&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">"strata</span><span class="nv"> </span><span class="s">repo</span><span class="nv"> </span><span class="s">add</span><span class="nv"> </span><span class="s">{name}</span><span class="nv"> </span><span class="s">{url}"</span>
+<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">"Register</span><span class="nv"> </span><span class="s">at</span><span class="nv"> </span><span class="s">least</span><span class="nv"> </span><span class="s">one</span><span class="nv"> </span><span class="s">configuration</span><span class="nv"> </span><span class="s">repository"</span>
+<span class="w">    </span><span class="nt">see_also</span><span class="p">:</span><span class="w"> </span><span class="s">"strata</span><span class="nv"> </span><span class="s">help</span><span class="nv"> </span><span class="s">--topic</span><span class="nv"> </span><span class="s">repos"</span>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">repos_on_disk</span>
 <span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Repositories on disk</span>
 <span class="w">    </span><span class="nt">check</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">repos_cloned</span>
 <span class="w">    </span><span class="nt">depends_on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">repos_registered</span><span class="p p-Indicator">]</span>
-<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Clone</span><span class="nv"> </span><span class="s">registered</span><span class="nv"> </span><span class="s">repositories</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">their</span><span class="nv"> </span><span class="s">configured</span><span class="nv"> </span><span class="s">paths&quot;</span>
-<span class="w">    </span><span class="nt">see_also</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata</span><span class="nv"> </span><span class="s">help</span><span class="nv"> </span><span class="s">--topic</span><span class="nv"> </span><span class="s">repos&quot;</span>
+<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">"Clone</span><span class="nv"> </span><span class="s">registered</span><span class="nv"> </span><span class="s">repositories</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">their</span><span class="nv"> </span><span class="s">configured</span><span class="nv"> </span><span class="s">paths"</span>
+<span class="w">    </span><span class="nt">see_also</span><span class="p">:</span><span class="w"> </span><span class="s">"strata</span><span class="nv"> </span><span class="s">help</span><span class="nv"> </span><span class="s">--topic</span><span class="nv"> </span><span class="s">repos"</span>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">profile_created</span>
 <span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Profile created</span>
 <span class="w">    </span><span class="nt">check</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">profile_exists</span>
 <span class="w">    </span><span class="nt">depends_on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">workspace_init</span><span class="p p-Indicator">]</span>
-<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata</span><span class="nv"> </span><span class="s">profile</span><span class="nv"> </span><span class="s">add</span><span class="nv"> </span><span class="s">{name}</span><span class="nv"> </span><span class="s">--activate&quot;</span>
-<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Create</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">profile</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">organize</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">references&quot;</span>
-<span class="w">    </span><span class="nt">see_also</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata</span><span class="nv"> </span><span class="s">help</span><span class="nv"> </span><span class="s">--topic</span><span class="nv"> </span><span class="s">profiles&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">"strata</span><span class="nv"> </span><span class="s">profile</span><span class="nv"> </span><span class="s">add</span><span class="nv"> </span><span class="s">{name}</span><span class="nv"> </span><span class="s">--activate"</span>
+<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">"Create</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">profile</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">organize</span><span class="nv"> </span><span class="s">file</span><span class="nv"> </span><span class="s">references"</span>
+<span class="w">    </span><span class="nt">see_also</span><span class="p">:</span><span class="w"> </span><span class="s">"strata</span><span class="nv"> </span><span class="s">help</span><span class="nv"> </span><span class="s">--topic</span><span class="nv"> </span><span class="s">profiles"</span>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">profile_activated</span>
 <span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Profile activated</span>
 <span class="w">    </span><span class="nt">check</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">profile_active</span>
 <span class="w">    </span><span class="nt">depends_on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">profile_created</span><span class="p p-Indicator">]</span>
-<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata</span><span class="nv"> </span><span class="s">profile</span><span class="nv"> </span><span class="s">activate</span><span class="nv"> </span><span class="s">{name}&quot;</span>
-<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Activate</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">profile</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">set</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">working</span><span class="nv"> </span><span class="s">context&quot;</span>
-<span class="w">    </span><span class="nt">see_also</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata</span><span class="nv"> </span><span class="s">help</span><span class="nv"> </span><span class="s">--topic</span><span class="nv"> </span><span class="s">profiles&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">"strata</span><span class="nv"> </span><span class="s">profile</span><span class="nv"> </span><span class="s">activate</span><span class="nv"> </span><span class="s">{name}"</span>
+<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">"Activate</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">profile</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">set</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">working</span><span class="nv"> </span><span class="s">context"</span>
+<span class="w">    </span><span class="nt">see_also</span><span class="p">:</span><span class="w"> </span><span class="s">"strata</span><span class="nv"> </span><span class="s">help</span><span class="nv"> </span><span class="s">--topic</span><span class="nv"> </span><span class="s">profiles"</span>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">files_registered</span>
 <span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">File references registered</span>
 <span class="w">    </span><span class="nt">check</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">files_registered</span>
 <span class="w">    </span><span class="nt">depends_on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">profile_activated</span><span class="p p-Indicator">]</span>
-<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata</span><span class="nv"> </span><span class="s">ref</span><span class="nv"> </span><span class="s">config</span><span class="nv"> </span><span class="s">add</span><span class="nv"> </span><span class="s">{name}</span><span class="nv"> </span><span class="s">@{repo}/path/to/config.yaml</span><span class="nv"> </span><span class="s">--profile</span><span class="nv"> </span><span class="s">{active}&quot;</span>
-<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Register</span><span class="nv"> </span><span class="s">configuration</span><span class="nv"> </span><span class="s">files</span><span class="nv"> </span><span class="s">against</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">active</span><span class="nv"> </span><span class="s">profile&quot;</span>
-<span class="w">    </span><span class="nt">see_also</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata</span><span class="nv"> </span><span class="s">help</span><span class="nv"> </span><span class="s">--topic</span><span class="nv"> </span><span class="s">environments&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">"strata</span><span class="nv"> </span><span class="s">ref</span><span class="nv"> </span><span class="s">config</span><span class="nv"> </span><span class="s">add</span><span class="nv"> </span><span class="s">{name}</span><span class="nv"> </span><span class="s">@{repo}/path/to/config.yaml</span><span class="nv"> </span><span class="s">--profile</span><span class="nv"> </span><span class="s">{active}"</span>
+<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">"Register</span><span class="nv"> </span><span class="s">configuration</span><span class="nv"> </span><span class="s">files</span><span class="nv"> </span><span class="s">against</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">active</span><span class="nv"> </span><span class="s">profile"</span>
+<span class="w">    </span><span class="nt">see_also</span><span class="p">:</span><span class="w"> </span><span class="s">"strata</span><span class="nv"> </span><span class="s">help</span><span class="nv"> </span><span class="s">--topic</span><span class="nv"> </span><span class="s">environments"</span>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build_exists</span>
 <span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Build artifact exists</span>
 <span class="w">    </span><span class="nt">check</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build_exists</span>
-<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata</span><span class="nv"> </span><span class="s">build</span><span class="nv"> </span><span class="s">run&quot;</span>
-<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Run</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">build</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">generate</span><span class="nv"> </span><span class="s">deployment</span><span class="nv"> </span><span class="s">artifacts&quot;</span>
-<span class="w">    </span><span class="nt">see_also</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata</span><span class="nv"> </span><span class="s">help</span><span class="nv"> </span><span class="s">--topic</span><span class="nv"> </span><span class="s">build&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">"strata</span><span class="nv"> </span><span class="s">build</span><span class="nv"> </span><span class="s">run"</span>
+<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">"Run</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">build</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">generate</span><span class="nv"> </span><span class="s">deployment</span><span class="nv"> </span><span class="s">artifacts"</span>
+<span class="w">    </span><span class="nt">see_also</span><span class="p">:</span><span class="w"> </span><span class="s">"strata</span><span class="nv"> </span><span class="s">help</span><span class="nv"> </span><span class="s">--topic</span><span class="nv"> </span><span class="s">build"</span>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">inventory_generated</span>
 <span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Platform inventory generated</span>
 <span class="w">    </span><span class="nt">check</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sbom_exists</span>
 <span class="w">    </span><span class="nt">depends_on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">build_exists</span><span class="p p-Indicator">]</span>
-<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata</span><span class="nv"> </span><span class="s">build</span><span class="nv"> </span><span class="s">sbom</span><span class="nv"> </span><span class="s">-f</span><span class="nv"> </span><span class="s">{file}&quot;</span>
-<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Generate</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">platform</span><span class="nv"> </span><span class="s">inventory&quot;</span>
-<span class="w">    </span><span class="nt">see_also</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;docs/platform/builders.md&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">"strata</span><span class="nv"> </span><span class="s">build</span><span class="nv"> </span><span class="s">sbom</span><span class="nv"> </span><span class="s">-f</span><span class="nv"> </span><span class="s">{file}"</span>
+<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">"Generate</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">platform</span><span class="nv"> </span><span class="s">inventory"</span>
+<span class="w">    </span><span class="nt">see_also</span><span class="p">:</span><span class="w"> </span><span class="s">"docs/platform/builders.md"</span>
 </pre></div>
 </div>
 </section>
@@ -3617,21 +3662,21 @@
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspace_init</span>
 <span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Workspace initialized</span>
 <span class="w">    </span><span class="nt">check</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">solution_exists</span>
-<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata</span><span class="nv"> </span><span class="s">sln</span><span class="nv"> </span><span class="s">init</span><span class="nv"> </span><span class="s">{name}&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">"strata</span><span class="nv"> </span><span class="s">sln</span><span class="nv"> </span><span class="s">init</span><span class="nv"> </span><span class="s">{name}"</span>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build_exists</span>
 <span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Build artifact exists</span>
 <span class="w">    </span><span class="nt">check</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build_exists</span>
 <span class="w">    </span><span class="nt">depends_on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">workspace_init</span><span class="p p-Indicator">]</span>
-<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata</span><span class="nv"> </span><span class="s">build</span><span class="nv"> </span><span class="s">run&quot;</span>
-<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Run</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">build</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">generate</span><span class="nv"> </span><span class="s">deployment</span><span class="nv"> </span><span class="s">artifacts&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">"strata</span><span class="nv"> </span><span class="s">build</span><span class="nv"> </span><span class="s">run"</span>
+<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">"Run</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">build</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">generate</span><span class="nv"> </span><span class="s">deployment</span><span class="nv"> </span><span class="s">artifacts"</span>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">files_registered</span>
 <span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">File references registered</span>
 <span class="w">    </span><span class="nt">check</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">files_registered</span>
 <span class="w">    </span><span class="nt">depends_on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">workspace_init</span><span class="p p-Indicator">]</span>
-<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata</span><span class="nv"> </span><span class="s">ref</span><span class="nv"> </span><span class="s">config</span><span class="nv"> </span><span class="s">add</span><span class="nv"> </span><span class="s">{name}</span><span class="nv"> </span><span class="s">@{repo}/path/to/config.yaml&quot;</span>
-<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Register</span><span class="nv"> </span><span class="s">configuration</span><span class="nv"> </span><span class="s">files</span><span class="nv"> </span><span class="s">against</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">active</span><span class="nv"> </span><span class="s">profile&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">"strata</span><span class="nv"> </span><span class="s">ref</span><span class="nv"> </span><span class="s">config</span><span class="nv"> </span><span class="s">add</span><span class="nv"> </span><span class="s">{name}</span><span class="nv"> </span><span class="s">@{repo}/path/to/config.yaml"</span>
+<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">"Register</span><span class="nv"> </span><span class="s">configuration</span><span class="nv"> </span><span class="s">files</span><span class="nv"> </span><span class="s">against</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">active</span><span class="nv"> </span><span class="s">profile"</span>
 </pre></div>
 </div>
 </section>
@@ -3642,8 +3687,8 @@
 <span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Terraform docs generated</span>
 <span class="w">    </span><span class="nt">check</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build_exists</span><span class="w">          </span><span class="c1"># reuse an existing check as a proxy</span>
 <span class="w">    </span><span class="nt">depends_on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">build_exists</span><span class="p p-Indicator">]</span>
-<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;terraform-docs</span><span class="nv"> </span><span class="s">markdown</span><span class="nv"> </span><span class="s">.</span><span class="nv"> </span><span class="s">&gt;</span><span class="nv"> </span><span class="s">README.md&quot;</span>
-<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Generate</span><span class="nv"> </span><span class="s">Terraform</span><span class="nv"> </span><span class="s">module</span><span class="nv"> </span><span class="s">documentation&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">"terraform-docs</span><span class="nv"> </span><span class="s">markdown</span><span class="nv"> </span><span class="s">.</span><span class="nv"> </span><span class="s">&gt;</span><span class="nv"> </span><span class="s">README.md"</span>
+<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">"Generate</span><span class="nv"> </span><span class="s">Terraform</span><span class="nv"> </span><span class="s">module</span><span class="nv"> </span><span class="s">documentation"</span>
 <span class="w">    </span><span class="nt">skippable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </pre></div>
 </div>
@@ -3655,20 +3700,20 @@
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspace_init</span>
 <span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Workspace initialized</span>
 <span class="w">    </span><span class="nt">check</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">solution_exists</span>
-<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata</span><span class="nv"> </span><span class="s">sln</span><span class="nv"> </span><span class="s">init</span><span class="nv"> </span><span class="s">my-project&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">"strata</span><span class="nv"> </span><span class="s">sln</span><span class="nv"> </span><span class="s">init</span><span class="nv"> </span><span class="s">my-project"</span>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">profile_created</span>
 <span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Profile activated</span>
 <span class="w">    </span><span class="nt">check</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">profile_active</span>
 <span class="w">    </span><span class="nt">depends_on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">workspace_init</span><span class="p p-Indicator">]</span>
-<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata</span><span class="nv"> </span><span class="s">profile</span><span class="nv"> </span><span class="s">add</span><span class="nv"> </span><span class="s">prd</span><span class="nv"> </span><span class="s">--activate&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">"strata</span><span class="nv"> </span><span class="s">profile</span><span class="nv"> </span><span class="s">add</span><span class="nv"> </span><span class="s">prd</span><span class="nv"> </span><span class="s">--activate"</span>
 
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build_exists</span>
 <span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Compose file built</span>
 <span class="w">    </span><span class="nt">check</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build_exists</span>
 <span class="w">    </span><span class="nt">depends_on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">profile_created</span><span class="p p-Indicator">]</span>
-<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata</span><span class="nv"> </span><span class="s">build</span><span class="nv"> </span><span class="s">run&quot;</span>
-<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Generate</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">docker-compose.yml</span><span class="nv"> </span><span class="s">artifact&quot;</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">"strata</span><span class="nv"> </span><span class="s">build</span><span class="nv"> </span><span class="s">run"</span>
+<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">"Generate</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">docker-compose.yml</span><span class="nv"> </span><span class="s">artifact"</span>
 </pre></div>
 </div>
 </section>
@@ -3682,7 +3727,7 @@
 <span class="w">    </span><span class="nt">check</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">repos_cloned</span>
 <span class="w">    </span><span class="nt">depends_on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">repos_registered</span><span class="p p-Indicator">]</span>
 <span class="w">    </span><span class="c1"># no command — console shows git clone lines per missing repo</span>
-<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Clone</span><span class="nv"> </span><span class="s">registered</span><span class="nv"> </span><span class="s">repositories</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">their</span><span class="nv"> </span><span class="s">configured</span><span class="nv"> </span><span class="s">paths&quot;</span>
+<span class="w">    </span><span class="nt">hint</span><span class="p">:</span><span class="w"> </span><span class="s">"Clone</span><span class="nv"> </span><span class="s">registered</span><span class="nv"> </span><span class="s">repositories</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">their</span><span class="nv"> </span><span class="s">configured</span><span class="nv"> </span><span class="s">paths"</span>
 </pre></div>
 </div>
 </section>

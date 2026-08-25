@@ -23,7 +23,7 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Environment Configuration" href="environment.html" />
+    <link rel="next" title="Diagram Configuration" href="diagram.html" />
     <link rel="prev" title="Workspace Configuration" href="workspace.html" /> 
 </head>
 
@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="../guides/features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../guides/faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3455,7 +3500,7 @@
 <span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;description&gt;</span>
 <span class="w">  </span><span class="nt">labels</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&lt;version&gt;&quot;</span>
+<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">"&lt;version&gt;"</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">partial</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">               </span><span class="c1"># Optional: reusable base fragment, not directly deployable</span>
 <span class="w">  </span><span class="nt">extends</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;@repo/path.yaml&gt;</span><span class="w">   </span><span class="c1"># Optional: inherit from another deployment file</span>
@@ -3496,9 +3541,9 @@
 </div>
 <p><strong>Custom</strong> - Organizational metadata:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">custom</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">owner</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Platform</span><span class="nv"> </span><span class="s">Team&quot;</span>
-<span class="w">  </span><span class="nt">costcenter</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;PROD-001&quot;</span>
-<span class="w">  </span><span class="nt">billing_code</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;BC-123&quot;</span>
+<span class="w">  </span><span class="nt">owner</span><span class="p">:</span><span class="w"> </span><span class="s">"Platform</span><span class="nv"> </span><span class="s">Team"</span>
+<span class="w">  </span><span class="nt">costcenter</span><span class="p">:</span><span class="w"> </span><span class="s">"PROD-001"</span>
+<span class="w">  </span><span class="nt">billing_code</span><span class="p">:</span><span class="w"> </span><span class="s">"BC-123"</span>
 </pre></div>
 </div>
 </section>
@@ -3569,7 +3614,7 @@ for orchestration and references.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">meta</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">platform_prod</span>
 <span class="w">  </span><span class="nt">labels</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1.0.0&quot;</span>
+<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">"1.0.0"</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme-corp</span>
@@ -3585,25 +3630,25 @@ for orchestration and references.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">meta</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tenant_deployment</span>
 <span class="w">  </span><span class="nt">labels</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2.0.0&quot;</span>
+<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">"2.0.0"</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tenant-a</span>
 <span class="w">    </span><span class="nt">project</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">saas-platform</span>
 <span class="w">  </span><span class="nt">custom</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">tenant_id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;CUST-001&quot;</span>
-<span class="w">    </span><span class="nt">tier</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;premium&quot;</span>
-<span class="w">    </span><span class="nt">sla</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;99.99%&quot;</span>
+<span class="w">    </span><span class="nt">tenant_id</span><span class="p">:</span><span class="w"> </span><span class="s">"CUST-001"</span>
+<span class="w">    </span><span class="nt">tier</span><span class="p">:</span><span class="w"> </span><span class="s">"premium"</span>
+<span class="w">    </span><span class="nt">sla</span><span class="p">:</span><span class="w"> </span><span class="s">"99.99%"</span>
 <span class="w">  </span><span class="nt">workspace</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">saas_workspace</span>
-<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;@config/workspaces/saas-platform.yaml&quot;</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">"@config/workspaces/saas-platform.yaml"</span>
 <span class="w">  </span><span class="nt">environments</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;@config/environments/production.yaml&quot;</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;@config/environments/us-east.yaml&quot;</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"@config/environments/production.yaml"</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">"@config/environments/us-east.yaml"</span>
 <span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">regional</span>
 <span class="w">  </span><span class="nt">configurations</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tenant_a_config</span>
-<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;@config/configurations/tenant-a.yaml&quot;</span>
+<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">"@config/configurations/tenant-a.yaml"</span>
 <span class="w">  </span><span class="nt">versions</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">versions/prd.manifest.yaml</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">versions/prd.yaml</span>
@@ -3615,9 +3660,9 @@ for orchestration and references.</p>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">workspace</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infrastructure</span>
-<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;@infra/workspaces/main.yaml&quot;</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">"@infra/workspaces/main.yaml"</span>
 <span class="w">  </span><span class="nt">environments</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;@env/environments/production/us-east-1.yaml&quot;</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"@env/environments/production/us-east-1.yaml"</span>
 </pre></div>
 </div>
 </section>
@@ -3819,12 +3864,12 @@ strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> 
 <h3>Sensitive output handling<a class="headerlink" href="#sensitive-output-handling" title="Link to this heading"></a></h3>
 <p>Sensitivity is determined by the IaC tool, not by YAML configuration.</p>
 <p><strong>Terraform</strong> — reads the <code class="docutils literal notranslate"><span class="pre">sensitive</span></code> flag from <code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">output</span> <span class="pre">-json</span></code>:</p>
-<div class="highlight-hcl notranslate"><div class="highlight"><pre><span></span><span class="kr">output</span><span class="w"> </span><span class="nv">&quot;cluster_endpoint&quot;</span><span class="w"> </span><span class="p">{</span>
+<div class="highlight-hcl notranslate"><div class="highlight"><pre><span></span><span class="kr">output</span><span class="w"> </span><span class="nv">"cluster_endpoint"</span><span class="w"> </span><span class="p">{</span>
 <span class="w">  </span><span class="na">value</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nv">azurerm_kubernetes_cluster.main.kube_config[0].host</span>
 <span class="w">  </span><span class="na">sensitive</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="no">false</span><span class="c1">  # → injected as TF_VAR_cluster_endpoint in downstream stages</span>
 <span class="p">}</span>
 
-<span class="kr">output</span><span class="w"> </span><span class="nv">&quot;kubeconfig&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="kr">output</span><span class="w"> </span><span class="nv">"kubeconfig"</span><span class="w"> </span><span class="p">{</span>
 <span class="w">  </span><span class="na">value</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nv">azurerm_kubernetes_cluster.main.kube_config_raw</span>
 <span class="w">  </span><span class="na">sensitive</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="no">true</span><span class="c1">   # → held internally, never injected</span>
 <span class="p">}</span>
@@ -3941,10 +3986,10 @@ it as part of the ArgoCD chart installation — no separate <code class="docutil
 <span class="w">          </span><span class="nt">source</span><span class="p">:</span>
 <span class="w">            </span><span class="nt">repoURL</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://git.company.com/deploy-charts</span>
 <span class="w">            </span><span class="nt">chart</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">company-webapp</span>
-<span class="w">            </span><span class="nt">targetRevision</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;3.2.1&quot;</span>
+<span class="w">            </span><span class="nt">targetRevision</span><span class="p">:</span><span class="w"> </span><span class="s">"3.2.1"</span>
 <span class="w">          </span><span class="nt">destination</span><span class="p">:</span>
 <span class="w">            </span><span class="nt">server</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://kubernetes.default.svc</span>
-<span class="w">            </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{namespace}}&quot;</span>
+<span class="w">            </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="s">"{{namespace}}"</span>
 </pre></div>
 </div>
 <p>Environment overrides inject the per-environment generator list:</p>
@@ -3972,9 +4017,9 @@ it as part of the ArgoCD chart installation — no separate <code class="docutil
 <span class="w">                  </span><span class="nt">spec</span><span class="p">:</span>
 <span class="w">                    </span><span class="nt">source</span><span class="p">:</span>
 <span class="w">                      </span><span class="nt">chart</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">company-webapp</span>
-<span class="w">                      </span><span class="nt">targetRevision</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;3.2.1&quot;</span>
+<span class="w">                      </span><span class="nt">targetRevision</span><span class="p">:</span><span class="w"> </span><span class="s">"3.2.1"</span>
 <span class="w">                    </span><span class="nt">destination</span><span class="p">:</span>
-<span class="w">                      </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{namespace}}&quot;</span>
+<span class="w">                      </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="s">"{{namespace}}"</span>
 </pre></div>
 </div>
 <p><strong>Why this is the right approach:</strong></p>
@@ -4108,7 +4153,7 @@ it as part of the ArgoCD chart installation — no separate <code class="docutil
 <span class="w">  </span><span class="nt">locking</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">    </span><span class="nt">wait_timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15m</span>
-<span class="w">  </span><span class="c1"># Lock backend derived from the first provisioner&#39;s backend:</span>
+<span class="w">  </span><span class="c1"># Lock backend derived from the first provisioner's backend:</span>
 <span class="w">  </span><span class="c1"># workspace.spec.provisioners[*].backend.type: azurerm</span>
 <span class="w">  </span><span class="c1"># (storage_account_name + container_name read from backend.configuration)</span>
 </pre></div>
@@ -4148,7 +4193,7 @@ strata<span class="w"> </span>deploy<span class="w"> </span>lock<span class="w">
 <span class="c1"># Release a stuck lock (your own)</span>
 strata<span class="w"> </span>deploy<span class="w"> </span>lock<span class="w"> </span>release<span class="w"> </span>-f<span class="w"> </span>deployment.yaml
 
-<span class="c1"># Force-release another holder&#39;s lock</span>
+<span class="c1"># Force-release another holder's lock</span>
 strata<span class="w"> </span>deploy<span class="w"> </span>lock<span class="w"> </span>release<span class="w"> </span>-f<span class="w"> </span>deployment.yaml<span class="w"> </span>--force
 
 <span class="c1"># View recent lock history</span>
@@ -4195,7 +4240,7 @@ strata<span class="w"> </span>deploy<span class="w"> </span>lock<span class="w">
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="workspace.html" class="btn btn-neutral float-left" title="Workspace Configuration" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="environment.html" class="btn btn-neutral float-right" title="Environment Configuration" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="diagram.html" class="btn btn-neutral float-right" title="Diagram Configuration" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../config/diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="../guides/features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../guides/faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3481,20 +3526,20 @@
 <p><strong>JSON format:</strong></p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">[</span>
 <span class="w">  </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;.strata/build/prod/manifest.json&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;prod&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;action&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;build&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;success&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;timestamp&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2024-06-17T10:35:20Z&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;user&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ops@acme.com&quot;</span>
+<span class="w">    </span><span class="nt">"path"</span><span class="p">:</span><span class="w"> </span><span class="s2">".strata/build/prod/manifest.json"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="s2">"prod"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"build"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"success"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"timestamp"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2024-06-17T10:35:20Z"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"user"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ops@acme.com"</span>
 <span class="w">  </span><span class="p">},</span>
 <span class="w">  </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;.strata/deployments/prod/v2.3.0/2024-06-17T10:45:33Z.json&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;prod&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;action&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;deploy&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;success&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;timestamp&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2024-06-17T10:45:33Z&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;user&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ops@acme.com&quot;</span>
+<span class="w">    </span><span class="nt">"path"</span><span class="p">:</span><span class="w"> </span><span class="s2">".strata/deployments/prod/v2.3.0/2024-06-17T10:45:33Z.json"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="s2">"prod"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"deploy"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"success"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"timestamp"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2024-06-17T10:45:33Z"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"user"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ops@acme.com"</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">]</span>
 </pre></div>
@@ -3512,7 +3557,7 @@ strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w
 strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w"> </span>--last<span class="w"> </span><span class="m">5</span><span class="w"> </span>--output<span class="w"> </span>json
 
 <span class="c1"># Query with jq</span>
-strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.[] | select(.action == &quot;build&quot;)&#39;</span>
+strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">'.[] | select(.action == "build")'</span>
 </pre></div>
 </div>
 </section>
@@ -3614,14 +3659,14 @@ strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w
 strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w"> </span>.strata/build/prod/manifest.json<span class="w"> </span>--output<span class="w"> </span>json
 
 <span class="c1"># Extract specific fields with jq</span>
-strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w"> </span>manifest.json<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.spec.artifacts.repositories&#39;</span>
+strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w"> </span>manifest.json<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">'.spec.artifacts.repositories'</span>
 
 <span class="c1"># Check policy results</span>
-strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w"> </span>manifest.json<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.spec.policy_results&#39;</span>
+strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w"> </span>manifest.json<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">'.spec.policy_results'</span>
 
 <span class="c1"># View all repository commits</span>
 strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w"> </span>manifest.json<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>jq<span class="w"> </span><span class="s1">&#39;.spec.artifacts.repositories | to_entries[] | {repo: .key, commit: .value.commit}&#39;</span>
+<span class="w">  </span>jq<span class="w"> </span><span class="s1">'.spec.artifacts.repositories | to_entries[] | {repo: .key, commit: .value.commit}'</span>
 </pre></div>
 </div>
 </section>
@@ -3710,17 +3755,17 @@ strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w
 <section id="summary-file">
 <h4>Summary File<a class="headerlink" href="#summary-file" title="Link to this heading"></a></h4>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;export_timestamp&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2024-06-17T14:30:00Z&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;exported_by&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ops@acme.com&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;manifest_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;sbom_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;artifacts_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;manifests&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="nt">"export_timestamp"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2024-06-17T14:30:00Z"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"exported_by"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ops@acme.com"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"manifest_count"</span><span class="p">:</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"sbom_count"</span><span class="p">:</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"artifacts_count"</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"manifests"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">    </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;manifests/prod-build-2024-06-17.json&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;prod&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;action&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;build&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;success&quot;</span>
+<span class="w">      </span><span class="nt">"path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"manifests/prod-build-2024-06-17.json"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="s2">"prod"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"build"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"success"</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">]</span>
 <span class="p">}</span>
@@ -3774,7 +3819,7 @@ strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w
 
 <span class="c1"># 3. Check policy results</span>
 strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w"> </span>.strata/build/prod/manifest.json<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>jq<span class="w"> </span><span class="s1">&#39;.spec.policy_results | select(.status != &quot;passed&quot;)&#39;</span>
+<span class="w">  </span>jq<span class="w"> </span><span class="s1">'.spec.policy_results | select(.status != "passed")'</span>
 
 <span class="c1"># 4. If satisfied, deploy</span>
 strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>deploy/prod.yaml
@@ -3782,9 +3827,9 @@ strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> 
 <span class="c1"># 5. Compare build vs. deploy</span>
 strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w"> </span>.strata/build/prod/manifest.json<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span>&gt;<span class="w"> </span>build.json
 strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w"> </span>--deployment<span class="w"> </span>prod<span class="w"> </span>--last<span class="w"> </span><span class="m">1</span><span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>jq<span class="w"> </span><span class="s1">&#39;.[0].path&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>xargs<span class="w"> </span>strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span>&gt;<span class="w"> </span>deploy.json
-diff<span class="w"> </span>&lt;<span class="o">(</span>jq<span class="w"> </span><span class="s1">&#39;.spec.artifacts.repositories&#39;</span><span class="w"> </span>build.json<span class="o">)</span><span class="w"> </span><span class="se">\</span>
-<span class="w">     </span>&lt;<span class="o">(</span>jq<span class="w"> </span><span class="s1">&#39;.spec.artifacts.repositories&#39;</span><span class="w"> </span>deploy.json<span class="o">)</span>
+<span class="w">  </span>jq<span class="w"> </span><span class="s1">'.[0].path'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>xargs<span class="w"> </span>strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span>&gt;<span class="w"> </span>deploy.json
+diff<span class="w"> </span>&lt;<span class="o">(</span>jq<span class="w"> </span><span class="s1">'.spec.artifacts.repositories'</span><span class="w"> </span>build.json<span class="o">)</span><span class="w"> </span><span class="se">\</span>
+<span class="w">     </span>&lt;<span class="o">(</span>jq<span class="w"> </span><span class="s1">'.spec.artifacts.repositories'</span><span class="w"> </span>deploy.json<span class="o">)</span>
 </pre></div>
 </div>
 </section>
@@ -3806,16 +3851,16 @@ email<span class="w"> </span>-to<span class="w"> </span>auditor@firm.com<span cl
 <h3>Query Manifest History<a class="headerlink" href="#query-manifest-history" title="Link to this heading"></a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Find all successful builds in the last 7 days</span>
 strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>jq<span class="w"> </span><span class="s1">&#39;[.[] | select(.action == &quot;build&quot; and .status == &quot;success&quot;) | .timestamp]&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>jq<span class="w"> </span>--arg<span class="w"> </span>cutoff<span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span>date<span class="w"> </span>-d<span class="w"> </span><span class="s1">&#39;7 days ago&#39;</span><span class="w"> </span>--iso-8601<span class="k">)</span><span class="s2">&quot;</span><span class="w"> </span><span class="s1">&#39;.[] | select(. &gt; $cutoff)&#39;</span>
+<span class="w">  </span>jq<span class="w"> </span><span class="s1">'[.[] | select(.action == "build" and .status == "success") | .timestamp]'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>jq<span class="w"> </span>--arg<span class="w"> </span>cutoff<span class="w"> </span><span class="s2">"</span><span class="k">$(</span>date<span class="w"> </span>-d<span class="w"> </span><span class="s1">'7 days ago'</span><span class="w"> </span>--iso-8601<span class="k">)</span><span class="s2">"</span><span class="w"> </span><span class="s1">'.[] | select(. &gt; $cutoff)'</span>
 
 <span class="c1"># List users who deployed in production</span>
 strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w"> </span>--deployment<span class="w"> </span>prod<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>jq<span class="w"> </span><span class="s1">&#39;[.[] | select(.action == &quot;deploy&quot;)] | group_by(.user) | .[] | {user: .[0].user, count: length}&#39;</span>
+<span class="w">  </span>jq<span class="w"> </span><span class="s1">'[.[] | select(.action == "deploy")] | group_by(.user) | .[] | {user: .[0].user, count: length}'</span>
 
 <span class="c1"># Find last build for rollback</span>
 strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w"> </span>--deployment<span class="w"> </span>prod<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>jq<span class="w"> </span><span class="s1">&#39;[.[] | select(.action == &quot;build&quot;)] | sort_by(.timestamp) | .[-1]&#39;</span>
+<span class="w">  </span>jq<span class="w"> </span><span class="s1">'[.[] | select(.action == "build")] | sort_by(.timestamp) | .[-1]'</span>
 </pre></div>
 </div>
 </section>

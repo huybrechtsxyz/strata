@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="../guides/features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../guides/faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3475,7 +3520,7 @@
 
 <span class="w">  </span><span class="c1"># --- Base environment layers ---</span>
 <span class="w">  </span><span class="nt">environments</span><span class="p">:</span><span class="w">             </span><span class="c1"># Optional</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;path&gt;</span><span class="w">                </span><span class="c1"># Applied BEFORE each deployment&#39;s environments</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;path&gt;</span><span class="w">                </span><span class="c1"># Applied BEFORE each deployment's environments</span>
 
 <span class="w">  </span><span class="c1"># --- Deployment defaults (merged into every linked deployment) ---</span>
 <span class="w">  </span><span class="nt">properties</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w">            </span><span class="c1"># Optional: base layer for deployment spec.properties</span>
@@ -3547,14 +3592,14 @@
 <h3><code class="docutils literal notranslate"><span class="pre">spec.configuration</span></code><a class="headerlink" href="#spec-configuration" title="Link to this heading"></a></h3>
 <p>Arbitrary key/value metadata emitted <strong>verbatim</strong> inside the <code class="docutils literal notranslate"><span class="pre">strata_tenant</span></code> Terraform variable object. This is not merged into deployment properties — it is tenant identity data consumed directly by Terraform or Ansible modules.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">configuration</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">crm_id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;42&quot;</span>
-<span class="w">  </span><span class="nt">invoice_prefix</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ACM&quot;</span>
+<span class="w">  </span><span class="nt">crm_id</span><span class="p">:</span><span class="w"> </span><span class="s">"42"</span>
+<span class="w">  </span><span class="nt">invoice_prefix</span><span class="p">:</span><span class="w"> </span><span class="s">"ACM"</span>
 <span class="w">  </span><span class="nt">support_level</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">enterprise</span>
 </pre></div>
 </div>
 <p>In Terraform:</p>
-<div class="highlight-hcl notranslate"><div class="highlight"><pre><span></span><span class="nv">var.strata_tenant.configuration</span><span class="p">[</span><span class="s2">&quot;crm_id&quot;]     # → &quot;42&quot;</span>
-<span class="nv">var.strata_tenant.configuration</span><span class="p">[</span><span class="s2">&quot;support_level&quot;]  # → &quot;enterprise&quot;</span>
+<div class="highlight-hcl notranslate"><div class="highlight"><pre><span></span><span class="nv">var.strata_tenant.configuration</span><span class="p">[</span><span class="s2">"crm_id"]     # → "42"</span>
+<span class="nv">var.strata_tenant.configuration</span><span class="p">[</span><span class="s2">"support_level"]  # → "enterprise"</span>
 </pre></div>
 </div>
 </section>
@@ -3644,7 +3689,7 @@
 <span class="w">    </span><span class="nt">costcenter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">INFRA-001</span>
 
 <span class="w">  </span><span class="nt">configuration</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">crm_id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2001&quot;</span>
+<span class="w">    </span><span class="nt">crm_id</span><span class="p">:</span><span class="w"> </span><span class="s">"2001"</span>
 <span class="w">    </span><span class="nt">invoice_prefix</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ACM</span>
 <span class="w">    </span><span class="nt">support_level</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">enterprise</span>
 

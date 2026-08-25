@@ -563,6 +563,53 @@ A starter template is scaffolded at `.strata/policies/my_policy.py` by `strata s
 
 ---
 
+## Diagram visualization
+
+Visualize any workspace data as an interactive Mermaid diagram without writing a script:
+
+```bash
+strata diagram show -f topology          # built-in: resource topology + dependencies
+strata diagram show -f deploy-prd        # custom: point at your own diagram definition
+strata diagram list                      # show all available diagrams
+strata diagram resolve strata://deployment/deploy-prd/stage/infrastructure  # find line numbers
+```
+
+**All 24 diagram source types:**
+
+| Category       | Sources                                                                           |
+| -------------- | --------------------------------------------------------------------------------- |
+| Workspace      | Topology, Files, Resources, Modules, Namespaces, Networks, Firewalls, DNS zones   |
+| Deployment     | Stages, Environments, Tenants                                                     |
+| History        | Execution history, Promotions, Approval gates                                     |
+| Config & rules | Variables, Secrets, Feature flags, Policies (metadata only, values never exposed) |
+| Live state     | Drift tracking, Deployment outputs, Deployment locks                              |
+| Artifacts      | Repositories, Software Bill of Materials (SBOM)                                   |
+| Aggregates     | Values (union of variables + secrets + features)                                  |
+
+Every diagram is a YAML file (kind: diagram). Declare which data you want, how to filter it, what
+layout to use (flowchart / state diagram), and how to color/highlight nodes. strata generates
+Mermaid and pipes it to VS Code or renders it as SVG.
+
+```yaml
+apiVersion: strata.huybrechts.xyz/v1
+kind: diagram
+meta:
+  name: deployment-stages
+spec:
+  sources:
+    - type: stages
+  layout: flowchart LR
+  style:
+    color_by: status
+    highlight: status != "active"
+```
+
+Diagrams are scanned from `.strata/diagrams/` (workspace-local) before falling back to built-ins.
+Use `strata new deployment-stages --template diagram` to scaffold a starter. Store diagrams in
+version control so the team shares the same picture.
+
+---
+
 ## The escape hatch
 
 If strata stops fitting your workflow:

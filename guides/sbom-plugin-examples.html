@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../config/diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3425,7 +3470,7 @@
 <h2>Example 1: Ruby Bundler Gemfile.lock Parser<a class="headerlink" href="#example-1-ruby-bundler-gemfile-lock-parser" title="Link to this heading"></a></h2>
 <p>A complete lockfile parser for Ruby Bundler manifests.</p>
 <p><strong>File:</strong> <code class="docutils literal notranslate"><span class="pre">.strata/lockfile_parsers/bundler_gemfile.py</span></code></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">&quot;&quot;&quot;Parse Ruby Bundler Gemfile.lock files.&quot;&quot;&quot;</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">"""Parse Ruby Bundler Gemfile.lock files."""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span>
@@ -3434,7 +3479,7 @@
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">BundlerGemdockParser</span><span class="p">(</span><span class="n">LockfileParser</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse Ruby Bundler&#39;s Gemfile.lock format.</span>
+<span class="w">    </span><span class="sd">"""Parse Ruby Bundler's Gemfile.lock format.</span>
 
 <span class="sd">    Extracts gem names and versions from the BUNDLED WITH section.</span>
 <span class="sd">    Format:</span>
@@ -3451,49 +3496,49 @@
 <span class="sd">          rails (~&gt; 7.0.0)</span>
 <span class="sd">        BUNDLED WITH</span>
 <span class="sd">           2.3.0</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">ecosystem</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-        <span class="k">return</span> <span class="s2">&quot;gem&quot;</span>
+        <span class="k">return</span> <span class="s2">"gem"</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">filename_patterns</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;Gemfile.lock&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"Gemfile.lock"</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">RawDependency</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract gem dependencies from Gemfile.lock.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Extract gem dependencies from Gemfile.lock."""</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">lines</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">splitlines</span><span class="p">()</span>
+            <span class="n">lines</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8"</span><span class="p">)</span><span class="o">.</span><span class="n">splitlines</span><span class="p">()</span>
         <span class="k">except</span> <span class="ne">OSError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not read </span><span class="si">{</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Could not read </span><span class="si">{</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
 
         <span class="n">deps</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">RawDependency</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">in_specs</span> <span class="o">=</span> <span class="kc">False</span>
 
         <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">lines</span><span class="p">:</span>
             <span class="c1"># Skip empty lines and comments</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="ow">or</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;#&quot;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="ow">or</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"#"</span><span class="p">):</span>
                 <span class="k">continue</span>
 
             <span class="c1"># Enter specs section</span>
-            <span class="k">if</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;specs:&quot;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="o">==</span> <span class="s2">"specs:"</span><span class="p">:</span>
                 <span class="n">in_specs</span> <span class="o">=</span> <span class="kc">True</span>
                 <span class="k">continue</span>
 
             <span class="c1"># Exit specs section</span>
-            <span class="k">if</span> <span class="n">in_specs</span> <span class="ow">and</span> <span class="n">line</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot; &quot;</span><span class="p">,</span> <span class="s2">&quot;</span><span class="se">\t</span><span class="s2">&quot;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">in_specs</span> <span class="ow">and</span> <span class="n">line</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">" "</span><span class="p">,</span> <span class="s2">"</span><span class="se">\t</span><span class="s2">"</span><span class="p">):</span>
                 <span class="n">in_specs</span> <span class="o">=</span> <span class="kc">False</span>
 
-            <span class="c1"># Parse spec line: &quot;    gem_name (version)&quot;</span>
-            <span class="k">if</span> <span class="n">in_specs</span> <span class="ow">and</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">((</span><span class="s2">&quot;  &quot;</span><span class="p">,</span> <span class="s2">&quot;</span><span class="se">\t</span><span class="s2">&quot;</span><span class="p">)):</span>
+            <span class="c1"># Parse spec line: "    gem_name (version)"</span>
+            <span class="k">if</span> <span class="n">in_specs</span> <span class="ow">and</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">((</span><span class="s2">"  "</span><span class="p">,</span> <span class="s2">"</span><span class="se">\t</span><span class="s2">"</span><span class="p">)):</span>
                 <span class="n">spec_line</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-                <span class="k">if</span> <span class="ow">not</span> <span class="n">spec_line</span> <span class="ow">or</span> <span class="s2">&quot;(&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">spec_line</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">spec_line</span> <span class="ow">or</span> <span class="s2">"("</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">spec_line</span><span class="p">:</span>
                     <span class="k">continue</span>
 
                 <span class="c1"># Extract gem name and version</span>
-                <span class="n">name_part</span><span class="p">,</span> <span class="n">version_part</span> <span class="o">=</span> <span class="n">spec_line</span><span class="o">.</span><span class="n">rsplit</span><span class="p">(</span><span class="s2">&quot;(&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+                <span class="n">name_part</span><span class="p">,</span> <span class="n">version_part</span> <span class="o">=</span> <span class="n">spec_line</span><span class="o">.</span><span class="n">rsplit</span><span class="p">(</span><span class="s2">"("</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
                 <span class="n">name</span> <span class="o">=</span> <span class="n">name_part</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-                <span class="n">version</span> <span class="o">=</span> <span class="n">version_part</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">&quot;)&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+                <span class="n">version</span> <span class="o">=</span> <span class="n">version_part</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">")"</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
 
                 <span class="k">if</span> <span class="n">name</span> <span class="ow">and</span> <span class="n">version</span><span class="p">:</span>
                     <span class="n">deps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">RawDependency</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">))</span>
@@ -3513,7 +3558,7 @@
 <h2>Example 2: Go go.mod Parser<a class="headerlink" href="#example-2-go-go-mod-parser" title="Link to this heading"></a></h2>
 <p>Parse Go module dependencies.</p>
 <p><strong>File:</strong> <code class="docutils literal notranslate"><span class="pre">.strata/lockfile_parsers/golang_mod.py</span></code></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">&quot;&quot;&quot;Parse Go go.mod files.&quot;&quot;&quot;</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">"""Parse Go go.mod files."""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span>
@@ -3522,7 +3567,7 @@
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">GoModParser</span><span class="p">(</span><span class="n">LockfileParser</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse Go go.mod files.</span>
+<span class="w">    </span><span class="sd">"""Parse Go go.mod files.</span>
 
 <span class="sd">    Extracts module dependencies from the require section.</span>
 <span class="sd">    Format:</span>
@@ -3537,21 +3582,21 @@
 <span class="sd">        )</span>
 
 <span class="sd">        require github.com/stretchr/testify v1.8.4 // indirect</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">ecosystem</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-        <span class="k">return</span> <span class="s2">&quot;golang&quot;</span>
+        <span class="k">return</span> <span class="s2">"golang"</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">filename_patterns</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;go.mod&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"go.mod"</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">RawDependency</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract Go module dependencies from go.mod.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Extract Go module dependencies from go.mod."""</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">lines</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">splitlines</span><span class="p">()</span>
+            <span class="n">lines</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8"</span><span class="p">)</span><span class="o">.</span><span class="n">splitlines</span><span class="p">()</span>
         <span class="k">except</span> <span class="ne">OSError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not read </span><span class="si">{</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Could not read </span><span class="si">{</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
 
         <span class="n">deps</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">RawDependency</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">in_require_block</span> <span class="o">=</span> <span class="kc">False</span>
@@ -3560,33 +3605,33 @@
             <span class="n">stripped</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
 
             <span class="c1"># Skip empty lines and comments</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">stripped</span> <span class="ow">or</span> <span class="n">stripped</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;//&quot;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">stripped</span> <span class="ow">or</span> <span class="n">stripped</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"//"</span><span class="p">):</span>
                 <span class="k">continue</span>
 
             <span class="c1"># Detect require block start</span>
-            <span class="k">if</span> <span class="n">stripped</span> <span class="o">==</span> <span class="s2">&quot;require (&quot;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">stripped</span> <span class="o">==</span> <span class="s2">"require ("</span><span class="p">:</span>
                 <span class="n">in_require_block</span> <span class="o">=</span> <span class="kc">True</span>
                 <span class="k">continue</span>
 
             <span class="c1"># Exit require block</span>
-            <span class="k">if</span> <span class="n">in_require_block</span> <span class="ow">and</span> <span class="n">stripped</span> <span class="o">==</span> <span class="s2">&quot;)&quot;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">in_require_block</span> <span class="ow">and</span> <span class="n">stripped</span> <span class="o">==</span> <span class="s2">")"</span><span class="p">:</span>
                 <span class="n">in_require_block</span> <span class="o">=</span> <span class="kc">False</span>
                 <span class="k">continue</span>
 
             <span class="c1"># Parse single-line require statements</span>
-            <span class="k">if</span> <span class="n">stripped</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;require &quot;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">stripped</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"require "</span><span class="p">):</span>
                 <span class="n">stripped</span> <span class="o">=</span> <span class="n">stripped</span><span class="p">[</span><span class="mi">8</span><span class="p">:]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
                 <span class="n">in_require_block</span> <span class="o">=</span> <span class="kc">False</span>
 
             <span class="c1"># Parse require lines (inside or outside block)</span>
-            <span class="k">if</span> <span class="n">stripped</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">stripped</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;module &quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">stripped</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;go &quot;</span><span class="p">):</span>
-                <span class="c1"># Format: &quot;github.com/user/pkg v1.2.3&quot; or with &quot;// indirect&quot;</span>
+            <span class="k">if</span> <span class="n">stripped</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">stripped</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"module "</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">stripped</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"go "</span><span class="p">):</span>
+                <span class="c1"># Format: "github.com/user/pkg v1.2.3" or with "// indirect"</span>
                 <span class="n">parts</span> <span class="o">=</span> <span class="n">stripped</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
                 <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">:</span>
                     <span class="n">module_name</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
                     <span class="n">version</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
-                    <span class="c1"># Strip &quot;// indirect&quot; or similar comments</span>
-                    <span class="k">if</span> <span class="n">version</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;//&quot;</span><span class="p">):</span>
+                    <span class="c1"># Strip "// indirect" or similar comments</span>
+                    <span class="k">if</span> <span class="n">version</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"//"</span><span class="p">):</span>
                         <span class="k">continue</span>
                     <span class="n">deps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">RawDependency</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">module_name</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">))</span>
 
@@ -3599,7 +3644,7 @@
 <h2>Example 3: Composer (PHP) Parser<a class="headerlink" href="#example-3-composer-php-parser" title="Link to this heading"></a></h2>
 <p>Parse PHP Composer lock files.</p>
 <p><strong>File:</strong> <code class="docutils literal notranslate"><span class="pre">.strata/lockfile_parsers/php_composer.py</span></code></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">&quot;&quot;&quot;Parse PHP Composer lock files.&quot;&quot;&quot;</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">"""Parse PHP Composer lock files."""</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
@@ -3609,38 +3654,38 @@
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">ComposerLockParser</span><span class="p">(</span><span class="n">LockfileParser</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse PHP Composer composer.lock files.</span>
+<span class="w">    </span><span class="sd">"""Parse PHP Composer composer.lock files.</span>
 
 <span class="sd">    Extracts package names and versions from the packages array.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">ecosystem</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-        <span class="k">return</span> <span class="s2">&quot;composer&quot;</span>
+        <span class="k">return</span> <span class="s2">"composer"</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">filename_patterns</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;composer.lock&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"composer.lock"</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">RawDependency</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract PHP packages from composer.lock.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Extract PHP packages from composer.lock."""</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">data</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">))</span>
+            <span class="n">data</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8"</span><span class="p">))</span>
         <span class="k">except</span> <span class="p">(</span><span class="ne">OSError</span><span class="p">,</span> <span class="n">json</span><span class="o">.</span><span class="n">JSONDecodeError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to parse </span><span class="si">{</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Failed to parse </span><span class="si">{</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected JSON object, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Expected JSON object, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
         <span class="n">deps</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">RawDependency</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
 
         <span class="c1"># Parse packages array</span>
-        <span class="k">for</span> <span class="n">section</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;packages&quot;</span><span class="p">,</span> <span class="s2">&quot;packages-dev&quot;</span><span class="p">]:</span>
+        <span class="k">for</span> <span class="n">section</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">"packages"</span><span class="p">,</span> <span class="s2">"packages-dev"</span><span class="p">]:</span>
             <span class="n">packages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">section</span><span class="p">)</span> <span class="ow">or</span> <span class="p">[]</span>
             <span class="k">for</span> <span class="n">pkg</span> <span class="ow">in</span> <span class="n">packages</span><span class="p">:</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pkg</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
                     <span class="k">continue</span>
-                <span class="n">name</span> <span class="o">=</span> <span class="n">pkg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">)</span>
-                <span class="n">version</span> <span class="o">=</span> <span class="n">pkg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;version&quot;</span><span class="p">)</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="n">pkg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"name"</span><span class="p">)</span>
+                <span class="n">version</span> <span class="o">=</span> <span class="n">pkg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"version"</span><span class="p">)</span>
                 <span class="k">if</span> <span class="n">name</span><span class="p">:</span>
                     <span class="n">deps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">RawDependency</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">),</span> <span class="n">version</span><span class="o">=</span><span class="n">version</span> <span class="ow">or</span> <span class="kc">None</span><span class="p">))</span>
 
@@ -3653,7 +3698,7 @@
 <h2>Example 4: Custom Collector — Database Schemas<a class="headerlink" href="#example-4-custom-collector-database-schemas" title="Link to this heading"></a></h2>
 <p>A collector that extracts database schema versions from infrastructure code.</p>
 <p><strong>File:</strong> <code class="docutils literal notranslate"><span class="pre">.strata/collectors/database_schemas_collector.py</span></code></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">&quot;&quot;&quot;Collect database schema components from infrastructure code.&quot;&quot;&quot;</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">"""Collect database schema components from infrastructure code."""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span>
@@ -3667,7 +3712,7 @@
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">DatabaseSchemasCollector</span><span class="p">(</span><span class="n">BaseSbomCollector</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Collect database and schema version components.</span>
+<span class="w">    </span><span class="sd">"""Collect database and schema version components.</span>
 
 <span class="sd">    This is an example collector that scans for database declarations</span>
 <span class="sd">    in platform modules and produces SBOM components for them.</span>
@@ -3676,10 +3721,10 @@
 <span class="sd">    - Database resource declarations (e.g., Azure SQL, RDS)</span>
 <span class="sd">    - Migration versions</span>
 <span class="sd">    - ORM configuration files</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">get_collector_name</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-        <span class="k">return</span> <span class="s2">&quot;database_schemas&quot;</span>
+        <span class="k">return</span> <span class="s2">"database_schemas"</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">collect</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -3687,7 +3732,7 @@
         <span class="n">work_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
         <span class="n">deployment_build_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">SbomComponentModel</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract database components from platform specification.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Extract database components from platform specification."""</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_reset_warnings</span><span class="p">()</span>
         <span class="n">components</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">SbomComponentModel</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
 
@@ -3697,42 +3742,42 @@
         <span class="n">seen_databases</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
 
         <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">platform</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">modules</span><span class="p">:</span>
-            <span class="c1"># Example: assume modules have a &#39;databases&#39; list</span>
+            <span class="c1"># Example: assume modules have a 'databases' list</span>
             <span class="c1"># In real code, adapt this to your actual schema structure</span>
-            <span class="n">databases</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="s2">&quot;databases&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">[]</span>
+            <span class="n">databases</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="s2">"databases"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">[]</span>
 
             <span class="k">for</span> <span class="n">db</span> <span class="ow">in</span> <span class="n">databases</span><span class="p">:</span>
-                <span class="n">db_name</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-                <span class="n">db_engine</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="s2">&quot;engine&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>  <span class="c1"># e.g., &quot;postgres&quot;, &quot;mysql&quot;</span>
-                <span class="n">db_version</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="s2">&quot;version&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+                <span class="n">db_name</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>
+                <span class="n">db_engine</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="s2">"engine"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>  <span class="c1"># e.g., "postgres", "mysql"</span>
+                <span class="n">db_version</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="s2">"version"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>
 
                 <span class="k">if</span> <span class="ow">not</span> <span class="n">db_name</span><span class="p">:</span>
                     <span class="k">continue</span>
 
-                <span class="n">purl_key</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">db_engine</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">db_name</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">db_version</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="n">purl_key</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">db_engine</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">db_name</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">db_version</span><span class="si">}</span><span class="s2">"</span>
                 <span class="k">if</span> <span class="n">purl_key</span> <span class="ow">in</span> <span class="n">seen_databases</span><span class="p">:</span>
                     <span class="k">continue</span>
                 <span class="n">seen_databases</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">purl_key</span><span class="p">)</span>
 
                 <span class="c1"># Build a meaningful PURL</span>
-                <span class="n">purl</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;pkg:generic/</span><span class="si">{</span><span class="n">db_engine</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">db_name</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="n">db_version</span><span class="w"> </span><span class="ow">or</span><span class="w"> </span><span class="s1">&#39;unknown&#39;</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="n">purl</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"pkg:generic/</span><span class="si">{</span><span class="n">db_engine</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">db_name</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="n">db_version</span><span class="w"> </span><span class="ow">or</span><span class="w"> </span><span class="s1">'unknown'</span><span class="si">}</span><span class="s2">"</span>
 
                 <span class="n">components</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
                     <span class="n">SbomComponentModel</span><span class="p">(</span>
-                        <span class="n">component_type</span><span class="o">=</span><span class="s2">&quot;framework&quot;</span><span class="p">,</span>
-                        <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">db_name</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">db_engine</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">,</span>
+                        <span class="n">component_type</span><span class="o">=</span><span class="s2">"framework"</span><span class="p">,</span>
+                        <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">db_name</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">db_engine</span><span class="si">}</span><span class="s2">)"</span><span class="p">,</span>
                         <span class="n">version</span><span class="o">=</span><span class="n">db_version</span><span class="p">,</span>
                         <span class="n">purl</span><span class="o">=</span><span class="n">purl</span><span class="p">,</span>
                         <span class="n">properties</span><span class="o">=</span><span class="p">{</span>
-                            <span class="s2">&quot;database_engine&quot;</span><span class="p">:</span> <span class="n">db_engine</span><span class="p">,</span>
-                            <span class="s2">&quot;database_name&quot;</span><span class="p">:</span> <span class="n">db_name</span><span class="p">,</span>
+                            <span class="s2">"database_engine"</span><span class="p">:</span> <span class="n">db_engine</span><span class="p">,</span>
+                            <span class="s2">"database_name"</span><span class="p">:</span> <span class="n">db_name</span><span class="p">,</span>
                         <span class="p">},</span>
                         <span class="n">source_collector</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">get_collector_name</span><span class="p">(),</span>
                     <span class="p">)</span>
                 <span class="p">)</span>
 
                 <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                    <span class="s2">&quot;Collected database schema&quot;</span><span class="p">,</span>
+                    <span class="s2">"Collected database schema"</span><span class="p">,</span>
                     <span class="n">name</span><span class="o">=</span><span class="n">db_name</span><span class="p">,</span>
                     <span class="n">engine</span><span class="o">=</span><span class="n">db_engine</span><span class="p">,</span>
                     <span class="n">version</span><span class="o">=</span><span class="n">db_version</span><span class="p">,</span>
@@ -3755,7 +3800,7 @@
 <h2>Example 5: Custom Collector — External APIs<a class="headerlink" href="#example-5-custom-collector-external-apis" title="Link to this heading"></a></h2>
 <p>A collector that documents external API dependencies.</p>
 <p><strong>File:</strong> <code class="docutils literal notranslate"><span class="pre">.strata/collectors/external_apis_collector.py</span></code></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">&quot;&quot;&quot;Collect external API dependencies.&quot;&quot;&quot;</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">"""Collect external API dependencies."""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span>
@@ -3766,7 +3811,7 @@
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">ExternalApisCollector</span><span class="p">(</span><span class="n">BaseSbomCollector</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Document external APIs used by the application.</span>
+<span class="w">    </span><span class="sd">"""Document external APIs used by the application.</span>
 
 <span class="sd">    This collector scans configuration files and infrastructure code</span>
 <span class="sd">    to identify external API integrations and document them in the SBOM.</span>
@@ -3775,10 +3820,10 @@
 <span class="sd">    - Stripe API v1.3</span>
 <span class="sd">    - Slack Webhooks</span>
 <span class="sd">    - Auth0 Management API</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">get_collector_name</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-        <span class="k">return</span> <span class="s2">&quot;external_apis&quot;</span>
+        <span class="k">return</span> <span class="s2">"external_apis"</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">collect</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -3786,57 +3831,57 @@
         <span class="n">work_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
         <span class="n">deployment_build_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">SbomComponentModel</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract external API components.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Extract external API components."""</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_reset_warnings</span><span class="p">()</span>
         <span class="n">components</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">SbomComponentModel</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
 
         <span class="c1"># Scan config files for API declarations</span>
-        <span class="n">config_dir</span> <span class="o">=</span> <span class="n">work_path</span> <span class="o">/</span> <span class="s2">&quot;config&quot;</span>
-        <span class="n">apis_file</span> <span class="o">=</span> <span class="n">config_dir</span> <span class="o">/</span> <span class="s2">&quot;external-apis.yaml&quot;</span>
+        <span class="n">config_dir</span> <span class="o">=</span> <span class="n">work_path</span> <span class="o">/</span> <span class="s2">"config"</span>
+        <span class="n">apis_file</span> <span class="o">=</span> <span class="n">config_dir</span> <span class="o">/</span> <span class="s2">"external-apis.yaml"</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="n">apis_file</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_warnings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;External APIs config not found: </span><span class="si">{</span><span class="n">apis_file</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_warnings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"External APIs config not found: </span><span class="si">{</span><span class="n">apis_file</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">components</span>
 
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">import</span><span class="w"> </span><span class="nn">yaml</span>
 
-            <span class="k">with</span> <span class="n">apis_file</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">fh</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">apis_file</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8"</span><span class="p">)</span> <span class="k">as</span> <span class="n">fh</span><span class="p">:</span>
                 <span class="n">data</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">fh</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{}</span>
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_warnings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to parse </span><span class="si">{</span><span class="n">apis_file</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_warnings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Failed to parse </span><span class="si">{</span><span class="n">apis_file</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">components</span>
 
-        <span class="n">apis</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;external_apis&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">[]</span>
+        <span class="n">apis</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"external_apis"</span><span class="p">)</span> <span class="ow">or</span> <span class="p">[]</span>
         <span class="n">seen_purls</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
 
         <span class="k">for</span> <span class="n">api_spec</span> <span class="ow">in</span> <span class="n">apis</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">api_spec</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
                 <span class="k">continue</span>
 
-            <span class="n">api_name</span> <span class="o">=</span> <span class="n">api_spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-            <span class="n">api_version</span> <span class="o">=</span> <span class="n">api_spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;version&quot;</span><span class="p">,</span> <span class="s2">&quot;1.0&quot;</span><span class="p">)</span>
-            <span class="n">api_url</span> <span class="o">=</span> <span class="n">api_spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;url&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-            <span class="n">api_status</span> <span class="o">=</span> <span class="n">api_spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;status&quot;</span><span class="p">,</span> <span class="s2">&quot;active&quot;</span><span class="p">)</span>
+            <span class="n">api_name</span> <span class="o">=</span> <span class="n">api_spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"name"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>
+            <span class="n">api_version</span> <span class="o">=</span> <span class="n">api_spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"version"</span><span class="p">,</span> <span class="s2">"1.0"</span><span class="p">)</span>
+            <span class="n">api_url</span> <span class="o">=</span> <span class="n">api_spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"url"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>
+            <span class="n">api_status</span> <span class="o">=</span> <span class="n">api_spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"status"</span><span class="p">,</span> <span class="s2">"active"</span><span class="p">)</span>
 
             <span class="k">if</span> <span class="ow">not</span> <span class="n">api_name</span><span class="p">:</span>
                 <span class="k">continue</span>
 
-            <span class="n">purl</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;pkg:generic/api/</span><span class="si">{</span><span class="n">api_name</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="n">api_version</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="n">purl</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"pkg:generic/api/</span><span class="si">{</span><span class="n">api_name</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="n">api_version</span><span class="si">}</span><span class="s2">"</span>
             <span class="k">if</span> <span class="n">purl</span> <span class="ow">in</span> <span class="n">seen_purls</span><span class="p">:</span>
                 <span class="k">continue</span>
             <span class="n">seen_purls</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">purl</span><span class="p">)</span>
 
             <span class="n">components</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
                 <span class="n">SbomComponentModel</span><span class="p">(</span>
-                    <span class="n">component_type</span><span class="o">=</span><span class="s2">&quot;framework&quot;</span><span class="p">,</span>
+                    <span class="n">component_type</span><span class="o">=</span><span class="s2">"framework"</span><span class="p">,</span>
                     <span class="n">name</span><span class="o">=</span><span class="n">api_name</span><span class="p">,</span>
                     <span class="n">version</span><span class="o">=</span><span class="n">api_version</span><span class="p">,</span>
                     <span class="n">purl</span><span class="o">=</span><span class="n">purl</span><span class="p">,</span>
                     <span class="n">properties</span><span class="o">=</span><span class="p">{</span>
-                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;external_api&quot;</span><span class="p">,</span>
-                        <span class="s2">&quot;url&quot;</span><span class="p">:</span> <span class="n">api_url</span><span class="p">,</span>
-                        <span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="n">api_status</span><span class="p">,</span>
+                        <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"external_api"</span><span class="p">,</span>
+                        <span class="s2">"url"</span><span class="p">:</span> <span class="n">api_url</span><span class="p">,</span>
+                        <span class="s2">"status"</span><span class="p">:</span> <span class="n">api_status</span><span class="p">,</span>
                     <span class="p">},</span>
                     <span class="n">source_collector</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">get_collector_name</span><span class="p">(),</span>
                 <span class="p">)</span>
@@ -3888,11 +3933,11 @@
 
 <span class="k">class</span><span class="w"> </span><span class="nc">TestBundlerParser</span><span class="p">:</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">test_parse_valid_gemfile_lock</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tmp_path</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Parse a valid Gemfile.lock.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Parse a valid Gemfile.lock."""</span>
         <span class="n">parser</span> <span class="o">=</span> <span class="n">BundlerGemdockParser</span><span class="p">()</span>
 
-        <span class="n">gemfile_lock</span> <span class="o">=</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">&quot;Gemfile.lock&quot;</span>
-        <span class="n">gemfile_lock</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
+        <span class="n">gemfile_lock</span> <span class="o">=</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">"Gemfile.lock"</span>
+        <span class="n">gemfile_lock</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="s2">"""</span>
 <span class="s2">GEM</span>
 <span class="s2">  remote: https://rubygems.org/</span>
 <span class="s2">  specs:</span>
@@ -3907,23 +3952,23 @@
 
 <span class="s2">BUNDLED WITH</span>
 <span class="s2">   2.3.0</span>
-<span class="s2">&quot;&quot;&quot;</span><span class="p">)</span>
+<span class="s2">"""</span><span class="p">)</span>
 
         <span class="n">deps</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">gemfile_lock</span><span class="p">)</span>
         <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">deps</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span>
-        <span class="k">assert</span> <span class="n">deps</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;rails&quot;</span>
-        <span class="k">assert</span> <span class="n">deps</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">version</span> <span class="o">==</span> <span class="s2">&quot;7.0.0&quot;</span>
-        <span class="k">assert</span> <span class="n">deps</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;bundler&quot;</span>
+        <span class="k">assert</span> <span class="n">deps</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"rails"</span>
+        <span class="k">assert</span> <span class="n">deps</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">version</span> <span class="o">==</span> <span class="s2">"7.0.0"</span>
+        <span class="k">assert</span> <span class="n">deps</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"bundler"</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">test_ecosystem</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Parser identifies as gem ecosystem.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Parser identifies as gem ecosystem."""</span>
         <span class="n">parser</span> <span class="o">=</span> <span class="n">BundlerGemdockParser</span><span class="p">()</span>
-        <span class="k">assert</span> <span class="n">parser</span><span class="o">.</span><span class="n">ecosystem</span> <span class="o">==</span> <span class="s2">&quot;gem&quot;</span>
+        <span class="k">assert</span> <span class="n">parser</span><span class="o">.</span><span class="n">ecosystem</span> <span class="o">==</span> <span class="s2">"gem"</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">test_filename_patterns</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Parser matches Gemfile.lock.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Parser matches Gemfile.lock."""</span>
         <span class="n">parser</span> <span class="o">=</span> <span class="n">BundlerGemdockParser</span><span class="p">()</span>
-        <span class="k">assert</span> <span class="s2">&quot;Gemfile.lock&quot;</span> <span class="ow">in</span> <span class="n">parser</span><span class="o">.</span><span class="n">filename_patterns</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="s2">"Gemfile.lock"</span> <span class="ow">in</span> <span class="n">parser</span><span class="o">.</span><span class="n">filename_patterns</span><span class="p">()</span>
 </pre></div>
 </div>
 </section>
@@ -3942,19 +3987,19 @@
 
 <span class="k">class</span><span class="w"> </span><span class="nc">TestDatabaseCollector</span><span class="p">:</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">test_collect_databases</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tmp_path</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Collector extracts database components.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Collector extracts database components."""</span>
         <span class="n">collector</span> <span class="o">=</span> <span class="n">DatabaseSchemasCollector</span><span class="p">()</span>
 
         <span class="c1"># Mock database objects</span>
         <span class="n">db1</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">()</span>
-        <span class="n">db1</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;users_db&quot;</span>
-        <span class="n">db1</span><span class="o">.</span><span class="n">engine</span> <span class="o">=</span> <span class="s2">&quot;postgres&quot;</span>
-        <span class="n">db1</span><span class="o">.</span><span class="n">version</span> <span class="o">=</span> <span class="s2">&quot;14.5&quot;</span>
+        <span class="n">db1</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s2">"users_db"</span>
+        <span class="n">db1</span><span class="o">.</span><span class="n">engine</span> <span class="o">=</span> <span class="s2">"postgres"</span>
+        <span class="n">db1</span><span class="o">.</span><span class="n">version</span> <span class="o">=</span> <span class="s2">"14.5"</span>
 
         <span class="n">db2</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">()</span>
-        <span class="n">db2</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;analytics_db&quot;</span>
-        <span class="n">db2</span><span class="o">.</span><span class="n">engine</span> <span class="o">=</span> <span class="s2">&quot;mysql&quot;</span>
-        <span class="n">db2</span><span class="o">.</span><span class="n">version</span> <span class="o">=</span> <span class="s2">&quot;8.0.32&quot;</span>
+        <span class="n">db2</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s2">"analytics_db"</span>
+        <span class="n">db2</span><span class="o">.</span><span class="n">engine</span> <span class="o">=</span> <span class="s2">"mysql"</span>
+        <span class="n">db2</span><span class="o">.</span><span class="n">version</span> <span class="o">=</span> <span class="s2">"8.0.32"</span>
 
         <span class="c1"># Mock module with databases</span>
         <span class="n">module</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">()</span>
@@ -3965,21 +4010,21 @@
         <span class="n">platform</span><span class="o">.</span><span class="n">spec</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">()</span>
         <span class="n">platform</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">modules</span> <span class="o">=</span> <span class="p">[</span><span class="n">module</span><span class="p">]</span>
 
-        <span class="n">components</span> <span class="o">=</span> <span class="n">collector</span><span class="o">.</span><span class="n">collect</span><span class="p">(</span><span class="n">platform</span><span class="p">,</span> <span class="n">tmp_path</span><span class="p">,</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">&quot;build&quot;</span><span class="p">)</span>
+        <span class="n">components</span> <span class="o">=</span> <span class="n">collector</span><span class="o">.</span><span class="n">collect</span><span class="p">(</span><span class="n">platform</span><span class="p">,</span> <span class="n">tmp_path</span><span class="p">,</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">"build"</span><span class="p">)</span>
 
         <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">components</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span>
-        <span class="k">assert</span> <span class="n">components</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;users_db (postgres)&quot;</span>
-        <span class="k">assert</span> <span class="n">components</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">version</span> <span class="o">==</span> <span class="s2">&quot;14.5&quot;</span>
-        <span class="k">assert</span> <span class="n">components</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;analytics_db (mysql)&quot;</span>
+        <span class="k">assert</span> <span class="n">components</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"users_db (postgres)"</span>
+        <span class="k">assert</span> <span class="n">components</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">version</span> <span class="o">==</span> <span class="s2">"14.5"</span>
+        <span class="k">assert</span> <span class="n">components</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"analytics_db (mysql)"</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">test_collect_deduplicates</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tmp_path</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Collector deduplicates databases.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Collector deduplicates databases."""</span>
         <span class="n">collector</span> <span class="o">=</span> <span class="n">DatabaseSchemasCollector</span><span class="p">()</span>
 
         <span class="n">db</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">()</span>
-        <span class="n">db</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;shared_db&quot;</span>
-        <span class="n">db</span><span class="o">.</span><span class="n">engine</span> <span class="o">=</span> <span class="s2">&quot;postgres&quot;</span>
-        <span class="n">db</span><span class="o">.</span><span class="n">version</span> <span class="o">=</span> <span class="s2">&quot;14.5&quot;</span>
+        <span class="n">db</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s2">"shared_db"</span>
+        <span class="n">db</span><span class="o">.</span><span class="n">engine</span> <span class="o">=</span> <span class="s2">"postgres"</span>
+        <span class="n">db</span><span class="o">.</span><span class="n">version</span> <span class="o">=</span> <span class="s2">"14.5"</span>
 
         <span class="c1"># Same database in two modules</span>
         <span class="n">module1</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">()</span>
@@ -3992,7 +4037,7 @@
         <span class="n">platform</span><span class="o">.</span><span class="n">spec</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">()</span>
         <span class="n">platform</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">modules</span> <span class="o">=</span> <span class="p">[</span><span class="n">module1</span><span class="p">,</span> <span class="n">module2</span><span class="p">]</span>
 
-        <span class="n">components</span> <span class="o">=</span> <span class="n">collector</span><span class="o">.</span><span class="n">collect</span><span class="p">(</span><span class="n">platform</span><span class="p">,</span> <span class="n">tmp_path</span><span class="p">,</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">&quot;build&quot;</span><span class="p">)</span>
+        <span class="n">components</span> <span class="o">=</span> <span class="n">collector</span><span class="o">.</span><span class="n">collect</span><span class="p">(</span><span class="n">platform</span><span class="p">,</span> <span class="n">tmp_path</span><span class="p">,</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">"build"</span><span class="p">)</span>
 
         <span class="c1"># Should have only one component due to deduplication</span>
         <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">components</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
@@ -4045,7 +4090,7 @@ cat<span class="w"> </span>&gt;<span class="w"> </span>test-workspace/deploy.yam
 strata<span class="w"> </span>build<span class="w"> </span>sbom<span class="w"> </span>-f<span class="w"> </span>deploy.yaml<span class="w"> </span>--output<span class="w"> </span>json
 
 <span class="c1"># Check the results</span>
-cat<span class="w"> </span>build/test-deployment-1.0.0/sbom.json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.components | length&#39;</span>
+cat<span class="w"> </span>build/test-deployment-1.0.0/sbom.json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">'.components | length'</span>
 </pre></div>
 </div>
 </section>

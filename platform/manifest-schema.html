@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../config/diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="../guides/features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../guides/faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3424,10 +3469,10 @@
 <section id="root-structure">
 <h2>Root Structure<a class="headerlink" href="#root-structure" title="Link to this heading"></a></h2>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>{
-  &quot;apiVersion&quot;: &quot;strata.huybrechts.xyz/v1&quot;,
-  &quot;kind&quot;: &quot;deployment-manifest&quot;,
-  &quot;meta&quot;: { ... },
-  &quot;spec&quot;: { ... }
+  "apiVersion": "strata.huybrechts.xyz/v1",
+  "kind": "deployment-manifest",
+  "meta": { ... },
+  "spec": { ... }
 }
 </pre></div>
 </div>
@@ -3447,14 +3492,14 @@
 <hr class="docutils" />
 <section id="metadata-section">
 <h2>Metadata Section<a class="headerlink" href="#metadata-section" title="Link to this heading"></a></h2>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;meta&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;prod_deployment&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;annotations&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Production deployment manifest&quot;</span>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">"meta"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"prod_deployment"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"annotations"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"description"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Production deployment manifest"</span>
 <span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;labels&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2.3.0&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;environment&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;production&quot;</span>
+<span class="w">  </span><span class="nt">"labels"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2.3.0"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"environment"</span><span class="p">:</span><span class="w"> </span><span class="s2">"production"</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
 </pre></div>
@@ -3487,20 +3532,20 @@
 <hr class="docutils" />
 <section id="specification-section">
 <h2>Specification Section<a class="headerlink" href="#specification-section" title="Link to this heading"></a></h2>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>&quot;spec&quot;: {
-  &quot;deployment_name&quot;: &quot;prod_deployment&quot;,
-  &quot;workspace_name&quot;: &quot;prod_workspace&quot;,
-  &quot;action&quot;: &quot;deploy&quot;,
-  &quot;status&quot;: &quot;success&quot;,
-  &quot;timestamp&quot;: &quot;2024-06-17T10:45:33Z&quot;,
-  &quot;user&quot;: &quot;ops@acme.com&quot;,
-  &quot;platform_version&quot;: &quot;1.2.0&quot;,
-  &quot;build_duration_seconds&quot;: 87,
-  &quot;deploy_duration_seconds&quot;: 215,
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>"spec": {
+  "deployment_name": "prod_deployment",
+  "workspace_name": "prod_workspace",
+  "action": "deploy",
+  "status": "success",
+  "timestamp": "2024-06-17T10:45:33Z",
+  "user": "ops@acme.com",
+  "platform_version": "1.2.0",
+  "build_duration_seconds": 87,
+  "deploy_duration_seconds": 215,
   
-  &quot;artifacts&quot;: { ... },
-  &quot;stages&quot;: [ ... ],
-  &quot;policy_results&quot;: { ... }
+  "artifacts": { ... },
+  "stages": [ ... ],
+  "policy_results": { ... }
 }
 </pre></div>
 </div>
@@ -3570,22 +3615,22 @@
 <hr class="docutils" />
 <section id="artifacts-section">
 <h2>Artifacts Section<a class="headerlink" href="#artifacts-section" title="Link to this heading"></a></h2>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>&quot;artifacts&quot;: {
-  &quot;platform&quot;: { ... },
-  &quot;repositories&quot;: { ... },
-  &quot;images&quot;: [ ... ],
-  &quot;providers&quot;: [ ... ],
-  &quot;sbom&quot;: { ... }
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>"artifacts": {
+  "platform": { ... },
+  "repositories": { ... },
+  "images": [ ... ],
+  "providers": [ ... ],
+  "sbom": { ... }
 }
 </pre></div>
 </div>
 <section id="artifacts-platform">
 <h3><code class="docutils literal notranslate"><span class="pre">artifacts.platform</span></code><a class="headerlink" href="#artifacts-platform" title="Link to this heading"></a></h3>
 <p><strong>Type:</strong> object</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>&quot;platform&quot;: {
-  &quot;hash&quot;: &quot;sha256:abc123def456...&quot;,
-  &quot;path&quot;: &quot;.strata/build/prod_deployment/platform.json&quot;,
-  &quot;content&quot;: { ...full platform.json... }
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>"platform": {
+  "hash": "sha256:abc123def456...",
+  "path": ".strata/build/prod_deployment/platform.json",
+  "content": { ...full platform.json... }
 }
 </pre></div>
 </div>
@@ -3616,16 +3661,16 @@
 <section id="artifacts-repositories">
 <h3><code class="docutils literal notranslate"><span class="pre">artifacts.repositories</span></code><a class="headerlink" href="#artifacts-repositories" title="Link to this heading"></a></h3>
 <p><strong>Type:</strong> object (map of repository name → commit info)</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;repositories&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;xyz-infrastructure&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;git@github.com:acme/xyz-infra.git&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;ref&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;v2.3.0&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;commit&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0&quot;</span>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">"repositories"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"xyz-infrastructure"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"git@github.com:acme/xyz-infra.git"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"ref"</span><span class="p">:</span><span class="w"> </span><span class="s2">"v2.3.0"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"commit"</span><span class="p">:</span><span class="w"> </span><span class="s2">"a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0"</span>
 <span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;xyz-config&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;git@github.com:acme/xyz-config.git&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;ref&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;main&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;commit&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;f7g8h9i0j1k2l3m4n5o6p7q8r9s0t1u2v3w4x5y6&quot;</span>
+<span class="w">  </span><span class="nt">"xyz-config"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"git@github.com:acme/xyz-config.git"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"ref"</span><span class="p">:</span><span class="w"> </span><span class="s2">"main"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"commit"</span><span class="p">:</span><span class="w"> </span><span class="s2">"f7g8h9i0j1k2l3m4n5o6p7q8r9s0t1u2v3w4x5y6"</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
 </pre></div>
@@ -3657,16 +3702,16 @@
 <section id="artifacts-images">
 <h3><code class="docutils literal notranslate"><span class="pre">artifacts.images</span></code><a class="headerlink" href="#artifacts-images" title="Link to this heading"></a></h3>
 <p><strong>Type:</strong> array of objects (optional)</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;images&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">"images"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">  </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;traefik&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;image&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;docker.io/traefik:v3.0.1&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;digest&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sha256:xyz789abc123...&quot;</span>
+<span class="w">    </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"traefik"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"image"</span><span class="p">:</span><span class="w"> </span><span class="s2">"docker.io/traefik:v3.0.1"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"digest"</span><span class="p">:</span><span class="w"> </span><span class="s2">"sha256:xyz789abc123..."</span>
 <span class="w">  </span><span class="p">},</span>
 <span class="w">  </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;app&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;image&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ghcr.io/acme/app:v2.3.0&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;digest&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sha256:123abc789xyz...&quot;</span>
+<span class="w">    </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"app"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"image"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ghcr.io/acme/app:v2.3.0"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"digest"</span><span class="p">:</span><span class="w"> </span><span class="s2">"sha256:123abc789xyz..."</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">]</span>
 </pre></div>
@@ -3698,25 +3743,25 @@
 <section id="artifacts-providers">
 <h3><code class="docutils literal notranslate"><span class="pre">artifacts.providers</span></code><a class="headerlink" href="#artifacts-providers" title="Link to this heading"></a></h3>
 <p><strong>Type:</strong> array of objects (deploy manifests only)</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;providers&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">"providers"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">  </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;tf_hetzner&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;terraform&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;backend&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;local&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;configuration&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;.strata/build/prod_deployment/terraform&quot;</span>
+<span class="w">    </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tf_hetzner"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"terraform"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"backend"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"local"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"configuration"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"path"</span><span class="p">:</span><span class="w"> </span><span class="s2">".strata/build/prod_deployment/terraform"</span>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">},</span>
 <span class="w">  </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;configure&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ansible&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;backend&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;default&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;configuration&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;playbook&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;site.yml&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;inventory&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;inventory/hosts.yml&quot;</span>
+<span class="w">    </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"configure"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ansible"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"backend"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"default"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"configuration"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"playbook"</span><span class="p">:</span><span class="w"> </span><span class="s2">"site.yml"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"inventory"</span><span class="p">:</span><span class="w"> </span><span class="s2">"inventory/hosts.yml"</span>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">}</span>
@@ -3758,11 +3803,11 @@
 <section id="artifacts-sbom">
 <h3><code class="docutils literal notranslate"><span class="pre">artifacts.sbom</span></code><a class="headerlink" href="#artifacts-sbom" title="Link to this heading"></a></h3>
 <p><strong>Type:</strong> object</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;sbom&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;.strata/build/prod_deployment/sbom.json&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;format&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;cyclonedx-1.6&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;sha256&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sha256:def456abc123...&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;component_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">47</span>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">"sbom"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"path"</span><span class="p">:</span><span class="w"> </span><span class="s2">".strata/build/prod_deployment/sbom.json"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"format"</span><span class="p">:</span><span class="w"> </span><span class="s2">"cyclonedx-1.6"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"sha256"</span><span class="p">:</span><span class="w"> </span><span class="s2">"sha256:def456abc123..."</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"component_count"</span><span class="p">:</span><span class="w"> </span><span class="mi">47</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -3799,23 +3844,23 @@
 <section id="stages-section">
 <h2>Stages Section<a class="headerlink" href="#stages-section" title="Link to this heading"></a></h2>
 <p><strong>Type:</strong> array of objects (deploy manifests only)</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;stages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">"stages"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">  </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;infrastructure&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;success&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;duration_seconds&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">125</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;error&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;outputs&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;server_ip&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;192.0.2.10&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;load_balancer_fqdn&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;lb.example.com&quot;</span>
+<span class="w">    </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"infrastructure"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"success"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"duration_seconds"</span><span class="p">:</span><span class="w"> </span><span class="mi">125</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"error"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"outputs"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"server_ip"</span><span class="p">:</span><span class="w"> </span><span class="s2">"192.0.2.10"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"load_balancer_fqdn"</span><span class="p">:</span><span class="w"> </span><span class="s2">"lb.example.com"</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">},</span>
 <span class="w">  </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;configure&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;success&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;duration_seconds&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">45</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;error&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;outputs&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{}</span>
+<span class="w">    </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"configure"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"success"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"duration_seconds"</span><span class="p">:</span><span class="w"> </span><span class="mi">45</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"error"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"outputs"</span><span class="p">:</span><span class="w"> </span><span class="p">{}</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">]</span>
 </pre></div>
@@ -3856,11 +3901,11 @@
 <section id="policy-results-section">
 <h2>Policy Results Section<a class="headerlink" href="#policy-results-section" title="Link to this heading"></a></h2>
 <p><strong>Type:</strong> object (build manifests only)</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;policy_results&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;passed&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;policies_checked&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;policies_passed&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;violations&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">"policy_results"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"passed"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"policies_checked"</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"policies_passed"</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"violations"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -3893,9 +3938,9 @@
 </table>
 <p><strong>Violation structure:</strong></p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;policy_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;no-public-access&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;severity&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;critical&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Firewall rule allows public ingress on port 3306&quot;</span>
+<span class="w">  </span><span class="nt">"policy_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"no-public-access"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"severity"</span><span class="p">:</span><span class="w"> </span><span class="s2">"critical"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"message"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Firewall rule allows public ingress on port 3306"</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -3906,12 +3951,12 @@
 <section id="signatures-future-support">
 <h3>Signatures (Future Support)<a class="headerlink" href="#signatures-future-support" title="Link to this heading"></a></h3>
 <p><strong>Type:</strong> object (optional, not yet implemented)</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">&quot;signatures&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;gpg&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;method&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;gpg&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;key_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;0x1234567890ABCDEF&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;signature&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;-----BEGIN PGP SIGNATURE-----\n...\n-----END PGP SIGNATURE-----&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;signed_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2024-06-17T10:45:33Z&quot;</span>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="nt">"signatures"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"gpg"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"method"</span><span class="p">:</span><span class="w"> </span><span class="s2">"gpg"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"key_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"0x1234567890ABCDEF"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"signature"</span><span class="p">:</span><span class="w"> </span><span class="s2">"-----BEGIN PGP SIGNATURE-----\n...\n-----END PGP SIGNATURE-----"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"signed_at"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2024-06-17T10:45:33Z"</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
 </pre></div>
@@ -3923,63 +3968,63 @@
 <section id="complete-example-build-manifest">
 <h2>Complete Example: Build Manifest<a class="headerlink" href="#complete-example-build-manifest" title="Link to this heading"></a></h2>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>{
-  &quot;apiVersion&quot;: &quot;strata.huybrechts.xyz/v1&quot;,
-  &quot;kind&quot;: &quot;deployment-manifest&quot;,
-  &quot;meta&quot;: {
-    &quot;name&quot;: &quot;prod_deployment&quot;,
-    &quot;labels&quot;: {
-      &quot;version&quot;: &quot;2.3.0&quot;,
-      &quot;environment&quot;: &quot;production&quot;
+  "apiVersion": "strata.huybrechts.xyz/v1",
+  "kind": "deployment-manifest",
+  "meta": {
+    "name": "prod_deployment",
+    "labels": {
+      "version": "2.3.0",
+      "environment": "production"
     }
   },
-  &quot;spec&quot;: {
-    &quot;deployment_name&quot;: &quot;prod_deployment&quot;,
-    &quot;workspace_name&quot;: &quot;prod_workspace&quot;,
-    &quot;action&quot;: &quot;build&quot;,
-    &quot;status&quot;: &quot;success&quot;,
-    &quot;timestamp&quot;: &quot;2024-06-17T10:35:20Z&quot;,
-    &quot;user&quot;: &quot;devops@acme.com&quot;,
-    &quot;platform_version&quot;: &quot;1.2.0&quot;,
-    &quot;build_duration_seconds&quot;: 87,
+  "spec": {
+    "deployment_name": "prod_deployment",
+    "workspace_name": "prod_workspace",
+    "action": "build",
+    "status": "success",
+    "timestamp": "2024-06-17T10:35:20Z",
+    "user": "devops@acme.com",
+    "platform_version": "1.2.0",
+    "build_duration_seconds": 87,
     
-    &quot;artifacts&quot;: {
-      &quot;platform&quot;: {
-        &quot;hash&quot;: &quot;sha256:abc123def456...&quot;,
-        &quot;path&quot;: &quot;.strata/build/prod_deployment/platform.json&quot;,
-        &quot;content&quot;: {
-          &quot;apiVersion&quot;: &quot;strata.huybrechts.xyz/v1&quot;,
-          &quot;kind&quot;: &quot;deployment&quot;,
-          &quot;meta&quot;: {
-            &quot;name&quot;: &quot;prod_deployment&quot;
+    "artifacts": {
+      "platform": {
+        "hash": "sha256:abc123def456...",
+        "path": ".strata/build/prod_deployment/platform.json",
+        "content": {
+          "apiVersion": "strata.huybrechts.xyz/v1",
+          "kind": "deployment",
+          "meta": {
+            "name": "prod_deployment"
           },
-          &quot;spec&quot;: {
-            &quot;namespace&quot;: &quot;default&quot;,
-            &quot;configurations&quot;: [ ... ]
+          "spec": {
+            "namespace": "default",
+            "configurations": [ ... ]
           }
         }
       },
       
-      &quot;repositories&quot;: {
-        &quot;xyz-infrastructure&quot;: {
-          &quot;url&quot;: &quot;git@github.com:acme/xyz-infra.git&quot;,
-          &quot;ref&quot;: &quot;v2.3.0&quot;,
-          &quot;commit&quot;: &quot;a1b2c3d4e5f6g7h8...&quot;
+      "repositories": {
+        "xyz-infrastructure": {
+          "url": "git@github.com:acme/xyz-infra.git",
+          "ref": "v2.3.0",
+          "commit": "a1b2c3d4e5f6g7h8..."
         }
       },
       
-      &quot;sbom&quot;: {
-        &quot;path&quot;: &quot;.strata/build/prod_deployment/sbom.json&quot;,
-        &quot;format&quot;: &quot;cyclonedx-1.6&quot;,
-        &quot;sha256&quot;: &quot;sha256:def456...&quot;,
-        &quot;component_count&quot;: 47
+      "sbom": {
+        "path": ".strata/build/prod_deployment/sbom.json",
+        "format": "cyclonedx-1.6",
+        "sha256": "sha256:def456...",
+        "component_count": 47
       }
     },
     
-    &quot;policy_results&quot;: {
-      &quot;status&quot;: &quot;passed&quot;,
-      &quot;policies_checked&quot;: 12,
-      &quot;policies_passed&quot;: 12,
-      &quot;violations&quot;: []
+    "policy_results": {
+      "status": "passed",
+      "policies_checked": 12,
+      "policies_passed": 12,
+      "violations": []
     }
   }
 }
@@ -3990,86 +4035,86 @@
 <section id="complete-example-deploy-manifest">
 <h2>Complete Example: Deploy Manifest<a class="headerlink" href="#complete-example-deploy-manifest" title="Link to this heading"></a></h2>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>{
-  &quot;apiVersion&quot;: &quot;strata.huybrechts.xyz/v1&quot;,
-  &quot;kind&quot;: &quot;deployment-manifest&quot;,
-  &quot;meta&quot;: {
-    &quot;name&quot;: &quot;prod_deployment&quot;,
-    &quot;labels&quot;: {
-      &quot;version&quot;: &quot;2.3.0&quot;,
-      &quot;environment&quot;: &quot;production&quot;
+  "apiVersion": "strata.huybrechts.xyz/v1",
+  "kind": "deployment-manifest",
+  "meta": {
+    "name": "prod_deployment",
+    "labels": {
+      "version": "2.3.0",
+      "environment": "production"
     }
   },
-  &quot;spec&quot;: {
-    &quot;deployment_name&quot;: &quot;prod_deployment&quot;,
-    &quot;workspace_name&quot;: &quot;prod_workspace&quot;,
-    &quot;action&quot;: &quot;deploy&quot;,
-    &quot;status&quot;: &quot;success&quot;,
-    &quot;timestamp&quot;: &quot;2024-06-17T10:45:33Z&quot;,
-    &quot;user&quot;: &quot;ops@acme.com&quot;,
-    &quot;platform_version&quot;: &quot;1.2.0&quot;,
-    &quot;deploy_duration_seconds&quot;: 215,
+  "spec": {
+    "deployment_name": "prod_deployment",
+    "workspace_name": "prod_workspace",
+    "action": "deploy",
+    "status": "success",
+    "timestamp": "2024-06-17T10:45:33Z",
+    "user": "ops@acme.com",
+    "platform_version": "1.2.0",
+    "deploy_duration_seconds": 215,
     
-    &quot;artifacts&quot;: {
-      &quot;platform&quot;: {
-        &quot;hash&quot;: &quot;sha256:abc123def456...&quot;,
-        &quot;path&quot;: &quot;.strata/build/prod_deployment/platform.json&quot;,
-        &quot;content&quot;: { ... }
+    "artifacts": {
+      "platform": {
+        "hash": "sha256:abc123def456...",
+        "path": ".strata/build/prod_deployment/platform.json",
+        "content": { ... }
       },
       
-      &quot;repositories&quot;: {
-        &quot;xyz-infrastructure&quot;: {
-          &quot;url&quot;: &quot;git@github.com:acme/xyz-infra.git&quot;,
-          &quot;ref&quot;: &quot;v2.3.0&quot;,
-          &quot;commit&quot;: &quot;a1b2c3d4e5f6g7h8...&quot;
+      "repositories": {
+        "xyz-infrastructure": {
+          "url": "git@github.com:acme/xyz-infra.git",
+          "ref": "v2.3.0",
+          "commit": "a1b2c3d4e5f6g7h8..."
         }
       },
       
-      &quot;images&quot;: [
+      "images": [
         {
-          &quot;name&quot;: &quot;traefik&quot;,
-          &quot;image&quot;: &quot;docker.io/traefik:v3.0.1&quot;,
-          &quot;digest&quot;: &quot;sha256:xyz789...&quot;
+          "name": "traefik",
+          "image": "docker.io/traefik:v3.0.1",
+          "digest": "sha256:xyz789..."
         }
       ],
       
-      &quot;providers&quot;: [
+      "providers": [
         {
-          &quot;name&quot;: &quot;tf_hetzner&quot;,
-          &quot;type&quot;: &quot;terraform&quot;,
-          &quot;backend&quot;: {
-            &quot;type&quot;: &quot;local&quot;,
-            &quot;configuration&quot;: {
-              &quot;path&quot;: &quot;.strata/build/prod_deployment/terraform&quot;
+          "name": "tf_hetzner",
+          "type": "terraform",
+          "backend": {
+            "type": "local",
+            "configuration": {
+              "path": ".strata/build/prod_deployment/terraform"
             }
           }
         }
       ],
       
-      &quot;sbom&quot;: {
-        &quot;path&quot;: &quot;.strata/build/prod_deployment/sbom.json&quot;,
-        &quot;format&quot;: &quot;cyclonedx-1.6&quot;,
-        &quot;sha256&quot;: &quot;sha256:def456...&quot;,
-        &quot;component_count&quot;: 47
+      "sbom": {
+        "path": ".strata/build/prod_deployment/sbom.json",
+        "format": "cyclonedx-1.6",
+        "sha256": "sha256:def456...",
+        "component_count": 47
       }
     },
     
-    &quot;stages&quot;: [
+    "stages": [
       {
-        &quot;name&quot;: &quot;infrastructure&quot;,
-        &quot;status&quot;: &quot;success&quot;,
-        &quot;duration_seconds&quot;: 125,
-        &quot;error&quot;: null,
-        &quot;outputs&quot;: {
-          &quot;server_ip&quot;: &quot;192.0.2.10&quot;,
-          &quot;load_balancer_fqdn&quot;: &quot;lb.example.com&quot;
+        "name": "infrastructure",
+        "status": "success",
+        "duration_seconds": 125,
+        "error": null,
+        "outputs": {
+          "server_ip": "192.0.2.10",
+          "load_balancer_fqdn": "lb.example.com"
         }
       },
       {
-        &quot;name&quot;: &quot;configure&quot;,
-        &quot;status&quot;: &quot;success&quot;,
-        &quot;duration_seconds&quot;: 45,
-        &quot;error&quot;: null,
-        &quot;outputs&quot;: {}
+        "name": "configure",
+        "status": "success",
+        "duration_seconds": 45,
+        "error": null,
+        "outputs": {}
       }
     ]
   }
@@ -4141,7 +4186,7 @@
 <h3>ProvisionerInfo<a class="headerlink" href="#provisionerinfo" title="Link to this heading"></a></h3>
 <div class="highlight-typescript notranslate"><div class="highlight"><pre><span></span><span class="kd">interface</span><span class="w"> </span><span class="nx">ProvisionerInfo</span><span class="w"> </span><span class="p">{</span>
 <span class="w">  </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span>
-<span class="w">  </span><span class="kr">type</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;terraform&quot;</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="s2">&quot;ansible&quot;</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="s2">&quot;helm&quot;</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="s2">&quot;compose&quot;</span>
+<span class="w">  </span><span class="kr">type</span><span class="o">:</span><span class="w"> </span><span class="s2">"terraform"</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="s2">"ansible"</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="s2">"helm"</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="s2">"compose"</span>
 <span class="w">  </span><span class="nx">backend</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="kr">type</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span>
 <span class="w">    </span><span class="nx">configuration</span><span class="o">:</span><span class="w"> </span><span class="kt">Record</span><span class="o">&lt;</span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">unknown</span><span class="o">&gt;</span>
@@ -4154,7 +4199,7 @@
 <h3>SbomReference<a class="headerlink" href="#sbomreference" title="Link to this heading"></a></h3>
 <div class="highlight-typescript notranslate"><div class="highlight"><pre><span></span><span class="kd">interface</span><span class="w"> </span><span class="nx">SbomReference</span><span class="w"> </span><span class="p">{</span>
 <span class="w">  </span><span class="nx">path</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="w">            </span><span class="c1">// File path to SBOM</span>
-<span class="w">  </span><span class="nx">format</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;cyclonedx-1.6&quot;</span><span class="w"> </span><span class="c1">// SBOM format</span>
+<span class="w">  </span><span class="nx">format</span><span class="o">:</span><span class="w"> </span><span class="s2">"cyclonedx-1.6"</span><span class="w"> </span><span class="c1">// SBOM format</span>
 <span class="w">  </span><span class="nx">sha256</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="w">          </span><span class="c1">// File hash</span>
 <span class="w">  </span><span class="nx">component_count</span><span class="o">:</span><span class="w"> </span><span class="kt">number</span>
 <span class="p">}</span>
@@ -4175,7 +4220,7 @@
 <h3>DeploymentStage<a class="headerlink" href="#deploymentstage" title="Link to this heading"></a></h3>
 <div class="highlight-typescript notranslate"><div class="highlight"><pre><span></span><span class="kd">interface</span><span class="w"> </span><span class="nx">DeploymentStage</span><span class="w"> </span><span class="p">{</span>
 <span class="w">  </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span>
-<span class="w">  </span><span class="nx">status</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;success&quot;</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="s2">&quot;failure&quot;</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="s2">&quot;skipped&quot;</span>
+<span class="w">  </span><span class="nx">status</span><span class="o">:</span><span class="w"> </span><span class="s2">"success"</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="s2">"failure"</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="s2">"skipped"</span>
 <span class="w">  </span><span class="nx">duration_seconds</span><span class="o">:</span><span class="w"> </span><span class="kt">number</span>
 <span class="w">  </span><span class="nx">error</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="kc">null</span>
 <span class="w">  </span><span class="nx">outputs</span><span class="o">:</span><span class="w"> </span><span class="kt">Record</span><span class="o">&lt;</span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">unknown</span><span class="o">&gt;</span>
@@ -4186,12 +4231,12 @@
 <section id="policyresult">
 <h3>PolicyResult<a class="headerlink" href="#policyresult" title="Link to this heading"></a></h3>
 <div class="highlight-typescript notranslate"><div class="highlight"><pre><span></span><span class="kd">interface</span><span class="w"> </span><span class="nx">PolicyResult</span><span class="w"> </span><span class="p">{</span>
-<span class="w">  </span><span class="nx">status</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;passed&quot;</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="s2">&quot;failed&quot;</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="s2">&quot;warnings&quot;</span>
+<span class="w">  </span><span class="nx">status</span><span class="o">:</span><span class="w"> </span><span class="s2">"passed"</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="s2">"failed"</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="s2">"warnings"</span>
 <span class="w">  </span><span class="nx">policies_checked</span><span class="o">:</span><span class="w"> </span><span class="kt">number</span>
 <span class="w">  </span><span class="nx">policies_passed</span><span class="o">:</span><span class="w"> </span><span class="kt">number</span>
 <span class="w">  </span><span class="nx">violations</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="nx">policy_name</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span>
-<span class="w">    </span><span class="nx">severity</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;critical&quot;</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="s2">&quot;high&quot;</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="s2">&quot;medium&quot;</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="s2">&quot;low&quot;</span>
+<span class="w">    </span><span class="nx">severity</span><span class="o">:</span><span class="w"> </span><span class="s2">"critical"</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="s2">"high"</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="s2">"medium"</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="s2">"low"</span>
 <span class="w">    </span><span class="nx">message</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span>
 <span class="w">  </span><span class="p">}[]</span>
 <span class="p">}</span>

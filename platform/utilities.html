@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../config/diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="../guides/features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../guides/faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3424,9 +3469,9 @@
 <h2><code class="docutils literal notranslate"><span class="pre">config.py</span></code><a class="headerlink" href="#config-py" title="Link to this heading"></a></h2>
 <p>Package-level constants. Import instead of hard-coding strings.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">strata.utils.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">SOLUTION_DIR</span><span class="p">,</span> <span class="n">SOLUTION_FILE</span><span class="p">,</span> <span class="n">SCRIPT_EXTENSIONS</span>
-<span class="c1"># SOLUTION_DIR = &quot;.strata&quot;</span>
-<span class="c1"># SOLUTION_FILE = &quot;solution.json&quot;</span>
-<span class="c1"># SCRIPT_EXTENSIONS = {&quot;.sh&quot;, &quot;.bash&quot;, &quot;.py&quot;, &quot;.ps1&quot;}</span>
+<span class="c1"># SOLUTION_DIR = ".strata"</span>
+<span class="c1"># SOLUTION_FILE = "solution.json"</span>
+<span class="c1"># SCRIPT_EXTENSIONS = {".sh", ".bash", ".py", ".ps1"}</span>
 </pre></div>
 </div>
 </section>
@@ -3440,9 +3485,9 @@
 <p><strong><code class="docutils literal notranslate"><span class="pre">run_command(args,</span> <span class="pre">cwd,</span> <span class="pre">timeout,</span> <span class="pre">env)</span></code></strong> — subprocess wrapper returning a <code class="docutils literal notranslate"><span class="pre">CommandResult(stdout,</span> <span class="pre">stderr,</span> <span class="pre">returncode)</span></code>.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">strata.utils.system</span><span class="w"> </span><span class="kn">import</span> <span class="n">resolve_path</span><span class="p">,</span> <span class="n">resolve_work_path</span><span class="p">,</span> <span class="n">run_command</span>
 
-<span class="n">path</span> <span class="o">=</span> <span class="n">resolve_path</span><span class="p">(</span><span class="s2">&quot;/base&quot;</span><span class="p">,</span> <span class="s2">&quot;@myrepo/config/file.yaml&quot;</span><span class="p">,</span> <span class="n">repo_map</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;myrepo&quot;</span><span class="p">:</span> <span class="s2">&quot;/repos/myrepo&quot;</span><span class="p">})</span>
+<span class="n">path</span> <span class="o">=</span> <span class="n">resolve_path</span><span class="p">(</span><span class="s2">"/base"</span><span class="p">,</span> <span class="s2">"@myrepo/config/file.yaml"</span><span class="p">,</span> <span class="n">repo_map</span><span class="o">=</span><span class="p">{</span><span class="s2">"myrepo"</span><span class="p">:</span> <span class="s2">"/repos/myrepo"</span><span class="p">})</span>
 <span class="n">root</span> <span class="o">=</span> <span class="n">resolve_work_path</span><span class="p">()</span>  <span class="c1"># auto-discovers .strata/ ancestor</span>
-<span class="n">result</span> <span class="o">=</span> <span class="n">run_command</span><span class="p">([</span><span class="s2">&quot;git&quot;</span><span class="p">,</span> <span class="s2">&quot;status&quot;</span><span class="p">],</span> <span class="n">cwd</span><span class="o">=</span><span class="s2">&quot;/repo&quot;</span><span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">run_command</span><span class="p">([</span><span class="s2">"git"</span><span class="p">,</span> <span class="s2">"status"</span><span class="p">],</span> <span class="n">cwd</span><span class="o">=</span><span class="s2">"/repo"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -3461,8 +3506,8 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
 <span class="n">loader</span> <span class="o">=</span> <span class="n">ConfigurationLoader</span><span class="p">()</span>
-<span class="n">config</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_yaml_file</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;config/logging.yaml&quot;</span><span class="p">))</span>
-<span class="n">merged</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">apply_overrides</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;level&quot;</span><span class="p">:</span> <span class="s2">&quot;DEBUG&quot;</span><span class="p">})</span>
+<span class="n">config</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_yaml_file</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">"config/logging.yaml"</span><span class="p">))</span>
+<span class="n">merged</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">apply_overrides</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="p">{</span><span class="s2">"level"</span><span class="p">:</span> <span class="s2">"DEBUG"</span><span class="p">})</span>
 </pre></div>
 </div>
 </section>
@@ -3471,10 +3516,10 @@
 <p>In-process service instance cache to avoid re-parsing YAML on repeated loads.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">strata.utils.service_cache</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_cached_service</span><span class="p">,</span> <span class="n">cache_service</span><span class="p">,</span> <span class="n">clear_cache</span>
 
-<span class="n">instance</span> <span class="o">=</span> <span class="n">get_cached_service</span><span class="p">(</span><span class="n">MyService</span><span class="p">,</span> <span class="n">file_path</span><span class="o">=</span><span class="s2">&quot;/path/to/file.yaml&quot;</span><span class="p">)</span>
+<span class="n">instance</span> <span class="o">=</span> <span class="n">get_cached_service</span><span class="p">(</span><span class="n">MyService</span><span class="p">,</span> <span class="n">file_path</span><span class="o">=</span><span class="s2">"/path/to/file.yaml"</span><span class="p">)</span>
 <span class="k">if</span> <span class="n">instance</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="n">instance</span> <span class="o">=</span> <span class="n">MyService</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;/path/to/file.yaml&quot;</span><span class="p">)</span>
-    <span class="n">cache_service</span><span class="p">(</span><span class="n">MyService</span><span class="p">,</span> <span class="n">instance</span><span class="p">,</span> <span class="n">file_path</span><span class="o">=</span><span class="s2">&quot;/path/to/file.yaml&quot;</span><span class="p">)</span>
+    <span class="n">instance</span> <span class="o">=</span> <span class="n">MyService</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"/path/to/file.yaml"</span><span class="p">)</span>
+    <span class="n">cache_service</span><span class="p">(</span><span class="n">MyService</span><span class="p">,</span> <span class="n">instance</span><span class="p">,</span> <span class="n">file_path</span><span class="o">=</span><span class="s2">"/path/to/file.yaml"</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>Used internally by <code class="docutils literal notranslate"><span class="pre">BaseService.load()</span></code>. Call <code class="docutils literal notranslate"><span class="pre">clear_cache()</span></code> between tests.</p>
@@ -3485,7 +3530,7 @@
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">strata.utils.templater</span><span class="w"> </span><span class="kn">import</span> <span class="n">TemplateProcessor</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
-<span class="n">processor</span> <span class="o">=</span> <span class="n">TemplateProcessor</span><span class="p">(</span><span class="n">template_dir</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;terraform/&quot;</span><span class="p">),</span> <span class="n">cleanup_templates</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">processor</span> <span class="o">=</span> <span class="n">TemplateProcessor</span><span class="p">(</span><span class="n">template_dir</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="s2">"terraform/"</span><span class="p">),</span> <span class="n">cleanup_templates</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="n">processor</span><span class="o">.</span><span class="n">process_all_templates</span><span class="p">()</span>  <span class="c1"># main.template.tf → main.tf</span>
 </pre></div>
 </div>
@@ -3497,8 +3542,8 @@
 <p>Used by both <code class="docutils literal notranslate"><span class="pre">AnsibleCollectionCollector</span></code> and <code class="docutils literal notranslate"><span class="pre">AnsibleDeployer</span></code> to avoid duplicated discovery logic.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">strata.utils.ansible_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">find_ansible_requirements_file</span>
 
-<span class="n">req</span> <span class="o">=</span> <span class="n">find_ansible_requirements_file</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;deploy/configure&quot;</span><span class="p">))</span>
-<span class="c1"># returns Path(&quot;deploy/configure/requirements.yml&quot;) or None</span>
+<span class="n">req</span> <span class="o">=</span> <span class="n">find_ansible_requirements_file</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">"deploy/configure"</span><span class="p">))</span>
+<span class="c1"># returns Path("deploy/configure/requirements.yml") or None</span>
 </pre></div>
 </div>
 </section>
@@ -3513,11 +3558,11 @@
 <p><strong><code class="docutils literal notranslate"><span class="pre">ansible_collection_to_purl(name,</span> <span class="pre">version=None)</span></code></strong> / <strong><code class="docutils literal notranslate"><span class="pre">ansible_role_to_purl(name,</span> <span class="pre">version=None)</span></code></strong> — <code class="docutils literal notranslate"><span class="pre">pkg:ansible/…</span></code> PURLs.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">strata.utils.sbom_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_floating_tag</span><span class="p">,</span> <span class="n">image_to_purl</span><span class="p">,</span> <span class="n">helm_chart_to_purl</span>
 
-<span class="n">is_floating_tag</span><span class="p">(</span><span class="s2">&quot;latest&quot;</span><span class="p">)</span>          <span class="c1"># True</span>
-<span class="n">is_floating_tag</span><span class="p">(</span><span class="s2">&quot;v3.0.1&quot;</span><span class="p">)</span>          <span class="c1"># False</span>
-<span class="n">image_to_purl</span><span class="p">(</span><span class="s2">&quot;traefik:v3.0.1&quot;</span><span class="p">)</span>   <span class="c1"># &quot;pkg:docker/traefik@v3.0.1&quot;</span>
-<span class="n">helm_chart_to_purl</span><span class="p">(</span><span class="s2">&quot;authentik&quot;</span><span class="p">,</span> <span class="s2">&quot;2024.12.0&quot;</span><span class="p">,</span> <span class="s2">&quot;https://charts.goauthentik.io&quot;</span><span class="p">)</span>
-<span class="c1"># &quot;pkg:helm/authentik@2024.12.0?repository_url=https%3A%2F%2Fcharts.goauthentik.io&quot;</span>
+<span class="n">is_floating_tag</span><span class="p">(</span><span class="s2">"latest"</span><span class="p">)</span>          <span class="c1"># True</span>
+<span class="n">is_floating_tag</span><span class="p">(</span><span class="s2">"v3.0.1"</span><span class="p">)</span>          <span class="c1"># False</span>
+<span class="n">image_to_purl</span><span class="p">(</span><span class="s2">"traefik:v3.0.1"</span><span class="p">)</span>   <span class="c1"># "pkg:docker/traefik@v3.0.1"</span>
+<span class="n">helm_chart_to_purl</span><span class="p">(</span><span class="s2">"authentik"</span><span class="p">,</span> <span class="s2">"2024.12.0"</span><span class="p">,</span> <span class="s2">"https://charts.goauthentik.io"</span><span class="p">)</span>
+<span class="c1"># "pkg:helm/authentik@2024.12.0?repository_url=https%3A%2F%2Fcharts.goauthentik.io"</span>
 </pre></div>
 </div>
 </section>
@@ -3525,7 +3570,7 @@
 <h2><code class="docutils literal notranslate"><span class="pre">version.py</span></code><a class="headerlink" href="#version-py" title="Link to this heading"></a></h2>
 <p>Reads the installed package version from package metadata.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">strata.utils.version</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_version</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">get_version</span><span class="p">())</span>  <span class="c1"># e.g. &quot;1.2.3&quot;</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">get_version</span><span class="p">())</span>  <span class="c1"># e.g. "1.2.3"</span>
 </pre></div>
 </div>
 </section>

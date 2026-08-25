@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../config/diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3438,7 +3483,7 @@ pip<span class="w"> </span>install<span class="w"> </span>xyz-strata<span class=
 <span class="c1"># Or for production backends</span>
 pip<span class="w"> </span>install<span class="w"> </span>xyz-strata<span class="o">[</span>server,server-postgres<span class="o">]</span><span class="w">      </span><span class="c1"># PostgreSQL</span>
 pip<span class="w"> </span>install<span class="w"> </span>xyz-strata<span class="o">[</span>server,server-mssql<span class="o">]</span><span class="w">         </span><span class="c1"># SQL Server</span>
-pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;xyz-strata[server,server-postgres,server-mssql]&quot;</span><span class="w">  </span><span class="c1"># All three</span>
+pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"xyz-strata[server,server-postgres,server-mssql]"</span><span class="w">  </span><span class="c1"># All three</span>
 </pre></div>
 </div>
 <p>SQLite is used by default; it requires no external service and is suitable for up to hundreds of thousands of events. For production deployments with many workspaces, PostgreSQL or SQL Server is recommended.</p>
@@ -3458,7 +3503,7 @@ pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot
 <section id="initialize-the-database-first-time-only">
 <h3>Initialize the database (first time only)<a class="headerlink" href="#initialize-the-database-first-time-only" title="Link to this heading"></a></h3>
 <p>Before the server can accept events, create the <code class="docutils literal notranslate"><span class="pre">events</span></code> table:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># SQLite (same file as &#39;serve run&#39; will use)</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># SQLite (same file as 'serve run' will use)</span>
 strata<span class="w"> </span>serve<span class="w"> </span>migrate<span class="w"> </span>--db-url<span class="w"> </span>sqlite:///.strata/state-service.db
 
 <span class="c1"># PostgreSQL</span>
@@ -3520,7 +3565,7 @@ strata<span class="w"> </span>serve<span class="w"> </span>run
 
 <span class="k">RUN</span><span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>xyz-strata<span class="o">[</span>server,server-postgres<span class="o">]</span>
 
-<span class="k">ENTRYPOINT</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;strata&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;serve&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;run&quot;</span><span class="p">]</span>
+<span class="k">ENTRYPOINT</span><span class="w"> </span><span class="p">[</span><span class="s2">"strata"</span><span class="p">,</span><span class="w"> </span><span class="s2">"serve"</span><span class="p">,</span><span class="w"> </span><span class="s2">"run"</span><span class="p">]</span>
 </pre></div>
 </div>
 <p><strong>Example pod manifest:</strong></p>
@@ -3537,9 +3582,9 @@ strata<span class="w"> </span>serve<span class="w"> </span>run
 <span class="w">          </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http</span>
 <span class="w">      </span><span class="nt">env</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">STRATA_SERVE_HOST</span>
-<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0.0.0.0&quot;</span>
+<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">"0.0.0.0"</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">STRATA_SERVE_PORT</span>
-<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;8000&quot;</span>
+<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">"8000"</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">STRATA_SERVE_DB_URL</span>
 <span class="w">          </span><span class="nt">valueFrom</span><span class="p">:</span>
 <span class="w">            </span><span class="nt">secretKeyRef</span><span class="p">:</span>
@@ -3575,7 +3620,7 @@ strata<span class="w"> </span>serve<span class="w"> </span>run
 <p>Workspaces authenticate to the service using bearer tokens. Tokens are created by an admin and rotated by operators — never stored or shared through deployment configuration.</p>
 <section id="create-a-workspace-token">
 <h3>Create a workspace token<a class="headerlink" href="#create-a-workspace-token" title="Link to this heading"></a></h3>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Generate a new token for the &quot;prod&quot; workspace</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Generate a new token for the "prod" workspace</span>
 strata<span class="w"> </span>serve<span class="w"> </span>token<span class="w"> </span>create<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--url<span class="w"> </span>https://state-service.internal:8000<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--admin-token<span class="w"> </span><span class="nv">$ADMIN_TOKEN</span><span class="w"> </span><span class="se">\</span>
@@ -3628,7 +3673,7 @@ strata<span class="w"> </span>serve<span class="w"> </span>token<span class="w">
 <span class="w">        </span><span class="nt">authentication</span><span class="p">:</span>
 <span class="w">          </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">oauth2</span>
 <span class="w">          </span><span class="nt">oauth2</span><span class="p">:</span>
-<span class="w">            </span><span class="nt">client_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">$STRATA_STATE_TOKEN</span><span class="w">  </span><span class="c1"># from &#39;serve token create&#39;</span>
+<span class="w">            </span><span class="nt">client_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">$STRATA_STATE_TOKEN</span><span class="w">  </span><span class="c1"># from 'serve token create'</span>
 <span class="w">        </span><span class="nt">headers</span><span class="p">:</span>
 <span class="w">          </span><span class="nt">User-Agent</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata-workspace/prod</span>
 </pre></div>
@@ -3658,8 +3703,8 @@ strata<span class="w"> </span>serve<span class="w"> </span>token<span class="w">
 <p><strong>Failed deployments in the last 7 days:</strong></p>
 <div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">SELECT</span><span class="w"> </span><span class="n">deployment</span><span class="p">,</span><span class="w"> </span><span class="n">workspace</span><span class="p">,</span><span class="w"> </span><span class="n">environment</span><span class="p">,</span><span class="w"> </span><span class="n">recorded_at</span><span class="p">,</span><span class="w"> </span><span class="n">payload</span>
 <span class="k">FROM</span><span class="w"> </span><span class="n">events</span>
-<span class="k">WHERE</span><span class="w"> </span><span class="n">record_type</span><span class="w"> </span><span class="k">LIKE</span><span class="w"> </span><span class="s1">&#39;%.deployment.failed&#39;</span>
-<span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">recorded_at</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="n">NOW</span><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="nb">INTERVAL</span><span class="w"> </span><span class="s1">&#39;7 days&#39;</span>
+<span class="k">WHERE</span><span class="w"> </span><span class="n">record_type</span><span class="w"> </span><span class="k">LIKE</span><span class="w"> </span><span class="s1">'%.deployment.failed'</span>
+<span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">recorded_at</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="n">NOW</span><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="nb">INTERVAL</span><span class="w"> </span><span class="s1">'7 days'</span>
 <span class="k">ORDER</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">recorded_at</span><span class="w"> </span><span class="k">DESC</span><span class="p">;</span>
 </pre></div>
 </div>
@@ -3673,10 +3718,10 @@ strata<span class="w"> </span>serve<span class="w"> </span>token<span class="w">
 <p><strong>Extract a field from the JSON payload (PostgreSQL):</strong></p>
 <div class="highlight-sql notranslate"><div class="highlight"><pre><span></span><span class="k">SELECT</span>
 <span class="w">  </span><span class="n">deployment</span><span class="p">,</span>
-<span class="w">  </span><span class="p">(</span><span class="n">payload</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="s1">&#39;duration_seconds&#39;</span><span class="p">)::</span><span class="nb">numeric</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">duration</span><span class="p">,</span>
+<span class="w">  </span><span class="p">(</span><span class="n">payload</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="s1">'duration_seconds'</span><span class="p">)::</span><span class="nb">numeric</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">duration</span><span class="p">,</span>
 <span class="w">  </span><span class="n">recorded_at</span>
 <span class="k">FROM</span><span class="w"> </span><span class="n">events</span>
-<span class="k">WHERE</span><span class="w"> </span><span class="n">record_type</span><span class="w"> </span><span class="k">LIKE</span><span class="w"> </span><span class="s1">&#39;%.deployment.completed&#39;</span>
+<span class="k">WHERE</span><span class="w"> </span><span class="n">record_type</span><span class="w"> </span><span class="k">LIKE</span><span class="w"> </span><span class="s1">'%.deployment.completed'</span>
 <span class="k">ORDER</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">recorded_at</span><span class="w"> </span><span class="k">DESC</span><span class="p">;</span>
 </pre></div>
 </div>
@@ -3692,12 +3737,12 @@ strata<span class="w"> </span>serve<span class="w"> </span>token<span class="w">
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>SELECT
   $__timeGroupAlias(recorded_at, $__interval),
   COUNT(*) as deployments,
-  SUM(CASE WHEN outcome = &#39;success&#39; THEN 1 ELSE 0 END) as successful,
-  SUM(CASE WHEN outcome = &#39;failed&#39; THEN 1 ELSE 0 END) as failed
+  SUM(CASE WHEN outcome = 'success' THEN 1 ELSE 0 END) as successful,
+  SUM(CASE WHEN outcome = 'failed' THEN 1 ELSE 0 END) as failed
 FROM events
-WHERE record_type LIKE &#39;%.deployment.%&#39;
-  AND workspace = &#39;$workspace&#39;
-  AND environment = &#39;$environment&#39;
+WHERE record_type LIKE '%.deployment.%'
+  AND workspace = '$workspace'
+  AND environment = '$environment'
 GROUP BY $__timeGroupAlias(recorded_at, $__interval)
 ORDER BY time DESC;
 </pre></div>
@@ -3722,7 +3767,7 @@ Failure: HTTP 503 with error detail (e.g., database connection failed).</p>
 <section id="health-check-endpoint">
 <h3>Health check endpoint<a class="headerlink" href="#health-check-endpoint" title="Link to this heading"></a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>https://state-service.internal:8000/healthz
-<span class="c1"># {&quot;status&quot;: &quot;ok&quot;}</span>
+<span class="c1"># {"status": "ok"}</span>
 
 curl<span class="w"> </span>-I<span class="w"> </span>https://state-service.internal:8000/healthz
 <span class="c1"># HTTP/1.1 200 OK</span>
@@ -3819,16 +3864,16 @@ strata<span class="w"> </span>serve<span class="w"> </span>migrate<span class="w
 <span class="n">Content</span><span class="o">-</span><span class="n">Type</span><span class="p">:</span> <span class="n">application</span><span class="o">/</span><span class="n">json</span>
 
 <span class="p">{</span>
-  <span class="s2">&quot;specversion&quot;</span><span class="p">:</span> <span class="s2">&quot;1.0&quot;</span><span class="p">,</span>
-  <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;xyz.huybrechts.strata.deployment.completed&quot;</span><span class="p">,</span>
-  <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="s2">&quot;my-workspace/my-deployment&quot;</span><span class="p">,</span>
-  <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="s2">&quot;deployment-abc123-20260812&quot;</span><span class="p">,</span>
-  <span class="s2">&quot;time&quot;</span><span class="p">:</span> <span class="s2">&quot;2026-08-12T15:30:45Z&quot;</span><span class="p">,</span>
-  <span class="s2">&quot;deployment&quot;</span><span class="p">:</span> <span class="s2">&quot;my-deployment&quot;</span><span class="p">,</span>
-  <span class="s2">&quot;workspace&quot;</span><span class="p">:</span> <span class="s2">&quot;my-workspace&quot;</span><span class="p">,</span>
-  <span class="s2">&quot;environment&quot;</span><span class="p">:</span> <span class="s2">&quot;prod&quot;</span><span class="p">,</span>
-  <span class="s2">&quot;outcome&quot;</span><span class="p">:</span> <span class="s2">&quot;success&quot;</span><span class="p">,</span>
-  <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{</span> <span class="o">...</span><span class="n">full</span> <span class="n">event</span> <span class="n">payload</span><span class="o">...</span> <span class="p">}</span>
+  <span class="s2">"specversion"</span><span class="p">:</span> <span class="s2">"1.0"</span><span class="p">,</span>
+  <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"xyz.huybrechts.strata.deployment.completed"</span><span class="p">,</span>
+  <span class="s2">"source"</span><span class="p">:</span> <span class="s2">"my-workspace/my-deployment"</span><span class="p">,</span>
+  <span class="s2">"id"</span><span class="p">:</span> <span class="s2">"deployment-abc123-20260812"</span><span class="p">,</span>
+  <span class="s2">"time"</span><span class="p">:</span> <span class="s2">"2026-08-12T15:30:45Z"</span><span class="p">,</span>
+  <span class="s2">"deployment"</span><span class="p">:</span> <span class="s2">"my-deployment"</span><span class="p">,</span>
+  <span class="s2">"workspace"</span><span class="p">:</span> <span class="s2">"my-workspace"</span><span class="p">,</span>
+  <span class="s2">"environment"</span><span class="p">:</span> <span class="s2">"prod"</span><span class="p">,</span>
+  <span class="s2">"outcome"</span><span class="p">:</span> <span class="s2">"success"</span><span class="p">,</span>
+  <span class="s2">"data"</span><span class="p">:</span> <span class="p">{</span> <span class="o">...</span><span class="n">full</span> <span class="n">event</span> <span class="n">payload</span><span class="o">...</span> <span class="p">}</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -3849,7 +3894,7 @@ strata<span class="w"> </span>serve<span class="w"> </span>migrate<span class="w
 <li><p><code class="docutils literal notranslate"><span class="pre">200</span> <span class="pre">OK</span></code> — Service healthy</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">503</span> <span class="pre">Service</span> <span class="pre">Unavailable</span></code> — Database unreachable</p></li>
 </ul>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ok&quot;</span><span class="w"> </span><span class="p">}</span>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="w"> </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ok"</span><span class="w"> </span><span class="p">}</span>
 </pre></div>
 </div>
 </section>
@@ -3857,8 +3902,8 @@ strata<span class="w"> </span>serve<span class="w"> </span>migrate<span class="w
 <h3>GET /v1/events/tail<a class="headerlink" href="#get-v1-events-tail" title="Link to this heading"></a></h3>
 <p>Retrieve the most recent events (admin-only, read-only).</p>
 <p><strong>Request (requires admin token):</strong></p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">curl</span> <span class="o">-</span><span class="n">H</span> <span class="s2">&quot;Authorization: Bearer $ADMIN_TOKEN&quot;</span> \
-  <span class="s1">&#39;https://state-service.internal:8000/v1/events/tail?limit=100&amp;workspace=prod&#39;</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">curl</span> <span class="o">-</span><span class="n">H</span> <span class="s2">"Authorization: Bearer $ADMIN_TOKEN"</span> \
+  <span class="s1">'https://state-service.internal:8000/v1/events/tail?limit=100&amp;workspace=prod'</span>
 </pre></div>
 </div>
 <p><strong>Parameters:</strong></p>
@@ -3868,19 +3913,19 @@ strata<span class="w"> </span>serve<span class="w"> </span>migrate<span class="w
 </ul>
 <p><strong>Response:</strong></p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>{
-  &quot;events&quot;: [
+  "events": [
     {
-      &quot;execution_id&quot;: &quot;...&quot;,
-      &quot;record_type&quot;: &quot;xyz.huybrechts.strata.deployment.completed&quot;,
-      &quot;deployment&quot;: &quot;...&quot;,
-      &quot;workspace&quot;: &quot;...&quot;,
-      &quot;outcome&quot;: &quot;success&quot;,
-      &quot;recorded_at&quot;: &quot;2026-08-12T15:30:45Z&quot;,
-      &quot;payload&quot;: { ... }
+      "execution_id": "...",
+      "record_type": "xyz.huybrechts.strata.deployment.completed",
+      "deployment": "...",
+      "workspace": "...",
+      "outcome": "success",
+      "recorded_at": "2026-08-12T15:30:45Z",
+      "payload": { ... }
     }
   ],
-  &quot;count&quot;: 5,
-  &quot;limit&quot;: 100
+  "count": 5,
+  "limit": 100
 }
 </pre></div>
 </div>
@@ -3892,15 +3937,15 @@ strata<span class="w"> </span>serve<span class="w"> </span>migrate<span class="w
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Authorization</span><span class="p">:</span> <span class="n">Bearer</span> <span class="o">&lt;</span><span class="n">admin_token</span><span class="o">&gt;</span>
 <span class="n">Content</span><span class="o">-</span><span class="n">Type</span><span class="p">:</span> <span class="n">application</span><span class="o">/</span><span class="n">json</span>
 
-<span class="p">{</span> <span class="s2">&quot;workspace&quot;</span><span class="p">:</span> <span class="s2">&quot;prod&quot;</span> <span class="p">}</span>
+<span class="p">{</span> <span class="s2">"workspace"</span><span class="p">:</span> <span class="s2">"prod"</span> <span class="p">}</span>
 </pre></div>
 </div>
 <p><strong>Response:</strong></p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;token&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;strata_state_e1d3f6c9a2b4e7k...&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;workspace&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;prod&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;created_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-08-12T15:30:45Z&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;expires_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span>
+<span class="w">  </span><span class="nt">"token"</span><span class="p">:</span><span class="w"> </span><span class="s2">"strata_state_e1d3f6c9a2b4e7k..."</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"workspace"</span><span class="p">:</span><span class="w"> </span><span class="s2">"prod"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"created_at"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-08-12T15:30:45Z"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"expires_at"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -3914,13 +3959,13 @@ strata<span class="w"> </span>serve<span class="w"> </span>migrate<span class="w
 </div>
 <p><strong>Response:</strong></p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;tokens&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="nt">"tokens"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">    </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;tok_123&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;workspace&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;prod&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;created_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-08-12T15:30:45Z&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;last_used_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-08-12T16:00:00Z&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;expires_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span>
+<span class="w">      </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tok_123"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"workspace"</span><span class="p">:</span><span class="w"> </span><span class="s2">"prod"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"created_at"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-08-12T15:30:45Z"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"last_used_at"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-08-12T16:00:00Z"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"expires_at"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">]</span>
 <span class="p">}</span>

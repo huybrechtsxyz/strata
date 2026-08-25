@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../config/diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3446,7 +3491,7 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">MyProvisioner</span><span class="p">(</span><span class="n">BaseDeployer</span><span class="p">):</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">get_deployer_name</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-        <span class="k">return</span> <span class="s2">&quot;my-tool&quot;</span>           <span class="c1"># must match provisioner: in workspace YAML</span>
+        <span class="k">return</span> <span class="s2">"my-tool"</span>           <span class="c1"># must match provisioner: in workspace YAML</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">get_supported_steps</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
         <span class="k">return</span> <span class="p">[</span><span class="n">STEP_SETUP</span><span class="p">,</span> <span class="n">STEP_CHECK</span><span class="p">,</span> <span class="n">STEP_PLAN</span><span class="p">,</span> <span class="n">STEP_APPLY</span><span class="p">,</span>
@@ -3456,22 +3501,22 @@
         <span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="p">[]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">validate_environment</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">run</span><span class="p">([</span><span class="s2">&quot;my-tool&quot;</span><span class="p">,</span> <span class="s2">&quot;--version&quot;</span><span class="p">],</span> <span class="n">capture_output</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">run</span><span class="p">([</span><span class="s2">"my-tool"</span><span class="p">,</span> <span class="s2">"--version"</span><span class="p">],</span> <span class="n">capture_output</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">returncode</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">False</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;my-tool CLI not found on PATH&quot;</span><span class="p">]</span>
+            <span class="k">return</span> <span class="kc">False</span><span class="p">,</span> <span class="p">[</span><span class="s2">"my-tool CLI not found on PATH"</span><span class="p">]</span>
         <span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="p">[]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">setup</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
-        <span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;Setup complete&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="p">[</span><span class="s2">"Setup complete"</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">check</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
         <span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="p">[]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">plan</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
-        <span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;No changes&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="p">[</span><span class="s2">"No changes"</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">apply</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
-        <span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;✓ Stage &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">stage</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; applied.&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"✓ Stage '</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">stage</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">' applied."</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">destroy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
         <span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="p">[]</span>
@@ -3693,16 +3738,16 @@
 <h2>Step Name Constants<a class="headerlink" href="#step-name-constants" title="Link to this heading"></a></h2>
 <p>Import step name constants from <code class="docutils literal notranslate"><span class="pre">base_deployer</span></code> to avoid magic strings:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">strata.deployers.base_deployer</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">STEP_SETUP</span><span class="p">,</span>        <span class="c1"># &quot;setup&quot;</span>
-    <span class="n">STEP_CHECK</span><span class="p">,</span>        <span class="c1"># &quot;check&quot;</span>
-    <span class="n">STEP_PLAN</span><span class="p">,</span>         <span class="c1"># &quot;plan&quot;</span>
-    <span class="n">STEP_APPLY</span><span class="p">,</span>        <span class="c1"># &quot;apply&quot;</span>
-    <span class="n">STEP_DESTROY</span><span class="p">,</span>      <span class="c1"># &quot;destroy&quot;</span>
-    <span class="n">STEP_PLAN_DESTROY</span><span class="p">,</span> <span class="c1"># &quot;plan_destroy&quot;</span>
-    <span class="n">STEP_SHOW_PLAN</span><span class="p">,</span>    <span class="c1"># &quot;show_plan&quot;</span>
-    <span class="n">STEP_OUTPUT</span><span class="p">,</span>       <span class="c1"># &quot;output&quot;</span>
-    <span class="n">STEP_STATUS</span><span class="p">,</span>       <span class="c1"># &quot;status&quot;</span>
-    <span class="n">STEP_HEALTH</span><span class="p">,</span>       <span class="c1"># &quot;health&quot;</span>
+    <span class="n">STEP_SETUP</span><span class="p">,</span>        <span class="c1"># "setup"</span>
+    <span class="n">STEP_CHECK</span><span class="p">,</span>        <span class="c1"># "check"</span>
+    <span class="n">STEP_PLAN</span><span class="p">,</span>         <span class="c1"># "plan"</span>
+    <span class="n">STEP_APPLY</span><span class="p">,</span>        <span class="c1"># "apply"</span>
+    <span class="n">STEP_DESTROY</span><span class="p">,</span>      <span class="c1"># "destroy"</span>
+    <span class="n">STEP_PLAN_DESTROY</span><span class="p">,</span> <span class="c1"># "plan_destroy"</span>
+    <span class="n">STEP_SHOW_PLAN</span><span class="p">,</span>    <span class="c1"># "show_plan"</span>
+    <span class="n">STEP_OUTPUT</span><span class="p">,</span>       <span class="c1"># "output"</span>
+    <span class="n">STEP_STATUS</span><span class="p">,</span>       <span class="c1"># "status"</span>
+    <span class="n">STEP_HEALTH</span><span class="p">,</span>       <span class="c1"># "health"</span>
 <span class="p">)</span>
 </pre></div>
 </div>
@@ -3712,14 +3757,14 @@
 <h2>Return Value Conventions<a class="headerlink" href="#return-value-conventions" title="Link to this heading"></a></h2>
 <p>Every step returns a tuple. Follow these conventions:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Success with messages</span>
-<span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;✓ Applied successfully&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;3 resources created&quot;</span><span class="p">]</span>
+<span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="p">[</span><span class="s2">"✓ Applied successfully"</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"3 resources created"</span><span class="p">]</span>
 
 <span class="c1"># Failure with diagnostic messages</span>
-<span class="k">return</span> <span class="kc">False</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;Command failed: exit code 1&quot;</span><span class="p">,</span> <span class="s2">&quot;Error: permission denied&quot;</span><span class="p">]</span>
+<span class="k">return</span> <span class="kc">False</span><span class="p">,</span> <span class="p">[</span><span class="s2">"Command failed: exit code 1"</span><span class="p">,</span> <span class="s2">"Error: permission denied"</span><span class="p">]</span>
 
 <span class="c1"># Methods returning (success, data, messages)</span>
-<span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="s2">&quot;value&quot;</span><span class="p">},</span> <span class="p">[</span><span class="s2">&quot;Collected 2 outputs&quot;</span><span class="p">]</span>
-<span class="k">return</span> <span class="kc">False</span><span class="p">,</span> <span class="p">{},</span> <span class="p">[</span><span class="s2">&quot;Could not retrieve outputs: connection refused&quot;</span><span class="p">]</span>
+<span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="p">{</span><span class="s2">"key"</span><span class="p">:</span> <span class="s2">"value"</span><span class="p">},</span> <span class="p">[</span><span class="s2">"Collected 2 outputs"</span><span class="p">]</span>
+<span class="k">return</span> <span class="kc">False</span><span class="p">,</span> <span class="p">{},</span> <span class="p">[</span><span class="s2">"Could not retrieve outputs: connection refused"</span><span class="p">]</span>
 </pre></div>
 </div>
 <ul class="simple">
@@ -3734,7 +3779,7 @@
 <p>Use <code class="docutils literal notranslate"><span class="pre">self._get_timeout(step,</span> <span class="pre">default)</span></code> to respect per-stage timeout overrides:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">apply</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
     <span class="n">timeout</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_timeout</span><span class="p">(</span><span class="n">STEP_APPLY</span><span class="p">,</span> <span class="mi">1800</span><span class="p">)</span>   <span class="c1"># 30min default</span>
-    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">([</span><span class="s2">&quot;my-tool&quot;</span><span class="p">,</span> <span class="s2">&quot;apply&quot;</span><span class="p">],</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">([</span><span class="s2">"my-tool"</span><span class="p">,</span> <span class="s2">"apply"</span><span class="p">],</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>Timeouts are configured in the deployment YAML under <code class="docutils literal notranslate"><span class="pre">spec.stages[].timeouts</span></code>.</p>
@@ -3749,29 +3794,29 @@
 
 <span class="c1"># Load the plugin file (simulate auto-discovery)</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span><span class="o">,</span><span class="w"> </span><span class="nn">sys</span>
-<span class="n">spec</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">spec_from_file_location</span><span class="p">(</span><span class="s2">&quot;my_provisioner&quot;</span><span class="p">,</span> <span class="s2">&quot;.strata/provisioners/my_provisioner.py&quot;</span><span class="p">)</span>
+<span class="n">spec</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">spec_from_file_location</span><span class="p">(</span><span class="s2">"my_provisioner"</span><span class="p">,</span> <span class="s2">".strata/provisioners/my_provisioner.py"</span><span class="p">)</span>
 <span class="n">mod</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">module_from_spec</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
 <span class="n">spec</span><span class="o">.</span><span class="n">loader</span><span class="o">.</span><span class="n">exec_module</span><span class="p">(</span><span class="n">mod</span><span class="p">)</span>
 
 <span class="c1"># Verify registration</span>
-<span class="k">assert</span> <span class="n">DeployerFactory</span><span class="o">.</span><span class="n">is_known_type</span><span class="p">(</span><span class="s2">&quot;my-tool&quot;</span><span class="p">)</span>
+<span class="k">assert</span> <span class="n">DeployerFactory</span><span class="o">.</span><span class="n">is_known_type</span><span class="p">(</span><span class="s2">"my-tool"</span><span class="p">)</span>
 
 <span class="c1"># Create an instance</span>
 <span class="n">stage</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">()</span>
-<span class="n">stage</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;infra&quot;</span>
-<span class="n">stage</span><span class="o">.</span><span class="n">provisioner</span> <span class="o">=</span> <span class="s2">&quot;infra&quot;</span>
+<span class="n">stage</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s2">"infra"</span>
+<span class="n">stage</span><span class="o">.</span><span class="n">provisioner</span> <span class="o">=</span> <span class="s2">"infra"</span>
 <span class="n">deployer</span> <span class="o">=</span> <span class="n">DeployerFactory</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
-    <span class="s2">&quot;my-tool&quot;</span><span class="p">,</span>
+    <span class="s2">"my-tool"</span><span class="p">,</span>
     <span class="n">stage</span><span class="o">=</span><span class="n">stage</span><span class="p">,</span>
     <span class="n">deployment_service</span><span class="o">=</span><span class="n">MagicMock</span><span class="p">(),</span>
     <span class="n">configuration_service</span><span class="o">=</span><span class="n">MagicMock</span><span class="p">(),</span>
-    <span class="n">build_path</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;/tmp/build&quot;</span><span class="p">),</span>
-    <span class="n">work_path</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;/tmp/workspace&quot;</span><span class="p">),</span>
+    <span class="n">build_path</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="s2">"/tmp/build"</span><span class="p">),</span>
+    <span class="n">work_path</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="s2">"/tmp/workspace"</span><span class="p">),</span>
 <span class="p">)</span>
 
 <span class="c1"># Test a step</span>
-<span class="k">with</span> <span class="n">patch</span><span class="p">(</span><span class="s2">&quot;subprocess.run&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">mock_run</span><span class="p">:</span>
-    <span class="n">mock_run</span><span class="o">.</span><span class="n">return_value</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">(</span><span class="n">returncode</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">stdout</span><span class="o">=</span><span class="s2">&quot;ok&quot;</span><span class="p">,</span> <span class="n">stderr</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+<span class="k">with</span> <span class="n">patch</span><span class="p">(</span><span class="s2">"subprocess.run"</span><span class="p">)</span> <span class="k">as</span> <span class="n">mock_run</span><span class="p">:</span>
+    <span class="n">mock_run</span><span class="o">.</span><span class="n">return_value</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">(</span><span class="n">returncode</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">stdout</span><span class="o">=</span><span class="s2">"ok"</span><span class="p">,</span> <span class="n">stderr</span><span class="o">=</span><span class="s2">""</span><span class="p">)</span>
     <span class="n">ok</span><span class="p">,</span> <span class="n">msgs</span> <span class="o">=</span> <span class="n">deployer</span><span class="o">.</span><span class="n">apply</span><span class="p">()</span>
     <span class="k">assert</span> <span class="n">ok</span>
 </pre></div>

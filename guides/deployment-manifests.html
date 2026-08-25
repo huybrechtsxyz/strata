@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../config/diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3465,10 +3510,10 @@
 <section id="the-build-deploy-workflow">
 <h3>The Build → Deploy Workflow<a class="headerlink" href="#the-build-deploy-workflow" title="Link to this heading"></a></h3>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">graph</span> <span class="n">LR</span>
-    <span class="n">A</span><span class="p">[</span><span class="s2">&quot;strata build run&quot;</span><span class="p">]</span> <span class="o">--&gt;|</span><span class="n">generates</span><span class="o">|</span> <span class="n">B</span><span class="p">[</span><span class="s2">&quot;Build Manifest&lt;br/&gt;config + SBOM + repos&quot;</span><span class="p">]</span>
-    <span class="n">B</span> <span class="o">--&gt;|</span><span class="nb">input</span> <span class="n">to</span><span class="o">|</span> <span class="n">C</span><span class="p">[</span><span class="s2">&quot;strata deploy run&quot;</span><span class="p">]</span>
-    <span class="n">C</span> <span class="o">--&gt;|</span><span class="n">extends</span><span class="o">|</span> <span class="n">D</span><span class="p">[</span><span class="s2">&quot;Deploy Manifest&lt;br/&gt;build manifest + results&quot;</span><span class="p">]</span>
-    <span class="n">D</span> <span class="o">--&gt;|</span><span class="n">compliance</span> <span class="n">evidence</span><span class="o">|</span> <span class="n">E</span><span class="p">[</span><span class="s2">&quot;Audit Trail&quot;</span><span class="p">]</span>
+    <span class="n">A</span><span class="p">[</span><span class="s2">"strata build run"</span><span class="p">]</span> <span class="o">--&gt;|</span><span class="n">generates</span><span class="o">|</span> <span class="n">B</span><span class="p">[</span><span class="s2">"Build Manifest&lt;br/&gt;config + SBOM + repos"</span><span class="p">]</span>
+    <span class="n">B</span> <span class="o">--&gt;|</span><span class="nb">input</span> <span class="n">to</span><span class="o">|</span> <span class="n">C</span><span class="p">[</span><span class="s2">"strata deploy run"</span><span class="p">]</span>
+    <span class="n">C</span> <span class="o">--&gt;|</span><span class="n">extends</span><span class="o">|</span> <span class="n">D</span><span class="p">[</span><span class="s2">"Deploy Manifest&lt;br/&gt;build manifest + results"</span><span class="p">]</span>
+    <span class="n">D</span> <span class="o">--&gt;|</span><span class="n">compliance</span> <span class="n">evidence</span><span class="o">|</span> <span class="n">E</span><span class="p">[</span><span class="s2">"Audit Trail"</span><span class="p">]</span>
 </pre></div>
 </div>
 <p><strong>Timeline:</strong></p>
@@ -3498,12 +3543,12 @@ ls<span class="w"> </span>.strata/deployments/prod_deployment/v2.3.0/
 <span class="c1"># 2024-06-15T14:32:45Z.json</span>
 
 <span class="c1"># Show it</span>
-jq<span class="w"> </span><span class="s1">&#39;.spec.artifacts.repositories&#39;</span><span class="w"> </span><span class="m">2024</span>-06-15T14:32:45Z.json
+jq<span class="w"> </span><span class="s1">'.spec.artifacts.repositories'</span><span class="w"> </span><span class="m">2024</span>-06-15T14:32:45Z.json
 <span class="c1"># {</span>
-<span class="c1">#   &quot;xyz-infrastructure&quot;: {</span>
-<span class="c1">#     &quot;url&quot;: &quot;git@github.com:acme/xyz-infra.git&quot;,</span>
-<span class="c1">#     &quot;ref&quot;: &quot;v2.3.0&quot;,</span>
-<span class="c1">#     &quot;commit&quot;: &quot;a1b2c3d4e5f6g7h8...&quot;  ← exact commit deployed</span>
+<span class="c1">#   "xyz-infrastructure": {</span>
+<span class="c1">#     "url": "git@github.com:acme/xyz-infra.git",</span>
+<span class="c1">#     "ref": "v2.3.0",</span>
+<span class="c1">#     "commit": "a1b2c3d4e5f6g7h8..."  ← exact commit deployed</span>
 <span class="c1">#   }</span>
 <span class="c1"># }</span>
 </pre></div>
@@ -3519,14 +3564,14 @@ jq<span class="w"> </span><span class="s1">&#39;.spec.artifacts.repositories&#39
 </ul>
 <p><strong>Example:</strong></p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># What changed between two deployments?</span>
-diff<span class="w"> </span>&lt;<span class="o">(</span>jq<span class="w"> </span><span class="s1">&#39;.spec.artifacts.repositories&#39;</span><span class="w"> </span>manifest1.json<span class="o">)</span><span class="w"> </span><span class="se">\</span>
-<span class="w">     </span>&lt;<span class="o">(</span>jq<span class="w"> </span><span class="s1">&#39;.spec.artifacts.repositories&#39;</span><span class="w"> </span>manifest2.json<span class="o">)</span>
+diff<span class="w"> </span>&lt;<span class="o">(</span>jq<span class="w"> </span><span class="s1">'.spec.artifacts.repositories'</span><span class="w"> </span>manifest1.json<span class="o">)</span><span class="w"> </span><span class="se">\</span>
+<span class="w">     </span>&lt;<span class="o">(</span>jq<span class="w"> </span><span class="s1">'.spec.artifacts.repositories'</span><span class="w"> </span>manifest2.json<span class="o">)</span>
 
 <span class="c1"># What was the deployment status?</span>
-jq<span class="w"> </span><span class="s1">&#39;.spec.status, .spec.stages[].status&#39;</span><span class="w"> </span>manifest.json
-<span class="c1"># &quot;success&quot;</span>
-<span class="c1"># &quot;success&quot;</span>
-<span class="c1"># &quot;success&quot;</span>
+jq<span class="w"> </span><span class="s1">'.spec.status, .spec.stages[].status'</span><span class="w"> </span>manifest.json
+<span class="c1"># "success"</span>
+<span class="c1"># "success"</span>
+<span class="c1"># "success"</span>
 </pre></div>
 </div>
 </section>
@@ -3534,11 +3579,11 @@ jq<span class="w"> </span><span class="s1">&#39;.spec.status, .spec.stages[].sta
 <h3>Rollback &amp; Recovery<a class="headerlink" href="#rollback-recovery" title="Link to this heading"></a></h3>
 <p><strong>Manifest as rollback source:</strong></p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Extract pinned versions from the last-known-good deployment</span>
-jq<span class="w"> </span><span class="s1">&#39;.spec.artifacts.repositories | to_entries | .[].value.commit&#39;</span><span class="w"> </span><span class="se">\</span>
+jq<span class="w"> </span><span class="s1">'.spec.artifacts.repositories | to_entries | .[].value.commit'</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>previous_deployment.json<span class="w"> </span>&gt;<span class="w"> </span>rollback_commits.txt
 
 <span class="c1"># Or extract the entire platform.json to reapply:</span>
-jq<span class="w"> </span><span class="s1">&#39;.spec.artifacts.platform.content&#39;</span><span class="w"> </span>good_manifest.json<span class="w"> </span>&gt;<span class="w"> </span>platform.json.bak
+jq<span class="w"> </span><span class="s1">'.spec.artifacts.platform.content'</span><span class="w"> </span>good_manifest.json<span class="w"> </span>&gt;<span class="w"> </span>platform.json.bak
 </pre></div>
 </div>
 </section>
@@ -3556,7 +3601,7 @@ jq<span class="w"> </span><span class="s1">&#39;.spec.artifacts.platform.content
 <span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local_manifest_config</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">manifest</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;.strata/deployments&quot;</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="s">".strata/deployments"</span>
 </pre></div>
 </div>
 <p><strong>Local + durable push to a shared repo (ADR-0065 Phase 1):</strong></p>
@@ -3566,7 +3611,7 @@ jq<span class="w"> </span><span class="s1">&#39;.spec.artifacts.platform.content
 <span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">shared_manifest_config</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">manifest</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;deployments&quot;</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="s">"deployments"</span>
 <span class="w">    </span><span class="nt">repository</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">push</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">xyz-state-repo</span><span class="w">   </span><span class="c1"># registered via `strata repo add`, not spec.remotes</span>
@@ -3617,42 +3662,42 @@ useful for:</p>
 <section id="structure">
 <h3>Structure<a class="headerlink" href="#structure" title="Link to this heading"></a></h3>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;apiVersion&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;strata.huybrechts.xyz/v1&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;kind&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;deployment-outputs&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;meta&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;prod_deployment&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;labels&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2.3.0&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;environment&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;production&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;workspace&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;prod_workspace&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;tenant&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;acme-corp&quot;</span>
+<span class="w">  </span><span class="nt">"apiVersion"</span><span class="p">:</span><span class="w"> </span><span class="s2">"strata.huybrechts.xyz/v1"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"deployment-outputs"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"meta"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"prod_deployment"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"labels"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2.3.0"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"environment"</span><span class="p">:</span><span class="w"> </span><span class="s2">"production"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"workspace"</span><span class="p">:</span><span class="w"> </span><span class="s2">"prod_workspace"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"tenant"</span><span class="p">:</span><span class="w"> </span><span class="s2">"acme-corp"</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;spec&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;outputs&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;platform_baseline&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;vpc_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;vpc-0123456789abcdef0&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;subnet_ids&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;subnet-1&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;subnet-2&quot;</span><span class="p">],</span>
-<span class="w">        </span><span class="nt">&quot;aks_cluster_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;aks-prod-01&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;database_password&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;(sensitive)&quot;</span>
+<span class="w">  </span><span class="nt">"spec"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"outputs"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"platform_baseline"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"vpc_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vpc-0123456789abcdef0"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"subnet_ids"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"subnet-1"</span><span class="p">,</span><span class="w"> </span><span class="s2">"subnet-2"</span><span class="p">],</span>
+<span class="w">        </span><span class="nt">"aks_cluster_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"aks-prod-01"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"database_password"</span><span class="p">:</span><span class="w"> </span><span class="s2">"(sensitive)"</span>
 <span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">&quot;team_module&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;app_endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://app-prod.example.com&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;load_balancer_ip&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;203.0.113.42&quot;</span>
+<span class="w">      </span><span class="nt">"team_module"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"app_endpoint"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://app-prod.example.com"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"load_balancer_ip"</span><span class="p">:</span><span class="w"> </span><span class="s2">"203.0.113.42"</span>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">},</span>
-<span class="w">    </span><span class="nt">&quot;sensitive_keys&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<span class="w">      </span><span class="s2">&quot;platform_baseline.database_password&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="s2">&quot;platform_baseline.admin_token&quot;</span>
+<span class="w">    </span><span class="nt">"sensitive_keys"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="s2">"platform_baseline.database_password"</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">"platform_baseline.admin_token"</span>
 <span class="w">    </span><span class="p">],</span>
-<span class="w">    </span><span class="nt">&quot;stages_completed&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<span class="w">      </span><span class="s2">&quot;infrastructure&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="s2">&quot;configuration&quot;</span>
+<span class="w">    </span><span class="nt">"stages_completed"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="s2">"infrastructure"</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">"configuration"</span>
 <span class="w">    </span><span class="p">],</span>
-<span class="w">    </span><span class="nt">&quot;provenance&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;manifest_path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;.strata/deployments/prod_deployment/v2.3.0/2024-06-17T10:45:33Z.json&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;timestamp&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2024-06-17T10:45:33Z&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;deployment_status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;success&quot;</span>
+<span class="w">    </span><span class="nt">"provenance"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"manifest_path"</span><span class="p">:</span><span class="w"> </span><span class="s2">".strata/deployments/prod_deployment/v2.3.0/2024-06-17T10:45:33Z.json"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"timestamp"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2024-06-17T10:45:33Z"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"deployment_status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"success"</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
@@ -3669,27 +3714,27 @@ useful for:</p>
 <section id="using-deployment-outputs">
 <h3>Using Deployment Outputs<a class="headerlink" href="#using-deployment-outputs" title="Link to this heading"></a></h3>
 <p><strong>Query outputs for a specific stage:</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>jq<span class="w"> </span><span class="s1">&#39;.spec.outputs.platform_baseline&#39;</span><span class="w"> </span>deployment-outputs.json
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>jq<span class="w"> </span><span class="s1">'.spec.outputs.platform_baseline'</span><span class="w"> </span>deployment-outputs.json
 <span class="c1"># {</span>
-<span class="c1">#   &quot;vpc_id&quot;: &quot;vpc-0123456789abcdef0&quot;,</span>
-<span class="c1">#   &quot;subnet_ids&quot;: [&quot;subnet-1&quot;, &quot;subnet-2&quot;],</span>
-<span class="c1">#   &quot;aks_cluster_name&quot;: &quot;aks-prod-01&quot;,</span>
-<span class="c1">#   &quot;database_password&quot;: &quot;(sensitive)&quot;</span>
+<span class="c1">#   "vpc_id": "vpc-0123456789abcdef0",</span>
+<span class="c1">#   "subnet_ids": ["subnet-1", "subnet-2"],</span>
+<span class="c1">#   "aks_cluster_name": "aks-prod-01",</span>
+<span class="c1">#   "database_password": "(sensitive)"</span>
 <span class="c1"># }</span>
 </pre></div>
 </div>
 <p><strong>Extract non-sensitive outputs for team module:</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>jq<span class="w"> </span><span class="s1">&#39;.spec.outputs.team_module&#39;</span><span class="w"> </span>deployment-outputs.json
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>jq<span class="w"> </span><span class="s1">'.spec.outputs.team_module'</span><span class="w"> </span>deployment-outputs.json
 <span class="c1"># {</span>
-<span class="c1">#   &quot;app_endpoint&quot;: &quot;https://app-prod.example.com&quot;,</span>
-<span class="c1">#   &quot;load_balancer_ip&quot;: &quot;203.0.113.42&quot;</span>
+<span class="c1">#   "app_endpoint": "https://app-prod.example.com",</span>
+<span class="c1">#   "load_balancer_ip": "203.0.113.42"</span>
 <span class="c1"># }</span>
 </pre></div>
 </div>
 <p><strong>Check which outputs are sensitive:</strong></p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>jq<span class="w"> </span><span class="s1">&#39;.spec.sensitive_keys[]&#39;</span><span class="w"> </span>deployment-outputs.json
-<span class="c1"># &quot;platform_baseline.database_password&quot;</span>
-<span class="c1"># &quot;platform_baseline.admin_token&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>jq<span class="w"> </span><span class="s1">'.spec.sensitive_keys[]'</span><span class="w"> </span>deployment-outputs.json
+<span class="c1"># "platform_baseline.database_password"</span>
+<span class="c1"># "platform_baseline.admin_token"</span>
 </pre></div>
 </div>
 <p><strong>Integration with team module registries:</strong></p>
@@ -3698,11 +3743,11 @@ useful for:</p>
 <span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
-<span class="n">outputs_file</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;.strata/deployments/prod_deployment/latest/deployment-outputs.json&quot;</span><span class="p">)</span>
+<span class="n">outputs_file</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">".strata/deployments/prod_deployment/latest/deployment-outputs.json"</span><span class="p">)</span>
 <span class="k">if</span> <span class="n">outputs_file</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
     <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">outputs_file</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
         <span class="n">deployment_outputs</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
-        <span class="n">baseline</span> <span class="o">=</span> <span class="n">deployment_outputs</span><span class="p">[</span><span class="s2">&quot;spec&quot;</span><span class="p">][</span><span class="s2">&quot;outputs&quot;</span><span class="p">][</span><span class="s2">&quot;platform_baseline&quot;</span><span class="p">]</span>
+        <span class="n">baseline</span> <span class="o">=</span> <span class="n">deployment_outputs</span><span class="p">[</span><span class="s2">"spec"</span><span class="p">][</span><span class="s2">"outputs"</span><span class="p">][</span><span class="s2">"platform_baseline"</span><span class="p">]</span>
         <span class="c1"># Use baseline outputs: vpc_id, subnet_ids, etc.</span>
 </pre></div>
 </div>
@@ -3713,86 +3758,86 @@ useful for:</p>
 <h2>Reading a Manifest<a class="headerlink" href="#reading-a-manifest" title="Link to this heading"></a></h2>
 <p>Manifests are JSON files with this structure:</p>
 <div class="highlight-js notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="s2">&quot;apiVersion&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;strata.huybrechts.xyz/v1&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="s2">&quot;kind&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;deployment-manifest&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="s2">&quot;meta&quot;</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="s2">&quot;name&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;prod_deployment&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;labels&quot;</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="s2">&quot;version&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;2.3.0&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="s2">&quot;environment&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;production&quot;</span>
+<span class="w">  </span><span class="s2">"apiVersion"</span><span class="o">:</span><span class="w"> </span><span class="s2">"strata.huybrechts.xyz/v1"</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">"kind"</span><span class="o">:</span><span class="w"> </span><span class="s2">"deployment-manifest"</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">"meta"</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="s2">"name"</span><span class="o">:</span><span class="w"> </span><span class="s2">"prod_deployment"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"labels"</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="s2">"version"</span><span class="o">:</span><span class="w"> </span><span class="s2">"2.3.0"</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">"environment"</span><span class="o">:</span><span class="w"> </span><span class="s2">"production"</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="s2">&quot;spec&quot;</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="s2">&quot;deployment_name&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;prod_deployment&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;workspace_name&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;prod_workspace&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;action&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;deploy&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;status&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;success&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;timestamp&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;2024-06-17T10:45:33Z&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;user&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;ops-lead@acme.com&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;platform_version&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;1.2.0&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">"spec"</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="s2">"deployment_name"</span><span class="o">:</span><span class="w"> </span><span class="s2">"prod_deployment"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"workspace_name"</span><span class="o">:</span><span class="w"> </span><span class="s2">"prod_workspace"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"action"</span><span class="o">:</span><span class="w"> </span><span class="s2">"deploy"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"status"</span><span class="o">:</span><span class="w"> </span><span class="s2">"success"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"timestamp"</span><span class="o">:</span><span class="w"> </span><span class="s2">"2024-06-17T10:45:33Z"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"user"</span><span class="o">:</span><span class="w"> </span><span class="s2">"ops-lead@acme.com"</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">"platform_version"</span><span class="o">:</span><span class="w"> </span><span class="s2">"1.2.0"</span><span class="p">,</span>
 <span class="w">    </span>
-<span class="w">    </span><span class="s2">&quot;artifacts&quot;</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">      </span><span class="s2">&quot;platform&quot;</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="s2">&quot;hash&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;sha256:abc123...&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="s2">&quot;path&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;build/platform.json&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="s2">&quot;content&quot;</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="nx">full</span><span class="w"> </span><span class="nx">platform</span><span class="p">.</span><span class="nx">json</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="s2">"artifacts"</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="s2">"platform"</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="s2">"hash"</span><span class="o">:</span><span class="w"> </span><span class="s2">"sha256:abc123..."</span><span class="p">,</span>
+<span class="w">        </span><span class="s2">"path"</span><span class="o">:</span><span class="w"> </span><span class="s2">"build/platform.json"</span><span class="p">,</span>
+<span class="w">        </span><span class="s2">"content"</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="nx">full</span><span class="w"> </span><span class="nx">platform</span><span class="p">.</span><span class="nx">json</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="p">}</span>
 <span class="w">      </span><span class="p">},</span>
 <span class="w">      </span>
-<span class="w">      </span><span class="s2">&quot;repositories&quot;</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="s2">&quot;xyz-infrastructure&quot;</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">          </span><span class="s2">&quot;url&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;git@github.com:acme/xyz-infra.git&quot;</span><span class="p">,</span>
-<span class="w">          </span><span class="s2">&quot;ref&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;v2.3.0&quot;</span><span class="p">,</span>
-<span class="w">          </span><span class="s2">&quot;commit&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;a1b2c3d4e5f6g7h8...&quot;</span>
+<span class="w">      </span><span class="s2">"repositories"</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="s2">"xyz-infrastructure"</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="s2">"url"</span><span class="o">:</span><span class="w"> </span><span class="s2">"git@github.com:acme/xyz-infra.git"</span><span class="p">,</span>
+<span class="w">          </span><span class="s2">"ref"</span><span class="o">:</span><span class="w"> </span><span class="s2">"v2.3.0"</span><span class="p">,</span>
+<span class="w">          </span><span class="s2">"commit"</span><span class="o">:</span><span class="w"> </span><span class="s2">"a1b2c3d4e5f6g7h8..."</span>
 <span class="w">        </span><span class="p">},</span>
-<span class="w">        </span><span class="s2">&quot;xyz-config&quot;</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">          </span><span class="s2">&quot;url&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;git@github.com:acme/xyz-config.git&quot;</span><span class="p">,</span>
-<span class="w">          </span><span class="s2">&quot;ref&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;main&quot;</span><span class="p">,</span>
-<span class="w">          </span><span class="s2">&quot;commit&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;f7g8h9i0j1k2l3m4...&quot;</span>
+<span class="w">        </span><span class="s2">"xyz-config"</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="s2">"url"</span><span class="o">:</span><span class="w"> </span><span class="s2">"git@github.com:acme/xyz-config.git"</span><span class="p">,</span>
+<span class="w">          </span><span class="s2">"ref"</span><span class="o">:</span><span class="w"> </span><span class="s2">"main"</span><span class="p">,</span>
+<span class="w">          </span><span class="s2">"commit"</span><span class="o">:</span><span class="w"> </span><span class="s2">"f7g8h9i0j1k2l3m4..."</span>
 <span class="w">        </span><span class="p">}</span>
 <span class="w">      </span><span class="p">},</span>
 <span class="w">      </span>
-<span class="w">      </span><span class="s2">&quot;images&quot;</span><span class="o">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="s2">"images"</span><span class="o">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">        </span><span class="p">{</span>
-<span class="w">          </span><span class="s2">&quot;name&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;traefik&quot;</span><span class="p">,</span>
-<span class="w">          </span><span class="s2">&quot;image&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;docker.io/traefik:v3.0.1&quot;</span><span class="p">,</span>
-<span class="w">          </span><span class="s2">&quot;digest&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;sha256:xyz789...&quot;</span>
+<span class="w">          </span><span class="s2">"name"</span><span class="o">:</span><span class="w"> </span><span class="s2">"traefik"</span><span class="p">,</span>
+<span class="w">          </span><span class="s2">"image"</span><span class="o">:</span><span class="w"> </span><span class="s2">"docker.io/traefik:v3.0.1"</span><span class="p">,</span>
+<span class="w">          </span><span class="s2">"digest"</span><span class="o">:</span><span class="w"> </span><span class="s2">"sha256:xyz789..."</span>
 <span class="w">        </span><span class="p">}</span>
 <span class="w">      </span><span class="p">],</span>
 <span class="w">      </span>
-<span class="w">      </span><span class="s2">&quot;providers&quot;</span><span class="o">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="s2">"providers"</span><span class="o">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">        </span><span class="p">{</span>
-<span class="w">          </span><span class="s2">&quot;name&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;tf_hetzner&quot;</span><span class="p">,</span>
-<span class="w">          </span><span class="s2">&quot;type&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;terraform&quot;</span><span class="p">,</span>
-<span class="w">          </span><span class="s2">&quot;backend&quot;</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">            </span><span class="s2">&quot;type&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;azurerm&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="s2">&quot;configuration&quot;</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="p">}</span>
+<span class="w">          </span><span class="s2">"name"</span><span class="o">:</span><span class="w"> </span><span class="s2">"tf_hetzner"</span><span class="p">,</span>
+<span class="w">          </span><span class="s2">"type"</span><span class="o">:</span><span class="w"> </span><span class="s2">"terraform"</span><span class="p">,</span>
+<span class="w">          </span><span class="s2">"backend"</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="s2">"type"</span><span class="o">:</span><span class="w"> </span><span class="s2">"azurerm"</span><span class="p">,</span>
+<span class="w">            </span><span class="s2">"configuration"</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="p">}</span>
 <span class="w">          </span><span class="p">}</span>
 <span class="w">        </span><span class="p">}</span>
 <span class="w">      </span><span class="p">],</span>
 <span class="w">      </span>
-<span class="w">      </span><span class="s2">&quot;sbom&quot;</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="s2">&quot;path&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;build/sbom.json&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="s2">&quot;format&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;cyclonedx-1.6&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="s2">&quot;sha256&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;sha256:def456...&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="s2">&quot;component_count&quot;</span><span class="o">:</span><span class="w"> </span><span class="mf">47</span>
+<span class="w">      </span><span class="s2">"sbom"</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="s2">"path"</span><span class="o">:</span><span class="w"> </span><span class="s2">"build/sbom.json"</span><span class="p">,</span>
+<span class="w">        </span><span class="s2">"format"</span><span class="o">:</span><span class="w"> </span><span class="s2">"cyclonedx-1.6"</span><span class="p">,</span>
+<span class="w">        </span><span class="s2">"sha256"</span><span class="o">:</span><span class="w"> </span><span class="s2">"sha256:def456..."</span><span class="p">,</span>
+<span class="w">        </span><span class="s2">"component_count"</span><span class="o">:</span><span class="w"> </span><span class="mf">47</span>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">},</span>
 <span class="w">    </span>
-<span class="w">    </span><span class="s2">&quot;stages&quot;</span><span class="o">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="s2">"stages"</span><span class="o">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">      </span><span class="p">{</span>
-<span class="w">        </span><span class="s2">&quot;name&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;infrastructure&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="s2">&quot;status&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;success&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="s2">&quot;duration_seconds&quot;</span><span class="o">:</span><span class="w"> </span><span class="mf">125</span><span class="p">,</span>
-<span class="w">        </span><span class="s2">&quot;outputs&quot;</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">          </span><span class="s2">&quot;server_ip&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;192.0.2.10&quot;</span><span class="p">,</span>
-<span class="w">          </span><span class="s2">&quot;load_balancer_fqdn&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;lb.example.com&quot;</span>
+<span class="w">        </span><span class="s2">"name"</span><span class="o">:</span><span class="w"> </span><span class="s2">"infrastructure"</span><span class="p">,</span>
+<span class="w">        </span><span class="s2">"status"</span><span class="o">:</span><span class="w"> </span><span class="s2">"success"</span><span class="p">,</span>
+<span class="w">        </span><span class="s2">"duration_seconds"</span><span class="o">:</span><span class="w"> </span><span class="mf">125</span><span class="p">,</span>
+<span class="w">        </span><span class="s2">"outputs"</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="s2">"server_ip"</span><span class="o">:</span><span class="w"> </span><span class="s2">"192.0.2.10"</span><span class="p">,</span>
+<span class="w">          </span><span class="s2">"load_balancer_fqdn"</span><span class="o">:</span><span class="w"> </span><span class="s2">"lb.example.com"</span>
 <span class="w">        </span><span class="p">}</span>
 <span class="w">      </span><span class="p">},</span>
 <span class="w">      </span><span class="p">{</span>
-<span class="w">        </span><span class="s2">&quot;name&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;configure&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="s2">&quot;status&quot;</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;success&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="s2">&quot;duration_seconds&quot;</span><span class="o">:</span><span class="w"> </span><span class="mf">45</span><span class="p">,</span>
-<span class="w">        </span><span class="s2">&quot;outputs&quot;</span><span class="o">:</span><span class="w"> </span><span class="p">{}</span>
+<span class="w">        </span><span class="s2">"name"</span><span class="o">:</span><span class="w"> </span><span class="s2">"configure"</span><span class="p">,</span>
+<span class="w">        </span><span class="s2">"status"</span><span class="o">:</span><span class="w"> </span><span class="s2">"success"</span><span class="p">,</span>
+<span class="w">        </span><span class="s2">"duration_seconds"</span><span class="o">:</span><span class="w"> </span><span class="mf">45</span><span class="p">,</span>
+<span class="w">        </span><span class="s2">"outputs"</span><span class="o">:</span><span class="w"> </span><span class="p">{}</span>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">]</span>
 <span class="w">  </span><span class="p">}</span>
@@ -3861,10 +3906,10 @@ strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w
 <p><strong>Manual filesystem traversal:</strong></p>
 <p><strong>Local storage:</strong></p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># List all manifests</span>
-find<span class="w"> </span>.strata/deployments<span class="w"> </span>-name<span class="w"> </span><span class="s2">&quot;*.json&quot;</span><span class="w"> </span>-type<span class="w"> </span>f<span class="w"> </span><span class="p">|</span><span class="w"> </span>sort
+find<span class="w"> </span>.strata/deployments<span class="w"> </span>-name<span class="w"> </span><span class="s2">"*.json"</span><span class="w"> </span>-type<span class="w"> </span>f<span class="w"> </span><span class="p">|</span><span class="w"> </span>sort
 
 <span class="c1"># List just production deployments, newest first</span>
-find<span class="w"> </span>.strata/deployments/prod_deployment<span class="w"> </span>-name<span class="w"> </span><span class="s2">&quot;*.json&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sort<span class="w"> </span>-r<span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-5
+find<span class="w"> </span>.strata/deployments/prod_deployment<span class="w"> </span>-name<span class="w"> </span><span class="s2">"*.json"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sort<span class="w"> </span>-r<span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-5
 </pre></div>
 </div>
 <p><strong>GitOps storage:</strong></p>
@@ -3873,7 +3918,7 @@ git<span class="w"> </span>clone<span class="w"> </span>git@github.com:acme/xyz-
 <span class="nb">cd</span><span class="w"> </span>xyz-state
 
 <span class="c1"># List deployments</span>
-find<span class="w"> </span>deployments<span class="w"> </span>-name<span class="w"> </span><span class="s2">&quot;*.json&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sort<span class="w"> </span>-r
+find<span class="w"> </span>deployments<span class="w"> </span>-name<span class="w"> </span><span class="s2">"*.json"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sort<span class="w"> </span>-r
 </pre></div>
 </div>
 </section>
@@ -3888,7 +3933,7 @@ strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w
 
 <span class="c1"># Query specific fields with jq</span>
 strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w"> </span><span class="m">2024</span>-06-17T10:45:33Z.json<span class="w"> </span>--output<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>jq<span class="w"> </span><span class="s1">&#39;.spec.artifacts.repositories&#39;</span>
+<span class="w">  </span>jq<span class="w"> </span><span class="s1">'.spec.artifacts.repositories'</span>
 </pre></div>
 </div>
 </section>
@@ -3919,55 +3964,55 @@ strata<span class="w"> </span>manifest<span class="w"> </span><span class="nb">e
 <span class="nv">manifest2</span><span class="o">=</span><span class="k">$(</span>strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w"> </span>m2.json<span class="w"> </span>--output<span class="w"> </span>json<span class="k">)</span>
 
 <span class="c1"># What repositories changed?</span>
-diff<span class="w"> </span>&lt;<span class="o">(</span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$manifest1</span><span class="s2">&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">&#39;.spec.artifacts.repositories | keys[]&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sort<span class="o">)</span><span class="w"> </span><span class="se">\</span>
-<span class="w">     </span>&lt;<span class="o">(</span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$manifest2</span><span class="s2">&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">&#39;.spec.artifacts.repositories | keys[]&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sort<span class="o">)</span>
+diff<span class="w"> </span>&lt;<span class="o">(</span><span class="nb">echo</span><span class="w"> </span><span class="s2">"</span><span class="nv">$manifest1</span><span class="s2">"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">'.spec.artifacts.repositories | keys[]'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sort<span class="o">)</span><span class="w"> </span><span class="se">\</span>
+<span class="w">     </span>&lt;<span class="o">(</span><span class="nb">echo</span><span class="w"> </span><span class="s2">"</span><span class="nv">$manifest2</span><span class="s2">"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">'.spec.artifacts.repositories | keys[]'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sort<span class="o">)</span>
 
 <span class="c1"># What commits changed?</span>
-diff<span class="w"> </span>&lt;<span class="o">(</span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$manifest1</span><span class="s2">&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.spec.artifacts.repositories&#39;</span><span class="o">)</span><span class="w"> </span><span class="se">\</span>
-<span class="w">     </span>&lt;<span class="o">(</span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$manifest2</span><span class="s2">&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.spec.artifacts.repositories&#39;</span><span class="o">)</span>
+diff<span class="w"> </span>&lt;<span class="o">(</span><span class="nb">echo</span><span class="w"> </span><span class="s2">"</span><span class="nv">$manifest1</span><span class="s2">"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">'.spec.artifacts.repositories'</span><span class="o">)</span><span class="w"> </span><span class="se">\</span>
+<span class="w">     </span>&lt;<span class="o">(</span><span class="nb">echo</span><span class="w"> </span><span class="s2">"</span><span class="nv">$manifest2</span><span class="s2">"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">'.spec.artifacts.repositories'</span><span class="o">)</span>
 </pre></div>
 </div>
 </section>
 <section id="extract-terraform-outputs">
 <h3>Extract Terraform Outputs<a class="headerlink" href="#extract-terraform-outputs" title="Link to this heading"></a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Get all stage outputs</span>
-jq<span class="w"> </span><span class="s1">&#39;.spec.stages[] | select(.name == &quot;infrastructure&quot;) | .outputs&#39;</span><span class="w"> </span>manifest.json
+jq<span class="w"> </span><span class="s1">'.spec.stages[] | select(.name == "infrastructure") | .outputs'</span><span class="w"> </span>manifest.json
 
 <span class="c1"># Get one specific output</span>
-jq<span class="w"> </span><span class="s1">&#39;.spec.stages[] | select(.name == &quot;infrastructure&quot;) | .outputs.server_ip&#39;</span><span class="w"> </span>manifest.json
+jq<span class="w"> </span><span class="s1">'.spec.stages[] | select(.name == "infrastructure") | .outputs.server_ip'</span><span class="w"> </span>manifest.json
 </pre></div>
 </div>
 </section>
 <section id="check-deployment-duration">
 <h3>Check Deployment Duration<a class="headerlink" href="#check-deployment-duration" title="Link to this heading"></a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Total duration across all stages</span>
-jq<span class="w"> </span><span class="s1">&#39;[.spec.stages[].duration_seconds] | add&#39;</span><span class="w"> </span>manifest.json
+jq<span class="w"> </span><span class="s1">'[.spec.stages[].duration_seconds] | add'</span><span class="w"> </span>manifest.json
 
 <span class="c1"># Duration per stage</span>
-jq<span class="w"> </span><span class="s1">&#39;.spec.stages[] | {name, duration_seconds}&#39;</span><span class="w"> </span>manifest.json
+jq<span class="w"> </span><span class="s1">'.spec.stages[] | {name, duration_seconds}'</span><span class="w"> </span>manifest.json
 </pre></div>
 </div>
 </section>
 <section id="inspect-sbom">
 <h3>Inspect SBOM<a class="headerlink" href="#inspect-sbom" title="Link to this heading"></a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Count components</span>
-jq<span class="w"> </span><span class="s1">&#39;.spec.artifacts.sbom.component_count&#39;</span><span class="w"> </span>manifest.json
+jq<span class="w"> </span><span class="s1">'.spec.artifacts.sbom.component_count'</span><span class="w"> </span>manifest.json
 
 <span class="c1"># Get SBOM file</span>
-cat<span class="w"> </span>build/sbom.json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.metadata.component&#39;</span>
+cat<span class="w"> </span>build/sbom.json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">'.metadata.component'</span>
 </pre></div>
 </div>
 </section>
 <section id="failed-deployment-details">
 <h3>Failed Deployment Details<a class="headerlink" href="#failed-deployment-details" title="Link to this heading"></a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Check status</span>
-jq<span class="w"> </span><span class="s1">&#39;.spec.status&#39;</span><span class="w"> </span>failed_manifest.json
+jq<span class="w"> </span><span class="s1">'.spec.status'</span><span class="w"> </span>failed_manifest.json
 
 <span class="c1"># Which stage failed?</span>
-jq<span class="w"> </span><span class="s1">&#39;.spec.stages[] | select(.status != &quot;success&quot;)&#39;</span><span class="w"> </span>failed_manifest.json
+jq<span class="w"> </span><span class="s1">'.spec.stages[] | select(.status != "success")'</span><span class="w"> </span>failed_manifest.json
 
 <span class="c1"># Get error details (if captured)</span>
-jq<span class="w"> </span><span class="s1">&#39;.spec.stages[] | select(.status != &quot;success&quot;) | .error&#39;</span><span class="w"> </span>failed_manifest.json
+jq<span class="w"> </span><span class="s1">'.spec.stages[] | select(.status != "success") | .error'</span><span class="w"> </span>failed_manifest.json
 </pre></div>
 </div>
 </section>
@@ -4000,7 +4045,7 @@ cat<span class="w"> </span>history/manifest/&lt;workspace&gt;/prod_deployment/v2
 on:
 <span class="w">  </span>push:
 <span class="w">    </span>paths:
-<span class="w">      </span>-<span class="w"> </span><span class="s1">&#39;history/manifest/**&#39;</span>
+<span class="w">      </span>-<span class="w"> </span><span class="s1">'history/manifest/**'</span>
 jobs:
 <span class="w">  </span>compliance-scan:
 <span class="w">    </span>runs-on:<span class="w"> </span>ubuntu-latest
@@ -4009,7 +4054,7 @@ jobs:
 <span class="w">      </span>-<span class="w"> </span>name:<span class="w"> </span>Extract<span class="w"> </span>SBOM<span class="w"> </span>from<span class="w"> </span>manifest
 <span class="w">        </span>run:<span class="w"> </span><span class="p">|</span>
 <span class="w">          </span><span class="nv">manifest</span><span class="o">=</span><span class="k">$(</span>ls<span class="w"> </span>-t<span class="w"> </span>history/manifest/*/prod_deployment/**/*.json<span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-1<span class="k">)</span>
-<span class="w">          </span><span class="nv">sbom_path</span><span class="o">=</span><span class="k">$(</span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">&#39;.spec.sbom.path&#39;</span><span class="w"> </span><span class="nv">$manifest</span><span class="k">)</span>
+<span class="w">          </span><span class="nv">sbom_path</span><span class="o">=</span><span class="k">$(</span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">'.spec.sbom.path'</span><span class="w"> </span><span class="nv">$manifest</span><span class="k">)</span>
 <span class="w">          </span><span class="c1"># Run compliance scanner on sbom_path</span>
 </pre></div>
 </div>
@@ -4049,7 +4094,7 @@ git<span class="w"> </span>clone<span class="w"> </span>git@github.com:acme/xyz-
 strata<span class="w"> </span>repo<span class="w"> </span>list
 
 <span class="c1"># Check deploy logs for git errors</span>
-strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>prod.yaml<span class="w"> </span>--verbose<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-i<span class="w"> </span><span class="s2">&quot;git\|push&quot;</span>
+strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>prod.yaml<span class="w"> </span>--verbose<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-i<span class="w"> </span><span class="s2">"git\|push"</span>
 </pre></div>
 </div>
 </section>
@@ -4088,52 +4133,52 @@ strata<span class="w"> </span>audit<span class="w"> </span><span class="nb">expo
 <section id="build-manifest-structure">
 <h3>Build Manifest Structure<a class="headerlink" href="#build-manifest-structure" title="Link to this heading"></a></h3>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>{
-  &quot;apiVersion&quot;: &quot;strata.huybrechts.xyz/v1&quot;,
-  &quot;kind&quot;: &quot;deployment-manifest&quot;,
-  &quot;meta&quot;: {
-    &quot;name&quot;: &quot;prod_deployment&quot;,
-    &quot;labels&quot;: {
-      &quot;version&quot;: &quot;2.3.0&quot;,
-      &quot;environment&quot;: &quot;production&quot;
+  "apiVersion": "strata.huybrechts.xyz/v1",
+  "kind": "deployment-manifest",
+  "meta": {
+    "name": "prod_deployment",
+    "labels": {
+      "version": "2.3.0",
+      "environment": "production"
     }
   },
-  &quot;spec&quot;: {
-    &quot;deployment_name&quot;: &quot;prod_deployment&quot;,
-    &quot;workspace_name&quot;: &quot;prod_workspace&quot;,
-    &quot;action&quot;: &quot;build&quot;,
-    &quot;status&quot;: &quot;success&quot;,
-    &quot;timestamp&quot;: &quot;2024-06-17T10:35:20Z&quot;,
-    &quot;user&quot;: &quot;devops@acme.com&quot;,
-    &quot;platform_version&quot;: &quot;1.2.0&quot;,
-    &quot;build_duration_seconds&quot;: 87,
+  "spec": {
+    "deployment_name": "prod_deployment",
+    "workspace_name": "prod_workspace",
+    "action": "build",
+    "status": "success",
+    "timestamp": "2024-06-17T10:35:20Z",
+    "user": "devops@acme.com",
+    "platform_version": "1.2.0",
+    "build_duration_seconds": 87,
     
-    &quot;artifacts&quot;: {
-      &quot;platform&quot;: {
-        &quot;hash&quot;: &quot;sha256:abc123def456...&quot;,
-        &quot;path&quot;: &quot;.strata/build/prod_deployment/platform.json&quot;,
-        &quot;content&quot;: { ...full platform.json snapshot... }
+    "artifacts": {
+      "platform": {
+        "hash": "sha256:abc123def456...",
+        "path": ".strata/build/prod_deployment/platform.json",
+        "content": { ...full platform.json snapshot... }
       },
       
-      &quot;repositories&quot;: {
-        &quot;xyz-infrastructure&quot;: {
-          &quot;url&quot;: &quot;git@github.com:acme/xyz-infra.git&quot;,
-          &quot;ref&quot;: &quot;v2.3.0&quot;,
-          &quot;commit&quot;: &quot;a1b2c3d4e5f6g7h8...&quot;
+      "repositories": {
+        "xyz-infrastructure": {
+          "url": "git@github.com:acme/xyz-infra.git",
+          "ref": "v2.3.0",
+          "commit": "a1b2c3d4e5f6g7h8..."
         }
       },
       
-      &quot;sbom&quot;: {
-        &quot;path&quot;: &quot;.strata/build/prod_deployment/sbom.json&quot;,
-        &quot;format&quot;: &quot;cyclonedx-1.6&quot;,
-        &quot;sha256&quot;: &quot;sha256:xyz789...&quot;
+      "sbom": {
+        "path": ".strata/build/prod_deployment/sbom.json",
+        "format": "cyclonedx-1.6",
+        "sha256": "sha256:xyz789..."
       }
     },
     
-    &quot;policy_results&quot;: {
-      &quot;status&quot;: &quot;passed&quot;,
-      &quot;policies_checked&quot;: 12,
-      &quot;policies_passed&quot;: 12,
-      &quot;violations&quot;: []
+    "policy_results": {
+      "status": "passed",
+      "policies_checked": 12,
+      "policies_passed": 12,
+      "violations": []
     }
   }
 }
@@ -4176,14 +4221,14 @@ strata<span class="w"> </span>audit<span class="w"> </span><span class="nb">expo
 <section id="querying-build-manifests">
 <h3>Querying Build Manifests<a class="headerlink" href="#querying-build-manifests" title="Link to this heading"></a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># List only build manifests (not deployment manifests)</span>
-find<span class="w"> </span>.strata/build<span class="w"> </span>-name<span class="w"> </span><span class="s2">&quot;manifest.json&quot;</span><span class="w"> </span>-type<span class="w"> </span>f
+find<span class="w"> </span>.strata/build<span class="w"> </span>-name<span class="w"> </span><span class="s2">"manifest.json"</span><span class="w"> </span>-type<span class="w"> </span>f
 
 <span class="c1"># Show details of a build</span>
-jq<span class="w"> </span><span class="s1">&#39;.spec | {timestamp, user, build_duration_seconds, policy_results}&#39;</span><span class="w"> </span><span class="se">\</span>
+jq<span class="w"> </span><span class="s1">'.spec | {timestamp, user, build_duration_seconds, policy_results}'</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>.strata/build/prod_deployment/manifest.json
 
 <span class="c1"># Check if build passed all policies</span>
-jq<span class="w"> </span><span class="s1">&#39;.spec.policy_results.status&#39;</span><span class="w"> </span>.strata/build/prod_deployment/manifest.json
+jq<span class="w"> </span><span class="s1">'.spec.policy_results.status'</span><span class="w"> </span>.strata/build/prod_deployment/manifest.json
 </pre></div>
 </div>
 </section>
@@ -4196,7 +4241,7 @@ strata<span class="w"> </span>build<span class="w"> </span>run<span class="w"> <
 strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w"> </span>.strata/build/prod_deployment/manifest.json
 
 <span class="c1"># 3. Check policy results</span>
-jq<span class="w"> </span><span class="s1">&#39;.spec.policy_results&#39;</span><span class="w"> </span>.strata/build/prod_deployment/manifest.json
+jq<span class="w"> </span><span class="s1">'.spec.policy_results'</span><span class="w"> </span>.strata/build/prod_deployment/manifest.json
 
 <span class="c1"># 4. If satisfied, deploy</span>
 strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>deploy/prod.yaml

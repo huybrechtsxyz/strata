@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../config/diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="../guides/features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../guides/faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3485,14 +3530,14 @@ uv<span class="w"> </span>run<span class="w"> </span>strata<span class="w"> </sp
 <span class="c"># Copy the pre-built strata venv from the GHCR image</span>
 <span class="k">COPY</span><span class="w"> </span>--from<span class="o">=</span>ghcr.io/huybrechtsxyz/strata:latest<span class="w"> </span>/app/.venv<span class="w"> </span>/opt/strata
 
-<span class="k">ENV</span><span class="w"> </span><span class="nv">PATH</span><span class="o">=</span><span class="s2">&quot;/opt/strata/bin:</span><span class="nv">$PATH</span><span class="s2">&quot;</span>
+<span class="k">ENV</span><span class="w"> </span><span class="nv">PATH</span><span class="o">=</span><span class="s2">"/opt/strata/bin:</span><span class="nv">$PATH</span><span class="s2">"</span>
 </pre></div>
 </div>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="c1">// .devcontainer/devcontainer.json</span>
 <span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;my-repo&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;build&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;dockerfile&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Dockerfile&quot;</span><span class="w"> </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;remoteUser&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;vscode&quot;</span>
+<span class="w">  </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"my-repo"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"build"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"dockerfile"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Dockerfile"</span><span class="w"> </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">"remoteUser"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vscode"</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -3550,7 +3595,7 @@ strata<span class="w"> </span>sln<span class="w"> </span>init<span class="w"> </
 </pre></div>
 </div>
 <p>The output tells you exactly what to do next:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>✅  Solution &#39;my-aks&#39; initialised
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>✅  Solution 'my-aks' initialised
     • Work path    : /path/to/my-config-repo
     • Solution ID  : abc-123
     • Template     : aks
@@ -3598,7 +3643,7 @@ Next steps:
 <li><p>Shows every substitution so you can spot false positives</p></li>
 </ul>
 <p>Output:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>✅  Template &#39;my-corp-base&#39; exported
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>✅  Template 'my-corp-base' exported
     • Output       : .strata/templates/my-corp-base/
     • Files saved  : 6
     • Substitutions: 14 occurrences across 6 files
@@ -3633,10 +3678,10 @@ Use it:
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Production AKS cluster — EU West</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">profile</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prd</span>
-<span class="w">  </span><span class="nt">workspace</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;@xyz-config/config/xyz-config.yaml&quot;</span>
+<span class="w">  </span><span class="nt">workspace</span><span class="p">:</span><span class="w"> </span><span class="s">"@xyz-config/config/xyz-config.yaml"</span>
 <span class="w">  </span><span class="nt">modules</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;@xyz-config/stack/ns-base.yaml&quot;</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;@xyz-config/stack/mod-traefik.yaml&quot;</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"@xyz-config/stack/ns-base.yaml"</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"@xyz-config/stack/mod-traefik.yaml"</span>
 </pre></div>
 </div>
 <p>Cross-repository file references use <code class="docutils literal notranslate"><span class="pre">&#64;repo-name/path/to/file.yaml</span></code> notation. The <code class="docutils literal notranslate"><span class="pre">&#64;</span></code> prefix tells <code class="docutils literal notranslate"><span class="pre">strata</span></code> to resolve the path through the registered repo map.</p>
@@ -3735,7 +3780,7 @@ strata<span class="w"> </span>values<span class="w"> </span>resolve<span class="
 <p>Stop passing the same flags on every command:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>config<span class="w"> </span><span class="nb">set</span><span class="w"> </span>output<span class="w"> </span>json<span class="w">      </span><span class="c1"># always use JSON output</span>
 strata<span class="w"> </span>config<span class="w"> </span><span class="nb">set</span><span class="w"> </span>verbose<span class="w"> </span><span class="nb">true</span><span class="w">     </span><span class="c1"># always show verbose logs</span>
-strata<span class="w"> </span>config<span class="w"> </span>list<span class="w">                 </span><span class="c1"># check what&#39;s set</span>
+strata<span class="w"> </span>config<span class="w"> </span>list<span class="w">                 </span><span class="c1"># check what's set</span>
 </pre></div>
 </div>
 </section>
@@ -3744,11 +3789,11 @@ strata<span class="w"> </span>config<span class="w"> </span>list<span class="w">
 <h2>Shell Completion<a class="headerlink" href="#shell-completion" title="Link to this heading"></a></h2>
 <p>Enable Tab completion for all commands, subcommands, and options:</p>
 <p><strong>Bash</strong> — add to <code class="docutils literal notranslate"><span class="pre">~/.bashrc</span></code>:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">eval</span><span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span><span class="nv">_STRATA_COMPLETE</span><span class="o">=</span>bash_source<span class="w"> </span>strata<span class="k">)</span><span class="s2">&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">eval</span><span class="w"> </span><span class="s2">"</span><span class="k">$(</span><span class="nv">_STRATA_COMPLETE</span><span class="o">=</span>bash_source<span class="w"> </span>strata<span class="k">)</span><span class="s2">"</span>
 </pre></div>
 </div>
 <p><strong>Zsh</strong> — add to <code class="docutils literal notranslate"><span class="pre">~/.zshrc</span></code>:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">eval</span><span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span><span class="nv">_STRATA_COMPLETE</span><span class="o">=</span>zsh_source<span class="w"> </span>strata<span class="k">)</span><span class="s2">&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">eval</span><span class="w"> </span><span class="s2">"</span><span class="k">$(</span><span class="nv">_STRATA_COMPLETE</span><span class="o">=</span>zsh_source<span class="w"> </span>strata<span class="k">)</span><span class="s2">"</span>
 </pre></div>
 </div>
 <p><strong>Fish</strong> — add to <code class="docutils literal notranslate"><span class="pre">~/.config/fish/completions/strata.fish</span></code>:</p>
@@ -3757,7 +3802,7 @@ strata<span class="w"> </span>config<span class="w"> </span>list<span class="w">
 </div>
 <p><strong>Faster startup</strong> (generate a static script instead of eval on every shell open):</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">_STRATA_COMPLETE</span><span class="o">=</span>bash_source<span class="w"> </span>strata<span class="w"> </span>&gt;<span class="w"> </span>~/.strata-complete.bash
-<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;. ~/.strata-complete.bash&quot;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>~/.bashrc
+<span class="nb">echo</span><span class="w"> </span><span class="s2">". ~/.strata-complete.bash"</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>~/.bashrc
 </pre></div>
 </div>
 <p>After reloading your shell, <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">&lt;TAB&gt;</span></code> completes commands and <code class="docutils literal notranslate"><span class="pre">--&lt;TAB&gt;</span></code> completes options.</p>

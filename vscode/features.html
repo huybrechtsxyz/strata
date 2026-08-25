@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../config/diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="../guides/features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../guides/faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3494,7 +3539,8 @@ $(error) strata: broken              ← broken (major issues)
 <li><p><strong>Strata: Switch Profile</strong> — quick-pick to activate a different profile</p></li>
 <li><p><strong>Strata: Export Schemas</strong> — export and wire JSON schemas to <code class="docutils literal notranslate"><span class="pre">.vscode/settings.json</span></code></p></li>
 <li><p><strong>Strata: Open Console</strong> — open strata interactive console</p></li>
-<li><p><strong>Strata: Show Dependency Graph</strong> — visualize document relationships</p></li>
+<li><p><strong>Strata: Show Dependency Graph</strong> — visualize document relationships and infrastructure</p></li>
+<li><p><strong>Strata: List Diagrams</strong> — show all available diagrams (built-in + workspace)</p></li>
 </ul>
 </section>
 <section id="diagnostics-problems-panel">
@@ -3567,9 +3613,44 @@ strata:module        → module (with helm/compose/script choice)
 </div>
 <p>Snippets are generated from JSON schemas, so they stay in sync with your version.</p>
 </section>
+<section id="diagram-visualization">
+<h2>Diagram Visualization<a class="headerlink" href="#diagram-visualization" title="Link to this heading"></a></h2>
+<p>The extension renders interactive Mermaid diagrams for any workspace data via <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">diagram</span> <span class="pre">show</span></code>.</p>
+<section id="built-in-diagrams">
+<h3>Built-in diagrams<a class="headerlink" href="#built-in-diagrams" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>topology</strong> — resource topology, module dependencies, cross-references</p></li>
+<li><p><strong>refs</strong> — file cross-references and relationships</p></li>
+</ul>
+</section>
+<section id="custom-diagrams">
+<h3>Custom diagrams<a class="headerlink" href="#custom-diagrams" title="Link to this heading"></a></h3>
+<p>Create <code class="docutils literal notranslate"><span class="pre">.strata/diagrams/&lt;name&gt;.yaml</span></code> files to visualize:</p>
+<p><strong>Workspace structure:</strong> Topology, Files, Resources, Modules, Namespaces, Networks, Firewalls, DNS zones<br />
+<strong>Deployment details:</strong> Stages, Environments, Tenants, Policies<br />
+<strong>History:</strong> Execution records, Promotions, Approval gates<br />
+<strong>Configuration:</strong> Variables, Secrets, Feature flags, Values (metadata only, values never exposed)<br />
+<strong>Live state:</strong> Drift tracking, Deployment outputs, Deployment locks<br />
+<strong>Tooling:</strong> Repositories, Software Bill of Materials (SBOM)</p>
+<p><strong>Example diagram:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">diagram</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment-flow</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">sources</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">stages</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environments</span>
+<span class="w">  </span><span class="nt">layout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">flowchart TD</span>
+<span class="w">  </span><span class="nt">style</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">color_by</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kind</span>
+</pre></div>
+</div>
+<p>Nodes are color-coded by status. Click a node to open its source file. VS Code shows the diagram inline; the CLI renders it as SVG or Mermaid source.</p>
+</section>
 <section id="dependency-graph">
-<h2>Dependency Graph<a class="headerlink" href="#dependency-graph" title="Link to this heading"></a></h2>
-<p>Open <code class="docutils literal notranslate"><span class="pre">Strata:</span> <span class="pre">Show</span> <span class="pre">Dependency</span> <span class="pre">Graph</span></code> (Command Palette) to visualize how documents relate.</p>
+<h3>Dependency Graph<a class="headerlink" href="#dependency-graph" title="Link to this heading"></a></h3>
+<p>The “Show Dependency Graph” command is a shorthand for the built-in <code class="docutils literal notranslate"><span class="pre">refs</span></code> diagram — visualizing all <code class="docutils literal notranslate"><span class="pre">&#64;repo/path</span></code> cross-references in your workspace.</p>
 <p>Nodes are color-coded by kind:</p>
 <ul class="simple">
 <li><p>🔷 configuration</p></li>
@@ -3578,6 +3659,7 @@ strata:module        → module (with helm/compose/script choice)
 <li><p>etc.</p></li>
 </ul>
 <p>Edges show <code class="docutils literal notranslate"><span class="pre">&#64;repo/path</span></code> references. Click a node to open the file.</p>
+</section>
 </section>
 <section id="chat-integration">
 <h2>Chat Integration<a class="headerlink" href="#chat-integration" title="Link to this heading"></a></h2>
@@ -3610,19 +3692,19 @@ strata:module        → module (with helm/compose/script choice)
 <h2>Task Provider<a class="headerlink" href="#task-provider" title="Link to this heading"></a></h2>
 <p>Strata operations are registered as VS Code tasks. Open <code class="docutils literal notranslate"><span class="pre">.vscode/tasks.json</span></code> to add custom tasks:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;strata&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;command&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;validate&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;file&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;config/main.yaml&quot;</span>
+<span class="w">  </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"strata"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"command"</span><span class="p">:</span><span class="w"> </span><span class="s2">"validate"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"file"</span><span class="p">:</span><span class="w"> </span><span class="s2">"config/main.yaml"</span>
 <span class="p">}</span>
 </pre></div>
 </div>
 <p>or</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;strata&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;command&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;build&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;file&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;deploy/prd.yaml&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;dryRun&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;stage&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;infrastructure&quot;</span>
+<span class="w">  </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"strata"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"command"</span><span class="p">:</span><span class="w"> </span><span class="s2">"build"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"file"</span><span class="p">:</span><span class="w"> </span><span class="s2">"deploy/prd.yaml"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"dryRun"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"stage"</span><span class="p">:</span><span class="w"> </span><span class="s2">"infrastructure"</span>
 <span class="p">}</span>
 </pre></div>
 </div>

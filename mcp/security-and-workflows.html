@@ -180,7 +180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagram-visualization">Diagram Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#built-in-diagrams">Built-in diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#custom-diagrams">Custom diagrams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
@@ -655,7 +660,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#diagram"><code class="docutils literal notranslate"><span class="pre">diagram</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-show"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#shipped-built-ins">Shipped built-ins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-list"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#diagram-resolve"><code class="docutils literal notranslate"><span class="pre">diagram</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
@@ -1748,6 +1759,37 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../config/diagram.html">Diagram Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#when-to-use">When to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#render-pipeline">Render Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#top-level-fields">Top-level Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-sources-fields">spec.sources Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-layout-fields">spec.layout Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#spec-style-fields">spec.style Fields</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#highlight-fields">highlight Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/diagram.html#condition-grammar">Condition grammar</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#outgrowing-the-shorthand">Outgrowing the shorthand</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#minimal-layout-only-no-template">Minimal — layout only, no template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#explicit-template-a-mermaid-type-with-no-layout-sugar">Explicit template — a Mermaid type with no layout sugar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#filtered-sources-bound-to-distinct-names">Filtered sources bound to distinct names</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#template-helpers">Template Helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/diagram.html#token"><code class="docutils literal notranslate"><span class="pre">token</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#node-identity">Node Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/diagram.html#related">Related</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#purpose">Purpose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#schema">Schema</a></li>
@@ -2614,12 +2656,15 @@
 <li class="toctree-l3"><a class="reference internal" href="../guides/features.html#custom-policies">Custom policies</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/features.html#diagram-visualization">Diagram visualization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../guides/faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-timestamp-format-does-strata-use">What timestamp format does strata use?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#can-i-visualize-my-infrastructure-without-writing-code">Can I visualize my infrastructure without writing code?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#does-strata-expose-secret-values-in-diagrams">Does strata expose secret values in diagrams?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
@@ -3505,10 +3550,10 @@
 </ul>
 <p>Example:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;valid&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;issues&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;SSH key secret &#39;my_ssh_key&#39; is referenced but not found&quot;</span><span class="p">]</span>
+<span class="w">  </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"valid"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"issues"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"SSH key secret 'my_ssh_key' is referenced but not found"</span><span class="p">]</span>
 <span class="w">  </span><span class="p">}</span>
 <span class="p">}</span>
 </pre></div>
@@ -3518,13 +3563,13 @@
 <section id="best-practice-never-paste-secrets-in-prompts">
 <h3>Best Practice: Never Paste Secrets in Prompts<a class="headerlink" href="#best-practice-never-paste-secrets-in-prompts" title="Link to this heading"></a></h3>
 <p>❌ <strong>Don’t do this:</strong></p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">You</span><span class="p">:</span> <span class="s2">&quot;Validate this YAML. The SSH key is: -----BEGIN PRIVATE KEY-----...&quot;</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">You</span><span class="p">:</span> <span class="s2">"Validate this YAML. The SSH key is: -----BEGIN PRIVATE KEY-----..."</span>
 </pre></div>
 </div>
 <p>✅ <strong>Do this instead:</strong></p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>You: &quot;Validate my deployment YAML.&quot;
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>You: "Validate my deployment YAML."
 Claude: [calls validate_file()] ✅
-You: &quot;I see the SSH key secret reference is valid. Ready to deploy.&quot;
+You: "I see the SSH key secret reference is valid. Ready to deploy."
 </pre></div>
 </div>
 </section>
@@ -3552,17 +3597,17 @@ You: &quot;I see the SSH key secret reference is valid. Ready to deploy.&quot;
 <h3>Querying Audit Logs via MCP<a class="headerlink" href="#querying-audit-logs-via-mcp" title="Link to this heading"></a></h3>
 <p>Use <code class="docutils literal notranslate"><span class="pre">audit_query()</span></code> to analyze deployment history:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Get last 20 deployments</span>
-<span class="n">result</span> <span class="o">=</span> <span class="n">audit_query</span><span class="p">(</span><span class="n">work_path</span><span class="o">=</span><span class="s2">&quot;/my/workspace&quot;</span><span class="p">,</span> <span class="n">last</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">audit_query</span><span class="p">(</span><span class="n">work_path</span><span class="o">=</span><span class="s2">"/my/workspace"</span><span class="p">,</span> <span class="n">last</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
 <span class="c1"># Returns: [</span>
 <span class="c1">#   {timestamp, deployment, success, duration_seconds, stages},</span>
 <span class="c1">#   ...</span>
 <span class="c1"># ]</span>
 
 <span class="c1"># Get deployments since a specific time</span>
-<span class="n">result</span> <span class="o">=</span> <span class="n">audit_query</span><span class="p">(</span><span class="n">since</span><span class="o">=</span><span class="s2">&quot;2026-07-01T00:00:00&quot;</span><span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">audit_query</span><span class="p">(</span><span class="n">since</span><span class="o">=</span><span class="s2">"2026-07-01T00:00:00"</span><span class="p">)</span>
 
 <span class="c1"># Get deployments for a specific stage</span>
-<span class="n">result</span> <span class="o">=</span> <span class="n">audit_query</span><span class="p">(</span><span class="n">stage</span><span class="o">=</span><span class="s2">&quot;infrastructure&quot;</span><span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">audit_query</span><span class="p">(</span><span class="n">stage</span><span class="o">=</span><span class="s2">"infrastructure"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -3593,7 +3638,7 @@ You: &quot;I see the SSH key secret reference is valid. Ready to deploy.&quot;
 cat<span class="w"> </span>.strata/logs/deploy-*.json
 
 <span class="c1"># Parse and export</span>
-jq<span class="w"> </span><span class="s1">&#39;.[]&#39;</span><span class="w"> </span>.strata/logs/deploy-*.json<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s2">&quot;failure&quot;</span>
+jq<span class="w"> </span><span class="s1">'.[]'</span><span class="w"> </span>.strata/logs/deploy-*.json<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s2">"failure"</span>
 </pre></div>
 </div>
 </section>
@@ -3604,12 +3649,12 @@ jq<span class="w"> </span><span class="s1">&#39;.[]&#39;</span><span class="w"> 
 <section id="pattern-1-ai-suggests-human-approves-cli-executes">
 <h3>Pattern 1: AI Suggests, Human Approves, CLI Executes<a class="headerlink" href="#pattern-1-ai-suggests-human-approves-cli-executes" title="Link to this heading"></a></h3>
 <p><strong>Workflow:</strong></p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="mf">1.</span> <span class="n">You</span> <span class="n">ask</span> <span class="n">Claude</span><span class="p">:</span> <span class="s2">&quot;Deploy staging?&quot;</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="mf">1.</span> <span class="n">You</span> <span class="n">ask</span> <span class="n">Claude</span><span class="p">:</span> <span class="s2">"Deploy staging?"</span>
 <span class="mf">2.</span> <span class="n">Claude</span> <span class="n">calls</span> <span class="n">deploy_plan</span><span class="p">()</span>
 <span class="mf">3.</span> <span class="n">Claude</span> <span class="n">shows</span> <span class="n">you</span> <span class="n">the</span> <span class="n">Terraform</span> <span class="n">plan</span>
-<span class="mf">4.</span> <span class="n">You</span> <span class="n">review</span> <span class="ow">and</span> <span class="n">say</span><span class="p">:</span> <span class="s2">&quot;Looks good, deploy it.&quot;</span>
+<span class="mf">4.</span> <span class="n">You</span> <span class="n">review</span> <span class="ow">and</span> <span class="n">say</span><span class="p">:</span> <span class="s2">"Looks good, deploy it."</span>
 <span class="mf">5.</span> <span class="n">You</span> <span class="n">run</span> <span class="n">CLI</span> <span class="n">manually</span><span class="p">:</span> <span class="n">strata</span> <span class="n">deploy</span> <span class="n">run</span> <span class="o">-</span><span class="n">f</span> <span class="n">deploy</span><span class="o">-</span><span class="n">staging</span><span class="o">.</span><span class="n">yaml</span>
-<span class="mf">6.</span> <span class="n">Claude</span> <span class="n">queries</span> <span class="n">audit</span> <span class="n">logs</span><span class="p">:</span> <span class="s2">&quot;Deployment complete. Status: ✅&quot;</span>
+<span class="mf">6.</span> <span class="n">Claude</span> <span class="n">queries</span> <span class="n">audit</span> <span class="n">logs</span><span class="p">:</span> <span class="s2">"Deployment complete. Status: ✅"</span>
 </pre></div>
 </div>
 <p><strong>Why this is safe:</strong></p>
@@ -3625,8 +3670,8 @@ jq<span class="w"> </span><span class="s1">&#39;.[]&#39;</span><span class="w"> 
 <p><strong>Setup:</strong></p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="mf">1.</span> <span class="n">Deployment</span> <span class="n">request</span> <span class="n">triggered</span> <span class="p">(</span><span class="n">via</span> <span class="n">webhook</span> <span class="ow">or</span> <span class="n">polling</span><span class="p">)</span>
 <span class="mf">2.</span> <span class="n">Bot</span> <span class="n">calls</span> <span class="n">deploy_plan</span><span class="p">()</span> <span class="n">to</span> <span class="n">generate</span> <span class="n">preview</span>
-<span class="mf">3.</span> <span class="n">Bot</span> <span class="n">posts</span> <span class="n">preview</span> <span class="n">to</span> <span class="n">Slack</span><span class="o">/</span><span class="n">Teams</span> <span class="k">with</span> <span class="s2">&quot;Approve&quot;</span> <span class="n">button</span>
-<span class="mf">4.</span> <span class="n">Reviewer</span> <span class="n">clicks</span> <span class="s2">&quot;Approve&quot;</span>
+<span class="mf">3.</span> <span class="n">Bot</span> <span class="n">posts</span> <span class="n">preview</span> <span class="n">to</span> <span class="n">Slack</span><span class="o">/</span><span class="n">Teams</span> <span class="k">with</span> <span class="s2">"Approve"</span> <span class="n">button</span>
+<span class="mf">4.</span> <span class="n">Reviewer</span> <span class="n">clicks</span> <span class="s2">"Approve"</span>
 <span class="mf">5.</span> <span class="n">Approval</span> <span class="n">triggering</span> <span class="n">script</span> <span class="n">runs</span> <span class="n">CLI</span><span class="p">:</span> <span class="n">strata</span> <span class="n">deploy</span> <span class="n">run</span> <span class="o">-</span><span class="n">f</span> <span class="o">...</span>
 <span class="mf">6.</span> <span class="n">Bot</span> <span class="n">queries</span> <span class="n">audit</span> <span class="n">logs</span> <span class="ow">and</span> <span class="n">posts</span> <span class="n">result</span>
 </pre></div>
@@ -3635,7 +3680,7 @@ jq<span class="w"> </span><span class="s1">&#39;.[]&#39;</span><span class="w"> 
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">slack_sdk</span><span class="w"> </span><span class="kn">import</span> <span class="n">WebClient</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">subprocess</span>
 
-<span class="n">slack</span> <span class="o">=</span> <span class="n">WebClient</span><span class="p">(</span><span class="n">token</span><span class="o">=</span><span class="s2">&quot;xoxb-...&quot;</span><span class="p">)</span>
+<span class="n">slack</span> <span class="o">=</span> <span class="n">WebClient</span><span class="p">(</span><span class="n">token</span><span class="o">=</span><span class="s2">"xoxb-..."</span><span class="p">)</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">request_deployment</span><span class="p">(</span><span class="n">file_path</span><span class="p">):</span>
     <span class="c1"># 1. Get deployment preview via MCP</span>
@@ -3643,22 +3688,22 @@ jq<span class="w"> </span><span class="s1">&#39;.[]&#39;</span><span class="w"> 
     
     <span class="c1"># 2. Post to Slack for review</span>
     <span class="n">slack</span><span class="o">.</span><span class="n">chat_postMessage</span><span class="p">(</span>
-        <span class="n">channel</span><span class="o">=</span><span class="s2">&quot;#deployments&quot;</span><span class="p">,</span>
+        <span class="n">channel</span><span class="o">=</span><span class="s2">"#deployments"</span><span class="p">,</span>
         <span class="n">blocks</span><span class="o">=</span><span class="p">[</span>
             <span class="p">{</span>
-                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;section&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="p">{</span>
-                    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;mrkdwn&quot;</span><span class="p">,</span>
-                    <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Deploy `</span><span class="si">{</span><span class="n">file_path</span><span class="si">}</span><span class="s2">`?</span><span class="se">\n\n</span><span class="si">{</span><span class="n">preview</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"section"</span><span class="p">,</span>
+                <span class="s2">"text"</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"mrkdwn"</span><span class="p">,</span>
+                    <span class="s2">"text"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"Deploy `</span><span class="si">{</span><span class="n">file_path</span><span class="si">}</span><span class="s2">`?</span><span class="se">\n\n</span><span class="si">{</span><span class="n">preview</span><span class="si">}</span><span class="s2">"</span>
                 <span class="p">}</span>
             <span class="p">},</span>
             <span class="p">{</span>
-                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;actions&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;elements&quot;</span><span class="p">:</span> <span class="p">[</span>
+                <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"actions"</span><span class="p">,</span>
+                <span class="s2">"elements"</span><span class="p">:</span> <span class="p">[</span>
                     <span class="p">{</span>
-                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;button&quot;</span><span class="p">,</span>
-                        <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;plain_text&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="s2">&quot;Approve&quot;</span><span class="p">},</span>
-                        <span class="s2">&quot;action_id&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;approve_</span><span class="si">{</span><span class="n">file_path</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"button"</span><span class="p">,</span>
+                        <span class="s2">"text"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"plain_text"</span><span class="p">,</span> <span class="s2">"text"</span><span class="p">:</span> <span class="s2">"Approve"</span><span class="p">},</span>
+                        <span class="s2">"action_id"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"approve_</span><span class="si">{</span><span class="n">file_path</span><span class="si">}</span><span class="s2">"</span>
                     <span class="p">}</span>
                 <span class="p">]</span>
             <span class="p">}</span>
@@ -3668,16 +3713,16 @@ jq<span class="w"> </span><span class="s1">&#39;.[]&#39;</span><span class="w"> 
 <span class="k">def</span><span class="w"> </span><span class="nf">handle_approval</span><span class="p">(</span><span class="n">file_path</span><span class="p">):</span>
     <span class="c1"># 3. Execute deployment via CLI when approved</span>
     <span class="n">result</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
-        <span class="p">[</span><span class="s2">&quot;strata&quot;</span><span class="p">,</span> <span class="s2">&quot;deploy&quot;</span><span class="p">,</span> <span class="s2">&quot;run&quot;</span><span class="p">,</span> <span class="s2">&quot;-f&quot;</span><span class="p">,</span> <span class="n">file_path</span><span class="p">,</span> <span class="s2">&quot;--force&quot;</span><span class="p">],</span>
+        <span class="p">[</span><span class="s2">"strata"</span><span class="p">,</span> <span class="s2">"deploy"</span><span class="p">,</span> <span class="s2">"run"</span><span class="p">,</span> <span class="s2">"-f"</span><span class="p">,</span> <span class="n">file_path</span><span class="p">,</span> <span class="s2">"--force"</span><span class="p">],</span>
         <span class="n">capture_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">text</span><span class="o">=</span><span class="kc">True</span>
     <span class="p">)</span>
     
     <span class="c1"># 4. Post result back to Slack</span>
-    <span class="n">status</span> <span class="o">=</span> <span class="s2">&quot;✅ Success&quot;</span> <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">returncode</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="s2">&quot;❌ Failed&quot;</span>
+    <span class="n">status</span> <span class="o">=</span> <span class="s2">"✅ Success"</span> <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">returncode</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="s2">"❌ Failed"</span>
     <span class="n">slack</span><span class="o">.</span><span class="n">chat_postMessage</span><span class="p">(</span>
-        <span class="n">channel</span><span class="o">=</span><span class="s2">&quot;#deployments&quot;</span><span class="p">,</span>
-        <span class="n">text</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">status</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">file_path</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">channel</span><span class="o">=</span><span class="s2">"#deployments"</span><span class="p">,</span>
+        <span class="n">text</span><span class="o">=</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">status</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">file_path</span><span class="si">}</span><span class="s2">"</span>
     <span class="p">)</span>
 </pre></div>
 </div>
@@ -3715,8 +3760,8 @@ jq<span class="w"> </span><span class="s1">&#39;.[]&#39;</span><span class="w"> 
 <p><strong>Enforcement:</strong></p>
 <p>MCP servers can validate the caller’s role before granting access:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">validate_file</span><span class="p">(</span><span class="n">file_path</span><span class="p">,</span> <span class="n">work_path</span><span class="p">,</span> <span class="n">deep</span><span class="p">,</span> <span class="n">user_role</span><span class="p">):</span>
-    <span class="k">if</span> <span class="s2">&quot;validate_file&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ROLES</span><span class="p">[</span><span class="n">user_role</span><span class="p">][</span><span class="s2">&quot;permissions&quot;</span><span class="p">]:</span>
-        <span class="k">raise</span> <span class="ne">PermissionError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Role &#39;</span><span class="si">{</span><span class="n">user_role</span><span class="si">}</span><span class="s2">&#39; cannot validate files&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="s2">"validate_file"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ROLES</span><span class="p">[</span><span class="n">user_role</span><span class="p">][</span><span class="s2">"permissions"</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="ne">PermissionError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Role '</span><span class="si">{</span><span class="n">user_role</span><span class="si">}</span><span class="s2">' cannot validate files"</span><span class="p">)</span>
     <span class="c1"># ... proceed with validation</span>
 </pre></div>
 </div>
@@ -3747,7 +3792,7 @@ jq<span class="w"> </span><span class="s1">&#39;.[]&#39;</span><span class="w"> 
 <p>If you need remote access, use SSH tunneling:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># On your workstation</span>
 ssh<span class="w"> </span>-L<span class="w"> </span><span class="m">9000</span>:localhost:9000<span class="w"> </span>user@server.example.com<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="s2">&quot;strata mcp serve&quot;</span>
+<span class="w">  </span><span class="s2">"strata mcp serve"</span>
 
 <span class="c1"># On server</span>
 strata<span class="w"> </span>mcp<span class="w"> </span>serve<span class="w"> </span>--listen<span class="w"> </span><span class="m">127</span>.0.0.1:9000
@@ -3809,7 +3854,7 @@ strata<span class="w"> </span>mcp<span class="w"> </span>serve<span class="w"> <
 <span class="w">        </span><span class="nt">secrets</span><span class="p">:</span>
 <span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">database_password</span>
 <span class="w">            </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aws-secrets-manager</span>
-<span class="w">            </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;prod/database/password&quot;</span>
+<span class="w">            </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">"prod/database/password"</span>
 </pre></div>
 </div>
 </section>
