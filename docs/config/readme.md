@@ -13,6 +13,11 @@ strata uses YAML configuration files to define infrastructure, environments, and
 **Platform:**
 
 - [configuration.md](configuration.md) - Validation rules (providers, topologies, regex patterns)
+  - [manifest.md](manifest.md) - `configuration.spec.manifest` — deployment manifest/audit-record settings (not a standalone kind)
+
+**Multi-tenancy:**
+
+- [tenant.md](tenant.md) - Tenant identity, zones, and deployment defaults (default location `tenants/{code}.yaml`, overridable via a path convention)
 
 **Resources:**
 
@@ -23,6 +28,13 @@ strata uses YAML configuration files to define infrastructure, environments, and
 - [network.md](network.md) - Network topologies, subnets, and peerings
 - [module.md](module.md) - Reusable components
 - [namespace.md](namespace.md) - Application packages
+
+**Diagrams & records (machine-written or generated):**
+
+- [diagram.md](diagram.md) - Visual diagram definitions rendered as Mermaid (ADR-0034)
+- [version.md](version.md) - Intended component versions for a deployment ring
+- [version-lock.md](version-lock.md) - Frozen, immutable snapshot of what was actually deployed
+- [promotion-record.md](promotion-record.md) - Audit log of a version promotion through a ring progression
 
 **Workspace state:**
 
@@ -44,6 +56,7 @@ resources/       vm_manager.yaml, vm_worker.yaml
 firewalls/       web_public.yaml, api_internal.yaml
 modules/         postgres.yaml, redis.yaml
 namespaces/      frontend.yaml, backend.yaml
+tenants/         acme.yaml, contoso.yaml   # default location; overridable, see tenant.md
 ```
 
 ## Quick Start
