@@ -330,7 +330,20 @@ class DeploymentStageModel(PlatformBaseModel):
             "When set, the sync provisioner filters modules to those declared in this namespace "
             "and injects 'namespace' as a single object into the Jinja2 template context. "
             "Omit to include all namespaces (template is responsible for iteration). "
-            "Only meaningful for sync provisioners (argocd, flux)."
+            "Only meaningful for sync provisioners (argocd, flux). "
+            "Unrelated to 'helm_namespaces' below, which scopes the helm provisioner instead."
+        ),
+    )
+    helm_namespaces: Optional[List[str]] = Field(
+        None,
+        description=(
+            "Allowlist of namespace names (workspace.spec.namespaces[].name) this stage may deploy — "
+            "default-deny once set, same shape as the 'secrets' allowlist above. "
+            "Only meaningful for the helm provisioner, which otherwise loads every declared namespace "
+            "on every run. Omit for no filtering (deploy all namespaces — default, non-breaking). "
+            "Overridden per-run by 'strata deploy run --namespace NAME' (repeatable), which takes "
+            "precedence over this declarative list when supplied. "
+            "Unrelated to 'namespace' (singular) above, which scopes sync provisioners (argocd, flux) instead."
         ),
     )
     backend: Optional[SyncBackendModel] = Field(

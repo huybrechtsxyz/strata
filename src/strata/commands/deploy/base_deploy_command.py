@@ -638,7 +638,7 @@ class BaseDeployCommand(BaseCommand):
         _stage_values = _resolved_values.for_stage(stage.secrets) if _resolved_values else None
 
         try:
-            return DeployerFactory.create(
+            deployer = DeployerFactory.create(
                 resolved_type,
                 stage=stage,
                 deployment_service=self._deployment_service,  # type: ignore[arg-type]
@@ -653,6 +653,16 @@ class BaseDeployCommand(BaseCommand):
         except ValueError as exc:
             self._errors.append(str(exc))
             return None
+
+        # Effective namespace allowlist: CLI --namespace (only RunDeployCommand
+        # sets self._namespaces) takes precedence over the stage's declarative
+        # helm_namespaces allowlist. None on both means no filtering. Only
+        # HelmDeployer consumes this attribute (see BaseDeployer.namespace_filter).
+        effective_namespaces = getattr(self, "_namespaces", None) or stage.helm_namespaces
+        if effective_namespaces:
+            deployer.namespace_filter = list(effective_namespaces)
+
+        return deployer
 
     def _load_configuration_service(self) -> Optional[ConfigurationService]:
         """Load ConfigurationService from the active profile's configfile_paths."""

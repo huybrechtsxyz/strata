@@ -68,6 +68,13 @@ class BaseDeployer(ABC):
         self.resolved_values = resolved_values
         self.logger = get_logger(self.__class__.__module__)
 
+        # Effective namespace allowlist for this run (CLI --namespace, falling back
+        # to stage.helm_namespaces). Not a constructor parameter — set post-construction
+        # by BaseDeployCommand._create_deployer() so no deployer subclass's __init__
+        # signature needs to change. Only consumed by HelmDeployer today; every other
+        # deployer ignores it. None means "no filtering" (deploy all namespaces).
+        self.namespace_filter: Optional[List[str]] = None
+
     # ------------------------------------------------------------------
     # Metadata
     # ------------------------------------------------------------------

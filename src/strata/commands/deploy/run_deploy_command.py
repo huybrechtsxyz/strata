@@ -49,6 +49,7 @@ class RunDeployCommand(BaseDeployCommand):
         work_path: Optional[str] = None,
         stage: Optional[str] = None,
         scope: Optional[str] = None,
+        namespaces: Optional[List[str]] = None,
         force: bool = False,
         dry_run: bool = False,
         force_lock: bool = False,
@@ -74,6 +75,7 @@ class RunDeployCommand(BaseDeployCommand):
         )
         self._stage = stage
         self._scope = scope
+        self._namespaces = list(namespaces) if namespaces else None
         self._force = force
         self._dry_run = dry_run
         self._force_lock = force_lock
@@ -1110,6 +1112,20 @@ class RunDeployCommand(BaseDeployCommand):
                 self._errors.append(
                     f"No stages match scope '{self._scope}'. "
                     f"Available scopes: {[s.scope for s in all_stages if s.scope]}"
+                )
+                return False
+
+        # Validate --namespace values (if supplied) against the workspace's declared
+        # namespaces before running anything. Only the helm provisioner honors this
+        # filter (see BaseDeployer.namespace_filter), but the CLI-level names must
+        # still exist in workspace.spec.namespaces regardless of which stages run.
+        if self._namespaces:
+            known_namespaces = set((self._deployment_service.get_namespace_services() or {}).keys())
+            unknown = [ns for ns in self._namespaces if ns not in known_namespaces]
+            if unknown:
+                self._errors.append(
+                    f"Namespace(s) not found in workspace: {unknown}. "
+                    f"Available namespaces: {sorted(known_namespaces) or ['(none defined)']}"
                 )
                 return False
 

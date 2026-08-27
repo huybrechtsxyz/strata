@@ -470,3 +470,96 @@ class TestValidateSyncStages:
         )
         errors = svc._validate_sync_stages(configuration_model=None, work_path=str(tmp_path))
         assert any("unknown-ns" in e and "not found" in e for e in errors), errors
+
+
+class TestValidateHelmStageNamespaces:
+    """Tests for _validate_helm_stage_namespaces — stage.helm_namespaces allowlist.
+
+    Unrelated to TestValidateSyncStages' namespace checks above: this validates
+    the plural, helm-provisioner-only 'helm_namespaces' field, not the singular
+    sync-only 'namespace' field.
+    """
+
+    def _make_deployment(self, stages=None, workspace_file="workspace.yaml"):
+        data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "deployment",
+            "meta": {"name": "test_helm_ns_deploy"},
+            "spec": {
+                "workspace": {"name": "ws", "file": workspace_file},
+                "environments": ["env.yaml"],
+                "stages": stages or [],
+            },
+        }
+        svc = DeploymentService(data=data)
+        svc.validate()  # Phase 1 — populate self.model
+        return svc
+
+    def test_no_helm_namespaces_passes(self):
+        svc = self._make_deployment(stages=[{"name": "apps", "provisioner": "helm"}])
+        errors = svc._validate_helm_stage_namespaces(work_path=None, configuration_model=None)
+        assert errors == []
+
+    def test_empty_stages_passes(self):
+        svc = self._make_deployment(stages=[])
+        errors = svc._validate_helm_stage_namespaces(work_path=None, configuration_model=None)
+        assert errors == []
+
+    def test_without_workspace_skips_gracefully(self, tmp_path):
+        """When workspace YAML is missing, namespace validation is silently skipped."""
+        svc = self._make_deployment(
+            stages=[{"name": "apps", "provisioner": "helm", "helm_namespaces": ["immich"]}],
+            workspace_file="workspace.yaml",
+        )
+        # workspace.yaml does NOT exist in tmp_path
+        errors = svc._validate_helm_stage_namespaces(work_path=str(tmp_path), configuration_model=None)
+        assert errors == []
+
+    def test_valid_helm_namespaces_pass(self, tmp_path):
+        ws_data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "workspace",
+            "meta": {"name": "test_ws"},
+            "spec": {
+                "namespaces": [
+                    {"name": "immich", "file": "namespaces/immich.yaml"},
+                    {"name": "media", "file": "namespaces/media.yaml"},
+                ],
+                "provisioners": [],
+            },
+        }
+        import yaml
+
+        ws_file = tmp_path / "workspace.yaml"
+        ws_file.write_text(yaml.dump(ws_data))
+
+        svc = self._make_deployment(
+            stages=[{"name": "apps", "provisioner": "helm", "helm_namespaces": ["immich", "media"]}],
+            workspace_file=str(ws_file),
+        )
+        errors = svc._validate_helm_stage_namespaces(work_path=str(tmp_path), configuration_model=None)
+        assert errors == []
+
+    def test_unknown_helm_namespace_reports_error(self, tmp_path):
+        ws_data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "workspace",
+            "meta": {"name": "test_ws"},
+            "spec": {
+                "namespaces": [{"name": "immich", "file": "namespaces/immich.yaml"}],
+                "provisioners": [],
+            },
+        }
+        import yaml
+
+        ws_file = tmp_path / "workspace.yaml"
+        ws_file.write_text(yaml.dump(ws_data))
+
+        svc = self._make_deployment(
+            stages=[{"name": "apps", "provisioner": "helm", "helm_namespaces": ["immich", "documents"]}],
+            workspace_file=str(ws_file),
+        )
+        errors = svc._validate_helm_stage_namespaces(work_path=str(tmp_path), configuration_model=None)
+        assert any("documents" in e and "not found" in e for e in errors), errors
+        # Only the unknown entry is reported, not the known-good "immich"
+        assert not any(e.startswith("Stage 'apps': helm_namespaces ['immich'") for e in errors), errors

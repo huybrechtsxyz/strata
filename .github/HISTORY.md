@@ -7,6 +7,20 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Added
+
+- **`strata deploy run --namespace NAME` (repeatable) scopes the helm provisioner to specific namespace(s) for a single run**
+  - Problem: `HelmDeployer.validate_workspace()` unconditionally loaded every namespace in `deployment_service.get_namespace_services()` on every run — no way to scope a single invocation to a subset without temporarily editing `workspace.spec.namespaces` (and its topology's matching sub-list) and reverting afterward
+  - New `DeploymentStageModel.helm_namespaces: Optional[List[str]]` field (`src/strata/models/deployment_model.py`) — plural, default-deny allowlist, same shape as the existing `secrets` field. Deliberately named distinctly from the existing singular `namespace` field, which is sync-provisioner-only (argocd/flux, build-time, single value injected into the Jinja2 template context) — the two fields are unrelated and documented as such in both docstrings
+  - New `DeploymentService._validate_helm_stage_namespaces()` (sibling to the existing `_validate_sync_stages()`) validates `stage.helm_namespaces` entries against `workspace.spec.namespaces` via the existing `_load_workspace_namespaces()` helper — hard error on unknown names, wired into `_validate_dynamic()` so it runs on every `deploy run` (not just `--deep`)
+  - New CLI option `--namespace NAME` (repeatable, `deploy run` only, `src/strata/commands/cli_deploy.py`) → `RunDeployCommand._namespaces`. `_execute_provisioning()` hard-errors before any stage runs if a supplied name isn't in `deployment_service.get_namespace_services()`
+  - `BaseDeployer` gained a plain `namespace_filter: Optional[List[str]] = None` attribute (`src/strata/deployers/base_deployer.py`) — not a constructor parameter, so no deployer subclass's `__init__` signature changed. `BaseDeployCommand._create_deployer()` sets it post-construction: CLI `--namespace` (only `RunDeployCommand` ever sets `self._namespaces`) takes precedence over the stage's declarative `helm_namespaces`; every other command/deployer is unaffected
+  - `HelmDeployer.validate_workspace()` filters `namespace_services` by `self.namespace_filter` when set (otherwise unchanged — omit for no filtering, the default)
+  - Docs: `docs/config/deployment.md` — new "`namespace` vs `helm_namespaces`" comparison section under `## Stages`
+  - Tests: `tests/strata/models/test_models_deployment.py` (`TestDeploymentStageModelHelmNamespacesField`), `tests/strata/services/test_services_deployment.py` (`TestValidateHelmStageNamespaces`), `tests/strata/commands/test_commands_deploy.py` (`TestExecuteProvisioningNamespaceFilter`), `tests/strata/deployers/test_deployers_helm.py` (`TestHelmDeployerValidateWorkspaceNamespaceFilter`)
+
+## [1.8.3] - 2026-08-27
+
 ### Fixed
 
 - **`strata deploy run` always failed with `ServiceNotValidatedError: Service 'EnvironmentService' must be validated before use` (regression since v1.7.0)**

@@ -61,6 +61,17 @@ def deploy():
     help="Run only deployment stages whose scope field matches this label.",
 )
 @click.option(
+    "--namespace",
+    "namespaces",
+    multiple=True,
+    default=None,
+    metavar="NAME",
+    help=(
+        "Limit the helm provisioner to specific namespace(s) for this run (repeatable). "
+        "Overrides any stage-level 'helm_namespaces' allowlist. Omit to deploy all namespaces."
+    ),
+)
+@click.option(
     "--force",
     is_flag=True,
     default=False,
@@ -153,6 +164,7 @@ def deploy_run(
     work_path: Optional[str] = None,
     stage: Optional[str] = None,
     scope: Optional[str] = None,
+    namespaces: Optional[tuple] = None,
     force: bool = False,
     dry_run: bool = False,
     force_lock: bool = False,
@@ -175,6 +187,7 @@ def deploy_run(
         work_path=work_path,
         stage=stage,
         scope=scope,
+        namespaces=list(namespaces) if namespaces else None,
         force=force,
         dry_run=dry_run,
         force_lock=force_lock,

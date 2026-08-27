@@ -291,6 +291,8 @@ stages:
     # scope: infra        # Optional label for --scope CLI filtering (see deploy run --scope)
     secrets:               # Allowlist of secrets this stage may access (default-deny)
       - hetzner_api_token
+    # helm_namespaces:      # helm-only allowlist (see "namespace vs helm_namespaces" below)
+    #   - immich
     timeouts:              # Per-step overrides (seconds)
       setup: 120
       plan: 600
@@ -319,6 +321,39 @@ strata deploy run -f deploy/deploy-prd.yaml                 # all stages (no sco
 ```
 
 Stages without a `scope` field are skipped when `--scope` is set. This is intentional — unlabelled stages are treated as "always run" only when no filter is active.
+
+### `namespace` vs `helm_namespaces` — Kubernetes namespace scoping
+
+These two fields look similar but scope completely different provisioners at completely different times:
+
+| Field             | Shape           | Provisioner        | When applied                                                                                                                                         |
+| ----------------- | --------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `namespace`       | single string   | sync (argocd/flux) | Build time — scopes the rendered Jinja2 manifest to exactly one namespace, injected into the template context as `namespace`.                        |
+| `helm_namespaces` | list of strings | helm               | Deploy time — default-deny allowlist; the helm provisioner otherwise loads **every** namespace declared in `workspace.spec.namespaces` on every run. |
+
+```yaml
+stages:
+  - name: sync-argocd
+    backend:
+      integration: argocd
+    namespace: argocd            # sync provisioner: exactly one namespace
+
+  - name: apps
+    provisioner: helm
+    helm_namespaces:             # helm provisioner: allowlist (omit = deploy all)
+      - immich
+      - media
+```
+
+`helm_namespaces` can be overridden per-run without editing the YAML:
+
+```bash
+strata deploy run -f deploy/deploy-prd.yaml --namespace immich              # only immich
+strata deploy run -f deploy/deploy-prd.yaml --namespace immich --namespace media  # repeatable
+strata deploy run -f deploy/deploy-prd.yaml                                 # no filter — all namespaces (default)
+```
+
+`--namespace` on the CLI takes precedence over any stage's declarative `helm_namespaces` list when supplied. An unknown namespace name (on the CLI or in `helm_namespaces`) is a hard validation error, listing the available namespace names from `workspace.spec.namespaces`.
 
 ---
 

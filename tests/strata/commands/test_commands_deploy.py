@@ -892,7 +892,76 @@ class TestPreflightCheckProvisioners:
         assert any("terraform not found" in e for e in cmd._errors)
 
 
-class TestDeployList:
+class TestExecuteProvisioningNamespaceFilter:
+    """Tests for the --namespace pre-flight check in _execute_provisioning()."""
+
+    def _make_service_with_namespaces(self, stage, known_namespaces):
+        svc = MagicMock()
+        spec = _make_locking_spec(enabled=False)
+        spec.stages = [stage]
+        svc.model.spec = spec
+        svc.model.meta.name = "my-deploy"
+        svc.get_namespace_services.return_value = {n: MagicMock() for n in known_namespaces}
+        return svc
+
+    def test_no_namespaces_flag_skips_check_entirely(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        cmd._dry_run = False
+        cmd._output_format = "json"
+        stage = _make_stage("apps")
+        stage.helm_namespaces = None
+        cmd._deployment_service = self._make_service_with_namespaces(stage, ["immich", "media"])
+        assert cmd._namespaces is None
+
+        with (
+            patch.object(cmd, "_preflight_check_provisioners", return_value=[]),
+            patch.object(cmd, "_execute_stage_provisioning", return_value=True),
+            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
+        ):
+            result = cmd._execute_provisioning()  # type: ignore[call-arg]
+
+        assert result is True
+        cmd._deployment_service.get_namespace_services.assert_not_called()
+
+    def test_known_namespace_passes(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        cmd._dry_run = False
+        cmd._output_format = "json"
+        cmd._namespaces = ["immich"]
+        stage = _make_stage("apps")
+        stage.helm_namespaces = None
+        cmd._deployment_service = self._make_service_with_namespaces(stage, ["immich", "media"])
+
+        with (
+            patch.object(cmd, "_preflight_check_provisioners", return_value=[]),
+            patch.object(cmd, "_execute_stage_provisioning", return_value=True),
+            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
+        ):
+            result = cmd._execute_provisioning()  # type: ignore[call-arg]
+
+        assert result is True
+
+    def test_unknown_namespace_hard_errors_before_any_stage_runs(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        cmd._dry_run = False
+        cmd._output_format = "json"
+        cmd._namespaces = ["does-not-exist"]
+        stage = _make_stage("apps")
+        stage.helm_namespaces = None
+        cmd._deployment_service = self._make_service_with_namespaces(stage, ["immich", "media"])
+
+        with (
+            patch.object(cmd, "_preflight_check_provisioners", return_value=[]) as preflight,
+            patch.object(cmd, "_execute_stage_provisioning") as stage_exec,
+        ):
+            result = cmd._execute_provisioning()  # type: ignore[call-arg]
+
+        assert result is False
+        assert any("does-not-exist" in e and "not found" in e for e in cmd._errors), cmd._errors
+        # Fails fast — never even reaches the preflight/stage-execution phase
+        preflight.assert_not_called()
+        stage_exec.assert_not_called()
+
     """Tests for `strata deploy list`."""
 
     def _write_deployment(self, path: Path, name: str, layers: dict | None = None, tenant: str | None = None) -> Path:

@@ -97,6 +97,29 @@ class TestDeploymentStageModelSecretsField:
         assert stage.timeouts.apply == 1200
 
 
+class TestDeploymentStageModelHelmNamespacesField:
+    """helm_namespaces (plural) is unrelated to namespace (singular) — the latter
+    is sync-provisioner-only (argocd/flux); the former is helm-only."""
+
+    def test_helm_namespaces_optional_defaults_none(self):
+        stage = DeploymentStageModel(name="apps")
+        assert stage.helm_namespaces is None
+
+    def test_helm_namespaces_empty_list(self):
+        stage = DeploymentStageModel(name="apps", helm_namespaces=[])
+        assert stage.helm_namespaces == []
+
+    def test_helm_namespaces_specific_names(self):
+        stage = DeploymentStageModel(name="apps", provisioner="helm", helm_namespaces=["immich", "media"])
+        assert stage.helm_namespaces == ["immich", "media"]
+
+    def test_namespace_and_helm_namespaces_coexist_independently(self):
+        """The singular sync field and the plural helm field don't interfere with each other."""
+        stage = DeploymentStageModel(name="mixed", namespace="argocd", helm_namespaces=["immich"])
+        assert stage.namespace == "argocd"
+        assert stage.helm_namespaces == ["immich"]
+
+
 class TestDeploymentTenantField:
     """Tests for the optional tenant field on DeploymentSpecModel."""
 

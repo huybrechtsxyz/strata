@@ -150,6 +150,11 @@ class DeploymentService(BaseService["DeploymentModel"]):
             sync_errors = self._validate_sync_stages(configuration_model, work_path)
             errors.extend(sync_errors)
 
+        # Validate helm stage namespace allowlists (stage.helm_namespaces)
+        if self.model:
+            helm_ns_errors = self._validate_helm_stage_namespaces(work_path, configuration_model)
+            errors.extend(helm_ns_errors)
+
         # Shadowed-override check (non-fatal warnings, not errors)
         if work_path and self.model and self.model.spec.versions:
             self._validation_warnings = self._check_version_pin_shadows(
@@ -285,6 +290,43 @@ class DeploymentService(BaseService["DeploymentModel"]):
                             f"Stage '{stage.name}': namespace '{ns}' not found in workspace. "
                             f"Available namespaces: {available}"
                         )
+
+        return errors
+
+    def _validate_helm_stage_namespaces(
+        self,
+        work_path: Optional[str],
+        configuration_model: Optional["ConfigurationModel"],
+    ) -> List[str]:
+        """Validate ``stage.helm_namespaces`` allowlists against ``workspace.spec.namespaces``.
+
+        Unrelated to ``_validate_sync_stages`` — this checks the plural,
+        helm-provisioner-only ``helm_namespaces`` field, not the singular
+        sync-only ``namespace`` field. Best-effort: skipped silently when the
+        workspace cannot be loaded (mirrors ``_validate_sync_stages``' namespace check).
+        """
+        errors: List[str] = []
+        if not self.model:
+            return errors
+
+        stages = self.model.spec.stages or []
+        helm_ns_stages = [s for s in stages if s.helm_namespaces]
+        if not helm_ns_stages or not work_path or not self.model.spec.workspace:
+            return errors
+
+        effective_repo_map = self._merged_repo_map(configuration_model)
+        ws_namespaces = self._load_workspace_namespaces(work_path, effective_repo_map)
+        if ws_namespaces is None:
+            return errors
+
+        for stage in helm_ns_stages:
+            unknown = [ns for ns in (stage.helm_namespaces or []) if ns not in ws_namespaces]
+            if unknown:
+                available = sorted(ws_namespaces) or ["(none defined)"]
+                errors.append(
+                    f"Stage '{stage.name}': helm_namespaces {unknown} not found in workspace. "
+                    f"Available namespaces: {available}"
+                )
 
         return errors
 
