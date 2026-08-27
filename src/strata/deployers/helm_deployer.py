@@ -290,6 +290,14 @@ class HelmDeployer(BaseDeployer):
         deployment_build_path = self.deployment_service.get_build_path(self.build_path)
         namespace_services = self.deployment_service.get_namespace_services() or {}
 
+        # Scope to self.namespace_filter when set (CLI --namespace or stage.helm_namespaces —
+        # resolved by BaseDeployCommand._create_deployer(); unknown names are already
+        # rejected earlier by RunDeployCommand's pre-flight check / deep validation, so
+        # here we only filter, never error).
+        if self.namespace_filter:
+            namespace_services = {k: v for k, v in namespace_services.items() if k in self.namespace_filter}
+            messages.append(f"Namespace filter active: {sorted(self.namespace_filter)}")
+
         modules: List[HelmModuleTarget] = []
         for ns_name, ns_service in namespace_services.items():
             if not ns_service.is_validated() or not ns_service.model:

@@ -142,6 +142,62 @@ class TestHelmDeployerValidateEnvironment:
 
 
 # ---------------------------------------------------------------------------
+# validate_workspace — namespace_filter (CLI --namespace / stage.helm_namespaces)
+# ---------------------------------------------------------------------------
+
+
+class TestHelmDeployerValidateWorkspaceNamespaceFilter:
+    """namespace_filter (set post-construction by BaseDeployCommand._create_deployer)
+    must scope which namespaces validate_workspace() considers — filtered-out
+    namespaces should never even be inspected (is_validated() not called)."""
+
+    def _ns_service(self, validated: bool = False):
+        ns_service = MagicMock()
+        ns_service.is_validated.return_value = validated
+        return ns_service
+
+    def test_no_filter_considers_every_namespace(self):
+        d = _make_deployer()
+        ns_prod = self._ns_service()
+        ns_staging = self._ns_service()
+        d.deployment_service.get_namespace_services.return_value = {"prod": ns_prod, "staging": ns_staging}
+        assert d.namespace_filter is None
+
+        ok, messages = d.validate_workspace()
+
+        assert ok is True
+        ns_prod.is_validated.assert_called_once()
+        ns_staging.is_validated.assert_called_once()
+        assert not any("Namespace filter active" in m for m in messages)
+
+    def test_filter_excludes_non_matching_namespaces(self):
+        d = _make_deployer()
+        ns_prod = self._ns_service()
+        ns_staging = self._ns_service()
+        d.deployment_service.get_namespace_services.return_value = {"prod": ns_prod, "staging": ns_staging}
+        d.namespace_filter = ["prod"]
+
+        ok, messages = d.validate_workspace()
+
+        assert ok is True
+        ns_prod.is_validated.assert_called_once()
+        ns_staging.is_validated.assert_not_called()
+        assert any("Namespace filter active" in m for m in messages)
+
+    def test_empty_filter_list_is_treated_as_no_filter(self):
+        d = _make_deployer()
+        ns_prod = self._ns_service()
+        d.deployment_service.get_namespace_services.return_value = {"prod": ns_prod}
+        d.namespace_filter = []
+
+        ok, messages = d.validate_workspace()
+
+        assert ok is True
+        ns_prod.is_validated.assert_called_once()
+        assert not any("Namespace filter active" in m for m in messages)
+
+
+# ---------------------------------------------------------------------------
 # Steps require init (_helm must be set)
 # ---------------------------------------------------------------------------
 
