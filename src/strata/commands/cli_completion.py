@@ -77,7 +77,7 @@ def _completion_source(shell: str) -> str:
     module load time — ``cli.py`` imports this module, so importing ``strata.cli``
     here must only happen at *call* time (after ``cli.py`` is fully loaded).
     """
-    from click.shell_completion import BashComplete, FishComplete, ZshComplete
+    from click.shell_completion import BashComplete, FishComplete, ShellComplete, ZshComplete
 
     from strata.cli import main as _main  # deferred — see docstring
 
@@ -87,6 +87,11 @@ def _completion_source(shell: str) -> str:
         "fish": FishComplete,
     }
 
+    # Explicit annotation: without it, mypy infers cls's type from whichever
+    # assignment it sees first (here, the "powershell" branch's
+    # type[PowerShellComplete]), then rejects the other branch's
+    # type[ShellComplete] assignment as incompatible.
+    cls: type[ShellComplete]
     if shell == "powershell":
         try:
             from click.shell_completion import PowerShellComplete  # type: ignore[attr-defined]  # Click ≥ 8.1
