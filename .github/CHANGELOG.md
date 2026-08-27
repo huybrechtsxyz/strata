@@ -8,6 +8,12 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Added
+
+- **`strata deploy run --namespace NAME` (repeatable) scopes the helm provisioner to specific namespace(s) for a single run** — the helm provisioner previously loaded every namespace declared in the workspace on every run, with no way to test/deploy a subset without editing the workspace YAML. New declarative `stages[].helm_namespaces` allowlist (same shape as the existing `secrets` allowlist) sets a persistent default; the CLI flag overrides it per-run. Omit both for no filtering (deploy all — default, non-breaking). Unrelated to the existing `namespace` (singular) field, which scopes sync provisioners (argocd/flux) instead — see [deployment.md](../docs/config/deployment.md#namespace-vs-helm_namespaces--kubernetes-namespace-scoping).
+
+## [1.8.3] - 2026-08-27
+
 ### Fixed
 
 - **`strata deploy run` always failed with `ServiceNotValidatedError: Service 'EnvironmentService' must be validated before use` (regression since v1.7.0)** — `RunDeployCommand` had a stale no-op `_load_related_services()` override (`return True`, loading nothing) left over from before that method became an overridable hook for lightweight, environment-only commands (`deploy show`, `values get`/`list`/`resolve`). Once the base class started calling that hook instead of loading services directly, `deploy run`'s override silently skipped the entire workspace + environment load — `strata validate --deep` and `strata build run` on the same file both succeeded, masking the bug until `deploy run` crashed immediately on every invocation. Removed the incorrect override so `deploy run` inherits the base class's real, full-load implementation, matching its pre-v1.7.0 behavior.
