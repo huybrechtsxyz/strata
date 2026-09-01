@@ -97,6 +97,15 @@ def _sanitize_repo_name(url: str) -> str:
 
 
 _TOKEN_RE = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$")
+# Deliberately NOT `{{ VAR_NAME }}` (Jinja2/Go-template shape): `{{ }}` is already
+# Helm's own delimiter (Go templates + Sprig, and the `tpl` function lets chart
+# authors put literal `{{ ... }}` expressions directly inside values.yaml for the
+# chart itself to render later). Off-the-shelf/registry charts may already contain
+# such literal `{{ }}` text in their default values — reusing that shape here would
+# be ambiguous between "strata should substitute this" and "the chart authors put
+# this here for Helm to template-render". `${VAR_NAME}` has zero overlap with Go
+# template syntax, so it stays unambiguous regardless of what a third-party chart's
+# values.yaml already contains.
 
 
 def _find_env_tokens(values_doc: Dict[str, Any]) -> List[Tuple[str, str]]:
