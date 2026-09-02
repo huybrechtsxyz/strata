@@ -1612,6 +1612,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#config-py"><code class="docutils literal notranslate"><span class="pre">config.py</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#system-py"><code class="docutils literal notranslate"><span class="pre">system.py</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#configuration-loader-py"><code class="docutils literal notranslate"><span class="pre">configuration_loader.py</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#dict-merge-py"><code class="docutils literal notranslate"><span class="pre">dict_merge.py</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#service-cache-py"><code class="docutils literal notranslate"><span class="pre">service_cache.py</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#templater-py"><code class="docutils literal notranslate"><span class="pre">templater.py</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ansible-utils-py"><code class="docutils literal notranslate"><span class="pre">ansible_utils.py</span></code></a></li>
@@ -3512,6 +3513,20 @@
 <span class="n">loader</span> <span class="o">=</span> <span class="n">ConfigurationLoader</span><span class="p">()</span>
 <span class="n">config</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_yaml_file</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">"config/logging.yaml"</span><span class="p">))</span>
 <span class="n">merged</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">apply_overrides</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="p">{</span><span class="s2">"level"</span><span class="p">:</span> <span class="s2">"DEBUG"</span><span class="p">})</span>
+</pre></div>
+</div>
+</section>
+<section id="dict-merge-py">
+<h2><code class="docutils literal notranslate"><span class="pre">dict_merge.py</span></code><a class="headerlink" href="#dict-merge-py" title="Link to this heading"></a></h2>
+<p>Standalone recursive dict-merge function shared by services/builders that need
+deep-merge semantics but don’t otherwise depend on <code class="docutils literal notranslate"><span class="pre">ConfigurationLoader</span></code> (e.g.
+<code class="docutils literal notranslate"><span class="pre">EnvironmentService.merge_envfiles()</span></code> and <code class="docutils literal notranslate"><span class="pre">TerraformBuilder._resolve_merged_properties()</span></code>).
+Nested dicts are merged key-by-key; any other conflicting value (scalar, list,
+or mismatched type) is replaced wholesale by the override.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">strata.utils.dict_merge</span><span class="w"> </span><span class="kn">import</span> <span class="n">deep_merge</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="n">deep_merge</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"x"</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"y"</span><span class="p">:</span> <span class="mi">2</span><span class="p">}},</span> <span class="p">{</span><span class="s2">"a"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"y"</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span> <span class="s2">"z"</span><span class="p">:</span> <span class="mi">4</span><span class="p">}})</span>
+<span class="c1"># {"a": {"x": 1, "y": 3, "z": 4}}</span>
 </pre></div>
 </div>
 </section>
