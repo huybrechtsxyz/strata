@@ -1635,11 +1635,13 @@
 <li class="toctree-l2"><a class="reference internal" href="#providers">Providers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#topologies">Topologies</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#layering-artifact-path-hierarchies">Layering — Artifact Path Hierarchies</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#layering-schemes">Layering Schemes</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#layer-definition">Layer Definition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#declaring-a-hierarchy-spec-paths-with-resolves-layers">Declaring a hierarchy — <code class="docutils literal notranslate"><span class="pre">spec.paths</span></code> with <code class="docutils literal notranslate"><span class="pre">resolves:</span> <span class="pre">layers</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#segment-definition">Segment Definition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#declaring-values-deployment-spec-layers">Declaring values — <code class="docutils literal notranslate"><span class="pre">deployment.spec.layers</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#resolution-order">Resolution Order</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#artifact-path-resolution">Artifact Path Resolution</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#migration-from-layering-to-layerings">Migration from <code class="docutils literal notranslate"><span class="pre">layering</span></code> to <code class="docutils literal notranslate"><span class="pre">layerings</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#mutual-exclusion">Mutual Exclusion</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#validate-rules-check-the-resolved-value"><code class="docutils literal notranslate"><span class="pre">validate:</span></code> rules check the resolved value</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#migration-from-layering-layerings">Migration from <code class="docutils literal notranslate"><span class="pre">layering</span></code>/<code class="docutils literal notranslate"><span class="pre">layerings</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#example">Example</a></li>
@@ -1649,6 +1651,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#validation">Validation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#path-convention-policy">Path Convention Policy</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#declaring-conventions">Declaring conventions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#custom-tenant-file-location">Custom tenant file location</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#enforcement-policy">Enforcement policy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#inline-convention-deploy-repo-mode">Inline convention (deploy-repo mode)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#validation-rule-types">Validation rule types</a></li>
@@ -1732,6 +1735,7 @@
 <li class="toctree-l2"><a class="reference internal" href="deployment.html#stages">Stages</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="deployment.html#provisioner-vs-topology"><code class="docutils literal notranslate"><span class="pre">provisioner</span></code> vs <code class="docutils literal notranslate"><span class="pre">topology</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="deployment.html#scope-stage-filtering"><code class="docutils literal notranslate"><span class="pre">scope</span></code> — stage filtering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment.html#namespace-vs-helm-namespaces-kubernetes-namespace-scoping"><code class="docutils literal notranslate"><span class="pre">namespace</span></code> vs <code class="docutils literal notranslate"><span class="pre">helm_namespaces</span></code> — Kubernetes namespace scoping</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="deployment.html#cross-stage-outputs">Cross-Stage Outputs</a><ul>
@@ -3519,56 +3523,50 @@
 <section id="layering-artifact-path-hierarchies">
 <h2>Layering — Artifact Path Hierarchies<a class="headerlink" href="#layering-artifact-path-hierarchies" title="Link to this heading"></a></h2>
 <p>Define how deployment artifacts are organized into a hierarchical path structure. Use layering when different deployment files need to be placed into different directories during the build process.</p>
-<section id="layering-schemes">
-<h3>Layering Schemes<a class="headerlink" href="#layering-schemes" title="Link to this heading"></a></h3>
-<p>Two formats are supported:</p>
-<p><strong>Single-scheme layering</strong> (<code class="docutils literal notranslate"><span class="pre">spec.layering</span></code> — deprecated, for backward compatibility):</p>
+<blockquote>
+<div><p><strong>Changed in ADR-0072 (breaking).</strong> <code class="docutils literal notranslate"><span class="pre">spec.layering</span></code> and <code class="docutils literal notranslate"><span class="pre">spec.layerings</span></code> were removed and merged into <code class="docutils literal notranslate"><span class="pre">spec.paths</span></code> — the same mechanism that validates repository layout. One convention now declares a hierarchy family once (segment names, order, per-segment constraints), and a deployment’s values are resolved from its own <code class="docutils literal notranslate"><span class="pre">spec.layers</span></code> <strong>and</strong>, as a fallback, from the deployment file’s own location. See <a class="reference internal" href="#migration-from-layering-layerings">Migration from <code class="docutils literal notranslate"><span class="pre">layering</span></code>/<code class="docutils literal notranslate"><span class="pre">layerings</span></code></a> below.</p>
+</div></blockquote>
+<section id="declaring-a-hierarchy-spec-paths-with-resolves-layers">
+<h3>Declaring a hierarchy — <code class="docutils literal notranslate"><span class="pre">spec.paths</span></code> with <code class="docutils literal notranslate"><span class="pre">resolves:</span> <span class="pre">layers</span></code><a class="headerlink" href="#declaring-a-hierarchy-spec-paths-with-resolves-layers" title="Link to this heading"></a></h3>
+<p>A path convention that declares <code class="docutils literal notranslate"><span class="pre">resolves:</span> <span class="pre">layers</span></code> does double duty: it validates repository layout (as any <code class="docutils literal notranslate"><span class="pre">spec.paths</span></code> entry does) <em>and</em> drives artifact-path construction.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">layering</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zone</span>
-<span class="w">      </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer</span>
-<span class="w">      </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
-<span class="w">      </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-<span class="w">      </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dev</span>
-</pre></div>
-</div>
-<p>This creates a single layer scheme applied to all deployments. The artifact path is constructed by combining values from each layer in order, separated by <code class="docutils literal notranslate"><span class="pre">/</span></code>. For example, <code class="docutils literal notranslate"><span class="pre">zone:</span> <span class="pre">europe</span></code>, <code class="docutils literal notranslate"><span class="pre">customer:</span> <span class="pre">contoso</span></code>, <code class="docutils literal notranslate"><span class="pre">environment:</span> <span class="pre">prd</span></code> produces artifact path <code class="docutils literal notranslate"><span class="pre">europe/contoso/prd</span></code>.</p>
-<p><strong>Multi-scheme layering</strong> (<code class="docutils literal notranslate"><span class="pre">spec.layerings</span></code> — recommended):</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">layerings</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">paths</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zone-tenant</span>
-<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zones/**</span>
-<span class="w">      </span><span class="nt">layers</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="s">"zones/**"</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"zones/{zone}/customers/{customer}/{environment}"</span>
+<span class="w">      </span><span class="nt">resolves</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">layers</span>
+<span class="w">      </span><span class="nt">segments</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zone</span>
-<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">          </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^[a-z][a-z0-9-]*$"</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer</span>
-<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">          </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^[a-z][a-z0-9]{4}$"</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
-<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">          </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"^[a-z0-9]{1,4}$"</span>
 <span class="w">          </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dev</span>
 
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">landscape-ring</span>
-<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">landscape/**</span>
-<span class="w">      </span><span class="nt">layers</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="s">"landscape/**"</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"landscape/{landscape}/{ring}"</span>
+<span class="w">      </span><span class="nt">resolves</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">layers</span>
+<span class="w">      </span><span class="nt">segments</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">landscape</span>
-<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ring</span>
-<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </pre></div>
 </div>
-<p>This declares multiple layer schemes. Each scheme has:</p>
+<p>Each convention has:</p>
 <ul class="simple">
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">name</span></code></strong>: Identifier for the scheme</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">scope</span></code></strong>: Glob pattern matching deployment file paths (e.g., <code class="docutils literal notranslate"><span class="pre">zones/**</span></code>, <code class="docutils literal notranslate"><span class="pre">landscape/**</span></code>, <code class="docutils literal notranslate"><span class="pre">**</span></code>)</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">layers</span></code></strong>: Ordered list of layer definitions</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">name</span></code></strong> — identifier, referenced by <code class="docutils literal notranslate"><span class="pre">deployment.spec.layers.follows</span></code></p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">scope</span></code></strong> — <code class="docutils literal notranslate"><span class="pre">fnmatch</span></code> glob pre-filter on the file’s path relative to the workspace root</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">pattern</span></code></strong> — segment-aware path template; each <code class="docutils literal notranslate"><span class="pre">{segment}</span></code> captures exactly one path part</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">resolves:</span> <span class="pre">layers</span></code></strong> — opts this convention into layer resolution</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">segments</span></code></strong> — ordered segment definitions (this is the artifact-path order)</p></li>
 </ul>
-<p>During deployment validation, the deployment file’s path is matched against schemes in order. The first matching scope wins, and that scheme’s layers are used to resolve the artifact path.</p>
+<p><strong>One convention per hierarchy family, not per depth.</strong> Use the family’s <em>deepest</em> legitimate shape as the pattern; shallower deployments in the same family are handled on the deploy side. Give each family a <strong>distinguishing literal prefix segment</strong> (<code class="docutils literal notranslate"><span class="pre">zones/</span></code>, <code class="docutils literal notranslate"><span class="pre">landscape/</span></code>) so two families can never both match the same file — an ambiguous match is a hard validation error, not a silent pick.</p>
+<p><strong>Literal-only patterns are valid.</strong> If a stack encodes nothing in its paths and declares every value explicitly, use a pattern with no <code class="docutils literal notranslate"><span class="pre">{captures}</span></code> at all (e.g. <code class="docutils literal notranslate"><span class="pre">scope:</span> <span class="pre">&quot;deploy/**&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">pattern:</span> <span class="pre">&quot;deploy&quot;</span></code>). Nothing is derived, and explicit values are the only source.</p>
 </section>
-<section id="layer-definition">
-<h3>Layer Definition<a class="headerlink" href="#layer-definition" title="Link to this heading"></a></h3>
-<p>Each layer entry has:</p>
+<section id="segment-definition">
+<h3>Segment Definition<a class="headerlink" href="#segment-definition" title="Link to this heading"></a></h3>
+<p>Each <code class="docutils literal notranslate"><span class="pre">segments</span></code> entry has:</p>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Field</p></th>
@@ -3581,58 +3579,90 @@
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">str</span></code></p></td>
 <td><p>—</p></td>
-<td><p>Layer name (e.g., <code class="docutils literal notranslate"><span class="pre">zone</span></code>, <code class="docutils literal notranslate"><span class="pre">customer</span></code>, <code class="docutils literal notranslate"><span class="pre">ring</span></code>, <code class="docutils literal notranslate"><span class="pre">landscape</span></code>)</p></td>
+<td><p>Segment name (e.g., <code class="docutils literal notranslate"><span class="pre">zone</span></code>, <code class="docutils literal notranslate"><span class="pre">customer</span></code>, <code class="docutils literal notranslate"><span class="pre">ring</span></code>, <code class="docutils literal notranslate"><span class="pre">landscape</span></code>)</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">required</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">bool</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">true</span></code></p></td>
-<td><p>Whether the deployment must provide a value for this layer</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">default</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">description</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">str</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">null</span></code></p></td>
-<td><p>Default value if no value is provided (only if <code class="docutils literal notranslate"><span class="pre">required:</span> <span class="pre">false</span></code>)</p></td>
+<td><p>Human-readable description</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">pattern</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">str</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">null</span></code></p></td>
+<td><p>Regex validating any value that <em>does</em> get supplied, however it was supplied</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">default</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">str</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">null</span></code></p></td>
+<td><p>Value used when neither explicitly declared nor derivable from the path</p></td>
 </tr>
 </tbody>
 </table>
-<p><strong>Important:</strong> Layer names are arbitrary and must be unique within a scheme. The layer named <code class="docutils literal notranslate"><span class="pre">environment</span></code> no longer has special meaning — any valid layer can be the last layer in the hierarchy.</p>
+<blockquote>
+<div><p>There is no <code class="docutils literal notranslate"><span class="pre">required</span></code> field. A segment that resolves to nothing is <strong>not applicable</strong> to that deployment — not an error. Different deployments in the same family legitimately have different real depths (a shared-infra deployment genuinely has no customer or environment).</p>
+</div></blockquote>
+<p><strong>Important:</strong> Segment names are arbitrary and must be unique within a convention. The segment named <code class="docutils literal notranslate"><span class="pre">environment</span></code> has no special meaning.</p>
+</section>
+<section id="declaring-values-deployment-spec-layers">
+<h3>Declaring values — <code class="docutils literal notranslate"><span class="pre">deployment.spec.layers</span></code><a class="headerlink" href="#declaring-values-deployment-spec-layers" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># Values derived entirely from this file's own path</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">layers</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">follows</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zone-tenant</span>
+
+<span class="c1"># Explicit values (shared infra — deeper segments simply don't apply)</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">layers</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">follows</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zone-tenant</span>
+<span class="w">    </span><span class="nt">segments</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">zone</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">europe</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">follows</span></code></strong> — names the convention to use. If omitted, the convention is auto-detected by matching this file’s path against every <code class="docutils literal notranslate"><span class="pre">resolves:</span> <span class="pre">layers</span></code> convention’s <code class="docutils literal notranslate"><span class="pre">scope</span></code> + <code class="docutils literal notranslate"><span class="pre">pattern</span></code>.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">segments</span></code></strong> — explicit per-segment values. Not all-or-nothing; any name omitted here falls back to path-derivation, then <code class="docutils literal notranslate"><span class="pre">default</span></code>.</p></li>
+</ul>
+</section>
+<section id="resolution-order">
+<h3>Resolution Order<a class="headerlink" href="#resolution-order" title="Link to this heading"></a></h3>
+<p><strong>Level 1 — which convention applies:</strong></p>
+<ol class="arabic simple">
+<li><p><strong>Explicit</strong> — <code class="docutils literal notranslate"><span class="pre">spec.layers.follows</span></code> names a convention → use it. Error if the name doesn’t exist or doesn’t declare <code class="docutils literal notranslate"><span class="pre">resolves:</span> <span class="pre">layers</span></code>.</p></li>
+<li><p><strong>Auto-detected</strong> — no <code class="docutils literal notranslate"><span class="pre">follows</span></code> → match the file’s path against every <code class="docutils literal notranslate"><span class="pre">resolves:</span> <span class="pre">layers</span></code> convention. More than one match is a hard validation error naming both conventions.</p></li>
+<li><p><strong>None</strong> — no convention applies → <code class="docutils literal notranslate"><span class="pre">spec.layers.segments</span></code> is unvalidated free-form data.</p></li>
+</ol>
+<p><strong>Level 2 — each segment’s value:</strong></p>
+<ol class="arabic simple">
+<li><p><strong>Explicit</strong> — <code class="docutils literal notranslate"><span class="pre">spec.layers.segments.&lt;name&gt;</span></code> is set → always wins.</p></li>
+<li><p><strong>Derived</strong> — the file’s path reaches <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;</span></code>’s position in the pattern → use the captured value.</p></li>
+<li><p><strong>Default</strong> — the segment declares <code class="docutils literal notranslate"><span class="pre">default</span></code> → use it.</p></li>
+<li><p><strong>Not applicable</strong> — none of the above → omitted; not an error.</p></li>
+</ol>
 </section>
 <section id="artifact-path-resolution">
 <h3>Artifact Path Resolution<a class="headerlink" href="#artifact-path-resolution" title="Link to this heading"></a></h3>
-<p>When a deployment references a configuration file with layering:</p>
-<ol class="arabic simple">
-<li><p><strong>Scope matching</strong>: The deployment file’s relative path (from workspace root) is matched against all scheme scopes in order using glob pattern matching</p></li>
-<li><p><strong>First match wins</strong>: The first scheme whose scope matches the file path is selected</p></li>
-<li><p><strong>Value resolution</strong>: Layer values are extracted from the deployment’s <code class="docutils literal notranslate"><span class="pre">properties</span></code> field or use defaults</p></li>
-<li><p><strong>Path construction</strong>: The artifact path is built as <code class="docutils literal notranslate"><span class="pre">layer1_value/layer2_value/.../layerN_value</span></code></p></li>
-</ol>
-<p><strong>Example matching:</strong></p>
+<p>The artifact path is the join of however many segments actually resolved, in the convention’s declared <code class="docutils literal notranslate"><span class="pre">segments</span></code> order, <strong>stopping at the first segment that didn’t resolve</strong>. It reflects actual depth, not the family’s maximal shape.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Deployment files:
-├── zones/europe/contoso/prd/deploy.yaml    ← matches scope: zones/**
-├── landscape/platform/ring2/deploy.yaml    ← matches scope: landscape/**
-└── shared/base.yaml                        ← no match; layering not applied
+├── zones/europe/customers/contoso/prd/deploy.yaml  → zone-tenant → europe/contoso/prd
+├── zones/europe/shared.yaml (segments: {zone: europe}) → zone-tenant → europe
+├── landscape/platform/ring2/deploy.yaml            → landscape-ring → platform/ring2
+└── shared/base.yaml                                → no match; layering not applied
 </pre></div>
 </div>
+<p>Both <code class="docutils literal notranslate"><span class="pre">zones/</span></code> deployments follow the <em>same</em> convention — the shared-infra one simply resolves one segment instead of three.</p>
 </section>
-<section id="migration-from-layering-to-layerings">
-<h3>Migration from <code class="docutils literal notranslate"><span class="pre">layering</span></code> to <code class="docutils literal notranslate"><span class="pre">layerings</span></code><a class="headerlink" href="#migration-from-layering-to-layerings" title="Link to this heading"></a></h3>
-<p>If you’re using the deprecated single-scheme <code class="docutils literal notranslate"><span class="pre">layering</span></code> format, migrate as follows:</p>
+<section id="validate-rules-check-the-resolved-value">
+<h3><code class="docutils literal notranslate"><span class="pre">validate:</span></code> rules check the resolved value<a class="headerlink" href="#validate-rules-check-the-resolved-value" title="Link to this heading"></a></h3>
+<p>A convention’s <code class="docutils literal notranslate"><span class="pre">validate:</span></code> rules (membership against <code class="docutils literal notranslate"><span class="pre">spec.&lt;field&gt;[*].&lt;attr&gt;</span></code>, or a file-existence template) are applied to the <strong>resolved</strong> value for each segment — the Level 1 + Level 2 outcome — not just the raw path capture. Explicitly-declared values and shallower deployments are checked exactly like path-derived ones.</p>
+</section>
+<section id="migration-from-layering-layerings">
+<h3>Migration from <code class="docutils literal notranslate"><span class="pre">layering</span></code>/<code class="docutils literal notranslate"><span class="pre">layerings</span></code><a class="headerlink" href="#migration-from-layering-layerings" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">spec.layering</span></code> and <code class="docutils literal notranslate"><span class="pre">spec.layerings</span></code> were <strong>removed</strong> with no backward-compatible fallback. Because every strata model uses <code class="docutils literal notranslate"><span class="pre">extra:</span> <span class="pre">forbid</span></code>, an unmigrated configuration fails validation immediately with an “unknown field” error naming the removed field — a loud failure, never a silent behavior change.</p>
 <p><strong>Before:</strong></p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">layering</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zone</span>
-<span class="w">      </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer</span>
-<span class="w">      </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
-<span class="w">      </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dev</span>
-</pre></div>
-</div>
-<p><strong>After:</strong></p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">layerings</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
-<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="s">"**"</span><span class="w">  </span><span class="c1"># Matches all deployment files</span>
+<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="s">"zones/**"</span>
 <span class="w">      </span><span class="nt">layers</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zone</span>
 <span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
@@ -3642,18 +3672,47 @@
 <span class="w">          </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dev</span>
 </pre></div>
 </div>
-<p>Wrap your existing <code class="docutils literal notranslate"><span class="pre">layering</span></code> list in a single <code class="docutils literal notranslate"><span class="pre">ScopedLayeringModel</span></code> with <code class="docutils literal notranslate"><span class="pre">scope:</span> <span class="pre">&quot;**&quot;</span></code> (catch-all). The <code class="docutils literal notranslate"><span class="pre">&quot;**&quot;</span></code> scope matches all files, so all deployments use that scheme — equivalent to the old single-scheme behavior.</p>
-</section>
-<section id="mutual-exclusion">
-<h3>Mutual Exclusion<a class="headerlink" href="#mutual-exclusion" title="Link to this heading"></a></h3>
-<p>A configuration cannot have both <code class="docutils literal notranslate"><span class="pre">spec.layering</span></code> and <code class="docutils literal notranslate"><span class="pre">spec.layerings</span></code> defined. The system enforces this with a validation error:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># ✗ INVALID — both formats present</span>
-<span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">layering</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">...</span><span class="p p-Indicator">]</span>
-<span class="w">  </span><span class="nt">layerings</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">...</span><span class="p p-Indicator">]</span>
+<p><strong>After:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">paths</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="s">"zones/**"</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"zones/{zone}/customers/{customer}/{environment}"</span>
+<span class="w">      </span><span class="nt">resolves</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">layers</span>
+<span class="w">      </span><span class="nt">segments</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zone</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
+<span class="w">          </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dev</span>
 </pre></div>
 </div>
-<p>Choose one format and remove the other.</p>
+<p>Changes to make:</p>
+<ol class="arabic simple">
+<li><p>Move the entry from <code class="docutils literal notranslate"><span class="pre">spec.layerings</span></code> (or <code class="docutils literal notranslate"><span class="pre">spec.layering</span></code>) to <code class="docutils literal notranslate"><span class="pre">spec.paths</span></code>.</p></li>
+<li><p>Rename <code class="docutils literal notranslate"><span class="pre">layers:</span></code> to <code class="docutils literal notranslate"><span class="pre">segments:</span></code> and add <code class="docutils literal notranslate"><span class="pre">resolves:</span> <span class="pre">layers</span></code>.</p></li>
+<li><p>Add a <code class="docutils literal notranslate"><span class="pre">pattern:</span></code> describing the on-disk layout. If nothing is encoded in the path, use a <strong>literal-only</strong> pattern (no <code class="docutils literal notranslate"><span class="pre">{captures}</span></code>) so nothing is derived.</p></li>
+<li><p>Drop every <code class="docutils literal notranslate"><span class="pre">required:</span></code> field — it no longer exists (“not applicable” replaces it).</p></li>
+<li><p>On each deployment, nest the old flat <code class="docutils literal notranslate"><span class="pre">spec.layers</span></code> dict under <code class="docutils literal notranslate"><span class="pre">segments:</span></code>, and optionally add <code class="docutils literal notranslate"><span class="pre">follows:</span></code>.</p></li>
+</ol>
+<p><strong>Deployment side, before and after:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># Before</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">layers</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">zone</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">europe</span>
+<span class="w">    </span><span class="nt">customer</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">contoso</span>
+
+<span class="c1"># After</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">layers</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">follows</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<span class="w">    </span><span class="nt">segments</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">zone</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">europe</span>
+<span class="w">      </span><span class="nt">customer</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">contoso</span>
+</pre></div>
+</div>
+<blockquote>
+<div><p><strong>Note on <code class="docutils literal notranslate"><span class="pre">scope</span></code> wildcards.</strong> <code class="docutils literal notranslate"><span class="pre">scope</span></code> is matched with <code class="docutils literal notranslate"><span class="pre">fnmatch</span></code>, where <code class="docutils literal notranslate"><span class="pre">*</span></code> already crosses <code class="docutils literal notranslate"><span class="pre">/</span></code>. <code class="docutils literal notranslate"><span class="pre">&quot;zones/**&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;zones/*&quot;</span></code> compile to the identical regex — <code class="docutils literal notranslate"><span class="pre">**</span></code> is not a stronger “any depth” wildcard the way it is in gitignore or <code class="docutils literal notranslate"><span class="pre">pathlib.rglob</span></code>. Depth precision comes from <code class="docutils literal notranslate"><span class="pre">pattern</span></code> (which is genuinely segment-aware), not from <code class="docutils literal notranslate"><span class="pre">scope</span></code>.</p>
+</div></blockquote>
 </section>
 </section>
 <section id="example">
@@ -3680,27 +3739,26 @@
 <span class="w">          </span><span class="nt">max_count</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">worker</span>
 <span class="w">          </span><span class="nt">min_count</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
-<span class="w">  </span><span class="nt">layerings</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">paths</span><span class="p">:</span>
 <span class="w">    </span><span class="c1"># Multi-tenant deployments with region isolation</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">regional-tenant</span>
-<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zones/**</span>
-<span class="w">      </span><span class="nt">layers</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="s">"zones/**"</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"zones/{zone}/customers/{customer}/{environment}"</span>
+<span class="w">      </span><span class="nt">resolves</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">layers</span>
+<span class="w">      </span><span class="nt">segments</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zone</span>
-<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer</span>
-<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
-<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 <span class="w">          </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dev</span>
 
 <span class="w">    </span><span class="c1"># Ring-based deployments (canary → production)</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ring-promotion</span>
-<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">landscape/**</span>
-<span class="w">      </span><span class="nt">layers</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="s">"landscape/**"</span>
+<span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"landscape/{landscape}/{ring}"</span>
+<span class="w">      </span><span class="nt">resolves</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">layers</span>
+<span class="w">      </span><span class="nt">segments</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">landscape</span>
-<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ring</span>
-<span class="w">          </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </pre></div>
 </div>
 </section>
@@ -3840,7 +3898,10 @@ enforces these at validation time.</p>
 <span class="w">        </span><span class="nt">landscape</span><span class="p">:</span><span class="w"> </span><span class="s">"landscape/{landscape}/landscape.yaml"</span>
 </pre></div>
 </div>
-<p><strong>Custom tenant file location:</strong> A convention can declare <code class="docutils literal notranslate"><span class="pre">resolves:</span> <span class="pre">tenant</span></code> to override the default <code class="docutils literal notranslate"><span class="pre">tenants/{code}.yaml</span></code> location. The pattern must include a <code class="docutils literal notranslate"><span class="pre">{code}</span></code> segment (tenant code substitutes into it). At most one convention per configuration may declare <code class="docutils literal notranslate"><span class="pre">resolves:</span> <span class="pre">tenant</span></code>. For example:</p>
+</section>
+<section id="custom-tenant-file-location">
+<h3>Custom tenant file location<a class="headerlink" href="#custom-tenant-file-location" title="Link to this heading"></a></h3>
+<p>A convention can declare <code class="docutils literal notranslate"><span class="pre">resolves:</span> <span class="pre">tenant</span></code> to override the default <code class="docutils literal notranslate"><span class="pre">tenants/{code}.yaml</span></code> location. The pattern must include a <code class="docutils literal notranslate"><span class="pre">{code}</span></code> segment (tenant code substitutes into it). At most one convention per configuration may declare <code class="docutils literal notranslate"><span class="pre">resolves:</span> <span class="pre">tenant</span></code>. For example:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">paths</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tenant-location</span>

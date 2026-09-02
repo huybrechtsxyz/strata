@@ -1635,11 +1635,13 @@
 <li class="toctree-l2"><a class="reference internal" href="config/configuration.html#providers">Providers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="config/configuration.html#topologies">Topologies</a></li>
 <li class="toctree-l2"><a class="reference internal" href="config/configuration.html#layering-artifact-path-hierarchies">Layering — Artifact Path Hierarchies</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="config/configuration.html#layering-schemes">Layering Schemes</a></li>
-<li class="toctree-l3"><a class="reference internal" href="config/configuration.html#layer-definition">Layer Definition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config/configuration.html#declaring-a-hierarchy-spec-paths-with-resolves-layers">Declaring a hierarchy — <code class="docutils literal notranslate"><span class="pre">spec.paths</span></code> with <code class="docutils literal notranslate"><span class="pre">resolves:</span> <span class="pre">layers</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="config/configuration.html#segment-definition">Segment Definition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config/configuration.html#declaring-values-deployment-spec-layers">Declaring values — <code class="docutils literal notranslate"><span class="pre">deployment.spec.layers</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="config/configuration.html#resolution-order">Resolution Order</a></li>
 <li class="toctree-l3"><a class="reference internal" href="config/configuration.html#artifact-path-resolution">Artifact Path Resolution</a></li>
-<li class="toctree-l3"><a class="reference internal" href="config/configuration.html#migration-from-layering-to-layerings">Migration from <code class="docutils literal notranslate"><span class="pre">layering</span></code> to <code class="docutils literal notranslate"><span class="pre">layerings</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="config/configuration.html#mutual-exclusion">Mutual Exclusion</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config/configuration.html#validate-rules-check-the-resolved-value"><code class="docutils literal notranslate"><span class="pre">validate:</span></code> rules check the resolved value</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config/configuration.html#migration-from-layering-layerings">Migration from <code class="docutils literal notranslate"><span class="pre">layering</span></code>/<code class="docutils literal notranslate"><span class="pre">layerings</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="config/configuration.html#example">Example</a></li>
@@ -1649,6 +1651,7 @@
 <li class="toctree-l2"><a class="reference internal" href="config/configuration.html#validation">Validation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="config/configuration.html#path-convention-policy">Path Convention Policy</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="config/configuration.html#declaring-conventions">Declaring conventions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config/configuration.html#custom-tenant-file-location">Custom tenant file location</a></li>
 <li class="toctree-l3"><a class="reference internal" href="config/configuration.html#enforcement-policy">Enforcement policy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="config/configuration.html#inline-convention-deploy-repo-mode">Inline convention (deploy-repo mode)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="config/configuration.html#validation-rule-types">Validation rule types</a></li>
@@ -1732,6 +1735,7 @@
 <li class="toctree-l2"><a class="reference internal" href="config/deployment.html#stages">Stages</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="config/deployment.html#provisioner-vs-topology"><code class="docutils literal notranslate"><span class="pre">provisioner</span></code> vs <code class="docutils literal notranslate"><span class="pre">topology</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="config/deployment.html#scope-stage-filtering"><code class="docutils literal notranslate"><span class="pre">scope</span></code> — stage filtering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config/deployment.html#namespace-vs-helm-namespaces-kubernetes-namespace-scoping"><code class="docutils literal notranslate"><span class="pre">namespace</span></code> vs <code class="docutils literal notranslate"><span class="pre">helm_namespaces</span></code> — Kubernetes namespace scoping</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="config/deployment.html#cross-stage-outputs">Cross-Stage Outputs</a><ul>
@@ -3590,9 +3594,15 @@ Required on every document. Models use Pydantic’s <code class="docutils litera
 <section id="layer">
 <h3>Layer<a class="headerlink" href="#layer" title="Link to this heading"></a></h3>
 <p>A horizontal slice of deployment scope (e.g., <code class="docutils literal notranslate"><span class="pre">zone</span></code>, <code class="docutils literal notranslate"><span class="pre">tenant</span></code>, <code class="docutils literal notranslate"><span class="pre">application</span></code>).
-Defined in <code class="docutils literal notranslate"><span class="pre">configuration.spec.layering[]</span></code> with a <code class="docutils literal notranslate"><span class="pre">name</span></code> and optional <code class="docutils literal notranslate"><span class="pre">default</span></code>.
-Deployments declare which layers they support via <code class="docutils literal notranslate"><span class="pre">spec.layers:</span> <span class="pre">[layer1,</span> <span class="pre">layer2,</span> <span class="pre">...]</span></code>.
-Used for scope filtering in promotion strategies (ADR 0011).</p>
+Defined as a <strong>segment</strong> on a <code class="docutils literal notranslate"><span class="pre">configuration.spec.paths</span></code> convention declaring
+<code class="docutils literal notranslate"><span class="pre">resolves:</span> <span class="pre">layers</span></code> (ADR 0072), with a <code class="docutils literal notranslate"><span class="pre">name</span></code> and optional <code class="docutils literal notranslate"><span class="pre">pattern</span></code>/<code class="docutils literal notranslate"><span class="pre">default</span></code>.
+Deployments declare their values via <code class="docutils literal notranslate"><span class="pre">spec.layers.segments:</span> <span class="pre">{name:</span> <span class="pre">value}</span></code>; any value
+not declared explicitly is derived from the deployment file’s own location, then falls
+back to the segment’s <code class="docutils literal notranslate"><span class="pre">default</span></code>. Used for scope filtering in promotion strategies (ADR 0011).</p>
+<blockquote>
+<div><p>Superseded naming: <code class="docutils literal notranslate"><span class="pre">configuration.spec.layering[]</span></code> / <code class="docutils literal notranslate"><span class="pre">spec.layerings[]</span></code> were removed
+in ADR 0072 and merged into <code class="docutils literal notranslate"><span class="pre">spec.paths</span></code>.</p>
+</div></blockquote>
 </section>
 <section id="layering">
 <h3>Layering<a class="headerlink" href="#layering" title="Link to this heading"></a></h3>
@@ -3658,9 +3668,12 @@ a subset of environments within a ring. Together they control rollout granularit
 </section>
 <section id="scope">
 <h3>Scope<a class="headerlink" href="#scope" title="Link to this heading"></a></h3>
-<p>A layer name (from <code class="docutils literal notranslate"><span class="pre">configuration.spec.layering[]</span></code>) that determines which deployments
-participate in deployment waving. Deployments lacking the layer are excluded from scoped
-waves (all-at-once only).</p>
+<p>A segment name (from a <code class="docutils literal notranslate"><span class="pre">configuration.spec.paths</span></code> convention declaring <code class="docutils literal notranslate"><span class="pre">resolves:</span> <span class="pre">layers</span></code>)
+that determines which deployments participate in deployment waving. Matched against each
+deployment’s <strong>resolved</strong> segment values (explicit → path-derived → default), so a
+deployment that derives the value from its path participates just like one that declares
+it explicitly. Deployments for which the segment resolves to nothing are excluded from
+scoped waves (all-at-once only).</p>
 </section>
 <section id="gate">
 <h3>Gate<a class="headerlink" href="#gate" title="Link to this heading"></a></h3>

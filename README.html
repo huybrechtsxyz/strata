@@ -1635,11 +1635,13 @@
 <li class="toctree-l2"><a class="reference internal" href="config/configuration.html#providers">Providers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="config/configuration.html#topologies">Topologies</a></li>
 <li class="toctree-l2"><a class="reference internal" href="config/configuration.html#layering-artifact-path-hierarchies">Layering — Artifact Path Hierarchies</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="config/configuration.html#layering-schemes">Layering Schemes</a></li>
-<li class="toctree-l3"><a class="reference internal" href="config/configuration.html#layer-definition">Layer Definition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config/configuration.html#declaring-a-hierarchy-spec-paths-with-resolves-layers">Declaring a hierarchy — <code class="docutils literal notranslate"><span class="pre">spec.paths</span></code> with <code class="docutils literal notranslate"><span class="pre">resolves:</span> <span class="pre">layers</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="config/configuration.html#segment-definition">Segment Definition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config/configuration.html#declaring-values-deployment-spec-layers">Declaring values — <code class="docutils literal notranslate"><span class="pre">deployment.spec.layers</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="config/configuration.html#resolution-order">Resolution Order</a></li>
 <li class="toctree-l3"><a class="reference internal" href="config/configuration.html#artifact-path-resolution">Artifact Path Resolution</a></li>
-<li class="toctree-l3"><a class="reference internal" href="config/configuration.html#migration-from-layering-to-layerings">Migration from <code class="docutils literal notranslate"><span class="pre">layering</span></code> to <code class="docutils literal notranslate"><span class="pre">layerings</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="config/configuration.html#mutual-exclusion">Mutual Exclusion</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config/configuration.html#validate-rules-check-the-resolved-value"><code class="docutils literal notranslate"><span class="pre">validate:</span></code> rules check the resolved value</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config/configuration.html#migration-from-layering-layerings">Migration from <code class="docutils literal notranslate"><span class="pre">layering</span></code>/<code class="docutils literal notranslate"><span class="pre">layerings</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="config/configuration.html#example">Example</a></li>
@@ -1649,6 +1651,7 @@
 <li class="toctree-l2"><a class="reference internal" href="config/configuration.html#validation">Validation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="config/configuration.html#path-convention-policy">Path Convention Policy</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="config/configuration.html#declaring-conventions">Declaring conventions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config/configuration.html#custom-tenant-file-location">Custom tenant file location</a></li>
 <li class="toctree-l3"><a class="reference internal" href="config/configuration.html#enforcement-policy">Enforcement policy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="config/configuration.html#inline-convention-deploy-repo-mode">Inline convention (deploy-repo mode)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="config/configuration.html#validation-rule-types">Validation rule types</a></li>
@@ -1732,6 +1735,7 @@
 <li class="toctree-l2"><a class="reference internal" href="config/deployment.html#stages">Stages</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="config/deployment.html#provisioner-vs-topology"><code class="docutils literal notranslate"><span class="pre">provisioner</span></code> vs <code class="docutils literal notranslate"><span class="pre">topology</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="config/deployment.html#scope-stage-filtering"><code class="docutils literal notranslate"><span class="pre">scope</span></code> — stage filtering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config/deployment.html#namespace-vs-helm-namespaces-kubernetes-namespace-scoping"><code class="docutils literal notranslate"><span class="pre">namespace</span></code> vs <code class="docutils literal notranslate"><span class="pre">helm_namespaces</span></code> — Kubernetes namespace scoping</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="config/deployment.html#cross-stage-outputs">Cross-Stage Outputs</a><ul>

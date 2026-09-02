@@ -1635,11 +1635,13 @@
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#providers">Providers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#topologies">Topologies</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#layering-artifact-path-hierarchies">Layering — Artifact Path Hierarchies</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="configuration.html#layering-schemes">Layering Schemes</a></li>
-<li class="toctree-l3"><a class="reference internal" href="configuration.html#layer-definition">Layer Definition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#declaring-a-hierarchy-spec-paths-with-resolves-layers">Declaring a hierarchy — <code class="docutils literal notranslate"><span class="pre">spec.paths</span></code> with <code class="docutils literal notranslate"><span class="pre">resolves:</span> <span class="pre">layers</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#segment-definition">Segment Definition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#declaring-values-deployment-spec-layers">Declaring values — <code class="docutils literal notranslate"><span class="pre">deployment.spec.layers</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#resolution-order">Resolution Order</a></li>
 <li class="toctree-l3"><a class="reference internal" href="configuration.html#artifact-path-resolution">Artifact Path Resolution</a></li>
-<li class="toctree-l3"><a class="reference internal" href="configuration.html#migration-from-layering-to-layerings">Migration from <code class="docutils literal notranslate"><span class="pre">layering</span></code> to <code class="docutils literal notranslate"><span class="pre">layerings</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="configuration.html#mutual-exclusion">Mutual Exclusion</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#validate-rules-check-the-resolved-value"><code class="docutils literal notranslate"><span class="pre">validate:</span></code> rules check the resolved value</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#migration-from-layering-layerings">Migration from <code class="docutils literal notranslate"><span class="pre">layering</span></code>/<code class="docutils literal notranslate"><span class="pre">layerings</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#example">Example</a></li>
@@ -1649,6 +1651,7 @@
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#validation">Validation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#path-convention-policy">Path Convention Policy</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="configuration.html#declaring-conventions">Declaring conventions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#custom-tenant-file-location">Custom tenant file location</a></li>
 <li class="toctree-l3"><a class="reference internal" href="configuration.html#enforcement-policy">Enforcement policy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="configuration.html#inline-convention-deploy-repo-mode">Inline convention (deploy-repo mode)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="configuration.html#validation-rule-types">Validation rule types</a></li>
@@ -1732,6 +1735,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#stages">Stages</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#provisioner-vs-topology"><code class="docutils literal notranslate"><span class="pre">provisioner</span></code> vs <code class="docutils literal notranslate"><span class="pre">topology</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#scope-stage-filtering"><code class="docutils literal notranslate"><span class="pre">scope</span></code> — stage filtering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#namespace-vs-helm-namespaces-kubernetes-namespace-scoping"><code class="docutils literal notranslate"><span class="pre">namespace</span></code> vs <code class="docutils literal notranslate"><span class="pre">helm_namespaces</span></code> — Kubernetes namespace scoping</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#cross-stage-outputs">Cross-Stage Outputs</a><ul>
@@ -3505,7 +3509,10 @@
 <span class="w">  </span><span class="nt">partial</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">               </span><span class="c1"># Optional: reusable base fragment, not directly deployable</span>
 <span class="w">  </span><span class="nt">extends</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;@repo/path.yaml&gt;</span><span class="w">   </span><span class="c1"># Optional: inherit from another deployment file</span>
 <span class="w">  </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;tenant_code&gt;</span><span class="w">        </span><span class="c1"># Optional: tenant ownership reference</span>
-<span class="w">  </span><span class="nt">layers</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w">                   </span><span class="c1"># Optional: layer values</span>
+<span class="w">  </span><span class="nt">layers</span><span class="p">:</span><span class="w">                      </span><span class="c1"># Optional: hierarchy position (ADR-0072)</span>
+<span class="w">    </span><span class="nt">follows</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;convention_name&gt;</span><span class="w"> </span><span class="c1">#   Optional: names a configuration.spec.paths convention</span>
+<span class="w">    </span><span class="nt">segments</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w">               </span><span class="c1">#   Optional: explicit segment values; omitted names are</span>
+<span class="w">                               </span><span class="c1">#   derived from this file's own path, then the default</span>
 <span class="w">  </span><span class="nt">properties</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w">               </span><span class="c1"># Optional deployment metadata</span>
 <span class="w">  </span><span class="nt">custom</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w">                   </span><span class="c1"># Optional organizational metadata</span>
 <span class="w">  </span><span class="nt">workspace</span><span class="p">:</span><span class="w">                   </span><span class="c1"># Required for non-partial deployments</span>
@@ -3743,6 +3750,8 @@ deployments/
 <span class="w">    </span><span class="c1"># scope: infra        # Optional label for --scope CLI filtering (see deploy run --scope)</span>
 <span class="w">    </span><span class="nt">secrets</span><span class="p">:</span><span class="w">               </span><span class="c1"># Allowlist of secrets this stage may access (default-deny)</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hetzner_api_token</span>
+<span class="w">    </span><span class="c1"># helm_namespaces:      # helm-only allowlist (see "namespace vs helm_namespaces" below)</span>
+<span class="w">    </span><span class="c1">#   - immich</span>
 <span class="w">    </span><span class="nt">timeouts</span><span class="p">:</span><span class="w">              </span><span class="c1"># Per-step overrides (seconds)</span>
 <span class="w">      </span><span class="nt">setup</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">120</span>
 <span class="w">      </span><span class="nt">plan</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">600</span>
@@ -3778,6 +3787,51 @@ strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> 
 </pre></div>
 </div>
 <p>Stages without a <code class="docutils literal notranslate"><span class="pre">scope</span></code> field are skipped when <code class="docutils literal notranslate"><span class="pre">--scope</span></code> is set. This is intentional — unlabelled stages are treated as “always run” only when no filter is active.</p>
+</section>
+<section id="namespace-vs-helm-namespaces-kubernetes-namespace-scoping">
+<h3><code class="docutils literal notranslate"><span class="pre">namespace</span></code> vs <code class="docutils literal notranslate"><span class="pre">helm_namespaces</span></code> — Kubernetes namespace scoping<a class="headerlink" href="#namespace-vs-helm-namespaces-kubernetes-namespace-scoping" title="Link to this heading"></a></h3>
+<p>These two fields look similar but scope completely different provisioners at completely different times:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Shape</p></th>
+<th class="head"><p>Provisioner</p></th>
+<th class="head"><p>When applied</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">namespace</span></code></p></td>
+<td><p>single string</p></td>
+<td><p>sync (argocd/flux)</p></td>
+<td><p>Build time — scopes the rendered Jinja2 manifest to exactly one namespace, injected into the template context as <code class="docutils literal notranslate"><span class="pre">namespace</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">helm_namespaces</span></code></p></td>
+<td><p>list of strings</p></td>
+<td><p>helm</p></td>
+<td><p>Deploy time — default-deny allowlist; the helm provisioner otherwise loads <strong>every</strong> namespace declared in <code class="docutils literal notranslate"><span class="pre">workspace.spec.namespaces</span></code> on every run.</p></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">stages</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sync-argocd</span>
+<span class="w">    </span><span class="nt">backend</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">integration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">argocd</span>
+<span class="w">    </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">argocd</span><span class="w">            </span><span class="c1"># sync provisioner: exactly one namespace</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">apps</span>
+<span class="w">    </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">helm</span>
+<span class="w">    </span><span class="nt">helm_namespaces</span><span class="p">:</span><span class="w">             </span><span class="c1"># helm provisioner: allowlist (omit = deploy all)</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">immich</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">media</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">helm_namespaces</span></code> can be overridden per-run without editing the YAML:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--namespace<span class="w"> </span>immich<span class="w">              </span><span class="c1"># only immich</span>
+strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--namespace<span class="w"> </span>immich<span class="w"> </span>--namespace<span class="w"> </span>media<span class="w">  </span><span class="c1"># repeatable</span>
+strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w">                                 </span><span class="c1"># no filter — all namespaces (default)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">--namespace</span></code> on the CLI takes precedence over any stage’s declarative <code class="docutils literal notranslate"><span class="pre">helm_namespaces</span></code> list when supplied. An unknown namespace name (on the CLI or in <code class="docutils literal notranslate"><span class="pre">helm_namespaces</span></code>) is a hard validation error, listing the available namespace names from <code class="docutils literal notranslate"><span class="pre">workspace.spec.namespaces</span></code>.</p>
 </section>
 </section>
 <hr class="docutils" />

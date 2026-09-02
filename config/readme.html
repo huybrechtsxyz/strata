@@ -1635,11 +1635,13 @@
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#providers">Providers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#topologies">Topologies</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#layering-artifact-path-hierarchies">Layering — Artifact Path Hierarchies</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="configuration.html#layering-schemes">Layering Schemes</a></li>
-<li class="toctree-l3"><a class="reference internal" href="configuration.html#layer-definition">Layer Definition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#declaring-a-hierarchy-spec-paths-with-resolves-layers">Declaring a hierarchy — <code class="docutils literal notranslate"><span class="pre">spec.paths</span></code> with <code class="docutils literal notranslate"><span class="pre">resolves:</span> <span class="pre">layers</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#segment-definition">Segment Definition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#declaring-values-deployment-spec-layers">Declaring values — <code class="docutils literal notranslate"><span class="pre">deployment.spec.layers</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#resolution-order">Resolution Order</a></li>
 <li class="toctree-l3"><a class="reference internal" href="configuration.html#artifact-path-resolution">Artifact Path Resolution</a></li>
-<li class="toctree-l3"><a class="reference internal" href="configuration.html#migration-from-layering-to-layerings">Migration from <code class="docutils literal notranslate"><span class="pre">layering</span></code> to <code class="docutils literal notranslate"><span class="pre">layerings</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="configuration.html#mutual-exclusion">Mutual Exclusion</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#validate-rules-check-the-resolved-value"><code class="docutils literal notranslate"><span class="pre">validate:</span></code> rules check the resolved value</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#migration-from-layering-layerings">Migration from <code class="docutils literal notranslate"><span class="pre">layering</span></code>/<code class="docutils literal notranslate"><span class="pre">layerings</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#example">Example</a></li>
@@ -1649,6 +1651,7 @@
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#validation">Validation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="configuration.html#path-convention-policy">Path Convention Policy</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="configuration.html#declaring-conventions">Declaring conventions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#custom-tenant-file-location">Custom tenant file location</a></li>
 <li class="toctree-l3"><a class="reference internal" href="configuration.html#enforcement-policy">Enforcement policy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="configuration.html#inline-convention-deploy-repo-mode">Inline convention (deploy-repo mode)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="configuration.html#validation-rule-types">Validation rule types</a></li>
@@ -1732,6 +1735,7 @@
 <li class="toctree-l2"><a class="reference internal" href="deployment.html#stages">Stages</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="deployment.html#provisioner-vs-topology"><code class="docutils literal notranslate"><span class="pre">provisioner</span></code> vs <code class="docutils literal notranslate"><span class="pre">topology</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="deployment.html#scope-stage-filtering"><code class="docutils literal notranslate"><span class="pre">scope</span></code> — stage filtering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="deployment.html#namespace-vs-helm-namespaces-kubernetes-namespace-scoping"><code class="docutils literal notranslate"><span class="pre">namespace</span></code> vs <code class="docutils literal notranslate"><span class="pre">helm_namespaces</span></code> — Kubernetes namespace scoping</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="deployment.html#cross-stage-outputs">Cross-Stage Outputs</a><ul>
@@ -3475,7 +3479,15 @@
 </ul>
 <p><strong>Platform:</strong></p>
 <ul class="simple">
-<li><p><a class="reference internal" href="configuration.html"><span class="std std-doc">configuration.md</span></a> - Validation rules (providers, topologies, regex patterns)</p></li>
+<li><p><a class="reference internal" href="configuration.html"><span class="std std-doc">configuration.md</span></a> - Validation rules (providers, topologies, regex patterns)</p>
+<ul>
+<li><p><a class="reference internal" href="manifest.html"><span class="std std-doc">manifest.md</span></a> - <code class="docutils literal notranslate"><span class="pre">configuration.spec.manifest</span></code> — deployment manifest/audit-record settings (not a standalone kind)</p></li>
+</ul>
+</li>
+</ul>
+<p><strong>Multi-tenancy:</strong></p>
+<ul class="simple">
+<li><p><a class="reference internal" href="tenant.html"><span class="std std-doc">tenant.md</span></a> - Tenant identity, zones, and deployment defaults (default location <code class="docutils literal notranslate"><span class="pre">tenants/{code}.yaml</span></code>, overridable via a path convention)</p></li>
 </ul>
 <p><strong>Resources:</strong></p>
 <ul class="simple">
@@ -3486,6 +3498,13 @@
 <li><p><a class="reference internal" href="network.html"><span class="std std-doc">network.md</span></a> - Network topologies, subnets, and peerings</p></li>
 <li><p><a class="reference internal" href="module.html"><span class="std std-doc">module.md</span></a> - Reusable components</p></li>
 <li><p><a class="reference internal" href="namespace.html"><span class="std std-doc">namespace.md</span></a> - Application packages</p></li>
+</ul>
+<p><strong>Diagrams &amp; records (machine-written or generated):</strong></p>
+<ul class="simple">
+<li><p><a class="reference internal" href="diagram.html"><span class="std std-doc">diagram.md</span></a> - Visual diagram definitions rendered as Mermaid (ADR-0034)</p></li>
+<li><p><a class="reference internal" href="version.html"><span class="std std-doc">version.md</span></a> - Intended component versions for a deployment ring</p></li>
+<li><p><a class="reference internal" href="version-lock.html"><span class="std std-doc">version-lock.md</span></a> - Frozen, immutable snapshot of what was actually deployed</p></li>
+<li><p><a class="reference internal" href="promotion-record.html"><span class="std std-doc">promotion-record.md</span></a> - Audit log of a version promotion through a ring progression</p></li>
 </ul>
 <p><strong>Workspace state:</strong></p>
 <ul class="simple">
@@ -3507,6 +3526,7 @@
 <span class="n">firewalls</span><span class="o">/</span>       <span class="n">web_public</span><span class="o">.</span><span class="n">yaml</span><span class="p">,</span> <span class="n">api_internal</span><span class="o">.</span><span class="n">yaml</span>
 <span class="n">modules</span><span class="o">/</span>         <span class="n">postgres</span><span class="o">.</span><span class="n">yaml</span><span class="p">,</span> <span class="n">redis</span><span class="o">.</span><span class="n">yaml</span>
 <span class="n">namespaces</span><span class="o">/</span>      <span class="n">frontend</span><span class="o">.</span><span class="n">yaml</span><span class="p">,</span> <span class="n">backend</span><span class="o">.</span><span class="n">yaml</span>
+<span class="n">tenants</span><span class="o">/</span>         <span class="n">acme</span><span class="o">.</span><span class="n">yaml</span><span class="p">,</span> <span class="n">contoso</span><span class="o">.</span><span class="n">yaml</span>   <span class="c1"># default location; overridable, see tenant.md</span>
 </pre></div>
 </div>
 </section>
