@@ -7,6 +7,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [1.9.2] - 2026-09-02
+
 ### Fixed
 
 #### **Environment `properties`/`custom` shallow-merge bug**
