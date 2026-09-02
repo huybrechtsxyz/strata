@@ -59,135 +59,179 @@ topologies:
 
 Define how deployment artifacts are organized into a hierarchical path structure. Use layering when different deployment files need to be placed into different directories during the build process.
 
-### Layering Schemes
+> **Changed in ADR-0072 (breaking).** `spec.layering` and `spec.layerings` were removed and merged into `spec.paths` — the same mechanism that validates repository layout. One convention now declares a hierarchy family once (segment names, order, per-segment constraints), and a deployment's values are resolved from its own `spec.layers` **and**, as a fallback, from the deployment file's own location. See [Migration from `layering`/`layerings`](#migration-from-layeringlayerings) below.
 
-Two formats are supported:
+### Declaring a hierarchy — `spec.paths` with `resolves: layers`
 
-**Single-scheme layering** (`spec.layering` — deprecated, for backward compatibility):
+A path convention that declares `resolves: layers` does double duty: it validates repository layout (as any `spec.paths` entry does) *and* drives artifact-path construction.
 
 ```yaml
 spec:
-  layering:
-    - name: zone
-      required: true
-    - name: customer
-      required: true
-    - name: environment
-      required: false
-      default: dev
+  paths:
+    - name: zone-tenant
+      scope: "zones/**"
+      pattern: "zones/{zone}/customers/{customer}/{environment}"
+      resolves: layers
+      segments:
+        - name: zone
+          pattern: "^[a-z][a-z0-9-]*$"
+        - name: customer
+          pattern: "^[a-z][a-z0-9]{4}$"
+        - name: environment
+          pattern: "^[a-z0-9]{1,4}$"
+          default: dev
+
+    - name: landscape-ring
+      scope: "landscape/**"
+      pattern: "landscape/{landscape}/{ring}"
+      resolves: layers
+      segments:
+        - name: landscape
+        - name: ring
 ```
 
-This creates a single layer scheme applied to all deployments. The artifact path is constructed by combining values from each layer in order, separated by `/`. For example, `zone: europe`, `customer: contoso`, `environment: prd` produces artifact path `europe/contoso/prd`.
+Each convention has:
 
-**Multi-scheme layering** (`spec.layerings` — recommended):
+- **`name`** — identifier, referenced by `deployment.spec.layers.follows`
+- **`scope`** — `fnmatch` glob pre-filter on the file's path relative to the workspace root
+- **`pattern`** — segment-aware path template; each `{segment}` captures exactly one path part
+- **`resolves: layers`** — opts this convention into layer resolution
+- **`segments`** — ordered segment definitions (this is the artifact-path order)
+
+**One convention per hierarchy family, not per depth.** Use the family's *deepest* legitimate shape as the pattern; shallower deployments in the same family are handled on the deploy side. Give each family a **distinguishing literal prefix segment** (`zones/`, `landscape/`) so two families can never both match the same file — an ambiguous match is a hard validation error, not a silent pick.
+
+**Literal-only patterns are valid.** If a stack encodes nothing in its paths and declares every value explicitly, use a pattern with no `{captures}` at all (e.g. `scope: "deploy/**"`, `pattern: "deploy"`). Nothing is derived, and explicit values are the only source.
+
+### Segment Definition
+
+Each `segments` entry has:
+
+| Field         | Type  | Default | Description                                                                  |
+| ------------- | ----- | ------- | ---------------------------------------------------------------------------- |
+| `name`        | `str` | —       | Segment name (e.g., `zone`, `customer`, `ring`, `landscape`)                 |
+| `description` | `str` | `null`  | Human-readable description                                                   |
+| `pattern`     | `str` | `null`  | Regex validating any value that *does* get supplied, however it was supplied |
+| `default`     | `str` | `null`  | Value used when neither explicitly declared nor derivable from the path      |
+
+> There is no `required` field. A segment that resolves to nothing is **not applicable** to that deployment — not an error. Different deployments in the same family legitimately have different real depths (a shared-infra deployment genuinely has no customer or environment).
+
+**Important:** Segment names are arbitrary and must be unique within a convention. The segment named `environment` has no special meaning.
+
+### Declaring values — `deployment.spec.layers`
+
+```yaml
+# Values derived entirely from this file's own path
+spec:
+  layers:
+    follows: zone-tenant
+
+# Explicit values (shared infra — deeper segments simply don't apply)
+spec:
+  layers:
+    follows: zone-tenant
+    segments:
+      zone: europe
+```
+
+- **`follows`** — names the convention to use. If omitted, the convention is auto-detected by matching this file's path against every `resolves: layers` convention's `scope` + `pattern`.
+- **`segments`** — explicit per-segment values. Not all-or-nothing; any name omitted here falls back to path-derivation, then `default`.
+
+### Resolution Order
+
+**Level 1 — which convention applies:**
+
+1. **Explicit** — `spec.layers.follows` names a convention → use it. Error if the name doesn't exist or doesn't declare `resolves: layers`.
+2. **Auto-detected** — no `follows` → match the file's path against every `resolves: layers` convention. More than one match is a hard validation error naming both conventions.
+3. **None** — no convention applies → `spec.layers.segments` is unvalidated free-form data.
+
+**Level 2 — each segment's value:**
+
+1. **Explicit** — `spec.layers.segments.<name>` is set → always wins.
+2. **Derived** — the file's path reaches `<name>`'s position in the pattern → use the captured value.
+3. **Default** — the segment declares `default` → use it.
+4. **Not applicable** — none of the above → omitted; not an error.
+
+### Artifact Path Resolution
+
+The artifact path is the join of however many segments actually resolved, in the convention's declared `segments` order, **stopping at the first segment that didn't resolve**. It reflects actual depth, not the family's maximal shape.
+
+```
+Deployment files:
+├── zones/europe/customers/contoso/prd/deploy.yaml  → zone-tenant → europe/contoso/prd
+├── zones/europe/shared.yaml (segments: {zone: europe}) → zone-tenant → europe
+├── landscape/platform/ring2/deploy.yaml            → landscape-ring → platform/ring2
+└── shared/base.yaml                                → no match; layering not applied
+```
+
+Both `zones/` deployments follow the *same* convention — the shared-infra one simply resolves one segment instead of three.
+
+### `validate:` rules check the resolved value
+
+A convention's `validate:` rules (membership against `spec.<field>[*].<attr>`, or a file-existence template) are applied to the **resolved** value for each segment — the Level 1 + Level 2 outcome — not just the raw path capture. Explicitly-declared values and shallower deployments are checked exactly like path-derived ones.
+
+### Migration from `layering`/`layerings`
+
+`spec.layering` and `spec.layerings` were **removed** with no backward-compatible fallback. Because every strata model uses `extra: forbid`, an unmigrated configuration fails validation immediately with an "unknown field" error naming the removed field — a loud failure, never a silent behavior change.
+
+**Before:**
 
 ```yaml
 spec:
   layerings:
-    - name: zone-tenant
-      scope: zones/**
+    - name: default
+      scope: "zones/**"
       layers:
         - name: zone
           required: true
         - name: customer
           required: true
         - name: environment
-          required: false
           default: dev
-
-    - name: landscape-ring
-      scope: landscape/**
-      layers:
-        - name: landscape
-          required: true
-        - name: ring
-          required: true
-```
-
-This declares multiple layer schemes. Each scheme has:
-- **`name`**: Identifier for the scheme
-- **`scope`**: Glob pattern matching deployment file paths (e.g., `zones/**`, `landscape/**`, `**`)
-- **`layers`**: Ordered list of layer definitions
-
-During deployment validation, the deployment file's path is matched against schemes in order. The first matching scope wins, and that scheme's layers are used to resolve the artifact path.
-
-### Layer Definition
-
-Each layer entry has:
-
-| Field      | Type   | Default | Description                                                       |
-| ---------- | ------ | ------- | ----------------------------------------------------------------- |
-| `name`     | `str`  | —       | Layer name (e.g., `zone`, `customer`, `ring`, `landscape`)        |
-| `required` | `bool` | `true`  | Whether the deployment must provide a value for this layer        |
-| `default`  | `str`  | `null`  | Default value if no value is provided (only if `required: false`) |
-
-**Important:** Layer names are arbitrary and must be unique within a scheme. The layer named `environment` no longer has special meaning — any valid layer can be the last layer in the hierarchy.
-
-### Artifact Path Resolution
-
-When a deployment references a configuration file with layering:
-
-1. **Scope matching**: The deployment file's relative path (from workspace root) is matched against all scheme scopes in order using glob pattern matching
-2. **First match wins**: The first scheme whose scope matches the file path is selected
-3. **Value resolution**: Layer values are extracted from the deployment's `properties` field or use defaults
-4. **Path construction**: The artifact path is built as `layer1_value/layer2_value/.../layerN_value`
-
-**Example matching:**
-
-```
-Deployment files:
-├── zones/europe/contoso/prd/deploy.yaml    ← matches scope: zones/**
-├── landscape/platform/ring2/deploy.yaml    ← matches scope: landscape/**
-└── shared/base.yaml                        ← no match; layering not applied
-```
-
-### Migration from `layering` to `layerings`
-
-If you're using the deprecated single-scheme `layering` format, migrate as follows:
-
-**Before:**
-
-```yaml
-spec:
-  layering:
-    - name: zone
-      required: true
-    - name: customer
-      required: true
-    - name: environment
-      default: dev
 ```
 
 **After:**
 
 ```yaml
 spec:
-  layerings:
+  paths:
     - name: default
-      scope: "**"  # Matches all deployment files
-      layers:
+      scope: "zones/**"
+      pattern: "zones/{zone}/customers/{customer}/{environment}"
+      resolves: layers
+      segments:
         - name: zone
-          required: true
         - name: customer
-          required: true
         - name: environment
           default: dev
 ```
 
-Wrap your existing `layering` list in a single `ScopedLayeringModel` with `scope: "**"` (catch-all). The `"**"` scope matches all files, so all deployments use that scheme — equivalent to the old single-scheme behavior.
+Changes to make:
 
-### Mutual Exclusion
+1. Move the entry from `spec.layerings` (or `spec.layering`) to `spec.paths`.
+2. Rename `layers:` to `segments:` and add `resolves: layers`.
+3. Add a `pattern:` describing the on-disk layout. If nothing is encoded in the path, use a **literal-only** pattern (no `{captures}`) so nothing is derived.
+4. Drop every `required:` field — it no longer exists ("not applicable" replaces it).
+5. On each deployment, nest the old flat `spec.layers` dict under `segments:`, and optionally add `follows:`.
 
-A configuration cannot have both `spec.layering` and `spec.layerings` defined. The system enforces this with a validation error:
+**Deployment side, before and after:**
 
 ```yaml
-# ✗ INVALID — both formats present
+# Before
 spec:
-  layering: [...]
-  layerings: [...]
+  layers:
+    zone: europe
+    customer: contoso
+
+# After
+spec:
+  layers:
+    follows: default
+    segments:
+      zone: europe
+      customer: contoso
 ```
 
-Choose one format and remove the other.
+> **Note on `scope` wildcards.** `scope` is matched with `fnmatch`, where `*` already crosses `/`. `"zones/**"` and `"zones/*"` compile to the identical regex — `**` is not a stronger "any depth" wildcard the way it is in gitignore or `pathlib.rglob`. Depth precision comes from `pattern` (which is genuinely segment-aware), not from `scope`.
 
 ## Example
 
@@ -214,27 +258,26 @@ spec:
           max_count: 7
         - role: worker
           min_count: 1
-  layerings:
+  paths:
     # Multi-tenant deployments with region isolation
     - name: regional-tenant
-      scope: zones/**
-      layers:
+      scope: "zones/**"
+      pattern: "zones/{zone}/customers/{customer}/{environment}"
+      resolves: layers
+      segments:
         - name: zone
-          required: true
         - name: customer
-          required: true
         - name: environment
-          required: false
           default: dev
 
     # Ring-based deployments (canary → production)
     - name: ring-promotion
-      scope: landscape/**
-      layers:
+      scope: "landscape/**"
+      pattern: "landscape/{landscape}/{ring}"
+      resolves: layers
+      segments:
         - name: landscape
-          required: true
         - name: ring
-          required: true
 ```
 
 ## Configuration Schema Fields

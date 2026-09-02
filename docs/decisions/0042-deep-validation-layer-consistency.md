@@ -1,8 +1,14 @@
 # Deep Validation and Layer Consistency
 
-- Status: partially-implemented — Phase 1 complete, Phase 2 in progress
+- Status: superseded — by [ADR 0072](./0072-clarify-layering-vs-path-convention.md)
 - Date: 2026-07-15
-- Last updated: 2026-07-23
+- Last updated: 2026-09-02
+
+> **Superseded by [ADR 0072 — Clarifying `spec.layers`, `spec.layering(s)`, and `spec.paths`](./0072-clarify-layering-vs-path-convention.md).**
+> The `spec.layering`/`spec.layerings` mechanism described below (including
+> `ScopedLayeringModel`) was **removed** and merged into `spec.paths` via
+> `resolves: layers`. Retained for historical rationale only — do not implement
+> anything from this ADR.
 
 ## Completed (Phase 1)
 

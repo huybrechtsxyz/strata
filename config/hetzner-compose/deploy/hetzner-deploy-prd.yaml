@@ -9,7 +9,8 @@ meta:
   tags: [hetzner, production, deployment]
 spec:
   layers:
-    environment: prd
+    segments:
+      environment: prd
 
   properties:
     environment: prd

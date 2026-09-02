@@ -8,11 +8,18 @@ meta:
     version: "1.0.0"
   tags: [kamatera, swarm, configuration]
 spec:
-  # Deployment hierarchy
-  layering:
+  # Deployment hierarchy layers (ADR-0072) — spec.paths convention with resolves: layers.
+  # Literal-only pattern (no {captures}): this stack encodes nothing in the path,
+  # so every segment value comes from deployment.spec.layers.segments explicitly.
+  paths:
     - name: environment
-      description: "Deployment environment (dev, staging, prd)"
-      required: true
+      scope: "deploy/**"
+      pattern: "deploy"
+      resolves: layers
+      segments:
+        - name: environment
+          description: "Deployment environment (dev, staging, prd)"
+          pattern: "^(dev|staging|prd)$"
 
   # Deployment properties schema — defines required properties for all deployments
   deployment:

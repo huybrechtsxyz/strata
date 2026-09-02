@@ -231,7 +231,7 @@ class TestCheckVersionPinShadows:
                 "workspace": {"name": "ws", "file": "workspace.yaml"},
                 "environments": [{"file": env_file}],
                 "versions": [{"file": version_file}],
-                "layers": {"environment": "prod"},
+                "layers": {"segments": {"environment": "prod"}},
             },
         }
         p = tmp_path / "deploy.yaml"
@@ -249,7 +249,7 @@ class TestCheckVersionPinShadows:
             "spec": {
                 "workspace": {"name": "ws", "file": "workspace.yaml"},
                 "environments": [{"file": str(env_p)}],
-                "layers": {"environment": "prod"},
+                "layers": {"segments": {"environment": "prod"}},
             },
         }
         p = tmp_path / "deploy.yaml"

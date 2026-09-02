@@ -2,7 +2,7 @@
 """Pydantic model for provider and resource configuration validation."""
 
 from enum import Enum
-from typing import Annotated, Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
@@ -178,7 +178,15 @@ class ConfigurationProviderModel(PlatformBaseModel):
 
 
 class ConfigurationLayerModel(PlatformBaseModel):
-    """Definition of a single layer in the deployment hierarchy."""
+    """Definition of a single layer/segment in the deployment hierarchy (ADR-0072).
+
+    Used inline by ``PathConventionModel.segments`` (``resolves: layers``
+    conventions). There is no ``required`` flag — a segment absent from both the
+    deployment's explicit ``spec.layers.segments`` and its own path is simply
+    "not applicable" to that deployment, not a validation error (different
+    deployments in the same hierarchy family legitimately have different real
+    depths).
+    """
 
     name: PlatformName = Field(description="Layer name (must be valid identifier: lowercase, alphanumeric, hyphens)")
     description: Optional[str] = Field(None, description="Human-readable description of this layer's purpose")
@@ -186,71 +194,10 @@ class ConfigurationLayerModel(PlatformBaseModel):
         None,
         description="Regex pattern for validating layer values (e.g., '^[a-z][a-z0-9\\-]*$')",
     )
-    required: bool = Field(
-        default=False,
-        description="Whether this layer must be provided in deployment files",
-    )
     default: Optional[str] = Field(
         None,
-        description="Default value if not provided in deployment (only used if required=False)",
+        description="Default value used when not provided explicitly or derived from the deployment's path",
     )
-
-    @model_validator(mode="after")
-    def validate_default_when_not_required(self) -> "ConfigurationLayerModel":
-        """Validate that default is only set when required=False."""
-        if self.required and self.default:
-            raise ValueError(f"Layer '{self.name}': Cannot set default value when required=True")
-        return self
-
-
-class ScopedLayeringModel(PlatformBaseModel):
-    """A layering scheme applied to deployment files matching a glob scope.
-
-    Multiple schemes can be declared in ``spec.layerings``; the first whose
-    ``scope`` glob matches a deployment file's path (relative to work_path) is
-    used.  First-match wins — order in the list determines precedence.
-
-    Example::
-
-        layerings:
-          - name: zone-tenant-scheme
-            scope: "zones/**"
-            layers:
-              - name: zone
-                required: true
-              - name: customer
-                required: true
-              - name: environment
-                required: true
-                default: dev
-
-          - name: landscape-scheme
-            scope: "landscape/**"
-            layers:
-              - name: landscape
-                required: true
-              - name: ring
-                required: true
-    """
-
-    name: PlatformName = Field(description="Unique scheme name for diagnostics and policy references")
-    scope: str = Field(
-        description=(
-            "Glob pattern matched against the deployment file path relative to work_path. "
-            "First-match wins. Use '**' to match all files. "
-            "Examples: 'zones/**', 'landscape/*.yaml', '**'"
-        )
-    )
-    layers: Annotated[List[ConfigurationLayerModel], Field(min_length=1)] = Field(
-        description="Ordered layer definitions (shallowest first). At least one layer is required."
-    )
-
-    @model_validator(mode="after")
-    def validate_unique_layer_names_in_scheme(self) -> "ScopedLayeringModel":
-        """Validate that layer names within this scheme are unique."""
-        layer_names = [layer.name for layer in self.layers]
-        check_unique_names(layer_names, f"layer names in layering scheme '{self.name}'")
-        return self
 
 
 class PathConventionModel(PlatformBaseModel):
@@ -297,14 +244,25 @@ class PathConventionModel(PlatformBaseModel):
             "or a path template for file existence check."
         ),
     )
-    resolves: Optional[Literal["tenant"]] = Field(
+    resolves: Optional[Literal["tenant", "layers"]] = Field(
         None,
         description=(
             "When set to 'tenant', this convention ALSO drives tenant file resolution "
             "(not just validation) — deployment_service/platform_builder substitute the "
             "deployment's tenant code into this pattern's {code} segment instead of the "
             "built-in tenants/{code}.yaml default. The pattern MUST contain a {code} segment. "
-            "At most one convention across spec.paths may declare resolves: tenant."
+            "At most one convention across spec.paths may declare resolves: tenant. "
+            "When set to 'layers', this convention ALSO drives deployment.spec.layers "
+            "resolution (ADR-0072) — see the 'segments' field."
+        ),
+    )
+    segments: Optional[List[ConfigurationLayerModel]] = Field(
+        None,
+        description=(
+            "Inline segment definitions for this hierarchy family — only meaningful when "
+            "resolves: layers. One convention per family, using its deepest legitimate shape; "
+            "shallower deployments within the same family resolve fewer segments, handled on "
+            "the deploy side (deployment.spec.layers), not by declaring more conventions."
         ),
     )
 
@@ -324,6 +282,24 @@ class PathConventionModel(PlatformBaseModel):
                     f"Validation key '{key}' does not correspond to a {{segment}} "
                     f"in pattern '{self.pattern}'. Available segments: {sorted(pattern_segments)}"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def validate_segments_only_with_resolves_layers(self) -> "PathConventionModel":
+        """'segments' is only meaningful when resolves == 'layers'."""
+        if self.segments and self.resolves != "layers":
+            raise ValueError(
+                f"Convention '{self.name}' declares 'segments' but resolves is "
+                f"'{self.resolves}', not 'layers'. 'segments' only applies to "
+                "resolves: layers conventions."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_unique_segment_names(self) -> "PathConventionModel":
+        """Validate that segment names within this convention are unique."""
+        if self.segments:
+            check_unique_names([seg.name for seg in self.segments], f"segment names in convention '{self.name}'")
         return self
 
     @model_validator(mode="after")
@@ -587,15 +563,13 @@ class ConfigurationSpecModel(PlatformBaseModel):
     """Specification for the configuration model."""
 
     logging: Optional[ConfigurationLoggingModel] = Field(None, description="Logging configuration for the platform")
-    layering: Optional[List[ConfigurationLayerModel]] = Field(
-        None,
-        description="Single-scheme deployment hierarchy layers (deprecated — use spec.layerings for scope-aware multi-scheme layering)",
-    )
-    layerings: Optional[List[ScopedLayeringModel]] = Field(
+    custom: Optional[Dict[str, Any]] = Field(
         None,
         description=(
-            "Scoped layering schemes — each entry matches deployment files by path glob and defines "
-            "an ordered list of layer keys. First-match wins. Mutually exclusive with spec.layering."
+            "Generic freeform escape hatch for structures that don't warrant a dedicated "
+            "typed model (ADR-0072), same pattern as spec.configuration/spec.properties. "
+            "resolve_spec_rule() dict-aware fallback (see utils.path_convention) lets "
+            "rules: membership checks work against this field's contents."
         ),
     )
     paths: Optional[List[PathConventionModel]] = Field(
@@ -722,24 +696,6 @@ class ConfigurationSpecModel(PlatformBaseModel):
         """Validate that path convention names are unique."""
         if self.paths:
             check_unique_names([p.name for p in self.paths], "path convention names in configuration")
-        return self
-
-    @model_validator(mode="after")
-    def validate_unique_layer_names(self) -> "ConfigurationSpecModel":
-        """Validate layer uniqueness and mutual exclusivity of layering vs layerings."""
-        if self.layering and self.layerings:
-            raise ValueError(
-                "spec.layering and spec.layerings are mutually exclusive. "
-                "Use spec.layerings for scope-aware multi-scheme layering."
-            )
-        # Validate single-scheme layering
-        if self.layering:
-            layer_names = [layer.name for layer in self.layering]
-            check_unique_names(layer_names, "layer names")
-        # Validate multi-scheme layerings — scheme names must be unique
-        if self.layerings:
-            scheme_names = [scheme.name for scheme in self.layerings]
-            check_unique_names(scheme_names, "layering scheme names")
         return self
 
 

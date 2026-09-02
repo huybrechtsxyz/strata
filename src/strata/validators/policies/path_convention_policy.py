@@ -115,6 +115,16 @@ class PathConventionPolicy(BasePolicy):
         if context.configuration_service is not None:
             config_model = getattr(context.configuration_service, "model", None)
 
+        # Resolve this file's deployment.spec.layers, if the file currently being
+        # validated is the loaded deployment (may be None — graceful; see
+        # evaluate_conventions()'s ADR-0072 resolved-value validation for
+        # resolves: layers conventions).
+        deployment_layers = None
+        if context.deployment_service is not None:
+            deployment_model = getattr(context.deployment_service, "model", None)
+            deployment_spec = getattr(deployment_model, "spec", None)
+            deployment_layers = getattr(deployment_spec, "layers", None)
+
         # Evaluate all matching conventions
         from strata.utils.path_convention import evaluate_conventions
 
@@ -123,6 +133,7 @@ class PathConventionPolicy(BasePolicy):
             conventions=conventions,
             work_path=context.work_path,
             configuration_model=config_model,
+            deployment_layers=deployment_layers,
         )
 
         return PolicyResult(

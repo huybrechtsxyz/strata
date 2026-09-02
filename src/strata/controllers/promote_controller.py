@@ -56,6 +56,14 @@ class PromoteController(BaseController):
     get_log        — Show activity log for a specific promotion.
     """
 
+    def __init__(self) -> None:
+        super().__init__()
+        # deployment meta.name -> path relative to work_path, populated by
+        # _load_registered_deployments(). Needed by _resolve_dep_layers() for
+        # ADR-0072 layer resolution, since DeploymentModel carries no field for
+        # its own source path.
+        self._dep_rel_paths: Dict[str, str] = {}
+
     # ── helpers ───────────────────────────────────────────────────────────────
 
     def _load_config_model(self, work_path: Path):
@@ -399,7 +407,13 @@ class PromoteController(BaseController):
     # ── deployment discovery & wave assignment ────────────────────────────────
 
     def _load_registered_deployments(self, work_path: Path) -> List[Any]:
-        """Return list of DeploymentModel for all solution-registered deployments."""
+        """Return list of DeploymentModel for all solution-registered deployments.
+
+        Also records each deployment's path relative to *work_path* in
+        ``self._dep_rel_paths`` (keyed by ``meta.name``) — `_resolve_dep_layers()`
+        needs it for ADR-0072 layer resolution, and ``DeploymentModel`` carries no
+        field for its own source path.
+        """
         from strata.services.deployment_service import DeploymentService
 
         solution = self._load_solution(work_path)
@@ -413,6 +427,11 @@ class PromoteController(BaseController):
             try:
                 svc = DeploymentService.load(str(dep_path))
                 if svc.is_validated() and svc.model:
+                    try:
+                        rel_path = dep_path.relative_to(work_path).as_posix()
+                    except ValueError:
+                        rel_path = dep_path.name
+                    self._dep_rel_paths[str(svc.model.meta.name)] = rel_path
                     models.append(svc.model)
             except Exception:
                 pass
@@ -462,23 +481,73 @@ class PromoteController(BaseController):
 
         return n_waves
 
-    def _scope_filter(self, deployments: List[Any], scope: Optional[str]) -> Tuple[List[Any], List[Any]]:
-        """Split into (scoped_deployments, unscoped_deployments) based on strategy scope."""
+    def _resolve_dep_layers(self, deployment, conventions: List[Any]) -> Dict[str, str]:
+        """Resolve a loaded deployment's layer/segment values (ADR-0072).
+
+        Level 1 auto-detection and Level 2 path-derivation both need the deployment
+        file's own path, which ``_load_registered_deployments()`` recorded in
+        ``self._dep_rel_paths``. When the path is unknown (a deployment that didn't
+        come through that method), an empty ``rel_path`` is passed deliberately: it
+        matches no ``scope`` and no ``pattern``, so auto-detection and derivation are
+        both correctly disabled while an explicit ``spec.layers.follows`` +
+        ``segments`` still resolve normally. Never substitute ``meta.name`` here — a
+        deployment name is not a path, and feeding one in can silently auto-detect
+        the wrong convention.
+
+        Resolution errors (unknown ``follows`` name, ambiguous convention match) are
+        surfaced as messages rather than swallowed. They are *not* caught anywhere
+        else on this code path: ``_load_registered_deployments()`` calls
+        ``DeploymentService.load()`` without a configuration model, and
+        ``BaseService.validate()`` only runs Phase 2 — which is where
+        ``_validate_deployment_layers()`` would report them — when one is supplied.
+        Left silent, a misconfigured convention would quietly change *which*
+        deployments a scoped wave promotes, by falling back to explicit-only values.
+        """
+        from strata.utils.path_convention import resolve_layers
+
+        dep_name = str(deployment.meta.name)
+        rel_path = self._dep_rel_paths.get(dep_name, "")
+        resolution = resolve_layers(rel_path, deployment.spec.layers, conventions)
+        if resolution.error:
+            self._add_message(
+                f"Deployment '{dep_name}': layer resolution problem — {resolution.error}. "
+                "Falling back to explicitly-declared segment values only; scoped-wave "
+                "membership for this deployment may be wrong."
+            )
+        return resolution.values
+
+    def _scope_filter(
+        self, deployments: List[Any], scope: Optional[str], config: Any = None
+    ) -> Tuple[List[Any], List[Any]]:
+        """Split into (scoped_deployments, unscoped_deployments) based on strategy scope.
+
+        Fully resolved (ADR-0072, decided): a deployment is "scoped" when *scope*
+        (a segment name) has a value in its resolved layer values — explicit,
+        path-derived, or default — not just when it was explicitly declared.
+        Consistent with every other consumer of deployment.spec.layers
+        (get_artifact_path(), rules:) rather than treating derived values as
+        second-class.
+        """
         if not scope:
             return [], deployments
         scoped, unscoped = [], []
+        conventions = (config.spec.paths or []) if config is not None else []
         for dep in deployments:
-            layers = dict(dep.spec.layers) if dep.spec.layers else {}
-            if scope in layers:
+            values = self._resolve_dep_layers(dep, conventions)
+            if scope in values:
                 scoped.append(dep)
             else:
                 unscoped.append(dep)
         return scoped, unscoped
 
-    def _get_scope_selector(self, deployment) -> str:
-        """Return a selector string for a scoped deployment (tenant name or deployment name)."""
-        layers = dict(deployment.spec.layers) if deployment.spec.layers else {}
-        for val in layers.values():
+    def _get_scope_selector(self, deployment, config: Any = None) -> str:
+        """Return a selector string for a scoped deployment (tenant name or deployment name).
+
+        Fully resolved (ADR-0072, decided) — see `_scope_filter()`.
+        """
+        conventions = (config.spec.paths or []) if config is not None else []
+        values = self._resolve_dep_layers(deployment, conventions)
+        for val in values.values():
             if val:
                 return str(val)
         return str(deployment.meta.name)
@@ -561,7 +630,7 @@ class PromoteController(BaseController):
         # ── 5. load and filter deployments ─────────────────────────────────
         all_deployments = self._load_registered_deployments(work_path)
         relevant_deployments = self._filter_deployments_by_environments(all_deployments, target_envs)
-        scoped_deps, unscoped_deps = self._scope_filter(relevant_deployments, strategy.scope)
+        scoped_deps, unscoped_deps = self._scope_filter(relevant_deployments, strategy.scope, config)
 
         # ── 6. determine lock files to write ───────────────────────────────
         is_last_wave = self._is_last_ring_wave(ring_model, wave_int, target_envs)
@@ -595,7 +664,7 @@ class PromoteController(BaseController):
             for dep in scoped_deps:
                 wave_idx = self._assign_deployment_wave(dep, strategy)
                 if wave_int is None or wave_idx == wave_int:
-                    sel = self._get_scope_selector(dep)
+                    sel = self._get_scope_selector(dep, config)
                     selectors[sel] = True
             for sel in selectors:
                 files_to_write.append((self._scoped_lock_file_path(work_path, to_ring, sel), strategy.scope, sel))

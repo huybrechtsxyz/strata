@@ -652,7 +652,10 @@ class PlatformSpecModel(BaseModel):
     )
     deployment: Optional[Dict[str, str]] = Field(
         None,
-        description="Deployment layer values (keys match configuration.spec.layering[].name). Defines the artifact path location for this deployment.",
+        description="Resolved deployment layer/segment values (ADR-0072) — the outcome of "
+        "utils.path_convention.resolve_layers() (explicit -> derived -> default), keyed by "
+        "segment name per the matched configuration.spec.paths (resolves: layers) convention. "
+        "Defines the artifact path location for this deployment.",
     )
     artifact_path: Optional[str] = Field(
         None,

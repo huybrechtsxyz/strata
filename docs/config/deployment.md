@@ -27,7 +27,10 @@ spec:
   partial: false               # Optional: reusable base fragment, not directly deployable
   extends: <@repo/path.yaml>   # Optional: inherit from another deployment file
   tenant: <tenant_code>        # Optional: tenant ownership reference
-  layers: {}                   # Optional: layer values
+  layers:                      # Optional: hierarchy position (ADR-0072)
+    follows: <convention_name> #   Optional: names a configuration.spec.paths convention
+    segments: {}               #   Optional: explicit segment values; omitted names are
+                               #   derived from this file's own path, then the default
   properties: {}               # Optional deployment metadata
   custom: {}                   # Optional organizational metadata
   workspace:                   # Required for non-partial deployments

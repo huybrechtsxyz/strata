@@ -1,8 +1,14 @@
 # Path Convention Validation (`spec.paths`)
 
-- Status: implemented
+- Status: implemented — extended by [ADR 0072](./0072-clarify-layering-vs-path-convention.md)
 - Date: 2026-07-23
 - Parent: [ADR 0042 — Deep Validation and Layer Consistency](./0042-deep-validation-layer-consistency.md)
+
+> **Extended by [ADR 0072](./0072-clarify-layering-vs-path-convention.md).** `spec.paths`
+> remains as described here, plus: `resolves` accepts `layers` (in addition to `tenant`),
+> conventions gain an inline `segments` list, and `validate:` rules now check each
+> segment's **resolved** value (explicit → path-derived → default) rather than only the
+> raw `match_pattern()` capture.
 
 ## Implementation Notes
 

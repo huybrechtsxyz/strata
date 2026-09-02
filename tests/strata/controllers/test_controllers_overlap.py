@@ -13,13 +13,16 @@ from strata.controllers.overlap_controller import OverlapController, OverlapErro
 
 
 def _make_manifest(tmp_path: Path, name: str, layers: dict, workspace_file: str) -> Path:
-    """Write a minimal deployment YAML file and return its path."""
+    """Write a minimal deployment YAML file and return its path.
+
+    *layers* is written as explicit ``spec.layers.segments`` values (ADR-0072).
+    """
     data = {
         "apiVersion": "strata.huybrechts.xyz/v1",
         "kind": "deployment",
         "meta": {"name": name},
         "spec": {
-            "layers": layers,
+            "layers": {"segments": layers},
             "workspace": {"file": workspace_file},
             "environments": ["env.yaml"],
         },
@@ -30,20 +33,28 @@ def _make_manifest(tmp_path: Path, name: str, layers: dict, workspace_file: str)
 
 
 def _make_config_service(layering: list):
-    """Return a mock ConfigurationService whose layerings match *layering* (a list of layer names)."""
-    layer_objs = []
+    """Return a mock ConfigurationService with one spec.paths convention (resolves:
+    layers) declaring segments matching *layering* (a list of segment names) —
+    ADR-0072. ``scope``/``pattern`` are real strings (not MagicMock) since
+    resolve_layers() calls fnmatch()/match_pattern() on them directly; segments are
+    resolved from explicit spec.layers.segments values in these tests, so a trivial
+    single-part pattern is enough for the auto-detect match to succeed.
+    """
+    segment_objs = []
     for name in layering:
-        layer = MagicMock()
-        layer.name = name
-        layer.default = None
-        layer_objs.append(layer)
-    scheme = MagicMock()
-    scheme.name = "default"
-    scheme.scope = "**"
-    scheme.layers = layer_objs
+        segment = MagicMock()
+        segment.name = name
+        segment.default = None
+        segment.pattern = None
+        segment_objs.append(segment)
+    convention = MagicMock()
+    convention.name = "default"
+    convention.scope = "**"
+    convention.pattern = "{name}"
+    convention.resolves = "layers"
+    convention.segments = segment_objs
     spec = MagicMock()
-    spec.layering = None
-    spec.layerings = [scheme] if layer_objs else []
+    spec.paths = [convention] if segment_objs else []
     model = MagicMock()
     model.spec = spec
     svc = MagicMock()
@@ -150,8 +161,7 @@ class TestCheck1ArtifactPathUniqueness:
         m1 = _make_manifest(tmp_path, "a", layers, "ws.yaml")
         m2 = _make_manifest(tmp_path, "b", layers, "ws.yaml")
         config_svc = MagicMock()
-        config_svc.model.spec.layering = None
-        config_svc.model.spec.layerings = []
+        config_svc.model.spec.paths = []
         ctrl = OverlapController(configuration_service=config_svc, repo_map={}, work_path=tmp_path)
         ok = ctrl.run([m1, m2])
         assert ok is True
@@ -393,6 +403,43 @@ class TestCheck3NamespaceOverlap:
 
         check3 = [w for w in ctrl.get_overlap_warnings() if w.check == 3]
         assert check3 == []
+
+    def test_warns_without_any_resolves_layers_convention(self, tmp_path):
+        """Check #3 must still fire when no `resolves: layers` convention exists.
+
+        Regression guard (ADR-0072): layer_key_set is now derived from resolved
+        segment names, but resolution yields nothing when no convention is
+        declared. Without an explicit fallback to the declared segment names,
+        every manifest collapses to an identical empty key set and this check
+        silently never fires — it must keep working config-or-no-config, exactly
+        as the old raw `spec.layers.keys()` proxy did.
+        """
+        m1 = _make_manifest(tmp_path, "zone", {"zone": "eu"}, "ws-zone.yaml")
+        m2 = _make_manifest(tmp_path, "prd", {"zone": "eu", "tenant": "acme", "environment": "prd"}, "ws-prd.yaml")
+
+        for f in ("ws-zone.yaml", "ws-prd.yaml", "traefik.yaml"):
+            (tmp_path / f).write_text("placeholder")
+
+        ws_zone_svc = self._make_ws_svc_with_ns(["traefik"])
+        ws_prd_svc = self._make_ws_svc_with_ns(["traefik"])
+        ns_svc = self._make_ns_svc(is_shared=False)
+
+        # Configuration present, but declaring NO path conventions at all
+        config_svc = MagicMock()
+        config_svc.model.spec.paths = []
+
+        with (
+            patch("strata.controllers.overlap_controller.WorkspaceService") as mock_ws,
+            patch("strata.controllers.overlap_controller.NamespaceService") as mock_ns,
+        ):
+            mock_ws.load.side_effect = lambda p: ws_zone_svc if "zone" in p else ws_prd_svc
+            mock_ns.load.return_value = ns_svc
+            ctrl = OverlapController(configuration_service=config_svc, repo_map={}, work_path=tmp_path)
+            ctrl.run([m1, m2])
+
+        check3 = [w for w in ctrl.get_overlap_warnings() if w.check == 3]
+        assert len(check3) == 1, "Check #3 must not depend on a resolves: layers convention being declared"
+        assert "traefik" in check3[0].message
 
 
 # ---------------------------------------------------------------------------

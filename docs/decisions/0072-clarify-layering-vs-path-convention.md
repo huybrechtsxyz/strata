@@ -1,6 +1,6 @@
 # Clarifying `spec.layers`, `spec.layering(s)`, and `spec.paths`-Overlap, Confusion, and the Missing Link
 
-- Status: proposed
+- Status: partially-implemented — schema merge, resolution, and migration complete; agreement-enforcement policy not started
 - Date: 2026-09-01
 - Related: [ADR 0042-Deep Validation and Layer Consistency](./0042-deep-validation-layer-consistency.md), [ADR 0052-Path Convention Validation](./0052-path-convention-validation.md)
 
@@ -1039,29 +1039,53 @@ remain before implementation starts.
 <!-- Required while Status is proposed / in-progress / partially-implemented.
      Remove this section once Status becomes implemented. -->
 
-- Design the new (or extended) policy type for agreement enforcement, reusing
-  `enforcement: deny | warn | audit`; decide its default enforcement level and
+**Shipped** (Phases 1-6 of the [Implementation Plan](#implementation-plan)): the merged
+schema (`resolves: layers` + inline `segments`, `spec.layers.follows`/`segments`,
+`required` dropped), the shared `resolve_layers()` with Level 1 + Level 2 precedence,
+`rules:` validating the resolved value, `spec.custom` + dict-aware
+`resolve_spec_rule()`, removal of `spec.layering`/`spec.layerings`/`ScopedLayeringModel`/
+`utils/layering.py`, all call sites (`deployment_service`, `overlap_controller`,
+`promote_controller`, `platform_builder`, `path_convention_policy`), migration of every
+bundled example stack and scaffold template, and docs/changelog. Full `Check.ps1` green.
+
+Still open:
+
+- Design and implement the new (or extended) policy type for agreement enforcement,
+  reusing `enforcement: deny | warn | audit`; decide its default enforcement level and
   whether it ships enabled-by-default or requires explicit opt-in like every other
-  policy. *(Not yet designed — the design pass above only fixed the schema and
-  resolution precedence, not the enforcement policy itself.)*
-- Implement `rules:` validating the resolved value (Level 1 + Level 2 outcome) per
-  segment instead of the raw `match_pattern()` capture — see
-  [`rules:` validates the resolved value](#rules-validates-the-resolved-value-not-just-the-path-capture).
-  Without this, explicitly-declared `spec.layers.segments` values (and any
-  deployment whose path is shallower than the convention's full pattern) get zero
-  `rules:` validation today.
-- Add `configuration.spec.custom: Optional[Dict[str, Any]]` and make
-  `resolve_spec_rule()` dict-aware (fallback to `obj.get(name)` when a step is a
-  `dict`, at both the path-walk and final attribute-extraction points) — see
-  [Decided: add spec.custom and make resolve_spec_rule() dict-aware](#decided-add-speccustom-and-make-resolve_spec_rule-dict-aware).
-- Design/decide migration tooling (see open question above).
-- Plan the breaking-change rollout: since backward compatibility is explicitly out
-  of scope, decide how the removal of `spec.layering`/`spec.layerings` is
-  communicated (CHANGELOG/HISTORY entries, migration guide, version bump
-  signaling), given every file listed in
-  [Impact Analysis](#impact-analysis--where-a-change-would-ripple) needs to change
-  in the same release.
-- Update or retire [ADR 0042](./0042-deep-validation-layer-consistency.md) and
-  [ADR 0052](./0052-path-convention-validation.md) once the merged schema lands —
-  both currently describe the two mechanisms this ADR merges.
-- No implementation has started.
+  policy. *(Not designed — the work so far covers the schema and resolution
+  precedence, not the enforcement policy. Nothing currently fails a build when an
+  explicitly-declared segment value disagrees with the one its path implies; the
+  explicit value simply wins.)*
+- Decide whether migration tooling (e.g. a `strata migrate` helper to rewrite existing
+  `spec.layering`/`spec.layerings` automatically) is worth building. Detection is
+  already free — `extra: forbid` fails loudly on the removed field — so this is purely
+  a convenience question.
+- Revisit `PromoteController`'s deployment-path tracking if that code grows.
+  `_load_registered_deployments()` records each deployment's `rel_path` in a
+  `self._dep_rel_paths` dict keyed by `meta.name`, which `_resolve_dep_layers()`
+  reads back — `DeploymentModel` carries no field for its own source path, and
+  `resolve_layers()` needs one for Level 1 auto-detection and Level 2 derivation.
+  Keying by `meta.name` is safe today (both registration paths derive the registry
+  name from the file's own `meta.name`, and `SolutionController.add_deployment()`
+  rejects duplicates), but it is an implicit invariant rather than an enforced one.
+  A `(model, rel_path)` carrier type would remove the coupling if that method ever
+  gains a second caller.
+- Consider whether the one remaining silent case deserves a signal: a deployment
+  that declares **no** `spec.layers` at all, in a workspace whose `resolves: layers`
+  convention no longer matches it. Nothing claims to be in a hierarchy, so there is
+  nothing to contradict — but it is still indistinguishable from a typo'd pattern.
+  (The far more damaging variant — a deployment that *does* declare `spec.layers`
+  while no convention claims it, which silently produced an empty artifact path —
+  is now a reported error; see
+  [`LayerResolution`'s three states](../../src/strata/utils/path_convention.py).)
+- Make `PromoteController` load deployments *with* a configuration model, so
+  ADR-0072 resolution errors become hard validation failures there instead of
+  advisory messages. `_load_registered_deployments()` calls
+  `DeploymentService.load()` with no configuration model, and
+  `BaseService.validate()` only runs Phase 2 (where
+  `_validate_deployment_layers()` reports these) when one is supplied — so an
+  unknown `follows` name or an ambiguous convention match currently surfaces only
+  as a message from `_resolve_dep_layers()`, while scope filtering silently falls
+  back to explicit-only values. That fallback can change *which* deployments a
+  scoped wave promotes, so it deserves a hard failure rather than a message.
