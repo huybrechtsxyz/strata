@@ -109,9 +109,14 @@ Required on every document. Models use Pydantic's `extra="forbid"` — unknown f
 
 ### Layer
 A horizontal slice of deployment scope (e.g., `zone`, `tenant`, `application`).
-Defined in `configuration.spec.layering[]` with a `name` and optional `default`.
-Deployments declare which layers they support via `spec.layers: [layer1, layer2, ...]`.
-Used for scope filtering in promotion strategies (ADR 0011).
+Defined as a **segment** on a `configuration.spec.paths` convention declaring
+`resolves: layers` (ADR 0072), with a `name` and optional `pattern`/`default`.
+Deployments declare their values via `spec.layers.segments: {name: value}`; any value
+not declared explicitly is derived from the deployment file's own location, then falls
+back to the segment's `default`. Used for scope filtering in promotion strategies (ADR 0011).
+
+> Superseded naming: `configuration.spec.layering[]` / `spec.layerings[]` were removed
+> in ADR 0072 and merged into `spec.paths`.
 
 ### Layering
 The mechanism for organizing infrastructure across multiple scopes simultaneously.
@@ -167,9 +172,12 @@ a subset of deployments within one environment. **Ring wave** (integer, e.g., 1,
 a subset of environments within a ring. Together they control rollout granularity.
 
 ### Scope
-A layer name (from `configuration.spec.layering[]`) that determines which deployments
-participate in deployment waving. Deployments lacking the layer are excluded from scoped
-waves (all-at-once only).
+A segment name (from a `configuration.spec.paths` convention declaring `resolves: layers`)
+that determines which deployments participate in deployment waving. Matched against each
+deployment's **resolved** segment values (explicit → path-derived → default), so a
+deployment that derives the value from its path participates just like one that declares
+it explicitly. Deployments for which the segment resolves to nothing are excluded from
+scoped waves (all-at-once only).
 
 ### Gate
 A precondition evaluated before promotion proceeds. Example: `require_progression_order`

@@ -1296,7 +1296,7 @@ class BaseDeployCommand(BaseCommand):
                 if spec:
                     workspace_name = spec.workspace.name if spec.workspace else None
                     layers = spec.layers
-                    environment = layers.get("environment") if layers else None
+                    environment = layers.segments.get("environment") if layers and layers.segments else None
 
             payload = DeployLogModel(
                 execution_id=self._execution_id,

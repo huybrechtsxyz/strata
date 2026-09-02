@@ -9,7 +9,8 @@ meta:
   tags: [aws, eks, production, deployment]
 spec:
   layers:
-    environment: prd
+    segments:
+      environment: prd
 
   properties:
     environment: prd

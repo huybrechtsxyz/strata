@@ -9,7 +9,8 @@ meta:
   tags: [{{ solution_name }}, production, deployment, aks]
 spec:
   layers:
-    environment: prd
+    segments:
+      environment: prd
 
   properties:
     environment: prd

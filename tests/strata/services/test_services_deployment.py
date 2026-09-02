@@ -80,7 +80,7 @@ class TestDeploymentService:
             "spec": {
                 "workspace": {"name": "test_workspace", "file": "workspace.yaml"},
                 "environments": ["environment.yaml"],
-                "layers": {"environment": "dev"},
+                "layers": {"segments": {"environment": "dev"}},
                 "stages": [{"name": "dev"}],
             },
         }

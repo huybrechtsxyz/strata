@@ -1,7 +1,7 @@
 """Cross-manifest deployment scope overlap detection."""
 
 from pathlib import Path
-from typing import Dict, FrozenSet, List, Optional, Set, Tuple
+from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple
 
 import yaml
 
@@ -118,7 +118,7 @@ class OverlapController(BaseController):
                 continue
 
             spec = raw.get("spec") or {}
-            layers: Dict[str, str] = spec.get("layers") or {}
+            layers_raw: Dict[str, Any] = spec.get("layers") or {}
             # workspace is a single object with a 'file' key
             ws_raw = spec.get("workspace") or {}
             ws_file: Optional[str] = None
@@ -127,13 +127,25 @@ class OverlapController(BaseController):
             elif isinstance(ws_raw, str):
                 ws_file = ws_raw
 
-            artifact_path = self._compute_artifact_path(layers, config_model, str(path))
+            artifact_path, resolved_keys = self._compute_artifact_path(layers_raw, config_model, str(path))
+
+            # Check #3 groups manifests by "which layers identify this deployment's
+            # scope". Prefer the RESOLVED segment names (ADR-0072 — includes values
+            # derived from the file's own path, not just explicitly declared ones),
+            # but fall back to the explicitly-declared segment names whenever
+            # resolution yields nothing: no configuration loaded, no resolves: layers
+            # convention declared, or an unresolvable/ambiguous match. Without this
+            # fallback every manifest would collapse to an identical empty key set and
+            # Check #3 would silently never fire — which is exactly what the raw
+            # `spec.layers.keys()` proxy used to guarantee, config or no config.
+            explicit_segments = layers_raw.get("segments") or {} if isinstance(layers_raw, dict) else {}
+            layer_key_set = resolved_keys or frozenset(explicit_segments.keys())
 
             results.append(
                 {
                     "path": path,
-                    "layers": layers,
-                    "layer_key_set": frozenset(layers.keys()),
+                    "layers": layers_raw,
+                    "layer_key_set": layer_key_set,
                     "workspace_file": ws_file,
                     "artifact_path": artifact_path,
                     "configurations_raw": spec.get("configurations") or [],
@@ -142,38 +154,51 @@ class OverlapController(BaseController):
 
         return results
 
-    def _compute_artifact_path(self, layers: Dict[str, str], config_model, manifest_path: str = "") -> str:
-        """Reproduce DeploymentService.get_artifact_path() from raw layer data.
+    def _compute_artifact_path(
+        self, layers_raw: Dict[str, Any], config_model, manifest_path: str = ""
+    ) -> Tuple[str, FrozenSet[str]]:
+        """Call the shared resolve_layers() from raw layer data (ADR-0072).
 
-        Supports both ``spec.layering`` (single flat scheme) and ``spec.layerings``
-        (scoped multi-scheme).  The manifest file path is used for scope resolution.
+        Constructs a cheap ``LayersModel(**layers_raw)`` from the already-extracted
+        raw dict — this controller deliberately avoids full ``DeploymentModel``
+        validation across a fleet-wide scan for performance, but ``layers`` is a
+        tiny sub-model (``follows`` + ``segments``), so validating just it is
+        negligible next to validating the whole deployment graph (see ADR-0072's
+        "Decided: resolve_layers() always takes a typed LayersModel").
+
+        Returns ``(artifact_path, resolved_segment_names)``. An empty key set means
+        "resolution produced nothing" (no config, no ``resolves: layers`` convention,
+        or an unresolvable match) — callers must fall back to the explicitly-declared
+        segment names rather than treating it as a real, comparable value.
         """
-        from strata.utils.layering import compute_artifact_path, resolve_layering_scheme
+        from strata.models.deployment_model import LayersModel
+        from strata.utils.path_convention import resolve_layers
 
-        if not config_model or not layers:
-            return ""
+        if not config_model or not layers_raw:
+            return "", frozenset()
 
-        if config_model.spec.layerings:
-            scheme = resolve_layering_scheme(
-                manifest_path,
-                str(self._work_path),
-                config_model.spec.layerings,
-            )
-            if scheme is None:
-                return ""
-            return compute_artifact_path(layers, scheme)
+        try:
+            layers_model = LayersModel(**layers_raw)
+        except Exception:
+            return "", frozenset()
 
-        if config_model.spec.layering:
-            components = []
-            for layer in config_model.spec.layering:
-                value = layers.get(layer.name)
-                if value is None and layer.default:
-                    value = layer.default
-                if value:
-                    components.append(str(value))
-            return "/".join(components)
+        try:
+            rel_path = Path(manifest_path).relative_to(self._work_path).as_posix()
+        except (ValueError, TypeError):
+            rel_path = Path(manifest_path).name
 
-        return ""
+        resolution = resolve_layers(rel_path, layers_model, config_model.spec.paths or [])
+        if resolution.error or resolution.convention is None:
+            return "", frozenset()
+
+        components: List[str] = []
+        for segment in resolution.convention.segments or []:
+            value = resolution.values.get(segment.name)
+            if value is None:
+                break  # "not applicable" — stop here, don't pad with later segments
+            components.append(str(value))
+
+        return "/".join(components), frozenset(resolution.values.keys())
 
     # ------------------------------------------------------------------
     # Check #1 — artifact_path + workspace uniqueness

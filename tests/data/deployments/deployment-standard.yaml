@@ -12,7 +12,8 @@ meta:
   tags: ["platform", "infrastructure", "kamatera"]
 spec:
   layers:
-    environment: prod
+    segments:
+      environment: prod
 
   properties:
     deployment_type: production

@@ -402,6 +402,37 @@ class DeploymentLockingModel(PlatformBaseModel):
     )
 
 
+class LayersModel(PlatformBaseModel):
+    """Deployment-side layer values (ADR-0072).
+
+    Replaces the old flat ``Dict[str, str]`` shape. A deployment declares which
+    ``configuration.spec.paths`` convention (with ``resolves: layers``) it belongs
+    to, and — only where the path itself doesn't already say enough — explicit
+    segment values. Both explicit and path-derived values are resolved via
+    ``utils.path_convention.resolve_layers()``; an explicit value always wins.
+    """
+
+    follows: Optional[PlatformName] = Field(
+        None,
+        description=(
+            "Name of a configuration.spec.paths convention (with resolves: layers) this "
+            "deployment follows. If omitted, the convention is auto-detected by matching "
+            "this deployment file's own path against every resolves: layers convention's "
+            "scope + pattern — ambiguous matches (more than one) are a hard validation error."
+        ),
+    )
+    segments: Optional[Dict[str, str]] = Field(
+        None,
+        description=(
+            "Explicit segment values, keyed by segment name. Any name not present here "
+            "falls back to path-derivation (from this file's own location against the "
+            "resolved convention's pattern), then the segment's default, then 'not "
+            "applicable' — never an error. Declaring segments is not all-or-nothing; "
+            "individual keys are optional."
+        ),
+    )
+
+
 class DeploymentSpecModel(PlatformBaseModel):
     """Model for deployment specification (properties, workspace, stages)."""
 
@@ -417,10 +448,14 @@ class DeploymentSpecModel(PlatformBaseModel):
     custom: Optional[Dict[str, Any]] = Field(
         None, description="Deployment-specific custom properties and configurations"
     )
-    layers: Optional[Dict[str, str]] = Field(
+    layers: Optional[LayersModel] = Field(
         None,
-        description="Deployment layer values (keys must match configuration.spec.layering[].name). "
-        "Defines the artifact path location for this deployment.",
+        description=(
+            "Deployment layer values (ADR-0072). 'follows' names a "
+            "configuration.spec.paths convention (resolves: layers); 'segments' supplies "
+            "explicit per-segment values, falling back to path-derivation then default. "
+            "Defines the artifact path location for this deployment."
+        ),
     )
     tenant: Optional[PlatformName] = Field(
         None,

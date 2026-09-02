@@ -291,7 +291,9 @@ class PlatformBuilder(BaseBuilder):
         # ------------------------------------------------------------------
         artifact_path: Optional[str] = None
         if configuration_model and hasattr(deployment_service, "get_artifact_path"):
-            artifact_path = deployment_service.get_artifact_path(configuration_model)
+            artifact_path = deployment_service.get_artifact_path(
+                configuration_model, work_path=str(work_path) if work_path else None
+            )
             if self.verbose:
                 self.logger.debug(f"Computed artifact_path: {artifact_path}")
 
@@ -522,7 +524,14 @@ class PlatformBuilder(BaseBuilder):
         convenience_name: Optional[str] = str(deployment_model.meta.name)
         convenience_labels: Optional[Dict] = deployment_model.meta.labels or None
         convenience_annotations: Optional[Dict] = deployment_model.meta.annotations or None
-        convenience_layers: Optional[Dict] = deployment_model.spec.layers or None
+        # Resolved layer/segment values (ADR-0072) — explicit -> derived -> default,
+        # not the raw LayersModel object; see DeploymentService.get_resolved_layers().
+        resolved_layers: Optional[Dict[str, str]] = (
+            deployment_service.get_resolved_layers(configuration_model, str(work_path) if work_path else None)
+            if configuration_model
+            else None
+        ) or None
+        convenience_layers: Optional[Dict] = resolved_layers
 
         # chart_versions: module name → helm chart version (chart-based modules only)
         chart_versions: Optional[Dict[str, str]] = None
@@ -572,7 +581,7 @@ class PlatformBuilder(BaseBuilder):
             modules=modules,
             firewalls=firewalls,
             dns_zones=dns_zones,
-            deployment=deployment_model.spec.layers,
+            deployment=resolved_layers,
             artifact_path=artifact_path,
             stages=deployment_model.spec.stages,
             gates=deployment_model.spec.gates,

@@ -299,7 +299,7 @@ class TestDeploymentServiceApplyToolVersionPins:
                 "workspace": {"name": "ws", "file": str(ws_p)},
                 "environments": [{"file": str(env_p)}],
                 "versions": [{"file": str(lock_p)}],
-                "layers": {"environment": "prod"},
+                "layers": {"segments": {"environment": "prod"}},
             },
         }
         p = tmp_path / "deploy.yaml"

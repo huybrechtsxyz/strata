@@ -9,7 +9,8 @@ meta:
   tags: [azure, aks, production, deployment]
 spec:
   layers:
-    environment: prd
+    segments:
+      environment: prd
 
   properties:
     environment: prd

@@ -67,7 +67,7 @@ class DeploymentService(BaseService["DeploymentModel"]):
         Phase 2: Validate deployment against dynamic configuration.
 
         Validates cross-references when related services are loaded:
-        - Deployment layer values against configuration.spec.layering
+        - Deployment layer/segment values against configuration.spec.paths (resolves: layers)
         - Deployment properties against configuration.spec.deployment.properties schema
         - Environment variable/secret references against workspace
         - Deployment variable/secret references against workspace
@@ -93,8 +93,11 @@ class DeploymentService(BaseService["DeploymentModel"]):
                 "A leaf deployment that extends this file is required."
             ]
 
-        # Validate deployment layers against configuration layering
-        if configuration_model and (configuration_model.spec.layering or configuration_model.spec.layerings):
+        # Validate deployment layers/segments against configuration.spec.paths
+        # conventions declaring resolves: layers (ADR-0072).
+        if configuration_model and any(
+            getattr(p, "resolves", None) == "layers" for p in (configuration_model.spec.paths or [])
+        ):
             layer_errors = self._validate_deployment_layers(configuration_model, work_path)
             errors.extend(layer_errors)
 
@@ -378,20 +381,23 @@ class DeploymentService(BaseService["DeploymentModel"]):
         self, configuration_model: ConfigurationModel, work_path: Optional[str] = None
     ) -> List[str]:
         """
-        Validate deployment layer values against configuration layering definition.
+        Validate deployment layer/segment values against configuration.spec.paths
+        conventions declaring resolves: layers (ADR-0072).
 
-        Supports both ``spec.layering`` (single flat scheme) and ``spec.layerings``
-        (scoped multi-scheme).  For ``spec.layerings``, the scheme is resolved by
-        matching the deployment file path against each scheme's scope glob.
+        Resolves this deployment's layer values via resolve_layers() (Level 1 + Level 2
+        precedence: explicit -> derived -> default -> not applicable), then
+        pattern-checks each resolved value against its segment's declared pattern.
+        There is no "required" check — a segment that resolves to nothing is simply
+        not applicable to this deployment, not an error.
 
         Args:
-            configuration_model: Configuration model with layering definition
-            work_path: Workspace root for scope resolution (required for spec.layerings)
+            configuration_model: Configuration model with spec.paths conventions
+            work_path: Workspace root for scope/pattern resolution
 
         Returns:
             List[str]: List of validation error messages
         """
-        from strata.utils.layering import resolve_layering_scheme
+        from strata.utils.path_convention import resolve_layers
 
         errors: List[str] = []
 
@@ -399,47 +405,38 @@ class DeploymentService(BaseService["DeploymentModel"]):
             errors.append("Deployment model is not initialized")
             return errors
 
-        deployment_values = self.model.spec.layers or {}
+        try:
+            rel_path = Path(self.path or "").relative_to(work_path or "").as_posix()
+        except (ValueError, TypeError):
+            rel_path = Path(self.path or "").name
 
-        # Resolve the active layer list
-        active_layers = None
-        scheme_name: Optional[str] = None
+        resolution = resolve_layers(rel_path, self.model.spec.layers, configuration_model.spec.paths or [])
 
-        if configuration_model.spec.layerings:
-            scheme = resolve_layering_scheme(
-                self.path or "",
-                work_path or "",
-                configuration_model.spec.layerings,
-            )
-            if scheme is None:
-                # No scope matched — no layering validation for this deployment file
-                return errors
-            active_layers = scheme.layers
-            scheme_name = scheme.name
-        elif configuration_model.spec.layering:
-            active_layers = configuration_model.spec.layering
-        else:
+        if resolution.error:
+            errors.append(resolution.error)
             return errors
 
-        # Validate required layers are present and pattern-check values
-        for layer in active_layers:
-            if layer.required and layer.name not in deployment_values:
-                where = f" (scheme '{scheme_name}')" if scheme_name else ""
-                errors.append(f"Required layer '{layer.name}' not provided in deployment{where}")
+        if resolution.convention is None:
+            # No resolves: layers convention applies — no validation for this file
+            return errors
 
-            if layer.name in deployment_values and layer.pattern:
-                value = deployment_values[layer.name]
+        for segment in resolution.convention.segments or []:
+            value = resolution.values.get(segment.name)
+            if value is not None and segment.pattern:
                 try:
-                    if not re.match(layer.pattern, value):
-                        errors.append(f"Layer '{layer.name}' value '{value}' does not match pattern '{layer.pattern}'")
+                    if not re.match(segment.pattern, value):
+                        errors.append(
+                            f"Segment '{segment.name}' value '{value}' does not match pattern '{segment.pattern}'"
+                        )
                 except re.error as e:
-                    errors.append(f"Invalid regex pattern for layer '{layer.name}': {layer.pattern} - {e}")
+                    errors.append(f"Invalid regex pattern for segment '{segment.name}': {segment.pattern} - {e}")
 
-        # Warn on unknown layers (not in the active scheme)
-        configured_names = {layer.name for layer in active_layers}
-        unknown_layers = set(deployment_values.keys()) - configured_names
-        if unknown_layers:
-            self.logger.warning("Deployment contains unknown layers", unknown_layers=unknown_layers)
+        # Warn on unknown explicit segments (not part of the resolved convention)
+        explicit_segments = (self.model.spec.layers.segments or {}) if self.model.spec.layers else {}
+        configured_names = {segment.name for segment in resolution.convention.segments or []}
+        unknown_segments = set(explicit_segments.keys()) - configured_names
+        if unknown_segments:
+            self.logger.warning("Deployment contains unknown layer segments", unknown_segments=unknown_segments)
 
         return errors
 
@@ -537,66 +534,102 @@ class DeploymentService(BaseService["DeploymentModel"]):
 
         return errors
 
-    def get_artifact_path(self, configuration_model: Optional["ConfigurationModel"] = None) -> str:
+    def get_artifact_path(
+        self,
+        configuration_model: Optional["ConfigurationModel"] = None,
+        work_path: Optional[str] = None,
+    ) -> str:
         """
-        Construct artifact path from deployment layer values.
+        Construct artifact path from resolved deployment layer/segment values (ADR-0072).
 
-        The artifact path is constructed from the deployment.spec.deployment dictionary
-        following the order defined in configuration.spec.layering.
+        Calls resolve_layers() (Level 1 + Level 2 precedence) and joins the resolved
+        values in the matched convention's declared segments order, stopping at the
+        first segment that didn't resolve at all ("not applicable") — not the
+        family's full/deepest shape.
 
         Args:
-            configuration_model: Configuration model with layering definition
+            configuration_model: Configuration model with spec.paths conventions
+            work_path: Workspace root for scope/pattern resolution
 
         Returns:
-            str: Artifact path (e.g., "zone-europe/acme/production/prd")
+            str: Artifact path (e.g., "hub1/spoke1/cust1/prd/eu1")
 
         Example:
-            Configuration defines: zone → tenant → space → environment
-            Deployment provides: {zone: "eu", tenant: "acme", space: "default", environment: "prod"}
-            Result: "eu/acme/default/prod"
+            Convention segments (in order): hub, spoke, customer, ring, environment
+            Deployment provides: {hub: "hub1", spoke: "spoke1"}, rest derived from path
+            Result: "hub1/spoke1/cust1/prd/eu1"
 
         Note:
-            - If no layering configured, returns empty string
-            - If deployment has no layer values, returns empty string
-            - Missing optional layers use default values from configuration
-            - Path components follow layer order from configuration
+            - If no resolves: layers convention configured or matched, returns empty string
+            - Missing segments use default values, or are skipped once the first
+              "not applicable" segment is reached (a hub-only deployment stops early)
         """
         self._ensure_validated()
 
-        if not configuration_model:
+        if not configuration_model or self.model is None or self.model.spec is None:
             return ""
 
-        # Resolve the active layer list (scoped multi-scheme or single flat scheme)
-        from strata.utils.layering import compute_artifact_path, resolve_layering_scheme
+        from strata.utils.path_convention import resolve_layers
 
-        active_layers = None
-        if configuration_model.spec.layerings:
-            scheme = resolve_layering_scheme(
-                self.path or "",
-                "",  # work_path not available here; relies on filename fallback
-                configuration_model.spec.layerings,
-            )
-            if scheme is None:
-                return ""
-            return compute_artifact_path(self.model.spec.layers or {}, scheme)  # type: ignore[union-attr]
-        elif configuration_model.spec.layering:
-            active_layers = configuration_model.spec.layering
-        else:
+        try:
+            rel_path = Path(self.path or "").relative_to(work_path or "").as_posix()
+        except (ValueError, TypeError):
+            rel_path = Path(self.path or "").name
+
+        resolution = resolve_layers(rel_path, self.model.spec.layers, configuration_model.spec.paths or [])
+
+        if resolution.error or resolution.convention is None:
             return ""
 
-        if self.model is None or self.model.spec is None or not self.model.spec.layers:
-            return ""
-
-        # Single flat scheme path: build inline without a ScopedLayeringModel wrapper
-        deployment_values = self.model.spec.layers
-        components = []
-        for layer in active_layers:
-            value = deployment_values.get(layer.name)
-            if value is None and layer.default:
-                value = layer.default
-            if value is not None:
-                components.append(str(value))
+        components: List[str] = []
+        for segment in resolution.convention.segments or []:
+            value = resolution.values.get(segment.name)
+            if value is None:
+                # "not applicable" — stop here, don't pad with later segments
+                break
+            components.append(str(value))
         return "/".join(components)
+
+    def get_resolved_layers(
+        self,
+        configuration_model: Optional["ConfigurationModel"] = None,
+        work_path: Optional[str] = None,
+    ) -> Dict[str, str]:
+        """
+        Return this deployment's layer/segment values as a flat dict (ADR-0072).
+
+        Unlike ``get_artifact_path()`` (which joins segments in convention order and
+        is only defined when a convention actually matched), this deliberately also
+        returns the declared pass-through values when no ``resolves: layers``
+        convention exists at all — see ``LayerResolution``'s three states. That
+        asymmetry is intentional, not an inconsistency:
+
+        - an artifact **path** needs segment *order*, which only a convention
+          defines, so there is none without one;
+        - these **values** feed ``PlatformSpecModel.deployment``/``.layers``, which
+          templates read as a plain lookup (e.g. the sync templates'
+          ``layers.environment``). Blanking them for a workspace that simply doesn't
+          use layering would silently retarget GitOps resources to the fallback
+          namespace.
+
+        Returns an empty dict when resolution actually failed (``resolution.error``
+        — reported by ``_validate_deployment_layers()``), or when the model isn't
+        initialized.
+        """
+        if not configuration_model or self.model is None or self.model.spec is None:
+            return {}
+
+        from strata.utils.path_convention import resolve_layers
+
+        try:
+            rel_path = Path(self.path or "").relative_to(work_path or "").as_posix()
+        except (ValueError, TypeError):
+            rel_path = Path(self.path or "").name
+
+        resolution = resolve_layers(rel_path, self.model.spec.layers, configuration_model.spec.paths or [])
+        if resolution.error:
+            return {}
+        return dict(resolution.values)
 
     def get_build_path(self, build_path: Path) -> Path:
         """

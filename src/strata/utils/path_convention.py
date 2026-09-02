@@ -3,6 +3,11 @@
 Provides:
 - ``match_pattern()``  — match a file path against a convention pattern and return
   captured segment values.
+- ``resolve_layers()`` — resolve a deployment's layer/segment values against
+  ``configuration.spec.paths`` conventions with ``resolves: layers`` (ADR-0072).
+  The ONLY place Level 1 (which convention) + Level 2 (each segment's value)
+  precedence is implemented — every caller that needs a deployment's resolved
+  layer values must call this, not reimplement any part of it.
 - ``resolve_spec_rule()`` — resolve a ``spec.field[*].attr`` rule against a
   loaded ``ConfigurationModel`` and return the allowed value set.
 - ``evaluate_file_rule()`` — expand placeholder references in a file path template
@@ -16,11 +21,13 @@ Provides:
 """
 
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional, Set
 
 if TYPE_CHECKING:
     from strata.models.configuration_model import PathConventionModel
+    from strata.models.deployment_model import LayersModel
 
 
 def match_pattern(rel_path: str, pattern: str) -> Optional[Dict[str, str]]:
@@ -67,6 +74,155 @@ def match_pattern(rel_path: str, pattern: str) -> Optional[Dict[str, str]]:
 
 
 # ---------------------------------------------------------------------------
+# Layer/segment resolution (ADR-0072) — the single shared entry point
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class LayerResolution:
+    """Result of resolving a deployment's layer values (ADR-0072).
+
+    Three distinct states — check ``convention`` and ``error``, never ``values``
+    alone, since a non-empty ``values`` does **not** imply resolution succeeded:
+
+    - **Resolved** (``convention`` set, ``error`` None) — ``values`` are the Level 1
+      + Level 2 outcome, ordered by ``convention.segments``. Only in this state is
+      an artifact path defined, because segment *order* comes from the convention.
+    - **Pass-through** (both None) — no ``resolves: layers`` convention exists at
+      all, so layering simply isn't in play. ``values`` carries whatever the
+      deployment declared, unvalidated, so consumers that only need a lookup (e.g.
+      GitOps templates reading ``layers.environment``) keep working. There is no
+      artifact path: with no convention there is no defined segment order, and
+      guessing one from YAML key order would be exactly the kind of implicit
+      behavior ADR-0072 exists to remove.
+    - **Failed** (``error`` set) — unknown ``follows`` name, ambiguous match, or a
+      deployment declaring layers that no existing convention claims. ``values``
+      still carries the declared segments so callers can degrade gracefully, but
+      the error must be surfaced, not swallowed.
+    """
+
+    convention: Optional["PathConventionModel"] = None
+    values: Dict[str, str] = field(default_factory=dict)
+    error: Optional[str] = None
+
+
+def resolve_layers(
+    rel_path: str,
+    layers: Optional["LayersModel"],
+    conventions: "List[PathConventionModel]",
+) -> LayerResolution:
+    """Resolve a deployment's layer/segment values (ADR-0072).
+
+    The ONLY function implementing this precedence — every caller that needs a
+    deployment's resolved layer values (validation, artifact-path construction,
+    ``rules:`` checking, overlap/promote filtering) must call this, not
+    reimplement any part of it.
+
+    Level 1 — which convention applies:
+        1. Explicit — ``layers.follows`` names a convention → use it. Error if the
+           name doesn't exist among *conventions*' ``resolves: layers`` entries.
+        2. Auto-detected — no ``follows`` → match *rel_path* against every
+           ``resolves: layers`` convention's ``scope`` + ``pattern``. Error if more
+           than one matches (ambiguous).
+        3. None — neither explicit nor auto-detected → no convention applies;
+           ``layers.segments`` (if any) is returned as unvalidated free-form data.
+
+    Level 2 — each segment's value, once a convention is selected:
+        1. Explicit — ``layers.segments[name]`` is set → use it. Always wins.
+        2. Derived — *rel_path* matches the convention's ``pattern`` far enough to
+           capture ``name`` → use the captured value.
+        3. Default — the segment declares ``default`` → use it.
+        4. Not applicable — none of the above → ``name`` is omitted from
+           ``.values`` entirely (not an error).
+
+    Args:
+        rel_path: Deployment file path relative to work_path, forward-slash separated.
+        layers: The deployment's ``spec.layers`` (a ``LayersModel`` instance), or
+            ``None``.
+        conventions: ``configuration.spec.paths`` entries — only those with
+            ``resolves == "layers"`` are considered; others are ignored even if
+            present in this list.
+
+    Returns:
+        A `LayerResolution`.
+    """
+    from fnmatch import fnmatch
+
+    layer_conventions = [c for c in conventions if getattr(c, "resolves", None) == "layers"]
+
+    follows = getattr(layers, "follows", None) if layers is not None else None
+    explicit_segments: Dict[str, str] = dict(getattr(layers, "segments", None) or {}) if layers is not None else {}
+    declares_layers = bool(follows or explicit_segments)
+
+    convention: Optional["PathConventionModel"] = None
+
+    if follows:
+        convention = next((c for c in layer_conventions if c.name == follows), None)
+        if convention is None:
+            return LayerResolution(
+                values=explicit_segments,
+                error=(
+                    f"spec.layers.follows '{follows}' does not name a configuration.spec.paths "
+                    "convention declaring resolves: layers"
+                ),
+            )
+    else:
+        matches = [
+            c
+            for c in layer_conventions
+            if fnmatch(rel_path, c.scope) and match_pattern(rel_path, c.pattern) is not None
+        ]
+        if len(matches) > 1:
+            return LayerResolution(
+                values=explicit_segments,
+                error=(
+                    f"Ambiguous resolves: layers match for '{rel_path}': "
+                    f"{sorted(m.name for m in matches)} all match — give each convention a "
+                    "distinguishing literal prefix segment in scope/pattern, or set spec.layers.follows explicitly"
+                ),
+            )
+        convention = matches[0] if matches else None
+
+    if convention is None:
+        # A deployment that declares layer values while the configuration *does*
+        # define resolves: layers conventions, yet none of them claims this file, is
+        # a misconfiguration — almost always a pattern that no longer matches the
+        # real tree. Without this check the failure is invisible: the declared values
+        # still pass through, so nothing looks wrong, but no convention means no
+        # segment order, so the artifact path silently becomes empty and the build
+        # lands at the wrong place. Report it rather than let it pass.
+        if declares_layers and layer_conventions:
+            return LayerResolution(
+                values=explicit_segments,
+                error=(
+                    f"'{rel_path}' declares spec.layers but no resolves: layers convention claims it "
+                    f"(tried: {sorted(c.name for c in layer_conventions)}). Its artifact path would be "
+                    "empty. Fix the convention's scope/pattern to cover this file, set "
+                    "spec.layers.follows explicitly, or remove spec.layers from this deployment."
+                ),
+            )
+        # Otherwise genuinely no layering in play — segments are unvalidated
+        # free-form pass-through data, exactly as today's graceful "no scope match".
+        return LayerResolution(values=explicit_segments)
+
+    captures = match_pattern(rel_path, convention.pattern) or {}
+
+    values: Dict[str, str] = {}
+    for segment in convention.segments or []:
+        name = segment.name
+        explicit_value = explicit_segments.get(name)
+        if explicit_value is not None:
+            values[name] = explicit_value
+        elif name in captures:
+            values[name] = captures[name]
+        elif segment.default is not None:
+            values[name] = segment.default
+        # else: not applicable — omitted entirely from values, not an error
+
+    return LayerResolution(convention=convention, values=values)
+
+
+# ---------------------------------------------------------------------------
 # Validation rule: spec.* model field lookup
 # ---------------------------------------------------------------------------
 
@@ -76,6 +232,22 @@ _SPEC_RULE_RE = re.compile(r"^spec\.(.+)\[\*\]\.(.+)$")
 def is_spec_rule(rule: str) -> bool:
     """Return True if *rule* is a ``spec.field[*].attr`` membership rule."""
     return bool(_SPEC_RULE_RE.match(rule))
+
+
+def _resolve_step(obj, name: str):
+    """Resolve one attribute/key step, working against both Pydantic models and dicts.
+
+    Plain ``getattr()`` (the original implementation) only resolves object
+    attributes — it silently returns ``None`` the instant it hits a dict (e.g.
+    ``spec.custom``, ``spec.configuration``, ``spec.properties``, all
+    ``Optional[Dict[str, Any]]``), which callers then treat as "unresolvable,
+    skip gracefully" with no error at all. This dict-aware fallback (ADR-0072)
+    closes that gap so ``rules:`` membership checks actually work against
+    freeform dict structures, not just typed model attributes.
+    """
+    if isinstance(obj, dict):
+        return obj.get(name)
+    return getattr(obj, name, None)
 
 
 def resolve_spec_rule(rule: str, configuration_model) -> Optional[Set[str]]:
@@ -104,7 +276,7 @@ def resolve_spec_rule(rule: str, configuration_model) -> Optional[Set[str]]:
     # Walk dot-separated path: e.g., "zones" → list object
     obj = spec
     for part in field_path.split("."):
-        obj = getattr(obj, part, None)
+        obj = _resolve_step(obj, part)
         if obj is None:
             return None
 
@@ -113,7 +285,7 @@ def resolve_spec_rule(rule: str, configuration_model) -> Optional[Set[str]]:
 
     values: Set[str] = set()
     for item in obj:
-        val = getattr(item, attr, None)
+        val = _resolve_step(item, attr)
         if val is not None:
             values.add(str(val))
     return values
@@ -158,6 +330,7 @@ def evaluate_conventions(
     conventions: "List[PathConventionModel]",
     work_path: Path,
     configuration_model=None,
+    deployment_layers: Optional["LayersModel"] = None,
 ) -> List[str]:
     """Evaluate all matching conventions for a file and return violations.
 
@@ -166,6 +339,11 @@ def evaluate_conventions(
         conventions: List of ``PathConventionModel`` entries from ``spec.paths``.
         work_path: Workspace root for file existence checks.
         configuration_model: Optional ``ConfigurationModel`` for ``spec.*`` rules.
+        deployment_layers: Optional deployment ``spec.layers`` (a ``LayersModel``)
+            for *rel_path* — required so ``rules:`` validates the *resolved* value
+            (explicit -> derived -> default; see ``resolve_layers()``) for
+            ``resolves: layers`` conventions, per ADR-0072. Every other convention
+            keeps validating the raw ``match_pattern()`` capture, unchanged.
 
     Returns:
         List of violation strings.  Empty list means the file is compliant.
@@ -173,6 +351,7 @@ def evaluate_conventions(
     from fnmatch import fnmatch
 
     violations: List[str] = []
+    layer_resolution: Optional[LayerResolution] = None
 
     for conv in conventions:
         # Step a: scope check
@@ -188,8 +367,26 @@ def evaluate_conventions(
         if not conv.rules:
             continue
 
+        # rules: validates the resolved value (Level 1 + Level 2 outcome) for
+        # resolves: layers conventions, not the raw path capture — see ADR-0072.
+        # Computed once per file (conventions list is identical across iterations).
+        if conv.resolves == "layers":
+            if layer_resolution is None:
+                layer_resolution = resolve_layers(rel_path, deployment_layers, conventions)
+                if layer_resolution.error:
+                    # Report it here too rather than only validating the fallback
+                    # values. This function is reachable from the path_convention
+                    # policy on files that never went through
+                    # DeploymentService._validate_deployment_layers() (which needs a
+                    # configuration model), so this may be the only place a bad
+                    # `follows` name or an ambiguous convention match is ever seen.
+                    violations.append(f"layer resolution failed — {layer_resolution.error}")
+            segment_values = layer_resolution.values
+        else:
+            segment_values = captures
+
         for segment_name, rule in conv.rules.items():
-            value = captures.get(segment_name)
+            value = segment_values.get(segment_name)
             if value is None:
                 continue
 
@@ -206,7 +403,7 @@ def evaluate_conventions(
                     )
             else:
                 # File existence rule
-                violation = evaluate_file_rule(rule, captures, work_path)
+                violation = evaluate_file_rule(rule, segment_values, work_path)
                 if violation:
                     violations.append(
                         f"convention '{conv.name}' \u2014 segment '{segment_name}' = '{value}': {violation}"
