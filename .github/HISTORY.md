@@ -7,6 +7,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-09-02
+
 ### Changed
 
 #### **Clarify layering and path resolution (ADR-0072)**
