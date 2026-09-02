@@ -212,7 +212,7 @@ at a time.
   field (full definitions, no shared catalog — one convention per hierarchy
   family), reusing `ConfigurationLayerModel`'s existing shape minus `required`
   (dropped — see
-  [Decided: no existence-required segments](#decided-no-existence-required-segments-not-applicable-replaces-required)).
+  [Decided: no existence-required segments](#decided-no-existence-required-segments--not-applicable-replaces-required)).
   Also gains a new `spec.custom: Optional[Dict[str, Any]]` field (generic escape
   hatch, same pattern as the existing `spec.configuration`/`spec.properties`) — see
   [Decided: add spec.custom and make resolve_spec_rule() dict-aware](#decided-add-speccustom-and-make-resolve_spec_rule-dict-aware).
@@ -473,7 +473,7 @@ spec:
 > genuinely-segment-aware `match_pattern()`.
 
 Note `required` is dropped from segment definitions in this design — see
-[Decided: no existence-required segments](#decided-no-existence-required-segments-not-applicable-replaces-required)
+[Decided: no existence-required segments](#decided-no-existence-required-segments--not-applicable-replaces-required)
 below for why.
 
 ### Deploy side: `spec.layers.follows` + `spec.layers.segments` (reuses the existing field name)
@@ -794,33 +794,47 @@ def resolve_layers(
 Internally this reuses the existing `match_pattern()` for Level 2's path-derivation
 step — no new matching engine, only new precedence logic wrapped around it.
 
-### Open implementation question: scan contexts vs. loaded-model contexts
+### Decided: `resolve_layers()` always takes a typed `LayersModel` — only `overlap_controller.py` needs an adapter
 
-Not resolved here — flagged so it isn't discovered mid-implementation. Callers split
-into two shapes:
+Traced every real caller precisely rather than assuming a general "scan vs. loaded
+model" split:
 
 - **Loaded-model contexts** (`deployment_service.py`, `platform_builder.py`) already
   have a real `DeploymentModel` and `ConfigurationModel` in hand — call `resolve_layers()`
   directly with typed inputs, no complication.
-- **Scan contexts** (`overlap_controller.py`'s fleet-wide manifest scan,
-  `path_convention_policy.py`'s directory walk for `rules:` checking) deliberately avoid
-  loading every candidate file as a full Pydantic model for performance — that's *why*
-  `overlap_controller._compute_artifact_path()` takes raw `layers: Dict[str, str]` today
-  instead of a `DeploymentModel`. `resolve_layers()`'s `layers` parameter should probably
-  accept either a typed `LayersModel` or a plain dict (mirroring the same
-  [dict-aware fallback](#decided-add-speccustom-and-make-resolve_spec_rule-dict-aware)
-  pattern already decided for `resolve_spec_rule()`), so scan contexts keep their
-  performance property without a second reimplementation. Alternative: lazily load the
-  full deployment model only for files whose path already matched a `resolves: layers`
-  convention's `scope` — narrows the cost to files that matter, avoiding the dict-aware
-  complication entirely. Which of these two is better is implementation work, not
-  decided by this ADR.
+- **`path_convention_policy.py` is NOT a raw-scan context.** `PolicyContext` already
+  carries `deployment_service: Optional[DeploymentService]`
+  ([`base_policy.py`](../../src/strata/validators/policies/base_policy.py#L26)) —
+  it's evaluated per-file within an already-loaded-model flow, exactly like
+  `deployment_service.py` itself. It calls `resolve_layers()` with a real typed
+  `LayersModel` too. No special-casing needed here at all.
+- **Only `overlap_controller.py` is a genuine raw-scan context** — it deliberately uses
+  `yaml.safe_load()` + `spec.get("layers")`
+  ([`overlap_controller.py`](../../src/strata/controllers/overlap_controller.py#L109-L121))
+  to avoid full `DeploymentModel` validation across potentially thousands of manifests.
+  But `layers` is a tiny sub-model (`follows` + `segments`), not the whole deployment —
+  model-validation cost is proportional to what's validated. So
+  `overlap_controller.py` constructs just `LayersModel(**raw_layers_dict)` from its
+  already-extracted raw dict and passes that cheap, real typed instance into
+  `resolve_layers()`. This preserves the fast-scan performance property (never
+  validating the full deployment graph) without making the shared function itself
+  dict-aware — that complexity would otherwise be paid by every caller, not just the
+  one that needs it.
+
+**Decided:** `resolve_layers()`'s `layers` parameter is `Optional["LayersModel"]` only
+— never a raw dict. `overlap_controller.py` is the only call site that needs the
+one-line `LayersModel(**raw_dict)` adapter; everyone else already has a typed instance.
 
 ### Models
 
 - [`ConfigurationLayerModel`](../../src/strata/models/configuration_model.py#L180) —
   drop `required: bool` and its `validate_default_when_not_required` model validator
-  (see [Decided: no existence-required segments](#decided-no-existence-required-segments-not-applicable-replaces-required)).
+  (see [Decided: no existence-required segments](#decided-no-existence-required-segments--not-applicable-replaces-required)).
+  Safe to modify in place rather than fork a new model: its only other consumer,
+
+- [`ConfigurationLayerModel`](../../src/strata/models/configuration_model.py#L180) —
+  drop `required: bool` and its `validate_default_when_not_required` model validator
+  (see [Decided: no existence-required segments](#decided-no-existence-required-segments--not-applicable-replaces-required)).
   Safe to modify in place rather than fork a new model: its only other consumer,
   `ScopedLayeringModel.layers`, is retired in the same change, so nothing else depends
   on `required` surviving.
@@ -831,14 +845,22 @@ into two shapes:
   `Optional[Literal["tenant", "layers"]]`; add
   `segments: Optional[List[ConfigurationLayerModel]]` (only meaningful when
   `resolves == "layers"`; a model validator should enforce that combination, mirroring
-  the existing `validate_segments_match_pattern` validator's style). Note `rules` is
-  already aliased to the YAML key `validate` with `populate_by_name=True` — both
-  `rules:` and `validate:` are already accepted as YAML keys today; this is unrelated
-  to this ADR's changes and needs no action, just worth knowing before assuming `rules:`
-  is the only spelling.
+  the existing `validate_segments_match_pattern` validator's style). **Review finding:**
+  also needs a new "segment names unique within this convention" validator — the
+  retired `ScopedLayeringModel` had exactly this
+  (`validate_unique_layer_names_in_scheme`, checking `self.layers`), and nothing
+  carries that check forward for the new inline `segments` list unless it's added
+  explicitly. Note `rules` is already aliased to the YAML key `validate` with
+  `populate_by_name=True` — both `rules:` and `validate:` are already accepted as
+  YAML keys today; this is unrelated to this ADR's changes and needs no action, just
+  worth knowing before assuming `rules:` is the only spelling.
 - [`ConfigurationSpecModel`](../../src/strata/models/configuration_model.py#L586) —
   remove `layering` and `layerings` fields entirely (no deprecation period — see
-  [Decision Outcome](#decision-outcome)). Add
+  [Decision Outcome](#decision-outcome)), **and delete its
+  `validate_unique_layer_names` model validator** (checks `layering`/`layerings`
+  mutual exclusivity plus name uniqueness for both) — dead code the moment the two
+  fields it reads no longer exist; easy to miss since it's a validator, not a field,
+  so a search for the field names alone won't surface it. Add
   `custom: Optional[Dict[str, Any]]` (see
   [Decided: add spec.custom](#decided-add-speccustom-and-make-resolve_spec_rule-dict-aware)).
   **Naming collision to be aware of, not a conflict:**
@@ -889,17 +911,22 @@ into two shapes:
 ### Controllers
 
 - [`overlap_controller.py`](../../src/strata/controllers/overlap_controller.py#L145) —
-  `_compute_artifact_path()` deleted; call `resolve_layers()` directly (see the open
-  scan-context question above — this is exactly the call site that question is about).
+  `_compute_artifact_path()` deleted; call `resolve_layers()` directly, constructing a
+  `LayersModel(**raw_layers_dict)` adapter from its existing raw-YAML extraction (see
+  [Decided: resolve_layers() always takes a typed LayersModel](#decided-resolve_layers-always-takes-a-typed-layersmodel--only-overlap_controllerpy-needs-an-adapter)).
 - [`promote_controller.py`](../../src/strata/controllers/promote_controller.py#L465) —
   `_scope_filter()`/`_get_scope_selector()` currently read `dep.spec.layers` as a flat
-  dict directly; must switch to reading `dep.spec.layers.segments` (explicit-only) or
-  call `resolve_layers()` for the full resolved view (explicit + derived + default).
-  **Behavior choice, not yet decided:** promotion scope-filtering today only ever sees
-  explicitly-declared values (derivation didn't exist before); switching it to resolved
-  values means promotion filters could newly match deployments that never explicitly
-  declared a layer value but derive one from their path. Whether that's desired is a
-  product decision for whoever implements this, not settled by this ADR.
+  dict directly (`dict(dep.spec.layers)`), which breaks outright once `spec.layers` is
+  a `LayersModel`. **Decided: fully resolved**, for consistency with every other
+  consumer (`get_artifact_path()`, `rules:`) — a deployment that omits `segments`
+  entirely and derives every value from its own path is just as real a member of a
+  layer as one that declares it explicitly (Goal #2's "explicit always wins over
+  derived" implies derived values are equally valid, not second-class). Both methods
+  call `resolve_layers(rel_path, dep.spec.layers, conventions)` and use `.values`
+  instead of `dict(dep.spec.layers)` — `_scope_filter()` checks `scope in resolution.values`,
+  `_get_scope_selector()` iterates `resolution.values.values()`. Needs the deployment's
+  `rel_path` and the `resolves: layers` conventions plumbed into this controller (not
+  previously required, since it only ever read the flat dict directly).
 
 ### Builders
 
@@ -918,6 +945,94 @@ clear "unknown field" error naming exactly the removed field. This is a loud, im
 failure, not a silent behavior change — the "migration tooling" open question in
 [Remaining Work](#remaining-work) is about *convenience* (auto-converting old configs),
 not *detection* (already free from `extra="forbid"`).
+
+## Implementation Plan
+
+Ordered, dependency-sequenced phases for building [Application Design](#application-design).
+Each phase is independently reviewable (models before code that reads them, code before
+the tests/docs that describe it). Not a substitute for
+[Remaining Work](#remaining-work) — the policy type and migration tooling listed there
+stay deferred and are intentionally absent from this plan.
+
+Both Phase 0 items from earlier design passes are now resolved (see
+[Application Design](#application-design)) — the scan-context question
+(`overlap_controller.py` uses a `LayersModel(**raw_dict)` adapter) and the
+`promote_controller.py` behavior choice (fully resolved). No blocking decisions
+remain before implementation starts.
+
+### Phase 1 — Models (`src/strata/models/`)
+
+1. `deployment_model.py` — add `LayersModel` (`follows`, `segments`); change
+   `DeploymentSpecModel.layers` to `Optional[LayersModel]`; fix the docstring's
+   `spec.layering[].name` reference.
+2. `configuration_model.py` — drop `ConfigurationLayerModel.required` and its
+   `validate_default_when_not_required` validator; delete `ScopedLayeringModel`
+   entirely; extend `PathConventionModel.resolves` to
+   `Literal["tenant", "layers"]`, add `segments`, add the resolves/segments
+   combination validator and the new segment-name-uniqueness validator; remove
+   `ConfigurationSpecModel.layering`/`.layerings` and delete
+   `validate_unique_layer_names`; add `ConfigurationSpecModel.custom`.
+3. `platform_artifact_model.py` — fix the `spec.layering[].name` docstring reference.
+4. Update `tests/strata/models/test_models_configuration.py` for the new
+   `PathConventionModel`/`ConfigurationSpecModel` shape in the same phase — a model
+   change without its own tests updated isn't reviewable in isolation.
+
+### Phase 2 — Utils (`src/strata/utils/`)
+
+1. Delete `utils/layering.py`.
+2. Add `LayerResolution` + `resolve_layers()` to `utils/path_convention.py`,
+   implementing the Phase 0 scan-context decision.
+3. Modify `resolve_spec_rule()` (dict-aware `_resolve_step()` fallback) and
+   `evaluate_conventions()` (resolved-value validation for `resolves == "layers"`
+   conventions only; unchanged for everything else).
+4. Update/add tests: `test_utils_path_convention_tenant.py` plus new coverage for
+   `resolve_layers()` (Level 1 ambiguous-match error, Level 2 explicit/derived/
+   default/not-applicable) and the `resolve_spec_rule()` dict-aware fix.
+
+### Phase 3 — Services (`src/strata/services/deployment_service.py`)
+
+1. Rewrite `_validate_deployment_layers()` — call `resolve_layers()`, pattern-check
+   resolved values, no more `required` check.
+2. Rewrite `get_artifact_path()` — call `resolve_layers()`, join `.values` in
+   `segments` order, stop at first not-applicable segment.
+3. Update `test_services_deployment.py` accordingly.
+
+### Phase 4 — Controllers (`src/strata/controllers/`)
+
+1. `overlap_controller.py` — delete `_compute_artifact_path()`, call
+   `resolve_layers()` per the Phase 0 scan-context decision.
+2. `promote_controller.py` — update `_scope_filter()`/`_get_scope_selector()` to call
+   `resolve_layers()` for the fully resolved view (decided — see
+   [Application Design](#application-design)), plumbing in each deployment's
+   `rel_path` and the `resolves: layers` conventions list.
+3. Update `test_controllers_overlap.py` and any promote-controller tests touching
+   `spec.layers`.
+
+### Phase 5 — Builders (`src/strata/builders/platform_builder.py`)
+
+1. Update the `get_artifact_path()` call site, `convenience_layers`, and
+   `deployment=deployment_model.spec.layers` for the new `LayersModel` shape.
+   `resolve_tenant_file_path()` call site is untouched.
+2. Update any builder tests exercising `spec.layers`/artifact paths.
+
+### Phase 6 — Docs and changelog
+
+1. `docs/config/configuration.md` — rewrite "Layering — Artifact Path Hierarchies"
+   and "Path Convention Policy" sections for the merged mechanism.
+2. `docs/GLOSSARY.md` — update the "Layering & Multi-Tenancy Concepts (ADR 0003)"
+   section.
+3. [ADR 0042](./0042-deep-validation-layer-consistency.md) and
+   [ADR 0052](./0052-path-convention-validation.md) — mark superseded or
+   cross-reference per their own Remaining Work.
+4. `.github/CHANGELOG.md`/`HISTORY.md` — breaking-change entry. Communication, not a
+   safety net — `extra="forbid"` already guarantees detection (see above).
+
+### Phase 7 — Full validation and status update
+
+1. Full `scripts/Check.ps1` (lint + format + types) and full test suite.
+2. Update this ADR's `- Status:` line from `proposed` to `implemented` (or
+   `partially-implemented` if the policy-type/migration-tooling follow-up work in
+   [Remaining Work](#remaining-work) hasn't landed yet).
 
 ## Remaining Work
 
@@ -940,13 +1055,6 @@ not *detection* (already free from `extra="forbid"`).
   `dict`, at both the path-walk and final attribute-extraction points) — see
   [Decided: add spec.custom and make resolve_spec_rule() dict-aware](#decided-add-speccustom-and-make-resolve_spec_rule-dict-aware).
 - Design/decide migration tooling (see open question above).
-- Resolve the two open implementation questions flagged in
-  [Application Design](#application-design): (1) whether `resolve_layers()` accepts
-  raw dicts (dict-aware) or lazily loads models only for matched files, for scan
-  contexts (`overlap_controller.py`, `path_convention_policy.py`); (2) whether
-  `promote_controller.py`'s scope-filtering should move from explicit-only
-  `spec.layers` values to the fully resolved (explicit + derived + default) view —
-  a behavior change, not just a mechanical port.
 - Plan the breaking-change rollout: since backward compatibility is explicitly out
   of scope, decide how the removal of `spec.layering`/`spec.layerings` is
   communicated (CHANGELOG/HISTORY entries, migration guide, version bump
