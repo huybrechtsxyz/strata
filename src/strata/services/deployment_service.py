@@ -14,6 +14,7 @@ from strata.services.base_service import BaseService
 from strata.services.configuration_service import ConfigurationService
 from strata.services.environment_service import EnvironmentService
 from strata.services.workspace_service import WorkspaceService
+from strata.utils.dict_merge import deep_merge
 from strata.utils.merge_provenance import MergeProvenance
 
 
@@ -761,15 +762,19 @@ class DeploymentService(BaseService["DeploymentModel"]):
             if resource_override.firewalls is not None:
                 workspace_resource.firewalls = resource_override.firewalls
             if resource_override.configuration is not None:
-                # Deep merge configuration (override wins)
+                # Deep merge configuration (override wins) — nested keys merge recursively,
+                # other conflicting values are replaced wholesale by the override.
                 if workspace_resource.configuration:
-                    workspace_resource.configuration.update(resource_override.configuration)
+                    workspace_resource.configuration = deep_merge(
+                        workspace_resource.configuration, resource_override.configuration
+                    )
                 else:
                     workspace_resource.configuration = resource_override.configuration
             if resource_override.custom is not None:
-                # Deep merge custom (override wins)
+                # Deep merge custom (override wins) — nested keys merge recursively,
+                # other conflicting values are replaced wholesale by the override.
                 if workspace_resource.custom:
-                    workspace_resource.custom.update(resource_override.custom)
+                    workspace_resource.custom = deep_merge(workspace_resource.custom, resource_override.custom)
                 else:
                     workspace_resource.custom = resource_override.custom
             if resource_override.labels is not None:
@@ -821,8 +826,12 @@ class DeploymentService(BaseService["DeploymentModel"]):
                         if module_override.enabled is not None:
                             target_module.enabled = module_override.enabled
                         if module_override.configuration is not None:
+                            # Deep merge configuration (override wins) — nested keys merge
+                            # recursively, other conflicting values are replaced wholesale.
                             if target_module.configuration:
-                                target_module.configuration.update(module_override.configuration)
+                                target_module.configuration = deep_merge(
+                                    target_module.configuration, module_override.configuration
+                                )
                             else:
                                 target_module.configuration = module_override.configuration
 

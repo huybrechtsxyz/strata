@@ -24,6 +24,7 @@ from strata.models.store_models import (
 )
 from strata.models.workspace_model import OutputFileModel
 from strata.services.base_service import BaseService
+from strata.utils.dict_merge import deep_merge
 from strata.utils.merge_provenance import MergeProvenance
 
 
@@ -71,16 +72,23 @@ class EnvironmentService(BaseService["EnvironmentModel"]):
         * ``variables``           — last-wins by ``key``
         * ``secrets``             — last-wins by ``key``
         * ``features``            — last-wins by ``key``
-        * ``properties``          — shallow ``dict.update``
-        * ``custom``              — shallow ``dict.update``
+        * ``properties``          — deep merge (nested dicts merged recursively; scalars/lists replaced wholesale)
+        * ``custom``              — deep merge (nested dicts merged recursively; scalars/lists replaced wholesale)
         * ``lifecycle``           — last-wins (wholesale)
         * ``overrides.resources`` — last-wins by ``resource`` name
         * ``overrides.modules``   — last-wins by ``(module, resource, namespace, slot_type)``
         * ``overrides.providers`` — last-wins by ``provider`` name
         * ``overrides.remotes``   — last-wins by ``remote`` name
-        * ``overrides.properties``— shallow ``dict.update``
+        * ``overrides.properties``— deep merge (nested dicts merged recursively; scalars/lists replaced wholesale)
         * ``overrides.includes``  — append; deduplicated by ``source`` path
         * ``overrides.output_files`` — append; deduplicated by ``name``
+
+        ``properties``/``custom``/``overrides.properties`` use the same deep-merge
+        semantics as the workspace → environment → deployment composition performed
+        by ``TerraformBuilder._resolve_merged_properties()`` (both call
+        :func:`strata.utils.dict_merge.deep_merge`), so a nested key declared in an
+        earlier file survives being partially overridden by a later file instead of
+        the whole object being replaced wholesale.
 
         Args:
             envfiles: List of environment file paths to merge (relative to work_path).
@@ -160,11 +168,11 @@ class EnvironmentService(BaseService["EnvironmentModel"]):
                     merged_features[key] = feat
                     provenance.feature_sources[key] = envfile_path
 
-            # --- Properties / Custom: shallow merge ---
+            # --- Properties / Custom: deep merge ---
             if spec.properties:
-                merged_properties.update(spec.properties)
+                merged_properties = deep_merge(merged_properties, spec.properties)
             if spec.custom:
-                merged_custom.update(spec.custom)
+                merged_custom = deep_merge(merged_custom, spec.custom)
 
             # --- Lifecycle: last-wins ---
             if spec.lifecycle:
@@ -187,7 +195,7 @@ class EnvironmentService(BaseService["EnvironmentModel"]):
                     for rem in ovr.remotes:
                         merged_remote_overrides[str(rem.remote)] = rem
                 if ovr.properties:
-                    merged_ovr_properties.update(ovr.properties)
+                    merged_ovr_properties = deep_merge(merged_ovr_properties, ovr.properties)
                 if ovr.includes:
                     for inc in ovr.includes:
                         merged_includes[inc.source] = inc
@@ -614,6 +622,13 @@ class EnvironmentService(BaseService["EnvironmentModel"]):
         """
         Merge environment properties with workspace properties.
 
+        .. deprecated::
+            Dead code — no callers in ``src/`` or ``tests/`` as of this writing.
+            ``TerraformBuilder._resolve_merged_properties()`` is the actual code path used
+            to merge workspace → environment → deployment properties/custom for build output.
+            Kept for backward compatibility with any external callers; fixed to use
+            :func:`~strata.utils.dict_merge.deep_merge` for consistency rather than removed.
+
         Precedence order (lowest to highest):
         1. Workspace properties (base layer)
         2. Environment properties (middle layer)
@@ -630,10 +645,10 @@ class EnvironmentService(BaseService["EnvironmentModel"]):
 
         # Merge environment properties
         if self.model and self.model.spec and self.model.spec.properties:
-            result.update(self.model.spec.properties)
+            result = deep_merge(result, self.model.spec.properties)
 
         # Apply override properties (highest precedence)
         if self.model and self.model.spec and self.model.spec.overrides and self.model.spec.overrides.properties:
-            result.update(self.model.spec.overrides.properties)
+            result = deep_merge(result, self.model.spec.overrides.properties)
 
         return result

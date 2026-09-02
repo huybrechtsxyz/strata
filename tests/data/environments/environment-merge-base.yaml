@@ -8,6 +8,9 @@ spec:
   properties:
     region: eu-fr
     log_level: info
+    integration_config:
+      flag1: true
+      flag2: false
   custom:
     costcenter: base
     team: platform

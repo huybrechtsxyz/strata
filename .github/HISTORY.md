@@ -7,6 +7,29 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Fixed
+
+#### **Environment `properties`/`custom` shallow-merge bug**
+
+- **Symptom**: `EnvironmentService.merge_envfiles()` merged `spec.properties`, `spec.custom`, and `spec.overrides.properties` with plain `dict.update()` (shallow). When a later environment file in the chain (e.g. `prd.yaml` after `base.yaml`) redeclared a nested object under one of these sections to change a single key, the entire object from the earlier file was replaced — sibling keys not repeated in the later file silently vanished from the merged `EnvironmentModel`.
+- **Inconsistency**: `TerraformBuilder._resolve_merged_properties()` already deep-merges the same sections across the workspace → environment → deployment layers via a local `_deep_merge()` closure. This meant the merged `EnvironmentModel` (what an operator inspects via `strata values list`) and the final rendered `.tfvars.json` (what Terraform actually sees) could disagree on the same nested object — a key dropped during environment-file merging could reappear during Terraform-layer merging if it also existed at the workspace level.
+- **Root cause**: two independent merge implementations for what should be one semantic — "compose layered dict data" — with no shared utility, so they drifted (one shallow, one deep) without anyone deciding that on purpose.
+- **Fix**: Added `strata.utils.dict_merge.deep_merge()` — a standalone, self-contained recursive merge function (nested dicts merge key-by-key; any other conflicting value is replaced wholesale). `EnvironmentService.merge_envfiles()` now uses it for `properties`, `custom`, and `overrides.properties` instead of `dict.update()`. `TerraformBuilder._resolve_merged_properties()` now imports the same shared function instead of defining its own local closure, so both call sites are guaranteed to stay consistent.
+- **Docstring updated**: `merge_envfiles()`'s per-section semantics table changed from "shallow `dict.update`" to "deep merge" for the three affected sections, with a note pointing at the shared `deep_merge()` used by both merge points.
+- **Testing**: New `tests/strata/utils/test_utils_dict_merge.py` covers flat override, nested recursive merge, mismatched-type wholesale replacement, list replacement (not concatenation), non-mutation of inputs, and empty-base/empty-override identity cases. Added a nested `integration_config` fixture to `tests/data/environments/environment-merge-{base,override}.yaml` and a regression test (`test_nested_properties_deep_merged_not_replaced_wholesale`) proving a base-only nested key survives a later file partially overriding the same object.
+- **`ConfigurationLoader.deep_merge()` intentionally left as-is** — per the `docs/platform/utilities.md` "no cross-imports between utils modules" convention, it keeps its own self-contained recursive-merge implementation rather than importing the new shared function; behavior is identical, just not code-shared, to avoid introducing a utils→utils dependency.
+
+#### **Same shallow-merge bug in resource/module environment overrides — comments claimed "Deep merge", code did shallow merge**
+
+- **Symptom**: `DeploymentService.apply_environment_overrides()` applied `spec.environments[].overrides.resources[].configuration`/`custom` and `overrides.modules[].configuration` with `workspace_resource.configuration.update(...)` / `.custom.update(...)` / `target_module.configuration.update(...)` — plain shallow merge. Two of the three call sites had an inline comment reading `# Deep merge configuration (override wins)` / `# Deep merge custom (override wins)` that was simply incorrect — the code never did a deep merge. A resource or module override that redeclared a nested `configuration`/`custom` object to change one key silently dropped every sibling key from the workspace-level definition.
+- **Blast radius**: unlike `get_merged_properties()` (dead code, see below), this is on the live `apply_environment_overrides()` path exercised by every `strata build`/`strata deploy` that uses a resource or module override with nested `configuration`/`custom` data.
+- **Fix**: Both `configuration` and `custom` merges (resource overrides and module overrides) now use the shared `strata.utils.dict_merge.deep_merge()`. `references` and `labels` overrides were deliberately left as shallow `dict.update()` — both are typed as flat `Dict[str, str]` (cross-resource references) / conventional flat k8s-style label maps, not arbitrary nested config, so shallow replacement is the correct, unchanged behavior there.
+- **Testing**: New `tests/strata/services/test_services_deployment_resource_configuration_override.py` — builds a mocked workspace resource/module with nested `configuration`/`custom` dicts, applies an environment override that only touches one nested key, and asserts sibling keys (both top-level and nested) survive while the overridden key changes.
+
+#### **`EnvironmentService.get_merged_properties()` — same bug pattern, but dead code**
+
+- Found during the same audit: `get_merged_properties()` (workspace → environment → override properties merge) had the identical shallow `dict.update()` bug, but has zero callers in `src/` or `tests/` — `TerraformBuilder._resolve_merged_properties()` is the actual code path used for build output. Fixed for consistency (now uses `deep_merge()`) and marked `.. deprecated::` in its docstring noting it's dead code kept only for backward compatibility with any external callers, rather than removed outright.
+
 ## [1.9.1] - 2026-09-02
 
 ### Changed

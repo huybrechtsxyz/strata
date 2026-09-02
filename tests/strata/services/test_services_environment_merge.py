@@ -86,9 +86,9 @@ class TestMergeEnvfilesFeatures:
 
 
 class TestMergeEnvfilesProperties:
-    """Properties and custom: shallow dict.update — later file overlays earlier."""
+    """Properties and custom: deep merge — later file overlays earlier, nested keys survive."""
 
-    def test_properties_shallow_merged(self):
+    def test_properties_deep_merged(self):
         model, _ = EnvironmentService.merge_envfiles(
             [_env("environment-merge-base.yaml"), _env("environment-merge-override.yaml")],
             _data_dir(),
@@ -101,7 +101,20 @@ class TestMergeEnvfilesProperties:
         # extra_prop only in prd — present
         assert props["extra_prop"] == "prd_value"
 
-    def test_custom_shallow_merged(self):
+    def test_nested_properties_deep_merged_not_replaced_wholesale(self):
+        """Regression: a nested dict key partially overridden must not drop sibling keys."""
+        model, _ = EnvironmentService.merge_envfiles(
+            [_env("environment-merge-base.yaml"), _env("environment-merge-override.yaml")],
+            _data_dir(),
+        )
+        props = model.spec.properties or {}
+        integration_config = props["integration_config"]
+        # flag1 only declared in base — must survive the override file redeclaring the object
+        assert integration_config["flag1"] is True
+        # flag2 overridden by prd
+        assert integration_config["flag2"] is True
+
+    def test_custom_deep_merged(self):
         model, _ = EnvironmentService.merge_envfiles(
             [_env("environment-merge-base.yaml"), _env("environment-merge-override.yaml")],
             _data_dir(),
