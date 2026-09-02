@@ -8,6 +8,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [1.9.2] - 2026-09-02
+
 ### Fixed
 
 - **`environment.spec.properties`/`custom`/`overrides.properties` were shallow-merged across environment files, silently dropping nested keys** — `EnvironmentService.merge_envfiles()` used `dict.update()` for these sections, so a later environment file that redeclared a nested object (e.g. `integration_config`) to add one key wholesale-replaced the earlier file's object instead of patching it, silently dropping every sibling key not repeated by the later file. This was inconsistent with `TerraformBuilder._resolve_merged_properties()`, which already deep-merges the workspace → environment → deployment layers — meaning the merged `EnvironmentModel` and the final rendered `.tfvars` could disagree on the same object. Both now share a single recursive `deep_merge()` (new `strata.utils.dict_merge` module); nested dict keys merge recursively, other conflicting values are still replaced wholesale by the later file/layer.
