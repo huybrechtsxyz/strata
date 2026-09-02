@@ -7,6 +7,71 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Changed
+
+#### **Clarify layering and path resolution (ADR-0072)**
+
+Merged three overlapping layering mechanisms and refactored layer resolution into a single, shared entry point with explicit three-state error handling. Discovered and fixed three silent-failure paths, one regression, and one latent pattern bug during implementation review.
+
+**Core Refactoring:**
+
+- **Schema consolidation**: Removed `configuration.spec.layering` (artifact-path matcher) and `spec.layerings` (list of schemes), merging both into `spec.paths` with a new `resolves: layers` flag that marks a convention as owning hierarchy (segment names, order, patterns, defaults)
+- **Deployment shape change**: `deployment.spec.layers` changes from a flat freeform dict to `{follows, segments}`, where `follows` names a convention and `segments` provides explicit overrides; any omitted segment is derived from the deployment file's path, then falls back to the segment's default, then becomes "not applicable"
+- **Removed `required` flag**: Layer segments now have three explicit states (resolved/default/not-applicable), so every deployment in a family legitimately has different depths; no more forced hand-typed values
+- **Improved matcher**: `spec.paths.pattern` now uses genuinely segment-aware matching (respects path depth) instead of `fnmatch` (where `*` and `**` both match across `/`), fixing false positives where `deploy/*/*/**` and `deploy/*/*/*/**` patterns all matched shallow files
+- **Validation order**: `validate:` rules now check each segment's **resolved** value rather than raw path captures, so explicitly-declared values and shallower deployments are no longer skipped
+- **Error on ambiguity**: Two conventions matching one file now raise a hard error naming both (instead of silent first-match pick)
+
+**New Entry Point and Three-State Model:**
+
+- **`resolve_layers()` (src/strata/utils/path_convention.py)** — Single shared entry point for all layer resolution, returning `LayerResolution(convention=ConventionModel, values=Dict[str, str], error=LayerResolutionError)` with three explicit states:
+  - State 1: `convention` set, `error=None` → resolved against a named convention; `values` are the resolved segments (path-derived + explicit overrides + defaults + not-applicable)
+  - State 2: `convention=None`, `error=None` → no convention matched; values are pass-through (explicit-only, for templates); no artifact path can be computed
+  - State 3: `error` set → resolution failed (pattern typo, ambiguous match, bad `follows` name, or declared-but-unclaimed); callers must surface the error
+- **Two-level resolution precedence**: Level 1 selects convention (explicit `follows` → auto-detect → none); Level 2 gets values (path derivation → explicit override → default → not-applicable)
+- **Dict-aware pattern matching**: Added helper `resolve_spec_rule()` that handles both attribute access and dict lookups, fixing a regression where `validate:` rules pointing into freeform `spec.configuration`/`spec.properties` dicts validated nothing
+
+**Regressions Fixed:**
+
+1. **Namespace overlap check (Check #3) silent regression** — `OverlapController._compute_artifact_path()` was coupled to `resolve_layers()` segment names; when no convention matched, every deployment collapsed to the same key_set, preventing the cross-depth namespace-uniqueness warning. Fixed by adding fallback to explicit segment names when resolution fails, with permanent regression test.
+
+2. **Silent errors in promote layer resolution** — `PromoteController._resolve_dep_layers()` called `resolve_layers()` but discarded any error; a bad pattern, ambiguous convention, or typo would silently fall back to explicit-only values, potentially misrouting promoted deployments. Refactored to use `_dep_rel_paths` dict (replacing `object.__setattr__` stash) and surface errors as warning messages.
+
+3. **Silent errors in path convention policy** — `PathConventionPolicy.evaluate_conventions()` never checked or reported `resolve_layers()` errors. Now emits violations when resolution fails.
+
+**Consistency Fix:**
+
+- **Intentional asymmetry between `get_resolved_layers()` and `get_artifact_path()` (ADR-0072 Remaining Work)** — When no convention matched but layers were declared, both methods now consistently reflect that state:
+  - `get_resolved_layers()` → explicitly-declared values only ("pass-through"; templates need `layers.zone` lookup to work)
+  - `get_artifact_path()` → empty string (no segment order without convention; artifact belongs nowhere)
+  - The contradiction is **intended**, not a bug — GitOps templates like `targetNamespace: {{ layers.environment | default('default') }}` would retarget to `default` namespace if we blanked both. Formalized via `LayerResolution` three states with documented asymmetry.
+
+**Detection & Prevention:**
+
+- **Silent no-op detection** — `resolve_layers()` now emits an error (but **only** when both layers are declared **and** conventions exist) when a deployment declares `spec.layers` but no convention claims it. This catches typos (pattern `zoneZZ/{zone}` instead of `zones/{zone}`) without false-positives for workspaces with no layering setup. Error message:
+  ```
+  '{rel_path}' declares spec.layers but no resolves: layers convention claims it. 
+  Its artifact path would be empty. Fix the convention's scope/pattern, or remove spec.layers.
+  ```
+  - Guard condition: only fires when (1) `spec.layers` declared **and** (2) ≥1 `resolves: layers` convention exists — workspaces without layering stay completely silent
+  - Tested in 9 scenarios; 0 false positives
+
+**Latent Pattern Bug Fixed:**
+
+- **Pattern `{environment}` was capturing first path segment ("deploy") instead of environment** — All 8 example stacks (Azure AKS, AWS EKS, GCP GKE, Hetzner Compose, Kamatera Swarm + 2 scaffolds) inherited a generic pattern from migration. These stacks encode nothing in paths (`deploy/[stack]-[env].yaml`), so the pattern was returning `{'environment': 'deploy'}`. Fixed by changing all 8 to literal-only patterns `pattern: "deploy"` with no captures. This was masked by the asymmetry — `get_artifact_path()` returned empty (no convention match), but `get_resolved_layers()` still had the garbage derivation; comprehensive pattern-matching tests added to catch this family of bugs.
+
+**Affected Files:**
+
+- Models: `deployment_model.py` (LayersModel.follows, LayersModel.segments), `configuration_model.py` (PathConventionModel.resolves), `platform_artifact_model.py` (LayerResolution new type)
+- Utils: `path_convention.py` (resolve_layers entry point, dict-aware resolve_spec_rule)
+- Services: `deployment_service.py` (get_resolved_layers, get_artifact_path asymmetry docs, _validate_deployment_layers error reporting)
+- Controllers: `overlap_controller.py` (layer_key_set fallback, regression test), `promote_controller.py` (_dep_rel_paths dict, error surfacing), `graph_controller.py` (path_convention integration)
+- Builders: `platform_builder.py` (resolve_layers integration)
+- Validators: `path_convention_policy.py` (error emission)
+- Configs: 8 stack configs + 2 scaffolds migrated (pattern fixes)
+- Tests: `test_utils_resolve_layers.py` (13 new tests, all three states)
+- Docs: `docs/config/configuration.md` (60+ line rewrite), `docs/config/deployment.md` (spec.layers shape docs), `docs/GLOSSARY.md` (layer/scope/convention definitions)
+
 ### Added
 
 - **`strata deploy run --namespace NAME` (repeatable) scopes the helm provisioner to specific namespace(s) for a single run**
