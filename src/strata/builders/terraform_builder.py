@@ -17,6 +17,7 @@ from strata.models.platform_artifact_model import PlatformArtifactModel
 from strata.models.workspace_model import OutputFileModel, OutputProfileModel
 from strata.services.deployment_service import DeploymentService
 from strata.services.platform_artifact_service import PlatformService
+from strata.utils.dict_merge import deep_merge
 from strata.utils.terraform_loader import TerraformLoader
 
 if TYPE_CHECKING:
@@ -941,29 +942,20 @@ class TerraformBuilder(BaseBuilder):
         """Return deep-merged {source} dict: workspace → environment → deployment."""
         result: Dict[str, Any] = {}
 
-        def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
-            merged = dict(base)
-            for k, v in override.items():
-                if k in merged and isinstance(merged[k], dict) and isinstance(v, dict):
-                    merged[k] = _deep_merge(merged[k], v)
-                else:
-                    merged[k] = v
-            return merged
-
         ws_service = deployment_service.get_workspace_service()
         if ws_service and ws_service.model and ws_service.model.spec:
             ws_val = getattr(ws_service.model.spec, source, None) or {}
-            result = _deep_merge(result, ws_val)
+            result = deep_merge(result, ws_val)
 
         env_service = deployment_service.get_environment_service()
         if env_service and env_service.model and env_service.model.spec:
             env_val = getattr(env_service.model.spec, source, None) or {}
-            result = _deep_merge(result, env_val)
+            result = deep_merge(result, env_val)
             # Also pick up environment.spec.overrides.properties when source=="properties"
             if source == "properties":
                 overrides = getattr(env_service.model.spec, "overrides", None)
                 if overrides and overrides.properties:
-                    result = _deep_merge(result, overrides.properties)
+                    result = deep_merge(result, overrides.properties)
 
         return result
 

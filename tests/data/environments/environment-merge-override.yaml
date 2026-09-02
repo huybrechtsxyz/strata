@@ -8,6 +8,8 @@ spec:
   properties:
     log_level: warning
     extra_prop: prd_value
+    integration_config:
+      flag2: true
   custom:
     costcenter: prd
   variables:

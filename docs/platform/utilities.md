@@ -55,6 +55,21 @@ config = loader.load_yaml_file(Path("config/logging.yaml"))
 merged = loader.apply_overrides(config, {"level": "DEBUG"})
 ```
 
+## `dict_merge.py`
+
+Standalone recursive dict-merge function shared by services/builders that need
+deep-merge semantics but don't otherwise depend on `ConfigurationLoader` (e.g.
+`EnvironmentService.merge_envfiles()` and `TerraformBuilder._resolve_merged_properties()`).
+Nested dicts are merged key-by-key; any other conflicting value (scalar, list,
+or mismatched type) is replaced wholesale by the override.
+
+```python
+from strata.utils.dict_merge import deep_merge
+
+result = deep_merge({"a": {"x": 1, "y": 2}}, {"a": {"y": 3, "z": 4}})
+# {"a": {"x": 1, "y": 3, "z": 4}}
+```
+
 ## `service_cache.py`
 
 In-process service instance cache to avoid re-parsing YAML on repeated loads.
