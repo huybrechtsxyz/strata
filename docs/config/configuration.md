@@ -402,7 +402,9 @@ spec:
         landscape: "landscape/{landscape}/landscape.yaml"
 ```
 
-**Custom tenant file location:** A convention can declare `resolves: tenant` to override the default `tenants/{code}.yaml` location. The pattern must include a `{code}` segment (tenant code substitutes into it). At most one convention per configuration may declare `resolves: tenant`. For example:
+### Custom tenant file location
+
+A convention can declare `resolves: tenant` to override the default `tenants/{code}.yaml` location. The pattern must include a `{code}` segment (tenant code substitutes into it). At most one convention per configuration may declare `resolves: tenant`. For example:
 
 ```yaml
 spec:
