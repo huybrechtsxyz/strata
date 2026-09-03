@@ -30,7 +30,33 @@ the index:
    in `scripts/Check.ps1` (see its `$excludeTopDirs`), so there is no second place
    to register a new ADR.
 
-### Status values
+## Introducing a new convention
+
+ADR-0073 exists because several embedded-string conventions (`@repo_name/...`,
+`./`/`../`, `field op value`, bare YAML rule strings) were each added independently,
+without anyone checking whether something equivalent already existed — resulting in
+duplicated detection/parsing logic scattered across multiple files that quietly
+drifted out of sync with each other. Before introducing a new syntax, field shape,
+naming scheme, or other repeated pattern, apply these three checks:
+
+1. **Write an ADR.** Any new convention — a string syntax, a naming rule, a YAML
+   field shape, a resolution algorithm — needs an ADR recording what was decided and
+   why, even if it's short. This is what makes the next person's "does something
+   like this already exist?" search possible at all.
+2. **Prefer reuse over invention.** Before designing something new, check whether an
+   existing strata mechanism already does the job (grep `docs/decisions/` and the
+   relevant `models`/`utils` modules first) or whether an industry-standard format
+   already fits (e.g. JMESPath instead of a bespoke query mini-language, standard
+   regex instead of a hand-rolled glob variant). Only invent a new convention when
+   both come up empty, and say so explicitly in the ADR's "Considered Options".
+3. **One implementation, not copies.** If the same parsing/detection/evaluation
+   logic is needed in more than one place, it lives in exactly one shared
+   function/class that every call site imports — never copy-pasted or
+   independently reimplemented per call site, even with slightly different
+   variable names. Reviewers should treat a second hand-rolled copy of existing
+   logic as a bug, not a style nitpick.
+
+## Status values
 
 The `- Status:` line (always the first line under the title) must use exactly one
 of these values, so it stays greppable instead of drifting into free-text phrasing

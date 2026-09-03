@@ -43,6 +43,7 @@ These skills provide DevOps and IaC context that makes the 5 strata-specific ski
 - Cross-repo references use `@repo_name/relative/path.yaml` syntax.
 - Models use `extra="forbid"` — any unknown field causes a validation error. Only use fields that exist in the strata schema.
 - Secrets are never written as plain values — use `secret: <KEY_NAME>` references.
+- **Introducing a new convention** (a string syntax, field shape, naming rule, etc.): write an ADR first, check for an existing strata mechanism or industry standard to reuse before inventing one, and never let the same logic be duplicated across call sites — one shared implementation. See [docs/decisions/README.md#introducing-a-new-convention](../docs/decisions/README.md#introducing-a-new-convention).
 
 ## Deployment stages
 
