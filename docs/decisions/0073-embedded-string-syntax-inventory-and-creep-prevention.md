@@ -1,6 +1,6 @@
 # Embedded String-Prefix Syntax — Inventory and Creep Prevention
 
-- Status: partially-implemented — Locator system fully consolidated (`@repo_name/...`, `./`/`../`, `git@`/`scheme://`); Expression system's `path`/`yaml` kinds built and wired; `regex`/`jinja` kinds and doc migration still open (see Remaining Work)
+- Status: implemented — Locator system fully consolidated (`@repo_name/...`, `./`/`../`, `git@`/`scheme://`); Expression system's `path`/`yaml`/`jinja` kinds built and wired; doc migration and the new-convention-justification rule both done (see Decision Outcome)
 - Date: 2026-09-01
 - Related: [ADR 0070-Helm OCI Repositories and Value Substitution](./0070-helm-oci-repositories-and-value-substitution.md), [ADR 0072-Clarify spec.layers, spec.layering(s), and spec.paths](./0072-clarify-layering-vs-path-convention.md)
 
@@ -38,7 +38,7 @@ Also directly related: the `@repo_name/...` convention itself — while a legiti
 deliberate, documented convention — was independently re-detected via raw
 `str.startswith("@")` at roughly 15 call sites across the codebase instead of one shared
 predicate. **Fixed within this ADR** (2026-09-03) rather than tracked separately as
-originally planned — see [Remaining Work](#remaining-work) — but it is the same underlying
+originally planned — but it is the same underlying
 symptom: a string-shape convention that exists without one canonical, discoverable
 definition.
 
@@ -46,8 +46,8 @@ definition.
 as an inventory, so any future feature tempted to add "just one more" prefix would have
 something to check against. Follow-up work (2026-09-02/03, documented below) went further
 than planned: the Locator system's `@repo_name/...`/`./`/`../`/`git@`-normalize issues and
-the Expression system's `path`/`yaml` kinds were designed *and* implemented, not just
-inventoried. See [Remaining Work](#remaining-work) for what's still open.
+the Expression system's `path`/`yaml`/`jinja` kinds were designed *and* implemented, not just
+inventoried. See [Decision Outcome](#decision-outcome) for the final state.
 
 ## Inventory — every embedded string-shape convention found in the codebase today
 
@@ -275,8 +275,8 @@ now reflected in the tables above:
    `scheme://...` repo-type detection, `./`/`../` relative-source detection, version-string
    shape sniffing. These answer "where is this thing" or "what format is this", not "is this
    true" or "what does this resolve to". This is the system this ADR is **not** proposing to
-   change — each convention here stays as-is; only the `@repo_name/...` duplication is tracked
-   separately (see Remaining Work).
+   change — each convention here stays as-is; only the `@repo_name/...` duplication was fixed
+   (see the Locator system sections above).
 2. **Expression system** — the subset that needs one interpreter to run against some input and
    produce a result (a boolean, a matched value, a set, a substituted string). This is the
    system this ADR's `ExpressionModel` proposal targets. It decomposes cleanly into exactly
@@ -295,8 +295,10 @@ now reflected in the tables above:
    not"). Immediate concrete scope at proposal time: only `PathConventionModel.rules` (then
    the shape-sniffed dispatch, `is_spec_rule()`'s regex) would adopt `path`+`yaml` kinds —
    **this is what was actually implemented, see "Implemented" below.** `regex`/`jinja` kinds
-   are defined for completeness but still not wired anywhere — the gate/diagram consolidation
-   remains a separate, smaller, not-yet-started piece of work (see Remaining Work).
+   are defined for completeness — `jinja` was later wired into `gate_controller.py`'s
+   comparison evaluator (see Decision Outcome); `regex` remains defined but not yet consumed
+   anywhere beyond its precedent (`helm_deployer.py`'s `${VAR_NAME}` token, which predates and
+   doesn't itself need migrating to `ExpressionModel`).
 
    Efficiency note: whichever kind, the compiled form (`jmespath.compile(...)`,
    `re.compile(...)`, `Environment().compile_expression(...)`) should be built once — at model
@@ -394,7 +396,7 @@ Not to unify or redesign any of the above right now. Only:
    field is discoverable, validated, and documented by the model itself; a string-shape
    convention is not.
 3. **A trigger to actually research consolidation later** — see
-   [Remaining Work](#remaining-work) — rather than letting this fade back into "13
+   [Decision Outcome](#decision-outcome) — rather than letting this fade back into "13
    independent tricks nobody wrote down."
 
 ## Decision Outcome
@@ -404,56 +406,14 @@ grandfathered as-is.
 
 **Actual outcome (2026-09-03):** went further than originally scoped. The Locator system's
 `@repo_name/...`, `./`/`../`, and `git@`/`scheme://` duplication/bugs were fixed (see the
-Locator system sections above). The Expression system's `path`/`yaml` kinds were designed,
-implemented as `ExpressionModel`, and wired into `PathConventionModel.rules`, replacing the
-shape-sniffed `is_spec_rule()` dispatch this ADR was originally written to flag (see
-"Implemented" above). What's genuinely still grandfathered/unstarted is listed in
-[Remaining Work](#remaining-work) below.
-
-## Remaining Work
-
-<!-- Required while Status is proposed / in-progress / partially-implemented.
-     Remove this section once Status becomes implemented. -->
-
-**Locator system** — nothing outstanding; `@repo_name/...`, `./`/`../`, and `git@`/`scheme://`
-are all fixed/consolidated or confirmed fine as-is (see the Locator system sections above).
-
-**Expression system:**
-
-- Update the ~22 documented `validate:` YAML examples still showing the old bare-string shape
-  across `docs/config/configuration.md`, `docs/decisions/0052-path-convention-validation.md`,
-  `docs/decisions/0042-deep-validation-layer-consistency.md`, and `docs/platform/policies.md`
-  to `{kind: ..., expression: ...}`. **Partially done (2026-09-03)**: `configuration.md` and
-  `policies.md` (living docs) and this ADR's sibling ADR-0072 (`partially-implemented`, not a
-  done/historical doc) have been updated. `0052` (`implemented`) and `0042` (`superseded`) were
-  deliberately left untouched — historical decision records, correct as written at the time.
-- Design + implement the `regex`/`jinja` kind consolidation for `gate_controller.py`'s
-  `>=`/`<=`/etc. comparison evaluator and `diagram_expressions.py`'s `field op value` parser.
-  **Done for `gate_controller.py` (2026-09-03)**: `_eval_numeric_expr()` and `_eval_risk_expr()`
-  previously each carried their own byte-identical `ops = {">=": ..., "<=": ...}` dict; both now
-  call a single shared `_compare(op, actual, threshold)` helper that constructs
-  `ExpressionModel(kind=ExpressionKind.JINJA, expression=f"actual {op} threshold")` and calls
-  `.evaluate(...)`. This ended up reusing the existing, already-tested `ExpressionModel` directly
-  rather than a bespoke plain-string-field + raw `Environment.compile_expression()` — no need to
-  invent a second mechanism when the first one fits. All pre-existing validation strictness is
-  unchanged: `_OPERATOR_RE` still validates operator shape first, numeric threshold is still
-  parsed via `float(rhs)`, risk threshold is still resolved via `_RISK_ORDER` — `_compare()` is
-  only ever invoked with one of the 6 literal operator tokens already matched by `_OPERATOR_RE`,
-  never arbitrary caller text, so no unintended Jinja syntax can reach the evaluator. Verified
-  with the existing 28-test suite plus 15 new direct unit tests for `_compare()`/
-  `_eval_numeric_expr()`/`_eval_risk_expr()` (43 total in `test_gate_controller.py`), and the
-  full repo suite (6321 passed, 16 skipped, 0 failed) plus clean `ruff`/`mypy`/`lint-imports`.
-  **`diagram_expressions.py` deliberately left untouched** — its `field op value` parser
-  translates into a Jinja source *fragment* for later embedding into a full multi-line template
-  render (`templater.py`), a fundamentally different job from `gate_controller.py`'s "evaluate
-  to a bool right now" need; forcing it onto `compile_expression()` would require restructuring
-  its embed-in-template design for no real benefit.
-- Decide whether new embedded string-shape conventions (of either system) should require an
-  explicit justification (e.g. a short section in the introducing ADR/PR) that checks this
-  inventory first — not yet decided whether to formalize this as a written rule anywhere
-  (CONTRIBUTING, an instructions file, or just convention).
-- ADR-0072's "Known gap" section still references the now-deleted `resolve_spec_rule()`/
-  `getattr()` mechanism in prose (not a YAML example, so out of scope for the 2026-09-03 YAML
-  pass) and still lists the non-existent `spec.environments` field alongside real ones
-  (`spec.zones`, `spec.providers`, etc.) — worth a follow-up prose correction since ADR-0072
-  is not a done/historical doc either.
+Locator system sections above). The Expression system's `path`/`yaml`/`jinja` kinds were
+designed, implemented as `ExpressionModel`, and wired into `PathConventionModel.rules` and
+`gate_controller.py`'s comparison evaluator, replacing the shape-sniffed `is_spec_rule()`
+dispatch this ADR was originally written to flag (see "Implemented" above). `diagram_expressions.py`
+was deliberately left on its own existing Jinja-fragment approach — a different job
+(template-embedding vs. immediate evaluation) from `gate_controller.py`'s need, not a gap.
+Documentation (`configuration.md`, `policies.md`, ADR-0072) was migrated to the new
+`{kind, expression}` shape; historical ADRs `0052`/`0042` were deliberately left untouched.
+Whether new conventions need explicit justification was decided: yes, formalized in
+[docs/decisions/README.md#introducing-a-new-convention](README.md#introducing-a-new-convention).
+Nothing from the original inventory or the follow-up work remains open.

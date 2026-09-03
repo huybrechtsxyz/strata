@@ -1,6 +1,6 @@
 # Clarifying `spec.layers`, `spec.layering(s)`, and `spec.paths`-Overlap, Confusion, and the Missing Link
 
-- Status: partially-implemented — schema merge, resolution, and migration complete; agreement-enforcement policy not started
+- Status: partially-implemented — schema merge, resolution, migration, agreement-enforcement policy, and PromoteController hard-failure wiring complete; migration tooling decided against (nothing to build); only a deferred internal refactor and one undecided edge-case consideration remain
 - Date: 2026-09-01
 - Related: [ADR 0042-Deep Validation and Layer Consistency](./0042-deep-validation-layer-consistency.md), [ADR 0052-Path Convention Validation](./0052-path-convention-validation.md)
 
@@ -711,16 +711,27 @@ follow the same `hub-scheme` convention.
 
 ### Known gap: `rules:` can only reach the merged `ConfigurationModel` — never other kinds or external truth
 
-Precision check on what `resolve_spec_rule()` actually receives: the
-`configuration_model` it walks is `ConfigurationService.model` — and
-`ConfigurationService` deep-merges **every loaded `kind: configuration` YAML
-file** (via `ConfigurationLoader.merge_configs()`) into that one model before
-validating it. So this is not "the single file currently being checked" — it is
-the **full merged configuration** across all configuration-kind sources for the
-active profile/workspace. Data declared in any `kind: configuration` file that
-participates in that merge (`spec.zones`, `spec.environments`, `spec.providers`,
-`spec.topologies`, the new `spec.custom`, etc.) is already reachable today,
-config-file boundaries aside.
+> **Superseded in part (2026-09-03, ADR-0073):** `rules:` values are no longer bare
+> strings walked by a deleted `resolve_spec_rule()`/`getattr()` mechanism. They are
+> now `{kind, expression}` `ExpressionModel` objects — `kind: yaml` compiles
+> `expression` as a JMESPath query and runs it against `configuration_model.model_dump()`
+> (dict-based, not `getattr()` attribute-walking); `kind: path` calls
+> `ExpressionModel.check_path()`, reusing `evaluate_file_rule()`. This changes *how*
+> the merged model is queried, not *what* is reachable — the scope described below
+> (bounded to `kind: configuration` documents, no other kinds, no external truth)
+> is unchanged and still accurate. See
+> [ADR 0073](0073-embedded-string-syntax-inventory-and-creep-prevention.md).
+
+Precision check on what a `kind: yaml` rule's JMESPath query actually receives:
+`configuration_model` is `ConfigurationService.model` — and `ConfigurationService`
+deep-merges **every loaded `kind: configuration` YAML file** (via
+`ConfigurationLoader.merge_configs()`) into that one model before validating it. So
+this is not "the single file currently being checked" — it is the **full merged
+configuration** across all configuration-kind sources for the active
+profile/workspace. Data declared in any `kind: configuration` file that
+participates in that merge (`spec.zones`, `spec.providers`, `spec.topologies`, the
+`spec.custom` field, etc.) is already reachable today, config-file boundaries
+aside.
 
 That merge is still bounded to documents of `kind: configuration`, though — it
 never includes:
@@ -731,7 +742,7 @@ never includes:
   touches `ConfigurationService`. Tenant names (or anything else declared only in
   `kind: tenant`/`kind: environment`/`kind: deployment` documents) are structurally
   unreachable from `spec.*` rules, dict-aware or not — there is no code path that
-  passes tenant data into `resolve_spec_rule()`.
+  passes tenant data into a `kind: yaml` rule's query.
 - **External or code-level truth.** Real cloud-provider region catalogs, or
   constraints already enforced as a Python-side enum/`Literal` on a model field,
   exist nowhere in any loaded YAML at all. Duplicating them into `spec.custom`
@@ -740,7 +751,7 @@ never includes:
   make things worse, not better, since the "real" list (AWS/Azure's actual regions,
   or the code-level enum) lives entirely outside version-controlled config.
 
-`spec.custom` and the `resolve_spec_rule()` dict-aware fix (above) only close the
+`spec.custom` and the JMESPath-based `kind: yaml` rule (above) only close the
 reachability gap **within** the merged `ConfigurationModel`. They do not, and are
 not intended to, extend `rules:` to reach other kinds or external sources — that
 remains open (see below).
@@ -749,10 +760,12 @@ remains open (see below).
 
 - The exact policy type name/shape for agreement enforcement (Considered Option C,
   now a facet of E) is not designed here — only that it reuses `enforcement: deny |
-  warn | audit`.
+  warn | audit`. **Resolved (2026-09-03):** shipped as the `layer_agreement` policy
+  type — see [`docs/platform/policies.md`](../platform/policies.md#layer_agreement).
 - Migration tooling (e.g. a `strata migrate` helper to convert existing
   `spec.layering`/`spec.layerings` into the new `spec.paths` shape automatically) is
   out of scope for this design pass — not yet decided whether one will exist.
+  **Resolved (2026-09-03):** decided against — not worth building; see Remaining Work.
 - Whether/how `rules:` should ever reach data outside the merged
   `ConfigurationModel` — other kinds (e.g. `kind: tenant`) or external/code-level
   truth (cloud-provider region catalogs, existing `Literal`/enum constraints) — is
@@ -1065,19 +1078,30 @@ removal of `spec.layering`/`spec.layerings`/`ScopedLayeringModel`/
 `promote_controller`, `platform_builder`, `path_convention_policy`), migration of every
 bundled example stack and scaffold template, and docs/changelog. Full `Check.ps1` green.
 
+**Also shipped (2026-09-03)** — the agreement-enforcement policy from Considered Option C:
+a new `layer_agreement` policy type
+([`layer_agreement_policy.py`](../../src/strata/validators/policies/layer_agreement_policy.py))
+reuses `resolve_layers()` and `match_pattern()` (no duplicated resolution logic) to compare
+each explicit `spec.layers.segments` value against what the deployment file's own path would
+derive for that same segment, and reports a violation on disagreement. It needs no new
+enforcement toggle — the standard `enforcement: deny | warn | audit` field on the policy
+declaration itself already governs severity, exactly like every other policy type. Ships
+as opt-in like every other policy (no entry in `spec.policies` → no oversight, unchanged
+default behavior). Registered in `PolicyEngine._create()`'s builtin type registry and
+`PolicyModel.type`'s description; documented in
+[`docs/platform/policies.md`](../platform/policies.md#layer_agreement). Covered by 12 tests
+in `tests/strata/validators/test_layer_agreement_policy.py`.
+
 Still open:
 
-- Design and implement the new (or extended) policy type for agreement enforcement,
-  reusing `enforcement: deny | warn | audit`; decide its default enforcement level and
-  whether it ships enabled-by-default or requires explicit opt-in like every other
-  policy. *(Not designed — the work so far covers the schema and resolution
-  precedence, not the enforcement policy. Nothing currently fails a build when an
-  explicitly-declared segment value disagrees with the one its path implies; the
-  explicit value simply wins.)*
-- Decide whether migration tooling (e.g. a `strata migrate` helper to rewrite existing
-  `spec.layering`/`spec.layerings` automatically) is worth building. Detection is
-  already free — `extra: forbid` fails loudly on the removed field — so this is purely
-  a convenience question.
+- **Decided (2026-09-03): no migration tooling.** A `strata migrate` helper to
+  rewrite existing `spec.layering`/`spec.layerings` into the new `spec.paths`
+  shape automatically was considered and rejected — not worth building. Detection
+  was already free (`extra: forbid` fails loudly on the removed field the moment
+  it's encountered), so the only thing tooling would have added was convenience
+  for a one-time, already-fully-documented manual migration (see
+  [Migration from `layering`/`layerings`](../config/configuration.md#migration-from-layeringlayerings)).
+  Nothing to build here.
 - Revisit `PromoteController`'s deployment-path tracking if that code grows.
   `_load_registered_deployments()` records each deployment's `rel_path` in a
   `self._dep_rel_paths` dict keyed by `meta.name`, which `_resolve_dep_layers()`
@@ -1096,13 +1120,28 @@ Still open:
   while no convention claims it, which silently produced an empty artifact path —
   is now a reported error; see
   [`LayerResolution`'s three states](../../src/strata/utils/path_convention.py).)
-- Make `PromoteController` load deployments *with* a configuration model, so
-  ADR-0072 resolution errors become hard validation failures there instead of
-  advisory messages. `_load_registered_deployments()` calls
-  `DeploymentService.load()` with no configuration model, and
-  `BaseService.validate()` only runs Phase 2 (where
-  `_validate_deployment_layers()` reports these) when one is supplied — so an
-  unknown `follows` name or an ambiguous convention match currently surfaces only
-  as a message from `_resolve_dep_layers()`, while scope filtering silently falls
-  back to explicit-only values. That fallback can change *which* deployments a
-  scoped wave promotes, so it deserves a hard failure rather than a message.
+
+**Done (2026-09-03)** — `PromoteController` now loads deployments *with* a
+configuration model, so ADR-0072 resolution errors are hard validation failures
+there instead of advisory messages. `_load_registered_deployments()` now accepts
+the already-loaded `ConfigurationModel` and calls the new
+[`DeploymentService.validate_layers()`](../../src/strata/services/deployment_service.py)
+public wrapper (delegates to `_validate_deployment_layers()` — no duplicated
+resolution logic) per deployment; an unknown `follows` name, an ambiguous
+convention match, or a segment value that fails its declared pattern is now
+`self._add_error()`, excluding that deployment from the promotion set entirely
+(the command layer's existing `if controller.has_errors(): return False` check
+then fails the CLI invocation). Deliberately scoped: we do **not** run the
+deployment's full Phase 2 (`DeploymentService.validate()`) here — that also
+enforces environment/secret file existence, deployment properties schema,
+sync-stage/helm-namespace validation, and tenant zone checks, none of which are
+ADR-0072's concern; those are assumed to already be enforced by the pipeline
+that built/released the deployment file (`strata validate`/`build`/`deploy`), not
+re-checked at promote time. `_resolve_dep_layers()`'s advisory-message fallback is
+kept as defense-in-depth (its docstring updated) but should now be unreachable in
+normal operation, since a bad deployment is excluded before reaching it. Covered
+by 4 new tests in `tests/strata/services/test_services_deployment.py`
+(`TestValidateLayers`) and 3 new tests in the previously-uncovered
+`tests/strata/controllers/test_controllers_promote_start.py`
+(`TestRunStartLayerResolution`) — `run_start()` itself had zero prior test
+coverage.

@@ -633,6 +633,32 @@ class DeploymentService(BaseService["DeploymentModel"]):
             return {}
         return dict(resolution.values)
 
+    def validate_layers(
+        self,
+        configuration_model: Optional["ConfigurationModel"] = None,
+        work_path: Optional[str] = None,
+    ) -> List[str]:
+        """
+        Validate this deployment's layer/segment values against
+        ``configuration.spec.paths`` conventions declaring ``resolves: layers``
+        (ADR-0072), without running the rest of Phase 2 dynamic validation.
+
+        Public wrapper around ``_validate_deployment_layers()`` for callers that
+        need only this one check — e.g. ``PromoteController`` deliberately does not
+        run this deployment's full ``validate(configuration_model=...)`` before
+        considering it for promotion, since that also enforces several things
+        unrelated to promotion (environment/secret file existence, deployment
+        properties schema, sync-stage/helm-namespace validation, tenant zone
+        checks) that are assumed to already be enforced by the pipeline that
+        built/released this deployment file (``strata validate``/``build``/``deploy``).
+
+        Returns an empty list when *configuration_model* is None or the model isn't
+        initialized (nothing to validate against).
+        """
+        if not configuration_model or self.model is None:
+            return []
+        return self._validate_deployment_layers(configuration_model, work_path)
+
     def get_build_path(self, build_path: Path) -> Path:
         """
         Get the build path for the deployment.
