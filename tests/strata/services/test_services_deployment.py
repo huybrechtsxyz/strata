@@ -246,6 +246,69 @@ class TestDeploymentService:
         assert any("customers" in e and "acme" in e for e in errors)
 
 
+class TestValidateLayers:
+    """Tests for DeploymentService.validate_layers() — public wrapper around
+    _validate_deployment_layers() (ADR-0072), used by PromoteController so a
+    layer-resolution failure can be checked without running full Phase 2
+    validation (see promote_controller.py's _load_registered_deployments())."""
+
+    def _config_with_hub_scheme(self) -> ConfigurationModel:
+        return ConfigurationModel.model_validate(
+            {
+                "apiVersion": "strata.huybrechts.xyz/v1",
+                "kind": "configuration",
+                "meta": {"name": "test_config"},
+                "spec": {
+                    "paths": [
+                        {
+                            "name": "hub-scheme",
+                            "scope": "deploy/hubs/*",
+                            "pattern": "deploy/hubs/{hub}/{ring}",
+                            "resolves": "layers",
+                            "segments": [{"name": "hub"}, {"name": "ring"}],
+                        }
+                    ]
+                },
+            }
+        )
+
+    def _deployment(self, path: str, follows: str = "hub-scheme") -> DeploymentService:
+        data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "deployment",
+            "meta": {"name": "test_deploy"},
+            "spec": {"layers": {"follows": follows}},
+        }
+        svc = DeploymentService(path=path, data=data)
+        svc.validate()  # Phase 1
+        return svc
+
+    def test_no_configuration_model_returns_empty_list(self, tmp_path):
+        svc = self._deployment(str(tmp_path / "deploy" / "hubs" / "hub1" / "prd" / "deploy.yaml"))
+        assert svc.validate_layers(None, str(tmp_path)) == []
+
+    def test_valid_layers_returns_no_errors(self, tmp_path):
+        config = self._config_with_hub_scheme()
+        svc = self._deployment(str(tmp_path / "deploy" / "hubs" / "hub1" / "prd" / "deploy.yaml"))
+        assert svc.validate_layers(config, str(tmp_path)) == []
+
+    def test_unknown_follows_returns_error(self, tmp_path):
+        config = self._config_with_hub_scheme()
+        svc = self._deployment(
+            str(tmp_path / "deploy" / "hubs" / "hub1" / "prd" / "deploy.yaml"), follows="nonexistent-scheme"
+        )
+        errors = svc.validate_layers(config, str(tmp_path))
+        assert len(errors) == 1
+        assert "nonexistent-scheme" in errors[0]
+
+    def test_matches_private_method_directly(self, tmp_path):
+        """The public wrapper must not diverge from _validate_deployment_layers()
+        (ADR-0073's convention rule: one shared implementation, not a second copy)."""
+        config = self._config_with_hub_scheme()
+        svc = self._deployment(str(tmp_path / "deploy" / "hubs" / "hub1" / "prd" / "deploy.yaml"))
+        assert svc.validate_layers(config, str(tmp_path)) == svc._validate_deployment_layers(config, str(tmp_path))
+
+
 class TestValidateSyncStages:
     """Tests for _validate_sync_stages Phase-6 cross-reference validation."""
 

@@ -407,13 +407,30 @@ class PromoteController(BaseController):
 
     # ── deployment discovery & wave assignment ────────────────────────────────
 
-    def _load_registered_deployments(self, work_path: Path) -> List[Any]:
+    def _load_registered_deployments(self, work_path: Path, config: Any = None) -> List[Any]:
         """Return list of DeploymentModel for all solution-registered deployments.
 
         Also records each deployment's path relative to *work_path* in
         ``self._dep_rel_paths`` (keyed by ``meta.name``) — `_resolve_dep_layers()`
         needs it for ADR-0072 layer resolution, and ``DeploymentModel`` carries no
         field for its own source path.
+
+        When *config* (a loaded ``ConfigurationModel``) is supplied, each
+        deployment's layer/segment values are also checked against
+        ``configuration.spec.paths`` (ADR-0072) via
+        ``DeploymentService.validate_layers()`` before it is included. An unknown
+        ``spec.layers.follows`` name, an ambiguous convention match, or a segment
+        value that doesn't match its declared pattern is now a hard error
+        (``self._add_error()``) that excludes that deployment from the promotion
+        set entirely, instead of only ever surfacing as an advisory message deep
+        inside ``_resolve_dep_layers()`` (still kept as a defensive fallback there —
+        see its docstring). We deliberately do NOT run the deployment's full Phase 2
+        validation here (``DeploymentService.validate()``) — that also enforces
+        several things unrelated to promotion (environment/secret file existence,
+        deployment properties schema, sync-stage/helm-namespace validation, tenant
+        zone checks) that are assumed to already be enforced by the pipeline that
+        built/released this deployment file (``strata validate``/``build``/``deploy``),
+        not re-checked here.
         """
         from strata.services.deployment_service import DeploymentService
 
@@ -432,7 +449,18 @@ class PromoteController(BaseController):
                         rel_path = dep_path.relative_to(work_path).as_posix()
                     except ValueError:
                         rel_path = dep_path.name
-                    self._dep_rel_paths[str(svc.model.meta.name)] = rel_path
+                    dep_name = str(svc.model.meta.name)
+
+                    if config is not None:
+                        layer_errors = svc.validate_layers(config, str(work_path))
+                        if layer_errors:
+                            self._add_error(
+                                f"Deployment '{dep_name}' ({rel_path}): layer resolution failed — "
+                                + "; ".join(layer_errors)
+                            )
+                            continue
+
+                    self._dep_rel_paths[dep_name] = rel_path
                     models.append(svc.model)
             except Exception:
                 pass
@@ -496,13 +524,12 @@ class PromoteController(BaseController):
         the wrong convention.
 
         Resolution errors (unknown ``follows`` name, ambiguous convention match) are
-        surfaced as messages rather than swallowed. They are *not* caught anywhere
-        else on this code path: ``_load_registered_deployments()`` calls
-        ``DeploymentService.load()`` without a configuration model, and
-        ``BaseService.validate()`` only runs Phase 2 — which is where
-        ``_validate_deployment_layers()`` would report them — when one is supplied.
-        Left silent, a misconfigured convention would quietly change *which*
-        deployments a scoped wave promotes, by falling back to explicit-only values.
+        surfaced as messages here as a defensive fallback — they are also, and
+        primarily, caught earlier as hard errors in ``_load_registered_deployments()``
+        (via ``DeploymentService.validate_layers()``) whenever a configuration model
+        was available there, which excludes the offending deployment before it ever
+        reaches this method. This advisory path only still matters if this method is
+        ever reached with a deployment that bypassed that check.
         """
         from strata.utils.path_convention import resolve_layers
 
@@ -629,7 +656,7 @@ class PromoteController(BaseController):
                 return {}
 
         # ── 5. load and filter deployments ─────────────────────────────────
-        all_deployments = self._load_registered_deployments(work_path)
+        all_deployments = self._load_registered_deployments(work_path, config)
         relevant_deployments = self._filter_deployments_by_environments(all_deployments, target_envs)
         scoped_deps, unscoped_deps = self._scope_filter(relevant_deployments, strategy.scope, config)
 

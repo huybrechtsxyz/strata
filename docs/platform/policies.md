@@ -2,7 +2,7 @@
 
 Declarative guardrails evaluated at specific lifecycle phases before or after infrastructure changes are applied.
 
-**Built-in types:** `tenant_zone` | `resource_type_restrictions` | `required_labels` | `naming_pattern` | `ref_convention` | `script` | `sbom_pinned_versions` | `sbom_allowed_registries` | `sbom_denied_packages` | `sbom_max_components` | `sbom_license` | `cve_max_severity` | `cost_threshold` | `checkov` | `opa` | `path_convention` | `ai_review` | **Phases:** `validate` / `build` / `plan` / `deploy` | **Enforcement:** `deny` / `warn` / `audit` | **Declared in:** `configuration.spec.policies`
+**Built-in types:** `tenant_zone` | `resource_type_restrictions` | `required_labels` | `naming_pattern` | `ref_convention` | `script` | `sbom_pinned_versions` | `sbom_allowed_registries` | `sbom_denied_packages` | `sbom_max_components` | `sbom_license` | `cve_max_severity` | `cost_threshold` | `checkov` | `opa` | `path_convention` | `layer_agreement` | `ai_review` | **Phases:** `validate` / `build` / `plan` / `deploy` | **Enforcement:** `deny` / `warn` / `audit` | **Declared in:** `configuration.spec.policies`
 
 ---
 
@@ -78,6 +78,7 @@ spec:
 | `checkov`                    | `build`    | Runs Checkov against generated Terraform and gates on a severity threshold       |
 | `opa`                        | any        | Evaluates a Rego rule via an OPA server or the `opa eval` CLI                    |
 | `path_convention`            | `validate` | Files on disk follow declared directory-structure conventions                    |
+| `layer_agreement`            | `validate` | Explicit `spec.layers.segments` values agree with what the file's path derives   |
 | `ai_review`                  | `plan`     | AI-assessed risk of a Terraform plan stays below a configured threshold          |
 
 ### `tenant_zone`
@@ -586,6 +587,21 @@ Skipped gracefully when: no conventions are configured (neither `spec.paths` nor
       landscape:
         kind: path
         expression: "deploy/{landscape}/landscape.yaml"
+```
+
+### `layer_agreement`
+
+Evaluates at the `validate` phase (ADR-0072). A `configuration.spec.paths` convention with `resolves: layers` lets `deployment.spec.layers` values be *derived* from the deployment file's own path instead of hand-typed. This policy is the separate, opt-in check for whether an **explicitly**-declared `spec.layers.segments` value is allowed to *disagree* with the value its own path would derive for that same segment — declaring the convention turns derivation on; declaring this policy is what makes disagreement an enforced violation instead of silently letting the explicit value win.
+
+No `configuration` block — it reads the resolved convention and layer values directly from the loaded deployment and configuration.
+
+Skipped gracefully when: no deployment is loaded, `spec.layers.segments` declares no explicit values, no configuration service is available, or no `resolves: layers` convention applies to this file. A segment that the deployment's path doesn't reach (e.g. a shallower deployment within the same convention family) has nothing to compare against and is not a violation.
+
+```yaml
+- name: layer-agreement
+  type: layer_agreement
+  phase: validate
+  enforcement: warn
 ```
 
 ### `ai_review`
