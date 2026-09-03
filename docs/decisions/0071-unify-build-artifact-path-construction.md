@@ -61,21 +61,23 @@ as the concrete template for extending the same pattern to helm/compose/sync.
 **Caveat — the fallback path, not the primary path, still duplicates independently.**
 All three pairs call `get_provisioner_path()` only when `solution_controller is not None`;
 each side keeps its own inline fallback for when it's `None` (tests, some dry-run
-paths), and those fallbacks are **not** identical to each other or to
-`get_provisioner_path()`'s own resolution order:
-
-- `get_provisioner_path()`: `target_path` → else `source_path`.
-- `terraform_deployer._get_working_dir()` fallback: `target_path` → else
-  `Path("terraform") / iac_model.name` (different second choice).
-- `terraform_builder.py:1608`'s inline fallback: `target_path` → else `source_path`
-  (matches the helper, but is a second, separately-maintained copy of the same
-  two-line logic rather than a call to it).
-
-Same class of risk this ADR exists to flag, just already mostly mitigated rather than
-fully closed. Whether to also unify these fallbacks (e.g. by having
-`get_provisioner_path()` accept an already-loaded `solution_controller`-free mode
-instead of each caller re-implementing its own fallback) is a candidate addition to
-Option B's scope — see Remaining Work.
+paths). **Done (2026-09-03):** `terraform_deployer._get_working_dir()`'s fallback used
+to diverge from the other two — `target_path` → else
+`Path("terraform") / iac_model.name` — a made-up shape that never actually agreed with
+where the builder copies source, unlike `get_provisioner_path()`'s own
+`target_path` → else `source_path` order. In practice this path was unreachable in
+real CLI usage (`base_command.py` always constructs a real `SolutionController`, so
+`solution_controller` is never `None` in production), but it was still a live landmine
+for tests/direct/library use, and its docstring didn't disclose the divergence. Fixed by
+changing the fallback to `target_path` → else `source_path` (matching
+`get_provisioner_path()` and `terraform_builder.py:1608`'s inline fallback exactly), and
+adding a `ValueError` when neither is set (previously would have silently produced
+`terraform/{name}`, masking a misconfigured provisioner instead of failing loudly).
+Covered by 2 updated + 1 new test in `TestTerraformDeployerGetWorkingDir`
+(`test_deployers_terraform.py`). `terraform_builder.py:1608`'s inline fallback already
+matched and was left as-is (still a separately-maintained copy of the same two-line
+logic rather than a call to the helper, but no longer a *divergent* one — deduplicating
+it into a shared call is folded into Option B's broader scope, not fixed here).
 
 ### Related but distinct finding — bicep has no builder-side copy step at all
 
@@ -89,6 +91,112 @@ build run' first to copy IaC artefacts to the build folder"*), but nothing does 
 today. This is a separate, real gap in bicep provisioner support — out of scope for
 this ADR (which is about reconciling *duplicated* path logic, not adding *missing*
 functionality) but worth tracking somewhere before bicep is considered production-ready.
+
+**Compounding bug found alongside — `bicep_deployer.py`'s own `solution_controller is
+None` fallback uses a third, independently-different path shape.**
+[`bicep_deployer.py:168`](../../src/strata/deployers/bicep_deployer.py#L168):
+`self._working_dir = self.build_path / self._iac_model.name` — neither
+`get_provisioner_path()`'s `target_path` → else `source_path` order, nor even
+`terraform_deployer`'s pre-fix `terraform/{name}` shape, nor does it descend into
+`deployment_service.get_build_path(build_path)` first (every other provisioner type's
+fallback does). Confirmed via `grep` there is zero existing test coverage for this
+branch (`test_bicep_deployer.py` only ever sets `d._working_dir` directly, never drives
+it through `validate_workspace()` with `solution_controller=None`). Currently harmless
+only because the branch is unreachable in real CLI usage (same reasoning as
+`terraform_deployer`'s pre-fix bug) — but it must be corrected as part of closing this
+gap, since the new builder-side copy step (below) needs a fallback destination that
+actually agrees with where the deployer will look.
+
+**Fix design (2026-09-03) — add a minimal `BicepBuilder`, reusing the existing
+`_copy_provisioner_source()` shape rather than inventing a new one.** Bicep needs
+strictly less than Ansible's builder does (no generated vars files, no platform.json
+dependency, no git-ref pinning currently in scope) — it only needs the copy step every
+other IaC provisioner already has. `AnsibleBuilder._copy_provisioner_source()`
+([`ansible_builder.py:704`](../../src/strata/builders/ansible_builder.py#L704)) is the
+closest, simplest template (no tfvars-validation or lock-backend complexity like
+Terraform's version has).
+
+1. **New file `src/strata/builders/bicep_builder.py` — `class BicepBuilder(BaseBuilder)`.**
+   - `before_build()`: validate `deployment_service.is_validated()` and that
+     `get_workspace_service()` is available (matches Ansible/Compose's `before_build`).
+   - `build()`: iterate `workspace_service.model.spec.provisioners`, filter
+     `prov.provisioner == ProvisionerType.BICEP`, resolve `repo_root` from `repo_map`
+     (falling back to `work_path`), copy `repo_root / source.source_path` →
+     `solution_controller.get_provisioner_path(...)` when available, else
+     `deployment_service.get_build_path(build_path) / (source.target_path or
+     source.source_path)` — reusing the **corrected** fallback shape from the
+     `terraform_deployer` fix above, not a fourth new one. Raise the same
+     `ValueError`-style error message pattern as `terraform_deployer._get_working_dir()`
+     when neither is set. Apply Jinja templates via the inherited
+     `self._apply_templates_to_dir()`, matching every other copy-based builder. Same
+     error semantics as Ansible's version (`"has no source_path"` /
+     `"source directory not found"`). Honors `dry_run` (message-only, still validates
+     `src_dir.exists()`).
+   - `after_build()`: `return True` — no generated-file existence check needed here;
+     `bicep_deployer.validate_workspace()` already checks for `*.bicep` files at deploy
+     time, so duplicating that check in the builder would just be a third copy of the
+     same assertion.
+2. **Wire into `run_build_command.py`.** Add `("bicep", self._execute_bicep_build)` to
+   the phase tuple in `_execute()` (next to `("ansible", ...)`), and a
+   `_execute_bicep_build()` method that mirrors `_execute_ansible_build()`'s shape
+   (`before_build` → `build(repo_map=...)` → `after_build`) minus the
+   `platform_model`/vars-generation parts Bicep doesn't need.
+3. **Fix `bicep_deployer.py`'s divergent fallback** (Compounding bug, above): change
+   `validate_workspace()`'s `solution_controller is None` branch from
+   `self.build_path / self._iac_model.name` to the same corrected
+   `get_build_path(...) / (target_path or source_path)` shape used by the new builder,
+   so builder-writes and deployer-reads agree in both the primary and fallback path —
+   required for the new builder's output to actually be discoverable when
+   `solution_controller` is `None` (tests, direct/library use).
+4. **Tests:**
+   - New `tests/strata/builders/test_builders_bicep.py`: successful copy + template
+     substitution, missing `source_path` error, missing source directory error, dry-run
+     mode, no-op when no bicep provisioners declared, `get_provisioner_path()` used when
+     `solution_controller` is set vs. the corrected fallback when `None`, and pinned-ref
+     extraction (see below).
+   - `tests/strata/deployers/test_bicep_deployer.py`: add coverage for the
+     `solution_controller is None` fallback branch in `validate_workspace()` (currently
+     zero — same class of gap as `terraform_deployer` before its item #2 fix).
+   - `tests/strata/commands/test_commands_build.py` (or wherever `run_build_command`'s
+     phase wiring is tested): a test confirming `_execute_bicep_build()` runs as part of
+     the phase list.
+
+**Revised (2026-09-03) — match Terraform's git-ref-pinning support instead of leaving it
+out, since it's a generic capability, not a Terraform-specific one.**
+`SourceModel.reference` ([`common_models.py:259`](../../src/strata/models/common_models.py#L259))
+is documented as *"Only valid for git-based sources"* — nothing Terraform-specific about
+it — yet `TerraformBuilder._extract_source_at_ref()` is the only place that actually
+honors it. Checked while answering "why not match Terraform where possible":
+`AnsibleBuilder._copy_provisioner_source()` has **zero** references to `.reference`
+anywhere — declaring `reference: v1.2.0` on an ansible provisioner's source validates
+successfully today and is then silently ignored; the builder copies whatever the current
+working-tree checkout happens to be instead of the pinned ref. Same bug class as the
+`backend`/`output` schema gap above, just for a builder-side no-op instead of a
+validator gap. `_extract_source_at_ref()`'s body
+([`terraform_builder.py:1659`](../../src/strata/builders/terraform_builder.py#L1659))
+has no Terraform-specific coupling at all — it only uses `self._messages` (a
+`BaseBuilder` attribute), `shutil`, and `GitIntegration` — so it can move as-is, not be
+reimplemented. Revised plan:
+
+5. **Move `_extract_source_at_ref()` from `TerraformBuilder` to `BaseBuilder`** —
+   relocate the method unchanged (no logic changes; it's already fully generic), so all
+   copy-based builders can call `self._extract_source_at_ref(...)`.
+6. **Fix `AnsibleBuilder._copy_provisioner_source()`** to check `source.reference` and
+   call the (now-shared) `self._extract_source_at_ref(...)` before falling through to
+   the plain `shutil.copytree`, mirroring `TerraformBuilder`'s exact conditional
+   structure (dry-run message, then extract-at-ref, then apply templates).
+7. **`BicepBuilder.build()`** (item 1, above) also checks `source.reference` and calls
+   the shared `self._extract_source_at_ref(...)` first, exactly like Terraform/the
+   now-fixed Ansible — so all three IaC-provisioner builders behave identically for
+   pinned-ref sources, not two-out-of-three.
+8. `TerraformBuilder._copy_provisioner_source()` itself needs no behavior change — only
+   the helper's *location* moves; its call sites (`self._extract_source_at_ref(...)`)
+   are unaffected since it's still an inherited method.
+
+Out of scope, still: `strata build plan`'s temp-build path in `plan_build_command.py`
+only builds Platform/Terraform/Ansible today — Compose/Helm/Sync/Bicep are all equally
+absent there, a pre-existing, broader gap unrelated to this specific finding.
+
 
 ### Related but distinct finding — two divergent, independently-implemented `_resolve_lock_backend()` functions
 
@@ -231,12 +339,30 @@ refactor.
      sync — 7 sites total), following `get_provisioner_path()`'s existing shape as the
      template (a controller method, or a plain function, taking `deployment_service`,
      `build_path`, and the namespace/module/stage identifiers, returning a `Path`).
-  2. Whether to also unify the divergent solution_controller-`None` fallback logic
-     already present in the terraform/bicep/ansible pairs (Group 2's caveat) as part of
-     the same pass, or leave it as a smaller separate follow-up.
-  3. Whether the bicep builder-copy gap (Related but distinct finding, above) belongs in
-     this ADR's scope or a new one — it's a missing-functionality bug, not a
-     path-duplication bug, so probably its own ADR/issue.
+  2. **Done (2026-09-03).** The divergent `terraform_deployer._get_working_dir()`
+     fallback (Group 2's caveat, above) has been unified with `get_provisioner_path()`'s
+     resolution order (`target_path` → else `source_path`); a `ValueError` is now raised
+     when neither is set instead of silently fabricating a `terraform/{name}` path.
+     `terraform_builder.py:1608`'s inline fallback already matched and needed no change.
+     Deduplicating these inline fallbacks into a single shared call (rather than
+     independently-maintained copies) remains folded into Option B's broader scope.
+  3. **Designed (2026-09-03), not yet implemented.** The bicep builder-copy gap
+     (Related but distinct finding, above) — fix design written: a new minimal
+     `BicepBuilder` (mirroring `AnsibleBuilder._copy_provisioner_source()`'s shape),
+     wired into `run_build_command.py`'s phase list, plus fixing
+     `bicep_deployer.py`'s own divergent `solution_controller is None` fallback
+     (a third, independently-different path shape found alongside — see Compounding
+     bug, above) to agree with the new builder's output location. **Revised (same day):**
+     also move `TerraformBuilder._extract_source_at_ref()` to `BaseBuilder` (it has no
+     Terraform-specific coupling) and fix `AnsibleBuilder._copy_provisioner_source()`'s
+     newly-found silent gap — it never honored `source.reference` despite the field
+     being documented as generic, not Terraform-specific — so Bicep launches with
+     git-ref-pinning parity from day one instead of a third inconsistent provisioner.
+     See the finding's "Fix design" subsection for the full implementation plan (new
+     file, shared-helper relocation, wiring, and required test coverage). Kept as its
+     own item rather than folded into #1/#2 because it's missing functionality, not
+     duplicated-path reconciliation — still undecided whether it ultimately belongs in
+     this ADR or should be split into its own ADR/issue once implemented.
   4. **Done (2026-09-03).** The `_resolve_lock_backend()` divergence (Related but
      distinct finding, above) was a real correctness bug, not a documentation nicety —
      fixed independently of Option B's broader design decision. `lock_deploy_command.py`'s
