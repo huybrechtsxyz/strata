@@ -9,6 +9,8 @@ Description   : STAGES/ENVIRONMENTS/TENANTS diagram source resolver tests (ADR-0
 ===============================================================================
 """
 
+import json
+
 import pytest
 
 from strata.controllers.diagram_source_controller import DiagramSourceController
@@ -163,7 +165,7 @@ class TestEnvironmentsSource:
         assert node["metadata"]["variable_count"] == 1
         assert node["metadata"]["secret_count"] == 1
 
-    def test_cross_repo_reference_is_skipped_not_crashed(self, tmp_path):
+    def test_unregistered_repo_reference_reports_clear_error_not_crashed(self, tmp_path):
         (tmp_path / "deploy.yaml").write_text(
             "apiVersion: strata.huybrechts.xyz/v1\n"
             "kind: deployment\n"
@@ -180,7 +182,55 @@ class TestEnvironmentsSource:
         controller = DiagramSourceController(tmp_path, entry="deploy.yaml", no_validate=True)
         result = controller.resolve([_source("environments")])["environments"]
         assert result["nodes"] == []
-        assert "cross-repository" in controller.get_errors()[0]
+        assert "other_repo" in controller.get_errors()[0]
+
+    def test_cross_repo_reference_resolves_via_registered_solution_repo(self, tmp_path):
+        """A '@repo/...' environment reference resolves once the repo is registered in solution.json."""
+        other_repo_root = tmp_path / "other_repo_root"
+        other_repo_root.mkdir()
+        (other_repo_root / "env.yaml").write_text(ENVIRONMENT_YAML, encoding="utf-8")
+
+        strata_dir = tmp_path / ".strata"
+        strata_dir.mkdir()
+        strata_dir.joinpath("solution.json").write_text(
+            json.dumps(
+                {
+                    "apiVersion": "strata.huybrechts.xyz/v1",
+                    "kind": "solution",
+                    "meta": {"name": "sample_solution"},
+                    "spec": {
+                        "solution_id": "sol-0001",
+                        "repositories": [
+                            {
+                                "name": "other_repo",
+                                "url": str(other_repo_root),
+                                "path": "other_repo",
+                                "type": "local",
+                                "branch": "main",
+                            }
+                        ],
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        (tmp_path / "deploy.yaml").write_text(
+            "apiVersion: strata.huybrechts.xyz/v1\n"
+            "kind: deployment\n"
+            "meta:\n"
+            "  name: sample_deploy\n"
+            "spec:\n"
+            "  workspace:\n"
+            "    name: sample_ws\n"
+            "    file: workspace.yaml\n"
+            '  environments:\n    - "@other_repo/env.yaml"\n',
+            encoding="utf-8",
+        )
+        (tmp_path / "workspace.yaml").write_text(WORKSPACE_YAML, encoding="utf-8")
+        controller = DiagramSourceController(tmp_path, entry="deploy.yaml", no_validate=True)
+        result = controller.resolve([_source("environments")])["environments"]
+        assert not controller.has_errors()
+        assert {n["id"] for n in result["nodes"]} == {"env_prd"}
 
     def test_relative_ref_from_nested_deployment_resolves_against_work_path(self, tmp_path):
         """Regression test: environments[].file must resolve against work_path,

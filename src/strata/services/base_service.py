@@ -17,7 +17,7 @@ from strata.exceptions import (
 )
 from strata.logger import get_logger
 from strata.models.configuration_model import ConfigurationModel
-from strata.utils.system import resolve_path
+from strata.utils.system import is_cross_repo_ref, resolve_path
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
@@ -549,7 +549,7 @@ class BaseService(ABC, Generic[ModelT]):
             Absolute path to the file
         """
         # Handle @repo_name/... cross-repo references
-        if str(file_ref).startswith("@"):
+        if is_cross_repo_ref(str(file_ref)):
             try:
                 if object_path is None:
                     return str(file_ref)

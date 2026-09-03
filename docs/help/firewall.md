@@ -98,10 +98,13 @@ Combine with policies:
 ```yaml
 spec:
   policies:
-    - type: required_tags
-      tags: [Environment, Owner]
-    - type: firewall_audit
-      action: log_and_alert
+    - name: require_firewall_labels
+      type: required_labels
+      phase: build
+      enforcement: deny
+      configuration:
+        targets: [namespaces]
+        required_labels: [Environment, Owner]
 ```
 
 ---

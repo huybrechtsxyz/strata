@@ -6,15 +6,38 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: namespace
 meta:
-  name: {{ name }}
+  name: "{{ name }}"
   annotations:
     description: "Application namespace template"
-    owner: {{ owner }}
+    owner: "{{ owner }}"
   labels:
-    version: {{ version }}
-  tags: [ "template", "namespace" ]
+    version: "{{ version }}"
+  tags: ["template", "namespace"]
 spec:
+  # Ownership type: 'dedicated' (default) belongs to a single deployment layer —
+  # cross-layer overlap is flagged as a warning. 'shared' (e.g. kube-system,
+  # traefik) is intentionally used by multiple layers — overlap is suppressed.
+  # type: dedicated
+
   # Modules deployed in this namespace
+  # A namespace must declare at least one of modules/lifecycle — both may be omitted
+  # only if the other is present.
   modules:
     - name: template_module
+      description: "Template application module" # optional
       file: config/{platform}/modules/template-module.yaml
+
+  # Namespace-level lifecycle hooks
+  # lifecycle:
+  #   deploy_before:
+  #     scripts:
+  #       - scripts/pre-deploy.sh
+
+  # Variable/secret/feature references (list of required keys)
+  # references:
+  #   variables:
+  #     - namespace_region
+  #   secrets:
+  #     - namespace_api_key
+  #   features:
+  #     - enable_monitoring

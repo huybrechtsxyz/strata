@@ -6,22 +6,30 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: resource
 meta:
-  name: {{ name }}
+  name: "{{ name }}"
   annotations:
     description: "Infrastructure resource template"
-    owner: {{ owner }}
+    owner: "{{ owner }}"
   labels:
-    version: {{ version }}
+    version: "{{ version }}"
     environment: "production"
-  tags: [ "template", "infrastructure" ]
+  tags: ["template", "infrastructure"]
 spec:
   # Resource properties
   properties:
-    provider_type: "cloud" # Must match provider type
+    provider_type: "azure" # Must match a provider name declared in configuration.spec.providers
     resource_type: "virtualmachine" # virtualmachine, database, storage, etc.
     unit_cost: 10.0 # Cost per unit (optional)
     category: "compute" # compute, storage, network, database
     subcategory: "vm" # More specific categorization
+
+  # Capability-based dependencies — declare what TYPE of resource this needs;
+  # the workspace resolves the requirement to a concrete instance.
+  # dependencies:
+  #   - category: networking
+  #     subcategory: virtual_network
+  #     description: "Requires a VNet to attach its NIC to"
+  #     optional: false
 
   # Storage configuration (for VMs/containers)
   storage:
@@ -37,6 +45,8 @@ spec:
         path: "/mnt/data/app"
       - name: "logs"
         path: "/mnt/data/logs"
+    # parameters:
+    #   filesystem: ext4
 
   # Resource-specific configuration
   configuration:

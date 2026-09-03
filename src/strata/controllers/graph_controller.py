@@ -9,6 +9,7 @@ import yaml
 
 from strata.controllers.base_controller import BaseController
 from strata.utils.graph import GraphEdge, GraphNode, GraphResult, GraphTopology
+from strata.utils.system import is_cross_repo_ref
 
 
 class GraphController(BaseController):
@@ -404,7 +405,7 @@ class GraphController(BaseController):
     ) -> None:
         """Add an edge and recursively walk the target file."""
         # Handle @repo/ references
-        if ref.startswith("@"):
+        if is_cross_repo_ref(ref):
             target_rel = ref
             result.edges.append(GraphEdge(source=source_rel, target=target_rel, label=label))
             if target_rel not in self._visited:

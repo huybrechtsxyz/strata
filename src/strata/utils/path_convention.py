@@ -8,8 +8,11 @@ Provides:
   The ONLY place Level 1 (which convention) + Level 2 (each segment's value)
   precedence is implemented — every caller that needs a deployment's resolved
   layer values must call this, not reimplement any part of it.
-- ``resolve_spec_rule()`` — resolve a ``spec.field[*].attr`` rule against a
-  loaded ``ConfigurationModel`` and return the allowed value set.
+- ``evaluate_conventions()`` — top-level evaluator; for each segment's
+  ``validate`` rule, dispatches on ``ExpressionModel.kind`` (ADR-0073) instead
+  of shape-sniffing a raw string: ``kind=yaml`` runs a JMESPath query against
+  the loaded ``ConfigurationModel``'s ``model_dump()``; ``kind=path`` calls
+  ``ExpressionModel.check_path()``, which reuses ``evaluate_file_rule()`` below.
 - ``evaluate_file_rule()`` — expand placeholder references in a file path template
   and check existence on disk.
 - ``build_path_from_pattern()`` — inverse of ``match_pattern()``: substitute named
@@ -23,7 +26,7 @@ Provides:
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 if TYPE_CHECKING:
     from strata.models.configuration_model import PathConventionModel
@@ -223,75 +226,6 @@ def resolve_layers(
 
 
 # ---------------------------------------------------------------------------
-# Validation rule: spec.* model field lookup
-# ---------------------------------------------------------------------------
-
-_SPEC_RULE_RE = re.compile(r"^spec\.(.+)\[\*\]\.(.+)$")
-
-
-def is_spec_rule(rule: str) -> bool:
-    """Return True if *rule* is a ``spec.field[*].attr`` membership rule."""
-    return bool(_SPEC_RULE_RE.match(rule))
-
-
-def _resolve_step(obj, name: str):
-    """Resolve one attribute/key step, working against both Pydantic models and dicts.
-
-    Plain ``getattr()`` (the original implementation) only resolves object
-    attributes — it silently returns ``None`` the instant it hits a dict (e.g.
-    ``spec.custom``, ``spec.configuration``, ``spec.properties``, all
-    ``Optional[Dict[str, Any]]``), which callers then treat as "unresolvable,
-    skip gracefully" with no error at all. This dict-aware fallback (ADR-0072)
-    closes that gap so ``rules:`` membership checks actually work against
-    freeform dict structures, not just typed model attributes.
-    """
-    if isinstance(obj, dict):
-        return obj.get(name)
-    return getattr(obj, name, None)
-
-
-def resolve_spec_rule(rule: str, configuration_model) -> Optional[Set[str]]:
-    """Resolve a ``spec.field[*].attr`` rule against the loaded ConfigurationModel.
-
-    Returns the set of allowed values, or ``None`` if the rule cannot be resolved
-    (missing field, no configuration model, etc.).  Callers should treat ``None``
-    as "skip — no constraint available".
-
-    Args:
-        rule: A string like ``"spec.zones[*].name"`` or ``"spec.environments[*].name"``.
-        configuration_model: A loaded ``ConfigurationModel`` instance (or ``None``).
-    """
-    if configuration_model is None:
-        return None
-
-    m = _SPEC_RULE_RE.match(rule)
-    if not m:
-        return None
-
-    field_path, attr = m.group(1), m.group(2)
-    spec = getattr(configuration_model, "spec", None)
-    if spec is None:
-        return None
-
-    # Walk dot-separated path: e.g., "zones" → list object
-    obj = spec
-    for part in field_path.split("."):
-        obj = _resolve_step(obj, part)
-        if obj is None:
-            return None
-
-    if not isinstance(obj, list):
-        return None
-
-    values: Set[str] = set()
-    for item in obj:
-        val = _resolve_step(item, attr)
-        if val is not None:
-            values.add(str(val))
-    return values
-
-
-# ---------------------------------------------------------------------------
 # Validation rule: file existence check
 # ---------------------------------------------------------------------------
 
@@ -390,20 +324,27 @@ def evaluate_conventions(
             if value is None:
                 continue
 
-            if is_spec_rule(rule):
-                allowed = resolve_spec_rule(rule, configuration_model)
-                if allowed is None:
-                    # No configuration service or unresolvable — skip gracefully
+            if rule.kind == "yaml":
+                if configuration_model is None:
+                    continue  # No configuration service available — skip gracefully
+                try:
+                    allowed_raw = rule.query(configuration_model.model_dump())
+                except Exception:
+                    continue  # unresolvable (missing field, wrong shape) — skip gracefully
+                if not isinstance(allowed_raw, list):
                     continue
+                allowed = {str(v) for v in allowed_raw if v is not None}
                 if value not in allowed:
                     sorted_allowed = sorted(allowed)
                     violations.append(
                         f"convention '{conv.name}' \u2014 segment '{segment_name}' = '{value}' "
-                        f"not in {rule}: {sorted_allowed}"
+                        f"not in {rule.expression}: {sorted_allowed}"
                     )
             else:
-                # File existence rule
-                violation = evaluate_file_rule(rule, segment_values, work_path)
+                # kind == ExpressionKind.PATH — file existence rule. Model
+                # validation (PathConventionModel.validate_rules_kind) already
+                # guarantees rule.kind is yaml or path, nothing else, here.
+                violation = rule.check_path(segment_values, work_path)
                 if violation:
                     violations.append(
                         f"convention '{conv.name}' \u2014 segment '{segment_name}' = '{value}': {violation}"

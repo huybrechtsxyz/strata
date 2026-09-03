@@ -278,16 +278,20 @@ class StatusRepoSolutionCommand(BaseCommand):
     def _normalize_repo_url(url: str) -> str:
         """Normalize a git remote URL for identity comparison (not full parsing).
 
-        Strips scheme, trailing '.git', trailing slash, and converts the
-        'git@host:org/repo' SCP-like form to 'host/org/repo', then lowercases.
-        This lets 'git@github.com:acme/x.git' and 'https://github.com/acme/x'
-        compare equal — same repository, different string forms.
+        Strips scheme, trailing '.git', trailing slash, and converts either
+        SCP-like ('git@host:org/repo') or scheme-based SSH ('ssh://git@host/org/repo')
+        forms to 'host/org/repo', then lowercases. This lets 'git@github.com:acme/x.git',
+        'ssh://git@github.com/acme/x', and 'https://github.com/acme/x' all compare equal —
+        same repository, different string forms.
         """
         u = url.strip().rstrip("/")
         if u.endswith(".git"):
             u = u[:-4]
-        u = re.sub(r"^([\w.-]+)@([^:]+):", r"\2/", u)  # git@host:org/repo -> host/org/repo
-        u = re.sub(r"^\w+://", "", u)  # strip scheme (https://, ssh://, git://)
+        if "://" in u:
+            u = re.sub(r"^\w+://", "", u)  # strip scheme (https://, ssh://, git://)
+            u = re.sub(r"^[\w.-]+@", "", u)  # strip leftover user@ (ssh://git@host/... case)
+        else:
+            u = re.sub(r"^([\w.-]+)@([^:]+):", r"\2/", u)  # git@host:org/repo -> host/org/repo
         return u.lower()
 
     def _discover_tags(

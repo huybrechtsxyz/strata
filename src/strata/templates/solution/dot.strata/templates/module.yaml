@@ -6,43 +6,61 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: module
 meta:
-  name: {{ name }}
+  name: "{{ name }}"
   annotations:
     description: "Application module template"
-    owner: {{ owner }}
+    owner: "{{ owner }}"
   labels:
-    version: {{ version }}
+    version: "{{ version }}"
     category: "application"
   tags: ["template", "module"]
 spec:
-  # Module source
+  # Module source — git-based (repository + source_path). Mutually exclusive
+  # with the Helm chart-registry shape shown commented below.
   source:
     repository: main_repo # Remote name from solution registered repositories
     source_path: "services/app" # Path within repository
     target_path: "services/app" # Target deployment path
+    # reference: v1.2.0 # Optional git ref override (branch/tag/SHA)
+    # description: "Application service source"
 
-  # Lifecycle hooks
-  lifecycle:
-    validate_before: {}
-    deploy_before: {}
-    deploy_after: {}
+  # Alternative: pull a chart directly from a Helm/OCI chart registry instead
+  # of a git repository (mutually exclusive with repository/source_path above).
+  # source:
+  #   chart_name: authentik
+  #   chart_version: "2024.12.0"
+  #   chart_repository: https://charts.goauthentik.io
 
-  # Module properties
+  # Service deployer for this module: helm | compose | argocd | script
+  # type: compose
+
+  # Lifecycle hooks — each phase takes a list of scripts (or {} to declare a no-op phase)
+  # lifecycle:
+  #   validate_before: {}
+  #   deploy_before:
+  #     scripts:
+  #       - scripts/pre-deploy.sh
+  #   deploy_after:
+  #     scripts:
+  #       - scripts/post-deploy.sh
+
+  # Module properties — legacy single-service shape (mounts/checks/endpoints).
+  # Prefer `services:` below for new multi-container modules.
   properties:
     # Mounts (volumes/config/data)
     mounts:
       - name: "configuration_files"
         type: config
-        target_path: "{{ APP_CONFIG_PATH }}"
+        target_path: "/etc/app/config"
         source_path: "config"
         description: "Application configuration"
       - name: "data"
         type: data
-        target_path: "{{ APP_DATA_PATH }}"
+        target_path: "/var/lib/app/data"
         description: "Application data"
       - name: "logs"
         type: logs
-        target_path: "{{ APP_LOGS_PATH }}"
+        target_path: "/var/log/app"
         description: "Application logs"
 
     # Health checks
@@ -60,6 +78,68 @@ spec:
       - name: "app_dashboard"
         label: "Application Dashboard"
         url: "http://localhost:8080/"
+
+  # Multi-container service definitions — when present, each entry defines one
+  # container (compose) or sub-chart section (helm). Mutually exclusive with
+  # `compose_file:` below; independent of the legacy `properties:` shape above.
+  # services:
+  #   - name: app
+  #     image: "myorg/app:1.0.0"
+  #     command: ["serve"]
+  #     restart: unless-stopped        # compose only
+  #     environment:
+  #       - key: TZ
+  #         value: Europe/Brussels      # literal value
+  #       - key: APP_PORT
+  #         var: app_port               # from spec.references.variables
+  #       - key: DB_PASSWORD
+  #         secret: db_password         # from spec.references.secrets
+  #     ports:
+  #       - "8080:8080"                 # compose only ("host:container")
+  #     mounts:
+  #       - name: data
+  #         volume_ref: app_data         # named volume declared in workspace topology
+  #         target_path: /var/lib/app
+  #     depends_on: [db]                 # short name = intra-module dependency
+  #     healthcheck:
+  #       name: app_health
+  #       type: http
+  #       endpoint: "http://localhost:8080/health"
+  #       interval: 30s
+  #       timeout: 5s
+  #       retries: 3
+  #     configuration: {}                # deployer-specific overrides merged verbatim
+  #   - name: db
+  #     image: "postgres:16-alpine"
+  #     environment:
+  #       - key: POSTGRES_PASSWORD
+  #         secret: db_password
+  #     mounts:
+  #       - name: data
+  #         storage_class: standard      # Kubernetes PVC (helm) — mutually exclusive with volume_ref
+  #         storage_size: 10Gi
+  #         target_path: /var/lib/postgresql/data
+
+  # Pass-through mode: copy an existing docker-compose.yml verbatim instead of
+  # generating one from `services:` above (mutually exclusive with services).
+  # compose_file: "@main_repo/services/app/docker-compose.yml"
+
+  # Extra files copied verbatim into the module's build output directory.
+  # Supports globs and @repo/ cross-repo references; text files get
+  # ${STRATA_*}/variables.*/features.* substitution applied.
+  # files:
+  #   - source: "services/app/config/app.conf"
+  #     target: "app.conf"
+  #   - source: "@main_repo/services/app/conf.d/*"
+  #     target: "conf.d/"
+
+  # Helm / ArgoCD deploy identity (defaults to meta.name / the namespace name)
+  # release_name: app
+  # kubernetes_namespace: app-prod
+
+  # Module-specific configuration data (freeform; distinct from properties above)
+  # configuration:
+  #   replicas: 2
 
   # Variable/secret/feature references (list of required keys)
   references:

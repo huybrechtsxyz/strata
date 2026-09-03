@@ -21,7 +21,7 @@ from strata.models.workflow_model import (
     WorkflowStep,
     get_default_workflow,
 )
-from strata.utils.system import get_pkg_data_path
+from strata.utils.system import get_pkg_data_path, is_cross_repo_ref, resolve_path
 
 
 @dataclass
@@ -145,16 +145,11 @@ class GuideController(BaseController):
 
     def resolve_file_path(self, raw: str) -> Path:
         """Resolve relative, absolute, and @repo/ paths."""
-        if raw.startswith("@"):
-            parts = raw[1:].split("/", 1)
-            repo_name = parts[0]
-            rel = parts[1] if len(parts) > 1 else ""
+        if is_cross_repo_ref(raw):
             if self._solution is None:
                 raise ValueError("@repo reference requires an initialized workspace")
             repo_map = self._solution_controller.get_repo_map()
-            if repo_name not in repo_map:
-                raise ValueError(f"Repository '{repo_name}' not found in solution")
-            return Path(repo_map[repo_name]) / rel
+            return resolve_path("", raw, repo_map=repo_map)
         path = Path(raw)
         if path.is_absolute():
             return path

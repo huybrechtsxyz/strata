@@ -1,6 +1,6 @@
 # Embedded String-Prefix Syntax — Inventory and Creep Prevention
 
-- Status: proposed
+- Status: partially-implemented — Locator system fully consolidated (`@repo_name/...`, `./`/`../`, `git@`/`scheme://`); Expression system's `path`/`yaml` kinds built and wired; `regex`/`jinja` kinds and doc migration still open (see Remaining Work)
 - Date: 2026-09-01
 - Related: [ADR 0070-Helm OCI Repositories and Value Substitution](./0070-helm-oci-repositories-and-value-substitution.md), [ADR 0072-Clarify spec.layers, spec.layering(s), and spec.paths](./0072-clarify-layering-vs-path-convention.md)
 
@@ -35,44 +35,351 @@ all?" Two concrete costs already surfaced in this codebase from that lack of coo
    time. Nothing currently prevents the next one.
 
 Also directly related: the `@repo_name/...` convention itself — while a legitimate,
-deliberate, documented convention — is independently re-detected via raw
+deliberate, documented convention — was independently re-detected via raw
 `str.startswith("@")` at roughly 15 call sites across the codebase instead of one shared
-predicate. That is tracked as a separate bug/tech-debt item (not this ADR — see
-[Remaining Work](#remaining-work)), but it is the same underlying symptom: a string-shape
-convention that exists without one canonical, discoverable definition.
+predicate. **Fixed within this ADR** (2026-09-03) rather than tracked separately as
+originally planned — see [Remaining Work](#remaining-work) — but it is the same underlying
+symptom: a string-shape convention that exists without one canonical, discoverable
+definition.
 
-**This ADR does not propose fixing or unifying any of this now.** It exists so the
-inventory and the concern are written down before they're forgotten, and so any future
-feature that's tempted to add "just one more" prefix has something to check against
-first.
+**This ADR did not originally propose fixing or unifying any of this** — it started purely
+as an inventory, so any future feature tempted to add "just one more" prefix would have
+something to check against. Follow-up work (2026-09-02/03, documented below) went further
+than planned: the Locator system's `@repo_name/...`/`./`/`../`/`git@`-normalize issues and
+the Expression system's `path`/`yaml` kinds were designed *and* implemented, not just
+inventoried. See [Remaining Work](#remaining-work) for what's still open.
 
 ## Inventory — every embedded string-shape convention found in the codebase today
 
-**Reference markers** — the string names an external thing to resolve:
+The inventory splits into exactly two systems (confirmed by follow-up research, see below):
+a **locator system** (file-based — the string names or classifies an external thing to
+resolve) and an **expression system** (the string is evaluated against data to produce a
+result). Every convention found falls into exactly one; nothing straddles both.
 
-| Shape                                                | Meaning                                                         | Where                                                                                                                                                              |
-| ---------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `@repo_name/...`                                     | Cross-repo file reference                                       | [`resolve_path()`](../../src/strata/utils/system.py#L203) + ~15 independent re-detections (separate tech-debt item)                                                |
-| `strata://<kind>/<name>[/<child-kind>/<child-name>]` | Durable structural URI to a workspace object (ADR-0034)         | [`strata_uri.py`](../../src/strata/utils/strata_uri.py)                                                                                                            |
-| `file://...`                                         | Local-file-based Helm chart repo vs. a remote repo URL          | [`helm_chart_file_collector.py`](../../src/strata/builders/sbom/helm_chart_file_collector.py#L129)                                                                 |
-| `git@...` / `scheme://...`                           | Git remote URL vs. local filesystem path                        | [`add_repo_solution_command.py`](../../src/strata/commands/repo/add_repo_solution_command.py#L15)                                                                  |
-| `./` / `../`                                         | Local relative module source vs. registry/git-hosted reference  | [`sbom_utils.py`](../../src/strata/utils/sbom_utils.py#L146), [`terraform_module_collector.py`](../../src/strata/builders/sbom/terraform_module_collector.py#L127) |
-| `spec.<field>[*].<attr>`                             | Config-model membership lookup vs. file-existence path template | [`path_convention.py`](../../src/strata/utils/path_convention.py#L73) — the mechanism ADR 0072 documents                                                           |
+**Locator system** — the string names or classifies an external thing to resolve (files,
+URLs, URIs, format identifiers) — never evaluated against data, no truth value:
 
-**Embedded mini-expression syntax** — a small language inside the string:
+| Shape                                                | Meaning                                                        | Where                                                                                                                                                              |
+| ---------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@repo_name/...`                                     | Cross-repo file reference                                      | [`resolve_path()`](../../src/strata/utils/system.py#L203) + ~15 independent re-detections (separate tech-debt item)                                                |
+| `strata://<kind>/<name>[/<child-kind>/<child-name>]` | Durable structural URI to a workspace object (ADR-0034)        | [`strata_uri.py`](../../src/strata/utils/strata_uri.py)                                                                                                            |
+| `file://...`                                         | Local-file-based Helm chart repo vs. a remote repo URL         | [`helm_chart_file_collector.py`](../../src/strata/builders/sbom/helm_chart_file_collector.py#L129)                                                                 |
+| `git@...` / `scheme://...`                           | Git remote URL vs. local filesystem path                       | [`add_repo_solution_command.py`](../../src/strata/commands/repo/add_repo_solution_command.py#L15) (`_is_local_path()`/`_REMOTE_URL_RE`)                            |
+| `./` / `../`                                         | Local relative module source vs. registry/git-hosted reference | [`sbom_utils.py`](../../src/strata/utils/sbom_utils.py#L146), [`terraform_module_collector.py`](../../src/strata/builders/sbom/terraform_module_collector.py#L127) |
+| version-string shape                                 | semver / git SHA / OCI digest detection                        | [`sbom_utils.py`](../../src/strata/utils/sbom_utils.py#L18), [`version_service.py`](../../src/strata/services/version_service.py#L322-323)                         |
 
-| Shape                                   | Meaning                                                                  | Where                                                                                                                                      |
-| --------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `${VAR_NAME}`                           | Helm values substitution token (secrets/variables/features)              | [`helm_deployer.py`](../../src/strata/deployers/helm_deployer.py#L99)                                                                      |
-| `{{ var }}`                             | Jinja2 variable (unrelated domain — `strata new --template` scaffolding) | [`template_resolver.py`](../../src/strata/services/template_resolver.py#L24)                                                               |
-| `>=`, `<=`, `==`, `!=`, `>`, `<` prefix | Comparison expression (cost/threshold gates)                             | [`gate_controller.py`](../../src/strata/controllers/gate_controller.py#L57)                                                                |
-| `field op value`                        | Diagram conditional expression                                           | [`diagram_expressions.py`](../../src/strata/utils/diagram_expressions.py#L24)                                                              |
-| `{segment}`                             | Path-convention placeholder                                              | [`path_convention.py`](../../src/strata/utils/path_convention.py#L126)                                                                     |
-| version-string shape                    | semver / git SHA / OCI digest detection                                  | [`sbom_utils.py`](../../src/strata/utils/sbom_utils.py#L18), [`version_service.py`](../../src/strata/services/version_service.py#L322-323) |
+### Verified use-site inventory (2026-09-03)
+
+Every locator convention traced to its actual call sites, not just one representative example:
+
+**`@repo_name/...` — confirmed exactly 15 independent `str.startswith("@")` sites (real duplication, same job at every site):**
+
+1. [`utils/system.py:204`](../../src/strata/utils/system.py#L204) — `resolve_path()`, the canonical resolver
+2. [`services/base_service.py:552`](../../src/strata/services/base_service.py#L552)
+3. [`services/deployment_service.py:1687`](../../src/strata/services/deployment_service.py#L1687)
+4. [`services/module_service.py:55`](../../src/strata/services/module_service.py#L55)
+5. [`services/template_resolver.py:410`](../../src/strata/services/template_resolver.py#L410)
+6. [`services/template_resolver.py:450`](../../src/strata/services/template_resolver.py#L450)
+7. [`utils/graph.py:85`](../../src/strata/utils/graph.py#L85)
+8. [`builders/compose_builder.py:445`](../../src/strata/builders/compose_builder.py#L445)
+9. [`controllers/promote_controller.py:1401`](../../src/strata/controllers/promote_controller.py#L1401)
+10. [`controllers/guide_controller.py:148`](../../src/strata/controllers/guide_controller.py#L148)
+11. [`controllers/graph_controller.py:407`](../../src/strata/controllers/graph_controller.py#L407)
+12. [`controllers/diagram_source_controller.py:514`](../../src/strata/controllers/diagram_source_controller.py#L514)
+13. [`controllers/diagram_source_controller.py:1089`](../../src/strata/controllers/diagram_source_controller.py#L1089)
+14. [`commands/validate/run_validate_command.py:95`](../../src/strata/commands/validate/run_validate_command.py#L95)
+15. [`commands/deploy/run_deploy_command.py:380`](../../src/strata/commands/deploy/run_deploy_command.py#L380)
+
+Only #1 is the canonical resolver — the other 14 independently re-detect the same shape.
+
+**`strata://` — already well-consolidated, no action needed:**
+
+- [`utils/strata_uri.py`](../../src/strata/utils/strata_uri.py) — canonical `SCHEME`, `StrataUri` class, `parse_uri()`
+- [`services/diagram_service.py:19`](../../src/strata/services/diagram_service.py#L19) — `_CLICK_DIRECTIVE_RE` extracts a `strata://` URI *embedded inside* a `click <id> "strata://..."` directive string. A different context (pulling a URI out of surrounding text), not a re-detection of the scheme itself — legitimate, not duplication.
+
+**`file://` (Helm chart repo classification) — single site, no duplication:**
+
+- [`builders/sbom/helm_chart_file_collector.py:129`](../../src/strata/builders/sbom/helm_chart_file_collector.py#L129) — only usage.
+
+**`git@...`/`scheme://...` — 3 sites, but different purposes, not straight duplication:**
+
+| File:line                                                                                                                  | Purpose                                                            | Shape                                                                   |
+| -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| [`models/repository_model.py:168`](../../src/strata/models/repository_model.py#L168)                                       | **Validate** a field already typed `RemoteType.GITOPS`             | `^(https?://\|git@\|ssh://)` — deliberately narrow                      |
+| [`commands/repo/add_repo_solution_command.py:15`](../../src/strata/commands/repo/add_repo_solution_command.py#L15)         | **Classify** an untyped URL as local-vs-remote to derive `type:`   | `^[A-Za-z][A-Za-z0-9+\-.]*://\|^git@` — deliberately broad (any scheme) |
+| [`commands/repo/status_repo_solution_command.py:289`](../../src/strata/commands/repo/status_repo_solution_command.py#L289) | **Normalize** `git@host:org/repo` → `host/org/repo` for comparison | transform, not a classifier — see confirmed bug below                   |
+
+**Correction (2026-09-03) — the "worth a sanity check" concern below was wrong, retracted:**
+traced what each of #1/#2 actually validates — `repository_model.py:168` validates
+`RemoteModel.repository` (deployment `spec.remotes[]`); `add_repo_solution_command.py:15`
+classifies a URL to set `SolutionSpecRepositoryModel.type` (`solution.json`'s repo registry),
+which has **no URL-format validator at all** (`url: str`, no regex). Different models, never
+cross-validated — there is no code path where #2's broader allowlist accepting a URL causes
+#1 to later reject it. No fix needed for #1/#2.
+
+**Confirmed real bug instead — FIXED (2026-09-03) — in #3, `_normalize_repo_url()`:** this
+function is the actual bridge between the two models (matches a `RemoteModel.repository`
+against a locally-cloned repo's real `git remote get-url origin` for `strata repo status`).
+Empirically verified `ssh://git@github.com/acme/repo.git` (scheme-based SSH form) did **not**
+normalize to the same value as `git@github.com:acme/repo.git` (SCP-form) or
+`https://github.com/acme/repo.git`, despite all three identifying the same remote — the
+SCP-form rewrite regex only matched at the very start of the string, so a leading `ssh://`
+scheme prevented it from firing, leaving `git@` in the result. Impact: `strata repo status`
+would silently report a locally-cloned repo as "not linked" if the clone's origin used
+`ssh://` syntax while `spec.remotes[].repository` used SCP-form syntax (or vice versa) — a
+real false negative, previously untested (only `https://` vs SCP-form was covered). Fixed by
+stripping the scheme first, then stripping any leftover `user@` prefix, only applying the
+SCP-specific regex when no scheme is present at all. Verified via a new regression test
+(`test_scheme_based_ssh_form_equals_scp_form`) that fails on the old code and passes on the
+fix; all 16 existing `_normalize_repo_url` tests still pass; ruff/mypy clean.
+
+**`./`/`../` (relative module source detection) — 2 sites, identical duplicated check — FIXED (2026-09-03):**
+
+- [`utils/sbom_utils.py:146`](../../src/strata/utils/sbom_utils.py#L146)
+- [`builders/sbom/terraform_module_collector.py:127`](../../src/strata/builders/sbom/terraform_module_collector.py#L127)
+
+Both did `if source.startswith("./") or source.startswith("../")` — same job, copy-pasted, not
+shared. Consolidated into a new `is_local_module_source(source) -> bool` predicate added to
+`sbom_utils.py` (the domain-cohesive home — `terraform_module_collector.py` already imports
+`terraform_module_to_purl` from the same module, so no new cross-module dependency was
+introduced). Both sites now call the shared predicate. Verified via existing
+`test_builders_sbom_phase1.py`/`test_utils_sbom.py` suites plus 4 new direct unit tests for the
+predicate itself; ruff/mypy clean.
+
+**Version-string shape sniffing — 3 regexes, but check different identifier types, not duplicated:**
+
+- [`utils/sbom_utils.py:18`](../../src/strata/utils/sbom_utils.py#L18) — `_SEMVER_RE`
+- [`services/version_service.py:322`](../../src/strata/services/version_service.py#L322) — `_GIT_SHA_RE`
+- [`services/version_service.py:323`](../../src/strata/services/version_service.py#L323) — `_OCI_DIGEST_RE`
+
+Semver lives only in `sbom_utils.py`; git-SHA/OCI-digest live only in `version_service.py` — no
+overlap, each regex checks a distinct identifier shape in a distinct concern (SBOM inventory vs.
+version-pointer resolution). Not a duplication problem.
+
+**Net picture before designing a fix:**
+
+| Convention                             | Verdict                                                                                                                                                      |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@repo_name/...`                       | **Fixed (2026-09-03)** — 15 sites migrated to shared `is_cross_repo_ref()`/`split_repo_ref()`/`local_relative_part()`/`resolve_path()` helpers, per category |
+| `./`/`../`                             | **Fixed (2026-09-03)** — 2 sites migrated to shared `is_local_module_source()` in `sbom_utils.py`                                                            |
+| `git@.../scheme://...`                 | **Fixed (2026-09-03)** — validate/classify (#1/#2) confirmed as no actual interaction (different models); real bug found and fixed in normalize (#3)         |
+| `strata://`, `file://`, version-string | **Fine as-is** — already single-sourced or legitimately distinct concerns                                                                                    |
+
+### Locator system implementation plan: `@repo_name/...` (2026-09-03)
+
+Tracing what each of the 15 `str.startswith("@")` sites actually *does* with the detection
+(not just that it detects) splits them into 6 categories — only some are safe to consolidate
+onto `resolve_path()` directly:
+
+| Category                                      | Sites                                                                                                                                                                                                                                                                       | Verdict                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A — already correct**                       | [`base_service.py:552`](../../src/strata/services/base_service.py#L552), [`run_validate_command.py:95`](../../src/strata/commands/validate/run_validate_command.py#L95)                                                                                                     | Already delegate to `resolve_path()`. Swap raw `.startswith("@")` guard → `is_cross_repo_ref()` for consistency only.                                                                                                                                                                                                                                                                                                                                     |
+| **B — false positives, different convention** | [`module_service.py:55`](../../src/strata/services/module_service.py#L55), [`compose_builder.py:445`](../../src/strata/builders/compose_builder.py#L445)                                                                                                                    | These are `@module/service` cross-**module** dependency syntax, not `@repo_name/...` at all — reuse of bare `@` for an unrelated meaning. No change to logic; add a code comment flagging the distinct convention so future audits don't conflate them.                                                                                                                                                                                                   |
+| **C — cosmetic/graph-symbolic**               | [`utils/graph.py:85`](../../src/strata/utils/graph.py#L85), [`graph_controller.py:407`](../../src/strata/controllers/graph_controller.py#L407)                                                                                                                              | Must NOT resolve (slugify for Mermaid ID; keep symbolic in a dependency graph edge). Swap detection → `is_cross_repo_ref()`, keep the special-case behavior unchanged.                                                                                                                                                                                                                                                                                    |
+| **D — deliberate "not yet supported" guard**  | [`diagram_source_controller.py:514`](../../src/strata/controllers/diagram_source_controller.py#L514), [`:1089`](../../src/strata/controllers/diagram_source_controller.py#L1089)                                                                                            | Explicitly reject `@` refs today ("Diagram sources cannot resolve @repo/ references yet"). Swap detection → `is_cross_repo_ref()`, keep the early-exit behavior unchanged.                                                                                                                                                                                                                                                                                |
+| **E — genuine duplicate reimplementations**   | [`template_resolver.py:410`](../../src/strata/services/template_resolver.py#L410) (`resolve_at_repo_path()`), [`guide_controller.py:148`](../../src/strata/controllers/guide_controller.py#L148) (`resolve_file_path()`)                                                    | Hand-rolled repo_map lookups structurally identical to `resolve_path()`'s `@` branch. Replace both with direct calls to `resolve_path()` — no behavior change, removes ~30 duplicated lines total.                                                                                                                                                                                                                                                        |
+| **F — deliberate deferred/partial behavior**  | [`deployment_service.py:1687`](../../src/strata/services/deployment_service.py#L1687), [`promote_controller.py:1401`](../../src/strata/controllers/promote_controller.py#L1401), [`run_deploy_command.py:380`](../../src/strata/commands/deploy/run_deploy_command.py#L380) | All three strip `@repo_name/` and treat the remainder as `work_path`-relative, explicitly commented "Full cross-repo resolution is deferred to a later phase" — NOT swappable to `resolve_path()` (would resolve against the *other* repo's location via `repo_map`, a real behavior change). Consolidate the identical inline `lstrip("@").split("/", 1)[-1]` dance (verified byte-identical semantics across all three) into one shared helper instead. |
+
+**Implemented (first pass):** three shared helpers added to
+[`utils/system.py`](../../src/strata/utils/system.py), alongside `resolve_path()` (which now
+uses them internally instead of its own inline `@` detection):
+
+- `is_cross_repo_ref(value) -> bool` — the canonical detection predicate (replaces raw
+  `str.startswith("@")` for Categories A/C/D).
+- `split_repo_ref(value) -> Optional[Dict[str, str]]` — parses into
+  `{"repo_name": ..., "rest": ...}` or `None`; does not validate against a `repo_map` (that
+  remains `resolve_path()`'s job).
+- `local_relative_part(value) -> str` — the Category F fallback helper: strips an
+  `@repo_name/` prefix and returns only the trailing relative path, silently discarding the
+  repo name. Verified to reproduce all three existing Category F call sites' exact behavior,
+  including the bare-`@repo_name`-with-no-slash edge case (returns the repo name unchanged).
+
+**Migrated (2026-09-03) — all 15 sites now consistent, full test suite green (6279 passed, 16
+skipped, 0 failed):**
+
+- **Category E** (2 sites) — `template_resolver.py`'s `resolve_at_repo_path()` and
+  `guide_controller.py`'s `resolve_file_path()` now both delegate to `resolve_path()`/
+  `split_repo_ref()` instead of hand-rolled repo_map lookups. `resolve_at_repo_path()` kept as
+  a distinct, non-raising wrapper (callers there treat "unresolvable" as "skip", not an error).
+- **Category F** (3 sites) — `deployment_service.py`, `promote_controller.py`, and
+  `run_deploy_command.py` now all call `local_relative_part()` instead of independently
+  duplicating the same `lstrip("@").split("/", 1)[-1]` dance. Behavior unchanged (deferred
+  cross-repo resolution remains deferred — this only removed the triplicated code, not the
+  underlying design decision to defer).
+- **Categories A/C/D** (6 sites) — `base_service.py`, `graph_controller.py`, and
+  `diagram_source_controller.py` (2 sites) now call `is_cross_repo_ref()` instead of raw
+  `str.startswith("@")`. `run_validate_command.py` (Category A) already called `resolve_path()`
+  directly and was left as-is (no `is_cross_repo_ref()` swap needed there — its own
+  `.startswith("@")` check is a cheap pre-guard before a local import, not worth touching).
+  `utils/graph.py`'s `slugify_path()` (Category C) was deliberately **left unchanged** — it's
+  a `strata.utils` module, and per `docs/platform/utilities.md`'s "no cross-imports between
+  utils modules" convention, it cannot import `is_cross_repo_ref` from `strata.utils.system`;
+  its one-line `.startswith("@")` check is trivial enough that self-contained duplication is
+  the correct trade-off here, not a violation worth fixing.
+  **Superseded for Category D specifically** — see "Category D follow-up" immediately below;
+  `diagram_source_controller.py`'s two sites went further than a detection swap and now
+  actually resolve `@repo/...` refs instead of rejecting them.
+- **Category B** (2 sites) — `module_service.py` and `compose_builder.py` unchanged in logic;
+  added a `# NOTE:` comment at each site clarifying this `@` is the unrelated
+  `@module/service` cross-module convention, so future greps/audits don't conflate the two.
+
+**Category D follow-up (2026-09-03, later same day):** `diagram_source_controller.py`'s two
+Category D guards were upgraded from "reject `@repo/...` and skip" to actually resolving the
+reference. The controller already imports `SolutionController` (used by its own `repositories`
+source) and its sibling `cache_controller.py` already had the exact merge pattern
+(`SolutionController.get_repo_map()` + `ConfigurationService.get_remote_map()`, solution names
+take precedence) wired through `resolve_path()`. A new cached `_get_repo_map()` helper applies
+that same pattern; `_get_resolved_environments()` and `_iter_workspace_refs()` now call
+`resolve_path(..., repo_map=self._get_repo_map())` instead of early-exiting on
+`is_cross_repo_ref()`. An unregistered repo name still reports a clear per-reference error
+(`resolve_path()`'s own `ValueError`), it just no longer blocks *registered* repos too.
+
+**Remaining work in the `@repo_name/...` consolidation — none; fully migrated.** The
+`git@.../scheme://...` and `./`/`../` items below were tracked here as separate, not-yet-done
+work at the time this section was written; both have since been resolved — see their own
+sections above (git@/scheme normalize bug fixed; `./`/`../` consolidated into
+`is_local_module_source()`).
+
+**Expression system** — a small language inside the string, evaluated against data to
+produce a result (a boolean, a matched value, a set, a substituted string):
+
+| Shape                                   | Meaning                                                                  | Where                                                                                                                            |
+| --------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| `spec.<field>[*].<attr>`                | Config-model membership lookup (query half of ADR-0072's `rules:`)       | [`ExpressionModel.query()`](../../src/strata/models/expression_model.py) (`kind: yaml`) — implemented 2026-09-03, see below      |
+| `{segment}`                             | Path-convention placeholder (file-existence half of the same `rules:`)   | [`ExpressionModel.check_path()`](../../src/strata/models/expression_model.py) (`kind: path`) — implemented 2026-09-03, see below |
+| `${VAR_NAME}`                           | Helm values substitution token (secrets/variables/features)              | [`helm_deployer.py`](../../src/strata/deployers/helm_deployer.py#L99)                                                            |
+| `{{ var }}`                             | Jinja2 variable (unrelated domain — `strata new --template` scaffolding) | [`template_resolver.py`](../../src/strata/services/template_resolver.py#L24)                                                     |
+| `>=`, `<=`, `==`, `!=`, `>`, `<` prefix | Comparison expression (cost/threshold gates)                             | [`gate_controller.py`](../../src/strata/controllers/gate_controller.py#L57)                                                      |
+| `field op value`                        | Diagram conditional expression                                           | [`diagram_expressions.py`](../../src/strata/utils/diagram_expressions.py#L24)                                                    |
+
+`spec.<field>[*].<attr>` and `{segment}` are the two halves of one mechanism — ADR-0072's
+`rules:` dict, where a single value position meant *either* a spec-membership query *or* a
+file-existence path template, distinguished (before the 2026-09-03 fix below) only by
+regex-sniffing the string's shape (`is_spec_rule()`, now deleted). That dispatch ambiguity —
+one schema position, two unrelated meanings — is exactly what the expression system's `kind:`
+discriminator (below) was built to fix, and now does. Previously
+these two rows were split across both tables here; correctly, both belong in the expression
+system (`yaml` kind and `path` kind respectively) since both are evaluated against data, never
+used as bare locators.
 
 **Not strata's own convention** (foreign file formats — excluded from concern here):
 `ref:` in [`manifest_artifact_collector.py`](../../src/strata/services/manifest_artifact_collector.py#L82)
 reads real git plumbing (`.git/HEAD` symbolic-ref format), not a strata-authored marker.
+
+## Research follow-up (2026-09-02): a file-based locator system and an expression system
+
+Follow-up research confirmed the inventory above splits cleanly into exactly the two systems
+now reflected in the tables above:
+
+1. **Locator system (file-based)** — `@repo_name/...`, `strata://...`, `file://`/`git@...`/
+   `scheme://...` repo-type detection, `./`/`../` relative-source detection, version-string
+   shape sniffing. These answer "where is this thing" or "what format is this", not "is this
+   true" or "what does this resolve to". This is the system this ADR is **not** proposing to
+   change — each convention here stays as-is; only the `@repo_name/...` duplication is tracked
+   separately (see Remaining Work).
+2. **Expression system** — the subset that needs one interpreter to run against some input and
+   produce a result (a boolean, a matched value, a set, a substituted string). This is the
+   system this ADR's `ExpressionModel` proposal targets. It decomposes cleanly into exactly
+   four *kinds*, each already present in the codebase in some form:
+
+   | Kind    | What it does                                               | Existing precedent                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+   | ------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | `path`  | Substitute `{segment}` captures, check file existence      | `path_convention.py`'s `evaluate_file_rule()` — the file-existence half of ADR-0072's `rules:` mechanism                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+   | `yaml`  | JMESPath query against structured config data              | `path_convention.py`'s `resolve_spec_rule()` — the `spec.field[*].attr` half of the same `rules:` mechanism, hand-rolled today instead of using real JMESPath (the existing syntax is already valid JMESPath as-is)                                                                                                                                                                                                                                                                                                                                                  |
+   | `regex` | Fixed-shape pattern match/extract, no evaluation semantics | `helm_deployer.py`'s `${VAR_NAME}` token — **deliberately not Jinja**: `{{ }}` is already Helm's own Go-template/Sprig delimiter, so Jinja would collide with literal `{{ }}` text already present in off-the-shelf charts' `values.yaml`. Confirms `regex` must stay a first-class, permanent kind, not a fallback everything migrates off of.                                                                                                                                                                                                                      |
+   | `jinja` | Boolean/comparison expression evaluation                   | `diagram_expressions.py`'s `parse_condition()` **already** compiles a closed `field op value` grammar down to a real Jinja expression fragment, executed by the existing `templater.py` environment — proof this pattern already works in this codebase. `gate_controller.py`'s independent `>=`/`<=`/etc. regex+dict comparison evaluator could adopt the same approach via Jinja2's `Environment.compile_expression()` (evaluates a single expression against a context dict, distinct from full template rendering) — not yet done, a smaller separate follow-up. |
+
+   Proposed shape: `ExpressionModel(kind: path|yaml|regex|jinja, expression: str)` — an explicit
+   `kind:` discriminator field, per this ADR's own stated principle ("a schema field is
+   discoverable, validated, and documented by the model itself; a string-shape convention is
+   not"). Immediate concrete scope at proposal time: only `PathConventionModel.rules` (then
+   the shape-sniffed dispatch, `is_spec_rule()`'s regex) would adopt `path`+`yaml` kinds —
+   **this is what was actually implemented, see "Implemented" below.** `regex`/`jinja` kinds
+   are defined for completeness but still not wired anywhere — the gate/diagram consolidation
+   remains a separate, smaller, not-yet-started piece of work (see Remaining Work).
+
+   Efficiency note: whichever kind, the compiled form (`jmespath.compile(...)`,
+   `re.compile(...)`, `Environment().compile_expression(...)`) should be built once — at model
+   validation time (e.g. a Pydantic `model_validator(mode="after")` storing the compiled object
+   in a `PrivateAttr`, excluded from serialization) — and reused for every file/deployment
+   checked afterward, since `ConfigurationModel` (and therefore its `spec.paths[].rules`) is
+   loaded once per CLI invocation and then evaluated once per file during a workspace scan.
+   Recompiling the same expression string per file would be wasted, avoidable work.
+
+   **Update (2026-09-03): this was the original proposal text below — since implemented, see
+   the "Implemented" section further down.** `jmespath` was added as a new dependency (it
+   wasn't in `pyproject.toml` at proposal time) — small, well-known (AWS/Azure CLI `--query`,
+   Ansible `json_query`), and notably runs the exact same `spec.zones[*].name` syntax already
+   documented in ADR-0072 unchanged — only the underlying engine moved from hand-rolled to a
+   real standard.
+
+   **Scope rule — not every expression needs `kind:`.** `ExpressionModel` solves *shape
+   ambiguity*, not "this field is an expression". Add `kind:` only when the *same schema
+   position* can validly hold more than one kind of expression, the way `PathConventionModel`'s
+   `rules:` dict value can mean either a spec-membership query or a file-existence path
+   template today, resolved only by regex-sniffing the string (`is_spec_rule()`). Most other
+   expression sites already disambiguate by schema position and don't need it:
+   `GateWhenConditionsModel.cost_delta_monthly` is *always* a numeric comparison,
+   `spec.style.highlight[].condition` is *always* a `field op value` expression — the field
+   itself already tells you everything a `kind:` discriminator would, so adding one there would
+   be pure schema churn (over-formalizing), the same "creep" this ADR exists to prevent, just
+   pointed the other direction. Those two can still share one compiled-Jinja evaluator
+   internally (via `Environment.compile_expression()`) to kill the current code duplication
+   between `gate_controller.py` and `diagram_expressions.py` — as a plain typed string field,
+   with no `kind:`, no `ExpressionModel` wrapper, and no YAML schema change at all.
+
+## Implemented (2026-09-03) — `ExpressionModel` built and wired into `PathConventionModel.rules`
+
+The `path`/`yaml` kinds are no longer a proposal — fully implemented, tested (6306 passed, 16
+skipped, 0 failed full suite), and wired end-to-end:
+
+- **`jmespath>=1.0`** added as a real dependency (`pyproject.toml`), plus `types-jmespath` for mypy.
+- **`ExpressionModel`** ([`models/expression_model.py`](../../src/strata/models/expression_model.py)) —
+  `kind: path|yaml|regex|jinja` + `expression: str`, compiled once at construction
+  (`model_validator(mode="after")` + `PrivateAttr`), with kind-specific methods: `.query()`
+  (yaml), `.matches()` (regex), `.evaluate()` (jinja), `.check_path()` (path — delegates to
+  `path_convention.py`'s `evaluate_file_rule()` via a lazy import, reusing rather than
+  duplicating the substitution logic).
+- **`PathConventionModel.rules`** changed from `Dict[str, str]` to `Dict[str, ExpressionModel]`.
+  A new `validate_rules_kind()` model validator restricts values to `kind: yaml`/`kind: path`
+  only — `kind: regex`/`kind: jinja` in this position now raise a clear `ValueError` at
+  YAML-parse time instead of being silently mismatched later.
+- **`path_convention.py`**: `is_spec_rule()`, `resolve_spec_rule()`, `_resolve_step()`, and
+  `_SPEC_RULE_RE` — the hand-rolled dotted-path walker this whole ADR started from — are
+  **deleted**. `evaluate_conventions()`'s dispatch now checks `rule.kind` directly instead of
+  regex-sniffing a string. The `yaml` kind branch calls `rule.query(configuration_model.model_dump())`
+  and checks membership against the returned list; the dict-aware `spec.custom`/
+  `spec.configuration`/`spec.properties` fallback `_resolve_step()` needed (ADR-0072) is now
+  handled automatically and more completely by `model_dump()` producing a plain dict tree that
+  JMESPath traverses natively — no special-casing needed at all.
+
+**Layering discovery during wiring**: `path_convention.py` (`strata.utils`) importing
+`ExpressionKind` from `strata.models.expression_model` at module level broke the `strata.utils
+is not allowed to import strata.models` contract (ADR-0003 — `models` sits *above* `utils`, not
+below). Fixed by comparing `rule.kind == "yaml"` (a plain string) instead of importing the enum
+— `ExpressionKind(str, Enum)` compares equal to its raw string value, so no import is needed at
+all for the comparison. Confirmed via `lint-imports`: 0 new violations (2 pre-existing, unrelated
+ones remain: `services→controllers`, `commands→server`).
+
+**Test fixture discovery**: `test_path_convention_policy.py`'s `_make_config_model()` previously
+built a `MagicMock()` instead of a real `ConfigurationModel` — worked fine against the old
+`getattr()`-based walker, but breaks under `model_dump()` (a `MagicMock.model_dump()` doesn't
+return a real dict). Rewritten to construct genuine `ConfigurationModel`/`ConfigurationSpecModel`/
+`ConfigurationZoneModel` instances. This also surfaced that `spec.environments[*].name` — used
+as an example in this ADR's own inventory, in ADR-0072, and in several docs — was **never a real
+field** on `ConfigurationSpecModel`; it only ever "worked" in tests because `MagicMock` silently
+accepts any attribute. The one test that exercised it (`test_multiple_violations_same_convention`)
+was rewritten to validate two segments against the real `spec.zones` field instead. `TestSpecRule`
+(direct tests of the now-deleted `is_spec_rule`/`resolve_spec_rule`) was removed — that coverage
+now lives in `test_models_expression.py`'s `TestExpressionModelYamlKind`.
+
+**Not yet done**: the ~22 documented `validate:` YAML examples across `docs/config/configuration.md`,
+`docs/decisions/0052-path-convention-validation.md`, `docs/decisions/0042-deep-validation-layer-consistency.md`,
+and `docs/platform/policies.md` still show the old bare-string shape and need updating to
+`{kind: ..., expression: ...}`. Also still using the non-existent `spec.environments[*].name`
+example in places — should be corrected to a real field (e.g. `spec.zones[*].name`) while fixing
+the shape. The `regex`/`jinja` kinds remain unwired (by design, per the Scope rule above) until
+the `gate_controller.py`/`diagram_expressions.py` consolidation is separately tackled.
 
 ## Goal
 
@@ -92,25 +399,61 @@ Not to unify or redesign any of the above right now. Only:
 
 ## Decision Outcome
 
-No mechanism change is adopted by this ADR. Existing conventions are grandfathered
-as-is — none of them are required to change because of this document. This ADR's only
-concrete output is the inventory above and the open research questions below, so the
-concern is tracked instead of forgotten.
+**Original scope (2026-09-01):** no mechanism change, inventory only — existing conventions
+grandfathered as-is.
+
+**Actual outcome (2026-09-03):** went further than originally scoped. The Locator system's
+`@repo_name/...`, `./`/`../`, and `git@`/`scheme://` duplication/bugs were fixed (see the
+Locator system sections above). The Expression system's `path`/`yaml` kinds were designed,
+implemented as `ExpressionModel`, and wired into `PathConventionModel.rules`, replacing the
+shape-sniffed `is_spec_rule()` dispatch this ADR was originally written to flag (see
+"Implemented" above). What's genuinely still grandfathered/unstarted is listed in
+[Remaining Work](#remaining-work) below.
 
 ## Remaining Work
 
 <!-- Required while Status is proposed / in-progress / partially-implemented.
      Remove this section once Status becomes implemented. -->
 
-- Decide whether new embedded string-shape conventions should require an explicit
-  justification (e.g. a short section in the introducing ADR/PR) that checks this
+**Locator system** — nothing outstanding; `@repo_name/...`, `./`/`../`, and `git@`/`scheme://`
+are all fixed/consolidated or confirmed fine as-is (see the Locator system sections above).
+
+**Expression system:**
+
+- Update the ~22 documented `validate:` YAML examples still showing the old bare-string shape
+  across `docs/config/configuration.md`, `docs/decisions/0052-path-convention-validation.md`,
+  `docs/decisions/0042-deep-validation-layer-consistency.md`, and `docs/platform/policies.md`
+  to `{kind: ..., expression: ...}`. **Partially done (2026-09-03)**: `configuration.md` and
+  `policies.md` (living docs) and this ADR's sibling ADR-0072 (`partially-implemented`, not a
+  done/historical doc) have been updated. `0052` (`implemented`) and `0042` (`superseded`) were
+  deliberately left untouched — historical decision records, correct as written at the time.
+- Design + implement the `regex`/`jinja` kind consolidation for `gate_controller.py`'s
+  `>=`/`<=`/etc. comparison evaluator and `diagram_expressions.py`'s `field op value` parser.
+  **Done for `gate_controller.py` (2026-09-03)**: `_eval_numeric_expr()` and `_eval_risk_expr()`
+  previously each carried their own byte-identical `ops = {">=": ..., "<=": ...}` dict; both now
+  call a single shared `_compare(op, actual, threshold)` helper that constructs
+  `ExpressionModel(kind=ExpressionKind.JINJA, expression=f"actual {op} threshold")` and calls
+  `.evaluate(...)`. This ended up reusing the existing, already-tested `ExpressionModel` directly
+  rather than a bespoke plain-string-field + raw `Environment.compile_expression()` — no need to
+  invent a second mechanism when the first one fits. All pre-existing validation strictness is
+  unchanged: `_OPERATOR_RE` still validates operator shape first, numeric threshold is still
+  parsed via `float(rhs)`, risk threshold is still resolved via `_RISK_ORDER` — `_compare()` is
+  only ever invoked with one of the 6 literal operator tokens already matched by `_OPERATOR_RE`,
+  never arbitrary caller text, so no unintended Jinja syntax can reach the evaluator. Verified
+  with the existing 28-test suite plus 15 new direct unit tests for `_compare()`/
+  `_eval_numeric_expr()`/`_eval_risk_expr()` (43 total in `test_gate_controller.py`), and the
+  full repo suite (6321 passed, 16 skipped, 0 failed) plus clean `ruff`/`mypy`/`lint-imports`.
+  **`diagram_expressions.py` deliberately left untouched** — its `field op value` parser
+  translates into a Jinja source *fragment* for later embedding into a full multi-line template
+  render (`templater.py`), a fundamentally different job from `gate_controller.py`'s "evaluate
+  to a bool right now" need; forcing it onto `compile_expression()` would require restructuring
+  its embed-in-template design for no real benefit.
+- Decide whether new embedded string-shape conventions (of either system) should require an
+  explicit justification (e.g. a short section in the introducing ADR/PR) that checks this
   inventory first — not yet decided whether to formalize this as a written rule anywhere
   (CONTRIBUTING, an instructions file, or just convention).
-- Research whether any of the existing conventions above could be consolidated or made
-  more consistent (e.g. `rules:`'s spec-vs-file dispatch in `path_convention.py` — see
-  ADR 0072 — reusing the same "no explicit discriminator" shape as several others listed
-  here). Not decided; purely a future research question.
-- Track and resolve the `@repo_name/...` duplication (~15 independent
-  `str.startswith("@")` sites instead of one shared predicate) as its own bug/tech-debt
-  item — related to this ADR's concern but intentionally scoped out of it.
-- No implementation has started; this ADR is inventory + a flagged concern, not a design.
+- ADR-0072's "Known gap" section still references the now-deleted `resolve_spec_rule()`/
+  `getattr()` mechanism in prose (not a YAML example, so out of scope for the 2026-09-03 YAML
+  pass) and still lists the non-existent `spec.environments` field alongside real ones
+  (`spec.zones`, `spec.providers`, etc.) — worth a follow-up prose correction since ADR-0072
+  is not a done/historical doc either.

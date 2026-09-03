@@ -62,6 +62,15 @@ utils/        ← Pure utilities (no business logic, no service imports)
 4. Never call `Path.exists()` inside validators — models must load without a filesystem.
 5. Add a corresponding service in `src/strata/services/`.
 
+### Introducing a new convention
+
+Before adding any new string syntax, field shape, naming rule, or other repeated
+pattern (not just a one-off field): write an ADR, check whether an existing strata
+mechanism or an industry standard already does the job before inventing one, and if
+the same logic is needed in more than one place put it in exactly one shared
+function — never a second hand-rolled copy. See
+[docs/decisions/README.md#introducing-a-new-convention](../docs/decisions/README.md#introducing-a-new-convention).
+
 ---
 
 ## Exit Codes

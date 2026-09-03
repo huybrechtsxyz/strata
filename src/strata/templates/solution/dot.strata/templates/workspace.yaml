@@ -6,63 +6,120 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: workspace
 meta:
-  name: {{ name }}
+  name: "{{ name }}"
   annotations:
     description: "Platform workspace template"
-    owner: {{ owner }}
+    owner: "{{ owner }}"
   labels:
-    version: {{ version }}
+    version: "{{ version }}"
   tags: ["template", "workspace"]
 spec:
-  # Providers (cloud/infrastructure providers)
+  # Providers (cloud/infrastructure providers) — at least one required
   providers:
     - name: template_provider
       file: config/{platform}/providers/template-provider.yaml
+      # description: "Primary cloud provider"
 
-  # Provisioners (IaC tools)
+  # Provisioners (IaC tools) — at least one required.
+  # Built-in provisioner types: terraform, ansible, compose, helm, script, argocd, flux.
   provisioners:
     - name: template_provisioner
-      provisioner: terraform # terraform, script
+      provisioner: terraform
       source:
         repository: main_repo # Remote name from solution registered repositories
         source_path: deploy/terraform
+      # backend:
+      #   type: terraform_cloud # terraform_cloud, s3, azurerm, gcs, local, remote
+      #   configuration:
+      #     organization: myorg
+      #     workspace: template-prd
+      # output: # controls which tfvars files `strata build run` emits
+      #   format: strata # strata (default, emit everything) | custom | script | none
+      # version: "~>1.7" # pinned tool version (usually set by `strata versions`, not by hand)
+      # inputs_from: # consume another provisioner's outputs as variables
+      #   - provisioner: template_provisioner
+      #     select: [vnet_id]
+      #     # prefix: "net_" # mutually exclusive with `mapping`
+      #     # mapping: { vnet_id: network_id }
 
-  # Topology (infrastructure layout)
+    # Ansible provisioner — configures servers after Terraform provisions them
+    # - name: configure
+    #   provisioner: ansible
+    #   source:
+    #     repository: main_repo
+    #     source_path: deploy/ansible
+    #   properties:
+    #     playbook: site.yml # default: site.yml
+    #     inventory: inventory/hosts.yml # auto-discovered if omitted
+    #     ssh_private_key_secret: ssh_private_key # secret name; never inline a key
+    #     extra_vars:
+    #       env: production
+
+  # Topology (infrastructure layout) — at least one required
   topology:
     - name: template_topology
       provider: template_provider
-      provisioner: terraform
-      type: docker_swarm # docker_swarm, kubernetes, standalone
-      volumes:
-        - name: config
-          type: replicated
-        - name: data
-          type: local
-        - name: logs
-          type: local
+      provisioner: template_provisioner
+      type: docker_swarm # docker_swarm, kubernetes, standalone, azure-native, ...
       components:
         - resource: template_resource
+      # Namespaces deployed on this topology
+      namespaces:
+        - namespace: template_namespace
+      # Shared volumes available to modules on this topology
+      volumes:
+        - name: config
+          type: replicated # local, replicated, distributed, nfs, iscsi, ...
+        - name: data
+          type: local
+          # size: "10Gi"
+          # mount_path: "/data"
+          # access_mode: ReadWriteOnce # ReadWriteOnce, ReadWriteMany, ReadOnlyMany
+          # mode: "0755"
+          # driver: nfs.csi.k8s.io
+          # configuration:
+          #   server: nfs.example.com
+          #   share: /export/data
+        - name: logs
+          type: local
 
-  # Resources (infrastructure components)
+  # Resources (infrastructure components) — optional gluing layer over topology
   resources:
     - name: template_resource
       file: config/{platform}/resources/template-resource.yaml
+      # description: "Primary application VM"
+      # enabled: true
+      # condition: "{{ environment }} == production" # conditional inclusion
       role: manager # manager, worker, standalone
       count: 1 # Number of instances
       firewalls:
         - template_firewall # Reference firewall configs
+      # subnet: "template_network/default" # "network_name/subnet_name"
       configuration:
         # Override resource-specific settings
         cpu_cores: 4
         memory_gb: 16
+      # custom: {}
       labels:
         role: manager
         environment: production
       tags: ["template", "manager"]
-      # Optional: Dependencies
+      # Optional: Dependencies (other resource names)
       depends_on: []
-      # Optional: References to other resources
+      # Optional: References to other resources' output values
       references: {}
+      # Optional: application/code modules deployed onto this resource
+      # modules:
+      #   - name: app
+      #     file: config/{platform}/modules/app-module.yaml
+      #     slot_type: main # main, staging, canary, sidecar, init
+      #     enabled: true
+      #     configuration: {}
+
+    # A resource fully managed by the provisioner itself (no resource YAML file)
+    # - name: managed_network
+    #   managed_by: provisioner
+    #   description: "VNet defined directly in Terraform"
 
   # Namespaces (logical groupings)
   namespaces:
@@ -73,3 +130,23 @@ spec:
   firewalls:
     - name: template_firewall
       file: config/{platform}/firewalls/template-firewall.yaml
+
+  # DNS zone file references
+  # dns_zones:
+  #   - name: template_dns
+  #     file: config/{platform}/dns/template-dns.yaml
+
+  # Network topology file references
+  # networks:
+  #   - name: template_network
+  #     file: config/{platform}/networks/template-network.yaml
+
+  # Workspace-level properties/custom data (freeform)
+  # properties:
+  #   environment_class: production
+  # custom:
+  #   some_key: some_value
+
+  # Workspace lifecycle hooks
+  # lifecycle:
+  #   validate_before: {}

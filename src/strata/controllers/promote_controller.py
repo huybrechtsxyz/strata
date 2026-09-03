@@ -28,6 +28,7 @@ from strata.models.promotion_record_model import (
     PromotionRingWaveSummaryModel,
 )
 from strata.utils.config import SOLUTION_DIR, get_configuration_path, get_solution_json_path
+from strata.utils.system import local_relative_part
 
 _API_VERSION = "strata.huybrechts.xyz/v1"
 _PROMOTIONS_DIR = "promotions"
@@ -1401,9 +1402,7 @@ class PromoteController(BaseController):
         if versions_path_raw.startswith("@"):
             # Strip @repo_name prefix — treat as relative to work_path for now
             # Full cross-repo resolution is deferred to a later phase
-            stripped = versions_path_raw.lstrip("@")
-            parts = stripped.split("/", 1)
-            rel = parts[1] if len(parts) > 1 else parts[0]
+            rel = local_relative_part(versions_path_raw)
             return (work_path / rel).resolve()
         p = Path(versions_path_raw)
         if p.is_absolute():

@@ -185,6 +185,17 @@ class TestNormalizeRepoUrl:
 
         assert https == ssh
 
+    def test_scheme_based_ssh_form_equals_scp_form(self):
+        """Regression: ssh://user@host/org/repo (scheme form) must normalize the same as
+        user@host:org/repo (SCP-like form) — both are valid, common syntaxes for the same
+        remote. The SCP-form rewrite regex only matched at the start of the string, so a
+        leading scheme (ssh://) prevented it from firing, leaving 'git@' in the result and
+        silently breaking the match against the SCP-form/https equivalents."""
+        scp_form = StatusRepoSolutionCommand._normalize_repo_url("git@github.com:acme/billing-service.git")
+        scheme_form = StatusRepoSolutionCommand._normalize_repo_url("ssh://git@github.com/acme/billing-service.git")
+
+        assert scheme_form == scp_form
+
     def test_trailing_slash_and_dotgit_suffix_ignored(self):
         a = StatusRepoSolutionCommand._normalize_repo_url("https://github.com/acme/billing-service.git")
         b = StatusRepoSolutionCommand._normalize_repo_url("https://github.com/acme/billing-service/")

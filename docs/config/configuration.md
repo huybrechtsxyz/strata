@@ -385,21 +385,29 @@ spec:
       scope: "zones/**"                              # files in this subtree are candidates
       pattern: "zones/{zone}/customers/{tenant}/{env}" # {segment} captures one path part
       validate:
-        zone: spec.zones[*].name                     # captured value must be a declared zone
-        tenant: "customers/{tenant}/tenant.yaml"     # file at this path must exist
-        env: spec.environments[*].name               # captured value must be a declared environment
+        zone:
+          kind: yaml
+          expression: spec.zones[*].name             # captured value must be a declared zone
+        tenant:
+          kind: path
+          expression: "customers/{tenant}/tenant.yaml" # file at this path must exist
+        # {env} is captured but not validated — validate: entries are optional per segment
 
     - name: tenant-registry
       scope: "customers/**"
       pattern: "customers/{tenant}"
       validate:
-        tenant: "customers/{tenant}/tenant.yaml"
+        tenant:
+          kind: path
+          expression: "customers/{tenant}/tenant.yaml"
 
     - name: landscape-registry
       scope: "landscape/**"
       pattern: "landscape/{landscape}"
       validate:
-        landscape: "landscape/{landscape}/landscape.yaml"
+        landscape:
+          kind: path
+          expression: "landscape/{landscape}/landscape.yaml"
 ```
 
 ### Custom tenant file location
@@ -450,15 +458,17 @@ policies:
       scope: "deploy/**"
       pattern: "deploy/{landscape}/{ring}"
       validate:
-        landscape: "deploy/{landscape}/landscape.yaml"
+        landscape:
+          kind: path
+          expression: "deploy/{landscape}/landscape.yaml"
 ```
 
 ### Validation rule types
 
-| Rule syntax                      | Meaning                                                                |
-| -------------------------------- | ---------------------------------------------------------------------- |
-| `spec.zones[*].name`             | Captured value must appear in a field of the loaded ConfigurationModel |
-| `customers/{tenant}/tenant.yaml` | File at this path (relative to workspace root) must exist on disk      |
+| Rule shape                                                   | Meaning                                                                              |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| `{kind: yaml, expression: spec.zones[*].name}`               | Captured value must appear in a JMESPath query against the loaded ConfigurationModel |
+| `{kind: path, expression: "customers/{tenant}/tenant.yaml"}` | File at this path (relative to workspace root) must exist on disk                    |
 
 `spec.*` rules require `--deep` validation (configuration service must be available). File
 existence rules work in both surface and deep mode.

@@ -127,6 +127,16 @@ def helm_chart_to_purl(
     return purl
 
 
+def is_local_module_source(source: str) -> bool:
+    """Return True if *source* is a local Terraform module reference (``./`` or ``../``).
+
+    Local modules live in the same repo, not a registry — they are not
+    publishable SBOM components. Single detection point for this convention
+    (ADR-0073); call this instead of ``source.startswith("./")`` directly.
+    """
+    return source.startswith("./") or source.startswith("../")
+
+
 def terraform_module_to_purl(source: str, version: Optional[str] = None) -> Optional[str]:
     """Convert a Terraform module source string to a Package URL.
 
@@ -143,7 +153,7 @@ def terraform_module_to_purl(source: str, version: Optional[str] = None) -> Opti
     - ``github.com/org/repo[//subdir][?ref=tag]`` →
       ``pkg:github/org/repo@ref`` (``?ref=`` query param or *version* attribute)
     """
-    if source.startswith("./") or source.startswith("../"):
+    if is_local_module_source(source):
         return None
 
     # Strip subdirectory suffix (//subdir)

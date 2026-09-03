@@ -7,7 +7,7 @@ from strata.builders.sbom.base_sbom_collector import BaseSbomCollector
 from strata.logger import get_logger
 from strata.models.platform_artifact_model import PlatformArtifactModel
 from strata.models.sbom_model import SbomComponentModel
-from strata.utils.sbom_utils import terraform_module_to_purl
+from strata.utils.sbom_utils import is_local_module_source, terraform_module_to_purl
 
 logger = get_logger(__name__)
 
@@ -124,7 +124,7 @@ class TerraformModuleCollector(BaseSbomCollector):
                     version = self._strip_hcl_string(cfg.get("version"))
 
                     # Skip local modules — they are not publishable components
-                    if source.startswith("./") or source.startswith("../"):
+                    if is_local_module_source(source):
                         logger.debug("Skipping local terraform module", source=source)
                         continue
 

@@ -14,7 +14,7 @@ from strata.models.scaffold_template_model import ScaffoldTemplateModel
 from strata.models.solution_model import SolutionSpecModel, SolutionTemplateModel
 from strata.utils.config import get_templates_dir
 from strata.utils.graph import GraphResult
-from strata.utils.system import get_pkg_templates_path
+from strata.utils.system import get_pkg_templates_path, resolve_path, split_repo_ref
 
 logger = get_logger(__name__)
 
@@ -405,17 +405,21 @@ def _read_bundle_description(bundle_dir: Path) -> str:
 def resolve_at_repo_path(identifier: str, repo_map: Dict[str, str]) -> Optional[Path]:
     """Resolve a ``@repo_name/relative/path`` reference to an absolute ``Path``.
 
-    Returns ``None`` if the repo is not registered or the identifier is malformed.
+    Returns ``None`` if the repo is not registered, the identifier is malformed
+    (e.g. missing the trailing ``/relative/path`` segment), or *identifier* is
+    not an ``@`` reference at all.
+
+    Thin wrapper around :func:`strata.utils.system.resolve_path` (ADR-0073) —
+    kept as a distinct, non-raising function since callers here treat
+    "unresolvable" as "skip", not as an error.
     """
-    if not identifier.startswith("@"):
+    split = split_repo_ref(identifier)
+    if split is None or not split["rest"]:
         return None
-    rest = identifier[1:]
-    if "/" not in rest:
+    try:
+        return resolve_path("", identifier, repo_map=repo_map)
+    except ValueError:
         return None
-    repo_name, rel_path = rest.split("/", 1)
-    if repo_name not in repo_map:
-        return None
-    return Path(repo_map[repo_name]) / rel_path
 
 
 def collect_dep_candidates(

@@ -10,6 +10,7 @@ from typing import Dict, List, Optional
 from strata.controllers.workitem_controller import WorkItemController
 from strata.integrations.workitem.base_workitem_backend import WorkItem, WorkItemError
 from strata.logger import get_logger
+from strata.models.expression_model import ExpressionKind, ExpressionModel
 from strata.models.gate_model import DeploymentGateModel, GateWhenConditionsModel
 
 logger = get_logger(__name__)
@@ -57,6 +58,19 @@ class GateContext:
 _OPERATOR_RE = re.compile(r"^\s*(>=|<=|>|<|==|!=)\s*(.+)$")
 
 
+def _compare(op: str, actual: float, threshold: float) -> bool:
+    """Evaluate ``actual <op> threshold`` via a compiled Jinja expression (ADR-0073).
+
+    Shared by both ``_eval_numeric_expr()`` and ``_eval_risk_expr()`` — previously each
+    had its own byte-identical ``ops = {">=": ..., "<=": ...}`` dict. Safe to hand *op*
+    straight into the expression string: it can only ever be one of the 6 literal tokens
+    ``_OPERATOR_RE`` matched (``>=``/``<=``/``>``/``<``/``==``/``!=``), never arbitrary
+    caller-controlled text, so this never risks evaluating unintended Jinja syntax.
+    """
+    model = ExpressionModel(kind=ExpressionKind.JINJA, expression=f"actual {op} threshold")
+    return bool(model.evaluate({"actual": actual, "threshold": threshold}))
+
+
 def _eval_numeric_expr(expr: str, actual: Optional[float]) -> bool:
     """Evaluate ">= 1000" style expression against a numeric value.
     Returns False (don't trigger) when actual is None (data not available)."""
@@ -72,15 +86,7 @@ def _eval_numeric_expr(expr: str, actual: Optional[float]) -> bool:
     except ValueError:
         logger.warning("gate.invalid_numeric_threshold", expr=expr)
         return False
-    ops = {
-        ">=": actual >= threshold,
-        "<=": actual <= threshold,
-        ">": actual > threshold,
-        "<": actual < threshold,
-        "==": actual == threshold,
-        "!=": actual != threshold,
-    }
-    return ops.get(op, False)
+    return _compare(op, actual, threshold)
 
 
 def _eval_risk_expr(expr: str, actual: Optional[str]) -> bool:
@@ -97,15 +103,7 @@ def _eval_risk_expr(expr: str, actual: Optional[str]) -> bool:
     if threshold_ord == -1:
         logger.warning("gate.unknown_risk_threshold", expr=expr, rhs=rhs, valid=list(_RISK_ORDER))
         return False
-    ops = {
-        ">=": actual_ord >= threshold_ord,
-        "<=": actual_ord <= threshold_ord,
-        ">": actual_ord > threshold_ord,
-        "<": actual_ord < threshold_ord,
-        "==": actual_ord == threshold_ord,
-        "!=": actual_ord != threshold_ord,
-    }
-    return ops.get(op, False)
+    return _compare(op, actual_ord, threshold_ord)
 
 
 def _eval_time_window(window: str, now: Optional[datetime]) -> bool:

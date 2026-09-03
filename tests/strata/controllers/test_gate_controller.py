@@ -14,6 +14,9 @@ from strata.controllers.gate_controller import (
     GateConditionEvaluator,
     GateContext,
     WorkItemGateController,
+    _compare,
+    _eval_numeric_expr,
+    _eval_risk_expr,
 )
 from strata.integrations.workitem.base_workitem_backend import WorkItem, WorkItemError
 from strata.models.gate_model import DeploymentGateModel
@@ -106,6 +109,78 @@ class TestGateConditionEvaluatorShouldTrigger:
         gate = _gate(type="cost_review", when={"cost_delta_monthly": "not-an-expr"})
         context = GateContext(cost_delta_monthly=1500.0)
         assert GateConditionEvaluator.should_trigger(gate, context) is False
+
+
+# ---------------------------------------------------------------------------
+# _compare / _eval_numeric_expr / _eval_risk_expr (ADR-0073 consolidation)
+# ---------------------------------------------------------------------------
+
+
+class TestCompare:
+    """All 6 operators, delegated to a compiled Jinja expression (ADR-0073) —
+    previously a hand-rolled ops dict duplicated verbatim in both callers."""
+
+    def test_gte(self):
+        assert _compare(">=", 10, 5) is True
+        assert _compare(">=", 5, 5) is True
+        assert _compare(">=", 1, 5) is False
+
+    def test_lte(self):
+        assert _compare("<=", 1, 5) is True
+        assert _compare("<=", 5, 5) is True
+        assert _compare("<=", 10, 5) is False
+
+    def test_gt(self):
+        assert _compare(">", 10, 5) is True
+        assert _compare(">", 5, 5) is False
+
+    def test_lt(self):
+        assert _compare("<", 1, 5) is True
+        assert _compare("<", 5, 5) is False
+
+    def test_eq(self):
+        assert _compare("==", 5, 5) is True
+        assert _compare("==", 4, 5) is False
+
+    def test_neq(self):
+        assert _compare("!=", 4, 5) is True
+        assert _compare("!=", 5, 5) is False
+
+
+class TestEvalNumericExpr:
+    def test_actual_none_returns_false(self):
+        assert _eval_numeric_expr(">= 1000", None) is False
+
+    def test_valid_expr_matches(self):
+        assert _eval_numeric_expr(">= 1000", 1500.0) is True
+        assert _eval_numeric_expr(">= 1000", 500.0) is False
+
+    def test_missing_operator_logs_and_returns_false(self):
+        assert _eval_numeric_expr("1000", 1500.0) is False
+
+    def test_non_numeric_threshold_logs_and_returns_false(self):
+        assert _eval_numeric_expr(">= not-a-number", 1500.0) is False
+
+
+class TestEvalRiskExpr:
+    def test_actual_none_returns_false(self):
+        assert _eval_risk_expr(">= high", None) is False
+
+    def test_valid_expr_matches_ordinal_comparison(self):
+        assert _eval_risk_expr(">= high", "critical") is True
+        assert _eval_risk_expr(">= high", "medium") is False
+
+    def test_missing_operator_logs_and_returns_false(self):
+        assert _eval_risk_expr("high", "critical") is False
+
+    def test_unknown_risk_threshold_logs_and_returns_false(self):
+        assert _eval_risk_expr(">= not-a-risk-level", "critical") is False
+
+    def test_unknown_actual_risk_defaults_to_lowest_ordinal(self):
+        """Unrecognized actual risk words default to ordinal 0 ("low") — matches
+        _RISK_ORDER.get(actual.lower(), 0)'s existing fallback behavior."""
+        assert _eval_risk_expr(">= low", "totally-unknown") is True
+        assert _eval_risk_expr(">= high", "totally-unknown") is False
 
 
 # ---------------------------------------------------------------------------

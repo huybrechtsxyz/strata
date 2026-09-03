@@ -458,7 +458,9 @@ spec:
           pattern: "^[a-z0-9]{1,4}$"
           default: dev
       rules:
-        customer: "customers/{customer}/tenant.yaml"
+        customer:
+          kind: path
+          expression: "customers/{customer}/tenant.yaml"
 ```
 
 > **`scope` uses a single `*`, not `**`.** Verified directly: `fnmatch.translate()`
@@ -575,12 +577,24 @@ requested `attr`. Confirmed real, already-usable examples beyond zones, from
 
 ```yaml
 rules:
-  zone: spec.zones[*].name              # ConfigurationZoneModel
-  provider: spec.providers[*].name      # ConfigurationProviderModel
-  topology: spec.topologies[*].type     # ConfigurationTopologyModel — attr is "type", not "name"
-  remote: spec.remotes[*].name          # RemoteModel
-  integration: spec.integrations[*].name  # IntegrationModel
-  scheme: spec.paths[*].name            # even the path conventions' own names
+  zone:
+    kind: yaml
+    expression: spec.zones[*].name              # ConfigurationZoneModel
+  provider:
+    kind: yaml
+    expression: spec.providers[*].name          # ConfigurationProviderModel
+  topology:
+    kind: yaml
+    expression: spec.topologies[*].type         # ConfigurationTopologyModel — attr is "type", not "name"
+  remote:
+    kind: yaml
+    expression: spec.remotes[*].name            # RemoteModel
+  integration:
+    kind: yaml
+    expression: spec.integrations[*].name       # IntegrationModel
+  scheme:
+    kind: yaml
+    expression: spec.paths[*].name              # even the path conventions' own names
 ```
 
 Three caveats: `field_path` supports dotted nesting to *reach* a list (e.g.
@@ -1043,7 +1057,10 @@ remain before implementation starts.
 schema (`resolves: layers` + inline `segments`, `spec.layers.follows`/`segments`,
 `required` dropped), the shared `resolve_layers()` with Level 1 + Level 2 precedence,
 `rules:` validating the resolved value, `spec.custom` + dict-aware
-`resolve_spec_rule()`, removal of `spec.layering`/`spec.layerings`/`ScopedLayeringModel`/
+`resolve_spec_rule()` (**superseded 2026-09-03** — `resolve_spec_rule()`/`is_spec_rule()`
+were deleted; `rules:` now dispatches on an explicit `ExpressionModel.kind` and runs real
+JMESPath against `model_dump()` instead, see [ADR 0073](./0073-embedded-string-syntax-inventory-and-creep-prevention.md)),
+removal of `spec.layering`/`spec.layerings`/`ScopedLayeringModel`/
 `utils/layering.py`, all call sites (`deployment_service`, `overlap_controller`,
 `promote_controller`, `platform_builder`, `path_convention_policy`), migration of every
 bundled example stack and scaffold template, and docs/changelog. Full `Check.ps1` green.

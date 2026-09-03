@@ -442,6 +442,10 @@ class ComposeBuilder(BaseBuilder):
 
             Returns the resolved name, or None if an error was recorded.
             """
+            # NOTE: this @ is the @module/service cross-module dependency
+            # convention — unrelated to the @repo_name/... cross-repo file
+            # reference convention (ADR-0073); do not swap this for
+            # is_cross_repo_ref()/resolve_path().
             if not dep.startswith("@"):
                 # Intra-module: rewrite to prefixed form
                 return prefixed(dep) if dep in service_names else dep
