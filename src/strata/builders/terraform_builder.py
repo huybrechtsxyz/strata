@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 from strata.builders.base_builder import BaseBuilder
+from strata.models.common_models import ProvisionerType
 from strata.models.environment_model import IncludeMergeStrategy
 from strata.models.platform_artifact_model import PlatformArtifactModel
 from strata.models.workspace_model import OutputFileModel, OutputProfileModel
@@ -120,7 +121,9 @@ class TerraformBuilder(BaseBuilder):
                 ws_service = deployment_service.get_workspace_service()
                 first_profile: Optional[OutputProfileModel] = None
                 if ws_service and ws_service.model:
-                    tf_provs = [p for p in ws_service.model.spec.provisioners if p.provisioner == "terraform"]
+                    tf_provs = [
+                        p for p in ws_service.model.spec.provisioners if p.provisioner == ProvisionerType.TERRAFORM
+                    ]
                     if tf_provs:
                         first_profile = tf_provs[0].output
                 planned = [name for name, _ in self._planned_files(terraform_vars, profile=first_profile)]
@@ -766,7 +769,7 @@ class TerraformBuilder(BaseBuilder):
         return [
             solution_controller.get_provisioner_path(deployment_service, build_path, prov)
             for prov in provisioners
-            if prov.provisioner == "terraform"
+            if prov.provisioner == ProvisionerType.TERRAFORM
         ]
 
     def _planned_files(
@@ -1227,7 +1230,7 @@ class TerraformBuilder(BaseBuilder):
         try:
             ws_service = deployment_service.get_workspace_service()
             provisioners = (
-                [p for p in ws_service.model.spec.provisioners if p.provisioner == "terraform"]
+                [p for p in ws_service.model.spec.provisioners if p.provisioner == ProvisionerType.TERRAFORM]
                 if ws_service and ws_service.model
                 else []
             )
@@ -1389,7 +1392,7 @@ class TerraformBuilder(BaseBuilder):
         has_errors = False
 
         for prov in provisioners:
-            if prov.provisioner != "terraform":
+            if prov.provisioner != ProvisionerType.TERRAFORM:
                 continue
 
             # Determine the build directory where .tf files were copied
@@ -1582,7 +1585,7 @@ class TerraformBuilder(BaseBuilder):
         template_context = self._build_template_context(deployment_service)
 
         for prov in provisioners:
-            if prov.provisioner != "terraform":
+            if prov.provisioner != ProvisionerType.TERRAFORM:
                 continue
 
             source = prov.source

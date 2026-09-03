@@ -521,7 +521,11 @@ class WorkspaceIacModel(PlatformBaseModel):
         """Validate provisioner-type-specific field constraints."""
         from strata.models.common_models import _SYNC_PROVISIONER_TYPES
 
-        is_sync = self.provisioner in {str(t) for t in _SYNC_PROVISIONER_TYPES}
+        # NOTE: str(t) here would NOT produce "argocd"/"flux" — ProvisionerType(str, Enum)'s
+        # default __str__ returns "ProvisionerType.ARGOCD" (the enum repr), not t.value. That
+        # previously made this set contain values no real provisioner string could ever match,
+        # so is_sync was always False and source was wrongly required even for argocd/flux.
+        is_sync = self.provisioner in {t.value for t in _SYNC_PROVISIONER_TYPES}
 
         # source is required for all non-sync provisioner types
         if not is_sync and self.source is None:
@@ -533,6 +537,22 @@ class WorkspaceIacModel(PlatformBaseModel):
         if self.properties is not None and self.provisioner != ProvisionerType.ANSIBLE:
             raise ValueError(
                 f"Provisioner '{self.name}': 'properties' is only supported for ansible provisioners "
+                f"(got provisioner='{self.provisioner}')"
+            )
+
+        # backend and output are only supported for terraform (state-backend locking and
+        # tfvars emission profile respectively — both read exclusively by terraform-scoped
+        # code paths). Declaring either on another provisioner type previously validated
+        # successfully and was then silently ignored everywhere; fail loudly instead,
+        # mirroring the properties/ansible restriction above (ADR-0071).
+        if self.backend is not None and self.provisioner != ProvisionerType.TERRAFORM:
+            raise ValueError(
+                f"Provisioner '{self.name}': 'backend' is only supported for terraform provisioners "
+                f"(got provisioner='{self.provisioner}')"
+            )
+        if self.output is not None and self.provisioner != ProvisionerType.TERRAFORM:
+            raise ValueError(
+                f"Provisioner '{self.name}': 'output' is only supported for terraform provisioners "
                 f"(got provisioner='{self.provisioner}')"
             )
         return self

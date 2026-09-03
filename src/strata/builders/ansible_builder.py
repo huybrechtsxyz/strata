@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 import yaml
 
 from strata.builders.base_builder import BaseBuilder
+from strata.models.common_models import ProvisionerType
 from strata.models.platform_artifact_model import PlatformArtifactModel
 from strata.services.deployment_service import DeploymentService
 from strata.services.platform_artifact_service import PlatformService
@@ -728,7 +729,7 @@ class AnsibleBuilder(BaseBuilder):
         template_context = self._build_template_context(deployment_service)
 
         for prov in provisioners:
-            if prov.provisioner != "ansible":
+            if prov.provisioner != ProvisionerType.ANSIBLE:
                 continue
 
             source = prov.source
@@ -790,7 +791,7 @@ class AnsibleBuilder(BaseBuilder):
         return [
             solution_controller.get_provisioner_path(deployment_service, build_path, prov)
             for prov in provisioners
-            if prov.provisioner == "ansible"
+            if prov.provisioner == ProvisionerType.ANSIBLE
         ]
 
     # ------------------------------------------------------------------

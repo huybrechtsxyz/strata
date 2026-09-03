@@ -146,7 +146,7 @@ class TestLockStatusCommand:
         backend.status.return_value = None
 
         with patch(
-            "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
+            "strata.commands.deploy.base_deploy_command.BaseDeployCommand._resolve_lock_backend",
             return_value=backend,
         ):
             result = cmd._execute()
@@ -162,7 +162,7 @@ class TestLockStatusCommand:
         backend.status.return_value = entry
 
         with patch(
-            "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
+            "strata.commands.deploy.base_deploy_command.BaseDeployCommand._resolve_lock_backend",
             return_value=backend,
         ):
             result = cmd._execute()
@@ -176,7 +176,7 @@ class TestLockStatusCommand:
         backend.status.side_effect = LockBackendError("disk full")
 
         with patch(
-            "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
+            "strata.commands.deploy.base_deploy_command.BaseDeployCommand._resolve_lock_backend",
             return_value=backend,
         ):
             result = cmd._execute()
@@ -200,7 +200,7 @@ class TestLockStatusCommand:
         backend.status.return_value = None
 
         with patch(
-            "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
+            "strata.commands.deploy.base_deploy_command.BaseDeployCommand._resolve_lock_backend",
             return_value=backend,
         ):
             cmd._execute()
@@ -216,7 +216,7 @@ class TestLockStatusCommand:
         backend.status.return_value = entry
 
         with patch(
-            "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
+            "strata.commands.deploy.base_deploy_command.BaseDeployCommand._resolve_lock_backend",
             return_value=backend,
         ):
             cmd._execute()
@@ -238,7 +238,7 @@ class TestLockReleaseCommand:
         backend.status.return_value = None
 
         with patch(
-            "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
+            "strata.commands.deploy.base_deploy_command.BaseDeployCommand._resolve_lock_backend",
             return_value=backend,
         ):
             result = cmd._execute()
@@ -257,7 +257,7 @@ class TestLockReleaseCommand:
         backend.status.return_value = entry
 
         with patch(
-            "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
+            "strata.commands.deploy.base_deploy_command.BaseDeployCommand._resolve_lock_backend",
             return_value=backend,
         ):
             result = cmd._execute()
@@ -275,7 +275,7 @@ class TestLockReleaseCommand:
 
         with (
             patch(
-                "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
+                "strata.commands.deploy.base_deploy_command.BaseDeployCommand._resolve_lock_backend",
                 return_value=backend,
             ),
             patch.dict("os.environ", {"GITHUB_ACTOR": "", "USER": "alice", "USERNAME": "alice"}),
@@ -297,7 +297,7 @@ class TestLockReleaseCommand:
 
         with (
             patch(
-                "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
+                "strata.commands.deploy.base_deploy_command.BaseDeployCommand._resolve_lock_backend",
                 return_value=backend,
             ),
             patch.dict("os.environ", {"GITHUB_ACTOR": "", "USER": "alice", "USERNAME": "alice"}),
@@ -315,7 +315,7 @@ class TestLockReleaseCommand:
         backend.status.side_effect = LockBackendError("backend down")
 
         with patch(
-            "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
+            "strata.commands.deploy.base_deploy_command.BaseDeployCommand._resolve_lock_backend",
             return_value=backend,
         ):
             result = cmd._execute()
@@ -335,7 +335,7 @@ class TestLockReleaseCommand:
         backend.force_release.side_effect = LockBackendError("release failed")
 
         with patch(
-            "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
+            "strata.commands.deploy.base_deploy_command.BaseDeployCommand._resolve_lock_backend",
             return_value=backend,
         ):
             result = cmd._execute()
@@ -358,7 +358,7 @@ class TestLockReleaseCommand:
         backend.status.return_value = entry
 
         with patch(
-            "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
+            "strata.commands.deploy.base_deploy_command.BaseDeployCommand._resolve_lock_backend",
             return_value=backend,
         ):
             cmd._execute()
@@ -438,7 +438,7 @@ class TestLockHistoryCommand:
         backend.history.return_value = []
 
         with patch(
-            "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
+            "strata.commands.deploy.base_deploy_command.BaseDeployCommand._resolve_lock_backend",
             return_value=backend,
         ):
             result = cmd._execute()
@@ -457,7 +457,7 @@ class TestLockHistoryCommand:
         backend.history.return_value = entries
 
         with patch(
-            "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
+            "strata.commands.deploy.base_deploy_command.BaseDeployCommand._resolve_lock_backend",
             return_value=backend,
         ):
             result = cmd._execute()
@@ -472,7 +472,7 @@ class TestLockHistoryCommand:
         backend.history.return_value = [_make_lock_entry()]
 
         with patch(
-            "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
+            "strata.commands.deploy.base_deploy_command.BaseDeployCommand._resolve_lock_backend",
             return_value=backend,
         ):
             cmd._execute()
@@ -488,7 +488,7 @@ class TestLockHistoryCommand:
         backend.history.return_value = []
 
         with patch(
-            "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
+            "strata.commands.deploy.base_deploy_command.BaseDeployCommand._resolve_lock_backend",
             return_value=backend,
         ):
             cmd._execute()
@@ -511,7 +511,7 @@ class TestLockHistoryCommand:
         backend.history.side_effect = LockBackendError("backend error")
 
         with patch(
-            "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
+            "strata.commands.deploy.base_deploy_command.BaseDeployCommand._resolve_lock_backend",
             return_value=backend,
         ):
             result = cmd._execute()
