@@ -142,6 +142,88 @@ def sanitize_filename(name: str) -> str:
 
 
 # Join multiple paths
+
+
+# ---------------------------------------------------------------------------
+# @repo_name/... cross-repo reference — shared detection (ADR-0073)
+# ---------------------------------------------------------------------------
+#
+# Roughly 15 call sites across the codebase independently re-detected this
+# convention via raw ``str.startswith("@")`` instead of one shared predicate
+# (see docs/decisions/0073-embedded-string-syntax-inventory-and-creep-prevention.md).
+# These three helpers are the single, canonical detection/split points for the
+# ``@repo_name/...`` convention specifically. They deliberately do NOT cover
+# the unrelated ``@module/service`` cross-module dependency syntax used by
+# module_service.py/compose_builder.py, which reuses the bare ``@`` character
+# for a different meaning — callers there must keep their own detection.
+
+
+def is_cross_repo_ref(value: Optional[str]) -> bool:
+    """Return True if *value* looks like an ``@repo_name/...`` cross-repo file reference.
+
+    The single detection point for this convention — call this instead of
+    ``value.startswith("@")`` directly, so every site agrees on what counts as
+    a cross-repo reference. Does not validate that the repo actually exists;
+    use :func:`split_repo_ref` or :func:`resolve_path` for that.
+
+    Args:
+        value: Candidate string, or ``None``.
+
+    Returns:
+        bool: True if *value* is non-empty and starts with ``@``.
+    """
+    return value is not None and value.startswith("@")
+
+
+def split_repo_ref(value: Optional[str]) -> Optional[Dict[str, str]]:
+    """Split an ``@repo_name/relative/path`` reference into its parts.
+
+    Args:
+        value: Candidate string, or ``None``.
+
+    Returns:
+        ``{"repo_name": ..., "rest": ...}`` if *value* is a cross-repo
+        reference (``rest`` is ``""`` for a bare ``@repo_name`` with no
+        trailing path), or ``None`` if *value* is not a cross-repo reference
+        at all. Does not validate the repo name against a ``repo_map`` —
+        that is a resolution concern, not a parsing concern; use
+        :func:`resolve_path` when you need the repo to actually exist.
+    """
+    if not is_cross_repo_ref(value):
+        return None
+    assert value is not None  # narrows for mypy — is_cross_repo_ref() already confirmed this
+    repo_name, _, rest = value[1:].partition("/")
+    return {"repo_name": repo_name, "rest": rest}
+
+
+def local_relative_part(value: str) -> str:
+    """Strip an ``@repo_name/`` prefix, returning only the trailing relative path.
+
+    For callers that intentionally do **not** perform real cross-repo
+    resolution (yet) and instead fall back to interpreting the trailing path
+    as relative to the local ``work_path`` — today's deliberate, deferred
+    behavior in a handful of ``versions_path`` call sites (ADR-0073 Category
+    F). Do **not** use this for real cross-repo resolution — call
+    :func:`resolve_path` with a ``repo_map`` for that; this helper silently
+    discards the repo name.
+
+    A bare ``@repo_name`` with no ``/`` returns ``repo_name`` unchanged
+    (matches every existing call site's behavior). A non-``@`` value is
+    returned unchanged.
+
+    Args:
+        value: Candidate string, e.g. ``"@haven/versions"`` or ``"versions"``.
+
+    Returns:
+        str: The trailing relative path, or *value* unchanged if it isn't a
+        cross-repo reference.
+    """
+    split = split_repo_ref(value)
+    if split is None:
+        return value
+    return split["rest"] or split["repo_name"]
+
+
 def resolve_path(
     base_path: str,
     target_path: Optional[str] = None,
@@ -201,8 +283,9 @@ def resolve_path(
         )
 
     # Resolve @repo_name/... cross-repo references
-    if target_path and target_path.startswith("@"):
-        repo_name, _, rest = target_path[1:].partition("/")
+    if is_cross_repo_ref(target_path):
+        split = split_repo_ref(target_path) or {}
+        repo_name, rest = split.get("repo_name", ""), split.get("rest", "")
         if repo_map is None or repo_name not in repo_map:
             raise ValueError(f"Unknown repo reference '@{repo_name}' — no repo_map provided or repo not found")
         target_path = repo_map[repo_name] + ("/" + rest if rest else "")

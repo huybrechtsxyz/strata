@@ -21,6 +21,7 @@ from strata.models.deployment_manifest_model import (
     ManifestOutputsReferenceModel,
 )
 from strata.models.deployment_model import DeploymentStageModel
+from strata.utils.system import local_relative_part
 
 
 def _parse_ai_risk(content: str) -> tuple:
@@ -378,7 +379,7 @@ class RunDeployCommand(BaseDeployCommand):
         # Resolve versions_path
         vp_raw = strategy.versions_path
         if vp_raw.startswith("@"):
-            vp_raw = vp_raw.lstrip("@").split("/", 1)[-1]
+            vp_raw = local_relative_part(vp_raw)
         vp = Path(str(self._work_path)) / vp_raw
 
         # Find ring lock

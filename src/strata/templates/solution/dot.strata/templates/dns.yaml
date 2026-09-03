@@ -6,12 +6,12 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: dns
 meta:
-  name: {{ name }}
+  name: "{{ name }}"
   annotations:
     description: "DNS zone configuration"
-    owner: {{ owner }}
+    owner: "{{ owner }}"
   labels:
-    version: {{ version }}
+    version: "{{ version }}"
   tags: ["template", "dns", "networking"]
 spec:
   # DNS provider: inwx, cloudflare, route53, azure-dns, etc.
@@ -80,3 +80,28 @@ spec:
         #   value: "0 5 5060 sip.example.com."
         #   priority: 10
         #   ttl: 600
+
+        # A record sourced from a variable instead of a literal value
+        # (exactly one of value/var/secret/output_key must be set per record)
+        # - name: api
+        #   type: A
+        #   var: api_ip_address
+
+        # TXT record sourced from a secret (resolved at deploy time via TF_VAR_*)
+        # - name: _verification
+        #   type: TXT
+        #   secret: domain_verification_token
+
+        # A record sourced from a preceding deployment stage's provisioner output
+        # (e.g. a VM's public IP from a Terraform 'output' block)
+        # - name: app
+        #   type: A
+        #   output_key: vm_public_ip
+
+  # Required when any record above uses var:/secret: — declares which keys
+  # must be provided by the environment (output_key: is NOT declared here).
+  # references:
+  #   variables:
+  #     - api_ip_address
+  #   secrets:
+  #     - domain_verification_token

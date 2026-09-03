@@ -2,39 +2,191 @@
 # Copy this file and customize for your platform configuration
 #
 # Usage: cp config/template/configurations/template-config.yaml config/{platform}/configurations/{name}-config.yaml
+#
+# `kind: configuration` is the governance/registry file for a platform: allowed
+# providers/resources/topologies, policies, integrations, zones, path
+# conventions, and deployment schema all live here. See `strata help --topic
+# configuration` for the full reference.
 
 apiVersion: strata.huybrechts.xyz/v1
 kind: configuration
 meta:
-  name: { { name } }
+  name: "{{ name }}"
   annotations:
     description: "Configuration template for platform setup"
-    owner: { { owner } }
+    owner: "{{ owner }}"
   labels:
-    version: { { version } }
+    version: "{{ version }}"
     environment: "template"
   tags: ["template", "example"]
 spec:
-  # Define deployment layering hierarchy (optional)
-  # Used to construct artifact_path from deployment.spec.deployment values
-  layering:
-    - name: tenant
-      required: false
-      default: "default"
-      description: "Tenant identifier"
-    - name: region
-      required: false
-      default: "global"
-      description: "Geographic region"
-    - name: environment
-      required: true
-      description: "Environment (dev/staging/production)"
-
-  # Platform-specific properties
+  # Platform-specific properties (freeform; consumed by lifecycle scripts/templating)
   properties:
     platform_version: "1.0.0"
     api_version: "v1"
     # Add custom properties as needed
+
+  # Freeform escape hatch for anything that doesn't warrant a typed field.
+  # custom:
+  #   some_key: some_value
+
+  # Directory-structure conventions (ADR-0072) — validated by the `path_convention`
+  # policy. One convention may also own the deployment layering hierarchy via
+  # `resolves: layers` + `segments` (replaces the old spec.layering/spec.layerings).
+  # paths:
+  #   - name: zone-deployment-tree
+  #     scope: "zones/**"
+  #     pattern: "zones/{zone}/customers/{tenant}/{env}"
+  #     resolves: layers            # this convention also drives deployment.spec.layers
+  #     segments:
+  #       - name: zone
+  #         description: "Geographic/regulatory zone"
+  #       - name: tenant
+  #         pattern: "^[a-z][a-z0-9-]*$"
+  #       - name: env
+  #         default: "dev"
+  #         description: "Environment (dev/staging/production)"
+  #     validate:
+  #       zone: spec.zones[*].name          # must match a declared zone name
+  #       tenant: "customers/{tenant}/tenant.yaml"  # must exist as a file
+
+  # Logical zones grouping provider regions (for tenant_zone policy / data residency)
+  # zones:
+  #   - name: eu-west
+  #     regions: [westeurope, northeurope]
+  #   - name: eu-central
+  #     regions: [germanywestcentral, swedencentral]
+
+  # Registry of allowed cloud providers, their regions, and resource types.
+  # Omit entirely to allow anything; use additional_regions/additional_resources
+  # to extend rather than replace the declared lists.
+  # providers:
+  #   - name: azure
+  #     description: "Azure cloud provider"
+  #     version: ">=3.0"
+  #     additional_regions: false
+  #     regions: [westeurope, northeurope]
+  #     additional_resources: false
+  #     resources:
+  #       - name: virtualmachine
+  #         category: compute
+  #         subcategory: vm
+  #         additional_configurations: false
+  #         configuration:
+  #           cpu_cores: { pattern: "^[0-9]+$", required: true }
+
+  # Registry of allowed infrastructure topologies and their components.
+  # additional_topologies: false
+  # topologies:
+  #   - type: docker_swarm
+  #     description: "Docker Swarm cluster topology"
+  #     additional_components: false
+  #     components:
+  #       - role: manager
+  #         is_control: true
+  #         required: true
+  #         min_count: 1
+  #         max_count: 3
+
+  # Restrict which secret/variable/feature store types may be used (omit = allow all)
+  # security:
+  #   allowed_secret_stores: [azure-keyvault, bitwarden, vault]
+  #   allowed_variable_stores: [constant, environment]
+  #   allowed_feature_stores: [constant]
+
+  # Named remote endpoints (artifact sources / deployment targets), referenced by
+  # workspace.spec.provisioners[].source.repository and module/resource sources.
+  # remotes:
+  #   - name: main_repo
+  #     description: "Primary application repository"
+  #     type: gitops                 # bundled | gitops | container
+  #     repository: "https://github.com/acme/my-service"
+  #     reference: main
+  #     source_path: "services/app"
+  #     conventions:                 # used by the ref_convention policy
+  #       release_pattern: "^v\\d+\\.\\d+\\.\\d+$"
+  #       quality_pattern: "^tested(-\\d+)?$"
+
+  # Deployment schema — required/optional properties every deployment must provide,
+  # plus where manifests and Terraform outputs are persisted.
+  # deployment:
+  #   additional_properties: false
+  #   properties:
+  #     environment:
+  #       pattern: "^(dev|test|staging|prod)$"
+  #       required: true
+  #       description: "Deployment environment"
+  #     tenant:
+  #       pattern: "^[a-z][a-z0-9-]*$"
+  #       required: true
+  #   manifest:
+  #     path: ".strata/deployments"
+  #   outputs:
+  #     enabled: true
+  #     path: ".strata/outputs"
+  #     sensitive: redact            # redact | omit
+
+  # Policy guardrails evaluated at validate/build/plan/deploy — run
+  # `strata help --topic policies` for the full list of built-in types.
+  # policies:
+  #   - name: require_standard_labels
+  #     type: required_labels
+  #     phase: build
+  #     enforcement: deny
+  #     configuration:
+  #       targets: [namespaces]
+  #       required_labels: [environment, owner, cost_center]
+
+  # Audit journal + SIEM sink configuration — run `strata help --topic audit` for details.
+  # audit:
+  #   journal:
+  #     path: ".strata/audit/journal.ndjson"
+  #   sinks:
+  #     - name: siem
+  #       integration: sentinel      # references an entry in spec.integrations[].name
+  #       events: [deploy.completed, policy.denied]
+
+  # Cost history storage + alert thresholds (populated by `strata cost show`)
+  # cost:
+  #   history:
+  #     alert:
+  #       max_monthly: 5000
+  #       delta_percent: 20
+
+  # Drift history storage (populated by `strata deploy health`/drift detection)
+  # drift:
+  #   history:
+  #     repository:
+  #       push: true
+  #       name: state-repo
+  #       path: history/drift
+
+  # Ring-based promotion system (ADR-0011) — see docs/decisions/0011-*.md
+  # promotions:
+  #   progressions:
+  #     - name: standard
+  #       rings:
+  #         - name: dev
+  #           environments: [dev1, dev2]
+  #         - name: prd
+  #           environments:
+  #             - { name: prod-be, wave: 1 }
+  #             - { name: prod-us, wave: 2 }
+  #           require: any_one
+  #   strategies:
+  #     - name: infra-cautious
+  #       type: remote
+  #       progression: standard
+  #       waves:
+  #         - name: canary
+  #         - name: all
+  #       scope: tenant
+  #       gates:
+  #         require_progression_order: true
+
+  # Lifecycle hooks that fire at named configuration-load phases
+  # lifecycle:
+  #   validate_before: {}
 
   # Integrations — external tools and services
   # integrations:

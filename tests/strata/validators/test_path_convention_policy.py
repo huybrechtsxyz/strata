@@ -2,13 +2,16 @@
 
 Covers:
 - match_pattern: capture, literal mismatch, shallow path, no captures
-- resolve_spec_rule: valid lookup, bad rule syntax, missing model, unknown field
 - evaluate_file_rule: file exists, file missing, placeholder expansion
 - evaluate_conventions: scope miss, pattern miss, spec rule pass/fail,
   file rule pass/fail, multiple conventions
 - PathConventionPolicy.evaluate: skip (no file_path), skip (no conventions),
   inline convention, spec.paths source, convention filter, enforce deny/warn
 - PathConventionModel validation: key not in pattern → ValueError
+
+Note: kind=yaml (JMESPath) rule resolution itself is unit-tested in
+test_models_expression.py (ExpressionModel.query()) — this file only tests the
+dispatch/integration around it (evaluate_conventions(), PathConventionPolicy).
 """
 
 from pathlib import Path
@@ -17,21 +20,30 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from strata.models.configuration_model import PathConventionModel
-from strata.models.policy_model import PolicyModel
-from strata.utils.path_convention import (
-    evaluate_conventions,
-    evaluate_file_rule,
-    is_spec_rule,
-    match_pattern,
-    resolve_spec_rule,
+from strata.models.configuration_model import (
+    ConfigurationMetaModel,
+    ConfigurationModel,
+    ConfigurationSpecModel,
+    ConfigurationZoneModel,
+    PathConventionModel,
 )
+from strata.models.expression_model import ExpressionKind, ExpressionModel
+from strata.models.policy_model import PolicyModel
+from strata.utils.path_convention import evaluate_conventions, evaluate_file_rule, match_pattern
 from strata.validators.policies.base_policy import PolicyContext
 from strata.validators.policies.path_convention_policy import PathConventionPolicy
 
 # ===========================================================================
 # Fixtures & helpers
 # ===========================================================================
+
+
+def _yaml_rule(expression: str) -> ExpressionModel:
+    return ExpressionModel(kind=ExpressionKind.YAML, expression=expression)
+
+
+def _path_rule(expression: str) -> ExpressionModel:
+    return ExpressionModel(kind=ExpressionKind.PATH, expression=expression)
 
 
 def _make_policy(enforcement: str = "deny", configuration: Optional[dict] = None) -> "PolicyModel":
@@ -70,27 +82,22 @@ def _make_context(
     )
 
 
-def _make_config_model(zones=None, environments=None):
-    """Return a minimal mock ConfigurationModel with spec.zones and spec.environments."""
-    spec = MagicMock()
-    spec.zones = zones or []
-    spec.environments = environments or []
-    spec.paths = None
-    model = MagicMock()
-    model.spec = spec
-    return model
+def _make_config_model(zones=None, paths=None) -> ConfigurationModel:
+    """Return a real, minimal ConfigurationModel with spec.zones (and optionally spec.paths).
+
+    Must be a real model (not a mock) — kind=yaml rules run JMESPath against
+    ``model_dump()``, which needs a genuine Pydantic instance to produce a real dict.
+    """
+    return ConfigurationModel(
+        meta=ConfigurationMetaModel(name="test-config"),
+        spec=ConfigurationSpecModel(zones=zones or [], paths=paths),
+    )
 
 
-def _zone(name: str):
-    z = MagicMock()
-    z.name = name
-    return z
-
-
-def _env(name: str):
-    e = MagicMock()
-    e.name = name
-    return e
+def _zone(name: str) -> ConfigurationZoneModel:
+    # Region must be unique per zone within one ConfigurationSpecModel — derive
+    # a distinct region from the zone name so multiple zones can coexist.
+    return ConfigurationZoneModel(name=name, regions=[f"region-{name}"])
 
 
 # ===========================================================================
@@ -141,46 +148,6 @@ class TestMatchPattern:
         """Patterns with extra leading separators should still match."""
         result = match_pattern("zones/eu/customers/acme/dev", "zones/{zone}/customers/{tenant}/{env}")
         assert result == {"zone": "eu", "tenant": "acme", "env": "dev"}
-
-
-# ===========================================================================
-# is_spec_rule / resolve_spec_rule
-# ===========================================================================
-
-
-class TestSpecRule:
-    def test_is_spec_rule_true(self):
-        assert is_spec_rule("spec.zones[*].name") is True
-        assert is_spec_rule("spec.environments[*].name") is True
-
-    def test_is_spec_rule_false(self):
-        assert is_spec_rule("customers/{tenant}/tenant.yaml") is False
-        assert is_spec_rule("spec.zones.name") is False  # missing [*]
-
-    def test_resolve_returns_set(self):
-        model = _make_config_model(zones=[_zone("europe"), _zone("us-east")])
-        result = resolve_spec_rule("spec.zones[*].name", model)
-        assert result == {"europe", "us-east"}
-
-    def test_resolve_empty_list(self):
-        model = _make_config_model(zones=[])
-        result = resolve_spec_rule("spec.zones[*].name", model)
-        assert result == set()
-
-    def test_resolve_none_model(self):
-        result = resolve_spec_rule("spec.zones[*].name", None)
-        assert result is None
-
-    def test_resolve_unknown_field(self):
-        model = _make_config_model()
-        del model.spec.nonexistent_field  # ensure it doesn't exist
-        result = resolve_spec_rule("spec.nonexistent_field[*].name", model)
-        assert result is None
-
-    def test_resolve_bad_rule_syntax(self):
-        model = _make_config_model(zones=[_zone("eu")])
-        result = resolve_spec_rule("not.a.spec.rule", model)
-        assert result is None
 
 
 # ===========================================================================
@@ -255,7 +222,7 @@ class TestEvaluateConventions:
         conv = _make_convention(
             scope="zones/**",
             pattern="zones/{zone}",
-            validate={"zone": "spec.zones[*].name"},
+            validate={"zone": _yaml_rule("spec.zones[*].name")},
         )
         model = _make_config_model(zones=[_zone("europe"), _zone("us-east")])
         violations = evaluate_conventions("zones/europe/deploy.yaml", [conv], tmp_path, model)
@@ -265,7 +232,7 @@ class TestEvaluateConventions:
         conv = _make_convention(
             scope="zones/**",
             pattern="zones/{zone}",
-            validate={"zone": "spec.zones[*].name"},
+            validate={"zone": _yaml_rule("spec.zones[*].name")},
         )
         model = _make_config_model(zones=[_zone("europe"), _zone("us-east")])
         violations = evaluate_conventions("zones/atlantis/deploy.yaml", [conv], tmp_path, model)
@@ -278,7 +245,7 @@ class TestEvaluateConventions:
         conv = _make_convention(
             scope="zones/**",
             pattern="zones/{zone}",
-            validate={"zone": "spec.zones[*].name"},
+            validate={"zone": _yaml_rule("spec.zones[*].name")},
         )
         violations = evaluate_conventions("zones/atlantis/deploy.yaml", [conv], tmp_path, None)
         assert violations == []
@@ -289,7 +256,7 @@ class TestEvaluateConventions:
         conv = _make_convention(
             scope="zones/**",
             pattern="zones/{zone}/customers/{tenant}",
-            validate={"tenant": "customers/{tenant}/tenant.yaml"},
+            validate={"tenant": _path_rule("customers/{tenant}/tenant.yaml")},
         )
         violations = evaluate_conventions("zones/europe/customers/contoso/deploy.yaml", [conv], tmp_path)
         assert violations == []
@@ -298,7 +265,7 @@ class TestEvaluateConventions:
         conv = _make_convention(
             scope="zones/**",
             pattern="zones/{zone}/customers/{tenant}",
-            validate={"tenant": "customers/{tenant}/tenant.yaml"},
+            validate={"tenant": _path_rule("customers/{tenant}/tenant.yaml")},
         )
         violations = evaluate_conventions("zones/europe/customers/unknown-co/deploy.yaml", [conv], tmp_path)
         assert len(violations) == 1
@@ -312,13 +279,13 @@ class TestEvaluateConventions:
             name="zones",
             scope="zones/**",
             pattern="zones/{zone}",
-            validate={"zone": "spec.zones[*].name"},
+            validate={"zone": _yaml_rule("spec.zones[*].name")},
         )
         conv_b = _make_convention(
             name="customers",
             scope="zones/**",  # same scope, different pattern
             pattern="zones/{zone}/customers/{tenant}",
-            validate={"tenant": "customers/{tenant}/tenant.yaml"},
+            validate={"tenant": _path_rule("customers/{tenant}/tenant.yaml")},
         )
         model = _make_config_model(zones=[_zone("europe")])
         # zones/atlantis fails zone check; tenant passes file existence
@@ -329,18 +296,18 @@ class TestEvaluateConventions:
         assert "atlantis" in violations[0]
 
     def test_multiple_violations_same_convention(self, tmp_path: Path):
+        """Two segments in the same convention both fail independently — produces
+        2 violations. Both validated against spec.zones (a real field); which real
+        field is used doesn't matter for this test, only that both are wrong."""
         conv = _make_convention(
             scope="zones/**",
             pattern="zones/{zone}/customers/{tenant}/{env}",
             validate={
-                "zone": "spec.zones[*].name",
-                "env": "spec.environments[*].name",
+                "zone": _yaml_rule("spec.zones[*].name"),
+                "env": _yaml_rule("spec.zones[*].name"),
             },
         )
-        model = _make_config_model(
-            zones=[_zone("europe")],
-            environments=[_env("dev"), _env("prd")],
-        )
+        model = _make_config_model(zones=[_zone("europe")])
         violations = evaluate_conventions(
             "zones/atlantis/customers/contoso/staging/deploy.yaml",
             [conv],
@@ -384,7 +351,7 @@ class TestPathConventionPolicy:
                 configuration={
                     "scope": "deploy/**",
                     "pattern": "deploy/{landscape}/{ring}",
-                    "validate": {"landscape": "landscape/{landscape}/landscape.yaml"},
+                    "validate": {"landscape": {"kind": "path", "expression": "landscape/{landscape}/landscape.yaml"}},
                 }
             )
         )
@@ -402,7 +369,7 @@ class TestPathConventionPolicy:
                 configuration={
                     "scope": "deploy/**",
                     "pattern": "deploy/{landscape}/{ring}",
-                    "validate": {"landscape": "landscape/{landscape}/landscape.yaml"},
+                    "validate": {"landscape": {"kind": "path", "expression": "landscape/{landscape}/landscape.yaml"}},
                 }
             )
         )
@@ -420,7 +387,7 @@ class TestPathConventionPolicy:
         conv = _make_convention(
             scope="zones/**",
             pattern="zones/{zone}",
-            validate={"zone": "spec.zones[*].name"},
+            validate={"zone": _yaml_rule("spec.zones[*].name")},
         )
         model.spec.paths = [conv]
 
@@ -438,7 +405,7 @@ class TestPathConventionPolicy:
         conv = _make_convention(
             scope="zones/**",
             pattern="zones/{zone}",
-            validate={"zone": "spec.zones[*].name"},
+            validate={"zone": _yaml_rule("spec.zones[*].name")},
         )
         model.spec.paths = [conv]
 
@@ -456,10 +423,13 @@ class TestPathConventionPolicy:
     def test_convention_filter_included(self, tmp_path: Path):
         model = _make_config_model(zones=[_zone("europe")])
         conv_a = _make_convention(
-            name="zones", scope="zones/**", pattern="zones/{zone}", validate={"zone": "spec.zones[*].name"}
+            name="zones", scope="zones/**", pattern="zones/{zone}", validate={"zone": _yaml_rule("spec.zones[*].name")}
         )
         conv_b = _make_convention(
-            name="landscape", scope="zones/**", pattern="zones/{zone}", validate={"zone": "spec.zones[*].name"}
+            name="landscape",
+            scope="zones/**",
+            pattern="zones/{zone}",
+            validate={"zone": _yaml_rule("spec.zones[*].name")},
         )
         model.spec.paths = [conv_a, conv_b]
 
@@ -476,7 +446,7 @@ class TestPathConventionPolicy:
     def test_convention_filter_excluded(self, tmp_path: Path):
         model = _make_config_model(zones=[_zone("europe")])
         conv = _make_convention(
-            name="zones", scope="zones/**", pattern="zones/{zone}", validate={"zone": "spec.zones[*].name"}
+            name="zones", scope="zones/**", pattern="zones/{zone}", validate={"zone": _yaml_rule("spec.zones[*].name")}
         )
         model.spec.paths = [conv]
 
@@ -494,7 +464,9 @@ class TestPathConventionPolicy:
     def test_warn_enforcement_still_fails(self, tmp_path: Path):
         """warn enforcement: result.passed=False, enforcement='warn'."""
         model = _make_config_model(zones=[_zone("europe")])
-        conv = _make_convention(scope="zones/**", pattern="zones/{zone}", validate={"zone": "spec.zones[*].name"})
+        conv = _make_convention(
+            scope="zones/**", pattern="zones/{zone}", validate={"zone": _yaml_rule("spec.zones[*].name")}
+        )
         model.spec.paths = [conv]
 
         policy = PathConventionPolicy(_make_policy(enforcement="warn"))
@@ -509,7 +481,9 @@ class TestPathConventionPolicy:
 
     def test_file_outside_scope_passes(self, tmp_path: Path):
         model = _make_config_model(zones=[_zone("europe")])
-        conv = _make_convention(scope="zones/**", pattern="zones/{zone}", validate={"zone": "spec.zones[*].name"})
+        conv = _make_convention(
+            scope="zones/**", pattern="zones/{zone}", validate={"zone": _yaml_rule("spec.zones[*].name")}
+        )
         model.spec.paths = [conv]
 
         policy = PathConventionPolicy(_make_policy())
@@ -533,7 +507,10 @@ class TestPathConventionModel:
             name="test",
             scope="zones/**",
             pattern="zones/{zone}/{tenant}",
-            rules={"zone": "spec.zones[*].name", "tenant": "customers/{tenant}/tenant.yaml"},
+            rules={
+                "zone": _yaml_rule("spec.zones[*].name"),
+                "tenant": _path_rule("customers/{tenant}/tenant.yaml"),
+            },
         )
         assert m.name == "test"
 
@@ -543,7 +520,7 @@ class TestPathConventionModel:
                 name="bad",
                 scope="zones/**",
                 pattern="zones/{zone}",
-                rules={"nonexistent": "spec.zones[*].name"},
+                rules={"nonexistent": _yaml_rule("spec.zones[*].name")},
             )
 
     def test_no_validate_is_valid(self):
@@ -553,3 +530,14 @@ class TestPathConventionModel:
     def test_empty_validate_is_valid(self):
         m = PathConventionModel(name="simple", scope="**", pattern="{name}", rules={})
         assert m.rules == {}
+
+    def test_rules_kind_regex_rejected(self):
+        """validate: only supports kind=yaml or kind=path — regex/jinja are for
+        other, not-yet-wired call sites (ADR-0073)."""
+        with pytest.raises(Exception, match="only support kind=yaml or kind=path"):
+            PathConventionModel(
+                name="bad-kind",
+                scope="zones/**",
+                pattern="zones/{zone}",
+                rules={"zone": ExpressionModel(kind=ExpressionKind.REGEX, expression="^[a-z]+$")},
+            )

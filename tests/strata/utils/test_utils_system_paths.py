@@ -6,10 +6,55 @@ import pytest
 
 from strata.utils.system import (
     generate_uuid,
+    is_cross_repo_ref,
+    local_relative_part,
     resolve_path,
     resolve_work_path,
     sanitize_filename,
+    split_repo_ref,
 )
+
+# ---------------------------------------------------------------------------
+# is_cross_repo_ref / split_repo_ref / local_relative_part (ADR-0073)
+# ---------------------------------------------------------------------------
+
+
+class TestIsCrossRepoRef:
+    def test_at_prefixed_is_true(self):
+        assert is_cross_repo_ref("@repo/path") is True
+
+    def test_plain_path_is_false(self):
+        assert is_cross_repo_ref("repo/path") is False
+
+    def test_none_is_false(self):
+        assert is_cross_repo_ref(None) is False
+
+    def test_empty_string_is_false(self):
+        assert is_cross_repo_ref("") is False
+
+
+class TestSplitRepoRef:
+    def test_splits_repo_and_rest(self):
+        assert split_repo_ref("@haven/versions/prd.yaml") == {"repo_name": "haven", "rest": "versions/prd.yaml"}
+
+    def test_bare_repo_name_has_empty_rest(self):
+        assert split_repo_ref("@haven") == {"repo_name": "haven", "rest": ""}
+
+    def test_non_ref_returns_none(self):
+        assert split_repo_ref("plain/path") is None
+
+
+class TestLocalRelativePart:
+    def test_strips_repo_prefix(self):
+        assert local_relative_part("@haven/versions") == "versions"
+
+    def test_bare_repo_name_returns_repo_name(self):
+        """No '/' after the repo name — matches every existing call site's behavior."""
+        assert local_relative_part("@haven") == "haven"
+
+    def test_non_ref_returned_unchanged(self):
+        assert local_relative_part("versions") == "versions"
+
 
 # ---------------------------------------------------------------------------
 # resolve_path — @repo-name cross-repo references

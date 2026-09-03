@@ -16,6 +16,7 @@ from strata.services.environment_service import EnvironmentService
 from strata.services.workspace_service import WorkspaceService
 from strata.utils.dict_merge import deep_merge
 from strata.utils.merge_provenance import MergeProvenance
+from strata.utils.system import local_relative_part
 
 
 class DeploymentService(BaseService["DeploymentModel"]):
@@ -1682,11 +1683,7 @@ class DeploymentService(BaseService["DeploymentModel"]):
 
         # Try new-style lock path first: {versions_path}/{ring}.lock.yaml
         if versions_path_raw:
-            vp_raw = (
-                versions_path_raw.lstrip("@").split("/", 1)[-1]
-                if versions_path_raw.startswith("@")
-                else versions_path_raw
-            )
+            vp_raw = local_relative_part(versions_path_raw)
             new_lock_path = Path(work_path) / vp_raw / f"{ring_name}.lock.yaml"
             if new_lock_path.exists():
                 return None  # lock exists — check passes

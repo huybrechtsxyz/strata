@@ -6,17 +6,17 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: tenant
 meta:
-  name: { { code } }
+  name: "{{ code }}"
   annotations:
     description: "{{ name }} - Tenant configuration"
   labels:
     tier: standard
 spec:
-  code: { { code } }
-  name: { { name } }
+  code: "{{ code }}"
+  name: "{{ name }}"
   zones:
-    - { { zone } } # Must match a zone name from configuration.spec.zones
-  onboarded: { { onboarded } } # ISO 8601 date (YYYY-MM-DD)
+    - "{{ zone }}" # Must match a zone name from configuration.spec.zones
+  onboarded: "{{ onboarded }}" # ISO 8601 date (YYYY-MM-DD)
 
   # Base environment files merged BEFORE each deployment's own environments.
   # Use this for tenant-wide defaults (tier variables, feature flags, secrets).

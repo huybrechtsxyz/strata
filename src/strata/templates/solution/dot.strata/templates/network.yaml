@@ -6,12 +6,12 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: network
 meta:
-  name: {{ name }}
+  name: "{{ name }}"
   annotations:
     description: "Network topology configuration"
-    owner: {{ owner }}
+    owner: "{{ owner }}"
   labels:
-    version: {{ version }}
+    version: "{{ version }}"
   tags: ["template", "network", "infrastructure"]
 spec:
   networks:
@@ -49,7 +49,8 @@ spec:
     #     - name: to_main
     #       target: main
 
-    # For per-environment CIDRs, use variable references:
+    # For per-environment CIDRs, use variable or secret references
+    # (exactly one of value/var/secret must be set per CIDR):
     # - name: env_network
     #   address_space:
     #     - var: env_address_space
@@ -57,9 +58,13 @@ spec:
     #     - name: workload
     #       cidr:
     #         var: workload_subnet_cidr
-    # And declare references:
+    #     - name: restricted
+    #       cidr:
+    #         secret: restricted_subnet_cidr   # resolved at deploy time via TF_VAR_*
+    # And declare references (required whenever var:/secret: is used above):
     # references:
     #   variables:
     #     - env_address_space
     #     - workload_subnet_cidr
-    #   secrets: []
+    #   secrets:
+    #     - restricted_subnet_cidr

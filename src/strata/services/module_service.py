@@ -52,6 +52,10 @@ class ModuleService(BaseService["ModuleModel"]):
             # Validate depends_on: intra-module entries must exist locally;
             # cross-module refs (@module/service) are validated at build time.
             for dep in service.depends_on or []:
+                # NOTE: this @ is the @module/service cross-module dependency
+                # convention — unrelated to the @repo_name/... cross-repo file
+                # reference convention (ADR-0073); do not swap this for
+                # is_cross_repo_ref()/resolve_path().
                 if dep.startswith("@"):
                     # Cross-module reference — validate syntax only
                     ref = dep[1:]  # strip leading @

@@ -6,13 +6,13 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: firewall
 meta:
-  name: {{ name }}
+  name: "{{ name }}"
   annotations:
     description: "Firewall rules template"
-    owner: {{ owner }}
+    owner: "{{ owner }}"
   labels:
-    version: {{ version }}
-  tags: [ "template", "security", "firewall" ]
+    version: "{{ version }}"
+  tags: ["template", "security", "firewall"]
 spec:
   # Reset existing rules before applying (true/false)
   reset: true
@@ -30,7 +30,7 @@ spec:
   deny:
     - direction: in
       proto: tcp
-      port: [ 23, 135, 139, 445 ] # Block common attack vectors
+      port: [23, 135, 139, 445] # Block common attack vectors
       comment: "Block insecure protocols"
 
   # Allow rules
@@ -44,7 +44,7 @@ spec:
     # HTTP/HTTPS
     - direction: in
       proto: tcp
-      port: [ 80, 443 ]
+      port: [80, 443]
       comment: "Web traffic"
 
     # SSH (with source restriction)
@@ -71,3 +71,9 @@ spec:
       proto: tcp
       port: "8000:8099"
       comment: "Application port range"
+
+    # ICMP (ping) — no port allowed with icmp
+    - direction: in
+      proto: icmp
+      from: "10.0.0.0/8"
+      comment: "Allow ping from internal network"

@@ -32,9 +32,20 @@ spec:
     Application: myapp
     Environment: production
     CostCenter: platform
+```
+
+Declare label enforcement separately, under `configuration.spec.policies` (see [policies](policies.md)):
+
+```yaml
+spec:
   policies:
-    - required_tags: [Application, Environment, CostCenter]
-    - max_size_gb: 1000
+    - name: require_resource_labels
+      type: required_labels
+      phase: build
+      enforcement: deny
+      configuration:
+        targets: [resources]
+        required_labels: [Application, Environment, CostCenter]
 ```
 
 ---

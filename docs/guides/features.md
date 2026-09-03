@@ -285,10 +285,12 @@ spec:
       phase: plan
       enforcement: deny           # deny | warn | audit
 
-    - name: require_tags
-      type: required_tags
+    - name: require_labels
+      type: required_labels
       phase: build
       enforcement: warn
+      configuration:
+        targets: [namespaces]
 
     - name: naming_convention
       type: naming_pattern
@@ -305,17 +307,17 @@ spec:
 
 **Built-in policy types:**
 
-| Type                      | Checks                                                   |
-| ------------------------- | -------------------------------------------------------- |
-| `tenant_zone`             | Terraform resource regions vs. allowed zones             |
-| `required_tags`           | Required tags present on all resources                   |
-| `naming_pattern`          | `meta.name` fields match a configured regex              |
-| `script`                  | Delegates to any external command (OPA, Checkov, custom) |
-| `sbom_pinned_versions`    | Container images use pinned (non-floating) tags          |
-| `sbom_allowed_registries` | Images come only from approved registries                |
-| `sbom_denied_packages`    | No dependency matches a purl/name blocklist              |
-| `sbom_max_components`     | Total SBOM component count stays within a budget         |
-| `sbom_license`            | Dependency licenses match an allow/deny list             |
+| Type                      | Checks                                                                      |
+| ------------------------- | --------------------------------------------------------------------------- |
+| `tenant_zone`             | Terraform resource regions vs. allowed zones                                |
+| `required_labels`         | Required labels present on selected entities (namespaces/resources/modules) |
+| `naming_pattern`          | `meta.name` fields match a configured regex                                 |
+| `script`                  | Delegates to any external command (OPA, Checkov, custom)                    |
+| `sbom_pinned_versions`    | Container images use pinned (non-floating) tags                             |
+| `sbom_allowed_registries` | Images come only from approved registries                                   |
+| `sbom_denied_packages`    | No dependency matches a purl/name blocklist                                 |
+| `sbom_max_components`     | Total SBOM component count stays within a budget                            |
+| `sbom_license`            | Dependency licenses match an allow/deny list                                |
 
 ---
 

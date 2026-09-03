@@ -15,6 +15,7 @@ from strata.models.common_models import (
     PlatformVersion,
     check_unique_names,
 )
+from strata.models.expression_model import ExpressionKind, ExpressionModel
 from strata.models.integration_model import IntegrationModel
 from strata.models.policy_model import PolicyModel
 from strata.models.promotion_model import ConfigurationPromotionsModel
@@ -206,7 +207,9 @@ class PathConventionModel(PlatformBaseModel):
     Declared in ``spec.paths`` on the configuration model.  Each entry targets a
     subtree via a ``scope`` glob and defines the expected directory structure via a
     ``pattern`` with ``{segment}`` captures.  Optional ``validate`` rules check each
-    captured segment value against a model field or a file existence constraint.
+    captured segment value against a model field (via JMESPath) or a file existence
+    constraint — see ``strata.models.expression_model.ExpressionModel`` (ADR-0073):
+    an explicit ``kind:`` discriminator, not a shape-sniffed string.
 
     Example::
 
@@ -215,9 +218,12 @@ class PathConventionModel(PlatformBaseModel):
             scope: "zones/**"
             pattern: "zones/{zone}/customers/{tenant}/{env}"
             validate:
-              zone: spec.zones[*].name
-              tenant: "customers/{tenant}/tenant.yaml"
-              env: spec.environments[*].name
+              zone:
+                kind: yaml
+                expression: spec.zones[*].name
+              tenant:
+                kind: path
+                expression: "customers/{tenant}/tenant.yaml"
     """
 
     name: PlatformName = Field(description="Unique convention name for diagnostics and policy filtering")
@@ -235,13 +241,15 @@ class PathConventionModel(PlatformBaseModel):
             "Trailing path parts after the pattern are ignored."
         )
     )
-    rules: Optional[Dict[str, str]] = Field(
+    rules: Optional[Dict[str, ExpressionModel]] = Field(
         None,
         alias="validate",
         description=(
             "Per-segment validation rules. Keys must match {segment} names in pattern. "
-            "Values: 'spec.field[*].attr' for model membership lookup, "
-            "or a path template for file existence check."
+            "Each value is an ExpressionModel: kind=yaml for a JMESPath query against the "
+            "configuration model (e.g. 'spec.zones[*].name') checking the segment value is "
+            "a member of the result, or kind=path for a {segment}-templated file-existence "
+            "check (e.g. 'customers/{tenant}/tenant.yaml')."
         ),
     )
     resolves: Optional[Literal["tenant", "layers"]] = Field(
@@ -281,6 +289,21 @@ class PathConventionModel(PlatformBaseModel):
                 raise ValueError(
                     f"Validation key '{key}' does not correspond to a {{segment}} "
                     f"in pattern '{self.pattern}'. Available segments: {sorted(pattern_segments)}"
+                )
+        return self
+
+    @model_validator(mode="after")
+    def validate_rules_kind(self) -> "PathConventionModel":
+        """'validate' rules only support kind=yaml (spec membership) or kind=path
+        (file existence) — ADR-0073's ``ExpressionModel`` also defines kind=regex/jinja
+        for other, not-yet-wired call sites, which don't apply here."""
+        if not self.rules:
+            return self
+        for key, expr in self.rules.items():
+            if expr.kind not in (ExpressionKind.YAML, ExpressionKind.PATH):
+                raise ValueError(
+                    f"Convention '{self.name}': validate.{key} has kind={expr.kind.value}, "
+                    "but path-convention rules only support kind=yaml or kind=path."
                 )
         return self
 
@@ -568,8 +591,8 @@ class ConfigurationSpecModel(PlatformBaseModel):
         description=(
             "Generic freeform escape hatch for structures that don't warrant a dedicated "
             "typed model (ADR-0072), same pattern as spec.configuration/spec.properties. "
-            "resolve_spec_rule() dict-aware fallback (see utils.path_convention) lets "
-            "rules: membership checks work against this field's contents."
+            "kind=yaml validate: rules (see PathConventionModel) run JMESPath against the "
+            "model's full model_dump(), so they work against this field's contents too."
         ),
     )
     paths: Optional[List[PathConventionModel]] = Field(

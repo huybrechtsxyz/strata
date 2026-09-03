@@ -9,6 +9,8 @@ Description   : NETWORK/FIREWALLS/DNS diagram source resolver tests (ADR-0034 Ta
 ===============================================================================
 """
 
+import json
+
 import pytest
 
 from strata.controllers.diagram_source_controller import DiagramSourceController
@@ -309,7 +311,7 @@ class TestConfigSourceSharedBehaviour:
         assert controller.has_errors()
         assert "does not exist" in controller.get_errors()[0]
 
-    def test_cross_repo_reference_is_skipped_not_crashed(self, tmp_path):
+    def test_unregistered_repo_reference_reports_clear_error_not_crashed(self, tmp_path):
         (tmp_path / "workspace.yaml").write_text(
             "apiVersion: strata.huybrechts.xyz/v1\n"
             "kind: workspace\n"
@@ -324,7 +326,53 @@ class TestConfigSourceSharedBehaviour:
         controller = DiagramSourceController(tmp_path, entry="workspace.yaml", no_validate=True)
         context = controller.resolve([_source("firewalls")])
         assert context["firewalls"]["nodes"] == []
-        assert "cross-repository" in controller.get_errors()[0]
+        assert "other_repo" in controller.get_errors()[0]
+
+    def test_cross_repo_reference_resolves_via_registered_solution_repo(self, tmp_path):
+        """A '@repo/...' reference resolves once the repo is registered in solution.json."""
+        other_repo_root = tmp_path / "other_repo_root"
+        other_repo_root.mkdir()
+        (other_repo_root / "fw.yaml").write_text(FIREWALL_YAML, encoding="utf-8")
+
+        strata_dir = tmp_path / ".strata"
+        strata_dir.mkdir()
+        strata_dir.joinpath("solution.json").write_text(
+            json.dumps(
+                {
+                    "apiVersion": "strata.huybrechts.xyz/v1",
+                    "kind": "solution",
+                    "meta": {"name": "sample_solution"},
+                    "spec": {
+                        "solution_id": "sol-0001",
+                        "repositories": [
+                            {
+                                "name": "other_repo",
+                                "url": str(other_repo_root),
+                                "path": "other_repo",
+                                "type": "local",
+                                "branch": "main",
+                            }
+                        ],
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        (tmp_path / "workspace.yaml").write_text(
+            "apiVersion: strata.huybrechts.xyz/v1\n"
+            "kind: workspace\n"
+            "meta:\n"
+            "  name: sample_ws\n"
+            "spec:\n"
+            "  firewalls:\n"
+            "    - name: shared_fw\n"
+            '      file: "@other_repo/fw.yaml"\n',
+            encoding="utf-8",
+        )
+        controller = DiagramSourceController(tmp_path, entry="workspace.yaml", no_validate=True)
+        context = controller.resolve([_source("firewalls")])
+        assert not controller.has_errors()
+        assert {n["id"] for n in context["firewalls"]["nodes"]} == {"shared_fw"}
 
     def test_invalid_referenced_document_reports_per_reference_error(self, tmp_path):
         """One bad file must not silently produce zero nodes with no explanation."""

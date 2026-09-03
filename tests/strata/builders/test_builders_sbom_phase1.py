@@ -9,7 +9,7 @@ from strata.builders.sbom.collector_plugin_loader import CollectorPluginLoader
 from strata.builders.sbom.compose_collector import ComposeImageCollector
 from strata.builders.sbom.terraform_module_collector import TerraformModuleCollector
 from strata.exceptions.base_exception import PlatformError
-from strata.utils.sbom_utils import terraform_module_to_purl
+from strata.utils.sbom_utils import is_local_module_source, terraform_module_to_purl
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -39,6 +39,20 @@ def _write_compose(path: Path, content: str, name: str = "docker-compose.yml") -
 # ===========================================================================
 # terraform_module_to_purl (unit tests — no I/O)
 # ===========================================================================
+
+
+class TestIsLocalModuleSource:
+    def test_dot_slash_is_local(self):
+        assert is_local_module_source("./modules/vpc") is True
+
+    def test_dot_dot_slash_is_local(self):
+        assert is_local_module_source("../shared/modules/vpc") is True
+
+    def test_registry_source_is_not_local(self):
+        assert is_local_module_source("registry.terraform.io/hashicorp/consul/aws") is False
+
+    def test_github_source_is_not_local(self):
+        assert is_local_module_source("github.com/org/module") is False
 
 
 class TestTerraformModuleToPurl:

@@ -192,7 +192,7 @@ class ManifestPolicyResultModel(PlatformBaseModel):
     """Result of a single policy evaluation recorded in the deployment manifest."""
 
     policy_name: str = Field(description="Policy name as declared in configuration.spec.policies")
-    policy_type: str = Field(description="Policy type (e.g. tenant_zone, required_tags, naming_pattern, script)")
+    policy_type: str = Field(description="Policy type (e.g. tenant_zone, required_labels, naming_pattern, script)")
     phase: str = Field(description="Phase when evaluated: validate | build | plan | deploy")
     enforcement: str = Field(description="Enforcement level: deny | warn | audit")
     passed: bool = Field(description="Whether the policy passed")

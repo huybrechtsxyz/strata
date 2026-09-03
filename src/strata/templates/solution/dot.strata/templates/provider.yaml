@@ -6,28 +6,65 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: provider
 meta:
-  name: {{ name }}
+  name: "{{ name }}"
   annotations:
     description: "Cloud provider configuration template"
-    owner: {{ owner }}
+    owner: "{{ owner }}"
   labels:
-    version: {{ version }}
-  tags: [ "template", "cloud" ]
+    version: "{{ version }}"
+  tags: ["template", "cloud"]
 spec:
   # Provider details
   properties:
-    type: "cloud" # cloud, kubernetes, docker, etc.
-    region: "us-east-1" # Provider-specific region
-    engine: "terraform" # terraform, ansible, cloudformation, etc.
-    version: "v1"
+    type: "azure" # Must match a provider type declared in configuration.spec.providers
+    region: "westeurope" # Provider-specific region
+    # location: "West Europe" # Optional: human-readable location (docs/tagging only)
+    # organization: "my-subscription" # Optional: subscription/org name or ID
+    # version: "~>3.0" # Optional: provider version constraint
 
-  # Authentication configuration
+  # Authentication configuration — pick ONE method and populate its matching block.
   authentication:
-    method: "api_key" # oauth2, aws, gcp, api_key, certificate, saml, cli, managed_identity
+    method: "api_key" # oauth2 | aws | gcp | api_key | certificate | saml | cli | managed_identity
     # For api_key method:
     api_key:
       api_key: "provider_api_key" # Key reference from environment declarations
       header_name: "X-API-Key" # Optional: HTTP header name
+      # api_secret: "provider_api_secret" # Optional: secondary secret
+      # endpoint: "provider_api_endpoint" # Optional: API endpoint URL
+
+  # Other authentication methods (uncomment the one you need instead of api_key):
+  # authentication:
+  #   method: oauth2
+  #   oauth2:
+  #     client_id: azure_client_id
+  #     client_secret: azure_client_secret
+  #     tenant_id: azure_tenant_id
+  # authentication:
+  #   method: cli
+  #   cli:
+  #     use_cli: true          # uses ambient `az login`/`gcloud auth`/`aws configure`
+  # authentication:
+  #   method: managed_identity
+  #   managed_identity:
+  #     use_managed_identity: true
+
+  # Variable/secret/feature references (list of required keys)
+  # references:
+  #   variables:
+  #     - provider_region_override
+  #   secrets:
+  #     - provider_api_key
+  #   features:
+  #     - enable_provider_debug
+
+  # IaC workflow lifecycle phases (setup, validate, plan, apply, output, destroy)
+  # lifecycle:
+  #   setup_before: {}
+
+  # Default tags/labels applied to every resource created by this provider
+  # default_tags:
+  #   managed_by: strata
+  #   cost_center: platform
 
   # Custom configuration
   custom: {}

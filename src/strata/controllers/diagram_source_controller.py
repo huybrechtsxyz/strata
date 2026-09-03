@@ -44,6 +44,7 @@ from strata.utils.config import DEFAULT_BUILD_PATH
 from strata.utils.drift_history import DriftHistoryStore
 from strata.utils.graph import GraphResult, slugify_path
 from strata.utils.strata_uri import FILE_KIND, build_uri
+from strata.utils.system import resolve_path
 
 
 def _file_uri(relative_path: str) -> str:
@@ -109,6 +110,8 @@ class DiagramSourceController(BaseController):
         self._resolved_environments_loaded = False
         self._deployment_build_path: Optional[Path] = None
         self._deployment_build_path_loaded = False
+        self._repo_map: Dict[str, str] = {}
+        self._repo_map_loaded = False
         self._resolvers: Dict[DiagramSourceType, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
             DiagramSourceType.FILES: self._resolve_files,
             DiagramSourceType.TOPOLOGY: self._resolve_topology,
@@ -511,16 +514,15 @@ class DiagramSourceController(BaseController):
             if document is not None:
                 _deployment_path, model = document
                 for ref in model.spec.environments or []:
-                    if ref.file.startswith("@"):
-                        self._add_error(
-                            f"Environment reference '{ref.file}' is a cross-repository file. Diagram "
-                            f"sources cannot resolve @repo/ references yet — skipping."
-                        )
-                        continue
                     # Resolved relative to the workspace root, not deployment_path's
                     # own directory — file references are always work_path-relative
-                    # (matches BaseService._resolve_file_path()).
-                    path = (self._work_path / ref.file).resolve()
+                    # (matches BaseService._resolve_file_path()), with @repo_name/...
+                    # references resolved through the merged solution + config repo map.
+                    try:
+                        path = resolve_path(str(self._work_path), ref.file, repo_map=self._get_repo_map()).resolve()
+                    except ValueError as exc:
+                        self._add_error(f"Environment reference '{ref.file}': {exc}")
+                        continue
                     if not path.is_file():
                         self._add_error(f"Environment reference '{ref.file}' does not exist.")
                         continue
@@ -1053,6 +1055,30 @@ class DiagramSourceController(BaseController):
             self._errors.extend(controller.get_errors())
         return self._resource_graph
 
+    def _get_repo_map(self) -> Dict[str, str]:
+        """Return the merged repo_map for resolving ``@repo_name/...`` file references.
+
+        Solution-level repos (``.strata/solution.json``) take precedence over
+        configuration-level remotes — matches ``DeploymentService._merged_repo_map()``.
+        Cached: every source that resolves a cross-repo reference shares one lookup
+        instead of re-reading solution.json per reference.
+        """
+        if not self._repo_map_loaded:
+            config_map: Dict[str, str] = {}
+            config_service = self._configuration_service or ConfigurationService.get_instance()
+            if config_service.model is not None:
+                config_map = config_service.get_remote_map()
+
+            solution_map: Dict[str, str] = {}
+            controller = SolutionController(self._work_path)
+            ok, _errors = controller.load()
+            if ok:
+                solution_map = controller.get_repo_map()
+
+            self._repo_map = {**config_map, **solution_map}
+            self._repo_map_loaded = True
+        return self._repo_map
+
     def _get_workspace_document(self) -> Optional[Tuple[Path, Dict[str, Any]]]:
         """Resolve the workspace file once per controller instance.
 
@@ -1071,9 +1097,8 @@ class DiagramSourceController(BaseController):
     def _iter_workspace_refs(self, key: str) -> List[Tuple[str, Path]]:
         """List ``(reference_name, resolved_file_path)`` pairs for ``spec.<key>[]``.
 
-        Cross-repository ``@repo/path`` references are reported and skipped —
-        resolving one needs the solution-level repo map, which this controller,
-        scoped to a single workspace, does not have.
+        Cross-repository ``@repo/path`` references are resolved through the merged
+        solution + configuration repo map (see :meth:`_get_repo_map`).
         """
         document = self._get_workspace_document()
         if document is None:
@@ -1086,16 +1111,15 @@ class DiagramSourceController(BaseController):
             file_ref = entry.get("file")
             if not name or not file_ref:
                 continue
-            if file_ref.startswith("@"):
-                self._add_error(
-                    f"'{name}' references '{file_ref}', a cross-repository file. Diagram sources "
-                    f"cannot resolve @repo/ references yet — skipping."
-                )
-                continue
             # Resolved relative to the workspace root, not ws_path's own
             # directory — file references are always work_path-relative
-            # (matches BaseService._resolve_file_path()).
-            resolved = (self._work_path / file_ref).resolve()
+            # (matches BaseService._resolve_file_path()), with @repo_name/...
+            # references resolved through the merged solution + config repo map.
+            try:
+                resolved = resolve_path(str(self._work_path), file_ref, repo_map=self._get_repo_map()).resolve()
+            except ValueError as exc:
+                self._add_error(f"'{name}' references '{file_ref}': {exc}")
+                continue
             if not resolved.is_file():
                 self._add_error(f"'{name}' references '{file_ref}', which does not exist.")
                 continue
