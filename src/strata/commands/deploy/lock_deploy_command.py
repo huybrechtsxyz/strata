@@ -8,39 +8,8 @@ import click
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
 from strata.controllers.actor_controller import resolve_actor
 from strata.integrations.lock.base_lock_backend import (
-    BaseLockBackend,
     LockBackendError,
 )
-from strata.models.common_models import ProvisionerType
-
-# ---------------------------------------------------------------------------
-# Shared backend resolution
-# ---------------------------------------------------------------------------
-
-
-def _resolve_lock_backend(deployment_service, work_path) -> BaseLockBackend:  # type: ignore[no-untyped-def]
-    """Return the lock backend for the deployment.
-
-    Reads the first Terraform provisioner with a backend from the workspace
-    service.  Falls back to ``LocalLockBackend`` when no Terraform provisioner
-    is found.
-    """
-    from strata.integrations.lock.lock_factory import LockFactory
-
-    try:
-        workspace_service = deployment_service.get_workspace_service()
-    except Exception:  # noqa: BLE001
-        return LockFactory.create(None, work_path)
-
-    if workspace_service is not None:
-        spec = workspace_service.model.spec  # type: ignore[union-attr]
-        provisioners = spec.provisioners or []
-        for prov in provisioners:
-            if prov.provisioner == ProvisionerType.TERRAFORM and prov.backend:
-                return LockFactory.create(prov.backend, work_path)
-
-    return LockFactory.create(None, work_path)
-
 
 # ---------------------------------------------------------------------------
 # strata deploy lock status
@@ -80,7 +49,8 @@ class LockStatusCommand(BaseDeployCommand):
         deploy_name = str(self._deployment_service.model.meta.name)  # type: ignore[union-attr]
 
         try:
-            backend = _resolve_lock_backend(self._deployment_service, self._work_path)
+            stages = self._deployment_service.model.spec.stages or []  # type: ignore[union-attr]
+            backend = self._resolve_lock_backend(stages)
         except LockBackendError as exc:
             self._errors.append(f"Lock backend error: {exc}")
             return False
@@ -188,7 +158,8 @@ class LockReleaseCommand(BaseDeployCommand):
         deploy_name = str(self._deployment_service.model.meta.name)  # type: ignore[union-attr]
 
         try:
-            backend = _resolve_lock_backend(self._deployment_service, self._work_path)
+            stages = self._deployment_service.model.spec.stages or []  # type: ignore[union-attr]
+            backend = self._resolve_lock_backend(stages)
         except LockBackendError as exc:
             self._errors.append(f"Lock backend error: {exc}")
             return False
@@ -295,7 +266,8 @@ class LockHistoryCommand(BaseDeployCommand):
         deploy_name = str(self._deployment_service.model.meta.name)  # type: ignore[union-attr]
 
         try:
-            backend = _resolve_lock_backend(self._deployment_service, self._work_path)
+            stages = self._deployment_service.model.spec.stages or []  # type: ignore[union-attr]
+            backend = self._resolve_lock_backend(stages)
         except LockBackendError as exc:
             self._errors.append(f"Lock backend error: {exc}")
             return False

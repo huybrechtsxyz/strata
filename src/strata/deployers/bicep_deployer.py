@@ -165,8 +165,7 @@ class BicepDeployer(BaseDeployer):
                 self.deployment_service, self.build_path, self._iac_model
             )
         else:
-            # Compute path directly — bicep deployer has no _get_working_dir helper
-            self._working_dir = self.build_path / self._iac_model.name
+            self._working_dir = self._get_working_dir(self.deployment_service, self.build_path, self._iac_model)
 
         if not self._working_dir.exists():
             messages.append(
@@ -187,6 +186,28 @@ class BicepDeployer(BaseDeployer):
             messages.append(f"Bicep working directory OK: {self._working_dir} ({len(bicep_files)} .bicep file(s))")
 
         return True, messages
+
+    def _get_working_dir(
+        self,
+        deployment_service: DeploymentService,
+        build_path: Path,
+        iac_model: WorkspaceIacModel,
+    ) -> Path:
+        """Return the filesystem path where bicep commands should run.
+
+        Fallback used only when no ``solution_controller`` is available (e.g. some
+        tests, direct/library use). Mirrors
+        ``SolutionController.get_provisioner_path()``'s resolution order exactly —
+        ``target_path`` when set, else ``source_path`` — so the deployer's working
+        directory always agrees with where the builder copies IaC source, whichever
+        path is taken (ADR-0071).
+        """
+        deployment_build_path = deployment_service.get_build_path(build_path)
+        assert iac_model.source is not None  # model validator guarantees source for non-sync provisioners
+        target = iac_model.source.target_path or iac_model.source.source_path
+        if target is None:
+            raise ValueError(f"Provisioner '{iac_model.name}' source has no source_path or target_path defined.")
+        return deployment_build_path / target
 
     def validate_environment(self) -> Tuple[bool, List[str]]:
         """Verify Azure CLI is installed and authenticated."""

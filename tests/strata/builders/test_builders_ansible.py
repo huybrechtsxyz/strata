@@ -1,10 +1,13 @@
 """Unit tests for AnsibleBuilder."""
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import yaml
 
 from strata.builders.ansible_builder import AnsibleBuilder
+from strata.models.common_models import ProvisionerType, SourceModel
+from strata.models.workspace_model import WorkspaceIacModel
 
 
 def _mock_svc(validated=True, build_path=None):
@@ -558,3 +561,152 @@ class TestAnsibleBuilderPlannedFiles:
         builder = AnsibleBuilder()
         files = builder._get_planned_files(_full_vars_dict())
         assert "strata_dns_outputs.yml" not in files
+
+
+def _make_provisioner(
+    source_path: str, repository: str | None = None, reference: str | None = None
+) -> WorkspaceIacModel:
+    """Build a WorkspaceIacModel with an ansible provisioner for testing."""
+    source = SourceModel(source_path=source_path, repository=repository, reference=reference)
+    return WorkspaceIacModel(name="configure", provisioner=ProvisionerType.ANSIBLE, source=source)
+
+
+def _make_deployment_svc(provisioner: WorkspaceIacModel, build_path: Path) -> MagicMock:
+    """Return a mock DeploymentService that surfaces the given provisioner."""
+    workspace_model = MagicMock()
+    workspace_model.spec.provisioners = [provisioner]
+
+    workspace_service = MagicMock()
+    workspace_service.model = workspace_model
+
+    deployment_svc = MagicMock()
+    deployment_svc.get_workspace_service.return_value = workspace_service
+    deployment_svc.get_build_path.return_value = build_path
+    return deployment_svc
+
+
+class TestCopyProvisionerSourceSingleRepo:
+    """_copy_provisioner_source resolves to work_path when repository is absent
+    (mirrors TerraformBuilder's/BicepBuilder's equivalent tests)."""
+
+    def test_no_repository_resolves_to_work_path(self, tmp_path):
+        src_dir = tmp_path / "ansible"
+        src_dir.mkdir()
+        build_path = tmp_path / "build"
+        build_path.mkdir()
+
+        prov = _make_provisioner(source_path="ansible")
+        depl_svc = _make_deployment_svc(prov, build_path)
+
+        builder = AnsibleBuilder()
+        with patch.object(builder, "_build_template_context", return_value={}):
+            result = builder._copy_provisioner_source(depl_svc, build_path, tmp_path, repo_map={}, dry_run=True)
+
+        assert result is True
+        assert not builder.has_errors()
+        messages = "\n".join(builder.get_messages())
+        assert str(tmp_path / "ansible") in messages
+
+    def test_no_repository_missing_src_dir_returns_false(self, tmp_path):
+        build_path = tmp_path / "build"
+        build_path.mkdir()
+
+        prov = _make_provisioner(source_path="nonexistent")
+        depl_svc = _make_deployment_svc(prov, build_path)
+
+        builder = AnsibleBuilder()
+        with patch.object(builder, "_build_template_context", return_value={}):
+            result = builder._copy_provisioner_source(depl_svc, build_path, tmp_path, repo_map={}, dry_run=True)
+
+        assert result is False
+        assert builder.has_errors()
+        assert any("nonexistent" in e for e in builder.get_errors())
+
+    def test_with_repository_uses_repo_map(self, tmp_path):
+        repo_root = tmp_path / "my-repo"
+        src_dir = repo_root / "ansible"
+        src_dir.mkdir(parents=True)
+        build_path = tmp_path / "build"
+        build_path.mkdir()
+
+        prov = _make_provisioner(source_path="ansible", repository="my_repo")
+        depl_svc = _make_deployment_svc(prov, build_path)
+
+        builder = AnsibleBuilder()
+        with patch.object(builder, "_build_template_context", return_value={}):
+            result = builder._copy_provisioner_source(
+                depl_svc, build_path, tmp_path, repo_map={"my_repo": str(repo_root)}, dry_run=True
+            )
+
+        assert result is True
+        messages = "\n".join(builder.get_messages())
+        assert str(src_dir) in messages
+
+
+class TestCopyProvisionerSourceRefPinning:
+    """_copy_provisioner_source honors source.reference for ref-pinned extraction.
+
+    ADR-0071: SourceModel.reference is generic ("only valid for git-based sources"),
+    not Terraform-specific — this was previously silently ignored by Ansible's copy
+    step (a real bug: declaring `reference:` on an ansible provisioner validated
+    successfully but had zero effect)."""
+
+    def test_dry_run_with_reference_reports_ref(self, tmp_path):
+        build_path = tmp_path / "build"
+        build_path.mkdir()
+
+        prov = _make_provisioner(source_path="ansible", repository="my_repo", reference="v1.4.0")
+        depl_svc = _make_deployment_svc(prov, build_path)
+
+        repo_root = tmp_path / "my-repo"
+        repo_root.mkdir()
+
+        builder = AnsibleBuilder()
+        with patch.object(builder, "_build_template_context", return_value={}):
+            result = builder._copy_provisioner_source(
+                depl_svc, build_path, tmp_path, repo_map={"my_repo": str(repo_root)}, dry_run=True
+            )
+
+        assert result is True
+        messages = "\n".join(builder.get_messages())
+        assert "v1.4.0" in messages
+        assert "DRY-RUN" in messages
+
+    def test_no_reference_uses_standard_copy(self, tmp_path):
+        src_dir = tmp_path / "ansible"
+        src_dir.mkdir()
+        (src_dir / "site.yml").write_text("- hosts: all")
+        build_path = tmp_path / "build"
+        build_path.mkdir()
+
+        prov = _make_provisioner(source_path="ansible", reference=None)
+        depl_svc = _make_deployment_svc(prov, build_path)
+
+        builder = AnsibleBuilder()
+        with patch.object(builder, "_build_template_context", return_value={}):
+            result = builder._copy_provisioner_source(depl_svc, build_path, tmp_path, repo_map={}, dry_run=False)
+
+        assert result is True
+        assert (build_path / "ansible" / "site.yml").exists()
+
+    def test_reference_on_non_git_dir_falls_back_to_copy(self, tmp_path):
+        repo_root = tmp_path / "my-repo"
+        src_dir = repo_root / "ansible"
+        src_dir.mkdir(parents=True)
+        (src_dir / "site.yml").write_text("- hosts: all")
+        build_path = tmp_path / "build"
+        build_path.mkdir()
+
+        prov = _make_provisioner(source_path="ansible", repository="my_repo", reference="v1.0.0")
+        depl_svc = _make_deployment_svc(prov, build_path)
+
+        builder = AnsibleBuilder()
+        with patch.object(builder, "_build_template_context", return_value={}):
+            result = builder._copy_provisioner_source(
+                depl_svc, build_path, tmp_path, repo_map={"my_repo": str(repo_root)}, dry_run=False
+            )
+
+        assert result is True
+        assert (build_path / "ansible" / "site.yml").exists()
+        messages = "\n".join(builder.get_messages())
+        assert "not a git repository" in messages

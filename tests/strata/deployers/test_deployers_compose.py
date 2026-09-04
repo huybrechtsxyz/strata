@@ -153,6 +153,32 @@ class TestComposeDeployerValidateWorkspace:
         assert "prod" in d._compose_files
         assert d._compose_files["prod"] == compose_file
 
+    def test_uses_get_namespace_compose_path_when_solution_controller_present(self, tmp_path):
+        """ADR-0071: compose_file resolution goes through
+        SolutionController.get_namespace_compose_path() when supplied."""
+        d = _make_deployer(tmp_path=tmp_path)
+        build_root = tmp_path / "build"
+        d.deployment_service.get_build_path.return_value = build_root
+
+        custom_dest = tmp_path / "custom" / "prod" / "docker-compose.yml"
+        custom_dest.parent.mkdir(parents=True)
+        custom_dest.write_text("version: '3'\nservices:\n  web:\n    image: nginx\n")
+
+        solution_controller = MagicMock()
+        solution_controller.get_namespace_compose_path.return_value = custom_dest
+        d.solution_controller = solution_controller
+
+        ns_service = MagicMock()
+        ns_service.is_validated.return_value = True
+        ns_service.model = MagicMock()
+        d.deployment_service.get_namespace_services.return_value = {"prod": ns_service}
+
+        ok, msgs = d.validate_workspace()
+
+        assert ok is True, msgs
+        assert d._compose_files["prod"] == custom_dest
+        solution_controller.get_namespace_compose_path.assert_any_call(d.deployment_service, d.build_path, "prod")
+
 
 # ---------------------------------------------------------------------------
 # Steps require init (_docker must be set)

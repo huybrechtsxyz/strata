@@ -23,6 +23,7 @@ from strata.deployers.helm_deployer import (
     _resolve_token,
     _sanitize_repo_name,
 )
+from strata.models.common_models import ServiceDeployerType
 from strata.utils.resolved_values import ResolvedValues
 
 # ---------------------------------------------------------------------------
@@ -195,6 +196,76 @@ class TestHelmDeployerValidateWorkspaceNamespaceFilter:
         assert ok is True
         ns_prod.is_validated.assert_called_once()
         assert not any("Namespace filter active" in m for m in messages)
+
+
+class TestHelmDeployerModuleDirResolution:
+    """ADR-0071: values_file/meta_file/chart_ref resolution goes through
+    SolutionController.get_module_build_path() when a solution_controller is
+    supplied, instead of independently re-deriving deployment_build_path/ns/module
+    three separate times."""
+
+    def _setup(self, tmp_path, module_dir, solution_controller=None):
+        d = _make_deployer(tmp_path)
+        d.solution_controller = solution_controller
+
+        module_dir.mkdir(parents=True, exist_ok=True)
+        (module_dir / "values.yaml").write_text("{}\n", encoding="utf-8")
+        (module_dir / "meta.yaml").write_text("releaseName: nginx\nnamespace: prod\n", encoding="utf-8")
+
+        (tmp_path / "module.yaml").write_text("", encoding="utf-8")
+
+        module = MagicMock()
+        module.meta.name = "nginx"
+        module.spec.type = ServiceDeployerType.HELM
+
+        module_ref = MagicMock()
+        module_ref.name = "nginx"
+        module_ref.file = "module.yaml"
+
+        ns_service = MagicMock()
+        ns_service.is_validated.return_value = True
+        ns_service.model.spec.modules = [module_ref]
+
+        d.deployment_service.get_namespace_services.return_value = {"prod": ns_service}
+        d.deployment_service.get_build_path.return_value = tmp_path / "build"
+
+        mod_service = MagicMock()
+        mod_service.is_validated.return_value = True
+        mod_service.model = module
+
+        return d, mod_service
+
+    def test_uses_get_module_build_path_when_solution_controller_present(self, tmp_path):
+        custom_dir = tmp_path / "custom" / "prod" / "nginx"
+        solution_controller = MagicMock()
+        solution_controller.get_module_build_path.return_value = custom_dir
+
+        d, mod_service = self._setup(tmp_path, custom_dir, solution_controller=solution_controller)
+
+        with (
+            patch("strata.deployers.helm_deployer.resolve_path", return_value=tmp_path / "module.yaml"),
+            patch("strata.deployers.helm_deployer.ModuleService.load", return_value=mod_service),
+        ):
+            ok, messages = d.validate_workspace()
+
+        assert ok is True, messages
+        assert d._helm_modules[0].values_file == custom_dir / "values.yaml"
+        assert d._helm_modules[0].chart_ref == str(custom_dir)
+        solution_controller.get_module_build_path.assert_any_call(d.deployment_service, d.build_path, "prod", "nginx")
+
+    def test_falls_back_to_default_shape_when_no_solution_controller(self, tmp_path):
+        default_dir = (tmp_path / "build") / "prod" / "nginx"
+        d, mod_service = self._setup(tmp_path, default_dir, solution_controller=None)
+
+        with (
+            patch("strata.deployers.helm_deployer.resolve_path", return_value=tmp_path / "module.yaml"),
+            patch("strata.deployers.helm_deployer.ModuleService.load", return_value=mod_service),
+        ):
+            ok, messages = d.validate_workspace()
+
+        assert ok is True, messages
+        assert d._helm_modules[0].values_file == default_dir / "values.yaml"
+        assert d._helm_modules[0].chart_ref == str(default_dir)
 
 
 # ---------------------------------------------------------------------------

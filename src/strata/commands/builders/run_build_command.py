@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 import click
 
 from strata.builders.ansible_builder import AnsibleBuilder
+from strata.builders.bicep_builder import BicepBuilder
 from strata.builders.compose_builder import ComposeBuilder
 from strata.builders.helm_builder import HelmBuilder
 from strata.builders.platform_builder import PlatformBuilder
@@ -102,6 +103,7 @@ class RunBuildCommand(BaseBuildCommand):
                 ("platform", self._execute_platform_build),
                 ("terraform", self._execute_terraform_build),
                 ("ansible", self._execute_ansible_build),
+                ("bicep", self._execute_bicep_build),
                 ("compose", self._execute_compose_build),
                 ("helm", self._execute_helm_build),
                 ("sync", self._execute_sync_build),
@@ -472,6 +474,53 @@ class RunBuildCommand(BaseBuildCommand):
             build_path=self._build_path,
             dry_run=self._dry_run,
             platform_model=getattr(self, "_platform_model", None),
+            repo_map=repo_map,
+            solution_controller=self._solution_controller,
+        )
+        self._messages.extend(builder.drain_messages())
+        if not ok:
+            self._errors.extend(builder.get_errors())
+            return False
+
+        ok = builder.after_build(
+            deployment_service=self._deployment_service,
+            work_path=self._work_path,
+            build_path=self._build_path,
+            dry_run=self._dry_run,
+            solution_controller=self._solution_controller,
+        )
+        self._messages.extend(builder.drain_messages())
+        if not ok:
+            self._errors.extend(builder.get_errors())
+            return False
+
+        return True
+
+    def _execute_bicep_build(self) -> bool:
+        if self._deployment_service is None:
+            self._errors.append("Deployment service not loaded")
+            return False
+        builder = BicepBuilder(verbose=self._is_verbose())
+
+        repo_map = self._solution_controller.get_repo_map() if self._solution_controller is not None else {}
+
+        ok = builder.before_build(
+            deployment_service=self._deployment_service,
+            work_path=self._work_path,
+            build_path=self._build_path,
+            dry_run=self._dry_run,
+            solution_controller=self._solution_controller,
+        )
+        self._messages.extend(builder.drain_messages())
+        if not ok:
+            self._errors.extend(builder.get_errors())
+            return False
+
+        ok = builder.build(
+            deployment_service=self._deployment_service,
+            work_path=self._work_path,
+            build_path=self._build_path,
+            dry_run=self._dry_run,
             repo_map=repo_map,
             solution_controller=self._solution_controller,
         )

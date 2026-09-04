@@ -15,8 +15,13 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from strata.models.common_models import SourceModel
-from strata.models.workspace_model import WorkspaceModel
+from strata.models.common_models import ProvisionerType, SourceModel
+from strata.models.workspace_model import (
+    OutputProfileModel,
+    WorkspaceIacBackendModel,
+    WorkspaceIacModel,
+    WorkspaceModel,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -80,3 +85,93 @@ class TestSourceModelSingleRepo:
         """Phase 1: repository alone (no source_path) must fail — source_path is required."""
         with pytest.raises(ValidationError):
             SourceModel(repository="my_repo")
+
+
+class TestWorkspaceIacModelProvisionerFieldValidation:
+    """Tests for WorkspaceIacModel.validate_provisioner_fields() (ADR-0071) — previously
+    had zero direct test coverage. Covers the pre-existing source/properties checks and
+    the new backend/output restrictions added alongside ADR-0071's finding that neither
+    was validator-restricted to terraform the way properties already is to ansible."""
+
+    def _source(self) -> SourceModel:
+        return SourceModel(repository="my_repo", source_path="terraform")
+
+    def test_source_required_for_non_sync_provisioner(self):
+        with pytest.raises(ValidationError, match="'source' is required"):
+            WorkspaceIacModel(name="infra", provisioner=ProvisionerType.TERRAFORM, source=None)
+
+    def test_source_not_required_for_sync_provisioner(self):
+        model = WorkspaceIacModel(name="sync", provisioner=ProvisionerType.ARGOCD, source=None)
+        assert model.source is None
+
+    def test_properties_allowed_on_ansible(self):
+        model = WorkspaceIacModel(
+            name="config",
+            provisioner=ProvisionerType.ANSIBLE,
+            source=self._source(),
+            properties={"playbook": "site.yml"},
+        )
+        assert model.properties is not None
+
+    def test_properties_rejected_on_terraform(self):
+        with pytest.raises(ValidationError, match="'properties' is only supported for ansible"):
+            WorkspaceIacModel(
+                name="infra",
+                provisioner=ProvisionerType.TERRAFORM,
+                source=self._source(),
+                properties={"playbook": "site.yml"},
+            )
+
+    def test_backend_allowed_on_terraform(self):
+        model = WorkspaceIacModel(
+            name="infra",
+            provisioner=ProvisionerType.TERRAFORM,
+            source=self._source(),
+            backend=WorkspaceIacBackendModel(type="local", configuration={}),
+        )
+        assert model.backend is not None
+
+    def test_backend_rejected_on_bicep(self):
+        with pytest.raises(ValidationError, match="'backend' is only supported for terraform"):
+            WorkspaceIacModel(
+                name="infra",
+                provisioner=ProvisionerType.BICEP,
+                source=self._source(),
+                backend=WorkspaceIacBackendModel(type="local", configuration={}),
+            )
+
+    def test_backend_rejected_on_ansible(self):
+        with pytest.raises(ValidationError, match="'backend' is only supported for terraform"):
+            WorkspaceIacModel(
+                name="config",
+                provisioner=ProvisionerType.ANSIBLE,
+                source=self._source(),
+                backend=WorkspaceIacBackendModel(type="local", configuration={}),
+            )
+
+    def test_output_allowed_on_terraform(self):
+        model = WorkspaceIacModel(
+            name="infra",
+            provisioner=ProvisionerType.TERRAFORM,
+            source=self._source(),
+            output=OutputProfileModel(),
+        )
+        assert model.output is not None
+
+    def test_output_rejected_on_compose(self):
+        with pytest.raises(ValidationError, match="'output' is only supported for terraform"):
+            WorkspaceIacModel(
+                name="app",
+                provisioner=ProvisionerType.COMPOSE,
+                source=self._source(),
+                output=OutputProfileModel(),
+            )
+
+    def test_output_rejected_on_helm(self):
+        with pytest.raises(ValidationError, match="'output' is only supported for terraform"):
+            WorkspaceIacModel(
+                name="app",
+                provisioner=ProvisionerType.HELM,
+                source=self._source(),
+                output=OutputProfileModel(),
+            )

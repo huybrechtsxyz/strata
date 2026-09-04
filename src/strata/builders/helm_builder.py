@@ -81,10 +81,13 @@ class HelmBuilder(BaseBuilder):
                     namespace_name=str(ns_name),
                     ns_service=ns_service,
                     work_path=work_path,
+                    deployment_service=deployment_service,
+                    build_path=build_path,
                     deployment_build_path=deployment_build_path,
                     dry_run=dry_run,
                     repo_map=repo_map or {},
                     template_context=template_context,
+                    solution_controller=solution_controller,
                 )
                 if not ok:
                     return False
@@ -93,9 +96,12 @@ class HelmBuilder(BaseBuilder):
                     namespace_name=str(ns_name),
                     ns_service=ns_service,
                     work_path=work_path,
+                    deployment_service=deployment_service,
+                    build_path=build_path,
                     deployment_build_path=deployment_build_path,
                     template_context=template_context,
                     dry_run=dry_run,
+                    solution_controller=solution_controller,
                 )
                 if not ok:
                     return False
@@ -173,10 +179,13 @@ class HelmBuilder(BaseBuilder):
         namespace_name: str,
         ns_service: Any,
         work_path: Path,
+        deployment_service: DeploymentService,
+        build_path: Path,
         deployment_build_path: Path,
         dry_run: bool,
         repo_map: Optional[Dict[str, str]] = None,
         template_context: Optional[Dict[str, Any]] = None,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> bool:
         """Build values.yaml and meta.yaml for all helm modules in one namespace.
 
@@ -227,7 +236,11 @@ class HelmBuilder(BaseBuilder):
                 continue
 
             module_name = str(module.meta.name)
-            module_dir = deployment_build_path / namespace_name / module_name
+            module_dir = (
+                solution_controller.get_module_build_path(deployment_service, build_path, namespace_name, module_name)
+                if solution_controller is not None
+                else deployment_build_path / namespace_name / module_name
+            )
             values_path = module_dir / "values.yaml"
             meta_path = module_dir / "meta.yaml"
 
@@ -242,7 +255,34 @@ class HelmBuilder(BaseBuilder):
                     repo_root = work_path
                 src_dir = repo_root / source.source_path
 
-                if dry_run:
+                # When source.reference is set, extract from the pinned ref using git
+                # archive instead of copying from the (potentially different) working
+                # tree checkout. SourceModel.reference is generic (valid for any
+                # git-based source), not Terraform-specific — helm's local chart copy
+                # must honor it too (ADR-0071).
+                if source.reference:
+                    if dry_run:
+                        self._messages.append(
+                            f"[DRY-RUN] Would extract helm chart source at ref '{source.reference}': "
+                            f"{src_dir} -> {module_dir}"
+                        )
+                    else:
+                        ok, msg = self._extract_source_at_ref(
+                            repo_root=repo_root,
+                            source_path=source.source_path,
+                            ref=source.reference,
+                            dest_dir=module_dir,
+                            provisioner_name=f"{namespace_name}/{module_name}",
+                        )
+                        if not ok:
+                            self._errors.append(msg)
+                            return False
+                        if template_context:
+                            self._apply_templates_to_dir(module_dir, template_context, exclude_dirs={"templates"})
+                        self._messages.append(
+                            f"Extracted helm chart source at ref '{source.reference}': {src_dir} -> {module_dir}"
+                        )
+                elif dry_run:
                     self._messages.append(f"[DRY-RUN] Would copy helm chart source: {src_dir} -> {module_dir}")
                     if not src_dir.exists():
                         self._errors.append(
@@ -366,9 +406,12 @@ class HelmBuilder(BaseBuilder):
         namespace_name: str,
         ns_service: Any,
         work_path: Path,
+        deployment_service: DeploymentService,
+        build_path: Path,
         deployment_build_path: Path,
         template_context: Dict[str, Any],
         dry_run: bool,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> bool:
         """Copy ``spec.files`` entries for all helm modules in one namespace.
 
@@ -408,7 +451,11 @@ class HelmBuilder(BaseBuilder):
                 continue
 
             module_name = str(module.meta.name)
-            dest_dir = deployment_build_path / namespace_name / module_name
+            dest_dir = (
+                solution_controller.get_module_build_path(deployment_service, build_path, namespace_name, module_name)
+                if solution_controller is not None
+                else deployment_build_path / namespace_name / module_name
+            )
             label = f"Namespace '{namespace_name}', module '{module_name}'"
 
             if not self._copy_module_files(

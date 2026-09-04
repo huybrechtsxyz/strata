@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Optional
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from strata.deployers.terraform_deployer import TerraformDeployer
 from strata.models.deployment_model import DeploymentStageTimeoutsModel
 
@@ -634,15 +636,29 @@ class TestTerraformDeployerGetWorkingDir:
         result = d._get_working_dir(svc, tmp_path, iac)
         assert result == tmp_path / "build" / "iac" / "terraform"
 
-    def test_falls_back_to_terraform_name(self, tmp_path):
+    def test_falls_back_to_source_path(self, tmp_path):
+        """ADR-0071: falls back to source_path (matching get_provisioner_path() and the
+        terraform_builder.py inline fallback), not a made-up terraform/{name} shape."""
         d = _make_deployer(tmp_path)
         svc = MagicMock()
         svc.get_build_path.return_value = tmp_path / "build"
         iac = MagicMock()
         iac.source.target_path = None
+        iac.source.source_path = "modules/networking"
         iac.name = "my_prov"
         result = d._get_working_dir(svc, tmp_path, iac)
-        assert result == tmp_path / "build" / "terraform" / "my_prov"
+        assert result == tmp_path / "build" / "modules" / "networking"
+
+    def test_raises_when_neither_target_nor_source_path_set(self, tmp_path):
+        d = _make_deployer(tmp_path)
+        svc = MagicMock()
+        svc.get_build_path.return_value = tmp_path / "build"
+        iac = MagicMock()
+        iac.source.target_path = None
+        iac.source.source_path = None
+        iac.name = "my_prov"
+        with pytest.raises(ValueError, match="no source_path or target_path"):
+            d._get_working_dir(svc, tmp_path, iac)
 
 
 class TestTerraformDeployerTimeouts:

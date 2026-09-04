@@ -753,3 +753,51 @@ class TestComposeBuilderCrossModuleDependsOn:
         deps = doc["services"]["mod_web-web"]["depends_on"]
         assert "mod_web-db" in deps
         assert "mod_auth-server" in deps
+
+
+class TestComposeBuilderSolutionController:
+    """ADR-0071: ns_path resolution goes through
+    SolutionController.get_namespace_compose_path() when a solution_controller is
+    supplied, instead of independently re-deriving deployment_build_path/namespace
+    at each of the 4 docker-compose.yml call sites."""
+
+    def _run_build(self, tmp_path, solution_controller=None):
+        namespace, module_name = "testns", "mymod"
+        svc = _make_service("web", image="nginx:alpine")
+        compose_module = _make_compose_module(module_name, services=[svc])
+        mod_service = _make_mod_service(module=compose_module)
+        mod_ref = _module_ref(module_name, "module.yaml")
+
+        ns_svc = _mock_namespace_service([mod_ref])
+        dep_svc = _mock_deployment_service(build_path=tmp_path, namespace_services={namespace: ns_svc})
+
+        module_path = tmp_path / "module.yaml"
+        module_path.write_text("")
+
+        builder = ComposeBuilder()
+        with (
+            patch("strata.builders.compose_builder.resolve_path") as mock_rp,
+            patch("strata.builders.compose_builder.ModuleService.load", return_value=mod_service),
+        ):
+            mock_rp.return_value = module_path
+            ok = builder.build(dep_svc, tmp_path, tmp_path, solution_controller=solution_controller)
+
+        return builder, ok, dep_svc
+
+    def test_uses_get_namespace_compose_path_when_solution_controller_present(self, tmp_path):
+        custom_dest = tmp_path / "custom" / "testns" / "docker-compose.yml"
+        solution_controller = MagicMock()
+        solution_controller.get_namespace_compose_path.return_value = custom_dest
+
+        builder, ok, dep_svc = self._run_build(tmp_path, solution_controller=solution_controller)
+
+        assert ok is True, builder.get_errors()
+        assert custom_dest.exists()
+        assert not (tmp_path / "testns" / "docker-compose.yml").exists()
+        solution_controller.get_namespace_compose_path.assert_any_call(dep_svc, tmp_path, "testns")
+
+    def test_falls_back_to_default_shape_when_no_solution_controller(self, tmp_path):
+        builder, ok, _ = self._run_build(tmp_path, solution_controller=None)
+
+        assert ok is True, builder.get_errors()
+        assert (tmp_path / "testns" / "docker-compose.yml").exists()

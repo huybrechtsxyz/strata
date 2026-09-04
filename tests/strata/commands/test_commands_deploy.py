@@ -732,6 +732,133 @@ class TestLockingWiring:
 
 
 # ---------------------------------------------------------------------------
+# _resolve_lock_backend() matching algorithm — direct tests (previously this
+# method was only ever mocked out, never exercised directly, anywhere in the
+# test suite). Added alongside ADR-0071's fix removing lock_deploy_command.py's
+# duplicate, non-stage-aware implementation, which could pick the wrong
+# Terraform provisioner's backend for a workspace declaring more than one.
+# ---------------------------------------------------------------------------
+
+
+def _make_provisioner(name: str, provisioner: str = "terraform", backend=None) -> MagicMock:
+    prov = MagicMock()
+    prov.name = name
+    prov.provisioner = provisioner
+    prov.backend = backend
+    return prov
+
+
+class TestResolveLockBackendMatching:
+    def test_no_stages_falls_back_to_local(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        svc = MagicMock()
+        svc.get_workspace_service.return_value = None
+        cmd._deployment_service = svc
+
+        with patch("strata.integrations.lock.lock_factory.LockFactory.create") as create:
+            cmd._resolve_lock_backend([])
+
+        create.assert_called_once_with(None, cmd._work_path)
+
+    def test_matches_stage_provisioner_by_name(self, tmp_path):
+        """Single terraform provisioner, referenced by name — the common case."""
+        cmd = _make_run_command(tmp_path)
+        backend = MagicMock(name="backend-a")
+        ws_svc = MagicMock()
+        ws_svc.model.spec.provisioners = [_make_provisioner("infra", backend=backend)]
+        svc = MagicMock()
+        svc.get_workspace_service.return_value = ws_svc
+        cmd._deployment_service = svc
+
+        stage = _make_stage()
+        stage.provisioner = "infra"
+
+        with patch("strata.integrations.lock.lock_factory.LockFactory.create") as create:
+            cmd._resolve_lock_backend([stage])
+
+        create.assert_called_once_with(backend, cmd._work_path)
+
+    def test_ignores_earlier_unrelated_terraform_provisioner(self, tmp_path):
+        """Regression test for the ADR-0071 bug: a workspace with two Terraform
+        provisioners must resolve the one this deployment's stage actually
+        references — not just the first Terraform provisioner declared in
+        spec.provisioners, which may belong to a different deployment/stage
+        sharing the same workspace file."""
+        cmd = _make_run_command(tmp_path)
+        backend_a = MagicMock(name="backend-a")  # unrelated — declared first
+        backend_b = MagicMock(name="backend-b")  # the one this deployment uses
+        ws_svc = MagicMock()
+        ws_svc.model.spec.provisioners = [
+            _make_provisioner("networking", backend=backend_a),
+            _make_provisioner("compute", backend=backend_b),
+        ]
+        svc = MagicMock()
+        svc.get_workspace_service.return_value = ws_svc
+        cmd._deployment_service = svc
+
+        stage = _make_stage()
+        stage.provisioner = "compute"
+
+        with patch("strata.integrations.lock.lock_factory.LockFactory.create") as create:
+            cmd._resolve_lock_backend([stage])
+
+        create.assert_called_once_with(backend_b, cmd._work_path)
+
+    def test_non_terraform_provisioner_falls_back_to_local(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        backend = MagicMock(name="ansible-backend")
+        ws_svc = MagicMock()
+        ws_svc.model.spec.provisioners = [_make_provisioner("config", provisioner="ansible", backend=backend)]
+        svc = MagicMock()
+        svc.get_workspace_service.return_value = ws_svc
+        cmd._deployment_service = svc
+
+        stage = _make_stage()
+        stage.provisioner = "config"
+
+        with patch("strata.integrations.lock.lock_factory.LockFactory.create") as create:
+            cmd._resolve_lock_backend([stage])
+
+        create.assert_called_once_with(None, cmd._work_path)
+
+    def test_provisioner_without_backend_falls_back_to_local(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        ws_svc = MagicMock()
+        ws_svc.model.spec.provisioners = [_make_provisioner("infra", backend=None)]
+        svc = MagicMock()
+        svc.get_workspace_service.return_value = ws_svc
+        cmd._deployment_service = svc
+
+        stage = _make_stage()
+        stage.provisioner = "infra"
+
+        with patch("strata.integrations.lock.lock_factory.LockFactory.create") as create:
+            cmd._resolve_lock_backend([stage])
+
+        create.assert_called_once_with(None, cmd._work_path)
+
+    def test_stage_without_provisioner_name_is_skipped(self, tmp_path):
+        """A topology-based stage (no explicit stage.provisioner) contributes
+        nothing to resolution — matches today's behavior, not part of this bug."""
+        cmd = _make_run_command(tmp_path)
+        backend = MagicMock(name="backend-a")
+        ws_svc = MagicMock()
+        ws_svc.model.spec.provisioners = [_make_provisioner("infra", backend=backend)]
+        svc = MagicMock()
+        svc.get_workspace_service.return_value = ws_svc
+        cmd._deployment_service = svc
+
+        stage = _make_stage()
+        stage.provisioner = None
+        stage.topology = "some-topology"
+
+        with patch("strata.integrations.lock.lock_factory.LockFactory.create") as create:
+            cmd._resolve_lock_backend([stage])
+
+        create.assert_called_once_with(None, cmd._work_path)
+
+
+# ---------------------------------------------------------------------------
 # Pre-flight provisioner validation — every stage's tool/auth must be checked
 # BEFORE any stage runs (and before the deployment lock is acquired), so a
 # later stage's missing tool can't be discovered only after an earlier stage

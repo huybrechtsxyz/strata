@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 import yaml
 
 from strata.builders.base_builder import BaseBuilder
+from strata.models.common_models import ProvisionerType
 from strata.models.platform_artifact_model import PlatformArtifactModel
 from strata.services.deployment_service import DeploymentService
 from strata.services.platform_artifact_service import PlatformService
@@ -728,7 +729,7 @@ class AnsibleBuilder(BaseBuilder):
         template_context = self._build_template_context(deployment_service)
 
         for prov in provisioners:
-            if prov.provisioner != "ansible":
+            if prov.provisioner != ProvisionerType.ANSIBLE:
                 continue
 
             source = prov.source
@@ -752,6 +753,35 @@ class AnsibleBuilder(BaseBuilder):
                 if solution_controller is not None
                 else deployment_build_path / (source.target_path or source.source_path)
             )
+
+            # When source.reference is set, extract from the pinned ref using git archive
+            # instead of copying from the (potentially different) working tree checkout.
+            # SourceModel.reference is generic (valid for any git-based source), not
+            # Terraform-specific — ansible must honor it too (ADR-0071).
+            if source.reference:
+                if dry_run:
+                    self._messages.append(
+                        f"[DRY-RUN] Would extract ansible source at ref '{source.reference}': "
+                        f"{repo_root}/{source.source_path} -> {dest_dir}"
+                    )
+                    continue
+
+                ok, msg = self._extract_source_at_ref(
+                    repo_root=repo_root,
+                    source_path=source.source_path,
+                    ref=source.reference,
+                    dest_dir=dest_dir,
+                    provisioner_name=prov.name,
+                )
+                if not ok:
+                    self._errors.append(msg)
+                    return False
+                self._apply_templates_to_dir(dest_dir, template_context)
+                self._messages.append(
+                    f"Extracted ansible source at ref '{source.reference}': "
+                    f"{repo_root}/{source.source_path} -> {dest_dir}"
+                )
+                continue
 
             if dry_run:
                 self._messages.append(f"[DRY-RUN] Would copy ansible source: {src_dir} -> {dest_dir}")
@@ -790,7 +820,7 @@ class AnsibleBuilder(BaseBuilder):
         return [
             solution_controller.get_provisioner_path(deployment_service, build_path, prov)
             for prov in provisioners
-            if prov.provisioner == "ansible"
+            if prov.provisioner == ProvisionerType.ANSIBLE
         ]
 
     # ------------------------------------------------------------------

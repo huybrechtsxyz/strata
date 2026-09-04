@@ -98,8 +98,11 @@ class SyncBuilder(BaseBuilder):
                     stage=stage,
                     spec=spec,
                     work_path=work_path,
+                    deployment_service=deployment_service,
+                    build_path=build_path,
                     deployment_build_path=deployment_build_path,
                     dry_run=dry_run,
+                    solution_controller=solution_controller,
                 )
                 if not ok:
                     return False
@@ -178,8 +181,11 @@ class SyncBuilder(BaseBuilder):
         stage: Any,
         spec: PlatformSpecModel,
         work_path: Path,
+        deployment_service: DeploymentService,
+        build_path: Path,
         deployment_build_path: Path,
         dry_run: bool,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> bool:
         """Render the Jinja2 template for a single sync stage."""
         stage_name = str(stage.name)
@@ -236,7 +242,11 @@ class SyncBuilder(BaseBuilder):
             return False
 
         # Write output (or dry-run log)
-        output_path = deployment_build_path / stage_name / output_rel
+        output_path = (
+            solution_controller.get_sync_output_path(deployment_service, build_path, stage_name, output_rel)
+            if solution_controller is not None
+            else deployment_build_path / stage_name / output_rel
+        )
         if dry_run:
             self._messages.append(f"[DRY-RUN] Would write sync manifest for stage '{stage_name}' to: {output_path}")
         else:

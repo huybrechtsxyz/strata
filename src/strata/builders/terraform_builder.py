@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 from strata.builders.base_builder import BaseBuilder
+from strata.models.common_models import ProvisionerType
 from strata.models.environment_model import IncludeMergeStrategy
 from strata.models.platform_artifact_model import PlatformArtifactModel
 from strata.models.workspace_model import OutputFileModel, OutputProfileModel
@@ -120,7 +121,9 @@ class TerraformBuilder(BaseBuilder):
                 ws_service = deployment_service.get_workspace_service()
                 first_profile: Optional[OutputProfileModel] = None
                 if ws_service and ws_service.model:
-                    tf_provs = [p for p in ws_service.model.spec.provisioners if p.provisioner == "terraform"]
+                    tf_provs = [
+                        p for p in ws_service.model.spec.provisioners if p.provisioner == ProvisionerType.TERRAFORM
+                    ]
                     if tf_provs:
                         first_profile = tf_provs[0].output
                 planned = [name for name, _ in self._planned_files(terraform_vars, profile=first_profile)]
@@ -766,7 +769,7 @@ class TerraformBuilder(BaseBuilder):
         return [
             solution_controller.get_provisioner_path(deployment_service, build_path, prov)
             for prov in provisioners
-            if prov.provisioner == "terraform"
+            if prov.provisioner == ProvisionerType.TERRAFORM
         ]
 
     def _planned_files(
@@ -1227,7 +1230,7 @@ class TerraformBuilder(BaseBuilder):
         try:
             ws_service = deployment_service.get_workspace_service()
             provisioners = (
-                [p for p in ws_service.model.spec.provisioners if p.provisioner == "terraform"]
+                [p for p in ws_service.model.spec.provisioners if p.provisioner == ProvisionerType.TERRAFORM]
                 if ws_service and ws_service.model
                 else []
             )
@@ -1389,7 +1392,7 @@ class TerraformBuilder(BaseBuilder):
         has_errors = False
 
         for prov in provisioners:
-            if prov.provisioner != "terraform":
+            if prov.provisioner != ProvisionerType.TERRAFORM:
                 continue
 
             # Determine the build directory where .tf files were copied
@@ -1582,7 +1585,7 @@ class TerraformBuilder(BaseBuilder):
         template_context = self._build_template_context(deployment_service)
 
         for prov in provisioners:
-            if prov.provisioner != "terraform":
+            if prov.provisioner != ProvisionerType.TERRAFORM:
                 continue
 
             source = prov.source
@@ -1652,64 +1655,6 @@ class TerraformBuilder(BaseBuilder):
             self._messages.append(f"Copied terraform source: {src_dir} → {dest_dir}")
 
         return True
-
-    def _extract_source_at_ref(
-        self,
-        repo_root: Path,
-        source_path: str,
-        ref: str,
-        dest_dir: Path,
-        provisioner_name: str,
-    ) -> tuple:
-        """Extract source files at a pinned git ref using git archive.
-
-        Falls back to copying from the working tree if git archive is unavailable
-        (e.g., repo_root is not a git repository).
-
-        Args:
-            repo_root: Root directory of the git repository.
-            source_path: Relative path within the repo to extract.
-            ref: Git ref (branch, tag, SHA) to extract from.
-            dest_dir: Destination directory.
-            provisioner_name: Provisioner name for error messages.
-
-        Returns:
-            (success, message) tuple.
-        """
-        from strata.integrations.git import GitIntegration
-        from strata.models.integration_model import IntegrationModel
-
-        # Check if repo_root is a git repository
-        if not (repo_root / ".git").exists():
-            # Not a git repo — fall back to direct copy from working tree
-            src_dir = repo_root / source_path
-            if not src_dir.exists():
-                return False, (
-                    f"Terraform source directory not found: {src_dir} "
-                    f"(provisioner: {provisioner_name}, ref: {ref}). "
-                    f"Repository at '{repo_root}' is not a git repository; cannot extract at ref."
-                )
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(src_dir, dest_dir, dirs_exist_ok=True)
-            self._messages.append(
-                f"Warning: '{repo_root}' is not a git repository. "
-                f"Copied from working tree instead of ref '{ref}' (provisioner: {provisioner_name})."
-            )
-            return True, ""
-
-        # Use git archive to extract without mutating the working tree
-        config = IntegrationModel(name="git_archive", type="git")
-        git = GitIntegration(config)
-
-        ok, msg = git.archive_subtree(
-            working_dir=str(repo_root),
-            ref=ref,
-            subtree_path=source_path,
-            dest_dir=str(dest_dir),
-        )
-        if not ok:
-            return False, (f"Failed to extract source at ref '{ref}' for provisioner '{provisioner_name}': {msg}")
-        return True, msg
 
     # ------------------------------------------------------------------
     # Terraform file includes (merge external .tf / .tfvars into build)
