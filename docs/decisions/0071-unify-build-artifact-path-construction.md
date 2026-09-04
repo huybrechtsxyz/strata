@@ -1,6 +1,6 @@
 # Unify Build Artifact Path Construction Across Builder/Deployer Pairs
 
-- Status: proposed
+- Status: implemented — all 6 findings from the 2026-09-03 inventory pass are done: Option B extended to helm/compose/sync (item 1), the terraform_deployer and bicep_deployer divergent fallbacks unified (items 2-3), the `_resolve_lock_backend()` duplication and provisioner-type string/enum inconsistency fixed (items 4-5), and the `backend`/`output` validator gap closed (item 6). See Implementation Summary below.
 - Date: 2026-08-25
 
 ## Context and Problem Statement
@@ -308,6 +308,122 @@ so a misconfiguration silently has zero effect instead of failing loudly at vali
 time. Same class of risk as the `_resolve_lock_backend()` bug above, just a schema gap
 instead of a duplicated-logic gap.
 
+### Fix design (2026-09-04) — Option B for Group 1 (helm, compose, sync)
+
+Extends the exact pattern already shipped for Group 2 — three new methods next to
+`get_provisioner_path()` in `SolutionController`'s "Canonical build path helpers"
+section, each a single source of truth called from both the builder and deployer side
+of its pair. Unlike Group 2, none of these three shapes has a `target_path`-vs-
+`source_path` branching choice, so there is no equivalent of the divergent-fallback bug
+found (and fixed) for `terraform_deployer` in item #2 — the `solution_controller is
+None` fallback at every call site is just the identical one-line expression the helper
+itself computes, not a second, independently-designed shape.
+
+**1. Helm — `get_module_build_path(deployment_service, build_path, namespace_name,
+module_name) -> Path`.**
+```python
+def get_module_build_path(
+    self,
+    deployment_service: "DeploymentService",
+    build_path: Path,
+    namespace_name: str,
+    module_name: str,
+) -> Path:
+    """Return the canonical build directory for a namespace module (Helm).
+
+    Single source of truth used by HelmBuilder (values.yaml/meta.yaml write
+    destination, local chart source copy destination) and HelmDeployer
+    (values_file/meta_file read location, local chart_ref resolution) — ADR-0071.
+    """
+    return deployment_service.get_build_path(build_path) / namespace_name / module_name
+```
+Replaces 4 independent re-derivations with 1 call each:
+- [`helm_builder.py:230`](../../src/strata/builders/helm_builder.py#L230) —
+  `module_dir = ...` becomes
+  `module_dir = solution_controller.get_module_build_path(deployment_service, build_path, namespace_name, module_name) if solution_controller is not None else deployment_build_path / namespace_name / module_name`
+  (then `/ "values.yaml"`, `/ "meta.yaml"` as today).
+- [`helm_deployer.py:347`](../../src/strata/deployers/helm_deployer.py#L347) (values),
+  [`:348`](../../src/strata/deployers/helm_deployer.py#L348) (meta),
+  [`:380`](../../src/strata/deployers/helm_deployer.py#L380) (local chart_ref) — all
+  three currently re-derive independently inside the same per-module loop iteration;
+  replaced by computing `module_dir` once per iteration via the same call, then
+  `values_file = module_dir / "values.yaml"`, `meta_file = module_dir / "meta.yaml"`,
+  `chart_ref = str(module_dir)` for the local-chart branch.
+
+**2. Compose — `get_namespace_compose_path(deployment_service, build_path,
+namespace_name) -> Path`.**
+```python
+def get_namespace_compose_path(
+    self,
+    deployment_service: "DeploymentService",
+    build_path: Path,
+    namespace_name: str,
+) -> Path:
+    """Return the canonical docker-compose.yml path for a namespace (Compose).
+
+    Single source of truth used by ComposeBuilder (write destination) and
+    ComposeDeployer.validate_workspace() (discovery) — ADR-0071.
+    """
+    return deployment_service.get_build_path(build_path) / namespace_name / "docker-compose.yml"
+```
+- [`compose_builder.py`](../../src/strata/builders/compose_builder.py) — the 4
+  `docker-compose.yml`-related sites (lines 296, 301, 323, 328) all live inside the same
+  `_build_namespace()` method; replaced by computing the path once at the top of that
+  method via the new helper and reusing the local variable for the dry-run/pass-through/
+  write branches, instead of 4 independent re-derivations.
+  **Line 397 (`_copy_namespace_module_files()`, `deployment_build_path / namespace_name
+  / module_name` for per-module file copies) is a different, builder-only shape with no
+  deployer counterpart — out of scope, left unchanged**, matching the ADR's own
+  Impact Analysis note.
+- [`compose_deployer.py:114`](../../src/strata/deployers/compose_deployer.py#L114) —
+  `compose_file = ...` becomes a call to the same helper.
+
+**3. Sync — `get_sync_output_path(deployment_service, build_path, stage_name,
+output_rel) -> Path`.**
+```python
+def get_sync_output_path(
+    self,
+    deployment_service: "DeploymentService",
+    build_path: Path,
+    stage_name: str,
+    output_rel: str,
+) -> Path:
+    """Return the canonical rendered-manifest path for a sync stage.
+
+    Single source of truth used by SyncBuilder (render/write destination) and
+    SyncDeployer.validate_workspace() (discovery) — ADR-0071. output_rel comes from
+    the stage's integration.properties["output_file"], read independently by both
+    sides today.
+    """
+    return deployment_service.get_build_path(build_path) / stage_name / output_rel
+```
+- [`sync_builder.py:239`](../../src/strata/builders/sync_builder.py#L239) —
+  `output_path = ...` becomes a call to the new helper.
+- [`sync_deployer.py:142`](../../src/strata/deployers/sync_deployer.py#L142) —
+  `rendered_file = ...` becomes a call to the new helper.
+
+**Fallback pattern at every call site** (matching Group 2's existing style exactly,
+for consistency — not because these shapes need a *different* fallback, since there is
+only one possible shape here):
+```python
+dest = (
+    solution_controller.get_module_build_path(deployment_service, build_path, ns, mod)
+    if solution_controller is not None
+    else deployment_service.get_build_path(build_path) / ns / mod
+)
+```
+
+**Tests:** each of the 3 new `SolutionController` methods gets direct unit tests
+(mirroring however `get_provisioner_path()` itself is tested, if at all — to be
+confirmed during implementation) plus updated/added coverage at each of the 7 call
+sites confirming the `solution_controller`-present and `-None`-fallback paths both
+resolve to the identical location (the same regression-test shape used for item #2's
+`terraform_deployer._get_working_dir()` fix).
+
+**Out of scope for this design:** `compose_builder.py:397`'s per-module file-copy path
+(no deployer counterpart, not a duplication risk) and any change to Group 2's
+already-shipped `get_provisioner_path()` itself.
+
 ## Considered Options
 
 - **A. Status quo.** Leave each builder/deployer pair to independently hardcode the
@@ -319,26 +435,43 @@ instead of a duplicated-logic gap.
   `SolutionController.get_provisioner_path()` (see Impact Analysis, Group 2) is exactly
   this pattern, already shipped for terraform/bicep/ansible. Extending the same shape
   of helper to helm/compose/sync (Group 1) is the concrete remaining work, not a new
-  design.
+  design. **Design for this extension written 2026-09-04 — see "Fix design" above.**
 
 ## Decision Outcome
 
-Not yet decided — deliberately deferred. Out of scope for ADR 0070's bug fixes (neither
-bug touches this path-agreement logic), and unifying it properly means touching every
-builder/deployer pair (helm, compose, terraform, sync), which is a larger, independent
-refactor.
+**Adopted: Option B**, extending `SolutionController`'s existing canonical-path-helper
+pattern to helm/compose/sync via 3 new methods (design above). Implemented
+2026-09-04 — see Implementation Summary below.
 
-## Remaining Work
 
-<!-- Required while Status is proposed / in-progress / partially-implemented.
-     Remove this section once Status becomes implemented. -->
+## Implementation Summary
 
-- Not started. Scope is now concrete after the 2026-09-03 inventory pass — see Impact
-  Analysis. Decide:
-  1. Whether to implement Option B for the 3 genuinely-duplicated pairs (helm, compose,
-     sync — 7 sites total), following `get_provisioner_path()`'s existing shape as the
-     template (a controller method, or a plain function, taking `deployment_service`,
-     `build_path`, and the namespace/module/stage identifiers, returning a `Path`).
+All 6 findings from the 2026-09-03 inventory pass (Impact Analysis) are complete:
+  1. **Done (2026-09-04).** Option B for the 3 genuinely-duplicated pairs (helm,
+     compose, sync — 7 sites total) — 3 new `SolutionController` methods
+     (`get_module_build_path`, `get_namespace_compose_path`, `get_sync_output_path`),
+     following `get_provisioner_path()`'s existing shape exactly (see the "Fix design
+     (2026-09-04)" subsection above for full signatures). All 7 call sites updated:
+     `helm_builder.py` (`_build_namespace()` + `_copy_namespace_module_files()`,
+     which turned out to share the same `module_dir` shape and both needed the
+     fix — not just the 1 site originally scoped), `helm_deployer.py`
+     (`validate_workspace()`'s 3 re-derivations consolidated into 1 call per
+     iteration), `compose_builder.py` (`_build_namespace()`'s 4 sites consolidated
+     into 1 call reused via a local variable — `_copy_namespace_module_files()`'s
+     per-module-file shape correctly left untouched, no deployer counterpart),
+     `compose_deployer.py`, `sync_builder.py`, `sync_deployer.py`. Added 18 new
+     tests across 7 files — `test_builders_sync.py` and `test_deployers_sync.py`
+     are entirely new (SyncBuilder/SyncDeployer had zero test coverage of any kind
+     before this), plus new `TestSolutionControllerCanonicalBuildPathHelpers`
+     direct-unit-test coverage for all 4 canonical path helpers (including
+     `get_provisioner_path()` itself, which also had zero direct coverage before).
+     Verified: full-project `ruff`/`mypy` clean (783 files, same 2 pre-existing
+     unrelated errors), full suite 6398 passed (up from 6380), 16 skipped, 0 failed.
+     A new mypy+MagicMock gotcha was found and fixed along the way (saved to user
+     memory): adding a type annotation to one test-helper parameter makes mypy
+     fully check that function body, surfacing `.return_value`-on-real-method
+     false positives that stay silent everywhere else in a file that otherwise
+     relies on being fully unannotated (mypy's default "skip untyped defs").
   2. **Done (2026-09-03).** The divergent `terraform_deployer._get_working_dir()`
      fallback (Group 2's caveat, above) has been unified with `get_provisioner_path()`'s
      resolution order (`target_path` → else `source_path`); a `ValueError` is now raised
@@ -346,23 +479,31 @@ refactor.
      `terraform_builder.py:1608`'s inline fallback already matched and needed no change.
      Deduplicating these inline fallbacks into a single shared call (rather than
      independently-maintained copies) remains folded into Option B's broader scope.
-  3. **Designed (2026-09-03), not yet implemented.** The bicep builder-copy gap
-     (Related but distinct finding, above) — fix design written: a new minimal
-     `BicepBuilder` (mirroring `AnsibleBuilder._copy_provisioner_source()`'s shape),
-     wired into `run_build_command.py`'s phase list, plus fixing
+  3. **Done (2026-09-04).** The bicep builder-copy gap (Related but distinct finding,
+     above) is fixed: new `src/strata/builders/bicep_builder.py` (`BicepBuilder`),
+     wired into `run_build_command.py`'s phase list as `_execute_bicep_build()`, plus
      `bicep_deployer.py`'s own divergent `solution_controller is None` fallback
-     (a third, independently-different path shape found alongside — see Compounding
-     bug, above) to agree with the new builder's output location. **Revised (same day):**
-     also move `TerraformBuilder._extract_source_at_ref()` to `BaseBuilder` (it has no
-     Terraform-specific coupling) and fix `AnsibleBuilder._copy_provisioner_source()`'s
-     newly-found silent gap — it never honored `source.reference` despite the field
-     being documented as generic, not Terraform-specific — so Bicep launches with
-     git-ref-pinning parity from day one instead of a third inconsistent provisioner.
-     See the finding's "Fix design" subsection for the full implementation plan (new
-     file, shared-helper relocation, wiring, and required test coverage). Kept as its
-     own item rather than folded into #1/#2 because it's missing functionality, not
-     duplicated-path reconciliation — still undecided whether it ultimately belongs in
-     this ADR or should be split into its own ADR/issue once implemented.
+     (Compounding bug, above) replaced with a `_get_working_dir()` method mirroring
+     `terraform_deployer`'s corrected shape (`target_path` → else `source_path`, raising
+     `ValueError` when neither is set). Also implemented as part of the same pass:
+     `TerraformBuilder._extract_source_at_ref()` moved to `BaseBuilder` unchanged (no
+     Terraform-specific coupling), and `AnsibleBuilder._copy_provisioner_source()` fixed
+     to honor `source.reference` (previously silently ignored it — a real, separate bug
+     found while confirming Bicep should get ref-pinning parity from day one). All three
+     IaC-provisioner builders (Terraform, Ansible, Bicep) now share the same copy +
+     ref-pinning behavior via `BaseBuilder`. Added 23 new tests: 13 in
+     `test_builders_bicep.py` (before/after/build, no-op cases, repo_map resolution,
+     `get_provisioner_path()` vs. fallback, ref-pinning), 6 in `test_builders_ansible.py`
+     (basic copy — previously zero coverage — plus the new ref-pinning behavior), 4 in
+     `test_bicep_deployer.py` (`_get_working_dir()` unit tests + an end-to-end
+     `validate_workspace()` fallback test); updated `test_commands_build.py`'s
+     `_PHASES` list to include `"bicep"` (would otherwise have broken that test, since
+     the real `_execute_bicep_build()` would now run unmocked). Verified: full-project
+     `ruff`/`mypy` clean (782 files, same 2 pre-existing unrelated errors), full suite
+     6380 passed (up from 6357), 16 skipped, 0 failed. Kept as its own item rather than
+     folded into #1/#2 because it was missing functionality, not duplicated-path
+     reconciliation — still undecided whether it ultimately belongs in this ADR or
+     should be split into its own ADR/issue in retrospect.
   4. **Done (2026-09-03).** The `_resolve_lock_backend()` divergence (Related but
      distinct finding, above) was a real correctness bug, not a documentation nicety —
      fixed independently of Option B's broader design decision. `lock_deploy_command.py`'s

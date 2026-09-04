@@ -344,8 +344,15 @@ class HelmDeployer(BaseDeployer):
                     continue
 
                 module_name = str(module.meta.name)
-                values_file = deployment_build_path / ns_name_str / module_name / "values.yaml"
-                meta_file = deployment_build_path / ns_name_str / module_name / "meta.yaml"
+                module_dir = (
+                    self.solution_controller.get_module_build_path(
+                        self.deployment_service, self.build_path, ns_name_str, module_name
+                    )
+                    if self.solution_controller is not None
+                    else deployment_build_path / ns_name_str / module_name
+                )
+                values_file = module_dir / "values.yaml"
+                meta_file = module_dir / "meta.yaml"
 
                 if not values_file.exists() or not meta_file.exists():
                     continue
@@ -377,7 +384,7 @@ class HelmDeployer(BaseDeployer):
                         is_oci = False
                     repo_url = chart_repository
                 else:
-                    chart_ref = str(deployment_build_path / ns_name_str / module_name)
+                    chart_ref = str(module_dir)
                     repo_url = None
                     repo_name = None
                     chart_version = None

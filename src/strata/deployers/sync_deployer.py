@@ -139,7 +139,13 @@ class BaseSyncDeployer(BaseDeployer):
 
         output_file_rel: str = str(integration.properties["output_file"])
         deployment_build_path = self.deployment_service.get_build_path(self.build_path)
-        rendered_file = deployment_build_path / self.stage.name / output_file_rel
+        rendered_file = (
+            self.solution_controller.get_sync_output_path(
+                self.deployment_service, self.build_path, self.stage.name, output_file_rel
+            )
+            if self.solution_controller is not None
+            else deployment_build_path / self.stage.name / output_file_rel
+        )
 
         if not rendered_file.exists():
             messages.append(

@@ -78,8 +78,11 @@ class ComposeBuilder(BaseBuilder):
                     namespace_name=str(ns_name),
                     ns_service=ns_service,
                     work_path=work_path,
+                    deployment_service=deployment_service,
+                    build_path=build_path,
                     deployment_build_path=deployment_build_path,
                     dry_run=dry_run,
+                    solution_controller=solution_controller,
                 )
                 if not ok:
                     return False
@@ -168,8 +171,11 @@ class ComposeBuilder(BaseBuilder):
         namespace_name: str,
         ns_service: Any,
         work_path: Path,
+        deployment_service: DeploymentService,
+        build_path: Path,
         deployment_build_path: Path,
         dry_run: bool,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> bool:
         """Build docker-compose.yml for one namespace.
 
@@ -190,6 +196,12 @@ class ComposeBuilder(BaseBuilder):
         modules = ns_service.model.spec.modules
         if not modules:
             return True
+
+        ns_path = (
+            solution_controller.get_namespace_compose_path(deployment_service, build_path, namespace_name)
+            if solution_controller is not None
+            else deployment_build_path / namespace_name / "docker-compose.yml"
+        )
 
         compose_services: Dict[str, Any] = {}
         top_volumes: Dict[str, Any] = {}
@@ -293,12 +305,11 @@ class ComposeBuilder(BaseBuilder):
 
         # Pass-through: copy the external compose file verbatim
         if passthrough_file is not None:
-            ns_path = deployment_build_path / namespace_name / "docker-compose.yml"
             if dry_run:
                 if self.verbose:
                     self._messages.append(f"[DRY-RUN] Would copy: {passthrough_file} → {ns_path}")
                 return True
-            ns_dir = deployment_build_path / namespace_name
+            ns_dir = ns_path.parent
             ns_dir.mkdir(parents=True, exist_ok=True)
             try:
                 import shutil
@@ -320,14 +331,13 @@ class ComposeBuilder(BaseBuilder):
             compose_doc["volumes"] = top_volumes
 
         if dry_run:
-            ns_path = deployment_build_path / namespace_name / "docker-compose.yml"
             if self.verbose:
                 self._messages.append(f"[DRY-RUN] Would write: {ns_path}")
             return True
 
-        ns_dir = deployment_build_path / namespace_name
+        ns_dir = ns_path.parent
         ns_dir.mkdir(parents=True, exist_ok=True)
-        compose_path = ns_dir / "docker-compose.yml"
+        compose_path = ns_path
 
         try:
             with compose_path.open("w", encoding="utf-8") as fh:

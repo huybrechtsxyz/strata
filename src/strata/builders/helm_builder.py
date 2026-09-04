@@ -81,10 +81,13 @@ class HelmBuilder(BaseBuilder):
                     namespace_name=str(ns_name),
                     ns_service=ns_service,
                     work_path=work_path,
+                    deployment_service=deployment_service,
+                    build_path=build_path,
                     deployment_build_path=deployment_build_path,
                     dry_run=dry_run,
                     repo_map=repo_map or {},
                     template_context=template_context,
+                    solution_controller=solution_controller,
                 )
                 if not ok:
                     return False
@@ -93,9 +96,12 @@ class HelmBuilder(BaseBuilder):
                     namespace_name=str(ns_name),
                     ns_service=ns_service,
                     work_path=work_path,
+                    deployment_service=deployment_service,
+                    build_path=build_path,
                     deployment_build_path=deployment_build_path,
                     template_context=template_context,
                     dry_run=dry_run,
+                    solution_controller=solution_controller,
                 )
                 if not ok:
                     return False
@@ -173,10 +179,13 @@ class HelmBuilder(BaseBuilder):
         namespace_name: str,
         ns_service: Any,
         work_path: Path,
+        deployment_service: DeploymentService,
+        build_path: Path,
         deployment_build_path: Path,
         dry_run: bool,
         repo_map: Optional[Dict[str, str]] = None,
         template_context: Optional[Dict[str, Any]] = None,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> bool:
         """Build values.yaml and meta.yaml for all helm modules in one namespace.
 
@@ -227,7 +236,11 @@ class HelmBuilder(BaseBuilder):
                 continue
 
             module_name = str(module.meta.name)
-            module_dir = deployment_build_path / namespace_name / module_name
+            module_dir = (
+                solution_controller.get_module_build_path(deployment_service, build_path, namespace_name, module_name)
+                if solution_controller is not None
+                else deployment_build_path / namespace_name / module_name
+            )
             values_path = module_dir / "values.yaml"
             meta_path = module_dir / "meta.yaml"
 
@@ -366,9 +379,12 @@ class HelmBuilder(BaseBuilder):
         namespace_name: str,
         ns_service: Any,
         work_path: Path,
+        deployment_service: DeploymentService,
+        build_path: Path,
         deployment_build_path: Path,
         template_context: Dict[str, Any],
         dry_run: bool,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> bool:
         """Copy ``spec.files`` entries for all helm modules in one namespace.
 
@@ -408,7 +424,11 @@ class HelmBuilder(BaseBuilder):
                 continue
 
             module_name = str(module.meta.name)
-            dest_dir = deployment_build_path / namespace_name / module_name
+            dest_dir = (
+                solution_controller.get_module_build_path(deployment_service, build_path, namespace_name, module_name)
+                if solution_controller is not None
+                else deployment_build_path / namespace_name / module_name
+            )
             label = f"Namespace '{namespace_name}', module '{module_name}'"
 
             if not self._copy_module_files(

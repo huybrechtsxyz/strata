@@ -591,3 +591,61 @@ class TestHelmBuilderLocalChartTemplates:
     def test_files_outside_templates_dir_are_still_copied(self, tmp_path):
         _, _, module_dir = self._build_with_local_chart(tmp_path)
         assert (module_dir / "Chart.yaml").read_text(encoding="utf-8") == "name: mychart\nversion: 0.1.0\n"
+
+
+class TestHelmBuilderSolutionController:
+    """ADR-0071: module_dir resolution goes through
+    SolutionController.get_module_build_path() when a solution_controller is supplied,
+    instead of independently re-deriving deployment_build_path/namespace/module."""
+
+    def test_uses_get_module_build_path_when_solution_controller_present(self, tmp_path):
+        namespace, module_name = "testns", "mymod"
+        helm_module = _make_helm_module(module_name, services=[_make_service("web", image="nginx")])
+        mod_service = _make_mod_service(module=helm_module)
+        mod_ref = _module_ref(module_name, "module.yaml")
+
+        ns_svc = _mock_namespace_service([mod_ref])
+        dep_svc = _mock_deployment_service(build_path=tmp_path, namespace_services={namespace: ns_svc})
+
+        module_path = tmp_path / "module.yaml"
+        module_path.write_text("")
+
+        custom_dest = tmp_path / "custom" / namespace / module_name
+        solution_controller = MagicMock()
+        solution_controller.get_module_build_path.return_value = custom_dest
+
+        builder = HelmBuilder()
+        with (
+            patch("strata.builders.helm_builder.resolve_path") as mock_rp,
+            patch("strata.builders.helm_builder.ModuleService.load", return_value=mod_service),
+        ):
+            mock_rp.return_value = module_path
+            ok = builder.build(dep_svc, tmp_path, tmp_path, solution_controller=solution_controller)
+
+        assert ok is True, builder.get_errors()
+        assert (custom_dest / "values.yaml").exists()
+        assert (custom_dest / "meta.yaml").exists()
+        solution_controller.get_module_build_path.assert_any_call(dep_svc, tmp_path, namespace, module_name)
+
+    def test_falls_back_to_default_shape_when_no_solution_controller(self, tmp_path):
+        namespace, module_name = "testns", "mymod"
+        helm_module = _make_helm_module(module_name, services=[_make_service("web", image="nginx")])
+        mod_service = _make_mod_service(module=helm_module)
+        mod_ref = _module_ref(module_name, "module.yaml")
+
+        ns_svc = _mock_namespace_service([mod_ref])
+        dep_svc = _mock_deployment_service(build_path=tmp_path, namespace_services={namespace: ns_svc})
+
+        module_path = tmp_path / "module.yaml"
+        module_path.write_text("")
+
+        builder = HelmBuilder()
+        with (
+            patch("strata.builders.helm_builder.resolve_path") as mock_rp,
+            patch("strata.builders.helm_builder.ModuleService.load", return_value=mod_service),
+        ):
+            mock_rp.return_value = module_path
+            ok = builder.build(dep_svc, tmp_path, tmp_path, solution_controller=None)
+
+        assert ok is True, builder.get_errors()
+        assert (tmp_path / namespace / module_name / "values.yaml").exists()

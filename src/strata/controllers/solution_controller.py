@@ -570,6 +570,52 @@ class SolutionController(BaseController):
             raise ValueError(f"Provisioner '{iac.name}' source has no source_path or target_path defined.")
         return deployment_service.get_build_path(build_path) / target
 
+    def get_module_build_path(
+        self,
+        deployment_service: "DeploymentService",
+        build_path: Path,
+        namespace_name: str,
+        module_name: str,
+    ) -> Path:
+        """Return the canonical build directory for a namespace module (Helm).
+
+        Single source of truth used by both ``HelmBuilder`` (``values.yaml`` /
+        ``meta.yaml`` write destination, local chart source copy destination) and
+        ``HelmDeployer`` (``values_file`` / ``meta_file`` read location, local
+        ``chart_ref`` resolution) — ADR-0071.
+        """
+        return deployment_service.get_build_path(build_path) / namespace_name / module_name
+
+    def get_namespace_compose_path(
+        self,
+        deployment_service: "DeploymentService",
+        build_path: Path,
+        namespace_name: str,
+    ) -> Path:
+        """Return the canonical ``docker-compose.yml`` path for a namespace (Compose).
+
+        Single source of truth used by both ``ComposeBuilder`` (write destination)
+        and ``ComposeDeployer.validate_workspace()`` (discovery) — ADR-0071.
+        """
+        return deployment_service.get_build_path(build_path) / namespace_name / "docker-compose.yml"
+
+    def get_sync_output_path(
+        self,
+        deployment_service: "DeploymentService",
+        build_path: Path,
+        stage_name: str,
+        output_rel: str,
+    ) -> Path:
+        """Return the canonical rendered-manifest path for a sync stage.
+
+        Single source of truth used by both ``SyncBuilder`` (render/write
+        destination) and ``SyncDeployer.validate_workspace()`` (discovery) —
+        ADR-0071. ``output_rel`` comes from the stage's
+        ``integration.properties["output_file"]``, read independently by both
+        sides today.
+        """
+        return deployment_service.get_build_path(build_path) / stage_name / output_rel
+
     # ------------------------------------------------------------------
     # Profile management
     # ------------------------------------------------------------------

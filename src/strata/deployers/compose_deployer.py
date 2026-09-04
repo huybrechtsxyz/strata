@@ -111,9 +111,16 @@ class ComposeDeployer(BaseDeployer):
         for ns_name, ns_service in namespace_services.items():
             if not ns_service.is_validated() or not ns_service.model:
                 continue
-            compose_file = deployment_build_path / str(ns_name) / "docker-compose.yml"
+            ns_name_str = str(ns_name)
+            compose_file = (
+                self.solution_controller.get_namespace_compose_path(
+                    self.deployment_service, self.build_path, ns_name_str
+                )
+                if self.solution_controller is not None
+                else deployment_build_path / ns_name_str / "docker-compose.yml"
+            )
             if compose_file.exists():
-                found[str(ns_name)] = compose_file
+                found[ns_name_str] = compose_file
 
         if not found:
             messages.append("No docker-compose.yml files found in build path — nothing to deploy")

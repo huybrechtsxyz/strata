@@ -5,7 +5,7 @@ full init/save round-trips with the heavy scaffold logic.
 """
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from strata.controllers.solution_controller import SolutionController
 from strata.models.solution_model import (
@@ -254,6 +254,69 @@ class TestSolutionControllerStaticHelpers:
     def test_get_solution_json_path(self, tmp_path):
         path = SolutionController.get_solution_json_path(tmp_path)
         assert path == tmp_path / ".strata" / "solution.json"
+
+
+# ---------------------------------------------------------------------------
+# Canonical build path helpers (ADR-0071) — get_provisioner_path() had zero
+# direct test coverage before these were added alongside its 3 new siblings.
+# ---------------------------------------------------------------------------
+
+
+class TestSolutionControllerCanonicalBuildPathHelpers:
+    def _deployment_service(self, build_path: Path):
+        svc = MagicMock()
+        svc.get_build_path.return_value = build_path
+        return svc
+
+    def test_get_provisioner_path_uses_target_path(self, tmp_path):
+        ctrl = SolutionController(tmp_path)
+        build_path = tmp_path / "build"
+        svc = self._deployment_service(build_path)
+
+        iac = MagicMock()
+        iac.name = "infra"
+        iac.source.target_path = "custom/target"
+        iac.source.source_path = "terraform"
+
+        result = ctrl.get_provisioner_path(svc, tmp_path, iac)
+        assert result == build_path / "custom/target"
+
+    def test_get_provisioner_path_falls_back_to_source_path(self, tmp_path):
+        ctrl = SolutionController(tmp_path)
+        build_path = tmp_path / "build"
+        svc = self._deployment_service(build_path)
+
+        iac = MagicMock()
+        iac.name = "infra"
+        iac.source.target_path = None
+        iac.source.source_path = "terraform"
+
+        result = ctrl.get_provisioner_path(svc, tmp_path, iac)
+        assert result == build_path / "terraform"
+
+    def test_get_module_build_path(self, tmp_path):
+        ctrl = SolutionController(tmp_path)
+        build_path = tmp_path / "build"
+        svc = self._deployment_service(build_path)
+
+        result = ctrl.get_module_build_path(svc, tmp_path, "prod", "nginx")
+        assert result == build_path / "prod" / "nginx"
+
+    def test_get_namespace_compose_path(self, tmp_path):
+        ctrl = SolutionController(tmp_path)
+        build_path = tmp_path / "build"
+        svc = self._deployment_service(build_path)
+
+        result = ctrl.get_namespace_compose_path(svc, tmp_path, "prod")
+        assert result == build_path / "prod" / "docker-compose.yml"
+
+    def test_get_sync_output_path(self, tmp_path):
+        ctrl = SolutionController(tmp_path)
+        build_path = tmp_path / "build"
+        svc = self._deployment_service(build_path)
+
+        result = ctrl.get_sync_output_path(svc, tmp_path, "gitops", "manifest.yaml")
+        assert result == build_path / "gitops" / "manifest.yaml"
 
 
 # ---------------------------------------------------------------------------
