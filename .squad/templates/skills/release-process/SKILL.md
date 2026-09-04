@@ -223,8 +223,10 @@ mkdir /tmp/squad-release-test && cd /tmp/squad-release-test
 # Test SDK installation
 npm init -y
 npm install @bradygaster/squad-sdk
-node -p "require('@bradygaster/squad-sdk/package.json').version"
-# Output: 0.8.22
+npm list @bradygaster/squad-sdk --depth=0
+# Output: @bradygaster/squad-sdk@0.13.0
+# Note: package.json is not a public subpath export as of 0.13.0 (exports map
+# added) — use `npm list`/`npm view` instead of `require('.../package.json')`.
 
 # Test CLI installation
 npm install -g @bradygaster/squad-cli
