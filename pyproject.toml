@@ -40,6 +40,7 @@ dependencies = [
     "packageurl-python>=0.11,<2",
     # Logging - Standard libraries
     "structlog>=24.0",                  # Structured logging (replaces python-json-logger)
+    "colorama>=0.4; platform_system == 'Windows'", # Required by structlog.dev.ConsoleRenderer(colors=True) on Windows
     "opentelemetry-api>=1.20",          # OpenTelemetry API
     "opentelemetry-sdk>=1.20",          # OpenTelemetry SDK
     "azure-monitor-opentelemetry>=1.0", # Azure Application Insights
