@@ -255,7 +255,34 @@ class HelmBuilder(BaseBuilder):
                     repo_root = work_path
                 src_dir = repo_root / source.source_path
 
-                if dry_run:
+                # When source.reference is set, extract from the pinned ref using git
+                # archive instead of copying from the (potentially different) working
+                # tree checkout. SourceModel.reference is generic (valid for any
+                # git-based source), not Terraform-specific — helm's local chart copy
+                # must honor it too (ADR-0071).
+                if source.reference:
+                    if dry_run:
+                        self._messages.append(
+                            f"[DRY-RUN] Would extract helm chart source at ref '{source.reference}': "
+                            f"{src_dir} -> {module_dir}"
+                        )
+                    else:
+                        ok, msg = self._extract_source_at_ref(
+                            repo_root=repo_root,
+                            source_path=source.source_path,
+                            ref=source.reference,
+                            dest_dir=module_dir,
+                            provisioner_name=f"{namespace_name}/{module_name}",
+                        )
+                        if not ok:
+                            self._errors.append(msg)
+                            return False
+                        if template_context:
+                            self._apply_templates_to_dir(module_dir, template_context, exclude_dirs={"templates"})
+                        self._messages.append(
+                            f"Extracted helm chart source at ref '{source.reference}': {src_dir} -> {module_dir}"
+                        )
+                elif dry_run:
                     self._messages.append(f"[DRY-RUN] Would copy helm chart source: {src_dir} -> {module_dir}")
                     if not src_dir.exists():
                         self._errors.append(

@@ -559,6 +559,7 @@ class TestHelmBuilderLocalChartTemplates:
         src.chart_version = None
         src.source_path = "charts/mychart"
         src.repository = None
+        src.reference = None
 
         helm_module = _make_helm_module(module_name, services=[], source=src)
         mod_service = _make_mod_service(module=helm_module)
@@ -591,6 +592,70 @@ class TestHelmBuilderLocalChartTemplates:
     def test_files_outside_templates_dir_are_still_copied(self, tmp_path):
         _, _, module_dir = self._build_with_local_chart(tmp_path)
         assert (module_dir / "Chart.yaml").read_text(encoding="utf-8") == "name: mychart\nversion: 0.1.0\n"
+
+
+class TestHelmBuilderLocalChartRefPinning:
+    """ADR-0071: local chart copy honors source.reference for ref-pinned extraction,
+    same as Terraform/Ansible/Bicep. Previously silently ignored — declaring
+    `reference:` on a helm module's local chart source validated successfully but
+    had zero effect (a real bug, not just a design gap)."""
+
+    def _build(self, tmp_path, reference, repository=None, namespace="testns", module_name="mymod", dry_run=False):
+        chart_dir = tmp_path / "charts" / "mychart"
+        chart_dir.mkdir(parents=True)
+        (chart_dir / "Chart.yaml").write_text("name: mychart\nversion: 0.1.0\n", encoding="utf-8")
+
+        src = MagicMock()
+        src.chart_repository = None
+        src.chart_name = None
+        src.chart_version = None
+        src.source_path = "charts/mychart"
+        src.repository = repository
+        src.reference = reference
+
+        helm_module = _make_helm_module(module_name, services=[], source=src)
+        mod_service = _make_mod_service(module=helm_module)
+        mod_ref = _module_ref(module_name, "module.yaml")
+        ns_svc = _mock_namespace_service([mod_ref])
+        dep_svc = _mock_deployment_service(build_path=tmp_path, namespace_services={namespace: ns_svc})
+
+        module_path = tmp_path / "module.yaml"
+        module_path.write_text("")
+
+        builder = HelmBuilder()
+        with (
+            patch("strata.builders.helm_builder.resolve_path") as mock_rp,
+            patch("strata.builders.helm_builder.ModuleService.load", return_value=mod_service),
+        ):
+            mock_rp.return_value = module_path
+            ok = builder.build(dep_svc, tmp_path, tmp_path, dry_run=dry_run)
+
+        return builder, ok, tmp_path / namespace / module_name
+
+    def test_dry_run_with_reference_reports_ref(self, tmp_path):
+        builder, ok, module_dir = self._build(tmp_path, reference="v1.4.0", dry_run=True)
+
+        assert ok is True, builder.get_errors()
+        messages = "\n".join(builder.get_messages())
+        assert "v1.4.0" in messages
+        assert "DRY-RUN" in messages
+        assert not module_dir.exists()
+
+    def test_reference_on_non_git_dir_falls_back_to_copy(self, tmp_path):
+        """work_path (used as repo_root here, since no repository/repo_map) is not a
+        git repo — falls back to copying from the working tree, same end result."""
+        builder, ok, module_dir = self._build(tmp_path, reference="v1.0.0")
+
+        assert ok is True, builder.get_errors()
+        assert (module_dir / "Chart.yaml").exists()
+        messages = "\n".join(builder.get_messages())
+        assert "not a git repository" in messages
+
+    def test_no_reference_uses_standard_copy(self, tmp_path):
+        builder, ok, module_dir = self._build(tmp_path, reference=None)
+
+        assert ok is True, builder.get_errors()
+        assert (module_dir / "Chart.yaml").exists()
 
 
 class TestHelmBuilderSolutionController:

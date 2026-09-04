@@ -538,3 +538,51 @@ All 6 findings from the 2026-09-03 inventory pass (Impact Analysis) are complete
      `test_source_not_required_for_sync_provisioner`. Full suite verified green (6356 passed,
      up from 6346; 0 failed) and full-project `mypy .`/`ruff` clean.
 
+## Addendum (2026-09-04) — full provisioner-type audit, one more ref-pinning gap found
+
+After Status became `implemented`, all 8 `ProvisionerType` values were audited end to
+end (builder existence, deployer existence, whether `WorkspaceIacModel.source` is
+actually read, ref-pinning support, `backend`/`output`/`properties` restriction) to
+check nothing from this ADR's fixes was missed for any provisioner type.
+
+**Non-findings (verified, not bugs):**
+- `source` being required for `helm`/`compose`/`script` (not just terraform/ansible/
+  bicep) is documented as intentional in the field's own docstring and is genuinely
+  used — `workspace_service.py` cross-references every non-sync provisioner's
+  `.source.repository` against solution repositories, independent of whether the
+  builder reads `.source_path` for path construction.
+- `script` having no builder is correct — `ScriptDeployer` runs lifecycle scripts
+  directly against `work_path`/`deployment.spec.lifecycle`, never reads
+  `WorkspaceIacModel` at all, and needs no build-time artifact copy.
+- `argocd`/`flux` (sync) and `script` never read `WorkspaceIacModel.source` — ref-pinning
+  doesn't apply to them.
+- `compose` has no raw external-source copy step (it generates YAML from
+  `module.spec.services`), so `.reference` doesn't apply there either.
+
+**Finding — Helm's local chart copy silently ignored `module.spec.source.reference`.**
+Same bug class as the Ansible gap fixed earlier in this ADR (Related but distinct
+finding, above), just one level down: at the **module** level
+(`ModuleModel.spec.source`), not the provisioner level. In
+`helm_builder.py`'s `_build_namespace()`, the local-chart (non-registry) copy branch
+did a plain `shutil.copytree(src_dir, module_dir, ...)` from the current working-tree
+checkout, never checking `source.reference` — even though `SourceModel.reference` is
+documented as generic ("only valid for git-based sources"), not Terraform-specific.
+Declaring `reference: v1.2.0` on a helm module's local chart source validated
+successfully and was silently ignored.
+
+**Fix:** restructured the local-chart copy branch into a 3-way split (reference /
+dry-run / normal copy), mirroring Terraform/Ansible/Bicep's exact structure — when
+`source.reference` is set, calls the same shared `BaseBuilder._extract_source_at_ref()`
+helper (already used by all three IaC-provisioner builders) instead of a fourth
+independent implementation. Added `TestHelmBuilderLocalChartRefPinning` (3 tests:
+dry-run message, non-git-dir fallback, no-reference standard copy) to
+`test_builders_helm.py`. Also fixed a latent test-authoring trap discovered while
+adding these: the pre-existing `TestHelmBuilderLocalChartTemplates._build_with_local_chart`
+helper never set `src.reference` on its `MagicMock()` source, so it defaulted to a
+truthy `MagicMock` instance — meaning those pre-existing regression tests were silently
+being routed through the (now-added) reference-extraction branch instead of the
+plain-copy branch, without ever failing, purely by coincidental identical output.
+Fixed by explicitly setting `src.reference = None` there. Verified: full-project
+`ruff`/`mypy` clean (783 files, same 2 pre-existing unrelated errors), full suite 6401
+passed (up from 6398), 16 skipped, 0 failed.
+
