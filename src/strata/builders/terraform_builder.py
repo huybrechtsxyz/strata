@@ -1656,64 +1656,6 @@ class TerraformBuilder(BaseBuilder):
 
         return True
 
-    def _extract_source_at_ref(
-        self,
-        repo_root: Path,
-        source_path: str,
-        ref: str,
-        dest_dir: Path,
-        provisioner_name: str,
-    ) -> tuple:
-        """Extract source files at a pinned git ref using git archive.
-
-        Falls back to copying from the working tree if git archive is unavailable
-        (e.g., repo_root is not a git repository).
-
-        Args:
-            repo_root: Root directory of the git repository.
-            source_path: Relative path within the repo to extract.
-            ref: Git ref (branch, tag, SHA) to extract from.
-            dest_dir: Destination directory.
-            provisioner_name: Provisioner name for error messages.
-
-        Returns:
-            (success, message) tuple.
-        """
-        from strata.integrations.git import GitIntegration
-        from strata.models.integration_model import IntegrationModel
-
-        # Check if repo_root is a git repository
-        if not (repo_root / ".git").exists():
-            # Not a git repo — fall back to direct copy from working tree
-            src_dir = repo_root / source_path
-            if not src_dir.exists():
-                return False, (
-                    f"Terraform source directory not found: {src_dir} "
-                    f"(provisioner: {provisioner_name}, ref: {ref}). "
-                    f"Repository at '{repo_root}' is not a git repository; cannot extract at ref."
-                )
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(src_dir, dest_dir, dirs_exist_ok=True)
-            self._messages.append(
-                f"Warning: '{repo_root}' is not a git repository. "
-                f"Copied from working tree instead of ref '{ref}' (provisioner: {provisioner_name})."
-            )
-            return True, ""
-
-        # Use git archive to extract without mutating the working tree
-        config = IntegrationModel(name="git_archive", type="git")
-        git = GitIntegration(config)
-
-        ok, msg = git.archive_subtree(
-            working_dir=str(repo_root),
-            ref=ref,
-            subtree_path=source_path,
-            dest_dir=str(dest_dir),
-        )
-        if not ok:
-            return False, (f"Failed to extract source at ref '{ref}' for provisioner '{provisioner_name}': {msg}")
-        return True, msg
-
     # ------------------------------------------------------------------
     # Terraform file includes (merge external .tf / .tfvars into build)
     # ------------------------------------------------------------------

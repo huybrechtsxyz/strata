@@ -643,6 +643,7 @@ class TestBuildRunNdjsonStreaming:
         "platform",
         "terraform",
         "ansible",
+        "bicep",
         "compose",
         "helm",
         "sync",

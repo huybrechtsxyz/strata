@@ -754,6 +754,35 @@ class AnsibleBuilder(BaseBuilder):
                 else deployment_build_path / (source.target_path or source.source_path)
             )
 
+            # When source.reference is set, extract from the pinned ref using git archive
+            # instead of copying from the (potentially different) working tree checkout.
+            # SourceModel.reference is generic (valid for any git-based source), not
+            # Terraform-specific — ansible must honor it too (ADR-0071).
+            if source.reference:
+                if dry_run:
+                    self._messages.append(
+                        f"[DRY-RUN] Would extract ansible source at ref '{source.reference}': "
+                        f"{repo_root}/{source.source_path} -> {dest_dir}"
+                    )
+                    continue
+
+                ok, msg = self._extract_source_at_ref(
+                    repo_root=repo_root,
+                    source_path=source.source_path,
+                    ref=source.reference,
+                    dest_dir=dest_dir,
+                    provisioner_name=prov.name,
+                )
+                if not ok:
+                    self._errors.append(msg)
+                    return False
+                self._apply_templates_to_dir(dest_dir, template_context)
+                self._messages.append(
+                    f"Extracted ansible source at ref '{source.reference}': "
+                    f"{repo_root}/{source.source_path} -> {dest_dir}"
+                )
+                continue
+
             if dry_run:
                 self._messages.append(f"[DRY-RUN] Would copy ansible source: {src_dir} -> {dest_dir}")
                 if not src_dir.exists():

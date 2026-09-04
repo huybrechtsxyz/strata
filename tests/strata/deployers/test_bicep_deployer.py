@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Optional
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from strata.deployers.bicep_deployer import _SCOPE_CMD, BicepDeployer
 from strata.models.common_models import ProvisionerType
 
@@ -124,6 +126,68 @@ class TestValidateWorkspace:
         ok, _ = d._check_working_dir()
 
         assert ok
+
+
+class TestBicepDeployerGetWorkingDir:
+    """ADR-0071: solution_controller=None fallback — previously an independently
+    different, untested path shape (self.build_path / iac_model.name); now unified
+    with get_provisioner_path()'s target_path -> else source_path resolution order."""
+
+    def test_uses_target_path(self, tmp_path):
+        d = _make_deployer(tmp_path)
+        svc = MagicMock()
+        svc.get_build_path.return_value = tmp_path / "build"
+        iac = MagicMock()
+        iac.source.target_path = "iac/bicep"
+        result = d._get_working_dir(svc, tmp_path, iac)
+        assert result == tmp_path / "build" / "iac" / "bicep"
+
+    def test_falls_back_to_source_path(self, tmp_path):
+        d = _make_deployer(tmp_path)
+        svc = MagicMock()
+        svc.get_build_path.return_value = tmp_path / "build"
+        iac = MagicMock()
+        iac.source.target_path = None
+        iac.source.source_path = "infrastructure"
+        iac.name = "my_prov"
+        result = d._get_working_dir(svc, tmp_path, iac)
+        assert result == tmp_path / "build" / "infrastructure"
+
+    def test_raises_when_neither_target_nor_source_path_set(self, tmp_path):
+        d = _make_deployer(tmp_path)
+        svc = MagicMock()
+        svc.get_build_path.return_value = tmp_path / "build"
+        iac = MagicMock()
+        iac.source.target_path = None
+        iac.source.source_path = None
+        iac.name = "my_prov"
+        with pytest.raises(ValueError, match="no source_path or target_path"):
+            d._get_working_dir(svc, tmp_path, iac)
+
+    def test_validate_workspace_uses_fallback_when_no_solution_controller(self, tmp_path):
+        """End-to-end: validate_workspace() with solution_controller=None must resolve
+        to the same location the builder actually copies to."""
+        d = _make_deployer(tmp_path)
+        assert d.solution_controller is None
+
+        build_path = tmp_path / "build"
+        bicep_dir = build_path / "infrastructure"
+        bicep_dir.mkdir(parents=True)
+        (bicep_dir / "main.bicep").write_text("param name string")
+
+        d.build_path = build_path
+        d.deployment_service.get_build_path.return_value = build_path
+
+        iac = MagicMock()
+        iac.name = "infrastructure"
+        iac.source.target_path = None
+        iac.source.source_path = "infrastructure"
+
+        with patch.object(d, "_resolve_iac_model", return_value=iac):
+            ok, msgs = d.validate_workspace()
+
+        assert ok, msgs
+        assert d._working_dir == bicep_dir
 
 
 # ===========================================================================
