@@ -7,6 +7,48 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [1.9.3] - 2026-09-04
+
+### Fixed
+
+#### **Unified build-artifact path resolution across every builder/deployer pair (ADR-0071)**
+
+- **Root problem**: every builder/deployer pair independently re-derived the same per-namespace/per-module/per-provisioner build output path shape, with nothing enforcing agreement between the two sides — a change to one side's path shape would only be discovered when the other side failed to find its file at runtime. Found while writing ADR-0070.
+- **Impact Analysis (2026-09-03)** traced every pair against the actual code: Terraform/Bicep/Ansible already shared `SolutionController.get_provisioner_path()`; Helm, Compose, and Sync (argocd/flux) each independently re-derived their own shape with no shared helper.
+- **Fix — Option B**: extended the existing `get_provisioner_path()` pattern with three new `SolutionController` methods — `get_module_build_path()` (Helm), `get_namespace_compose_path()` (Compose), `get_sync_output_path()` (Sync/argocd/flux) — each a single source of truth called from both the builder and deployer side of its pair. All 7 duplicated call sites updated. `helm_builder.py`'s `_copy_namespace_module_files()` turned out to share the same `module_dir` shape as its sibling `_build_namespace()` and needed the same fix, not just the one originally scoped site.
+- **Testing**: 18 new tests added across `SolutionController` (direct coverage for all 4 canonical path helpers, including `get_provisioner_path()` itself — previously untested), and each builder/deployer pair. `SyncBuilder`/`SyncDeployer` had zero test coverage of any kind before this pass — new test files created from scratch.
+
+#### **Bicep provisioners had no builder — `strata build run` silently produced nothing for them**
+
+- **Symptom**: `terraform_builder.py`'s provisioner-copy logic is explicitly gated on `provisioner == "terraform"`; there was no equivalent for `bicep` anywhere in `src/strata/builders/`. `bicep_deployer.py` already expected a builder to have copied `.bicep` files into the build output (its own error message said *"Run 'strata build run' first to copy IaC artefacts to the build folder"*), but nothing ever did.
+- **Compounding bug found alongside**: `bicep_deployer.py`'s own `solution_controller is None` fallback used a third, independently-different path shape (`self.build_path / self._iac_model.name`) — not `get_provisioner_path()`'s shape, not even the pre-fix `terraform_deployer` shape, and didn't descend into the deployment's build path first. Unreachable in real CLI usage (a real `SolutionController` is always constructed), but a live landmine for tests/direct/library use.
+- **Fix**: new `src/strata/builders/bicep_builder.py` (`BicepBuilder`), modeled on `AnsibleBuilder._copy_provisioner_source()`'s shape (simpler than Terraform's — no tfvars validation, no lock-backend complexity), wired into `run_build_command.py`'s phase list as `_execute_bicep_build()`. `bicep_deployer.py` gained a `_get_working_dir()` method mirroring `terraform_deployer`'s corrected fallback shape (`target_path` → else `source_path`, raising `ValueError` when neither is set instead of silently fabricating a path).
+- **Testing**: 13 new tests in `test_builders_bicep.py`, 4 in `test_bicep_deployer.py` covering the corrected fallback and an end-to-end `validate_workspace()` regression test.
+
+#### **`source.reference` (git-ref pinning) silently ignored by Ansible and Helm**
+
+- **Root cause**: `SourceModel.reference` is documented as generic ("only valid for git-based sources"), not Terraform-specific, but `TerraformBuilder._extract_source_at_ref()` was the only place that actually implemented pinned-ref extraction via `git archive`. `AnsibleBuilder._copy_provisioner_source()` had zero references to `.reference` anywhere — declaring `reference: v1.2.0` on an Ansible provisioner's source validated successfully and was silently ignored, copying whatever the current working-tree checkout happened to be instead of the pinned ref. The same gap existed one level down in `helm_builder.py`'s local (non-registry) chart copy, at the **module** level (`ModuleModel.spec.source`).
+- **Fix**: `_extract_source_at_ref()` had no Terraform-specific coupling at all (pure git/path logic using only `self._messages`, `shutil`, and `GitIntegration`), so it moved unchanged from `TerraformBuilder` to `BaseBuilder`. `AnsibleBuilder` and the new `BicepBuilder` both call the shared method; `HelmBuilder`'s local-chart copy branch was restructured into a 3-way split (reference / dry-run / normal copy) to do the same.
+- **Latent test-authoring trap found and fixed along the way**: the pre-existing `TestHelmBuilderLocalChartTemplates._build_with_local_chart` test helper never set `src.reference` on its `MagicMock()` source, so it defaulted to a truthy `MagicMock` instance — meaning those regression tests were silently being routed through the newly-added reference-extraction branch instead of the plain-copy branch, without ever failing, purely by coincidental identical output (repo_root wasn't a real git repo, so the reference branch's own fallback produced the same result). Fixed by explicitly setting `src.reference = None`.
+
+#### **`WorkspaceIacModel.backend`/`.output` had no type restriction, unlike `.properties`**
+
+- **Symptom**: `validate_provisioner_fields()` already restricted `.properties` to Ansible-only, raising a clear validation error otherwise. `.backend` (*"Backend configuration for state storage"*) and `.output` (*"Build output profile for Terraform provisioners"*) had no equivalent restriction, despite both field descriptions naming Terraform specifically — declaring either on a `bicep`/`ansible`/`compose`/`helm` provisioner validated successfully and was then silently ignored everywhere (no lock ever acquired, no overlap check ever ran, no tfvars emission profile ever applied).
+- **Fix**: extended `validate_provisioner_fields()` with the same restriction pattern for both fields, mirroring the existing `properties` check's exact error-message style.
+- **Bonus finding while writing tests**: the same validator's `is_sync` check (`self.provisioner in {str(t) for t in _SYNC_PROVISIONER_TYPES}`) was independently and unrelatedly broken. `str()` on a `class X(str, Enum)` member returns the enum's default `__str__` (`"ProvisionerType.ARGOCD"`), not `.value` (`"argocd"`) — so the set being compared against never contained anything a real provisioner string could match, making `is_sync` **always** `False`. `source` was therefore wrongly required even for `argocd`/`flux` sync provisioners, contradicting the field's own documented "optional for sync provisioner types" behavior. Confirmed live via `WorkspaceIacModel.model_validate({"provisioner": "argocd", "source": None, ...})` — realistic YAML-shaped input, not just an artifact of enum-typed test construction. Fixed by comparing against `{t.value for t in _SYNC_PROVISIONER_TYPES}` instead.
+
+#### **`strata deploy lock status`/`release`/`history` could act on the wrong Terraform provisioner's lock**
+
+- **Symptom**: `lock_deploy_command.py` had its own module-level `_resolve_lock_backend(deployment_service, work_path)`, independent from `BaseDeployCommand._resolve_lock_backend(stages)` (used by `deploy run`). The command-file version iterated **all** workspace provisioners and returned the backend of the **first** Terraform provisioner with one — no stage awareness. `BaseDeployCommand`'s version correctly looks up the provisioner matching the deployment's actual `stage.provisioner`. In a workspace with more than one Terraform provisioner (e.g. a `networking` stage on one backend, a `compute` stage on another), `deploy run` locked the correct one, but `deploy lock status`/`release`/`history` would silently report on — or force-release — whichever Terraform provisioner happened to come first in `spec.provisioners`, regardless of which stage was actually asked about.
+- **Fix**: deleted the duplicate module-level function; all three `Lock*Command` classes now call the inherited, stage-aware `BaseDeployCommand._resolve_lock_backend()`, passing the deployment's own stages.
+- **Testing**: 6 new regression tests (`TestResolveLockBackendMatching`), including a test proving the exact scenario the bug produced (`test_ignores_earlier_unrelated_terraform_provisioner`) — this method had zero direct test coverage before.
+
+#### **Provisioner-type comparisons mixed string literals and the `ProvisionerType` enum inconsistently**
+
+- Roughly half of `.provisioner ==`/`!=` comparisons in the codebase used the `ProvisionerType` enum; the other half compared against a bare string literal, functionally equivalent today only because `ProvisionerType(str, Enum)` mixes in `str`, but meaning a typo'd literal would silently never match instead of failing loudly the way an unchecked attribute access on the enum would. All 7 bare-string sites (5 in `terraform_builder.py`, 2 in `ansible_builder.py`) converted to `ProvisionerType.TERRAFORM`/`ProvisionerType.ANSIBLE`.
+
+See [ADR-0071](../docs/decisions/0071-unify-build-artifact-path-construction.md) for the complete investigation, including the full provisioner-type audit addendum (verifying `script`/`argocd`/`flux` correctly have no builder or path-helper dependency, by design).
+
 ## [1.9.2] - 2026-09-02
 
 ### Fixed

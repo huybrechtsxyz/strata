@@ -8,6 +8,20 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [1.9.3] - 2026-09-04
+
+### Fixed
+
+- **Bicep provisioners never had a builder-side copy step — `strata build run` silently produced nothing for them, so every `strata deploy run` failed with "Run 'strata build run' first"** — new `BicepBuilder` copies `.bicep` source into the build output like every other IaC provisioner; also fixes `bicep_deployer`'s inconsistent working-directory fallback shape. See ADR-0071.
+- **`source.reference` (git-ref pinning) was silently ignored by Ansible's provisioner-source copy and Helm's local-chart copy** — both now honor a pinned ref the same way Terraform already did, via a shared `BaseBuilder` helper instead of a Terraform-only one.
+- **`WorkspaceIacModel.backend`/`.output` validated successfully on non-Terraform provisioners despite having zero effect** (no lock ever acquired, no tfvars ever emitted) — now rejected at validation time, matching the existing `properties`→Ansible-only restriction.
+- **`argocd`/`flux` sync provisioners wrongly required a `source:` block**, contradicting their own documented "optional for sync types" behavior — an enum-vs-string comparison bug (`str()` on a `class X(str, Enum)` member returns the enum repr, not its value) made the "source not required for sync" check always evaluate false.
+- **`strata deploy lock status`/`release`/`history` could report on or force-release the wrong Terraform provisioner's lock** in a workspace with more than one Terraform provisioner — a second, non-stage-aware `_resolve_lock_backend()` implementation picked the first Terraform provisioner found instead of the one the current stage actually uses. Removed the duplicate; all lock subcommands now share the same stage-aware resolution as `deploy run`.
+
+### Changed
+
+- **Terraform/Ansible/Bicep and now Helm/Compose/Sync all resolve their build output paths through one canonical `SolutionController` helper instead of independently re-deriving the same shape** (ADR-0071) — closes the class of risk where a builder and its matching deployer silently drift apart on where an artifact lives. No user-facing behavior change for existing, valid workspaces.
+
 ## [1.9.2] - 2026-09-02
 
 ### Fixed
