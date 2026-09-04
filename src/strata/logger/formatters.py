@@ -39,7 +39,14 @@ def make_console_formatter() -> structlog.stdlib.ProcessorFormatter:
     """
     # Respect the NO_COLOR env var (https://no-color.org) — any presence of
     # the variable, regardless of its value, disables ANSI colour output.
-    renderer = structlog.dev.ConsoleRenderer(colors=sys.stderr.isatty() and "NO_COLOR" not in os.environ)
+    want_colors = sys.stderr.isatty() and "NO_COLOR" not in os.environ
+    try:
+        renderer = structlog.dev.ConsoleRenderer(colors=want_colors)
+    except SystemError:
+        # structlog raises SystemError on Windows when colors=True is requested
+        # but the optional `colorama` package isn't installed. Fall back to a
+        # plain (uncoloured) renderer instead of crashing every CLI invocation.
+        renderer = structlog.dev.ConsoleRenderer(colors=False)
     return structlog.stdlib.ProcessorFormatter(
         processors=[
             structlog.stdlib.ProcessorFormatter.remove_processors_meta,
