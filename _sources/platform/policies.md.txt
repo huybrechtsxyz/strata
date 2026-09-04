@@ -2,7 +2,7 @@
 
 Declarative guardrails evaluated at specific lifecycle phases before or after infrastructure changes are applied.
 
-**Built-in types:** `customer_zone` | `required_tags` | `naming_pattern` | `script` | `sbom_pinned_versions` | `sbom_allowed_registries` | `sbom_denied_packages` | `sbom_max_components` | `sbom_license` | **Phases:** `validate` / `build` / `plan` / `deploy` | **Enforcement:** `deny` / `warn` / `audit` | **Declared in:** `configuration.spec.policies`
+**Built-in types:** `tenant_zone` | `resource_type_restrictions` | `required_labels` | `naming_pattern` | `ref_convention` | `script` | `sbom_pinned_versions` | `sbom_allowed_registries` | `sbom_denied_packages` | `sbom_max_components` | `sbom_license` | `cve_max_severity` | `cost_threshold` | `checkov` | `opa` | `path_convention` | `layer_agreement` | `ai_review` | **Phases:** `validate` / `build` / `plan` / `deploy` | **Enforcement:** `deny` / `warn` / `audit` | **Declared in:** `configuration.spec.policies`
 
 ---
 
@@ -36,7 +36,7 @@ meta:
 spec:
   policies:
     - name: zone_enforcement
-      type: customer_zone
+      type: tenant_zone
       phase: plan
       enforcement: deny
       description: "Reject any Terraform resource targeting a disallowed region"
@@ -64,7 +64,7 @@ spec:
 | ---------------------------- | ---------- | -------------------------------------------------------------------------------- |
 | `tenant_zone`                | `plan`     | Terraform resource regions vs. the tenant's allowed zones                        |
 | `resource_type_restrictions` | `plan`     | Allow or deny Terraform resource types (allowlist or blocklist)                  |
-| `required_tags`              | `build`    | Required tags/labels present on all resources in the platform artifact           |
+| `required_labels`            | `build`    | Required labels present on selected entities (namespaces/resources/modules)      |
 | `naming_pattern`             | `validate` | `meta.name` fields match a configured regex pattern                              |
 | `ref_convention`             | `validate` | Remote references follow configured tag naming conventions                       |
 | `script`                     | any        | Delegates to an external command (OPA, Checkov, custom script)                   |
@@ -75,6 +75,11 @@ spec:
 | `sbom_license`               | `build`    | SBOM component licenses match an allow/deny list (via `strata:license` property) |
 | `cve_max_severity`           | `build`    | CVE vulnerability findings stay within a configured severity threshold           |
 | `cost_threshold`             | `plan`     | Estimated monthly cost (from `cost.json`) stays within a configured maximum      |
+| `checkov`                    | `build`    | Runs Checkov against generated Terraform and gates on a severity threshold       |
+| `opa`                        | any        | Evaluates a Rego rule via an OPA server or the `opa eval` CLI                    |
+| `path_convention`            | `validate` | Files on disk follow declared directory-structure conventions                    |
+| `layer_agreement`            | `validate` | Explicit `spec.layers.segments` values agree with what the file's path derives   |
+| `ai_review`                  | `plan`     | AI-assessed risk of a Terraform plan stays below a configured threshold          |
 
 ### `tenant_zone`
 
@@ -134,24 +139,59 @@ Two modes:
 
 Skipped gracefully when no plan data is available or `types` is empty.
 
-### `required_tags`
+### `required_labels`
 
 Evaluates at the `build` phase, after all builders have completed and the platform artifact has been generated.
 
-It checks that every namespace in the built platform artifact has all labels listed in `configuration.required_labels`. Any namespace missing a required label is reported as a violation.
+It checks that every entity in the configured `targets` (default: `namespaces`) has all labels listed in `configuration.required_labels`. Any matching entity missing a required label is reported as a violation.
 
 Skipped gracefully when no platform artifact has been generated, or when `required_labels` is not configured.
 
+**Configuration fields:**
+
+| Field                  | Type           | Default          | Description                                                                                     |
+| ---------------------- | -------------- | ---------------- | ----------------------------------------------------------------------------------------------- |
+| `required_labels`      | list of string | required         | Label keys that must be present on every matched entity.                                        |
+| `targets`              | list of string | `[namespaces]`   | Entity collections to check: `namespaces`, `resources`, `modules`.                              |
+| `filter.name`          | list of glob   | none (no filter) | Only entities whose name matches one of these `fnmatch` patterns are checked (e.g. `"prod-*"`). |
+| `filter.resource_type` | list of string | none (no filter) | `resources` target only — only resources whose `properties.resource_type` is in this list.      |
+
+Use `targets` + `filter` to declare several narrowly-scoped policies instead of one policy that forces every entity to carry the same labels:
+
 ```yaml
+# Every namespace must carry standard cost-tracking labels
 - name: require_standard_labels
-  type: required_tags
+  type: required_labels
   phase: build
   enforcement: deny
   configuration:
+    targets: [namespaces]
     required_labels:
       - environment
       - project
       - owner
+
+# Only VM resources must carry an 'owner' label — other resource types are untouched
+- name: vm_owner_label
+  type: required_labels
+  phase: build
+  enforcement: warn
+  configuration:
+    targets: [resources]
+    filter:
+      resource_type: [vm]
+    required_labels: [owner]
+
+# Only resources whose name starts with 'prod-' need a cost_center label
+- name: prod_cost_center
+  type: required_labels
+  phase: build
+  enforcement: deny
+  configuration:
+    targets: [resources]
+    filter:
+      name: ["prod-*"]
+    required_labels: [cost_center]
 ```
 
 ### `naming_pattern`
@@ -428,6 +468,164 @@ The policy reads the pre-computed cost file — it does not call Infracost itsel
     currency: EUR
 ```
 
+### `cve_max_severity`
+
+Evaluates at the `build` phase, after the SBOM has been generated. Fails when the number of CVE findings at or above `max_severity` exceeds `max_count` (default: `0`).
+
+If a CVE audit was already computed during the current build (`strata build run --audit`), the policy reuses that result. Otherwise it runs the CVE scanner itself against the build's `sbom.json`. Findings listed in `.strata/cve-allowed.yaml` (with a non-expired `expires` date) are excluded before counting.
+
+Skipped gracefully when: no SBOM is available, no CVE scanner is installed, or `max_severity` is not configured.
+
+| `configuration` key  | Type   | Default      | Description                                                                            |
+| -------------------- | ------ | ------------ | -------------------------------------------------------------------------------------- |
+| `max_severity`       | string | *(required)* | Minimum severity that counts toward the violation: `CRITICAL`\|`HIGH`\|`MEDIUM`\|`LOW` |
+| `max_count`          | int    | `0`          | Fail when the number of findings at or above `max_severity` exceeds this               |
+| `severity_threshold` | string | `MEDIUM`     | Minimum severity requested from the scanner itself                                     |
+
+```yaml
+- name: no_critical_cves
+  type: cve_max_severity
+  phase: build
+  enforcement: deny
+  description: "Block builds with CRITICAL vulnerabilities"
+  configuration:
+    max_severity: CRITICAL
+    max_count: 0
+    severity_threshold: MEDIUM
+```
+
+### `checkov`
+
+Evaluates at the `build` phase. Runs [Checkov](https://www.checkov.io/) against the Terraform artifacts generated by `strata build run` and fails when findings at or above `severity_gate` are detected.
+
+The policy locates the Terraform directory automatically (deployment-scoped build path, `{build_path}/terraform/`, or `{build_path}/` itself — whichever contains `.tf` files first).
+
+Skipped gracefully when: Checkov is not installed, no Terraform artifacts exist in the build path, or the scan subprocess fails.
+
+| `configuration` key | Type           | Default     | Description                                                                 |
+| ------------------- | -------------- | ----------- | --------------------------------------------------------------------------- |
+| `framework`         | string         | `terraform` | Checkov framework to scan                                                   |
+| `severity_gate`     | string         | `high`      | Minimum severity that fails the policy: `critical`\|`high`\|`medium`\|`low` |
+| `skip_checks`       | list of string | none        | Checkov check IDs to suppress (e.g. `CKV_AWS_1`)                            |
+| `include_checks`    | list of string | none        | If set, run only these checks                                               |
+| `custom_checks_dir` | string         | none        | Directory of custom Checkov checks                                          |
+| `timeout`           | int            | `120`       | Scan subprocess timeout, in seconds                                         |
+
+```yaml
+- name: terraform_security_baseline
+  type: checkov
+  phase: build
+  enforcement: deny
+  description: "Block builds with HIGH or CRITICAL Checkov findings"
+  configuration:
+    framework: terraform
+    severity_gate: high
+    skip_checks:
+      - CKV_AWS_1
+      - CKV_AWS_20
+    timeout: 120
+```
+
+### `opa`
+
+Evaluates a Rego rule against a JSON document describing the current deployment (platform artifact, configuration, deployment model, and Terraform plan data, where available). Can run at any phase.
+
+Two evaluation modes are tried in order: an OPA server reachable at `configuration.endpoint` (or the `OPA_ENDPOINT` environment variable), or the `opa eval` CLI as a stateless subprocess. The Rego rule must return a set of violation strings.
+
+Skipped gracefully when: neither an OPA server nor the `opa` binary is available, `rule` is not configured, or `policy_dir` (CLI mode) does not exist.
+
+| `configuration` key | Type   | Default      | Description                                                               |
+| ------------------- | ------ | ------------ | ------------------------------------------------------------------------- |
+| `rule`              | string | *(required)* | Fully-qualified Rego rule to evaluate (e.g. `data.strata.zones.deny`)     |
+| `policy_dir`        | string | none         | Directory of `.rego` files, resolved relative to the workspace (CLI mode) |
+| `endpoint`          | string | none         | OPA server URL (HTTP mode); falls back to `OPA_ENDPOINT` env var          |
+| `timeout`           | int    | `30`         | Evaluation timeout, in seconds                                            |
+
+```yaml
+- name: zone_enforcement
+  type: opa
+  phase: build
+  enforcement: deny
+  description: "Enforce tenant zone restrictions via OPA"
+  configuration:
+    rule: "data.strata.zones.deny"
+    policy_dir: ".strata/policies/"
+    timeout: 30
+```
+
+### `path_convention`
+
+Evaluates at the `validate` phase. Checks that the file currently being validated follows the directory-structure conventions declared in `configuration.spec.paths` — a `scope` glob, a `pattern` with `{segment}` captures, and optional per-segment `validate` rules.
+
+An inline convention can also be declared directly on the policy (`configuration.scope` + `configuration.pattern`) without a configuration service — useful in deploy-only repositories.
+
+Skipped gracefully when: no conventions are configured (neither `spec.paths` nor an inline convention), or the file being validated is not under the workspace path.
+
+| `configuration` key | Type           | Description                                                                                     |
+| ------------------- | -------------- | ----------------------------------------------------------------------------------------------- |
+| `conventions`       | list of string | Restrict evaluation to these named `spec.paths` conventions                                     |
+| `scope`             | string         | Inline mode: glob of files this convention applies to                                           |
+| `pattern`           | string         | Inline mode: path pattern with `{segment}` captures                                             |
+| `validate`          | mapping        | Inline mode: per-segment validation rules (each value is `{kind: yaml\|path, expression: ...}`) |
+
+```yaml
+# All spec.paths conventions, deny enforcement
+- name: enforce-paths
+  type: path_convention
+  phase: validate
+  enforcement: deny
+
+# Deploy-repo: inline convention (no spec.paths required)
+- name: deploy-layout
+  type: path_convention
+  phase: validate
+  enforcement: deny
+  configuration:
+    scope: "deploy/**"
+    pattern: "deploy/{landscape}/{ring}"
+    validate:
+      landscape:
+        kind: path
+        expression: "deploy/{landscape}/landscape.yaml"
+```
+
+### `layer_agreement`
+
+Evaluates at the `validate` phase (ADR-0072). A `configuration.spec.paths` convention with `resolves: layers` lets `deployment.spec.layers` values be *derived* from the deployment file's own path instead of hand-typed. This policy is the separate, opt-in check for whether an **explicitly**-declared `spec.layers.segments` value is allowed to *disagree* with the value its own path would derive for that same segment — declaring the convention turns derivation on; declaring this policy is what makes disagreement an enforced violation instead of silently letting the explicit value win.
+
+No `configuration` block — it reads the resolved convention and layer values directly from the loaded deployment and configuration.
+
+Skipped gracefully when: no deployment is loaded, `spec.layers.segments` declares no explicit values, no configuration service is available, or no `resolves: layers` convention applies to this file. A segment that the deployment's path doesn't reach (e.g. a shallower deployment within the same convention family) has nothing to compare against and is not a violation.
+
+```yaml
+- name: layer-agreement
+  type: layer_agreement
+  phase: validate
+  enforcement: warn
+```
+
+### `ai_review`
+
+Evaluates at the `plan` phase. Sends the Terraform plan to a configured `ai_agent` integration for risk assessment and denies the deployment when the assessed risk meets or exceeds `risk_threshold`.
+
+Skipped gracefully when: no `ai_agent` integration is configured (or the named one is not found), or the AI provider reports itself unavailable.
+
+| `configuration` key | Type   | Default         | Description                                                                            |
+| ------------------- | ------ | --------------- | -------------------------------------------------------------------------------------- |
+| `integration`       | string | first available | Name of the `ai_agent` integration to use (`configuration.spec.integrations`)          |
+| `risk_threshold`    | string | `critical`      | Deny when assessed risk is at or above this level: `low`\|`medium`\|`high`\|`critical` |
+| `ai_prompt`         | string | none            | Optional `.strata/prompts` override for the review prompt                              |
+
+```yaml
+- name: ai_plan_gate
+  type: ai_review
+  phase: plan
+  enforcement: deny
+  configuration:
+    integration: ai-advisor
+    risk_threshold: high
+```
+
 ---
 
 ## Enforcement Levels
@@ -468,18 +666,18 @@ meta:
     description: Production environment configuration
 spec:
   zones:
-    eu-west:
+    - name: eu-west
       regions:
         - westeurope
         - northeurope
-    eu-central:
+    - name: eu-central
       regions:
         - germanywestcentral
         - swedencentral
 
   policies:
     - name: zone_enforcement
-      type: customer_zone
+      type: tenant_zone
       phase: plan
       enforcement: deny
       description: "All provisioned resources must be in customer-allowed zones"
@@ -487,28 +685,29 @@ spec:
 
 With this configuration, running `strata deploy run` will evaluate every resource in the Terraform plan against the customer's declared zones. If any resource targets `us-east-1` or another region outside the allowed set, the deploy stops before apply with exit code `3`.
 
-### Two policies — zone enforcement + required tags
+### Two policies — zone enforcement + required labels
 
 ```yaml
   policies:
     - name: zone_enforcement
-      type: customer_zone
+      type: tenant_zone
       phase: plan
       enforcement: deny
       description: "Block resources outside customer zones"
 
     - name: require_standard_labels
-      type: required_tags
+      type: required_labels
       phase: build
       enforcement: warn
       description: "Warn when required labels are missing"
       configuration:
+        targets: [namespaces]
         required_labels:
           - environment
           - cost_center
 ```
 
-### Complete example — naming, tags, SBOM, zone, and OPA
+### Complete example — naming, refs, tags, SBOM, zone, and OPA
 
 The following configuration shows all built-in policy types working together on a single deployment. Policies are evaluated in declaration order within each phase.
 
@@ -519,10 +718,18 @@ meta:
   name: production
 spec:
   zones:
-    eu-west:
+    - name: eu-west
       regions:
         - westeurope
         - northeurope
+
+  remotes:
+    - name: my-service
+      repository: https://github.com/acme/my-service
+      reference: main
+      conventions:
+        release_pattern: "^v\\d+\\.\\d+\\.\\d+$"    # semver only
+        quality_pattern: "^tested(-\\d+)?$"          # quality gate tags
 
   policies:
     # validate phase: checked during `strata validate --deep`
@@ -534,13 +741,21 @@ spec:
       configuration:
         pattern: "^[a-z][a-z0-9-]*$"
 
+    # validate phase: config-free — patterns come from spec.remotes[].conventions above
+    - name: release_tag_conventions
+      type: ref_convention
+      phase: validate
+      enforcement: warn
+      description: "Remote references must follow the naming convention declared on that remote"
+
     # build phase: checked after `strata build run` completes
     - name: require_standard_labels
-      type: required_tags
+      type: required_labels
       phase: build
       enforcement: deny
       description: "All namespaces must carry standard cost-tracking labels"
       configuration:
+        targets: [namespaces]
         required_labels:
           - environment
           - project
@@ -596,7 +811,7 @@ spec:
 
     # plan phase: checked after `terraform plan`, before `terraform apply`
     - name: zone_enforcement
-      type: customer_zone
+      type: tenant_zone
       phase: plan
       enforcement: deny
       description: "Resources must stay within customer-allowed regions"
@@ -613,7 +828,7 @@ spec:
 ```
 
 With this setup:
-- `strata validate --deep` flags configuration names that don't follow the naming convention.
+- `strata validate --deep` flags configuration names that don't follow the naming convention and warns if `my-service`'s pinned `reference` doesn't match its declared `release_pattern`/`quality_pattern`.
 - `strata build run` stops if any namespace is missing required labels, finds a floating image tag, an unapproved registry, or a blocked package. A warning is emitted if the component budget is exceeded.
 - `strata deploy run` runs zone enforcement and the OPA check in sequence against the Terraform plan. Both must pass before `terraform apply` is invoked.
 

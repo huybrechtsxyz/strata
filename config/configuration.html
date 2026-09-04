@@ -1553,7 +1553,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#built-in-types">Built-in types</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#tenant-zone"><code class="docutils literal notranslate"><span class="pre">tenant_zone</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#resource-type-restrictions"><code class="docutils literal notranslate"><span class="pre">resource_type_restrictions</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#required-tags"><code class="docutils literal notranslate"><span class="pre">required_tags</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#required-labels"><code class="docutils literal notranslate"><span class="pre">required_labels</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#naming-pattern"><code class="docutils literal notranslate"><span class="pre">naming_pattern</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#script"><code class="docutils literal notranslate"><span class="pre">script</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#ref-convention"><code class="docutils literal notranslate"><span class="pre">ref_convention</span></code></a></li>
@@ -1563,14 +1563,20 @@
 <li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#sbom-max-components"><code class="docutils literal notranslate"><span class="pre">sbom_max_components</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#sbom-license"><code class="docutils literal notranslate"><span class="pre">sbom_license</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#cost-threshold"><code class="docutils literal notranslate"><span class="pre">cost_threshold</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#cve-max-severity"><code class="docutils literal notranslate"><span class="pre">cve_max_severity</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#checkov"><code class="docutils literal notranslate"><span class="pre">checkov</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#opa"><code class="docutils literal notranslate"><span class="pre">opa</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#path-convention"><code class="docutils literal notranslate"><span class="pre">path_convention</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#layer-agreement"><code class="docutils literal notranslate"><span class="pre">layer_agreement</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#ai-review"><code class="docutils literal notranslate"><span class="pre">ai_review</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/policies.html#enforcement-levels">Enforcement Levels</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/policies.html#phases">Phases</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/policies.html#example-configuration">Example Configuration</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#single-policy-zone-enforcement">Single policy — zone enforcement</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#two-policies-zone-enforcement-required-tags">Two policies — zone enforcement + required tags</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#complete-example-naming-tags-sbom-zone-and-opa">Complete example — naming, tags, SBOM, zone, and OPA</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#two-policies-zone-enforcement-required-labels">Two policies — zone enforcement + required labels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#complete-example-naming-refs-tags-sbom-zone-and-opa">Complete example — naming, refs, tags, SBOM, zone, and OPA</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/policies.html#see-also">See Also</a></li>
@@ -3882,21 +3888,29 @@ enforces these at validation time.</p>
 <span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="s">"zones/**"</span><span class="w">                              </span><span class="c1"># files in this subtree are candidates</span>
 <span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"zones/{zone}/customers/{tenant}/{env}"</span><span class="w"> </span><span class="c1"># {segment} captures one path part</span>
 <span class="w">      </span><span class="nt">validate</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">zone</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spec.zones[*].name</span><span class="w">                     </span><span class="c1"># captured value must be a declared zone</span>
-<span class="w">        </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="s">"customers/{tenant}/tenant.yaml"</span><span class="w">     </span><span class="c1"># file at this path must exist</span>
-<span class="w">        </span><span class="nt">env</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spec.environments[*].name</span><span class="w">               </span><span class="c1"># captured value must be a declared environment</span>
+<span class="w">        </span><span class="nt">zone</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">yaml</span>
+<span class="w">          </span><span class="nt">expression</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spec.zones[*].name</span><span class="w">             </span><span class="c1"># captured value must be a declared zone</span>
+<span class="w">        </span><span class="nt">tenant</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">path</span>
+<span class="w">          </span><span class="nt">expression</span><span class="p">:</span><span class="w"> </span><span class="s">"customers/{tenant}/tenant.yaml"</span><span class="w"> </span><span class="c1"># file at this path must exist</span>
+<span class="w">        </span><span class="c1"># {env} is captured but not validated — validate: entries are optional per segment</span>
 
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tenant-registry</span>
 <span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="s">"customers/**"</span>
 <span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"customers/{tenant}"</span>
 <span class="w">      </span><span class="nt">validate</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="s">"customers/{tenant}/tenant.yaml"</span>
+<span class="w">        </span><span class="nt">tenant</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">path</span>
+<span class="w">          </span><span class="nt">expression</span><span class="p">:</span><span class="w"> </span><span class="s">"customers/{tenant}/tenant.yaml"</span>
 
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">landscape-registry</span>
 <span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="s">"landscape/**"</span>
 <span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"landscape/{landscape}"</span>
 <span class="w">      </span><span class="nt">validate</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">landscape</span><span class="p">:</span><span class="w"> </span><span class="s">"landscape/{landscape}/landscape.yaml"</span>
+<span class="w">        </span><span class="nt">landscape</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">path</span>
+<span class="w">          </span><span class="nt">expression</span><span class="p">:</span><span class="w"> </span><span class="s">"landscape/{landscape}/landscape.yaml"</span>
 </pre></div>
 </div>
 </section>
@@ -3944,7 +3958,9 @@ enforces these at validation time.</p>
 <span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="s">"deploy/**"</span>
 <span class="w">      </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="s">"deploy/{landscape}/{ring}"</span>
 <span class="w">      </span><span class="nt">validate</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">landscape</span><span class="p">:</span><span class="w"> </span><span class="s">"deploy/{landscape}/landscape.yaml"</span>
+<span class="w">        </span><span class="nt">landscape</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">path</span>
+<span class="w">          </span><span class="nt">expression</span><span class="p">:</span><span class="w"> </span><span class="s">"deploy/{landscape}/landscape.yaml"</span>
 </pre></div>
 </div>
 </section>
@@ -3952,15 +3968,15 @@ enforces these at validation time.</p>
 <h3>Validation rule types<a class="headerlink" href="#validation-rule-types" title="Link to this heading"></a></h3>
 <table class="docutils align-default">
 <thead>
-<tr class="row-odd"><th class="head"><p>Rule syntax</p></th>
+<tr class="row-odd"><th class="head"><p>Rule shape</p></th>
 <th class="head"><p>Meaning</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">spec.zones[*].name</span></code></p></td>
-<td><p>Captured value must appear in a field of the loaded ConfigurationModel</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">{kind:</span> <span class="pre">yaml,</span> <span class="pre">expression:</span> <span class="pre">spec.zones[*].name}</span></code></p></td>
+<td><p>Captured value must appear in a JMESPath query against the loaded ConfigurationModel</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">customers/{tenant}/tenant.yaml</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">{kind:</span> <span class="pre">path,</span> <span class="pre">expression:</span> <span class="pre">&quot;customers/{tenant}/tenant.yaml&quot;}</span></code></p></td>
 <td><p>File at this path (relative to workspace root) must exist on disk</p></td>
 </tr>
 </tbody>
