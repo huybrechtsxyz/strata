@@ -197,6 +197,8 @@ class PlanBuildCommand(BaseBuildCommand):
         # --- Terraform builder ---
         tb = TerraformBuilder(verbose=self._is_verbose())
 
+        repo_map = self._solution_controller.get_repo_map() if self._solution_controller is not None else {}
+
         ok = tb.before_build(
             deployment_service=self._deployment_service,
             work_path=self._work_path,
@@ -215,6 +217,7 @@ class PlanBuildCommand(BaseBuildCommand):
             build_path=tmp_build_path,
             dry_run=False,
             platform_model=platform_model,
+            repo_map=repo_map,
             solution_controller=self._solution_controller,
         )
         self._messages.extend(tb.get_messages())

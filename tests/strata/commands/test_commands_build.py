@@ -427,6 +427,68 @@ def _make_plan_cmd(tmp_path):
     return cmd
 
 
+class TestPlanBuildToTemp:
+    """Regression tests: PlanBuildCommand._build_to_temp() must pass repo_map to every
+    builder whose .build() signature accepts one, exactly like RunBuildCommand does.
+
+    Previously TerraformBuilder.build() was called with no repo_map argument at all,
+    silently defaulting to {} and breaking source-copy resolution for any workspace
+    whose Terraform provisioner used a non-local source.repository.
+    """
+
+    def test_terraform_builder_receives_repo_map(self, tmp_path):
+        cmd = _make_plan_cmd(tmp_path)
+        cmd._deployment_service = MagicMock()
+        cmd._output_verbose = False
+        expected_repo_map = {"iac-int": "/abs/path/to/iac-int-deployment"}
+        cmd._solution_controller.get_repo_map.return_value = expected_repo_map
+
+        with (
+            patch("strata.commands.builders.plan_build_command.PlatformBuilder") as mock_platform_builder,
+            patch("strata.commands.builders.plan_build_command.TerraformBuilder") as mock_terraform_builder,
+            patch("strata.commands.builders.plan_build_command.AnsibleBuilder") as mock_ansible_builder,
+        ):
+            for mock_cls in (mock_platform_builder, mock_terraform_builder, mock_ansible_builder):
+                instance = mock_cls.return_value
+                instance.before_build.return_value = True
+                instance.build.return_value = True
+                instance.after_build.return_value = True
+                instance.get_messages.return_value = []
+                instance.get_errors.return_value = []
+
+            result = cmd._build_to_temp(tmp_path / "build")
+
+        assert result is True
+        tb_instance = mock_terraform_builder.return_value
+        assert tb_instance.build.call_args.kwargs.get("repo_map") == expected_repo_map
+
+    def test_ansible_builder_receives_repo_map(self, tmp_path):
+        cmd = _make_plan_cmd(tmp_path)
+        cmd._deployment_service = MagicMock()
+        cmd._output_verbose = False
+        expected_repo_map = {"iac-int": "/abs/path/to/iac-int-deployment"}
+        cmd._solution_controller.get_repo_map.return_value = expected_repo_map
+
+        with (
+            patch("strata.commands.builders.plan_build_command.PlatformBuilder") as mock_platform_builder,
+            patch("strata.commands.builders.plan_build_command.TerraformBuilder") as mock_terraform_builder,
+            patch("strata.commands.builders.plan_build_command.AnsibleBuilder") as mock_ansible_builder,
+        ):
+            for mock_cls in (mock_platform_builder, mock_terraform_builder, mock_ansible_builder):
+                instance = mock_cls.return_value
+                instance.before_build.return_value = True
+                instance.build.return_value = True
+                instance.after_build.return_value = True
+                instance.get_messages.return_value = []
+                instance.get_errors.return_value = []
+
+            result = cmd._build_to_temp(tmp_path / "build")
+
+        assert result is True
+        ab_instance = mock_ansible_builder.return_value
+        assert ab_instance.build.call_args.kwargs.get("repo_map") == expected_repo_map
+
+
 def _make_variable(key, store, default=None):
     from unittest.mock import MagicMock
 
