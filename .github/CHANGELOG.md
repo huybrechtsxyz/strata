@@ -8,6 +8,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [1.9.11] - 2026-09-11
+
 ### Fixed
 
 - **`@repo/...` references resolved differently depending on which directory `strata` was run from, silently ignoring an explicitly-supplied `--work-path`** — `SolutionController.get_repo_map()` resolved `type: local` repositories against the process working directory (`os.getcwd()`) while resolving `type: gitops` repositories against the workspace root. Running any command from a subdirectory therefore resolved `@repo/...` to `<work_path>/<subdir>/<ref>` instead of `<work_path>/<ref>`, failing with a diagnostic that blamed the profile's config references rather than the resolution — even when `--work-path` was passed correctly. Both repository types now resolve against the workspace root, which is the only stable base for workspace-scoped state. The same `os.getcwd()` bug in `generate_workspace()` (which made generated `.code-workspace` folder paths depend on where `strata repo add` was run) is fixed identically. See ADR-0077.

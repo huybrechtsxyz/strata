@@ -7,6 +7,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [1.9.11] - 2026-09-11
+
 ### Fixed
 
 #### **`@repo/...` resolution depended on the process working directory, ignoring `--work-path`**
