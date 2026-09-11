@@ -1352,142 +1352,116 @@ All `values` subcommands accept `--file/-f PATH` and standard options like `--no
 
 ### `values list`
 
-List all declared variables and feature flags for a deployment, along with their current resolved values.
+List all declared variables, secrets, and feature flags for a deployment, along with their current resolved values.
 
 ```
-strata values list [-f FILE] [--stage NAME] [--no-cache] [--refresh-cache] [standard options]
+strata values list -f FILE [--stage NAME] [--type variables|secrets|features] [--show-store] [--unresolved] [--trace] [--ai] [--no-cache] [--refresh-cache] [standard options]
 ```
 
-| Option             | Description                                                    |
-| ------------------ | -------------------------------------------------------------- |
-| `-f / --file PATH` | Deployment file (required unless `STRATA_FILE` env var is set) |
-| `--stage NAME`     | Limit to values declared for a specific stage                  |
-| `--no-cache`       | Bypass the resolved-model cache; re-resolve all values live    |
-| `--refresh-cache`  | Invalidate cached values and re-resolve, then update the cache |
+| Option                                | Description                                                                    |
+| ------------------------------------- | ------------------------------------------------------------------------------ |
+| `-f / --file PATH`                    | Deployment file (required unless `STRATA_FILE` env var is set)                 |
+| `--stage NAME`                        | Use the environment from this specific deployment stage (default: first stage) |
+| `--type variables\|secrets\|features` | Show only this value type. Default: all                                        |
+| `--show-store`                        | Include the store reference (env var name, key path) in output                 |
+| `--unresolved`                        | Show only entries that failed to resolve                                       |
+| `--trace`                             | Show which environment file each value originates from (provenance)            |
+| `--ai`                                | Run AI explanation of unresolved values (requires an `ai_agent` integration)   |
+| `--no-cache`                          | Bypass the resolved-model cache; re-resolve all values live                    |
+| `--refresh-cache`                     | Invalidate cached values and re-resolve, then update the cache                 |
 
-Output includes value source (store type), store reference, current value (masked for secrets), and any resolution errors.
+Secrets are masked (first 3 chars + `*****`) — use `values get` to reveal a full value.
 
 ```bash
 strata values list -f deploy/deploy-prd.yaml
-strata values list -f deploy/deploy-prd.yaml --stage production
-strata values list -f deploy/deploy-prd.yaml --refresh-cache
+strata values list -f deploy/deploy-prd.yaml --type secrets --show-store
+strata values list -f deploy/deploy-prd.yaml --unresolved
 strata values list -f deploy/deploy-prd.yaml --output json
 ```
 
-**Console output columns:** `key`, `type` (variable/feature/secret), `store`, `value`, `status` (resolved/error/masked).
+### `values get`
 
-**JSON output keys:** `deployment`, `values[]` — each: `key`, `type`, `store`, `reference`, `value`, `masked`, `status`, `error`.
-
-### `values get KEY`
-
-Retrieve the resolved value of a single variable or feature flag.
+Retrieve the full resolved value for one or more keys. Secrets are revealed in plain text — use with care.
 
 ```
-strata values get KEY [-f FILE] [--no-cache] [--refresh-cache] [--raw] [standard options]
+strata values get -f FILE KEY... [--format table|raw|env|export] [--no-cache] [--refresh-cache] [standard options]
 ```
 
-| Option            | Description                                                    |
-| ----------------- | -------------------------------------------------------------- |
-| `KEY`             | Variable or feature name to retrieve                           |
-| `--raw`           | Print the bare value only (no JSON envelope, no masking label) |
-| `--no-cache`      | Bypass the resolved-model cache; re-resolve live               |
-| `--refresh-cache` | Invalidate cache and re-resolve, then update the cache         |
+| Option                             | Default | Description                                                    |
+| ---------------------------------- | ------- | -------------------------------------------------------------- |
+| `-f / --file PATH`                 | —       | Deployment file (required unless `STRATA_FILE` env var is set) |
+| `KEY...`                           | —       | One or more variable/secret/feature keys to retrieve           |
+| `--format table\|raw\|env\|export` | `table` | See below. Mutually exclusive with `--output`                  |
+| `--no-cache`                       | off     | Bypass the resolved-model cache; re-resolve live               |
+| `--refresh-cache`                  | off     | Invalidate cache and re-resolve, then update the cache         |
+
+`--format` options:
+
+- **`table`** (default) — `KEY  VALUE` console table
+- **`raw`** — bare value only, no key, no quoting. Requires exactly one `KEY` argument
+- **`env`** — `KEY=value` lines, unquoted (`.env`-file style)
+- **`export`** — `export KEY='value'` lines, shell-quoted for direct `eval`/sourcing
+
+For any of `raw`/`env`/`export`, nothing is printed if any requested key fails to resolve (only a non-zero exit code) — this prevents a script from accidentally capturing an `"ERROR: ..."`/`"NOT FOUND"` placeholder string as if it were a real value.
 
 ```bash
-strata values get DATABASE_PASSWORD -f deploy/deploy-prd.yaml
-strata values get ENABLE_FEATURE_X -f deploy/deploy-prd.yaml --raw
-strata values get API_KEY -f deploy/deploy-prd.yaml --refresh-cache
-strata values get DATABASE_PASSWORD -f deploy/deploy-prd.yaml --output json
+strata values get -f deploy/deploy-prd.yaml DB_PASSWORD
+strata values get -f deploy/deploy-prd.yaml DB_PASSWORD API_KEY
+strata values get -f deploy/deploy-prd.yaml DB_PASSWORD --format raw
+export DB_PASSWORD=$(strata values get -f deploy/deploy-prd.yaml DB_PASSWORD --format raw)
+eval "$(strata values get -f deploy/deploy-prd.yaml DB_PASSWORD API_KEY --format export)"
+strata values get -f deploy/deploy-prd.yaml DB_PASSWORD API_KEY --format env > .env
+strata values get -f deploy/deploy-prd.yaml DB_PASSWORD --output json
 ```
 
-**Exit codes:** 0 success (value exists) · 3 key not found
+**Exit codes:** 0 success (all keys resolved) · 3 one or more keys missing or failed to resolve
 
-### `values set KEY VALUE`
+### `values set`
 
-Set a team-shared template variable in the workspace (stored in `solution.json`). Unlike deployment-level variables, team variables persist across deployments.
+Write a value to its configured store backend. Behaviour depends on the store type — see the table below.
 
 ```
-strata values set KEY VALUE [standard options]
+strata values set -f FILE -k KEY {--value VALUE | --from-file PATH | --stdin} [standard options]
 ```
+
+| Store type                                                                                                                 | Action                                                                        |
+| -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `constant`                                                                                                                 | Prints the file path and key location (cannot write to YAML)                  |
+| `environment`                                                                                                              | Prints the env var name and export instruction                                |
+| `github`                                                                                                                   | Calls `gh secret set` via the GitHub CLI                                      |
+| Integration-backed (`azure-keyvault`, `vault`, `consul`, `azure-appconfig`, `bitwarden`, `infisical`, `etcd`, `flagsmith`) | Calls the integration's `set_variable`, `set_secret`, or `set_feature` method |
+
+Multiline values (SSH keys, certificates) use `--from-file` or `--stdin`:
 
 ```bash
-strata values set app_version 1.2.3
-strata values set default_region us-east-1
+strata values set -f deploy/deploy-prd.yaml -k DB_HOST --value "new-host.example.com"
+strata values set -f deploy/deploy-prd.yaml -k TLS_CERT --from-file cert.pem
+cat key.pem | strata values set -f deploy/deploy-prd.yaml -k SSH_KEY --stdin
 ```
 
 ### `values resolve`
 
-Resolve and display all variable and feature values for a deployment in a structured format. Useful for CI/CD pipelines that need to inject resolved values into subsequent stages.
+Diagnose value resolution paths **without revealing values**. Walks the resolution chain for each key and reports whether each step would succeed: store type, integration registration, availability, and optionally (with `--probe`) actual backend reachability.
 
 ```
-strata values resolve [-f FILE] [--format json|ndjson|env] [--no-cache] [--refresh-cache] [standard options]
+strata values resolve -f FILE [-k KEY] [--probe] [--no-cache] [--refresh-cache] [standard options]
 ```
 
-| Option             | Default | Description                                                    |
-| ------------------ | ------- | -------------------------------------------------------------- |
-| `-f / --file PATH` | —       | Deployment file (required unless `STRATA_FILE` env var is set) |
-| `--format FORMAT`  | `json`  | Output format: `json` (object), `ndjson` (one per line), `env` |
-| `--no-cache`       | off     | Bypass the resolved-model cache                                |
-| `--refresh-cache`  | off     | Invalidate and re-resolve, then update cache                   |
-
-Output formats:
-
-- **`json`** (default) — Complete structure with metadata (status, errors, store info)
-- **`ndjson`** — One line per value; useful for log pipelines and streaming
-- **`env`** — Bash/PowerShell env-var format (`KEY=value`), suitable for sourcing into shells
+| Option             | Description                                                                      |
+| ------------------ | -------------------------------------------------------------------------------- |
+| `-f / --file PATH` | Deployment file (required unless `STRATA_FILE` env var is set)                   |
+| `-k / --key KEY`   | Diagnose a single key only (default: all)                                        |
+| `--probe`          | Also attempt actual resolution against store backends (without revealing values) |
+| `--no-cache`       | Bypass the resolved-model cache                                                  |
+| `--refresh-cache`  | Invalidate and re-resolve, then update cache                                     |
 
 ```bash
-# JSON format (default) — full metadata
 strata values resolve -f deploy/deploy-prd.yaml
-
-# NDJSON format — one value per line for log pipelines
-strata values resolve -f deploy/deploy-prd.yaml --format ndjson
-
-# Env format — source into shell
-source <(strata values resolve -f deploy/deploy-prd.yaml --format env)
-# PowerShell
-strata values resolve -f deploy/deploy-prd.yaml --format env | ForEach-Object { $env:$_ = (iex $_).Split('=')[1] }
-
-# Refresh cache and re-resolve
-strata values resolve -f deploy/deploy-prd.yaml --refresh-cache
-
-# Integration with external tools
-strata values resolve -f deploy/deploy-prd.yaml --format json | jq '.values | map(select(.type=="secret")) | .[].key'
+strata values resolve -f deploy/deploy-prd.yaml -k DB_PASSWORD
+strata values resolve -f deploy/deploy-prd.yaml --probe
 ```
 
-**JSON output example:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "deployment": "xyz-prd",
-    "values": [
-      {
-        "key": "DATABASE_PASSWORD",
-        "type": "secret",
-        "store": "azure-keyvault",
-        "value": "***",
-        "masked": true,
-        "status": "resolved"
-      },
-      {
-        "key": "ENABLE_FEATURE_X",
-        "type": "feature",
-        "store": "constant",
-        "value": "true",
-        "status": "resolved"
-      }
-    ],
-    "cache_hit": true,
-    "cache_age_seconds": 42
-  },
-  "errors": [],
-  "messages": []
-}
-```
-
-**Exit codes:** 0 success · 1 system error · 3 resolution failed (one or more values could not be resolved)
+**Exit codes:** 0 success · 3 one or more keys would fail to resolve
 
 ---
 

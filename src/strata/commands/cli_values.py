@@ -132,6 +132,19 @@ def values_list(
 )
 @click_work_path
 @click.argument("keys", nargs=-1, required=True, metavar="KEY...")
+@click.option(
+    "--format",
+    "value_format",
+    type=click.Choice(["table", "raw", "env", "export"], case_sensitive=False),
+    default="table",
+    metavar="FORMAT",
+    help=(
+        "Value rendering format: table (default, key/value columns), "
+        "raw (bare value only, requires exactly one KEY), "
+        "env (KEY=value lines), export (export KEY='value' lines). "
+        "Mutually exclusive with --output."
+    ),
+)
 @click_no_cache
 @click_refresh_cache
 @click_output_format
@@ -140,6 +153,7 @@ def values_list(
 def values_get(
     file: str,
     keys: tuple,
+    value_format: str = "table",
     work_path: Optional[str] = None,
     no_cache: bool = False,
     refresh_cache: bool = False,
@@ -152,9 +166,15 @@ def values_get(
     Secrets are revealed in plain text — use with care.
     Provide one or more KEY arguments.
     """
+    if value_format != "table" and output:
+        raise click.UsageError("Illegal usage: --format and --output are mutually exclusive.")
+    if value_format == "raw" and len(keys) != 1:
+        raise click.UsageError("--format raw requires exactly one KEY argument.")
+
     command = GetValuesDeployCommand(
         file=file,
         keys=list(keys),
+        value_format=value_format,
         work_path=work_path,
         no_cache=no_cache,
         refresh_cache=refresh_cache,

@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from click.testing import CliRunner
 
 from strata.commands.cli_values import values_group
+from strata.commands.deploy.get_values_deploy_command import GetValuesDeployCommand
 
 
 class TestValuesList:
@@ -150,6 +151,87 @@ class TestValuesGet:
                 values_group, ["get", "-f", "deploy.yaml", "MISSING_KEY", "--work-path", str(tmp_path)]
             )
         assert result.exit_code != 0
+
+    def test_format_raw_with_single_key_mocked(self, tmp_path):
+        runner = CliRunner()
+        with patch(
+            "strata.commands.deploy.get_values_deploy_command.GetValuesDeployCommand.execute",
+            return_value=True,
+        ):
+            result = runner.invoke(
+                values_group,
+                ["get", "-f", "deploy.yaml", "DB_PASSWORD", "--format", "raw", "--work-path", str(tmp_path)],
+            )
+        assert result.exit_code == 0
+
+    def test_format_raw_with_multiple_keys_returns_exit_2(self, tmp_path):
+        runner = CliRunner()
+        result = runner.invoke(
+            values_group,
+            [
+                "get",
+                "-f",
+                "deploy.yaml",
+                "DB_PASSWORD",
+                "API_KEY",
+                "--format",
+                "raw",
+                "--work-path",
+                str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 2
+
+    def test_format_env_mocked(self, tmp_path):
+        runner = CliRunner()
+        with patch(
+            "strata.commands.deploy.get_values_deploy_command.GetValuesDeployCommand.execute",
+            return_value=True,
+        ):
+            result = runner.invoke(
+                values_group,
+                ["get", "-f", "deploy.yaml", "DB_PASSWORD", "--format", "env", "--work-path", str(tmp_path)],
+            )
+        assert result.exit_code == 0
+
+    def test_format_export_mocked(self, tmp_path):
+        runner = CliRunner()
+        with patch(
+            "strata.commands.deploy.get_values_deploy_command.GetValuesDeployCommand.execute",
+            return_value=True,
+        ):
+            result = runner.invoke(
+                values_group,
+                ["get", "-f", "deploy.yaml", "DB_PASSWORD", "--format", "export", "--work-path", str(tmp_path)],
+            )
+        assert result.exit_code == 0
+
+    def test_invalid_format_returns_exit_2(self, tmp_path):
+        runner = CliRunner()
+        result = runner.invoke(
+            values_group,
+            ["get", "-f", "deploy.yaml", "DB_PASSWORD", "--format", "bogus", "--work-path", str(tmp_path)],
+        )
+        assert result.exit_code == 2
+
+    def test_format_and_output_mutually_exclusive_returns_exit_2(self, tmp_path):
+        runner = CliRunner()
+        result = runner.invoke(
+            values_group,
+            [
+                "get",
+                "-f",
+                "deploy.yaml",
+                "DB_PASSWORD",
+                "--format",
+                "env",
+                "--output",
+                "json",
+                "--work-path",
+                str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 2
 
 
 class TestValuesSet:
@@ -645,6 +727,76 @@ class TestValuesResolveCommand:
 
         assert diag["ok"] is True
         assert any(c["check"] == "probe" and c["status"] == "ok" for c in diag["checks"])
+
+
+class TestGetValuesDeployCommandFormatRenderers:
+    """Unit tests for GetValuesDeployCommand's --format renderers (raw/env/export)."""
+
+    def test_print_raw_outputs_bare_value(self, capsys):
+        cmd = GetValuesDeployCommand(file="x.yaml", keys=["DB_PASSWORD"], value_format="raw")
+        cmd._print_raw({"DB_PASSWORD": "s3cr3t"})
+        out = capsys.readouterr().out
+        assert out == "s3cr3t\n"
+
+    def test_print_env_outputs_key_equals_value_lines(self, capsys):
+        cmd = GetValuesDeployCommand(file="x.yaml", keys=["DB_PASSWORD", "API_KEY"], value_format="env")
+        cmd._print_env({"DB_PASSWORD": "s3cr3t", "API_KEY": "abc123"})
+        out = capsys.readouterr().out
+        assert out == "DB_PASSWORD=s3cr3t\nAPI_KEY=abc123\n"
+
+    def test_print_export_shell_quotes_values(self, capsys):
+        cmd = GetValuesDeployCommand(file="x.yaml", keys=["DB_PASSWORD"], value_format="export")
+        cmd._print_export({"DB_PASSWORD": "has space's"})
+        out = capsys.readouterr().out
+        assert out == "export DB_PASSWORD='has space'\"'\"'s'\n"
+
+    def test_execute_skips_format_output_when_any_key_failed(self, capsys):
+        cmd = GetValuesDeployCommand(file="x.yaml", keys=["DB_PASSWORD"], value_format="env")
+        env_service = MagicMock()
+        env_service.get_variables.return_value = []
+        env_service.get_secrets.return_value = []
+        env_service.get_features.return_value = []
+
+        cmd._deployment_service = MagicMock()
+        cmd._deployment_service.get_environment_service.return_value = env_service
+
+        with patch.object(
+            cmd,
+            "_resolve_values",
+            return_value=(None, MagicMock(variables={}, secrets={}, features={}, errors=[]), None),
+        ):
+            result = cmd._execute()
+
+        assert result is False
+        out = capsys.readouterr().out
+        # Nothing printed for a failed key in env/export/raw formats — only the
+        # non-zero exit / self._errors signal the failure.
+        assert out == ""
+
+    def test_execute_prints_env_format_on_success(self, capsys):
+        cmd = GetValuesDeployCommand(file="x.yaml", keys=["DB_PASSWORD"], value_format="env")
+        env_service = MagicMock()
+        env_service.get_variables.return_value = []
+        env_service.get_secrets.return_value = []
+        env_service.get_features.return_value = []
+
+        cmd._deployment_service = MagicMock()
+        cmd._deployment_service.get_environment_service.return_value = env_service
+
+        with patch.object(
+            cmd,
+            "_resolve_values",
+            return_value=(
+                None,
+                MagicMock(variables={"DB_PASSWORD": "s3cr3t"}, secrets={}, features={}, errors=[]),
+                None,
+            ),
+        ):
+            result = cmd._execute()
+
+        assert result is True
+        out = capsys.readouterr().out
+        assert out == "DB_PASSWORD=s3cr3t\n"
 
     def test_diagnose_integration_with_probe_failure(self):
         from strata.commands.deploy.resolve_values_deploy_command import ResolveValuesDeployCommand

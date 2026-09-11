@@ -7,6 +7,21 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Added
+
+#### **`strata values get` gained a `--format` option for direct shell/script consumption**
+
+- **Motivation**: the only way to extract a single resolved value for use in a script was `strata values get -f deploy.yaml KEY --output json | jq -r '.data.results.KEY'` — clunky even for the single-key case, and `--output text`/`console` both print a generic envelope/table, not something directly usable in a shell one-liner. A stale doc block (`docs/platform/commands.md`) had long described a `--raw` flag for this exact purpose, but it was never actually implemented.
+- **Design**: added `--format` (choices: `table` default, `raw`, `env`, `export`) to `values get` only — deliberately a separate, command-scoped option rather than a new value on the shared global `--output` enum (`console`/`text`/`json`/`ndjson`), since `raw`/`env`/`export` render bare values and wouldn't make sense as a global concept for most other commands. `--format` and `--output` are mutually exclusive (checked in `cli_values.py`'s `values_get()`), matching the pattern used elsewhere for `--verbose`/`--quiet`.
+  - `table` (default): unchanged `KEY  VALUE` console table.
+  - `raw`: bare value only, no key/quoting — requires exactly one `KEY` argument (validated as a `click.UsageError`, exit 2, if more than one is given).
+  - `env`: `KEY=value` lines, unquoted — `.env`-file style.
+  - `export`: `export KEY='value'` lines, shell-quoted via `shlex.quote()` — safe to `eval` directly even when a value contains spaces/quotes.
+  - For `raw`/`env`/`export`, nothing is printed at all if any requested key fails to resolve — only the existing non-zero exit code signals failure. This is deliberate: a script blindly capturing stdout must never see a literal `"ERROR: ..."`/`"NOT FOUND"` string masquerading as a real secret value.
+- **Implementation**: `GetValuesDeployCommand` gained `_print_raw()`/`_print_env()`/`_print_export()`, dispatched from `_execute()` alongside the existing `_print_console()` (now only used for the `table` format).
+- **Docs**: `docs/platform/commands.md`'s entire `## values` section was stale/inaccurate independent of this change (wrong argument order for `get`, a nonexistent `values set KEY VALUE` positional signature instead of the real `-f FILE -k KEY {--value|--from-file|--stdin}`, and a `values resolve` description describing a value-revealing command instead of its real purpose — a non-revealing resolution-path diagnostic). Rewrote the whole section to match the actual CLI (`cli_values.py`) exactly, including the new `--format` option.
+- **Testing**: new CLI-wiring tests (`test_format_raw_with_single_key_mocked`, `test_format_raw_with_multiple_keys_returns_exit_2`, `test_format_env_mocked`, `test_format_export_mocked`, `test_invalid_format_returns_exit_2`, `test_format_and_output_mutually_exclusive_returns_exit_2`) plus a new `TestGetValuesDeployCommandFormatRenderers` class unit-testing the renderers directly (including the "nothing printed on any-key-failure" behavior).
+
 ## [1.9.9] - 2026-09-10
 
 ### Fixed

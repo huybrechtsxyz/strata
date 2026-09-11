@@ -1,5 +1,6 @@
 """Command to retrieve full resolved values for specific keys from a deployment."""
 
+import shlex
 from typing import Any, Dict, List, Optional
 
 import click
@@ -25,6 +26,7 @@ class GetValuesDeployCommand(BaseDeployCommand):
         self,
         file: Optional[str] = None,
         keys: Optional[List[str]] = None,
+        value_format: str = "table",
         work_path: Optional[str] = None,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
@@ -42,6 +44,7 @@ class GetValuesDeployCommand(BaseDeployCommand):
             refresh_cache=refresh_cache,
         )
         self._keys: List[str] = list(keys or [])
+        self._value_format = value_format or "table"
 
     def _load_related_services(self, deployment_service: DeploymentService, repo_map: Dict[str, str]) -> bool:
         """ADR-0026: only the merged environment is needed — never the workspace."""
@@ -102,8 +105,21 @@ class GetValuesDeployCommand(BaseDeployCommand):
 
         self._output_data = {"file": str(self._file_path), "results": results}
 
-        if self._is_console_output():
-            self._print_console(results)
+        if self._value_format == "table":
+            if self._is_console_output():
+                self._print_console(results)
+        elif not any_failed:
+            # raw/env/export are meant for direct shell/script consumption — never
+            # emit anything for these formats when a key failed to resolve, so a
+            # script can't accidentally capture an "ERROR: ..."/"NOT FOUND" string
+            # as if it were a real secret value. The non-zero exit code below is
+            # the only signal in that case.
+            if self._value_format == "raw":
+                self._print_raw(results)
+            elif self._value_format == "env":
+                self._print_env(results)
+            elif self._value_format == "export":
+                self._print_export(results)
 
         if any_failed:
             missing = [
@@ -128,3 +144,20 @@ class GetValuesDeployCommand(BaseDeployCommand):
         for key, value in results.items():
             click.echo(f"  {key:<{col_key}}  {value}")
         click.echo("")
+
+    def _print_raw(self, results: Dict[str, Any]) -> None:
+        """Print the bare value only — no key, no quoting. Exactly one key is
+        guaranteed by CLI-level validation (``--format raw`` requires a single KEY).
+        """
+        value = next(iter(results.values()))
+        click.echo(value)
+
+    def _print_env(self, results: Dict[str, Any]) -> None:
+        """Print ``KEY=value`` lines, unquoted (.env-file style)."""
+        for key, value in results.items():
+            click.echo(f"{key}={value}")
+
+    def _print_export(self, results: Dict[str, Any]) -> None:
+        """Print ``export KEY='value'`` lines, shell-quoted for direct eval/sourcing."""
+        for key, value in results.items():
+            click.echo(f"export {key}={shlex.quote(str(value))}")
