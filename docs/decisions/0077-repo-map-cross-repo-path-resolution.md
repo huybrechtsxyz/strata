@@ -36,7 +36,7 @@ command that consults all of them the same way.**
 | #   | Source                                                                                                                                                             | Who writes it                               | Intended question                                                                                                          | Committed to git?              | Actually machine-independent?             |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ----------------------------------------- |
 | 1   | `.strata/solution.json` → `spec.repositories[].path`/`.url`                                                                                                        | `strata repo add`/`sync` (CLI, per-machine) | "Where did *I* clone/point this repo?"                                                                                     | **No — by design** (see below) | No — this is the whole point              |
-| 2   | `config/*.yaml` (e.g. `remotes.yaml`) → `spec.remotes[].deploy_path` (`RemoteModel`)                                                                              | hand-authored, team-committed               | Per ADR-0010/[docs/config/manifest.md](../config/manifest.md#L90): target *inside* a remote for GitOps manifest publishing | Yes                            | Yes (that's what makes it safe to commit) |
+| 2   | `config/*.yaml` (e.g. `remotes.yaml`) → `spec.remotes[].deploy_path` (`RemoteModel`)                                                                               | hand-authored, team-committed               | Per ADR-0010/[docs/config/manifest.md](../config/manifest.md#L90): target *inside* a remote for GitOps manifest publishing | Yes                            | Yes (that's what makes it safe to commit) |
 | 3   | Whatever the environment's own bootstrap step actually did (a CI `checkout:` step's `path:`, a developer's `git clone` location, `docker-compose` bind mount, ...) | the environment itself                      | The actual ground truth, right now, on this machine                                                                        | N/A                            | No                                        |
 
 Row 2 is where the trouble starts: nothing in `RemoteModel`, its docstring, or any
@@ -121,11 +121,11 @@ Given one ordinary `solution.json` entry for the workspace's own config director
 That is one entry, one file, two answers — and the divergence is doubled, because
 the two code paths disagree on **both** inputs:
 
-| | Field consulted | Base path |
-| ---- | --------------- | --------- |
-| `strata repo status` | `path` | `self._work_path` |
-| `get_repo_map()`, `type: local` | `url` | `os.getcwd()` |
-| `get_repo_map()`, `type: gitops` | `path` | `self._work_path` |
+|                                  | Field consulted | Base path         |
+| -------------------------------- | --------------- | ----------------- |
+| `strata repo status`             | `path`          | `self._work_path` |
+| `get_repo_map()`, `type: local`  | `url`           | `os.getcwd()`     |
+| `get_repo_map()`, `type: gitops` | `path`          | `self._work_path` |
 
 Note the third row: `get_repo_map()` is internally inconsistent with *itself* —
 `local` repos are keyed off `url` relative to the process working directory, while
@@ -330,13 +330,13 @@ down.
 treats "I'm working on a local checkout of that dependency right now" as a
 transient, per-machine fact expressed *outside* the shared manifest:
 
-| Tool | Override mechanism | Committed? |
-| ---- | ------------------ | ---------- |
-| Nix flakes | `--override-input foo /path` | No — CLI flag |
-| Bazel | `--override_repository=name=/path` | No — CLI flag |
-| Go | `go.work` | No — gitignored by convention |
-| Cargo | `.cargo/config.toml` `paths`, `[patch]` | Typically machine-local |
-| npm/pnpm | `npm link` / `pnpm link` | No — machine state |
+| Tool       | Override mechanism                      | Committed?                    |
+| ---------- | --------------------------------------- | ----------------------------- |
+| Nix flakes | `--override-input foo /path`            | No — CLI flag                 |
+| Bazel      | `--override_repository=name=/path`      | No — CLI flag                 |
+| Go         | `go.work`                               | No — gitignored by convention |
+| Cargo      | `.cargo/config.toml` `paths`, `[patch]` | Typically machine-local       |
+| npm/pnpm   | `npm link` / `pnpm link`                | No — machine state            |
 
 Nix's `--override-input` and Bazel's `--override_repository` are almost exactly
 the design proposed here and are the strongest support for it.
@@ -345,13 +345,13 @@ the design proposed here and are the strongest support for it.
 location.** For dependencies fetched from a registry or git remote, none of these
 tools let the user configure *where* the content lands:
 
-| Tool | Committed declaration | Where it actually lands |
-| ---- | --------------------- | ----------------------- |
-| Go modules | `require github.com/org/foo v1.2.3` | `$GOMODCACHE` — tool-owned, keyed by identity+version |
-| Cargo | `foo = { git = "…", branch = "…" }` | `~/.cargo/git/checkouts/…` — tool-owned |
-| Nix flakes | `inputs.foo.url = "github:org/foo"` | `/nix/store/…` — content-addressed |
-| Bazel (bzlmod) | `bazel_dep(name = "foo", version = "1.0")` | output base — tool-owned |
-| Terraform | `source = "git::https://…"` | `.terraform/modules/<key>` — tool-owned |
+| Tool           | Committed declaration                      | Where it actually lands                               |
+| -------------- | ------------------------------------------ | ----------------------------------------------------- |
+| Go modules     | `require github.com/org/foo v1.2.3`        | `$GOMODCACHE` — tool-owned, keyed by identity+version |
+| Cargo          | `foo = { git = "…", branch = "…" }`        | `~/.cargo/git/checkouts/…` — tool-owned               |
+| Nix flakes     | `inputs.foo.url = "github:org/foo"`        | `/nix/store/…` — content-addressed                    |
+| Bazel (bzlmod) | `bazel_dep(name = "foo", version = "1.0")` | output base — tool-owned                              |
+| Terraform      | `source = "git::https://…"`                | `.terraform/modules/<key>` — tool-owned               |
 
 **Not supported — "committed manifests never contain paths."** This claim would
 be overstated. Several of these tools *do* allow committed local paths:
@@ -388,10 +388,10 @@ answer, which then need to agree, which nothing enforces.
 draft was collapsing these into one. They are independent and both must be
 expressible:
 
-| Axis | Question | Values |
-| ---- | -------- | ------ |
-| **Location** | *Where* is the content? | default (tool-owned cache) / overridden path / in-tree |
-| **Managed** | *Who puts it there?* | `managed: true` (strata clones + checks out the ref) / `managed: false` (something else already did) |
+| Axis         | Question                | Values                                                                                               |
+| ------------ | ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| **Location** | *Where* is the content? | default (tool-owned cache) / overridden path / in-tree                                               |
+| **Managed**  | *Who puts it there?*    | `managed: true` (strata clones + checks out the ref) / `managed: false` (something else already did) |
 
 Today `gitops` vs `bundled` encodes the *managed* axis, and encodes it well —
 that expressiveness must be preserved, not lost. All four combinations are legal
@@ -470,13 +470,13 @@ copying one file.
 
 **The real-world scenarios then resolve as:**
 
-| Scenario | What the user does |
-| -------- | ------------------ |
-| Local dev, let strata fetch everything | Nothing. `strata repo sync` populates the cache. Zero configuration. |
-| Local dev, actively editing a sibling checkout | `strata repo link infra ../infra` |
-| CI, no native checkout step | Nothing. `strata repo sync` populates the cache. |
+| Scenario                                                                                        | What the user does                                                         |
+| ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Local dev, let strata fetch everything                                                          | Nothing. `strata repo sync` populates the cache. Zero configuration.       |
+| Local dev, actively editing a sibling checkout                                                  | `strata repo link infra ../infra`                                          |
+| CI, no native checkout step                                                                     | Nothing. `strata repo sync` populates the cache.                           |
 | CI *with* an authenticated native checkout (Azure `resources.repositories`, `actions/checkout`) | Bootstrap step writes the overrides file; remotes declare `managed: false` |
-| The workspace's own config directory | `in_tree: "."` — never materialized |
+| The workspace's own config directory                                                            | `in_tree: "."` — never materialized                                        |
 
 #### Why this dissolves the problems rather than patching them
 
@@ -575,26 +575,26 @@ transitional step only — after Track 2 the file holds nothing machine-specific
 
 ### Track 1 — Problem B (non-breaking, ship first)
 
-| Item | Description | Status |
-| ---- | ----------- | ------ |
-| B-1 | Remove the `work_path` silent fallback in every builder's `_copy_provisioner_source()`; unresolvable repo name → hard error naming the repo and the fix | 🔲 TODO |
-| B-2 | Replace the optional `repo_map` kwarg with a required injected resolver (or service lookup) so omission is structurally impossible | 🔲 TODO |
-| B-3 | Regression test: a builder constructed without a resolver fails loudly rather than resolving against `work_path` | 🔲 TODO |
-| B-4 | Reconcile the duplicated resolution logic proven divergent above (`repo status` vs `get_repo_map()`, and `get_repo_map()`'s own `local`/`gitops` split over `url`/`path` and `os.getcwd()`/`work_path`) | 🔲 TODO |
+| Item | Description                                                                                                                                                                                             | Status |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| B-1  | Remove the `work_path` silent fallback in every builder's `_copy_provisioner_source()`; unresolvable repo name → hard error naming the repo and the fix                                                 | 🔲 TODO |
+| B-2  | Replace the optional `repo_map` kwarg with a required injected resolver (or service lookup) so omission is structurally impossible                                                                      | 🔲 TODO |
+| B-3  | Regression test: a builder constructed without a resolver fails loudly rather than resolving against `work_path`                                                                                        | 🔲 TODO |
+| B-4  | Reconcile the duplicated resolution logic proven divergent above (`repo status` vs `get_repo_map()`, and `get_repo_map()`'s own `local`/`gitops` split over `url`/`path` and `os.getcwd()`/`work_path`) | 🔲 TODO |
 
 ### Track 2 — Problem A (breaking, deprecation window)
 
-| Item | Description | Status |
-| ---- | ----------- | ------ |
-| F-1 | Define the remote schema: identity (`name`/`url`/`ref`) + `managed:` axis + `in_tree:` self-reference form | 🔲 TODO |
-| F-2 | Implement the resolution chain: overrides file → `--repo` flag → `in_tree` → out-of-tree cache → hard error | 🔲 TODO |
-| F-3 | `strata repo sync` materializes into the out-of-tree cache keyed by identity+ref | 🔲 TODO |
-| F-4 | `strata repo link <name> <path>` writes the gitignored overrides file; document the same file as the CI bootstrap mechanism | 🔲 TODO |
-| F-5 | Honour legacy `deploy_path`-as-location with a loud deprecation warning | 🔲 TODO |
-| F-6 | `strata validate`/`doctor` check flagging workspaces still relying on the legacy meaning (surfaces at validate time, not apply time) | 🔲 TODO |
-| F-7 | Document the resolution chain + `managed: false` CI pattern in the `.azure`/`.github` scaffold templates | 🔲 TODO |
-| F-8 | Remove the legacy `deploy_path` location meaning (following major) | 🔲 DEFERRED |
-| Ops (transitional, external) | `git rm --cached .strata/solution.json` in affected deployment repositories — needed only until Track 2 lands | 🔲 TODO (external repo) |
+| Item                         | Description                                                                                                                          | Status                 |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------- |
+| F-1                          | Define the remote schema: identity (`name`/`url`/`ref`) + `managed:` axis + `in_tree:` self-reference form                           | 🔲 TODO                 |
+| F-2                          | Implement the resolution chain: overrides file → `--repo` flag → `in_tree` → out-of-tree cache → hard error                          | 🔲 TODO                 |
+| F-3                          | `strata repo sync` materializes into the out-of-tree cache keyed by identity+ref                                                     | 🔲 TODO                 |
+| F-4                          | `strata repo link <name> <path>` writes the gitignored overrides file; document the same file as the CI bootstrap mechanism          | 🔲 TODO                 |
+| F-5                          | Honour legacy `deploy_path`-as-location with a loud deprecation warning                                                              | 🔲 TODO                 |
+| F-6                          | `strata validate`/`doctor` check flagging workspaces still relying on the legacy meaning (surfaces at validate time, not apply time) | 🔲 TODO                 |
+| F-7                          | Document the resolution chain + `managed: false` CI pattern in the `.azure`/`.github` scaffold templates                             | 🔲 TODO                 |
+| F-8                          | Remove the legacy `deploy_path` location meaning (following major)                                                                   | 🔲 DEFERRED             |
+| Ops (transitional, external) | `git rm --cached .strata/solution.json` in affected deployment repositories — needed only until Track 2 lands                        | 🔲 TODO (external repo) |
 
 ## Open Questions
 
