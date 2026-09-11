@@ -7,6 +7,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [1.9.10] - 2026-09-11
+
 ### Added
 
 #### **`strata values get` gained a `--format` option for direct shell/script consumption**
