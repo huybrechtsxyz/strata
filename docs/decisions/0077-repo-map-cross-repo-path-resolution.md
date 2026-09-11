@@ -727,14 +727,14 @@ transitional step only — after Track 2 the file holds nothing machine-specific
 
 ### Track 1 — Problem B (non-breaking, ship first)
 
-| Item | Description                                                                                                                                                                                                   | Status |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| B-1  | Remove the `work_path` silent fallback in every builder's `_copy_provisioner_source()`; unresolvable repo name → hard error naming the repo and the fix                                                       | 🔲 TODO |
-| B-2  | Replace the optional `repo_map` kwarg with a required injected resolver (or service lookup) so omission is structurally impossible                                                                            | 🔲 TODO |
-| B-3  | Regression test: a builder constructed without a resolver fails loudly rather than resolving against `work_path`                                                                                              | 🔲 TODO |
-| B-4  | Reconcile the duplicated resolution logic proven divergent above (`repo status` vs `get_repo_map()`, and `get_repo_map()`'s own `local`/`gitops` split over `url`/`path` and `os.getcwd()`/`work_path`)       | 🔲 TODO |
+| Item | Description                                                                                                                                                                                                                                                  | Status |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
+| B-1  | Remove the `work_path` silent fallback in every builder's `_copy_provisioner_source()`; unresolvable repo name → hard error naming the repo and the fix                                                                                                      | 🔲 TODO |
+| B-2  | Replace the optional `repo_map` kwarg with a required injected resolver (or service lookup) so omission is structurally impossible                                                                                                                           | 🔲 TODO |
+| B-3  | Regression test: a builder constructed without a resolver fails loudly rather than resolving against `work_path`                                                                                                                                             | 🔲 TODO |
+| B-4  | Reconcile the duplicated resolution logic proven divergent above (`repo status` vs `get_repo_map()`, and `get_repo_map()`'s own `local`/`gitops` split over `url`/`path` and `os.getcwd()`/`work_path`)                                                      | 🔲 TODO |
 | B-5  | Fix `get_repo_map()`'s `os.getcwd()` → workspace root for `type: local` (and the identical bug in `generate_workspace()`); regression test asserting identical resolution from the workspace root and from a nested subdirectory with the same `--work-path` | ✅ DONE |
-| B-6  | Replace the misleading "check your profile refs" diagnostic with one that reports the resolved path and the repo whose resolution produced it                                                                 | 🔲 TODO |
+| B-6  | Replace the misleading "check your profile refs" diagnostic with one that reports the resolved path and the repo whose resolution produced it                                                                                                                | 🔲 TODO |
 
 ### Track 2 — Problem A (breaking, deprecation window)
 
