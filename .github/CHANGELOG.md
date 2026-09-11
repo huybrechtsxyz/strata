@@ -8,6 +8,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Added
+
+- **`strata values get` gained a `--format` option (`table`/`raw`/`env`/`export`)** for direct shell/script consumption — `raw` prints the bare value (single key only), `env` prints `KEY=value` lines, `export` prints shell-quoted `export KEY='value'` lines ready for `eval`. Mutually exclusive with `--output`. Previously the only way to extract a single value into a script was piping `--output json` through `jq`.
+
 ## [1.9.9] - 2026-09-10
 
 ### Fixed
