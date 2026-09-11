@@ -7,6 +7,15 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Fixed
+
+#### **`strata build plan` silently omitted `repo_map` when copying Terraform provisioner sources**
+
+- **Root cause**: `PlanBuildCommand._build_to_temp()` (the artifact-generation step behind `strata build plan`/`--artifacts-only`) constructs its own `TerraformBuilder`/`AnsibleBuilder`/`PlatformBuilder` instances independently of `RunBuildCommand` (the `strata build run` pipeline). The `TerraformBuilder.build()` call had no `repo_map` argument at all — `TerraformBuilder.build()`'s signature defaults `repo_map: Optional[Dict[str, str]] = None`, used downstream as `repo_map or {}`, so the omission was completely silent. `TerraformBuilder._copy_provisioner_source()` then resolved every provisioner's `source.repository` against `work_path` instead of the registered repository path from `.strata/solution.json`, since `repo_name in repo_map` was always `False` against an empty dict. Any workspace whose Terraform provisioner referenced a non-local `source.repository` (the common case — e.g. `source: {repository: iac-int, source_path: "control/terraform"}`) got a `"Terraform source directory not found: <work_path>/<source_path>"` error that looked exactly like a real repository misconfiguration, even though the identical deployment built successfully via `strata build run` (whose `RunBuildCommand._execute_terraform_build()` already computes and passes `repo_map` correctly).
+- **Fix**: moved the existing `repo_map = self._solution_controller.get_repo_map() if self._solution_controller is not None else {}` computation to before the Terraform builder block (previously it was only computed later, right before the Ansible builder call) and added `repo_map=repo_map` to the `tb.build()` call — mirrors `RunBuildCommand._execute_terraform_build()` exactly. The Ansible builder call in the same method already had `repo_map` correctly wired; the Platform builder doesn't accept one (source copying isn't part of platform assembly).
+- **Broader audit** (per report follow-up): searched the whole codebase for every place that constructs a `TerraformBuilder`/`AnsibleBuilder`/`BicepBuilder`/`ComposeBuilder`/`HelmBuilder`/`SyncBuilder` instance. Only two files do so: `run_build_command.py` (confirmed already correct for every builder that accepts `repo_map` — Terraform, Ansible, Bicep, Helm) and `plan_build_command.py` (this fix). `ComposeBuilder`/`SyncBuilder` don't accept `repo_map` at all (by design — Compose copies namespace module files directly, Sync only renders Jinja2 templates from the platform model, neither resolves a provisioner `source.repository`). No other instances of this bug pattern found.
+- **Testing**: new `TestPlanBuildToTemp` class in `test_commands_build.py` — `test_terraform_builder_receives_repo_map`/`test_ansible_builder_receives_repo_map` assert `repo_map` is threaded through to both builders' `.build()` calls with the exact value `solution_controller.get_repo_map()` returns.
+
 ## [1.9.10] - 2026-09-11
 
 ### Added

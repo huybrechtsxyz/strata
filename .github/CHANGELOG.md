@@ -8,6 +8,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Fixed
+
+- **`strata build plan` (including `--artifacts-only`) failed with `Terraform source directory not found` for any workspace whose Terraform provisioner uses a non-local `source.repository`** — even though the exact same deployment built fine via `strata build run`. `PlanBuildCommand._build_to_temp()` called `TerraformBuilder.build()` without passing `repo_map` at all, so every provisioner source silently resolved relative to the workspace root instead of the registered repository path. Fixed to compute and pass `repo_map` the same way `strata build run` already does. Audited every other builder call site in the codebase for the same omission — no others found.
+
 ## [1.9.10] - 2026-09-11
 
 ### Added
