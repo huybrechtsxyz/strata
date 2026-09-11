@@ -7,6 +7,17 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Fixed
+
+#### **A transient Marketplace timeout failed the entire VS Code extension release job**
+
+- **Symptom**: the `publish-vscode` job failed with `Request timeout: /_apis/gallery` exactly 180 seconds after `Publishing 'huybrechts-xyz.xyz-strata v1.9.11'...` — `vsce`'s default HTTP request timeout expiring against the VS Marketplace gallery API. Every preceding step succeeded (the `.vsix` downloaded with a verified SHA256 digest, `vsce` installed cleanly), and no other release job was affected — nothing depends on `publish-vscode`, so the GitHub Release, PyPI upload and all Docker images published normally.
+- **Root cause**: not a configuration or credential fault. A bad/expired `VSCE_PAT` produces `401`/"Access Denied", a bad manifest produces a named validation error, and a duplicate version produces "already exists" — a clean timeout on `/_apis/gallery` means the Marketplace simply did not respond. The job had no retry and no `timeout-minutes`, so a transient upstream blip failed a release step outright.
+- **Fix**: the publish step now retries up to three times with escalating backoff (60s, 120s), and the job carries `timeout-minutes: 20`. Two classification rules make the retry safe rather than merely repetitive:
+  - **"already exists" is treated as success.** A timeout means the *client* gave up, not that the server rejected the request — the publish may well have completed server-side. Without this, a retry after a silently-successful attempt would fail spuriously on the duplicate-version error.
+  - **Auth and publisher errors fail fast.** `unauthorized`/`access denied`/`401`/`invalid publisher` can never succeed on retry, so they exit immediately with a message pointing at the `VSCE_PAT` secret rather than burning three minutes of backoff.
+- **Operational note**: because a timed-out publish may have succeeded, the correct first response to this failure is to check the Marketplace (`npx @vscode/vsce show huybrechts-xyz.xyz-strata`) *before* re-running — the new "already exists" handling now makes a blind re-run safe either way.
+
 ## [1.9.11] - 2026-09-11
 
 ### Fixed
