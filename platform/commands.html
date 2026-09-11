@@ -692,8 +692,8 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#values"><code class="docutils literal notranslate"><span class="pre">values</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#values-list"><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">list</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#values-get-key"><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">get</span> <span class="pre">KEY</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#values-set-key-value"><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">set</span> <span class="pre">KEY</span> <span class="pre">VALUE</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#values-get"><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">get</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#values-set"><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">set</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#values-resolve"><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
@@ -753,9 +753,9 @@
 <li class="toctree-l2"><a class="reference internal" href="#mcp"><code class="docutils literal notranslate"><span class="pre">mcp</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#mcp-serve"><code class="docutils literal notranslate"><span class="pre">mcp</span> <span class="pre">serve</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#id1"><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">list</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#values-get"><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">get</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#values-set"><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">set</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#id2"><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">resolve</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id2"><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">get</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id3"><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">set</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id4"><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">resolve</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#version-v"><code class="docutils literal notranslate"><span class="pre">--version</span></code> / <code class="docutils literal notranslate"><span class="pre">-v</span></code></a></li>
@@ -5488,8 +5488,8 @@ my########
 <p>All <code class="docutils literal notranslate"><span class="pre">values</span></code> subcommands accept <code class="docutils literal notranslate"><span class="pre">--file/-f</span> <span class="pre">PATH</span></code> and standard options like <code class="docutils literal notranslate"><span class="pre">--no-cache</span></code> and <code class="docutils literal notranslate"><span class="pre">--refresh-cache</span></code>.</p>
 <section id="values-list">
 <h3><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">list</span></code><a class="headerlink" href="#values-list" title="Link to this heading"></a></h3>
-<p>List all declared variables and feature flags for a deployment, along with their current resolved values.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">values</span> <span class="nb">list</span> <span class="p">[</span><span class="o">-</span><span class="n">f</span> <span class="n">FILE</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">stage</span> <span class="n">NAME</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">no</span><span class="o">-</span><span class="n">cache</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">refresh</span><span class="o">-</span><span class="n">cache</span><span class="p">]</span> <span class="p">[</span><span class="n">standard</span> <span class="n">options</span><span class="p">]</span>
+<p>List all declared variables, secrets, and feature flags for a deployment, along with their current resolved values.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">values</span> <span class="nb">list</span> <span class="o">-</span><span class="n">f</span> <span class="n">FILE</span> <span class="p">[</span><span class="o">--</span><span class="n">stage</span> <span class="n">NAME</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="nb">type</span> <span class="n">variables</span><span class="o">|</span><span class="n">secrets</span><span class="o">|</span><span class="n">features</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">show</span><span class="o">-</span><span class="n">store</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">unresolved</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">trace</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">ai</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">no</span><span class="o">-</span><span class="n">cache</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">refresh</span><span class="o">-</span><span class="n">cache</span><span class="p">]</span> <span class="p">[</span><span class="n">standard</span> <span class="n">options</span><span class="p">]</span>
 </pre></div>
 </div>
 <table class="docutils align-default">
@@ -5503,76 +5503,43 @@ my########
 <td><p>Deployment file (required unless <code class="docutils literal notranslate"><span class="pre">STRATA_FILE</span></code> env var is set)</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--stage</span> <span class="pre">NAME</span></code></p></td>
-<td><p>Limit to values declared for a specific stage</p></td>
+<td><p>Use the environment from this specific deployment stage (default: first stage)</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--no-cache</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--type</span> <span class="pre">variables|secrets|features</span></code></p></td>
+<td><p>Show only this value type. Default: all</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--show-store</span></code></p></td>
+<td><p>Include the store reference (env var name, key path) in output</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--unresolved</span></code></p></td>
+<td><p>Show only entries that failed to resolve</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--trace</span></code></p></td>
+<td><p>Show which environment file each value originates from (provenance)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--ai</span></code></p></td>
+<td><p>Run AI explanation of unresolved values (requires an <code class="docutils literal notranslate"><span class="pre">ai_agent</span></code> integration)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--no-cache</span></code></p></td>
 <td><p>Bypass the resolved-model cache; re-resolve all values live</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--refresh-cache</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--refresh-cache</span></code></p></td>
 <td><p>Invalidate cached values and re-resolve, then update the cache</p></td>
 </tr>
 </tbody>
 </table>
-<p>Output includes value source (store type), store reference, current value (masked for secrets), and any resolution errors.</p>
+<p>Secrets are masked (first 3 chars + <code class="docutils literal notranslate"><span class="pre">*****</span></code>) — use <code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">get</span></code> to reveal a full value.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>values<span class="w"> </span>list<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml
-strata<span class="w"> </span>values<span class="w"> </span>list<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--stage<span class="w"> </span>production
-strata<span class="w"> </span>values<span class="w"> </span>list<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--refresh-cache
+strata<span class="w"> </span>values<span class="w"> </span>list<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--type<span class="w"> </span>secrets<span class="w"> </span>--show-store
+strata<span class="w"> </span>values<span class="w"> </span>list<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--unresolved
 strata<span class="w"> </span>values<span class="w"> </span>list<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--output<span class="w"> </span>json
 </pre></div>
 </div>
-<p><strong>Console output columns:</strong> <code class="docutils literal notranslate"><span class="pre">key</span></code>, <code class="docutils literal notranslate"><span class="pre">type</span></code> (variable/feature/secret), <code class="docutils literal notranslate"><span class="pre">store</span></code>, <code class="docutils literal notranslate"><span class="pre">value</span></code>, <code class="docutils literal notranslate"><span class="pre">status</span></code> (resolved/error/masked).</p>
-<p><strong>JSON output keys:</strong> <code class="docutils literal notranslate"><span class="pre">deployment</span></code>, <code class="docutils literal notranslate"><span class="pre">values[]</span></code> — each: <code class="docutils literal notranslate"><span class="pre">key</span></code>, <code class="docutils literal notranslate"><span class="pre">type</span></code>, <code class="docutils literal notranslate"><span class="pre">store</span></code>, <code class="docutils literal notranslate"><span class="pre">reference</span></code>, <code class="docutils literal notranslate"><span class="pre">value</span></code>, <code class="docutils literal notranslate"><span class="pre">masked</span></code>, <code class="docutils literal notranslate"><span class="pre">status</span></code>, <code class="docutils literal notranslate"><span class="pre">error</span></code>.</p>
 </section>
-<section id="values-get-key">
-<h3><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">get</span> <span class="pre">KEY</span></code><a class="headerlink" href="#values-get-key" title="Link to this heading"></a></h3>
-<p>Retrieve the resolved value of a single variable or feature flag.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">values</span> <span class="n">get</span> <span class="n">KEY</span> <span class="p">[</span><span class="o">-</span><span class="n">f</span> <span class="n">FILE</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">no</span><span class="o">-</span><span class="n">cache</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">refresh</span><span class="o">-</span><span class="n">cache</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">raw</span><span class="p">]</span> <span class="p">[</span><span class="n">standard</span> <span class="n">options</span><span class="p">]</span>
-</pre></div>
-</div>
-<table class="docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Option</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">KEY</span></code></p></td>
-<td><p>Variable or feature name to retrieve</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--raw</span></code></p></td>
-<td><p>Print the bare value only (no JSON envelope, no masking label)</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--no-cache</span></code></p></td>
-<td><p>Bypass the resolved-model cache; re-resolve live</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--refresh-cache</span></code></p></td>
-<td><p>Invalidate cache and re-resolve, then update the cache</p></td>
-</tr>
-</tbody>
-</table>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>values<span class="w"> </span>get<span class="w"> </span>DATABASE_PASSWORD<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml
-strata<span class="w"> </span>values<span class="w"> </span>get<span class="w"> </span>ENABLE_FEATURE_X<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--raw
-strata<span class="w"> </span>values<span class="w"> </span>get<span class="w"> </span>API_KEY<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--refresh-cache
-strata<span class="w"> </span>values<span class="w"> </span>get<span class="w"> </span>DATABASE_PASSWORD<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--output<span class="w"> </span>json
-</pre></div>
-</div>
-<p><strong>Exit codes:</strong> 0 success (value exists) · 3 key not found</p>
-</section>
-<section id="values-set-key-value">
-<h3><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">set</span> <span class="pre">KEY</span> <span class="pre">VALUE</span></code><a class="headerlink" href="#values-set-key-value" title="Link to this heading"></a></h3>
-<p>Set a team-shared template variable in the workspace (stored in <code class="docutils literal notranslate"><span class="pre">solution.json</span></code>). Unlike deployment-level variables, team variables persist across deployments.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">values</span> <span class="nb">set</span> <span class="n">KEY</span> <span class="n">VALUE</span> <span class="p">[</span><span class="n">standard</span> <span class="n">options</span><span class="p">]</span>
-</pre></div>
-</div>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>values<span class="w"> </span><span class="nb">set</span><span class="w"> </span>app_version<span class="w"> </span><span class="m">1</span>.2.3
-strata<span class="w"> </span>values<span class="w"> </span><span class="nb">set</span><span class="w"> </span>default_region<span class="w"> </span>us-east-1
-</pre></div>
-</div>
-</section>
-<section id="values-resolve">
-<h3><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">resolve</span></code><a class="headerlink" href="#values-resolve" title="Link to this heading"></a></h3>
-<p>Resolve and display all variable and feature values for a deployment in a structured format. Useful for CI/CD pipelines that need to inject resolved values into subsequent stages.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">values</span> <span class="n">resolve</span> <span class="p">[</span><span class="o">-</span><span class="n">f</span> <span class="n">FILE</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="nb">format</span> <span class="n">json</span><span class="o">|</span><span class="n">ndjson</span><span class="o">|</span><span class="n">env</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">no</span><span class="o">-</span><span class="n">cache</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">refresh</span><span class="o">-</span><span class="n">cache</span><span class="p">]</span> <span class="p">[</span><span class="n">standard</span> <span class="n">options</span><span class="p">]</span>
+<section id="values-get">
+<h3><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">get</span></code><a class="headerlink" href="#values-get" title="Link to this heading"></a></h3>
+<p>Retrieve the full resolved value for one or more keys. Secrets are revealed in plain text — use with care.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">values</span> <span class="n">get</span> <span class="o">-</span><span class="n">f</span> <span class="n">FILE</span> <span class="n">KEY</span><span class="o">...</span> <span class="p">[</span><span class="o">--</span><span class="nb">format</span> <span class="n">table</span><span class="o">|</span><span class="n">raw</span><span class="o">|</span><span class="n">env</span><span class="o">|</span><span class="n">export</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">no</span><span class="o">-</span><span class="n">cache</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">refresh</span><span class="o">-</span><span class="n">cache</span><span class="p">]</span> <span class="p">[</span><span class="n">standard</span> <span class="n">options</span><span class="p">]</span>
 </pre></div>
 </div>
 <table class="docutils align-default">
@@ -5587,75 +5554,113 @@ strata<span class="w"> </span>values<span class="w"> </span><span class="nb">set
 <td><p>—</p></td>
 <td><p>Deployment file (required unless <code class="docutils literal notranslate"><span class="pre">STRATA_FILE</span></code> env var is set)</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--format</span> <span class="pre">FORMAT</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">json</span></code></p></td>
-<td><p>Output format: <code class="docutils literal notranslate"><span class="pre">json</span></code> (object), <code class="docutils literal notranslate"><span class="pre">ndjson</span></code> (one per line), <code class="docutils literal notranslate"><span class="pre">env</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">KEY...</span></code></p></td>
+<td><p>—</p></td>
+<td><p>One or more variable/secret/feature keys to retrieve</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--no-cache</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--format</span> <span class="pre">table|raw|env|export</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">table</span></code></p></td>
+<td><p>See below. Mutually exclusive with <code class="docutils literal notranslate"><span class="pre">--output</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--no-cache</span></code></p></td>
 <td><p>off</p></td>
+<td><p>Bypass the resolved-model cache; re-resolve live</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--refresh-cache</span></code></p></td>
+<td><p>off</p></td>
+<td><p>Invalidate cache and re-resolve, then update the cache</p></td>
+</tr>
+</tbody>
+</table>
+<p><code class="docutils literal notranslate"><span class="pre">--format</span></code> options:</p>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">table</span></code></strong> (default) — <code class="docutils literal notranslate"><span class="pre">KEY</span>&#160; <span class="pre">VALUE</span></code> console table</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">raw</span></code></strong> — bare value only, no key, no quoting. Requires exactly one <code class="docutils literal notranslate"><span class="pre">KEY</span></code> argument</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">env</span></code></strong> — <code class="docutils literal notranslate"><span class="pre">KEY=value</span></code> lines, unquoted (<code class="docutils literal notranslate"><span class="pre">.env</span></code>-file style)</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">export</span></code></strong> — <code class="docutils literal notranslate"><span class="pre">export</span> <span class="pre">KEY='value'</span></code> lines, shell-quoted for direct <code class="docutils literal notranslate"><span class="pre">eval</span></code>/sourcing</p></li>
+</ul>
+<p>For any of <code class="docutils literal notranslate"><span class="pre">raw</span></code>/<code class="docutils literal notranslate"><span class="pre">env</span></code>/<code class="docutils literal notranslate"><span class="pre">export</span></code>, nothing is printed if any requested key fails to resolve (only a non-zero exit code) — this prevents a script from accidentally capturing an <code class="docutils literal notranslate"><span class="pre">&quot;ERROR:</span> <span class="pre">...&quot;</span></code>/<code class="docutils literal notranslate"><span class="pre">&quot;NOT</span> <span class="pre">FOUND&quot;</span></code> placeholder string as if it were a real value.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>values<span class="w"> </span>get<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>DB_PASSWORD
+strata<span class="w"> </span>values<span class="w"> </span>get<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>DB_PASSWORD<span class="w"> </span>API_KEY
+strata<span class="w"> </span>values<span class="w"> </span>get<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>DB_PASSWORD<span class="w"> </span>--format<span class="w"> </span>raw
+<span class="nb">export</span><span class="w"> </span><span class="nv">DB_PASSWORD</span><span class="o">=</span><span class="k">$(</span>strata<span class="w"> </span>values<span class="w"> </span>get<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>DB_PASSWORD<span class="w"> </span>--format<span class="w"> </span>raw<span class="k">)</span>
+<span class="nb">eval</span><span class="w"> </span><span class="s2">"</span><span class="k">$(</span>strata<span class="w"> </span>values<span class="w"> </span>get<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>DB_PASSWORD<span class="w"> </span>API_KEY<span class="w"> </span>--format<span class="w"> </span><span class="nb">export</span><span class="k">)</span><span class="s2">"</span>
+strata<span class="w"> </span>values<span class="w"> </span>get<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>DB_PASSWORD<span class="w"> </span>API_KEY<span class="w"> </span>--format<span class="w"> </span>env<span class="w"> </span>&gt;<span class="w"> </span>.env
+strata<span class="w"> </span>values<span class="w"> </span>get<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>DB_PASSWORD<span class="w"> </span>--output<span class="w"> </span>json
+</pre></div>
+</div>
+<p><strong>Exit codes:</strong> 0 success (all keys resolved) · 3 one or more keys missing or failed to resolve</p>
+</section>
+<section id="values-set">
+<h3><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">set</span></code><a class="headerlink" href="#values-set" title="Link to this heading"></a></h3>
+<p>Write a value to its configured store backend. Behaviour depends on the store type — see the table below.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">values</span> <span class="nb">set</span> <span class="o">-</span><span class="n">f</span> <span class="n">FILE</span> <span class="o">-</span><span class="n">k</span> <span class="n">KEY</span> <span class="p">{</span><span class="o">--</span><span class="n">value</span> <span class="n">VALUE</span> <span class="o">|</span> <span class="o">--</span><span class="n">from</span><span class="o">-</span><span class="n">file</span> <span class="n">PATH</span> <span class="o">|</span> <span class="o">--</span><span class="n">stdin</span><span class="p">}</span> <span class="p">[</span><span class="n">standard</span> <span class="n">options</span><span class="p">]</span>
+</pre></div>
+</div>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Store type</p></th>
+<th class="head"><p>Action</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">constant</span></code></p></td>
+<td><p>Prints the file path and key location (cannot write to YAML)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">environment</span></code></p></td>
+<td><p>Prints the env var name and export instruction</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">github</span></code></p></td>
+<td><p>Calls <code class="docutils literal notranslate"><span class="pre">gh</span> <span class="pre">secret</span> <span class="pre">set</span></code> via the GitHub CLI</p></td>
+</tr>
+<tr class="row-odd"><td><p>Integration-backed (<code class="docutils literal notranslate"><span class="pre">azure-keyvault</span></code>, <code class="docutils literal notranslate"><span class="pre">vault</span></code>, <code class="docutils literal notranslate"><span class="pre">consul</span></code>, <code class="docutils literal notranslate"><span class="pre">azure-appconfig</span></code>, <code class="docutils literal notranslate"><span class="pre">bitwarden</span></code>, <code class="docutils literal notranslate"><span class="pre">infisical</span></code>, <code class="docutils literal notranslate"><span class="pre">etcd</span></code>, <code class="docutils literal notranslate"><span class="pre">flagsmith</span></code>)</p></td>
+<td><p>Calls the integration’s <code class="docutils literal notranslate"><span class="pre">set_variable</span></code>, <code class="docutils literal notranslate"><span class="pre">set_secret</span></code>, or <code class="docutils literal notranslate"><span class="pre">set_feature</span></code> method</p></td>
+</tr>
+</tbody>
+</table>
+<p>Multiline values (SSH keys, certificates) use <code class="docutils literal notranslate"><span class="pre">--from-file</span></code> or <code class="docutils literal notranslate"><span class="pre">--stdin</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>values<span class="w"> </span><span class="nb">set</span><span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>-k<span class="w"> </span>DB_HOST<span class="w"> </span>--value<span class="w"> </span><span class="s2">"new-host.example.com"</span>
+strata<span class="w"> </span>values<span class="w"> </span><span class="nb">set</span><span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>-k<span class="w"> </span>TLS_CERT<span class="w"> </span>--from-file<span class="w"> </span>cert.pem
+cat<span class="w"> </span>key.pem<span class="w"> </span><span class="p">|</span><span class="w"> </span>strata<span class="w"> </span>values<span class="w"> </span><span class="nb">set</span><span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>-k<span class="w"> </span>SSH_KEY<span class="w"> </span>--stdin
+</pre></div>
+</div>
+</section>
+<section id="values-resolve">
+<h3><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">resolve</span></code><a class="headerlink" href="#values-resolve" title="Link to this heading"></a></h3>
+<p>Diagnose value resolution paths <strong>without revealing values</strong>. Walks the resolution chain for each key and reports whether each step would succeed: store type, integration registration, availability, and optionally (with <code class="docutils literal notranslate"><span class="pre">--probe</span></code>) actual backend reachability.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">values</span> <span class="n">resolve</span> <span class="o">-</span><span class="n">f</span> <span class="n">FILE</span> <span class="p">[</span><span class="o">-</span><span class="n">k</span> <span class="n">KEY</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">probe</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">no</span><span class="o">-</span><span class="n">cache</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">refresh</span><span class="o">-</span><span class="n">cache</span><span class="p">]</span> <span class="p">[</span><span class="n">standard</span> <span class="n">options</span><span class="p">]</span>
+</pre></div>
+</div>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-f</span> <span class="pre">/</span> <span class="pre">--file</span> <span class="pre">PATH</span></code></p></td>
+<td><p>Deployment file (required unless <code class="docutils literal notranslate"><span class="pre">STRATA_FILE</span></code> env var is set)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">-k</span> <span class="pre">/</span> <span class="pre">--key</span> <span class="pre">KEY</span></code></p></td>
+<td><p>Diagnose a single key only (default: all)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--probe</span></code></p></td>
+<td><p>Also attempt actual resolution against store backends (without revealing values)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--no-cache</span></code></p></td>
 <td><p>Bypass the resolved-model cache</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--refresh-cache</span></code></p></td>
-<td><p>off</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--refresh-cache</span></code></p></td>
 <td><p>Invalidate and re-resolve, then update cache</p></td>
 </tr>
 </tbody>
 </table>
-<p>Output formats:</p>
-<ul class="simple">
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">json</span></code></strong> (default) — Complete structure with metadata (status, errors, store info)</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">ndjson</span></code></strong> — One line per value; useful for log pipelines and streaming</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">env</span></code></strong> — Bash/PowerShell env-var format (<code class="docutils literal notranslate"><span class="pre">KEY=value</span></code>), suitable for sourcing into shells</p></li>
-</ul>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># JSON format (default) — full metadata</span>
-strata<span class="w"> </span>values<span class="w"> </span>resolve<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml
-
-<span class="c1"># NDJSON format — one value per line for log pipelines</span>
-strata<span class="w"> </span>values<span class="w"> </span>resolve<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--format<span class="w"> </span>ndjson
-
-<span class="c1"># Env format — source into shell</span>
-<span class="nb">source</span><span class="w"> </span>&lt;<span class="o">(</span>strata<span class="w"> </span>values<span class="w"> </span>resolve<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--format<span class="w"> </span>env<span class="o">)</span>
-<span class="c1"># PowerShell</span>
-strata<span class="w"> </span>values<span class="w"> </span>resolve<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--format<span class="w"> </span>env<span class="w"> </span><span class="p">|</span><span class="w"> </span>ForEach-Object<span class="w"> </span><span class="o">{</span><span class="w"> </span><span class="nv">$env</span>:<span class="nv">$_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">(</span>iex<span class="w"> </span><span class="nv">$_</span><span class="o">)</span>.Split<span class="o">(</span><span class="s1">'='</span><span class="o">)[</span><span class="m">1</span><span class="o">]</span><span class="w"> </span><span class="o">}</span>
-
-<span class="c1"># Refresh cache and re-resolve</span>
-strata<span class="w"> </span>values<span class="w"> </span>resolve<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--refresh-cache
-
-<span class="c1"># Integration with external tools</span>
-strata<span class="w"> </span>values<span class="w"> </span>resolve<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">'.values | map(select(.type=="secret")) | .[].key'</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>values<span class="w"> </span>resolve<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml
+strata<span class="w"> </span>values<span class="w"> </span>resolve<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>-k<span class="w"> </span>DB_PASSWORD
+strata<span class="w"> </span>values<span class="w"> </span>resolve<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--probe
 </pre></div>
 </div>
-<p><strong>JSON output example:</strong></p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">"deployment"</span><span class="p">:</span><span class="w"> </span><span class="s2">"xyz-prd"</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">"values"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<span class="w">      </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"key"</span><span class="p">:</span><span class="w"> </span><span class="s2">"DATABASE_PASSWORD"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"secret"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"store"</span><span class="p">:</span><span class="w"> </span><span class="s2">"azure-keyvault"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"value"</span><span class="p">:</span><span class="w"> </span><span class="s2">"***"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"masked"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"resolved"</span>
-<span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">"key"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ENABLE_FEATURE_X"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"feature"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"store"</span><span class="p">:</span><span class="w"> </span><span class="s2">"constant"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"value"</span><span class="p">:</span><span class="w"> </span><span class="s2">"true"</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"resolved"</span>
-<span class="w">      </span><span class="p">}</span>
-<span class="w">    </span><span class="p">],</span>
-<span class="w">    </span><span class="nt">"cache_hit"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">"cache_age_seconds"</span><span class="p">:</span><span class="w"> </span><span class="mi">42</span>
-<span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">"errors"</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
-<span class="w">  </span><span class="nt">"messages"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
-<span class="p">}</span>
-</pre></div>
-</div>
-<p><strong>Exit codes:</strong> 0 success · 1 system error · 3 resolution failed (one or more values could not be resolved)</p>
+<p><strong>Exit codes:</strong> 0 success · 3 one or more keys would fail to resolve</p>
 </section>
 </section>
 <hr class="docutils" />
@@ -7018,8 +7023,8 @@ strata<span class="w"> </span>values<span class="w"> </span>list<span class="w">
 </pre></div>
 </div>
 </section>
-<section id="values-get">
-<h3><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">get</span></code><a class="headerlink" href="#values-get" title="Link to this heading"></a></h3>
+<section id="id2">
+<h3><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">get</span></code><a class="headerlink" href="#id2" title="Link to this heading"></a></h3>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">values</span> <span class="n">get</span> <span class="o">-</span><span class="n">f</span> <span class="n">FILE</span> <span class="n">KEY</span><span class="o">...</span> <span class="p">[</span><span class="n">standard</span> <span class="n">options</span><span class="p">]</span>
 </pre></div>
 </div>
@@ -7029,8 +7034,8 @@ strata<span class="w"> </span>values<span class="w"> </span>get<span class="w"> 
 </pre></div>
 </div>
 </section>
-<section id="values-set">
-<h3><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">set</span></code><a class="headerlink" href="#values-set" title="Link to this heading"></a></h3>
+<section id="id3">
+<h3><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">set</span></code><a class="headerlink" href="#id3" title="Link to this heading"></a></h3>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">values</span> <span class="nb">set</span> <span class="o">-</span><span class="n">f</span> <span class="n">FILE</span> <span class="o">-</span><span class="n">k</span> <span class="n">KEY</span> <span class="p">{</span><span class="o">--</span><span class="n">value</span> <span class="n">VALUE</span> <span class="o">|</span> <span class="o">--</span><span class="n">from</span><span class="o">-</span><span class="n">file</span> <span class="n">PATH</span> <span class="o">|</span> <span class="o">--</span><span class="n">stdin</span><span class="p">}</span> <span class="p">[</span><span class="n">standard</span> <span class="n">options</span><span class="p">]</span>
 </pre></div>
 </div>
@@ -7063,8 +7068,8 @@ cat<span class="w"> </span>key.pem<span class="w"> </span><span class="p">|</spa
 </pre></div>
 </div>
 </section>
-<section id="id2">
-<h3><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">resolve</span></code><a class="headerlink" href="#id2" title="Link to this heading"></a></h3>
+<section id="id4">
+<h3><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">resolve</span></code><a class="headerlink" href="#id4" title="Link to this heading"></a></h3>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">values</span> <span class="n">resolve</span> <span class="o">-</span><span class="n">f</span> <span class="n">FILE</span> <span class="p">[</span><span class="o">-</span><span class="n">k</span> <span class="n">KEY</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">probe</span><span class="p">]</span> <span class="p">[</span><span class="n">standard</span> <span class="n">options</span><span class="p">]</span>
 </pre></div>
 </div>
