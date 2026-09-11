@@ -137,6 +137,117 @@ class TestSolutionControllerRepositories:
 
 
 # ---------------------------------------------------------------------------
+# get_repo_map — @repo/... resolution (ADR-0077, Track 1 / B-5)
+# ---------------------------------------------------------------------------
+
+
+def _make_local_repo(name: str = "config", url: str = ".") -> SolutionSpecRepositoryModel:
+    return SolutionSpecRepositoryModel(name=name, url=url, path=name, type="local", branch="")
+
+
+class TestSolutionControllerRepoMap:
+    """Registered repos are workspace-scoped state, so `@repo/...` must resolve
+    against the workspace root — never the process working directory.
+    """
+
+    def test_local_repo_resolves_against_work_path_not_cwd(self, tmp_path, monkeypatch):
+        """Regression: a `type: local` repo with a relative url resolved against
+        `os.getcwd()`, so running strata from a subdirectory silently produced a
+        different path and ignored an explicitly-supplied --work-path.
+        """
+        workspace = tmp_path / "workspace"
+        nested = workspace / "deploy" / "control" / "dev"
+        nested.mkdir(parents=True)
+
+        ctrl = SolutionController(workspace)
+        ctrl._solution = _make_solution()
+        ctrl._solution.spec.repositories = [_make_local_repo("config", ".")]
+
+        monkeypatch.chdir(nested)
+        from_nested = ctrl.get_repo_map()
+
+        monkeypatch.chdir(workspace)
+        from_root = ctrl.get_repo_map()
+
+        assert from_nested == from_root
+        assert from_nested["config"] == str(workspace.resolve())
+
+    def test_local_repo_relative_url_is_workspace_relative(self, tmp_path, monkeypatch):
+        """A relative url like `../sibling` is relative to the workspace root."""
+        workspace = tmp_path / "workspace"
+        sibling = tmp_path / "sibling"
+        workspace.mkdir()
+        sibling.mkdir()
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+
+        ctrl = SolutionController(workspace)
+        ctrl._solution = _make_solution()
+        ctrl._solution.spec.repositories = [_make_local_repo("infra", "../sibling")]
+
+        monkeypatch.chdir(elsewhere)
+        repo_map = ctrl.get_repo_map()
+
+        assert repo_map["infra"] == str(sibling.resolve())
+
+    def test_local_repo_absolute_url_is_unchanged(self, tmp_path, monkeypatch):
+        workspace = tmp_path / "workspace"
+        external = tmp_path / "external"
+        workspace.mkdir()
+        external.mkdir()
+
+        ctrl = SolutionController(workspace)
+        ctrl._solution = _make_solution()
+        ctrl._solution.spec.repositories = [_make_local_repo("ext", str(external))]
+
+        monkeypatch.chdir(tmp_path)
+        assert ctrl.get_repo_map()["ext"] == str(external.resolve())
+
+    def test_gitops_repo_resolves_against_work_path(self, tmp_path, monkeypatch):
+        workspace = tmp_path / "workspace"
+        nested = workspace / "nested"
+        nested.mkdir(parents=True)
+
+        ctrl = SolutionController(workspace)
+        ctrl._solution = _make_solution()
+        ctrl._solution.spec.repositories = [_make_repo("env-int")]
+
+        monkeypatch.chdir(nested)
+        from_nested = ctrl.get_repo_map()
+        monkeypatch.chdir(workspace)
+
+        assert from_nested == ctrl.get_repo_map()
+        assert from_nested["env-int"] == str((workspace / "repos" / "env-int").resolve())
+
+    def test_local_and_gitops_share_the_same_base(self, tmp_path, monkeypatch):
+        """The original bug was two branches using two different bases."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+
+        ctrl = SolutionController(workspace)
+        ctrl._solution = _make_solution()
+        ctrl._solution.spec.repositories = [
+            _make_local_repo("local-repo", "sub"),
+            SolutionSpecRepositoryModel(
+                name="gitops-repo",
+                url="https://example.com/r.git",
+                path="sub",
+                type="gitops",
+                branch="main",
+            ),
+        ]
+
+        monkeypatch.chdir(elsewhere)
+        repo_map = ctrl.get_repo_map()
+
+        # Same declared relative path ⇒ same resolved location, regardless of type
+        assert repo_map["local-repo"] == repo_map["gitops-repo"]
+        assert repo_map["local-repo"] == str((workspace / "sub").resolve())
+
+
+# ---------------------------------------------------------------------------
 # Profile management
 # ---------------------------------------------------------------------------
 
