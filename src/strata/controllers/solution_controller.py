@@ -444,24 +444,38 @@ class SolutionController(BaseController):
     def get_repo_map(self) -> Dict[str, str]:
         """Return a mapping of repo name → absolute root path for ``@repo/...`` resolution.
 
-        - **local** repos: the ``url`` field is the source directory (absolute or
-          relative to CWD).  ``path`` is only a logical mount label and is not used
-          for resolution.
-        - **gitops** repos: the ``path`` field is where the repo was cloned, relative
-          to ``work_path``.
+        - **local** repos: the ``url`` field is the source directory (absolute, or
+          relative to the workspace root).  ``path`` is only a logical mount label
+          and is not used for resolution.
+        - **gitops** repos: the ``path`` field is where the repo was cloned,
+          relative to the workspace root.
+
+        Both branches resolve relative values against **the workspace root**, never
+        against the process working directory.  Registered repositories are
+        workspace-scoped state — they live in ``.strata/solution.json`` inside the
+        workspace — so the workspace root is the only stable base.
+
+        Resolving ``local`` repos against ``os.getcwd()`` (the previous behaviour)
+        meant ``@repo/...`` references resolved differently depending on which
+        directory ``strata`` happened to be invoked from, and silently ignored an
+        explicitly-supplied ``--work-path``: running from a nested deployment
+        directory produced ``<work_path>/<subdir>/<ref>`` instead of
+        ``<work_path>/<ref>``, failing with a diagnostic that blamed the profile's
+        config references rather than the resolution.  See ADR-0077.
         """
         repos, _ = self.get_repositories()
+        base = Path(self._work_path).resolve()
         repo_map: Dict[str, str] = {}
         for r in repos:
             if str(r.type) == "local":
-                # url is the source directory; resolve against CWD if relative
+                # url is the source directory; resolve against work_path if relative
                 url_path = Path(str(r.url))
                 if not url_path.is_absolute():
-                    url_path = Path(os.getcwd()) / url_path
+                    url_path = base / url_path
                 repo_map[str(r.name)] = str(url_path.resolve())
             else:
                 # git repo: cloned into work_path / r.path
-                repo_map[str(r.name)] = str(self._work_path / r.path)
+                repo_map[str(r.name)] = str((base / r.path).resolve())
         return repo_map
 
     # ------------------------------------------------------------------
@@ -893,15 +907,18 @@ class SolutionController(BaseController):
         repos = self._solution.spec.repositories or []
 
         folders: List[dict] = [{"path": "."}]  # always include the solution root
+        base = self._work_path.resolve()
         for repo in repos:
             if str(repo.type) == "local":
-                # url is relative to CWD (where the CLI ran); we need it relative
-                # to work_path so VS Code resolves it correctly from the workspace file.
+                # url is relative to the workspace root (same contract as
+                # get_repo_map — never the process CWD, which would make the
+                # generated .code-workspace depend on where `strata repo add`
+                # happened to be run from). See ADR-0077.
                 url_abs = Path(str(repo.url))
                 if not url_abs.is_absolute():
-                    url_abs = Path(os.getcwd()) / url_abs
+                    url_abs = base / url_abs
                 try:
-                    folder_path = os.path.relpath(url_abs.resolve(), self._work_path.resolve()).replace("\\", "/")
+                    folder_path = os.path.relpath(url_abs.resolve(), base).replace("\\", "/")
                 except ValueError:
                     # relpath can fail on Windows across drives — keep absolute
                     folder_path = str(url_abs.resolve())

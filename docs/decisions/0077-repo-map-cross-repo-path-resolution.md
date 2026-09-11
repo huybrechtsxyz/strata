@@ -133,9 +133,45 @@ Note the third row: `get_repo_map()` is internally inconsistent with *itself* �
 to "where is repo X?" for a `local` repo also changes depending on **which
 directory the user happened to run `strata` from**.
 
+### This is not merely inconsistent — it is a live, reproducible failure
+
+The `os.getcwd()` branch is not a latent tidiness issue. It is a user-visible bug
+today, reproducible as a controlled experiment: **identical command, identical
+explicit `--work-path`, identical work-path-relative `-f`, with CWD as the only
+variable.** Run from the workspace root it succeeds; run from a nested deployment
+directory it fails.
+
+The mechanism, for a workspace whose active profile references `@config/config/base.yaml`
+where `config` is `type: local` with `url: "."`:
+
+| CWD at invocation    | `repo_map["config"]` resolves to | `@config/config/base.yaml` resolves to                             |
+| -------------------- | -------------------------------- | ------------------------------------------------------------------ |
+| workspace root       | `<workspace>`                    | `<workspace>/config/base.yaml` ✅ exists                            |
+| `deploy/control/dev` | `<workspace>/deploy/control/dev` | `<workspace>/deploy/control/dev/config/base.yaml` ❌ does not exist |
+
+Three things make this the strongest exhibit in this ADR:
+
+1. **An explicitly-supplied correct answer is silently ignored.** The user passed
+   `--work-path` pointing at the right directory. `SolutionController` *has*
+   `self._work_path` — it is used on the very next line for `gitops` repos — and
+   the `local` branch reaches past it to `os.getcwd()` anyway. Giving strata the
+   right answer does not save you.
+2. **The diagnostic names the wrong thing.** The failure surfaces as a complaint
+   about the profile's config refs. The refs are fine. The user is sent to
+   investigate a file that is correct, for a problem caused somewhere else
+   entirely — the same misdiagnosis cost that made the `build plan` bug expensive.
+3. **It means running `strata` from a subdirectory is currently unsupported** in
+   any workspace that combines `type: local` repos with `@ref` references — and
+   this is documented nowhere, warned about nowhere, and validated nowhere.
+
+The fix is a one-line change (`os.getcwd()` → `self._work_path`), is
+non-breaking, and does not depend on any schema decision in this ADR. It belongs
+in Track 1.
+
 This is the real thesis of this ADR, demonstrated without needing the
 two-registry argument at all: **path resolution logic is duplicated across call
-sites rather than centralised, and the copies have already drifted.**
+sites rather than centralised, the copies have already drifted, and the drift is
+reaching users.**
 
 ## Two independent problems (do not conflate)
 
@@ -470,13 +506,122 @@ copying one file.
 
 **The real-world scenarios then resolve as:**
 
-| Scenario                                                                                        | What the user does                                                         |
-| ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Local dev, let strata fetch everything                                                          | Nothing. `strata repo sync` populates the cache. Zero configuration.       |
-| Local dev, actively editing a sibling checkout                                                  | `strata repo link infra ../infra`                                          |
-| CI, no native checkout step                                                                     | Nothing. `strata repo sync` populates the cache.                           |
-| CI *with* an authenticated native checkout (Azure `resources.repositories`, `actions/checkout`) | Bootstrap step writes the overrides file; remotes declare `managed: false` |
-| The workspace's own config directory                                                            | `in_tree: "."` — never materialized                                        |
+| Scenario                                                                                        | What the user does                                                   |
+| ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Local dev, let strata fetch everything                                                          | Nothing. `strata repo sync` populates the cache. Zero configuration. |
+| Local dev, actively editing a sibling checkout                                                  | `strata repo link infra ../infra`                                    |
+| CI, no native checkout step                                                                     | Nothing. `strata repo sync` populates the cache.                     |
+| CI *with* an authenticated native checkout (Azure `resources.repositories`, `actions/checkout`) | Bootstrap step writes the overrides file; overrides `managed: false` |
+| The workspace's own config directory                                                            | `in_tree: "."` — never materialized                                  |
+
+##### A lock file is a prerequisite, not an optional extra
+
+The cache design cannot be settled without first answering a question the earlier
+draft never asked: **is there a lock file?** Without one there is no good cache
+key; with one the concurrency problem largely dissolves.
+
+The issue is that `ref: main` is **mutable**. If the cache key contains a branch
+name, the directory's contents are a moving target. "Two workspaces want different
+refs" is the *easy* case — the hard case is two workspaces wanting the *same* ref
+and disagreeing about when it moved: workspace A syncs Monday, workspace B syncs
+Friday, `main` advanced in between, and they now silently need different content
+at the same key. Any key derived from a mutable ref has this problem regardless of
+how concurrency is handled.
+
+Every tool cited as prior art solved this the same way — key on the **resolved
+immutable identity**, and record the resolution in a lock file:
+
+- **Cache key:** `<cache_root>/<hash(normalized_url)>/<commit_sha>`. Immutable, so
+  a populated directory is never mutated and never invalidated — safe to share
+  across workspaces and across concurrent processes with zero read coordination.
+- **Lock file:** committed, mapping `name → (url, requested_ref, resolved_sha)`,
+  updated only by an explicit `strata repo sync --update` (the `go get -u` /
+  `cargo update` / `nix flake update` verb). This is what makes builds
+  reproducible and what makes `--dry-run` mean anything.
+
+With this, "two workspaces want different refs" is not a conflict at all —
+different SHAs, different directories, both present, both immutable.
+
+**Cost to be honest about:** a lock file changes `ref: main` from "always follow
+the branch" to "pin until told otherwise." Some users want the former. That is a
+real behavioural change and needs its own migration note — though it is moot for
+`managed: false` remotes, which covers the CI case entirely.
+
+##### Cache implementation specifics
+
+These are recorded now because each is a known way to get this wrong:
+
+- **Cache root:** `%LOCALAPPDATA%\strata\cache\repos` on Windows;
+  `$XDG_CACHE_HOME/strata/repos` (default `~/.cache/strata/repos`) elsewhere;
+  overridable via `STRATA_CACHE_DIR`. The override matters for CI — hosted agents
+  want the cache inside the workspace so it lands in the pipeline cache, and
+  air-gapped builds want it pre-seeded.
+- **Concurrent materialization:** clone/fetch into `<cache_root>/tmp/<random>`,
+  then atomically rename into place. The loser of a race treats "destination
+  exists" as success and discards its temp copy. No lock files, no timeouts, no
+  stale-lock recovery after a crash — which matters on Windows, where advisory
+  locking and crash cleanup are both worse than on POSIX. **The temp directory
+  must live under the cache root, not the system temp directory**, or the rename
+  crosses filesystems and stops being atomic. This is the single most common way
+  this pattern is implemented incorrectly.
+- **Windows rename semantics:** `os.rename` fails if the destination exists
+  (unlike POSIX), so the exists-is-success path must be taken deliberately rather
+  than relying on replace semantics. Expect transient `Access is denied` when
+  another process holds a handle in the directory, and retry once.
+- **Fetching by SHA:** `git fetch --depth 1 origin <sha>` requires
+  `uploadpack.allowReachableSHA1InWant` on the server, which is **not** enabled by
+  default on GitHub Enterprise. A fallback is required (fetch the ref, then check
+  out the SHA, verifying reachability) or this will work against github.com and
+  fail against on-premise GHE.
+- **Garbage collection:** an immutable content-addressed cache grows without
+  bound. `strata cache gc` with last-access pruning is needed eventually. Recorded
+  here as a follow-on rather than a blocker, so that it is a planned item and not
+  a disk-full incident.
+
+##### The overrides file covers `managed:` as well as location
+
+`managed:` must be overridable, **in both directions**:
+
+- Committed config says `managed: true`; a CI pipeline with an authenticated
+  native checkout needs "don't fetch, it's already here" → `true → false`.
+- Committed config says `managed: false` (because CI provides it); a developer
+  with no checkout wants strata to fetch it → `false → true`.
+
+If the overrides layer cannot express these, the only remaining place to express
+them is the committed file — which is precisely the problem Option F exists to
+eliminate. **`managed:` is not a property of the dependency; it is a property of
+whether *this environment* already provides it.** That makes the committed value a
+*default*, and defaults are exactly what an overrides layer overrides.
+
+Three qualifications:
+
+1. **`in_tree` is not overridable.** It is genuinely invariant — you can never
+   materialize the repository you are executing inside. Different axis, fixed.
+2. **Validate the 2×2 rather than assuming it.** `managed: false` + no location is
+   a hard error (nobody knows where it is). `managed: true` + explicit location is
+   legitimate but escapes the content-addressed cache and its GC — allow it, and
+   document that it opts out of sharing. The other two are the normal cases.
+3. **An unknown repo name in the overrides file is a hard error**, listing the
+   known names. A typo'd `iac-itn` silently creating a phantom override, or
+   silently doing nothing, is the *same silent-fallback bug class* Track 1 closes
+   — it must not be reintroduced one layer up.
+
+##### Provenance must be a first-class output
+
+Once there is a committed layer, an overrides layer, and `managed:` varying
+independently, the failure mode being escaped stops being "multiple sources" and
+becomes **"multiple sources with no visibility into which one won."** That is what
+made the original incident expensive — not that the two registries disagreed, but
+that nothing reported *that* they disagreed or *which* was in effect.
+
+`strata repo status` must therefore show, per repo and per axis, which layer
+supplied the effective value — e.g. location from `overrides.yaml`, `managed`
+from the committed declaration, ref from the lock file. Nix (`nix flake metadata`)
+and Bazel (`bazel info`) both do this, and it is what makes a layered resolution
+chain debuggable rather than a repeat of the current situation.
+
+This is cheap: the resolver must already know which layer won in order to select a
+value. It only has to stop discarding that information.
 
 #### Why this dissolves the problems rather than patching them
 
@@ -525,6 +670,12 @@ is orthogonal to the schema question:
    constructor dependency (injected resolver) or a service lookup, so that
    "forgot to pass `repo_map`" becomes structurally impossible rather than
    silently degrading.
+3. **Fix `SolutionController.get_repo_map()`'s `os.getcwd()` branch** to use
+   `self._work_path`, which the method already holds and already uses for `gitops`
+   repos. This closes the live, reproducible "running strata from a subdirectory
+   silently resolves `@ref`s to the wrong place, ignoring an explicitly-supplied
+   `--work-path`" failure documented above. One line, non-breaking, and
+   independent of every schema decision in Track 2.
 
 Without step 2, Option F's central claim — *"one resolution path, so there is
 nothing for a new command to forget"* — **does not hold.** If a future unified
@@ -538,10 +689,11 @@ is never adopted.
 
 ### Track 2 — Adopt Option F for Problem A (breaking, deprecation window)
 
-Adopt Option F as specified above, including the four corrections folded in from
-review: orthogonal `location`/`managed` axes, first-class `in_tree` self-reference,
-out-of-tree materialization keyed by identity+ref, and a single overrides-file
-mechanism shared by CI and local dev.
+Adopt Option F as specified above, including the corrections folded in from
+review: orthogonal `location`/`managed` axes (both overridable), first-class
+`in_tree` self-reference, out-of-tree materialization keyed by resolved commit SHA
+backed by a committed lock file, a single overrides-file mechanism shared by CI
+and local dev, and provenance as a first-class output of `strata repo status`.
 
 **Migration is a deprecation window, not a hard break** — and not for politeness.
 `deploy_path` is not being *removed*; its *meaning* changes. A silent semantic
@@ -575,41 +727,53 @@ transitional step only — after Track 2 the file holds nothing machine-specific
 
 ### Track 1 — Problem B (non-breaking, ship first)
 
-| Item | Description                                                                                                                                                                                             | Status |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| B-1  | Remove the `work_path` silent fallback in every builder's `_copy_provisioner_source()`; unresolvable repo name → hard error naming the repo and the fix                                                 | 🔲 TODO |
-| B-2  | Replace the optional `repo_map` kwarg with a required injected resolver (or service lookup) so omission is structurally impossible                                                                      | 🔲 TODO |
-| B-3  | Regression test: a builder constructed without a resolver fails loudly rather than resolving against `work_path`                                                                                        | 🔲 TODO |
-| B-4  | Reconcile the duplicated resolution logic proven divergent above (`repo status` vs `get_repo_map()`, and `get_repo_map()`'s own `local`/`gitops` split over `url`/`path` and `os.getcwd()`/`work_path`) | 🔲 TODO |
+| Item | Description                                                                                                                                                                                                                                                  | Status |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
+| B-1  | Remove the `work_path` silent fallback in every builder's `_copy_provisioner_source()`; unresolvable repo name → hard error naming the repo and the fix                                                                                                      | 🔲 TODO |
+| B-2  | Replace the optional `repo_map` kwarg with a required injected resolver (or service lookup) so omission is structurally impossible                                                                                                                           | 🔲 TODO |
+| B-3  | Regression test: a builder constructed without a resolver fails loudly rather than resolving against `work_path`                                                                                                                                             | 🔲 TODO |
+| B-4  | Reconcile the duplicated resolution logic proven divergent above (`repo status` vs `get_repo_map()`, and `get_repo_map()`'s own `local`/`gitops` split over `url`/`path` and `os.getcwd()`/`work_path`)                                                      | 🔲 TODO |
+| B-5  | Fix `get_repo_map()`'s `os.getcwd()` → workspace root for `type: local` (and the identical bug in `generate_workspace()`); regression test asserting identical resolution from the workspace root and from a nested subdirectory with the same `--work-path` | ✅ DONE |
+| B-6  | Replace the misleading "check your profile refs" diagnostic with one that reports the resolved path and the repo whose resolution produced it                                                                                                                | 🔲 TODO |
 
 ### Track 2 — Problem A (breaking, deprecation window)
 
-| Item                         | Description                                                                                                                          | Status                 |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------- |
-| F-1                          | Define the remote schema: identity (`name`/`url`/`ref`) + `managed:` axis + `in_tree:` self-reference form                           | 🔲 TODO                 |
-| F-2                          | Implement the resolution chain: overrides file → `--repo` flag → `in_tree` → out-of-tree cache → hard error                          | 🔲 TODO                 |
-| F-3                          | `strata repo sync` materializes into the out-of-tree cache keyed by identity+ref                                                     | 🔲 TODO                 |
-| F-4                          | `strata repo link <name> <path>` writes the gitignored overrides file; document the same file as the CI bootstrap mechanism          | 🔲 TODO                 |
-| F-5                          | Honour legacy `deploy_path`-as-location with a loud deprecation warning                                                              | 🔲 TODO                 |
-| F-6                          | `strata validate`/`doctor` check flagging workspaces still relying on the legacy meaning (surfaces at validate time, not apply time) | 🔲 TODO                 |
-| F-7                          | Document the resolution chain + `managed: false` CI pattern in the `.azure`/`.github` scaffold templates                             | 🔲 TODO                 |
-| F-8                          | Remove the legacy `deploy_path` location meaning (following major)                                                                   | 🔲 DEFERRED             |
-| Ops (transitional, external) | `git rm --cached .strata/solution.json` in affected deployment repositories — needed only until Track 2 lands                        | 🔲 TODO (external repo) |
+| Item                         | Description                                                                                                                                                               | Status                 |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| F-1                          | Define the remote schema: identity (`name`/`url`/`ref`) + `managed:` axis + `in_tree:` self-reference form                                                                | 🔲 TODO                 |
+| F-2                          | Implement the resolution chain: overrides file → `--repo` flag → `in_tree` → cache → hard error; unknown name in overrides = hard error listing known names               | 🔲 TODO                 |
+| F-3                          | Lock file: committed `name → (url, requested_ref, resolved_sha)`, updated only by explicit `strata repo sync --update`                                                    | 🔲 TODO                 |
+| F-4                          | Content-addressed cache keyed by `hash(normalized_url)/<commit_sha>`; temp-dir-under-cache-root + atomic rename; exists-is-success on race; Windows rename/retry handling | 🔲 TODO                 |
+| F-5                          | SHA-fetch fallback for servers without `uploadpack.allowReachableSHA1InWant` (fetch ref, then check out SHA, verify reachability)                                         | 🔲 TODO                 |
+| F-6                          | `strata repo link <name> <path>` writes the gitignored overrides file; document the same file as the CI bootstrap mechanism                                               | 🔲 TODO                 |
+| F-7                          | `managed:` overridable in both directions; validate the location×managed 2×2 (`managed: false` + no location = hard error)                                                | 🔲 TODO                 |
+| F-8                          | Provenance in `strata repo status`: per repo, per axis, which layer supplied the effective value                                                                          | 🔲 TODO                 |
+| F-9                          | Honour legacy `deploy_path`-as-location with a loud deprecation warning                                                                                                   | 🔲 TODO                 |
+| F-10                         | `strata validate`/`doctor` check flagging workspaces still relying on the legacy meaning (surfaces at validate time, not apply time)                                      | 🔲 TODO                 |
+| F-11                         | Migration note: lock file changes `ref: main` from "always follow branch" to "pin until told otherwise" (moot for `managed: false`)                                       | 🔲 TODO                 |
+| F-12                         | Document the resolution chain + `managed:` override CI pattern in the `.azure`/`.github` scaffold templates                                                               | 🔲 TODO                 |
+| F-13                         | `strata cache gc` with last-access pruning — an immutable cache grows without bound                                                                                       | 🔲 DEFERRED             |
+| F-14                         | Remove the legacy `deploy_path` location meaning (following major)                                                                                                        | 🔲 DEFERRED             |
+| Ops (transitional, external) | `git rm --cached .strata/solution.json` in affected deployment repositories — needed only until Track 2 lands                                                             | 🔲 TODO (external repo) |
 
 ## Open Questions
 
-1. **Cache location and key.** Out-of-tree is decided; the exact root
-   (`$STRATA_CACHE_HOME`, XDG/OS default) and the key derivation (identity+ref —
-   and what happens when two workspaces want different refs of the same repo
-   concurrently) still need specifying.
-2. **Overrides file shape and precedence within itself.** One entry per remote is
-   obvious; less obvious is whether it may also override `managed:` (e.g. "this
-   run, don't fetch even though the declaration says managed") or only location.
-   Leaning toward location-only, with `managed` staying declarative.
-3. **Does `in_tree` need to support anything other than the workspace root?**
+> Two previously-open questions — cache root/key derivation, and whether the
+> overrides file may cover `managed:` — are now **resolved** and folded into
+> Option F above (lock file + content-addressed cache; `managed:` overridable in
+> both directions, with three qualifications).
+
+1. **Does `in_tree` need to support anything other than the workspace root?**
    `"."` covers the known case. Allowing arbitrary nested paths is Rule-2-safe but
    adds surface area with no demonstrated demand.
-4. **Should Track 1's hard error be a new exit code**, or reuse the existing
+2. **Should Track 1's hard error be a new exit code**, or reuse the existing
    validation/system-error codes? A dedicated code would let CI distinguish
    "unresolvable repo" from a genuine build failure.
+3. **Lock file placement and commit status.** Committed is the intent — that is
+   what makes builds reproducible — but it needs a home. Alongside the
+   `config/*.yaml` sources, or in `.strata/`? The latter currently signals
+   "generated, gitignored," which would be exactly the wrong signal for a lock
+   file.
+4. **Does `strata repo sync --update` operate per-repo or all-or-nothing?**
+   `go get -u <pkg>` and `cargo update -p <pkg>` support both; the default matters.
 
