@@ -16,6 +16,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 - **Broader audit** (per report follow-up): searched the whole codebase for every place that constructs a `TerraformBuilder`/`AnsibleBuilder`/`BicepBuilder`/`ComposeBuilder`/`HelmBuilder`/`SyncBuilder` instance. Only two files do so: `run_build_command.py` (confirmed already correct for every builder that accepts `repo_map` — Terraform, Ansible, Bicep, Helm) and `plan_build_command.py` (this fix). `ComposeBuilder`/`SyncBuilder` don't accept `repo_map` at all (by design — Compose copies namespace module files directly, Sync only renders Jinja2 templates from the platform model, neither resolves a provisioner `source.repository`). No other instances of this bug pattern found.
 - **Testing**: new `TestPlanBuildToTemp` class in `test_commands_build.py` — `test_terraform_builder_receives_repo_map`/`test_ansible_builder_receives_repo_map` assert `repo_map` is threaded through to both builders' `.build()` calls with the exact value `solution_controller.get_repo_map()` returns.
 
+## [1.9.10] - 2026-09-11
+
 ### Added
 
 #### **`strata values get` gained a `--format` option for direct shell/script consumption**
