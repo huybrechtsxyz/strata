@@ -306,6 +306,7 @@ class AuditController(BaseController):
             self.logger.warning("push_to_remote_git_unavailable")
             return False
 
+        target_branch: Optional[str] = None
         if repo_name:
             try:
                 from strata.controllers.solution_controller import SolutionController
@@ -321,6 +322,15 @@ class AuditController(BaseController):
                 self.logger.warning("push_to_remote_repo_not_found", repository=repo_name)
                 return False
             repo_dir = Path(repo_dir_str)
+
+            # Resolve the repo's configured branch so the push always supplies an
+            # explicit target — the working tree may be in detached-HEAD state
+            # (the norm for a CI checkout pinned to a ref), where a bare
+            # `git push origin` has no branch to derive a refspec from and fails
+            # with "You are not currently on a branch".
+            repos, _ = sol_ctrl.get_repositories(name=repo_name)
+            if repos:
+                target_branch = repos[0].branch
         else:
             repo_dir = self._work_path
 
@@ -362,8 +372,11 @@ class AuditController(BaseController):
             self.logger.warning("push_to_remote_commit_failed", stderr=result.stderr)
             return False
 
-        # Push
-        result = git.push(wd, remote=remote_name)
+        # Push — always via a HEAD:<branch> refspec when the target branch is
+        # known (registered repo), so this succeeds regardless of whether the
+        # target repo's working tree is attached to a branch or in detached-HEAD
+        # state (see GitIntegration.push()).
+        result = git.push(wd, remote=remote_name, branch=target_branch)
         if result.returncode != 0:
             self.logger.warning("push_to_remote_push_failed", stderr=result.stderr)
             return False

@@ -3,6 +3,7 @@
 - Status: proposed — under evaluation, **no option selected**; Option F is the current focus
 - Date: 2026-09-11
 - Revised: 2026-09-14 — Option E's addressing scheme found unworkable against shared/layered environment files; Option F (`spec.references`) added; decision withdrawn pending evaluation
+- Revised: 2026-09-14 — Gap 2 (inert `references` field) resolved and **implemented** as a removal. Option F design reviewed against the code: three open problems recorded, one decisive (`kind: resource`/`kind: provider` have no usage sites, so the loop-closer that prevents the check becoming vacuous cannot be implemented for them). Sub-option **F-d** (provisioner-level scoping only) identified as a possibly-sufficient minimal answer.
 - Related: [ADR 0073 — Embedded string syntax inventory and creep prevention](./0073-embedded-string-syntax-inventory-and-creep-prevention.md), [ADR 0075 — Unified Terraform/Helm value-expression syntax](./0075-unify-terraform-helm-value-expression-syntax.md), [ADR 0077 — Repo map & cross-repo path resolution](./0077-repo-map-cross-repo-path-resolution.md), [ADR 0068 — Cross-pipeline output publishing](./0068-cross-pipeline-output-publishing.md) (owns resource-to-resource / cross-pipeline output wiring, which this ADR removes inert schema for and explicitly leaves out of scope)
 
 ## Context and Problem Statement
@@ -601,6 +602,109 @@ changes what the build accepts, and only for workspaces that opted in at step 3.
 Step 1 is deliberately decoupled from the rest: it is correct regardless of
 whether Option F is ultimately selected, because the field was inert under every
 option.
+
+### Open problems found in review
+
+Three issues surfaced when the design was checked against
+`terraform_input_validator.check_inputs()` and the component models. The third is
+decisive and is currently unresolved.
+
+#### 1. `declared_keys` drives two opposite checks — narrowing it breaks one
+
+[`check_inputs()`](../../src/strata/validators/terraform_input_validator.py#L113)
+uses the same set for two inverse assertions:
+
+| Direction | Assertion                                                         | Effect of narrowing `declared_keys` |
+| --------- | ----------------------------------------------------------------- | ----------------------------------- |
+| A (error) | every declared key must exist in `variables.tf` — *typo catcher*   | ✅ fixes the triggering case         |
+| B (warn)  | every required `variables.tf` entry must be in `declared_keys`     | ❌ **new false positives**           |
+
+A variable that *is* supplied by the environment but that no component names in
+`references` would drop out of `declared_keys` and immediately trip direction B:
+`Required variable 'X' (no default) is not supplied by any input` — for a variable
+that is, in fact, supplied.
+
+This is not hypothetical: the Unreleased changelog entry fixes a permanent false
+positive of exactly this shape (required variables supplied via
+`spec.properties`/`spec.custom`). Repeating it would be a regression of a
+just-fixed class of bug.
+
+**Fix:** split the parameter. `check_inputs(supplied_keys, checked_keys, …)` —
+direction B keeps the full environment set, direction A uses the scoped set. Small
+change, but the design is wrong without it.
+
+#### 2. The mixed-adoption fallback is not implementable as written
+
+The proposed computation reads:
+
+```
+declared_keys(P) = ⋃ references of components that declare them
+                   ∪ all environment keys of components that do not
+```
+
+The second line has no meaning. A component that declares no `references` has no
+associated key set — environment keys are not attributable to components. There is
+no "its keys" to fall back to.
+
+**Fix:** move opt-in from the *component* to the *provisioner*, all-or-nothing. A
+provisioner is either scoped (every one of its components must declare
+`references`; one that doesn't is an error, not a silent skip) or unscoped
+(today's behaviour). This removes the incoherent half-state and makes the
+guarantee binary and legible: reading a provisioner tells you whether its check is
+precise, with no per-component archaeology.
+
+#### 3. Resources and providers have no usage sites — the loop cannot be closed
+
+Option F's defence against becoming vacuous is rule 2: *a key used must be
+declared*. That requires the component to **have** usage sites strata can parse.
+Surveying the kinds:
+
+| Kind         | Usage site                                   | Rule 2 possible                                                    |
+| ------------ | -------------------------------------------- | ------------------------------------------------------------------ |
+| `dns`        | `var:` / `secret:` on records                | ✅ already enforced (`DnsSpecModel.validate_references_declared`)    |
+| `network`    | `var:` / `secret:` on CIDRs                  | ✅ already enforced (`NetworkSpecModel.validate_references_declared`) |
+| `module`     | `services[].environment[].var/secret/feature` | ✅ already enforced (`ModuleService`)                                |
+| **`resource`** | **none** — only a free-form `configuration` dict consumed by Terraform | ❌ |
+| **`provider`** | **none** — same                             | ❌                                                                   |
+
+`kind: resource` has no `var:` field and no `${var:}` expression support. Its
+`references` block is a **pure assertion**: nothing in the document can contradict
+it, so nothing can verify it is complete.
+
+That is decisive, because resources and providers are exactly what a Terraform
+provisioner is composed of — and the triggering case is a Terraform provisioner.
+For the kinds that matter most here, opting in *only* narrows direction A and
+contributes no compensating check. That is precisely the
+"make the check pass by making it check nothing" trap this ADR names as the risk
+that could kill the option, arriving through the door the mitigation was supposed
+to close.
+
+**Possible responses, none yet chosen:**
+
+- **F-a — accept it for resources.** Treat `references` as a trusted human
+  assertion. Honest, but it is an unenforced allowlist; ADR-0077's silent-failure
+  lesson argues against.
+- **F-b — give resources a usage site.** Require variables consumed by a resource
+  to appear as `${var:…}` in its `configuration`, making them parseable. Real
+  scope: a new expression surface on a kind that currently has none.
+- **F-c — derive the reference set instead of declaring it.** Scope the check to
+  keys that appear in the provisioner's `variables.tf` *plus* keys used by
+  parseable kinds — no `references` declaration needed for resources at all.
+  Sidesteps the gap, but weakens direction A to "is it in `variables.tf`", which
+  is nearly the identity check.
+- **F-d — scope by provisioner only.** Use Gap 1's provisioner-level `references`
+  as the *sole* opt-in surface and ignore component-level references for scoping.
+  The bookkeeping variable is declared on the `script` provisioner that consumes
+  it; the Terraform provisioner's check is scoped to "environment keys minus keys
+  claimed by another provisioner". Smallest change, no new expression surface, and
+  the triggering case is solved — but it does not make the Terraform check more
+  precise, only less wrong.
+
+**F-d deserves particular attention:** it solves the triggering case with Gap 1
+alone, requires no component-level adoption, and needs none of rules 1–3. If the
+goal is "stop forcing dummy `variable {}` declarations" rather than "make the
+cross-check precise", F-d may be the whole answer — and the rest of Option F
+becomes optional scope.
 
 ## Analysis — allow- vs deny-by-default
 
