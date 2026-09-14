@@ -175,3 +175,38 @@ class TestWorkspaceIacModelProvisionerFieldValidation:
                 source=self._source(),
                 output=OutputProfileModel(),
             )
+
+    def test_integration_allowed_on_terraform(self):
+        model = WorkspaceIacModel(
+            name="infra",
+            provisioner=ProvisionerType.TERRAFORM,
+            source=self._source(),
+            integration="terraform_current",
+        )
+        assert model.integration == "terraform_current"
+
+    def test_integration_unset_by_default(self):
+        model = WorkspaceIacModel(
+            name="infra",
+            provisioner=ProvisionerType.TERRAFORM,
+            source=self._source(),
+        )
+        assert model.integration is None
+
+    def test_integration_rejected_on_ansible(self):
+        with pytest.raises(ValidationError, match="'integration' is only supported for terraform"):
+            WorkspaceIacModel(
+                name="config",
+                provisioner=ProvisionerType.ANSIBLE,
+                source=self._source(),
+                integration="config_mgmt",
+            )
+
+    def test_integration_rejected_on_helm(self):
+        with pytest.raises(ValidationError, match="'integration' is only supported for terraform"):
+            WorkspaceIacModel(
+                name="app",
+                provisioner=ProvisionerType.HELM,
+                source=self._source(),
+                integration="helm_registry",
+            )

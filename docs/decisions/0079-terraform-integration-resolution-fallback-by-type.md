@@ -1,12 +1,11 @@
 # Terraform Provisioner-to-Integration Binding: Explicit Field, Zero-Config by Default
 
-- Status: proposed
+- Status: implemented
 - Date: 2026-09-14
 - Target release: 2.0.0 — breaking change, hard break (no deprecation window).
-  **Release-coupled with [ADR-0080](./0080-unified-provisioner-integration-contract.md):
-  both must land in the same major release** (see "Release and scope
-  decisions" for why shipping this one alone would reintroduce a silent-no-op
-  bug).
+  Originally specified as release-coupled with
+  [ADR-0080](./0080-unified-provisioner-integration-contract.md); that
+  coupling is now relaxed — see "Release and scope decisions".
 - Supersedes the narrower "name-then-type fallback" framing this ADR started
   from — kept below under "Considered Options" as Option B for context, but
   the chosen design (Option D) is a deliberate, documented binding contract
@@ -193,10 +192,16 @@ exactly the "looks configurable, does nothing" anti-pattern that ADR-0080
 exists to fix. Because both land in the same release, every provisioner type
 consumes the field on arrival and no silent-no-op window ever exists.
 
-**Guard condition:** if ADR-0080 slips out of the 2.0.0 release for any
-reason, ADR-0079 must **not** ship alone as-is. Either it slips too, or it
-must add a model validator rejecting `integration:` on any provisioner type
-that doesn't yet consume it, so the field never silently does nothing.
+**Guard condition — implemented.** The model validator rejecting
+`integration:` on any provisioner type other than `terraform`
+([src/strata/models/workspace_model.py](../../src/strata/models/workspace_model.py))
+is in place as of this ADR's implementation, ahead of ADR-0080. That means
+the silent-no-op risk described above is already closed: setting
+`integration:` on `ansible`/`helm`/`compose`/etc. fails validation loudly
+today rather than being ignored. **This relaxes the hard release coupling** —
+ADR-0079 can ship in 2.0.0 independently of ADR-0080's timeline; ADR-0080
+simply needs to relax this same validator (provisioner type by provisioner
+type) as it wires each deployer into `resolve_for_provisioner()`.
 
 ### Consequences
 
@@ -483,12 +488,25 @@ Call site in `validate_environment()` drops the `.name` argument:
 
 ### 4. Deep validation — resolve ahead of deploy time
 
-A new deep-validation rule (`strata validate --deep`) iterates every
-Terraform-typed `workspace.spec.provisioners[]` entry and calls
-`resolve_for_provisioner()` for each, surfacing the same errors as a
-validation failure instead of a mid-`deploy run` `RuntimeError`. Lives
-alongside the existing deep-validation checks (cross-reference checks that
-already require configuration + workspace both loaded).
+A new deep-validation step, `WorkspaceService._validate_terraform_integration_bindings()`
+([src/strata/services/workspace_service.py](../../src/strata/services/workspace_service.py)),
+runs as part of `WorkspaceService._validate_dynamic()` — i.e. Phase 2 of
+`strata validate --deep` (only runs once a `configuration_model` is available).
+
+**Implementation note (deviates from the plan above):** it does **not** call
+`IntegrationService.resolve_for_provisioner()`. That helper depends on
+`IntegrationRegistry` already being populated by
+`IntegrationService.initialize_integrations()`, a live singleton this static
+validation pass never initializes (`strata validate` inspects YAML, it
+doesn't run the deploy-time integration bootstrap). Instead, the same
+algorithm is re-evaluated directly against the raw
+`configuration.spec.integrations[]` specs already available on
+`configuration_model`, using `IntegrationFactory.create_by_type(spec.type)` +
+`isinstance(..., TerraformIntegration)` to answer "is this type
+Terraform-compatible" without needing a live registry. Disabled integrations
+(`enabled: false`) are excluded, matching `initialize_integrations()`'s own
+behavior. This mirrors, rather than calls, `resolve_for_provisioner()` — both
+must be kept in sync if the algorithm ever changes.
 
 ### 5. Schema and docs
 
@@ -503,37 +521,51 @@ already require configuration + workspace both loaded).
   workspaces must add `integration:` explicitly; single-integration workspaces
   are unaffected.
 
-## Remaining Work
+## Implementation Notes
 
-<!-- Required while Status is proposed / in-progress / partially-implemented.
-     Remove this section once Status becomes implemented. -->
+Shipped 2026-09-14, in full:
 
-- Not started — nothing in this ADR has been implemented yet. Implementation
-  order follows the numbered sections under `## Detailed Design` above:
-  1. `WorkspaceIacModel.integration` field.
-  2. `IntegrationRegistry.get_by_type()` + `IntegrationService.resolve_for_provisioner()`.
-  3. `TerraformDeployer._get_terraform_integration()` thin-wrapper rewrite.
-  4. Deep-validation rule (`strata validate --deep`) resolving every
-     Terraform provisioner's binding ahead of deploy time.
-  5. Schema (`workspace.json`/`platform.json`) + docs
-     (`docs/config/workspace.md`, `docs/platform/integrations.md`) + CHANGELOG
-     breaking-change entry.
-- Add unit tests: explicit `integration:` wins and errors clearly when
-  missing; auto-bind succeeds with exactly one `type: terraform` integration;
-  auto-bind errors clearly with zero or multiple candidates; deep-validation
-  check surfaces the same errors ahead of deploy time.
-- Write a migration guide / CHANGELOG (breaking-change) entry: workspaces with
-  exactly one `type: terraform` integration need no changes; workspaces with
-  more than one must add `integration:` to each provisioner that needs a
-  specific one.
-- Update `.strata/schemas/workspace.json` and `platform.json`, plus
-  `docs/config/workspace.md` and `docs/platform/integrations.md`, to document
-  the new `integration:` field and resolution order.
-- Coordinate with ADR-0080 (unified provisioner integration contract): the
-  explicit-field-with-auto-bind shape here should become the template
-  ADR-0080 generalizes to other provisioner types (e.g. `AnsibleDeployer`
-  gaining the same `integration:`/auto-bind resolution instead of its current
-  hardcoded inline `IntegrationModel`), rather than each ADR inventing its own
-  mechanism.
+- `WorkspaceIacModel.integration` field, with a guard validator restricting it
+  to `provisioner: terraform` until ADR-0080 lands
+  ([src/strata/models/workspace_model.py](../../src/strata/models/workspace_model.py)).
+- `IntegrationResolutionError` exception, subclassing `PlatformError`
+  ([src/strata/exceptions/integration_exception.py](../../src/strata/exceptions/integration_exception.py)).
+- `IntegrationService.resolve_for_provisioner()`, matching on integration
+  **class** (not a type string, so `OpenTofuIntegration` keeps working) — no
+  new `IntegrationRegistry` method needed, it filters the existing
+  `get_all_integrations()`
+  ([src/strata/services/integration_service.py](../../src/strata/services/integration_service.py)).
+- `TerraformDeployer._get_terraform_integration()` rewritten as a thin wrapper
+  around the shared helper; `validate_environment()` updated to catch
+  `IntegrationResolutionError`
+  ([src/strata/deployers/terraform_deployer.py](../../src/strata/deployers/terraform_deployer.py)).
+- Deep validation — `WorkspaceService._validate_terraform_integration_bindings()`,
+  wired into Phase 2 (`--deep`) of `strata validate`
+  ([src/strata/services/workspace_service.py](../../src/strata/services/workspace_service.py)).
+  Re-evaluates the same resolution algorithm against the raw configuration
+  spec rather than calling `resolve_for_provisioner()` directly — see the
+  implementation note under "Detailed Design" § 4 for why.
+- Schemas: `.strata/schemas/workspace.json` and `platform.json` updated with
+  the `integration` field (applied surgically — both files had unrelated,
+  pre-existing drift from other past changes that a full regeneration would
+  have pulled in; left untouched as out of scope for this ADR).
+- Docs: `docs/config/workspace.md` (new "Integration Binding" subsection) and
+  `docs/platform/integrations.md` (new "Provisioner → integration binding"
+  section).
+- CHANGELOG (breaking-change) entry under `[Unreleased]`.
+- Tests: `IntegrationService.resolve_for_provisioner()` unit tests
+  ([tests/strata/services/test_services_integration_resolve_for_provisioner.py](../../tests/strata/services/test_services_integration_resolve_for_provisioner.py)),
+  `WorkspaceIacModel` validator tests
+  ([tests/strata/models/test_models_workspace.py](../../tests/strata/models/test_models_workspace.py)),
+  deep-validation tests
+  ([tests/strata/services/test_services_workspace.py](../../tests/strata/services/test_services_workspace.py)),
+  and the updated `TerraformDeployer` test
+  ([tests/strata/deployers/test_deployers_terraform.py](../../tests/strata/deployers/test_deployers_terraform.py)).
+  Full suite green: 6565 passed, 16 skipped, 0 failed. `mypy .` clean on every
+  touched file (pre-existing, unrelated failures elsewhere untouched).
+
+Coordinate with ADR-0080: it consumes `resolve_for_provisioner()` as-is (see
+its own Remaining Work) rather than redesigning it.
+
 
 

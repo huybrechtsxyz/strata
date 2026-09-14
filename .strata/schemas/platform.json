@@ -3408,6 +3408,19 @@
           ],
           "default": null,
           "description": "Build output profile for Terraform provisioners. Controls what tfvars files are emitted by 'strata build run'. Defaults to format=strata (current behaviour) when absent."
+        },
+        "integration": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Name of the configuration.spec.integrations[] entry this provisioner binds to (for auth/endpoints/tool-version validation). If unset, auto-binds to the sole registered integration compatible with this provisioner's type — an error (not a guess) if zero or more than one candidate exists. This provisioner's own 'name' is never used to look up an integration (ADR-0079). Currently only consumed for provisioner: terraform.",
+          "title": "Integration"
         }
       },
       "required": [

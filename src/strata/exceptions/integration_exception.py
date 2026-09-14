@@ -25,3 +25,27 @@ class SecretStoreUnavailableError(PlatformError):
             details={"integration": integration_name, "reason": reason},
             cause=cause,
         )
+
+
+class IntegrationResolutionError(PlatformError):
+    """Raised when a workspace provisioner's ``integration:`` binding cannot be
+    resolved to exactly one compatible, registered integration (ADR-0079).
+
+    Covers three distinct cases, all surfaced with the same exception type so
+    callers (``strata validate --deep`` and deploy-time validation) can treat
+    them identically:
+
+    - ``integration:`` is set but no integration is registered under that name.
+    - ``integration:`` is set but the named integration is not an instance of
+      the expected integration class (e.g. type mismatch).
+    - ``integration:`` is unset and zero, or more than one, registered
+      integration is compatible with the provisioner's type (ambiguous —
+      never silently guessed).
+    """
+
+    def __init__(self, provisioner_name: str, reason: str):
+        super().__init__(
+            message=f"Provisioner '{provisioner_name}': {reason}",
+            error_code="INTEGRATION_RESOLUTION_FAILED",
+            details={"provisioner": provisioner_name, "reason": reason},
+        )

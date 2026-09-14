@@ -3,6 +3,7 @@
 from typing import Any, Dict, List, Optional, Set, Tuple, Type, Union, cast
 
 from strata.exceptions import InvalidReferenceError
+from strata.models.common_models import ProvisionerType
 from strata.models.configuration_model import ConfigurationModel
 from strata.models.firewall_model import FirewallModel
 from strata.models.workspace_model import WorkspaceModel
@@ -112,6 +113,13 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
                     errors.append(str(error))
 
         # STEP 2: Provisioner name validity is validated by the WorkspaceSpecModel model validator
+
+        # STEP 1b: Validate Terraform provisioner -> integration binding ahead of deploy time
+        # (ADR-0079). Mirrors IntegrationService.resolve_for_provisioner()'s algorithm, but
+        # works directly off the configuration spec since no IntegrationService/registry is
+        # initialized during `strata validate` — this only runs with --deep (configuration_model
+        # is only passed in that case).
+        errors.extend(self._validate_terraform_integration_bindings(configuration_model))
 
         # STEP 3: Validate module repository references (if modules are defined in resources)
         if self.model and self.model.spec.resources:
@@ -267,6 +275,77 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
             errors.extend(self._validate_file_refs(work_path, repo_map, file_refs))
 
         return len(errors) == 0, errors
+
+    def _validate_terraform_integration_bindings(self, configuration_model: ConfigurationModel) -> List[str]:
+        """Resolve every ``provisioner: terraform`` entry's integration binding (ADR-0079).
+
+        Surfaces the same failures ``TerraformDeployer.validate_environment()`` would hit
+        at deploy time — missing/wrong-class explicit ``integration:``, or an ambiguous/empty
+        auto-bind candidate set — as a validation error instead, so operators find out at
+        ``strata validate --deep`` rather than partway through ``deploy run``.
+
+        Deliberately does not use ``IntegrationService``/``IntegrationRegistry`` (those require
+        a live, initialized singleton this validation pass doesn't set up) — it evaluates the
+        same resolution algorithm directly against the raw ``configuration.spec.integrations``
+        specs instead.
+        """
+        from strata.integrations.factory import IntegrationFactory
+        from strata.integrations.terraform import TerraformIntegration
+
+        if not self.model or not self.model.spec.provisioners:
+            return []
+
+        integration_specs = [s for s in (configuration_model.spec.integrations or []) if s.enabled]
+
+        # IntegrationFactory.create_by_type() instantiates a throwaway integration purely to
+        # check its class — cache per unique type string so repeated types (e.g. several
+        # `terraform` provisioners) don't re-instantiate for every provisioner.
+        compat_cache: Dict[str, bool] = {}
+
+        def _is_terraform_compatible(type_str: str) -> bool:
+            if type_str not in compat_cache:
+                try:
+                    compat_cache[type_str] = isinstance(
+                        IntegrationFactory.create_by_type(type_str), TerraformIntegration
+                    )
+                except Exception:
+                    compat_cache[type_str] = False
+            return compat_cache[type_str]
+
+        errors: List[str] = []
+        for provisioner in self.model.spec.provisioners:
+            if provisioner.provisioner != ProvisionerType.TERRAFORM:
+                continue
+
+            if provisioner.integration:
+                match = next((s for s in integration_specs if s.name == provisioner.integration), None)
+                if match is None:
+                    errors.append(
+                        f"Provisioner '{provisioner.name}': integration '{provisioner.integration}' is not "
+                        "registered. Check configuration.spec.integrations for a matching 'name'."
+                    )
+                elif not _is_terraform_compatible(match.type):
+                    errors.append(
+                        f"Provisioner '{provisioner.name}': integration '{provisioner.integration}' (type "
+                        f"'{match.type}') is not compatible — expected a Terraform-compatible integration."
+                    )
+                continue
+
+            candidates = [s for s in integration_specs if _is_terraform_compatible(s.type)]
+            if not candidates:
+                errors.append(
+                    f"Provisioner '{provisioner.name}': no Terraform-compatible integration registered. Add "
+                    "one to configuration.spec.integrations, or set 'integration:' explicitly if one already "
+                    "exists under a different name."
+                )
+            elif len(candidates) > 1:
+                names = ", ".join(c.name for c in candidates)
+                errors.append(
+                    f"Provisioner '{provisioner.name}': {len(candidates)} Terraform-compatible integrations "
+                    f"registered ({names}) — ambiguous. Set 'integration:' explicitly to pick one."
+                )
+
+        return errors
 
     def _validate_component_constraints(self, topology, matching_config) -> List[str]:
         """

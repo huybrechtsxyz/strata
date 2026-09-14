@@ -68,6 +68,7 @@ providers:
 provisioners:
   - name: <provisioner_name>
     provisioner: terraform | ansible | bicep   # IaC tool
+    integration: <name>                # optional, terraform only — see Integration Binding below
     source:
       repository: <repository_name>    # optional — omit for single-repo workspaces
       source_path: <path>              # path within the repo (or workspace root when repository is absent)
@@ -95,6 +96,51 @@ provisioners:
       emits: []                        # categories to emit (omit = format defaults)
       files: []                        # custom file definitions (see Build Output Profile)
 ```
+
+### Integration Binding (Terraform only, ADR-0079)
+
+A `provisioner: terraform` entry needs a `configuration.spec.integrations[]` entry
+(auth, endpoints, tool-version validation) to run against. It is bound as follows —
+the provisioner's own `name` is **never** used to look up an integration:
+
+1. **`integration: <name>` set** — exact match against
+   `configuration.spec.integrations[].name`. Errors if missing, or if the matched
+   entry isn't Terraform-compatible (`type: terraform` or `type: opentofu`).
+2. **`integration` unset** — auto-binds to the sole registered Terraform-compatible
+   integration. Errors (never guesses) if zero or more than one exist — in that case,
+   set `integration:` explicitly on each provisioner that needs a specific one.
+
+```yaml
+# One shared integration, several provisioners — zero-config, no `integration:` needed
+spec:
+  provisioners:
+    - name: control_infra
+      provisioner: terraform
+      source: { repository: haven, source_path: terraform/control }
+    - name: core_iac
+      provisioner: terraform
+      source: { repository: haven, source_path: terraform/core }
+```
+
+```yaml
+# Two integrations (e.g. different Terraform versions/auth) — explicit disambiguation required
+spec:
+  provisioners:
+    - name: env_iac
+      provisioner: terraform
+      integration: terraform_legacy
+      source: { repository: haven, source_path: terraform/legacy-stack }
+    - name: core_iac
+      provisioner: terraform
+      integration: terraform_current
+      source: { repository: haven, source_path: terraform/core }
+```
+
+`strata validate --deep` resolves every Terraform provisioner's binding ahead of
+time and reports a failure here as a validation error, so a missing/ambiguous
+binding surfaces before `deploy run`, not partway through it. See
+[ADR-0079](../decisions/0079-terraform-integration-resolution-fallback-by-type.md)
+for the full design rationale.
 
 ### Build Output Profile (Terraform only)
 

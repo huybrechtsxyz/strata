@@ -19,9 +19,13 @@ Usage::
 """
 
 import threading
-from typing import List, Optional, Set, Tuple, Type
+from typing import TYPE_CHECKING, List, Optional, Set, Tuple, Type
 
 from strata.logger import get_logger
+
+if TYPE_CHECKING:
+    from strata.integrations.base_integration import BaseIntegration
+    from strata.models.workspace_model import WorkspaceIacModel
 
 logger = get_logger(__name__)
 
@@ -297,6 +301,65 @@ class IntegrationService:
             True if integration is registered and available
         """
         return self.registry.is_integration_available(name)
+
+    def resolve_for_provisioner(
+        self,
+        iac_model: "WorkspaceIacModel",
+        integration_class: Type["BaseIntegration"],
+    ) -> "BaseIntegration":
+        """Resolve the integration a workspace provisioner binds to (ADR-0079).
+
+        Resolution order:
+        1. ``iac_model.integration`` set -> exact name lookup; raises if missing
+           or not an instance of ``integration_class``.
+        2. Unset -> auto-bind to the sole registered integration that is an
+           instance of ``integration_class``; raises if zero or more than one
+           candidate exists (never silently guesses).
+
+        Matching is by **integration class**, not a type string, so subclasses
+        (e.g. ``OpenTofuIntegration`` subclassing ``TerraformIntegration``) are
+        valid candidates for a ``provisioner: terraform`` entry — mirroring the
+        ``isinstance`` check this replaces.
+
+        Raises:
+            IntegrationResolutionError: no exact-name match, wrong class, or an
+                ambiguous/empty auto-bind candidate set.
+        """
+        from strata.exceptions import IntegrationResolutionError
+
+        expected = integration_class.__name__
+
+        if iac_model.integration:
+            integration = self.registry.get_integration(iac_model.integration)
+            if integration is None:
+                raise IntegrationResolutionError(
+                    iac_model.name,
+                    f"integration '{iac_model.integration}' is not registered. Check "
+                    "configuration.spec.integrations for a matching 'name'.",
+                )
+            if not isinstance(integration, integration_class):
+                raise IntegrationResolutionError(
+                    iac_model.name,
+                    f"integration '{iac_model.integration}' (type "
+                    f"'{integration.integration_type}') is not compatible — expected a {expected}.",
+                )
+            return integration
+
+        candidates = [i for i in self.registry.get_all_integrations().values() if isinstance(i, integration_class)]
+        if len(candidates) == 1:
+            return candidates[0]
+        if not candidates:
+            raise IntegrationResolutionError(
+                iac_model.name,
+                f"no {expected} registered. Add one to configuration.spec.integrations, or set "
+                "'integration:' explicitly if one already exists under a different name.",
+            )
+        names = ", ".join(c.integration_name for c in candidates)
+        raise IntegrationResolutionError(
+            iac_model.name,
+            f"{len(candidates)} compatible integrations registered ({names}) — ambiguous. "
+            "Set 'integration:' explicitly to pick one.",
+        )
 
     def list_integrations(self) -> List[str]:
         """

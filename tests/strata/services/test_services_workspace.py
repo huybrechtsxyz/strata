@@ -12,7 +12,8 @@ Description   : WorkspaceService test fixtures and utilities for strata CLI test
 """
 
 from pathlib import Path
-from typing import Any, Dict
+from types import SimpleNamespace
+from typing import Any, Dict, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -97,9 +98,104 @@ class TestWorkspaceServiceSingleRepo:
         service._repo_map = {}  # empty repo map — simulates single-repo workspace
         config_model = MagicMock()
         config_model.get_remote_map.return_value = {}
+        # ADR-0079: the fixture's sole provisioner is `provisioner: terraform` — declare a
+        # matching integration so this test still exercises only what it's meant to (that
+        # source.repository is optional), not the separate integration-binding check.
+        config_model.spec.integrations = [SimpleNamespace(name="tf", type="terraform", enabled=True)]
         is_valid, errors = service._validate_dynamic(configuration_model=config_model)
         assert is_valid, f"Phase 2 errors: {errors}"
         assert errors == []
+
+
+class TestWorkspaceServiceTerraformIntegrationBinding:
+    """ADR-0079: `strata validate --deep` resolves every `provisioner: terraform`
+    entry's integration binding ahead of deploy time."""
+
+    def _service(self, provisioner_extra: Optional[Dict[str, Any]] = None) -> WorkspaceService:
+        spec = {**_MINIMAL_SINGLE_REPO_WORKSPACE["spec"]}
+        provisioner = {**spec["provisioners"][0], **(provisioner_extra or {})}
+        spec = {**spec, "provisioners": [provisioner]}
+        service = WorkspaceService(data={**_MINIMAL_SINGLE_REPO_WORKSPACE, "spec": spec})
+        service.validate()
+        service._repo_map = {}
+        return service
+
+    def _config_model(self, integrations):
+        config_model = MagicMock()
+        config_model.get_remote_map.return_value = {}
+        config_model.spec.integrations = integrations
+        return config_model
+
+    def test_auto_bind_sole_candidate_no_errors(self):
+        service = self._service()
+        config_model = self._config_model([SimpleNamespace(name="tf", type="terraform", enabled=True)])
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid, f"Unexpected errors: {errors}"
+
+    def test_auto_bind_opentofu_counts_as_compatible(self):
+        service = self._service()
+        config_model = self._config_model([SimpleNamespace(name="tofu", type="opentofu", enabled=True)])
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid, f"Unexpected errors: {errors}"
+
+    def test_auto_bind_zero_candidates_fails(self):
+        service = self._service()
+        config_model = self._config_model([])
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid is False
+        assert any("no Terraform-compatible integration registered" in e for e in errors)
+
+    def test_auto_bind_ambiguous_candidates_fails(self):
+        service = self._service()
+        config_model = self._config_model(
+            [
+                SimpleNamespace(name="legacy", type="terraform", enabled=True),
+                SimpleNamespace(name="current", type="terraform", enabled=True),
+            ]
+        )
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid is False
+        assert any("ambiguous" in e for e in errors)
+
+    def test_disabled_integration_excluded_from_candidates(self):
+        """A disabled integration doesn't count — auto-bind still fails with zero candidates."""
+        service = self._service()
+        config_model = self._config_model([SimpleNamespace(name="tf", type="terraform", enabled=False)])
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid is False
+        assert any("no Terraform-compatible integration registered" in e for e in errors)
+
+    def test_explicit_integration_name_wins_over_ambiguity(self):
+        service = self._service(provisioner_extra={"integration": "current"})
+        config_model = self._config_model(
+            [
+                SimpleNamespace(name="legacy", type="terraform", enabled=True),
+                SimpleNamespace(name="current", type="terraform", enabled=True),
+            ]
+        )
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid, f"Unexpected errors: {errors}"
+
+    def test_explicit_integration_name_missing_fails(self):
+        service = self._service(provisioner_extra={"integration": "does_not_exist"})
+        config_model = self._config_model([SimpleNamespace(name="tf", type="terraform", enabled=True)])
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid is False
+        assert any("is not registered" in e for e in errors)
+
+    def test_explicit_integration_wrong_type_fails(self):
+        service = self._service(provisioner_extra={"integration": "git_main"})
+        config_model = self._config_model([SimpleNamespace(name="git_main", type="git", enabled=True)])
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid is False
+        assert any("is not compatible" in e for e in errors)
+
+    def test_non_terraform_provisioner_skips_binding_check(self):
+        """An ansible provisioner is never checked against Terraform integrations."""
+        service = self._service(provisioner_extra={"provisioner": "ansible"})
+        config_model = self._config_model([])
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid, f"Unexpected errors: {errors}"
 
 
 class TestWorkspaceServiceNetworks:
@@ -146,6 +242,9 @@ class TestWorkspaceServiceNetworks:
         service.validate()
         config_model = MagicMock()
         config_model.get_remote_map.return_value = {}
+        # ADR-0079: declare a matching integration so the only failure is the network file
+        # this test is actually about, not an incidental integration-binding error too.
+        config_model.spec.integrations = [SimpleNamespace(name="tf", type="terraform", enabled=True)]
         is_valid, errors = service._validate_dynamic(configuration_model=config_model, work_path=str(self._repo_root()))
         assert is_valid is False
         assert any("net1" in e for e in errors)

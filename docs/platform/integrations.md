@@ -128,6 +128,27 @@ if not ok:
 
 **Reset between tests:** `IntegrationRegistry.reset()`
 
+## Provisioner → integration binding (Terraform, ADR-0079)
+
+A `provisioner: terraform` entry in a workspace file resolves its
+`TerraformIntegration` via `IntegrationService.resolve_for_provisioner(iac_model,
+TerraformIntegration)`, **not** by matching the provisioner's own `name` against
+an integration of the same name:
+
+1. If the provisioner sets `integration: <name>`, that's an exact
+   `IntegrationRegistry.get_integration(name)` lookup.
+2. Otherwise, it auto-binds to the sole registered integration that `isinstance()`
+   of `TerraformIntegration` — matching by **class**, not a type string, so
+   `OpenTofuIntegration` (which subclasses `TerraformIntegration`) is a valid
+   candidate. Raises `IntegrationResolutionError` if zero or more than one exist.
+
+This is the only provisioner type wired into this binding today — Ansible, Helm,
+Compose, Script, and the sync deployers (ArgoCD/Flux) don't consult
+`IntegrationService` at all yet (see the workspace/deployment docs on
+`docs/config/workspace.md#integration-binding-terraform-only-adr-0079` for the
+YAML-level view, and ADR-0080 for extending this pattern to other provisioner
+types).
+
 ## Capability Protocols
 
 Capability protocols are `runtime_checkable` `Protocol` classes in `integrations.capabilities`. Use `isinstance()` to check capability support:

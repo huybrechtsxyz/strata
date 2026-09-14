@@ -515,6 +515,18 @@ class WorkspaceIacModel(PlatformBaseModel):
             "named provisioners are injected as variables into this provisioner at deploy time."
         ),
     )
+    integration: Optional[str] = Field(
+        None,
+        description=(
+            "Name of the configuration.spec.integrations[] entry this provisioner "
+            "binds to (for auth/endpoints/tool-version validation). If unset, "
+            "auto-binds to the sole registered integration compatible with this "
+            "provisioner's type — an error (not a guess) if zero or more than one "
+            "candidate exists. This provisioner's own 'name' is never used to look "
+            "up an integration (ADR-0079). Currently only consumed for "
+            "provisioner: terraform."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_provisioner_fields(self) -> "WorkspaceIacModel":
@@ -554,6 +566,18 @@ class WorkspaceIacModel(PlatformBaseModel):
             raise ValueError(
                 f"Provisioner '{self.name}': 'output' is only supported for terraform provisioners "
                 f"(got provisioner='{self.provisioner}')"
+            )
+
+        # integration is only consumed by TerraformDeployer today (ADR-0079). Setting it on any
+        # other provisioner type would silently do nothing — the exact anti-pattern ADR-0079/0080
+        # exist to fix (see Ansible's dead-config bug in ADR-0080) — so reject it loudly instead.
+        # Remove this restriction once ADR-0080 wires the remaining deployers into the same
+        # resolution helper.
+        if self.integration is not None and self.provisioner != ProvisionerType.TERRAFORM:
+            raise ValueError(
+                f"Provisioner '{self.name}': 'integration' is only supported for terraform "
+                f"provisioners today (got provisioner='{self.provisioner}'). See ADR-0080 for "
+                "extending this to other provisioner types."
             )
         return self
 
