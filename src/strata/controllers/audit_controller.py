@@ -123,12 +123,13 @@ class AuditController(BaseController):
         structure: str = "by-execution",
         path_definitions: Optional[Dict[str, str]] = None,
         file_per_stage: bool = True,
-    ) -> Tuple[bool, Optional[Path]]:
+    ) -> Tuple[bool, Optional[Path], List[Path]]:
         """Write deploy-log JSON to disk.
 
         Returns:
-            (success, path_to_execution_json). On failure returns (False, None)
-            and accumulates errors.
+            (success, path_to_execution_json, stage_file_paths). On failure
+            returns (False, None, []) and accumulates errors. ``stage_file_paths``
+            is empty when ``file_per_stage`` is False or there are no stages.
         """
         try:
             defs = path_definitions or {}
@@ -139,15 +140,16 @@ class AuditController(BaseController):
             exec_path = self._write_execution_json(payload, output_dir)
 
             # Write per-stage files if configured
+            stage_paths: List[Path] = []
             if file_per_stage:
-                self._write_stage_files(payload, output_dir)
+                stage_paths = self._write_stage_files(payload, output_dir)
 
             self.logger.info(
                 "deploy_log_written",
                 path=str(exec_path),
                 execution_id=payload.execution_id,
             )
-            return True, exec_path
+            return True, exec_path, stage_paths
 
         except Exception as e:
             self.logger.warning(
@@ -156,7 +158,7 @@ class AuditController(BaseController):
                 execution_id=payload.execution_id,
             )
             self._errors.append(f"Deploy-log write failed: {e}")
-            return False, None
+            return False, None, []
 
     def _resolve_output_dir(
         self,

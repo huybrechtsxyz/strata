@@ -114,7 +114,7 @@ class TestWriteDeployLog:
         payload = _make_payload()
         base_path = tmp_path / "deploy-log"
 
-        success, exec_path = controller.write_deploy_log(
+        success, exec_path, stage_paths = controller.write_deploy_log(
             payload=payload,
             base_path=base_path,
             structure="flat",
@@ -125,6 +125,7 @@ class TestWriteDeployLog:
         assert exec_path is not None
         assert exec_path.exists()
         assert exec_path.name == "_execution.json"
+        assert stage_paths == []
 
         data = json.loads(exec_path.read_text())
         assert data["execution_id"] == "550e8400-e29b-41d4-a716-446655440000"
@@ -136,7 +137,7 @@ class TestWriteDeployLog:
         payload = _make_payload()
         base_path = tmp_path / "deploy-log"
 
-        success, exec_path = controller.write_deploy_log(
+        success, exec_path, stage_paths = controller.write_deploy_log(
             payload=payload,
             base_path=base_path,
             structure="flat",
@@ -147,6 +148,7 @@ class TestWriteDeployLog:
         output_dir = exec_path.parent
         assert (output_dir / "infrastructure.json").exists()
         assert (output_dir / "platform.json").exists()
+        assert {p.name for p in stage_paths} == {"infrastructure.json", "platform.json"}
 
         # Verify stage file content
         infra_data = json.loads((output_dir / "infrastructure.json").read_text())
@@ -159,7 +161,7 @@ class TestWriteDeployLog:
         payload = _make_payload()
         base_path = tmp_path / "deploy-log"
 
-        success, exec_path = controller.write_deploy_log(
+        success, exec_path, stage_paths = controller.write_deploy_log(
             payload=payload,
             base_path=base_path,
             structure="flat",
@@ -170,13 +172,14 @@ class TestWriteDeployLog:
         output_dir = exec_path.parent
         assert not (output_dir / "infrastructure.json").exists()
         assert not (output_dir / "platform.json").exists()
+        assert stage_paths == []
 
     def test_by_execution_creates_timestamped_dir(self, tmp_path):
         controller = AuditController(work_path=tmp_path)
         payload = _make_payload()
         base_path = tmp_path / "deploy-log"
 
-        success, exec_path = controller.write_deploy_log(
+        success, exec_path, _stage_paths = controller.write_deploy_log(
             payload=payload,
             base_path=base_path,
             structure="by-execution",
@@ -193,7 +196,7 @@ class TestWriteDeployLog:
         base_path = tmp_path / "deploy-log"
         custom_defs = {"env-deploy": "{{ environment }}/{{ deployment }}"}
 
-        success, exec_path = controller.write_deploy_log(
+        success, exec_path, _stage_paths = controller.write_deploy_log(
             payload=payload,
             base_path=base_path,
             structure="env-deploy",
@@ -209,7 +212,7 @@ class TestWriteDeployLog:
         payload = _make_payload()
         base_path = tmp_path / "deep" / "nested" / "deploy-log"
 
-        success, exec_path = controller.write_deploy_log(
+        success, exec_path, _stage_paths = controller.write_deploy_log(
             payload=payload,
             base_path=base_path,
             structure="flat",

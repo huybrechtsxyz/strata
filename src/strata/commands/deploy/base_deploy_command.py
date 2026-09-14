@@ -1524,7 +1524,7 @@ class BaseDeployCommand(BaseCommand):
 
             # Write via AuditController
             controller = AuditController(work_path=self._work_path)
-            ok, path = controller.write_deploy_log(
+            ok, path, stage_paths = controller.write_deploy_log(
                 payload=payload,
                 base_path=base_path,
                 structure=structure,
@@ -1546,10 +1546,12 @@ class BaseDeployCommand(BaseCommand):
                 controller.forward(event_type, enriched.model_dump(exclude_none=True), audit_config=resolved_audit_cfg)
 
                 # Layer 4c: Push to remote repo — best-effort, opt-in via audit.repository.push (ADR-0065 Phase 1)
+                # Includes the per-stage files alongside _execution.json so the durable
+                # copy in the remote repo isn't missing them on ephemeral CI agents.
                 repo_cfg = resolved_audit_cfg.repository if resolved_audit_cfg else None
                 if repo_cfg and repo_cfg.push:
                     controller.push_to_remote(
-                        [path],
+                        [path, *stage_paths],
                         local_base=base_path,
                         remote_path=repo_cfg.path or "deploy-log",
                         repo_name=repo_cfg.name,

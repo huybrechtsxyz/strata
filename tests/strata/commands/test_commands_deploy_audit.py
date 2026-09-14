@@ -118,7 +118,7 @@ class TestDeployLogWrite:
     ) -> None:
         """_write_deploy_log assembles DeployLogModel from stage results and writes it."""
         mock_git.return_value = None
-        mock_write_log = MagicMock(return_value=(True, tmp_path / ".strata" / "deploy-log" / "_execution.json"))
+        mock_write_log = MagicMock(return_value=(True, tmp_path / ".strata" / "deploy-log" / "_execution.json", []))
 
         cmd = _make_command(tmp_path)
         cmd._stage_results = [_make_stage_result()]
@@ -145,7 +145,7 @@ class TestDeployLogWrite:
     ) -> None:
         """Failed stages are correctly captured."""
         mock_git.return_value = None
-        mock_write_log = MagicMock(return_value=(True, tmp_path / "_execution.json"))
+        mock_write_log = MagicMock(return_value=(True, tmp_path / "_execution.json", []))
 
         cmd = _make_command(tmp_path)
         cmd._stage_results = [_make_stage_result(status="failed", error="Terraform apply failed")]
@@ -170,7 +170,7 @@ class TestDeployLogWrite:
             ("log", "--format=%s", "-1"): "Fix bug",
             ("log", "--format=%ae", "-1"): "dev@example.com",
         }.get(args, None)
-        mock_write_log = MagicMock(return_value=(True, tmp_path / "_execution.json"))
+        mock_write_log = MagicMock(return_value=(True, tmp_path / "_execution.json", []))
 
         cmd = _make_command(tmp_path)
         cmd._stage_results = []
@@ -211,7 +211,7 @@ class TestDeployLogWrite:
     ) -> None:
         """Base path should be {work_path}/.strata/deploy-log."""
         mock_git.return_value = None
-        mock_write_log = MagicMock(return_value=(True, tmp_path / "_execution.json"))
+        mock_write_log = MagicMock(return_value=(True, tmp_path / "_execution.json", []))
 
         cmd = _make_command(tmp_path)
         cmd._stage_results = []
@@ -230,7 +230,7 @@ class TestDeployLogWrite:
     ) -> None:
         """Default structure should be 'by-execution'."""
         mock_git.return_value = None
-        mock_write_log = MagicMock(return_value=(True, tmp_path / "_execution.json"))
+        mock_write_log = MagicMock(return_value=(True, tmp_path / "_execution.json", []))
 
         cmd = _make_command(tmp_path)
         cmd._stage_results = []
@@ -254,7 +254,7 @@ class TestDeployLogWrite:
         exec_path = tmp_path / "_execution.json"
         exec_path.write_text("{}", encoding="utf-8")
 
-        mock_write_log = MagicMock(return_value=(True, exec_path))
+        mock_write_log = MagicMock(return_value=(True, exec_path, []))
 
         enriched_pr = DeployLogPullRequestModel(
             number=42,
@@ -296,7 +296,7 @@ class TestDeployLogWrite:
         exec_path = tmp_path / "_execution.json"
         exec_path.write_text('{"original": true}', encoding="utf-8")
 
-        mock_write_log = MagicMock(return_value=(True, exec_path))
+        mock_write_log = MagicMock(return_value=(True, exec_path, []))
 
         cmd = _make_command(tmp_path)
         cmd._stage_results = []
@@ -325,7 +325,7 @@ class TestDeployLogWrite:
         """enrich_with_pr_data raising must not propagate — best-effort."""
         mock_git.return_value = None
         exec_path = tmp_path / "_execution.json"
-        mock_write_log = MagicMock(return_value=(True, exec_path))
+        mock_write_log = MagicMock(return_value=(True, exec_path, []))
 
         cmd = _make_command(tmp_path)
         cmd._stage_results = []
@@ -355,7 +355,7 @@ class TestSiemForwarding:
         """forward_to_siem is called after write_deploy_log succeeds."""
         mock_git.return_value = None
         exec_path = tmp_path / "_execution.json"
-        mock_write_log = MagicMock(return_value=(True, exec_path))
+        mock_write_log = MagicMock(return_value=(True, exec_path, []))
         mock_forward = MagicMock()
 
         cmd = _make_command(tmp_path)
@@ -382,7 +382,7 @@ class TestSiemForwarding:
         mock_git.return_value = None
         exec_path = tmp_path / "_execution.json"
         exec_path.write_text("{}", encoding="utf-8")
-        mock_write_log = MagicMock(return_value=(True, exec_path))
+        mock_write_log = MagicMock(return_value=(True, exec_path, []))
 
         pr = DeployLogPullRequestModel(number=7, title="feat: update", url="https://github.com/org/repo/pull/7")
         forwarded: list = []
@@ -416,7 +416,7 @@ class TestSiemForwarding:
     ) -> None:
         """forward_to_siem must NOT be called when write_deploy_log fails."""
         mock_git.return_value = None
-        mock_write_log = MagicMock(return_value=(False, None))  # write failed
+        mock_write_log = MagicMock(return_value=(False, None, []))  # write failed
         mock_forward = MagicMock()
 
         cmd = _make_command(tmp_path)
@@ -439,7 +439,7 @@ class TestSiemForwarding:
         """forward_to_siem raising must not propagate — best-effort."""
         mock_git.return_value = None
         exec_path = tmp_path / "_execution.json"
-        mock_write_log = MagicMock(return_value=(True, exec_path))
+        mock_write_log = MagicMock(return_value=(True, exec_path, []))
 
         cmd = _make_command(tmp_path)
         cmd._stage_results = []
@@ -470,7 +470,7 @@ class TestDeployLogPushToRepo:
         """push_to_remote is called when audit.repository resolves to a known repo."""
         mock_git.return_value = None
         exec_path = tmp_path / "_execution.json"
-        mock_write_log = MagicMock(return_value=(True, exec_path))
+        mock_write_log = MagicMock(return_value=(True, exec_path, []))
         mock_push = MagicMock(return_value=True)
         repo_dir = tmp_path / "repos" / "config"
         repo_dir.mkdir(parents=True)
@@ -520,7 +520,7 @@ class TestDeployLogPushToRepo:
         """push_to_remote is NOT called when audit.repository is absent."""
         mock_git.return_value = None
         exec_path = tmp_path / "_execution.json"
-        mock_write_log = MagicMock(return_value=(True, exec_path))
+        mock_write_log = MagicMock(return_value=(True, exec_path, []))
         mock_push = MagicMock(return_value=True)
 
         cmd = _make_command(tmp_path)
@@ -547,7 +547,7 @@ class TestDeployLogPushToRepo:
         mock_git.return_value = None
         exec_path = tmp_path / "_execution.json"
         exec_path.write_text("{}", encoding="utf-8")
-        mock_write_log = MagicMock(return_value=(True, exec_path))
+        mock_write_log = MagicMock(return_value=(True, exec_path, []))
         mock_push = MagicMock(return_value=True)
 
         cmd = _make_command(tmp_path)
@@ -583,6 +583,59 @@ class TestDeployLogPushToRepo:
 
         # Without a configuration_service, resolved_audit_cfg=None, so push is skipped
         mock_push.assert_not_called()
+
+    @patch("strata.commands.deploy.run_deploy_command.RunDeployCommand._get_git_field")
+    def test_push_includes_stage_file_paths(
+        self,
+        mock_git: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """push_to_remote receives the per-stage file paths alongside _execution.json.
+
+        Regression test: write_deploy_log()'s per-stage paths must reach
+        push_to_remote() so they aren't silently dropped on ephemeral CI agents
+        (only the discarded _write_stage_files() return value existed before).
+        """
+        from strata.models.audit_config_model import AuditConfigModel, RepositoryPushModel
+
+        mock_git.return_value = None
+        exec_path = tmp_path / "_execution.json"
+        exec_path.write_text("{}", encoding="utf-8")
+        stage_path_1 = tmp_path / "infrastructure.json"
+        stage_path_2 = tmp_path / "platform.json"
+        stage_path_1.write_text("{}", encoding="utf-8")
+        stage_path_2.write_text("{}", encoding="utf-8")
+        mock_write_log = MagicMock(return_value=(True, exec_path, [stage_path_1, stage_path_2]))
+        mock_push = MagicMock(return_value=True)
+
+        repo_dir = tmp_path / "repos" / "config"
+        repo_dir.mkdir(parents=True)
+
+        audit_cfg = AuditConfigModel(repository=RepositoryPushModel(push=True, name="config"))
+        config_service = MagicMock()
+        config_service.model.spec.audit = audit_cfg
+        config_service.get_deploy_log_path.return_value = tmp_path / ".strata" / "deploy-log"
+
+        cmd = _make_command(tmp_path)
+        cmd._stage_results = []
+        cmd._configuration_service = config_service
+
+        with (
+            patch("strata.controllers.audit_controller.AuditController.write_deploy_log", mock_write_log),
+            patch("strata.controllers.audit_controller.AuditController.enrich_with_pr_data", side_effect=lambda p: p),
+            patch("strata.controllers.audit_controller.AuditController.forward"),
+            patch("strata.controllers.audit_controller.AuditController.push_to_remote", mock_push),
+            patch(
+                "strata.controllers.solution_controller.SolutionController.get_repo_map",
+                return_value={"config": str(repo_dir)},
+            ),
+            patch("strata.controllers.solution_controller.SolutionController.load"),
+        ):
+            cmd._write_deploy_log(success=True)
+
+        mock_push.assert_called_once()
+        pushed_paths = mock_push.call_args[0][0]
+        assert pushed_paths == [exec_path, stage_path_1, stage_path_2]
 
 
 class TestAuditConfigModel:
