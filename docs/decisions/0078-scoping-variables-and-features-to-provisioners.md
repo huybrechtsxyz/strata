@@ -1,8 +1,9 @@
 # Scoping Variables and Features to Provisioners — Allow- vs Deny-by-Default
 
-- Status: proposed
+- Status: proposed — under evaluation, **no option selected**; Option F is the current focus
 - Date: 2026-09-11
-- Related: [ADR 0075 — Unified Terraform/Helm value-expression syntax](./0075-unify-terraform-helm-value-expression-syntax.md), [ADR 0077 — Repo map & cross-repo path resolution](./0077-repo-map-cross-repo-path-resolution.md)
+- Revised: 2026-09-14 — Option E's addressing scheme found unworkable against shared/layered environment files; Option F (`spec.references`) added; decision withdrawn pending evaluation
+- Related: [ADR 0073 — Embedded string syntax inventory and creep prevention](./0073-embedded-string-syntax-inventory-and-creep-prevention.md), [ADR 0075 — Unified Terraform/Helm value-expression syntax](./0075-unify-terraform-helm-value-expression-syntax.md), [ADR 0077 — Repo map & cross-repo path resolution](./0077-repo-map-cross-repo-path-resolution.md)
 
 ## Context and Problem Statement
 
@@ -169,7 +170,7 @@ model relative to `stage.secrets`, and answer "not Terraform" without ever sayin
 "yes, the script" — so the real consumer still has no declared relationship to the
 value.
 
-### Option E — Allow-by-default, the *variable* declares its routing (chosen)
+### Option E — Allow-by-default, the *variable* declares its routing
 
 Routing lives on the declaration, not on the consumer:
 
@@ -197,32 +198,175 @@ Omitting `stages:` preserves today's behaviour exactly: the value goes everywher
   silent path. This is the property Options C and D lack.
 - **Migration:** none. Absent `stages:` ⇒ current semantics.
 
-## Decision Outcome
+#### Objection — stages and variables do not live in the same file
 
-**Adopt Option E — allow-by-default, with optional per-variable routing.**
+Option E's addressing scheme does not survive contact with how environments are
+actually composed:
 
-### On allow- vs deny-by-default
+- **Stages live in the deployment file; variables live in environment file(s).**
+  A variable declaring `stages: [configure]` names something defined in a
+  different document, with a different owner and lifecycle. Nothing about the
+  environment file is locally checkable.
+- **Environment files are shared across deployments.** A base such as
+  `@config/stacks/core/environment.yaml` is included by many deployments, each
+  with its own `spec.stages` and *different stage names*. A variable in a shared
+  base therefore **cannot name a stage at all** — the name only becomes meaningful
+  in files that include it.
+- **Environment files layer, last-wins by `key`.** `EnvironmentService.merge_envfiles()`
+  replaces whole entries: a leaf file redeclaring a variable to change its `value`
+  silently drops any `stages:` the base had set, unless it repeats it.
 
-Deny-by-default is the right instinct for secrets and the wrong one here, and the
-reason is that **`stage.secrets` and variable routing are not the same mechanism
-wearing different defaults. They solve different problems:**
+The merge hazard is milder than it first appears — dropping routing *broadens*
+the variable, which reverts to today's behaviour and trips the existing
+`variables.tf` cross-check if undeclared. So the common mistake stays loud. But
+the shared-base problem is fatal to the addressing scheme, not merely awkward:
+**stage names are not stable across the files that would need to reference them.**
 
-|                      | `stage.secrets`                                             | variable routing                                   |
-| -------------------- | ----------------------------------------------------------- | -------------------------------------------------- |
-| Purpose              | **Access control**                                          | **Dependency declaration**                         |
-| The stage is…        | a trust boundary                                            | a consumer                                         |
-| Cost of over-sharing | a leaked credential                                         | a validator false-positive                         |
-| Correct default      | **deny** — least privilege                                  | **allow** — least ceremony                         |
-| Belongs on           | the **stage** (read a stage, see exactly what it can touch) | the **variable** (read a value, see where it goes) |
+Of the three things a variable could name, only one is stable in a shared
+environment file:
 
-An earlier draft of this analysis flagged the differing defaults as an
-inconsistency to apologise for. On examination that was wrong: **the difference is
-justified by purpose, and forcing symmetry would be the actual mistake.** Secrets
-deny-by-default because the blast radius of over-sharing is a credential leak.
-Variables allow-by-default because the blast radius is a build-time warning, and
-because the ceremony of deny-by-default (Option B) is what drives teams to
-`['*']`, which destroys the mechanism's value for secrets too by normalising the
-escape hatch.
+| Routing target       | Defined in        | Stable across deployments sharing the env file? |
+| -------------------- | ----------------- | ----------------------------------------------- |
+| Stage name           | `deployment.yaml` | ❌ varies per deployment                         |
+| Provisioner name     | `workspace.yaml`  | ❌ varies if the env file spans stacks           |
+| Provisioner **type** | universal enum    | ✅ always                                        |
+
+This reframes the problem: the question is no longer primarily *allow vs deny*,
+but **what can a shared, layered file stably address?**
+
+### Option F — Scope the check to `spec.references` (existing mechanism)
+
+Strata already has a first-class, widely-declared mechanism for "this document
+requires these keys" — and it is the exact inverse of Option E: the **consumer**
+declares its needs, rather than the value declaring its destinations.
+
+#### The mechanism already exists
+
+`spec.references` is present on **dns, resource, network, provider, tenant,
+module and namespace**, plus `workspace` and `environment`, and is carried
+through into the built `platform.json` artifact. The canonical shape, from
+[`ResourceReferencesModel`](../../src/strata/models/resource_model.py#L265):
+
+```python
+class ResourceReferencesModel(PlatformBaseModel):
+    """References to variables, secrets, and features required by this resource.
+
+    Lists the keys that must be defined in the environment configuration.
+    Actual values and store backends are defined at environment/workspace level.
+    """
+    variables: VariableRefs
+    secrets:   SecretRefs
+    features:  FeatureRefs
+```
+
+That docstring *is* the design statement for this option.
+
+#### It is already enforced, and already computed
+
+The DNS model enforces the chain **from the usage side** —
+`DnsSpecModel.validate_references_declared()` errors if a record uses `var: X`
+without declaring `X` in references:
+
+```yaml
+spec:
+  references:
+    variables: [SERVER_IP]
+  zones:
+    - records:
+        - { name: "@", type: A, var: SERVER_IP }
+```
+
+And `references` already feeds `_track_variable()`/`_track_feature()`/
+`_track_secret()` in `TerraformBuilder`, producing the `tf_required_*.json`
+documentation files **with `used_by` provenance**. So strata already computes
+"which component requires which key." It simply does not use that to scope
+`_validate_inputs()`, which instead asks "what is declared in the environment" —
+i.e. everything.
+
+#### The proposal
+
+Scope the Terraform cross-check to **keys actually referenced by that
+provisioner's components**, instead of every key declared in the environment. A
+bookkeeping variable that no resource, module, provider or dns document
+references is then never cross-checked, and needs no dummy declaration.
+
+#### Why it dodges every objection raised so far
+
+| Objection                                                    | Option E (`variable.stages`) | Option F (references)                                                |
+| ------------------------------------------------------------ | ---------------------------- | -------------------------------------------------------------------- |
+| Stages defined in a different file                           | ❌ cross-file name reference  | ✅ references name **keys**, not stages                               |
+| Shared env files span deployments with differing stage names | ❌ fatal                      | ✅ keys are already the shared vocabulary                             |
+| Env files merge last-wins; routing silently dropped          | ⚠️ mitigated, not solved      | ✅ references live on the consumer doc, which is not layered that way |
+| New syntax to learn                                          | ⚠️ new field                  | ✅ zero — existing idiom on 7+ kinds                                  |
+| Bookkeeping variable forces a dummy `variable {}`            | fixed                        | ✅ referenced by nothing ⇒ not checked                                |
+
+The reason it dodges the addressing problem entirely: **references name *keys*,
+and keys are already the stable shared vocabulary between environment files and
+consumer documents.** No stage names, no provisioner names, no new addressing
+scheme that can go stale across shared files.
+
+#### The risk that could kill it
+
+`spec.references` is **sparsely populated in practice** — a grep across every
+shipped example configuration under `config/` finds it **twice**. Switching the
+cross-check to "only referenced keys" wholesale would therefore make it
+*near-vacuous* for most real workspaces: it would silently stop catching the
+typos it exists to catch. That is the classic "make the check pass by making it
+check nothing" trap — and precisely the silent-weakening failure mode this
+codebase has recently spent effort eliminating (ADR-0077).
+
+#### The combination that resolves it — opt-in precision, per provisioner
+
+- Components **do** declare `references` ⇒ the check is scoped to those keys, and
+  enforced **in both directions**: usage must be referenced (the DNS precedent,
+  extended to resource/module), and references must exist in `variables.tf`.
+- Components **do not** declare references ⇒ current behaviour, unchanged.
+
+This is backwards-compatible, and opting in makes the check *more* precise rather
+than weaker — because the usage-side enforcement closes the loop. A key that is
+referenced but missing from `variables.tf` is still an error; a key used but not
+referenced is a new error; a key that is neither is correctly ignored.
+
+#### Two gaps to close before this is viable
+
+1. **Script provisioners have no component document.** Resources, modules and dns
+   documents can carry references. The triggering case — a value consumed by a
+   `script` provisioner — has nowhere to declare them today. The natural home
+   would be `references` on the provisioner itself in the workspace file, sitting
+   beside the existing `inputs_from`.
+2. **A name collision, same class as ADR-0010's "repositories".** Two unrelated
+   things are called `references` in the schema:
+   - `spec.references` on resource/dns/module ⇒ `{variables, secrets, features}` —
+     declares required environment keys.
+   - `references` on a *workspace resource entry* ⇒ `Dict[str, str]` — cross-resource
+     value wiring (`{'storage_connection': 'contoso_storage.connection_string'}`).
+
+   Different meanings, same word. Worth resolving before building more on top of it.
+
+## Analysis — allow- vs deny-by-default
+
+*(Retained as findings. This section deliberately does not select an option — see
+[Status](#status) below.)*
+
+Deny-by-default is the right instinct for secrets and the wrong one for
+variables, because **`stage.secrets` and variable scoping are not the same
+mechanism wearing different defaults. They solve different problems:**
+
+|                      | `stage.secrets`                                             | variable scoping                              |
+| -------------------- | ----------------------------------------------------------- | --------------------------------------------- |
+| Purpose              | **Access control**                                          | **Dependency declaration**                    |
+| The stage is…        | a trust boundary                                            | a consumer                                    |
+| Cost of over-sharing | a leaked credential                                         | a validator false-positive                    |
+| Correct default      | **deny** — least privilege                                  | **allow** — least ceremony                    |
+| Belongs on           | the **stage** (read a stage, see exactly what it can touch) | the **consumer** or the **value**, per option |
+
+An earlier draft flagged the differing defaults as an inconsistency to apologise
+for. That was wrong: **the difference is justified by purpose, and forcing
+symmetry would be the actual mistake.** Secrets deny-by-default because the blast
+radius of over-sharing is a credential leak. Variables allow-by-default because
+the blast radius is a build-time warning — and because the ceremony of
+deny-by-default (Option B) is what drives teams to `['*']`, which destroys the
+mechanism's value for secrets too by normalising the escape hatch.
 
 For a DevOps profile specifically: deny-by-default only produces predictability if
 the allowlists are actually maintained. At 40+ variables across multiple stages
@@ -231,48 +375,54 @@ guarantee while providing none.
 
 ### On failure modes
 
-The deciding property is that Option E's failure mode is *today's behaviour plus
-today's error*. Every other option introduces a new way for a value to silently
-not arrive. Given that this codebase has just spent significant effort removing
-two silent-fallback bugs (ADR-0077), adding a third would be a poor trade for
-syntactic symmetry with `stage.secrets`.
+The dominant criterion. Recent incidents in this codebase — `PlanBuildCommand`
+silently omitting `repo_map`, and `get_repo_map()` silently resolving against
+`os.getcwd()` (both ADR-0077) — were expensive precisely because they failed
+*silently* and were diagnosed hours later against a misleading error.
 
-### Scope
+| Option                     | Failure mode when got wrong                                                          |
+| -------------------------- | ------------------------------------------------------------------------------------ |
+| B (deny, stage enumerates) | Moderately loud — "required variable not set"                                        |
+| C (allow, stage narrows)   | **Silent** — a new variable omitted from a narrowed list is simply never injected    |
+| D (allow, stage excludes)  | Loud, but exclusion lists compose badly                                              |
+| E (allow, variable routes) | Loud — forgetting reverts to today's behaviour + today's error                       |
+| F (references-scoped)      | Loud **if** both directions are enforced; **silently vacuous** if adoption stays low |
 
-Routing applies to `spec.variables` and `spec.features` (which have the identical
-problem and the identical fix). `spec.secrets` is unchanged — `stage.secrets`
-already handles it correctly and is an access-control mechanism that should stay
-on the stage.
+Any option that introduces a new way for a value to *silently not arrive* should
+be treated as disqualified.
 
-## Remaining Work
+## Status
 
-| Item | Description                                                                                                                                                                                               | Status |
-| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| S-1  | Add optional `stages: Optional[List[str]]` to the variable and feature store models; absent ⇒ all stages (current behaviour)                                                                              | 🔲 TODO |
-| S-2  | Validate declared stage names against `deployment.spec.stages[].name`; an unknown name is a **hard error** listing known stages — never a silently-ignored no-op                                          | 🔲 TODO |
-| S-3  | `TerraformBuilder._collect_declared_input_keys()` honours routing when scoping keys to a provisioner's matching stages (reuse the existing `_stages_for_provisioner()`)                                   | 🔲 TODO |
-| S-4  | Build-time emission: a variable routed away from a Terraform provisioner is not written into that provisioner's `variables.auto.tfvars.json`                                                              | 🔲 TODO |
-| S-5  | Deploy-time: extend `ResolvedValues.for_stage()` to filter `variables`/`features` by routing, so build and deploy agree                                                                                   | 🔲 TODO |
-| S-6  | `strata values list --stage <name>` reports the effective per-stage input set, restoring the stage-local readability Option E trades away                                                                 | 🔲 TODO |
-| S-7  | Document the deliberate asymmetry (secrets deny-by-default on the stage; variables allow-by-default on the variable) in `docs/config/environment.md` — so it reads as a decision rather than an oversight | 🔲 TODO |
-| S-8  | Regression test: a variable routed to a script stage does not trip the Terraform `variables.tf` cross-check, and *is* still injected into the script stage's env                                          | 🔲 TODO |
+**No decision yet.** Options A–E are recorded above; Option F is the current focus
+of evaluation. The open fork is stated in [Open Questions](#open-questions) item 1.
+
+Remaining work is deliberately not enumerated until an option is selected — the
+task list differs substantially between E (new schema field, routing resolution,
+emission filtering) and F (making an existing mechanism load-bearing, plus a
+migration path that does not weaken checks during adoption).
 
 ## Open Questions
 
-1. **Route by stage name or by provisioner name?** `stages:` matches the
-   `stage.secrets` model and stages are the user-facing unit in the deployment
-   file. But the cross-check is per-*provisioner*, and one provisioner may serve
-   several stages. `stages:` + the existing `_stages_for_provisioner()` mapping is
-   the proposal; a `provisioners:` form would be more direct but introduces a
-   second addressing scheme.
-2. **Should routing support negation** (`stages: ["!terraform"]`)? It would make
-   "everywhere except one" a one-liner, which is the actual shape of the
-   triggering case. Against: it is a second syntax for the same idea, and
-   ADR-0073 (embedded-string-syntax creep) argues for resisting exactly this.
-3. **Does `features` need routing at all**, or only `variables`? Features are
-   booleans typically consumed by Terraform `count`/`for_each`. The mechanism is
+1. **Should `spec.references` become load-bearing, or stay documentation?** This
+   is the real fork. Load-bearing gives a complete, enforced dependency graph and
+   solves this cleanly — but the current 2-occurrence adoption rate has to rise,
+   and every existing workspace needs a migration path that does not silently
+   weaken its checks in the meantime.
+2. **Where does a `script` provisioner declare its required keys?** Probably
+   `references` on the provisioner in the workspace file, beside `inputs_from` —
+   but that needs confirming against how script provisioners are actually
+   configured.
+3. **Is type-level granularity ever insufficient?** Concretely: would a variable
+   ever need to reach *one* Terraform root but not another within the same
+   deployment? If not, several options collapse to the same thing and the
+   finer-grained ones are over-engineering.
+4. **Resolve the `references` name collision** (required-keys vs cross-resource
+   wiring) before building further on the term.
+5. **Does `features` need scoping at all**, or only `variables`? The mechanism is
    free once variables have it, but if no real case exists it may be surface area
    with no demand.
-4. **Should the existing dummy declarations be cleaned up** once routing exists?
-   `enable_platform` and friends are genuinely unused — different problem, and
-   possibly they should simply be deleted rather than routed.
+6. **Should the existing dummy declarations be cleaned up** regardless?
+   `enable_platform`, `enable_aks`, `enable_udr_subnet_association`,
+   `privatelink_zones` and `layer_name` are genuinely unused — a different
+   problem, and possibly they should simply be deleted rather than scoped.
+
