@@ -716,6 +716,103 @@ def _make_stage(name="stage1", provisioner=None, topology=None, secrets=None):
     return stage
 
 
+class TestValidateInputsPropertiesSuppliedKeys:
+    """Regression: a required Terraform variable supplied via ``spec.properties``
+    must not be reported as "not supplied by any input".
+
+    ``spec.properties`` / ``spec.custom`` are emitted as their own tfvars files
+    (``properties.auto.tfvars.json`` / ``custom.auto.tfvars.json``), so their
+    top-level keys are genuine Terraform variable values — they are simply not
+    sourced from ``spec.variables``/``features``/``secrets`` and so never appear
+    in ``declared_keys``. Previously this produced a permanent, always-wrong
+    warning on every build for workspaces that supply required inputs via
+    properties.
+    """
+
+    def _make_svc(self, tmp_path, properties=None, custom=None, output=None):
+        prov = _make_provisioner(source_path="terraform")
+        prov.name = "control_infra"
+        prov.output = output
+
+        workspace_model = MagicMock()
+        workspace_model.spec.provisioners = [prov]
+        workspace_model.spec.topology = []
+        workspace_model.spec.properties = {}
+        workspace_model.spec.custom = {}
+        workspace_model.spec.resources = []
+
+        workspace_service = MagicMock()
+        workspace_service.model = workspace_model
+
+        env_service = MagicMock()
+        env_service.model.spec.properties = properties or {}
+        env_service.model.spec.custom = custom or {}
+        env_service.model.spec.overrides = None
+        env_service.model.spec.secrets = []
+        env_service.get_variables.return_value = []
+        env_service.get_features.return_value = []
+
+        deployment_service = MagicMock()
+        deployment_service.get_workspace_service.return_value = workspace_service
+        deployment_service.get_environment_service.return_value = env_service
+        deployment_service.get_build_path.return_value = tmp_path
+        deployment_service.model.spec.stages = [_make_stage(name="control_infra", provisioner="control_infra")]
+        return deployment_service
+
+    def _write_required_var(self, tmp_path, name):
+        prov_dir = tmp_path / "terraform"
+        prov_dir.mkdir(parents=True, exist_ok=True)
+        (prov_dir / "variables.tf").write_text(f'variable "{name}" {{\n  type = any\n}}\n', encoding="utf-8")
+
+    def test_required_var_supplied_via_properties_is_not_warned(self, tmp_path):
+        self._write_required_var(tmp_path, "environment_info")
+        svc = self._make_svc(tmp_path, properties={"environment_info": {"region": "westeurope"}})
+
+        builder = TerraformBuilder()
+        ok = builder._validate_inputs(svc, tmp_path)
+
+        assert ok is True, builder.get_errors()
+        assert not any("environment_info" in m for m in builder.get_messages()), builder.get_messages()
+
+    def test_required_var_supplied_via_custom_is_not_warned(self, tmp_path):
+        self._write_required_var(tmp_path, "custom_block")
+        svc = self._make_svc(tmp_path, custom={"custom_block": {"a": 1}})
+
+        builder = TerraformBuilder()
+        builder._validate_inputs(svc, tmp_path)
+
+        assert not any("custom_block" in m for m in builder.get_messages()), builder.get_messages()
+
+    def test_genuinely_unsupplied_required_var_is_still_warned(self, tmp_path):
+        """Safety: the warning must still fire for a variable nothing supplies."""
+        self._write_required_var(tmp_path, "truly_missing")
+        svc = self._make_svc(tmp_path, properties={"something_else": 1})
+
+        builder = TerraformBuilder()
+        builder._validate_inputs(svc, tmp_path)
+
+        assert any("truly_missing" in m and "not supplied" in m for m in builder.get_messages()), builder.get_messages()
+
+    def test_properties_not_excluded_when_profile_omits_them(self, tmp_path):
+        """A profile that doesn't emit properties means the key really isn't
+        supplied — the warning must still fire."""
+        from strata.models.workspace_model import OutputProfileModel
+
+        self._write_required_var(tmp_path, "environment_info")
+        svc = self._make_svc(
+            tmp_path,
+            properties={"environment_info": {"region": "westeurope"}},
+            output=OutputProfileModel(format="strata", emits=["variables"]),
+        )
+
+        builder = TerraformBuilder()
+        builder._validate_inputs(svc, tmp_path)
+
+        assert any("environment_info" in m and "not supplied" in m for m in builder.get_messages()), (
+            builder.get_messages()
+        )
+
+
 class TestStagesForProvisioner:
     def test_explicit_stage_provisioner_match(self):
         prov = _make_provisioner(source_path="terraform")

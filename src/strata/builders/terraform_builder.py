@@ -1459,6 +1459,23 @@ class TerraformBuilder(BaseBuilder):
             # Add resource-category keys emitted by _build_resources_by_category
             excluded.update(self._collect_platform_emitted_keys(deployment_service))
 
+            # spec.properties / spec.custom are emitted as their own tfvars files
+            # (properties.auto.tfvars.json / custom.auto.tfvars.json), so their
+            # TOP-LEVEL keys are genuine Terraform variable values — they are simply
+            # not sourced from spec.variables/features/secrets and so never appear in
+            # declared_keys. Without this, every required Terraform variable supplied
+            # via spec.properties produced a permanent, always-wrong
+            # "Required variable 'X' (no default) is not supplied by any input"
+            # warning on every build.
+            #
+            # Honour the provisioner's output profile: a key is only actually supplied
+            # when the corresponding file is emitted (should_emit() already returns
+            # False for format: none and for profiles whose emits[] omits the category).
+            profile_for_exclusions: Optional[OutputProfileModel] = prov.output
+            for source in ("properties", "custom"):
+                if profile_for_exclusions is None or profile_for_exclusions.should_emit(source):
+                    excluded.update(self._resolve_merged_properties(deployment_service, source).keys())
+
             # Backend configuration expressions (${var:KEY} / ${secret:KEY} / ${feature:KEY},
             # ADR-0075) are resolved directly from ResolvedValues at deploy time — never
             # passed as Terraform root-module inputs — so keys referenced only there are

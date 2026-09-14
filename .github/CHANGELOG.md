@@ -8,6 +8,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Fixed
+
+- **`strata build run` warned `Required variable 'X' (no default) is not supplied by any input` on every build for required Terraform variables supplied via `spec.properties`/`spec.custom`** — a permanent false positive. The check only knew about `spec.variables`/`features`/`secrets`, but properties and custom blocks are emitted as their own `properties.auto.tfvars.json`/`custom.auto.tfvars.json` files and are genuine inputs. Their top-level keys are now recognised, honouring the provisioner's `output:` profile so the warning still fires when the corresponding file isn't emitted.
+
 ## [1.9.11] - 2026-09-11
 
 ### Fixed
