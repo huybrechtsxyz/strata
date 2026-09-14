@@ -291,7 +291,7 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
         same resolution algorithm directly against the raw `configuration.spec.integrations`
         specs instead. Kept as one method (not split per provisioner type) since the algorithm
         is identical modulo which integration class each type expects and whether a
-        zero-candidate auto-bind is an error — see `_INTEGRATION_BINDING_RULES` below, which
+        zero-candidate auto-bind is an error — see `_integration_binding_rules` below, which
         must be kept in sync with each deployer's `resolve_for_provisioner()`/`default_factory`
         call (ADR-0079/0080).
         """
@@ -308,7 +308,7 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
         # error). Ansible/Bicep fall back to a hardcoded default integration when nothing is
         # declared (ADR-0080), so zero candidates is not an error for them — mirrors each
         # deployer's `default_factory` argument to `resolve_for_provisioner()`.
-        _INTEGRATION_BINDING_RULES: Dict[ProvisionerType, Tuple[type, bool]] = {
+        _integration_binding_rules: Dict[ProvisionerType, Tuple[type, bool]] = {
             ProvisionerType.TERRAFORM: (TerraformIntegration, True),
             ProvisionerType.ANSIBLE: (AnsibleIntegration, False),
             ProvisionerType.BICEP: (AzureCLIIntegration, False),
@@ -332,7 +332,7 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
 
         errors: List[str] = []
         for provisioner in self.model.spec.provisioners:
-            rule = _INTEGRATION_BINDING_RULES.get(provisioner.provisioner)  # type: ignore[call-overload]
+            rule = _integration_binding_rules.get(provisioner.provisioner)  # type: ignore[call-overload]
             if rule is None:
                 continue
             expected_class, zero_candidates_is_error = rule

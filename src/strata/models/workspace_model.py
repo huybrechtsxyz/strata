@@ -577,12 +577,12 @@ class WorkspaceIacModel(PlatformBaseModel):
         #   IntegrationService.resolve_by_class() — they aren't provisioner-scoped (no
         #   `_iac_model`, a stage can deploy many namespaces/charts) so there is no addressable
         #   provisioner entry for an explicit 'integration:' override to target.
-        _INTEGRATION_AWARE_PROVISIONERS = {
+        _integration_aware_provisioners = {
             ProvisionerType.TERRAFORM,
             ProvisionerType.ANSIBLE,
             ProvisionerType.BICEP,
         }
-        if self.integration is not None and self.provisioner not in _INTEGRATION_AWARE_PROVISIONERS:
+        if self.integration is not None and self.provisioner not in _integration_aware_provisioners:
             raise ValueError(
                 f"Provisioner '{self.name}': 'integration' is not supported for provisioner type "
                 f"'{self.provisioner}' (no integration lookup exists for this type)."
