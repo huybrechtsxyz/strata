@@ -39,6 +39,7 @@ def _make_deployer(tmp_path: Path, config: Optional[dict] = None) -> BicepDeploy
     # Pre-populate internals as if validate_workspace/validate_environment passed
     iac = MagicMock()
     iac.name = "infrastructure"
+    iac.integration = None  # ADR-0080: unconfigured MagicMock attr is truthy, would break auto-bind
     iac.configuration = config or {
         "scope": "resourceGroup",
         "resource_group": "my-rg",
@@ -217,6 +218,46 @@ class TestValidateEnvironment:
         ):
             ok, _ = d.validate_environment()
         assert ok
+
+
+class TestGetAzureCliIntegration:
+    """ADR-0080: `_get_azure_cli_integration()` actually consumes a registered
+    `type: azure_cli` integration (fixing the previous silent no-op bug), with a
+    fallback to today's bare default when nothing is declared."""
+
+    def setup_method(self):
+        from strata.integrations.base_integration import BaseIntegration
+        from strata.services.integration_service import IntegrationService
+
+        BaseIntegration._instances.clear()
+        IntegrationService.reset()
+
+    def teardown_method(self):
+        from strata.integrations.base_integration import BaseIntegration
+        from strata.services.integration_service import IntegrationService
+
+        BaseIntegration._instances.clear()
+        IntegrationService.reset()
+
+    def test_falls_back_to_default_when_nothing_registered(self, tmp_path):
+        from strata.integrations.azure_cli import AzureCLIIntegration
+
+        d = _make_deployer(tmp_path)
+        integration = d._get_azure_cli_integration()
+        assert isinstance(integration, AzureCLIIntegration)
+
+    def test_uses_registered_integration_when_declared(self, tmp_path):
+        from strata.integrations.azure_cli import AzureCLIIntegration
+        from strata.models.integration_model import IntegrationModel
+        from strata.services.integration_service import IntegrationService
+
+        d = _make_deployer(tmp_path)
+        svc = IntegrationService.get_instance()
+        registered = AzureCLIIntegration(IntegrationModel(name="azure_main", type="azure_cli"))
+        svc.registry.register_integration("azure_main", registered)
+
+        integration = d._get_azure_cli_integration()
+        assert integration is registered
 
 
 # ===========================================================================

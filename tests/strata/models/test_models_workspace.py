@@ -193,20 +193,63 @@ class TestWorkspaceIacModelProvisionerFieldValidation:
         )
         assert model.integration is None
 
-    def test_integration_rejected_on_ansible(self):
-        with pytest.raises(ValidationError, match="'integration' is only supported for terraform"):
-            WorkspaceIacModel(
-                name="config",
-                provisioner=ProvisionerType.ANSIBLE,
-                source=self._source(),
-                integration="config_mgmt",
-            )
+    def test_integration_allowed_on_ansible(self):
+        """ADR-0080: ansible is provisioner-scoped (has _iac_model), wired into
+        IntegrationService.resolve_for_provisioner() same as terraform."""
+        model = WorkspaceIacModel(
+            name="config",
+            provisioner=ProvisionerType.ANSIBLE,
+            source=self._source(),
+            integration="config_mgmt",
+        )
+        assert model.integration == "config_mgmt"
+
+    def test_integration_allowed_on_bicep(self):
+        """ADR-0080: bicep is provisioner-scoped (has _iac_model), wired into
+        IntegrationService.resolve_for_provisioner() (matching AzureCLIIntegration)."""
+        model = WorkspaceIacModel(
+            name="infra",
+            provisioner=ProvisionerType.BICEP,
+            source=self._source(),
+            integration="azure_main",
+        )
+        assert model.integration == "azure_main"
 
     def test_integration_rejected_on_helm(self):
-        with pytest.raises(ValidationError, match="'integration' is only supported for terraform"):
+        """ADR-0080: helm IS wired into an integration lookup (resolve_by_class), but it isn't
+        provisioner-scoped (no _iac_model — a stage can deploy many charts), so there's no
+        addressable provisioner entry for an explicit 'integration:' override to target."""
+        with pytest.raises(ValidationError, match="'integration' is not supported for provisioner type"):
             WorkspaceIacModel(
                 name="app",
                 provisioner=ProvisionerType.HELM,
                 source=self._source(),
                 integration="helm_registry",
+            )
+
+    def test_integration_rejected_on_compose(self):
+        """ADR-0080: same reasoning as helm above — compose isn't provisioner-scoped either."""
+        with pytest.raises(ValidationError, match="'integration' is not supported for provisioner type"):
+            WorkspaceIacModel(
+                name="app",
+                provisioner=ProvisionerType.COMPOSE,
+                source=self._source(),
+                integration="docker_main",
+            )
+
+    def test_integration_rejected_on_script(self):
+        with pytest.raises(ValidationError, match="'integration' is not supported for provisioner type"):
+            WorkspaceIacModel(
+                name="app",
+                provisioner=ProvisionerType.SCRIPT,
+                source=self._source(),
+                integration="something",
+            )
+
+    def test_integration_rejected_on_argocd(self):
+        with pytest.raises(ValidationError, match="'integration' is not supported for provisioner type"):
+            WorkspaceIacModel(
+                name="app",
+                provisioner=ProvisionerType.ARGOCD,
+                integration="something",
             )

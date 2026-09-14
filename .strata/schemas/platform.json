@@ -3419,7 +3419,7 @@
             }
           ],
           "default": null,
-          "description": "Name of the configuration.spec.integrations[] entry this provisioner binds to (for auth/endpoints/tool-version validation). If unset, auto-binds to the sole registered integration compatible with this provisioner's type — an error (not a guess) if zero or more than one candidate exists. This provisioner's own 'name' is never used to look up an integration (ADR-0079). Currently only consumed for provisioner: terraform.",
+          "description": "Name of the configuration.spec.integrations[] entry this provisioner binds to (for auth/endpoints/tool-version validation). If unset, auto-binds to the sole registered integration compatible with this provisioner's type — an error (not a guess) if more than one candidate exists (terraform also errors on zero; ansible/bicep fall back to a default when nothing is declared). This provisioner's own 'name' is never used to look up an integration (ADR-0079/ADR-0080). Only valid on provisioner: terraform, ansible, or bicep.",
           "title": "Integration"
         }
       },

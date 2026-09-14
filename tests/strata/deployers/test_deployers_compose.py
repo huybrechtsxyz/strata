@@ -77,11 +77,10 @@ class TestComposeDeployerMetadata:
 class TestComposeDeployerValidateEnvironment:
     def test_success_sets_docker_instance(self):
         d = _make_deployer()
-        with patch("strata.deployers.compose_deployer.DockerIntegration") as mock_int:
-            instance = MagicMock()
-            instance.ensure_available.return_value = (True, "")
-            instance.get_version.return_value = "24.0.0"
-            mock_int.return_value = instance
+        instance = MagicMock()
+        instance.ensure_available.return_value = (True, "")
+        instance.get_version.return_value = "24.0.0"
+        with patch.object(ComposeDeployer, "_get_docker_integration", return_value=instance):
             ok, msgs = d.validate_environment()
         assert ok is True
         assert d._docker is instance
@@ -89,13 +88,52 @@ class TestComposeDeployerValidateEnvironment:
 
     def test_unavailable_returns_false(self):
         d = _make_deployer()
-        with patch("strata.deployers.compose_deployer.DockerIntegration") as mock_int:
-            instance = MagicMock()
-            instance.ensure_available.return_value = (False, "docker not in PATH")
-            mock_int.return_value = instance
+        instance = MagicMock()
+        instance.ensure_available.return_value = (False, "docker not in PATH")
+        with patch.object(ComposeDeployer, "_get_docker_integration", return_value=instance):
             ok, msgs = d.validate_environment()
         assert ok is False
         assert any("docker not in PATH" in m for m in msgs)
+
+
+class TestGetDockerIntegration:
+    """ADR-0080: `_get_docker_integration()` actually consumes a registered
+    `type: docker` integration (fixing the previous silent no-op bug), with a
+    fallback to today's bare default when nothing is declared."""
+
+    def setup_method(self):
+        from strata.integrations.base_integration import BaseIntegration
+        from strata.services.integration_service import IntegrationService
+
+        BaseIntegration._instances.clear()
+        IntegrationService.reset()
+
+    def teardown_method(self):
+        from strata.integrations.base_integration import BaseIntegration
+        from strata.services.integration_service import IntegrationService
+
+        BaseIntegration._instances.clear()
+        IntegrationService.reset()
+
+    def test_falls_back_to_default_when_nothing_registered(self):
+        from strata.integrations.docker import DockerIntegration
+
+        d = _make_deployer()
+        integration = d._get_docker_integration()
+        assert isinstance(integration, DockerIntegration)
+
+    def test_uses_registered_integration_when_declared(self):
+        from strata.integrations.docker import DockerIntegration
+        from strata.models.integration_model import IntegrationModel
+        from strata.services.integration_service import IntegrationService
+
+        d = _make_deployer()
+        svc = IntegrationService.get_instance()
+        registered = DockerIntegration(config=IntegrationModel(name="docker_main", type="docker"))
+        svc.registry.register_integration("docker_main", registered)
+
+        integration = d._get_docker_integration()
+        assert integration is registered
 
 
 # ---------------------------------------------------------------------------

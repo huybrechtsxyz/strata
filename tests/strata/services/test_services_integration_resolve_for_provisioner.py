@@ -110,3 +110,105 @@ class TestResolveForProvisioner:
 
         result = svc.resolve_for_provisioner(_iac_model(integration="primary"), TerraformIntegration)
         assert result is tofu
+
+
+class TestResolveForProvisionerDefaultFactory:
+    """ADR-0080: default_factory preserves a deployer's pre-existing ad-hoc default
+    (e.g. Ansible/Bicep) when zero candidates are registered — instead of erroring,
+    which would break virtually every existing workspace that never declared one."""
+
+    def setup_method(self):
+        BaseIntegration._instances.clear()
+        IntegrationService.reset()
+
+    def teardown_method(self):
+        BaseIntegration._instances.clear()
+        IntegrationService.reset()
+
+    def test_zero_candidates_uses_default_factory(self):
+        svc = IntegrationService.get_instance()
+        default = _tf("fallback")
+
+        result = svc.resolve_for_provisioner(
+            _iac_model(integration=None), TerraformIntegration, default_factory=lambda: default
+        )
+        assert result is default
+
+    def test_sole_candidate_wins_over_default_factory(self):
+        svc = IntegrationService.get_instance()
+        tf = _tf("only_one")
+        svc.registry.register_integration("only_one", tf)
+        default = _tf("fallback")
+
+        result = svc.resolve_for_provisioner(
+            _iac_model(integration=None), TerraformIntegration, default_factory=lambda: default
+        )
+        assert result is tf
+
+    def test_ambiguous_still_raises_even_with_default_factory(self):
+        svc = IntegrationService.get_instance()
+        svc.registry.register_integration("legacy", _tf("legacy"))
+        svc.registry.register_integration("current", _tf("current"))
+
+        with pytest.raises(IntegrationResolutionError, match="ambiguous"):
+            svc.resolve_for_provisioner(
+                _iac_model(integration=None), TerraformIntegration, default_factory=lambda: _tf("fallback")
+            )
+
+    def test_explicit_missing_still_raises_even_with_default_factory(self):
+        svc = IntegrationService.get_instance()
+
+        with pytest.raises(IntegrationResolutionError, match="not registered"):
+            svc.resolve_for_provisioner(
+                _iac_model(integration="missing"), TerraformIntegration, default_factory=lambda: _tf("fallback")
+            )
+
+
+class TestResolveByClass:
+    """ADR-0080: for non-provisioner-scoped deployers (Compose/Helm) — no iac_model,
+    no explicit-name override, auto-bind or default only."""
+
+    def setup_method(self):
+        BaseIntegration._instances.clear()
+        IntegrationService.reset()
+
+    def teardown_method(self):
+        BaseIntegration._instances.clear()
+        IntegrationService.reset()
+
+    def test_sole_candidate_wins(self):
+        svc = IntegrationService.get_instance()
+        tf = _tf("only_one")
+        svc.registry.register_integration("only_one", tf)
+
+        result = svc.resolve_by_class(TerraformIntegration)
+        assert result is tf
+
+    def test_zero_candidates_uses_default_factory(self):
+        svc = IntegrationService.get_instance()
+        default = _tf("fallback")
+
+        result = svc.resolve_by_class(TerraformIntegration, default_factory=lambda: default)
+        assert result is default
+
+    def test_zero_candidates_no_default_factory_raises(self):
+        svc = IntegrationService.get_instance()
+
+        with pytest.raises(IntegrationResolutionError, match="no TerraformIntegration registered"):
+            svc.resolve_by_class(TerraformIntegration)
+
+    def test_ambiguous_always_raises_no_disambiguation_path(self):
+        svc = IntegrationService.get_instance()
+        svc.registry.register_integration("legacy", _tf("legacy"))
+        svc.registry.register_integration("current", _tf("current"))
+
+        with pytest.raises(IntegrationResolutionError, match="ambiguous"):
+            svc.resolve_by_class(TerraformIntegration, default_factory=lambda: _tf("fallback"))
+
+    def test_subclass_counts_as_candidate(self):
+        svc = IntegrationService.get_instance()
+        tofu = _tofu()
+        svc.registry.register_integration("opentofu", tofu)
+
+        result = svc.resolve_by_class(TerraformIntegration)
+        assert result is tofu

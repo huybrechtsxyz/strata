@@ -521,10 +521,11 @@ class WorkspaceIacModel(PlatformBaseModel):
             "Name of the configuration.spec.integrations[] entry this provisioner "
             "binds to (for auth/endpoints/tool-version validation). If unset, "
             "auto-binds to the sole registered integration compatible with this "
-            "provisioner's type — an error (not a guess) if zero or more than one "
-            "candidate exists. This provisioner's own 'name' is never used to look "
-            "up an integration (ADR-0079). Currently only consumed for "
-            "provisioner: terraform."
+            "provisioner's type — an error (not a guess) if more than one candidate "
+            "exists (terraform also errors on zero; ansible/bicep fall back to a "
+            "default when nothing is declared). This provisioner's own 'name' is "
+            "never used to look up an integration (ADR-0079/ADR-0080). Only valid "
+            "on provisioner: terraform, ansible, or bicep."
         ),
     )
 
@@ -568,16 +569,23 @@ class WorkspaceIacModel(PlatformBaseModel):
                 f"(got provisioner='{self.provisioner}')"
             )
 
-        # integration is only consumed by TerraformDeployer today (ADR-0079). Setting it on any
-        # other provisioner type would silently do nothing — the exact anti-pattern ADR-0079/0080
-        # exist to fix (see Ansible's dead-config bug in ADR-0080) — so reject it loudly instead.
-        # Remove this restriction once ADR-0080 wires the remaining deployers into the same
-        # resolution helper.
-        if self.integration is not None and self.provisioner != ProvisionerType.TERRAFORM:
+        # integration is only consumed by deployers wired into
+        # IntegrationService.resolve_for_provisioner() — terraform (ADR-0079), plus ansible/bicep
+        # (ADR-0080). Setting it on any other provisioner type would silently do nothing:
+        # - script/argocd/flux have no integration lookup at all.
+        # - compose/helm ARE wired into an integration lookup (ADR-0080), but via
+        #   IntegrationService.resolve_by_class() — they aren't provisioner-scoped (no
+        #   `_iac_model`, a stage can deploy many namespaces/charts) so there is no addressable
+        #   provisioner entry for an explicit 'integration:' override to target.
+        _INTEGRATION_AWARE_PROVISIONERS = {
+            ProvisionerType.TERRAFORM,
+            ProvisionerType.ANSIBLE,
+            ProvisionerType.BICEP,
+        }
+        if self.integration is not None and self.provisioner not in _INTEGRATION_AWARE_PROVISIONERS:
             raise ValueError(
-                f"Provisioner '{self.name}': 'integration' is only supported for terraform "
-                f"provisioners today (got provisioner='{self.provisioner}'). See ADR-0080 for "
-                "extending this to other provisioner types."
+                f"Provisioner '{self.name}': 'integration' is not supported for provisioner type "
+                f"'{self.provisioner}' (no integration lookup exists for this type)."
             )
         return self
 

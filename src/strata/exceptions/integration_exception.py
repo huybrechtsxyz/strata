@@ -28,24 +28,22 @@ class SecretStoreUnavailableError(PlatformError):
 
 
 class IntegrationResolutionError(PlatformError):
-    """Raised when a workspace provisioner's ``integration:`` binding cannot be
-    resolved to exactly one compatible, registered integration (ADR-0079).
+    """Raised when a provisioner's or capability's ``integration:`` binding cannot
+    be resolved to exactly one compatible, registered integration (ADR-0079/0080).
 
-    Covers three distinct cases, all surfaced with the same exception type so
-    callers (``strata validate --deep`` and deploy-time validation) can treat
-    them identically:
+    Covers, for both the provisioner-scoped (``IntegrationService.resolve_for_provisioner()``)
+    and capability-scoped (``IntegrationService.resolve_by_class()``) resolution paths:
 
-    - ``integration:`` is set but no integration is registered under that name.
-    - ``integration:`` is set but the named integration is not an instance of
-      the expected integration class (e.g. type mismatch).
-    - ``integration:`` is unset and zero, or more than one, registered
-      integration is compatible with the provisioner's type (ambiguous —
-      never silently guessed).
+    - An explicit ``integration:`` name is set but no integration is registered
+      under that name, or the named integration is not an instance of the
+      expected integration class (type mismatch).
+    - No explicit name is set, and zero or more than one registered integration
+      is compatible with the expected class (ambiguous — never silently guessed).
     """
 
-    def __init__(self, provisioner_name: str, reason: str):
+    def __init__(self, subject: str, reason: str):
         super().__init__(
-            message=f"Provisioner '{provisioner_name}': {reason}",
+            message=f"{subject}: {reason}",
             error_code="INTEGRATION_RESOLUTION_FAILED",
-            details={"provisioner": provisioner_name, "reason": reason},
+            details={"subject": subject, "reason": reason},
         )

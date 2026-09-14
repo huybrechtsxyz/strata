@@ -114,12 +114,13 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
 
         # STEP 2: Provisioner name validity is validated by the WorkspaceSpecModel model validator
 
-        # STEP 1b: Validate Terraform provisioner -> integration binding ahead of deploy time
-        # (ADR-0079). Mirrors IntegrationService.resolve_for_provisioner()'s algorithm, but
-        # works directly off the configuration spec since no IntegrationService/registry is
-        # initialized during `strata validate` — this only runs with --deep (configuration_model
-        # is only passed in that case).
-        errors.extend(self._validate_terraform_integration_bindings(configuration_model))
+        # STEP 1b: Validate integration-aware provisioner (terraform/ansible/bicep) bindings
+        # ahead of deploy time (ADR-0079/ADR-0080). Mirrors
+        # IntegrationService.resolve_for_provisioner()'s algorithm, but works directly off the
+        # configuration spec since no IntegrationService/registry is initialized during
+        # `strata validate` — this only runs with --deep (configuration_model is only passed
+        # in that case).
+        errors.extend(self._validate_provisioner_integration_bindings(configuration_model))
 
         # STEP 3: Validate module repository references (if modules are defined in resources)
         if self.model and self.model.spec.resources:
@@ -276,46 +277,69 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
 
         return len(errors) == 0, errors
 
-    def _validate_terraform_integration_bindings(self, configuration_model: ConfigurationModel) -> List[str]:
-        """Resolve every ``provisioner: terraform`` entry's integration binding (ADR-0079).
+    def _validate_provisioner_integration_bindings(self, configuration_model: ConfigurationModel) -> List[str]:
+        """Resolve every integration-aware provisioner entry's binding ahead of deploy time
+        (ADR-0079 for `terraform`, ADR-0080 for `ansible`/`bicep`).
 
-        Surfaces the same failures ``TerraformDeployer.validate_environment()`` would hit
-        at deploy time — missing/wrong-class explicit ``integration:``, or an ambiguous/empty
-        auto-bind candidate set — as a validation error instead, so operators find out at
-        ``strata validate --deep`` rather than partway through ``deploy run``.
+        Surfaces the same failures each deployer's `validate_environment()` would hit at
+        deploy time — missing/wrong-class explicit `integration:`, or an ambiguous auto-bind
+        candidate set — as a validation error instead, so operators find out at
+        `strata validate --deep` rather than partway through `deploy run`.
 
-        Deliberately does not use ``IntegrationService``/``IntegrationRegistry`` (those require
-        a live, initialized singleton this validation pass doesn't set up) — it evaluates the
-        same resolution algorithm directly against the raw ``configuration.spec.integrations``
-        specs instead.
+        Deliberately does not use `IntegrationService`/`IntegrationRegistry` (those require a
+        live, initialized singleton this validation pass doesn't set up) — it evaluates the
+        same resolution algorithm directly against the raw `configuration.spec.integrations`
+        specs instead. Kept as one method (not split per provisioner type) since the algorithm
+        is identical modulo which integration class each type expects and whether a
+        zero-candidate auto-bind is an error — see `_INTEGRATION_BINDING_RULES` below, which
+        must be kept in sync with each deployer's `resolve_for_provisioner()`/`default_factory`
+        call (ADR-0079/0080).
         """
+        from strata.integrations.ansible import AnsibleIntegration
+        from strata.integrations.azure_cli import AzureCLIIntegration
         from strata.integrations.factory import IntegrationFactory
         from strata.integrations.terraform import TerraformIntegration
 
         if not self.model or not self.model.spec.provisioners:
             return []
 
+        # provisioner type -> (compatible integration class, is a zero-candidate auto-bind an
+        # error). Terraform has no ad-hoc default (ADR-0079: zero registered is always an
+        # error). Ansible/Bicep fall back to a hardcoded default integration when nothing is
+        # declared (ADR-0080), so zero candidates is not an error for them — mirrors each
+        # deployer's `default_factory` argument to `resolve_for_provisioner()`.
+        _INTEGRATION_BINDING_RULES: Dict[ProvisionerType, Tuple[type, bool]] = {
+            ProvisionerType.TERRAFORM: (TerraformIntegration, True),
+            ProvisionerType.ANSIBLE: (AnsibleIntegration, False),
+            ProvisionerType.BICEP: (AzureCLIIntegration, False),
+        }
+
         integration_specs = [s for s in (configuration_model.spec.integrations or []) if s.enabled]
 
         # IntegrationFactory.create_by_type() instantiates a throwaway integration purely to
-        # check its class — cache per unique type string so repeated types (e.g. several
-        # `terraform` provisioners) don't re-instantiate for every provisioner.
-        compat_cache: Dict[str, bool] = {}
+        # check its class — cache per (type string, expected class) pair so repeated types
+        # (e.g. several `terraform` provisioners) don't re-instantiate for every provisioner.
+        compat_cache: Dict[Tuple[str, type], bool] = {}
 
-        def _is_terraform_compatible(type_str: str) -> bool:
-            if type_str not in compat_cache:
+        def _is_compatible(type_str: str, expected_class: type) -> bool:
+            key = (type_str, expected_class)
+            if key not in compat_cache:
                 try:
-                    compat_cache[type_str] = isinstance(
-                        IntegrationFactory.create_by_type(type_str), TerraformIntegration
-                    )
+                    compat_cache[key] = isinstance(IntegrationFactory.create_by_type(type_str), expected_class)
                 except Exception:
-                    compat_cache[type_str] = False
-            return compat_cache[type_str]
+                    compat_cache[key] = False
+            return compat_cache[key]
 
         errors: List[str] = []
         for provisioner in self.model.spec.provisioners:
-            if provisioner.provisioner != ProvisionerType.TERRAFORM:
+            rule = _INTEGRATION_BINDING_RULES.get(provisioner.provisioner)  # type: ignore[call-overload]
+            if rule is None:
                 continue
+            expected_class, zero_candidates_is_error = rule
+            # Friendly display name for error messages ("Terraform", "Ansible", "AzureCLI")
+            # rather than the raw class name — preserves the exact wording
+            # ADR-0079's original Terraform-only messages/tests already established.
+            expected_name = expected_class.__name__.removesuffix("Integration")
 
             if provisioner.integration:
                 match = next((s for s in integration_specs if s.name == provisioner.integration), None)
@@ -324,25 +348,29 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
                         f"Provisioner '{provisioner.name}': integration '{provisioner.integration}' is not "
                         "registered. Check configuration.spec.integrations for a matching 'name'."
                     )
-                elif not _is_terraform_compatible(match.type):
+                elif not _is_compatible(match.type, expected_class):
                     errors.append(
                         f"Provisioner '{provisioner.name}': integration '{provisioner.integration}' (type "
-                        f"'{match.type}') is not compatible — expected a Terraform-compatible integration."
+                        f"'{match.type}') is not compatible — expected a {expected_name}."
                     )
                 continue
 
-            candidates = [s for s in integration_specs if _is_terraform_compatible(s.type)]
+            candidates = [s for s in integration_specs if _is_compatible(s.type, expected_class)]
             if not candidates:
-                errors.append(
-                    f"Provisioner '{provisioner.name}': no Terraform-compatible integration registered. Add "
-                    "one to configuration.spec.integrations, or set 'integration:' explicitly if one already "
-                    "exists under a different name."
-                )
+                if zero_candidates_is_error:
+                    errors.append(
+                        f"Provisioner '{provisioner.name}': no {expected_name}-compatible integration "
+                        "registered. Add one to configuration.spec.integrations, or set 'integration:' "
+                        "explicitly if one already exists under a different name."
+                    )
+                # else: this provisioner type falls back to a hardcoded default at deploy time
+                # (ADR-0080) — zero declared is valid, not an error.
             elif len(candidates) > 1:
                 names = ", ".join(c.name for c in candidates)
                 errors.append(
-                    f"Provisioner '{provisioner.name}': {len(candidates)} Terraform-compatible integrations "
-                    f"registered ({names}) — ambiguous. Set 'integration:' explicitly to pick one."
+                    f"Provisioner '{provisioner.name}': {len(candidates)} {expected_name}-compatible "
+                    f"integrations registered ({names}) — ambiguous. Set 'integration:' explicitly to "
+                    "pick one."
                 )
 
         return errors
