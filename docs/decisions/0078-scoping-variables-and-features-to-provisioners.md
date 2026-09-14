@@ -614,10 +614,10 @@ decisive and is currently unresolved.
 [`check_inputs()`](../../src/strata/validators/terraform_input_validator.py#L113)
 uses the same set for two inverse assertions:
 
-| Direction | Assertion                                                         | Effect of narrowing `declared_keys` |
-| --------- | ----------------------------------------------------------------- | ----------------------------------- |
-| A (error) | every declared key must exist in `variables.tf` — *typo catcher*   | ✅ fixes the triggering case         |
-| B (warn)  | every required `variables.tf` entry must be in `declared_keys`     | ❌ **new false positives**           |
+| Direction | Assertion                                                        | Effect of narrowing `declared_keys` |
+| --------- | ---------------------------------------------------------------- | ----------------------------------- |
+| A (error) | every declared key must exist in `variables.tf` — *typo catcher* | ✅ fixes the triggering case         |
+| B (warn)  | every required `variables.tf` entry must be in `declared_keys`   | ❌ **new false positives**           |
 
 A variable that *is* supplied by the environment but that no component names in
 `references` would drop out of `declared_keys` and immediately trip direction B:
@@ -659,13 +659,13 @@ Option F's defence against becoming vacuous is rule 2: *a key used must be
 declared*. That requires the component to **have** usage sites strata can parse.
 Surveying the kinds:
 
-| Kind         | Usage site                                   | Rule 2 possible                                                    |
-| ------------ | -------------------------------------------- | ------------------------------------------------------------------ |
-| `dns`        | `var:` / `secret:` on records                | ✅ already enforced (`DnsSpecModel.validate_references_declared`)    |
-| `network`    | `var:` / `secret:` on CIDRs                  | ✅ already enforced (`NetworkSpecModel.validate_references_declared`) |
-| `module`     | `services[].environment[].var/secret/feature` | ✅ already enforced (`ModuleService`)                                |
-| **`resource`** | **none** — only a free-form `configuration` dict consumed by Terraform | ❌ |
-| **`provider`** | **none** — same                             | ❌                                                                   |
+| Kind           | Usage site                                                             | Rule 2 possible                                                      |
+| -------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `dns`          | `var:` / `secret:` on records                                          | ✅ already enforced (`DnsSpecModel.validate_references_declared`)     |
+| `network`      | `var:` / `secret:` on CIDRs                                            | ✅ already enforced (`NetworkSpecModel.validate_references_declared`) |
+| `module`       | `services[].environment[].var/secret/feature`                          | ✅ already enforced (`ModuleService`)                                 |
+| **`resource`** | **none** — only a free-form `configuration` dict consumed by Terraform | ❌                                                                    |
+| **`provider`** | **none** — same                                                        | ❌                                                                    |
 
 `kind: resource` has no `var:` field and no `${var:}` expression support. Its
 `references` block is a **pure assertion**: nothing in the document can contradict
