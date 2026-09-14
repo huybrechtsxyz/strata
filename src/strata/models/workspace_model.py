@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Pydantic models for workspace configuration validation."""
 
+import warnings
 from typing import Annotated, Any, Dict, List, Literal, Optional
 
 from pydantic import (
@@ -290,6 +291,26 @@ class WorkspaceTopologyModel(PlatformBaseModel):
 class WorkspaceResourceModel(PlatformBaseModel):
     """Model for workspace resource definition (gluing layer)."""
 
+    @model_validator(mode="before")
+    @classmethod
+    def drop_removed_references(cls, data):
+        """Drop the removed 'references' key with a warning instead of failing validation.
+
+        ADR-0078: the cross-resource 'references' field was inert — never resolved,
+        never validated — and has been removed. Shipped workspace templates emitted
+        'references: {}', so extra="forbid" would turn an upgrade into a hard error.
+        Deprecation shim; remove in the next minor release.
+        """
+        if isinstance(data, dict) and "references" in data:
+            data = {k: v for k, v in data.items() if k != "references"}
+            warnings.warn(
+                f"Workspace resource '{data.get('name', '<unnamed>')}': 'references' has been removed "
+                "(ADR-0078) and is ignored. The field was never read; remove it from your workspace file.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        return data
+
     name: PlatformName = Field(description="Unique resource name")
     file: Optional[str] = Field(
         None,
@@ -339,10 +360,6 @@ class WorkspaceResourceModel(PlatformBaseModel):
             return [v]
         return v
 
-    references: Optional[Dict[str, str]] = Field(
-        None,
-        description="Cross-resource value references (e.g., {'storage_connection': 'contoso_storage.connection_string'})",
-    )
     firewalls: Optional[List[str]] = Field(
         None,
         description="References to firewall/NSG resource names for network security",

@@ -8,6 +8,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Removed
+
+- **The cross-resource `references` field on workspace resource entries and environment resource overrides has been removed (ADR-0078)** — it was declared but never implemented: no resolver, no validation, no use in any shipped configuration. It could not have worked, since workspace resources are build-time metadata while outputs are post-apply and keyed by provisioner, not resource. A `references:` key is now dropped with a deprecation warning rather than failing validation; the shim goes away next minor. Use `inputs_from` for cross-provisioner values, or native Terraform references within a root module. ADR-0068 records the removed schema and what a revival would require.
+
 ### Changed
 
 - **BREAKING (targeting 2.0.0): Terraform provisioners now bind to a `configuration.spec.integrations[]` entry via an explicit, optional `integration:` field instead of an incidental name coincidence.** Previously, `TerraformDeployer` looked up the integration by the workspace provisioner's own `name` — undocumented, and it silently broke for anyone using semantically-named provisioners (e.g. `control_infra`, `core_iac`) instead of naming them `terraform`. Now: set `integration: <name>` to bind explicitly, or leave it unset to auto-bind to the sole registered Terraform-compatible integration (an error, not a guess, if zero or more than one exist). `strata validate --deep` resolves this ahead of time so a missing/ambiguous binding is caught before `deploy run`, not partway through it. Workspaces with exactly one `type: terraform` integration (the common case, and every example shipped in `config/`) need no changes. `OpenTofuIntegration` continues to satisfy `provisioner: terraform` unchanged. See ADR-0079.

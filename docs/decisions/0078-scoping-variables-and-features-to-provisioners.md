@@ -428,23 +428,26 @@ This gives `script` (and every other provisioner without a component document) t
 same declaration surface resources already have, and it sits beside `inputs_from`
 so the contract and the wiring are visible together.
 
-### Gap 2 — remove the inert `references` field
+### Gap 2 — remove the inert `references` field ✅ implemented
 
 Delete, rather than rename:
 
-| Location                                                                                                       | Field                        | Action                                      |
-| -------------------------------------------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------- |
-| `WorkspaceResourceModel` ([workspace_model.py](../../src/strata/models/workspace_model.py#L342))               | `references: Dict[str, str]` | remove                                      |
-| `EnvironmentResourceOverrideModel` ([environment_model.py](../../src/strata/models/environment_model.py#L118)) | `references: Dict[str, str]` | remove                                      |
-| `deployment_service.py` ([L815](../../src/strata/services/deployment_service.py#L815))                         | override merge block         | remove                                      |
-| `.strata/templates/workspace.yaml`, `templates/solution/…`                                                     | `references: {}`             | remove the line and its explanatory comment |
+| Location                                                                                                  | Field                        | Action                                 |
+| --------------------------------------------------------------------------------------------------------- | ---------------------------- | -------------------------------------- |
+| `WorkspaceResourceModel` ([workspace_model.py](../../src/strata/models/workspace_model.py))               | `references: Dict[str, str]` | removed                                |
+| `EnvironmentResourceOverrideModel` ([environment_model.py](../../src/strata/models/environment_model.py)) | `references: Dict[str, str]` | removed                                |
+| `deployment_service.py`                                                                                   | override merge block         | removed                                |
+| `.strata/templates/workspace.yaml`, `templates/solution/…`                                                | `references: {}`             | removed, with its explanatory comment  |
+| `.strata/schemas/workspace.json`, `environment.json`                                                      | generated                    | regenerated via `strata schema export` |
+| `docs/config/workspace.md`                                                                                | field table                  | line removed                           |
 
 **Migration risk: low, but not zero.** Models use `extra="forbid"`, so a
 workspace in the wild that *does* carry `references:` on a resource entry — copied
 from the shipped template, which emits `references: {}` — would start failing
-validation on upgrade. Mitigation: keep a `model_validator(mode="before")` for one
-minor release that drops the key with a deprecation warning rather than erroring,
-then remove the shim.
+validation on upgrade. Mitigation, implemented on both models: a
+`model_validator(mode="before")` that drops the key with a `DeprecationWarning`
+rather than erroring. Unknown keys are still rejected. Remove the shim in the next
+minor release.
 
 Nothing is lost by deleting it. The field was never resolved, never validated, and
 could not have worked: workspace resources are build-time metadata written into
@@ -583,8 +586,10 @@ Unchanged: `inputs_from`, `ProvisionerInputMappingModel`,
 
 ### Rollout
 
-1. Remove the inert `references` field (both models + the merge block + templates),
-   with the drop-with-warning shim (no behaviour change — nothing read it).
+1. ✅ **Done.** Remove the inert `references` field (both models + the merge block
+   + templates + generated schemas + docs), with the drop-with-warning shim
+   (no behaviour change — nothing read it). Regression tests in
+   `tests/strata/models/test_models_workspace.py::TestRemovedReferencesField`.
 2. Add `references` to `WorkspaceIacModel` (additive, no behaviour change).
 3. Add rule 2 (usage-side) for resource/module, opt-in via declaring `references`.
 4. Switch `_collect_declared_input_keys()` to the scoped computation.
@@ -592,6 +597,10 @@ Unchanged: `inputs_from`, `ProvisionerInputMappingModel`,
 
 Steps 1–3 are independently shippable and individually reversible. Only step 4
 changes what the build accepts, and only for workspaces that opted in at step 3.
+
+Step 1 is deliberately decoupled from the rest: it is correct regardless of
+whether Option F is ultimately selected, because the field was inert under every
+option.
 
 ## Analysis — allow- vs deny-by-default
 

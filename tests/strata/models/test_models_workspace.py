@@ -21,6 +21,7 @@ from strata.models.workspace_model import (
     WorkspaceIacBackendModel,
     WorkspaceIacModel,
     WorkspaceModel,
+    WorkspaceResourceModel,
 )
 
 
@@ -61,6 +62,25 @@ def test_workspace_yaml_invalid(yaml_path):
         WorkspaceModel.model_validate(data)
     model = None
     assert model is None
+
+
+class TestRemovedReferencesField:
+    """ADR-0078: the inert cross-resource 'references' field was removed."""
+
+    def test_references_is_not_a_field(self):
+        assert "references" not in WorkspaceResourceModel.model_fields
+
+    def test_legacy_references_key_is_dropped_with_warning(self):
+        with pytest.warns(DeprecationWarning, match="references"):
+            model = WorkspaceResourceModel.model_validate(
+                {"name": "app_tier", "file": "config/app.yaml", "references": {"db": "storage.conn"}}
+            )
+        assert model.name == "app_tier"
+        assert not hasattr(model, "references")
+
+    def test_unknown_keys_still_rejected(self):
+        with pytest.raises(ValidationError):
+            WorkspaceResourceModel.model_validate({"name": "app_tier", "file": "config/app.yaml", "bogus": 1})
 
 
 class TestSourceModelSingleRepo:

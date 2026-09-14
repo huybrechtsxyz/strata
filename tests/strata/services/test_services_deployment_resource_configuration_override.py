@@ -84,7 +84,6 @@ def _make_workspace_resource(name: str, configuration: dict, custom: dict) -> Ma
     resource.role = None
     resource.count = None
     resource.depends_on = None
-    resource.references = None
     resource.firewalls = None
     resource.configuration = configuration
     resource.custom = custom

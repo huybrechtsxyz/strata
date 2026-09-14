@@ -106,8 +106,6 @@ spec:
       tags: ["template", "manager"]
       # Optional: Dependencies (other resource names)
       depends_on: []
-      # Optional: References to other resources' output values
-      references: {}
       # Optional: application/code modules deployed onto this resource
       # modules:
       #   - name: app
