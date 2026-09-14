@@ -17,7 +17,7 @@ Working directory: build_path/{deployment_name}/{namespace}/docker-compose.yml
 """
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, cast
 
 import yaml
 
@@ -135,7 +135,14 @@ class ComposeDeployer(BaseDeployer):
         """Verify Docker is available on PATH."""
         messages: List[str] = []
 
-        docker = DockerIntegration(config=IntegrationModel(name="docker", type="docker"))
+        from strata.exceptions import IntegrationResolutionError
+
+        try:
+            docker = self._get_docker_integration()
+        except IntegrationResolutionError as exc:
+            messages.append(str(exc))
+            return False, messages
+
         available, error = docker.ensure_available()
         if not available:
             messages.append(error)
@@ -144,6 +151,24 @@ class ComposeDeployer(BaseDeployer):
         self._docker = docker
         messages.append(f"docker {docker.get_version()} available")
         return True, messages
+
+    def _get_docker_integration(self) -> DockerIntegration:
+        """Resolve the DockerIntegration this deployer uses (ADR-0080).
+
+        Delegates to ``IntegrationService.resolve_by_class()`` — Compose isn't
+        provisioner-scoped (a stage can deploy many namespaces), so this auto-binds
+        to the sole registered ``DockerIntegration``, falling back to today's bare
+        default when none is declared, so existing workspaces are unaffected. No
+        explicit-name override exists (no addressable provisioner entry to carry it).
+        """
+        from strata.services.integration_service import IntegrationService
+
+        svc = IntegrationService.get_instance()
+        integration = svc.resolve_by_class(
+            DockerIntegration,
+            default_factory=lambda: DockerIntegration(config=IntegrationModel(name="docker", type="docker")),
+        )
+        return cast(DockerIntegration, integration)
 
     # ------------------------------------------------------------------
     # Internal helpers

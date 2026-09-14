@@ -5,8 +5,12 @@ from typing import Optional
 from unittest.mock import MagicMock, patch
 
 from strata.deployers.ansible_deployer import AnsibleDeployer
+from strata.integrations.ansible import AnsibleIntegration
+from strata.integrations.base_integration import BaseIntegration
 from strata.models.common_models import ProvisionerType
 from strata.models.deployment_model import DeploymentStageTimeoutsModel
+from strata.models.integration_model import IntegrationModel
+from strata.services.integration_service import IntegrationService
 
 
 def _make_stage(name="configure", provisioner=None):
@@ -30,6 +34,7 @@ def _make_provisioner(name="ansible", ptype=ProvisionerType.ANSIBLE, source_path
     p.source = MagicMock()
     p.source.target_path = source_path  # None → falls back to "ansible/<name>"
     p.configuration = None
+    p.integration = None  # ADR-0080: unconfigured MagicMock attr is truthy, would break auto-bind
     return p
 
 
@@ -128,26 +133,79 @@ class TestAnsibleDeployerValidateWorkspace:
 
 
 class TestAnsibleDeployerValidateEnvironment:
+    def test_no_iac_model_returns_false(self):
+        d = _make_deployer()
+        d._iac_model = None  # simulate validate_workspace not called
+        ok, msgs = d.validate_environment()
+        assert ok is False
+        assert any("validate_workspace" in m for m in msgs)
+
     def test_unavailable_returns_false(self):
         d = _make_deployer()
-        with patch("strata.deployers.ansible_deployer.AnsibleIntegration") as mock_int:
-            instance = MagicMock()
-            instance.ensure_available.return_value = (False, "not installed")
-            mock_int.return_value = instance
+        d._iac_model = _make_provisioner()
+        instance = MagicMock()
+        instance.ensure_available.return_value = (False, "not installed")
+        with patch.object(AnsibleDeployer, "_get_ansible_integration", return_value=instance):
             ok, msgs = d.validate_environment()
         assert ok is False
         assert any("not installed" in m for m in msgs)
 
     def test_available_sets_ansible_instance(self):
         d = _make_deployer()
-        with patch("strata.deployers.ansible_deployer.AnsibleIntegration") as mock_int:
-            instance = MagicMock()
-            instance.ensure_available.return_value = (True, "")
-            instance.get_version.return_value = "2.15.4"
-            mock_int.return_value = instance
+        d._iac_model = _make_provisioner()
+        instance = MagicMock()
+        instance.ensure_available.return_value = (True, "")
+        instance.get_version.return_value = "2.15.4"
+        with patch.object(AnsibleDeployer, "_get_ansible_integration", return_value=instance):
             ok, msgs = d.validate_environment()
         assert ok is True
         assert d._ansible is instance
+
+
+class TestAnsibleDeployerGetAnsibleIntegration:
+    """ADR-0080: `_get_ansible_integration()` actually consumes a registered
+    `type: ansible` integration (fixing the previous silent no-op bug), with a
+    fallback to today's bare default when nothing is declared."""
+
+    def setup_method(self):
+        BaseIntegration._instances.clear()
+        IntegrationService.reset()
+
+    def teardown_method(self):
+        BaseIntegration._instances.clear()
+        IntegrationService.reset()
+
+    def test_falls_back_to_default_when_nothing_registered(self):
+        d = _make_deployer()
+        d._iac_model = _make_provisioner()
+        integration = d._get_ansible_integration()
+        assert isinstance(integration, AnsibleIntegration)
+
+    def test_uses_registered_integration_when_declared(self):
+        """The bug this ADR fixes: a declared `type: ansible` integration must
+        actually be consumed, not silently ignored."""
+        d = _make_deployer()
+        d._iac_model = _make_provisioner()
+        svc = IntegrationService.get_instance()
+        registered = AnsibleIntegration(config=IntegrationModel(name="config_mgmt", type="ansible"))
+        svc.registry.register_integration("config_mgmt", registered)
+
+        integration = d._get_ansible_integration()
+        assert integration is registered
+
+    def test_explicit_integration_name_is_honored(self):
+        d = _make_deployer()
+        d._iac_model = _make_provisioner()
+        d._iac_model.integration = "config_mgmt"
+        svc = IntegrationService.get_instance()
+        registered = AnsibleIntegration(config=IntegrationModel(name="config_mgmt", type="ansible"))
+        svc.registry.register_integration("config_mgmt", registered)
+        svc.registry.register_integration(
+            "other", AnsibleIntegration(config=IntegrationModel(name="other", type="ansible"))
+        )
+
+        integration = d._get_ansible_integration()
+        assert integration is registered
 
 
 class TestAnsibleDeployerStepsNotReady:

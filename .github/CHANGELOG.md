@@ -8,6 +8,15 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING (targeting 2.0.0): Terraform provisioners now bind to a `configuration.spec.integrations[]` entry via an explicit, optional `integration:` field instead of an incidental name coincidence.** Previously, `TerraformDeployer` looked up the integration by the workspace provisioner's own `name` — undocumented, and it silently broke for anyone using semantically-named provisioners (e.g. `control_infra`, `core_iac`) instead of naming them `terraform`. Now: set `integration: <name>` to bind explicitly, or leave it unset to auto-bind to the sole registered Terraform-compatible integration (an error, not a guess, if zero or more than one exist). `strata validate --deep` resolves this ahead of time so a missing/ambiguous binding is caught before `deploy run`, not partway through it. Workspaces with exactly one `type: terraform` integration (the common case, and every example shipped in `config/`) need no changes. `OpenTofuIntegration` continues to satisfy `provisioner: terraform` unchanged. See ADR-0079.
+- **BREAKING (targeting 2.0.0): declaring a `type: ansible`/`azure_cli`/`docker`/`helm` integration in `configuration.spec.integrations` now actually has an effect, for the first time.** `AnsibleDeployer`, `BicepDeployer`, `ComposeDeployer`, and `HelmDeployer` each built a throwaway, hardcoded integration inline and never consulted `configuration.spec.integrations` at all — any integration declared for these types was silently dead YAML. Ansible and Bicep are provisioner-scoped (like Terraform) and gain the same optional `integration:` field with identical auto-bind/explicit-name semantics — with one difference: zero declared integrations is **not** an error for these two (falls back to today's bare default, so existing workspaces are unaffected). Compose and Helm aren't provisioner-scoped (a stage can deploy many namespaces/charts) — they auto-bind the same way but have no `integration:` field to target explicitly. Ambiguity (2+ compatible integrations registered, no way to disambiguate) is a real, new limitation for Compose/Helm — reduce to one registered integration of that type if hit. See ADR-0080.
+
+### Fixed
+
+- **`strata build run` warned `Required variable 'X' (no default) is not supplied by any input` on every build for required Terraform variables supplied via `spec.properties`/`spec.custom`** — a permanent false positive. The check only knew about `spec.variables`/`features`/`secrets`, but properties and custom blocks are emitted as their own `properties.auto.tfvars.json`/`custom.auto.tfvars.json` files and are genuine inputs. Their top-level keys are now recognised, honouring the provisioner's `output:` profile so the warning still fires when the corresponding file isn't emitted.
+
 ## [1.9.11] - 2026-09-11
 
 ### Fixed

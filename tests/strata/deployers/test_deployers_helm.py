@@ -124,21 +124,19 @@ class TestHelmDeployerMetadata:
 class TestHelmDeployerValidateEnvironment:
     def test_success_sets_helm_instance(self):
         d = _make_deployer()
-        with patch("strata.deployers.helm_deployer.HelmIntegration") as mock_int:
-            instance = MagicMock()
-            instance.ensure_available.return_value = (True, "")
-            instance.get_version.return_value = "3.14.0"
-            mock_int.return_value = instance
+        instance = MagicMock()
+        instance.ensure_available.return_value = (True, "")
+        instance.get_version.return_value = "3.14.0"
+        with patch.object(HelmDeployer, "_get_helm_integration", return_value=instance):
             ok, msgs = d.validate_environment()
         assert ok is True
         assert d._helm is instance
 
     def test_unavailable_returns_false(self):
         d = _make_deployer()
-        with patch("strata.deployers.helm_deployer.HelmIntegration") as mock_int:
-            instance = MagicMock()
-            instance.ensure_available.return_value = (False, "helm not in PATH")
-            mock_int.return_value = instance
+        instance = MagicMock()
+        instance.ensure_available.return_value = (False, "helm not in PATH")
+        with patch.object(HelmDeployer, "_get_helm_integration", return_value=instance):
             ok, msgs = d.validate_environment()
         assert ok is False
         assert any("helm not in PATH" in m for m in msgs)

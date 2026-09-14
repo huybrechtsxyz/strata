@@ -3,6 +3,7 @@
 
 import os
 import re
+import shutil
 import subprocess
 import threading
 import time
@@ -497,6 +498,35 @@ def run_command(
     # Auto-detect capture_output if not specified
     if capture_output is None:
         capture_output = True  # Default to capturing output
+
+    # Empty list guard — an HTTP-only/no-CLI integration (e.g. Kroki) can
+    # legitimately return [] from get_version_command(). subprocess.Popen([])
+    # raises a Windows-only OSError (WinError 87) and a different error on
+    # POSIX; treat it as a clean "nothing to run" result instead of relying
+    # on an OS-specific crash bubbling up to callers.
+    if isinstance(command, list) and not command:
+        duration_ms = (time.time() - start_time) * 1000
+        logger.debug("Empty command list \u2014 nothing to execute")
+        return CommandResult(
+            returncode=127,
+            stdout="",
+            stderr="Empty command",
+            command=cmd_display,
+            duration_ms=round(duration_ms, 2),
+        )
+
+    # PATHEXT-aware executable resolution — when invoking without a shell,
+    # subprocess uses CreateProcess directly on Windows, which (unlike
+    # cmd.exe) does NOT consult PATHEXT to resolve a bare command name to a
+    # .cmd/.bat shim. This silently breaks every shim-backed CLI (az, npm,
+    # etc.) even though shutil.which()/Get-Command find it fine — the tool
+    # would otherwise report a false "not available" via the FileNotFoundError
+    # path below. shutil.which() is PATHEXT-aware on Windows and a no-op
+    # equivalent to a plain PATH lookup on POSIX, so this is safe everywhere.
+    if isinstance(command, list) and command:
+        resolved = shutil.which(command[0])
+        if resolved:
+            command = [resolved, *command[1:]]
 
     # ------------------------------------------------------------------
     # Streaming path — used when a line_callback is supplied or when

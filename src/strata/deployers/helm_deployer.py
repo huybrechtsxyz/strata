@@ -48,7 +48,7 @@ Value substitution:
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, cast
 
 import yaml
 
@@ -438,7 +438,14 @@ class HelmDeployer(BaseDeployer):
         """Verify helm is available on PATH."""
         messages: List[str] = []
 
-        helm = HelmIntegration(config=IntegrationModel(name="helm", type="helm"))
+        from strata.exceptions import IntegrationResolutionError
+
+        try:
+            helm = self._get_helm_integration()
+        except IntegrationResolutionError as exc:
+            messages.append(str(exc))
+            return False, messages
+
         available, error = helm.ensure_available()
         if not available:
             messages.append(error)
@@ -447,6 +454,24 @@ class HelmDeployer(BaseDeployer):
         self._helm = helm
         messages.append(f"helm {helm.get_version()} available")
         return True, messages
+
+    def _get_helm_integration(self) -> HelmIntegration:
+        """Resolve the HelmIntegration this deployer uses (ADR-0080).
+
+        Delegates to ``IntegrationService.resolve_by_class()`` — Helm isn't
+        provisioner-scoped (a stage can deploy many charts), so this auto-binds
+        to the sole registered ``HelmIntegration``, falling back to today's bare
+        default when none is declared, so existing workspaces are unaffected. No
+        explicit-name override exists (no addressable provisioner entry to carry it).
+        """
+        from strata.services.integration_service import IntegrationService
+
+        svc = IntegrationService.get_instance()
+        integration = svc.resolve_by_class(
+            HelmIntegration,
+            default_factory=lambda: HelmIntegration(config=IntegrationModel(name="helm", type="helm")),
+        )
+        return cast(HelmIntegration, integration)
 
     # ------------------------------------------------------------------
     # Internal helpers

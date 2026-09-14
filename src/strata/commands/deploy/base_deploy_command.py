@@ -42,6 +42,7 @@ from strata.services.manifest_artifact_collector import (
     collect_repository_info,
 )
 from strata.utils.duration import parse_duration
+from strata.utils.resolved_values import resolve_expr_string
 
 
 class BaseDeployCommand(BaseCommand):
@@ -157,8 +158,12 @@ class BaseDeployCommand(BaseCommand):
         """Return the lock backend from the first Terraform provisioner with a backend.
 
         Falls back to ``LocalLockBackend`` when no matching provisioner is found.
+
+        Backend configuration values are resolved to substitute ${var:...} placeholders
+        before the backend is passed to the lock factory (ADR-0080).
         """
         from strata.integrations.lock.lock_factory import LockFactory
+        from strata.models.workspace_model import WorkspaceIacBackendModel
 
         if self._deployment_service is not None:
             workspace_service = self._deployment_service.get_workspace_service()
@@ -172,7 +177,23 @@ class BaseDeployCommand(BaseCommand):
                             None,
                         )
                         if iac and iac.provisioner == ProvisionerType.TERRAFORM and iac.backend:
-                            return LockFactory.create(iac.backend, self._work_path)
+                            # Resolve backend configuration variables before creating lock
+                            # (matches pattern used in terraform_deployer.py)
+                            resolved_backend = iac.backend
+                            if iac.backend.configuration:
+                                _resolved_values = getattr(self, "_resolved_values", None)
+                                if _resolved_values:
+                                    _stage_values = _resolved_values.for_stage(stage.secrets)
+                                    resolved_config = {}
+                                    for k, v in iac.backend.configuration.items():
+                                        resolved, _ = resolve_expr_string(str(v), _stage_values)
+                                        resolved_config[k] = resolved
+                                    # Create resolved backend model copy
+                                    resolved_backend = WorkspaceIacBackendModel(
+                                        type=iac.backend.type,
+                                        configuration=resolved_config,
+                                    )
+                            return LockFactory.create(resolved_backend, self._work_path)
 
         return LockFactory.create(None, self._work_path)
 

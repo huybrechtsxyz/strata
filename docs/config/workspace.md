@@ -68,6 +68,7 @@ providers:
 provisioners:
   - name: <provisioner_name>
     provisioner: terraform | ansible | bicep   # IaC tool
+    integration: <name>                # optional, terraform only — see Integration Binding below
     source:
       repository: <repository_name>    # optional — omit for single-repo workspaces
       source_path: <path>              # path within the repo (or workspace root when repository is absent)
@@ -95,6 +96,80 @@ provisioners:
       emits: []                        # categories to emit (omit = format defaults)
       files: []                        # custom file definitions (see Build Output Profile)
 ```
+
+### Integration Binding (ADR-0079 / ADR-0080)
+
+A `terraform`/`ansible`/`bicep` provisioner needs a `configuration.spec.integrations[]`
+entry (auth, endpoints, tool-version validation) to run against. It is bound as
+follows — the provisioner's own `name` is **never** used to look up an integration:
+
+1. **`integration: <name>` set** — exact match against
+   `configuration.spec.integrations[].name`. Errors if missing, or if the matched
+   entry isn't compatible (`type: terraform`/`opentofu` for a terraform provisioner,
+   `type: ansible` for ansible, `type: azure_cli` for bicep).
+2. **`integration` unset** — auto-binds to the sole registered compatible
+   integration. Errors (never guesses) if more than one exists — in that case,
+   set `integration:` explicitly on each provisioner that needs a specific one.
+   For **terraform**, zero registered is also an error. For **ansible**/**bicep**,
+   zero registered falls back to a default (`ansible-playbook`/`az` on `PATH`
+   with no extra config) — declaring nothing keeps working exactly as before
+   ADR-0080.
+
+`integration:` is only accepted on `terraform`/`ansible`/`bicep` provisioners —
+schema validation rejects it on any other type (no binding exists to consume it).
+`compose`/`helm` deployments auto-bind the same way but have **no** `integration:`
+field to target, since they aren't tied to a single named provisioner (a stage can
+deploy many namespaces/charts) — see
+[docs/platform/integrations.md](../platform/integrations.md#provisioner--integration-binding-adr-0079--adr-0080)
+for that distinction.
+
+```yaml
+# One shared integration, several provisioners — zero-config, no `integration:` needed
+spec:
+  provisioners:
+    - name: control_infra
+      provisioner: terraform
+      source: { repository: haven, source_path: terraform/control }
+    - name: core_iac
+      provisioner: terraform
+      source: { repository: haven, source_path: terraform/core }
+```
+
+```yaml
+# Two integrations (e.g. different Terraform versions/auth) — explicit disambiguation required
+spec:
+  provisioners:
+    - name: env_iac
+      provisioner: terraform
+      integration: terraform_legacy
+      source: { repository: haven, source_path: terraform/legacy-stack }
+    - name: core_iac
+      provisioner: terraform
+      integration: terraform_current
+      source: { repository: haven, source_path: terraform/core }
+```
+
+```yaml
+# Ansible/Bicep: same field, same algorithm — usually zero-config
+spec:
+  provisioners:
+    - name: config_mgmt
+      provisioner: ansible
+      source: { repository: haven, source_path: ansible }
+      # integration: unset — auto-binds if one type:ansible integration is
+      # registered, else falls back to a bare `ansible-playbook` on PATH
+    - name: infra_bicep
+      provisioner: bicep
+      integration: azure_main   # explicit — e.g. two type:azure_cli integrations exist
+      source: { repository: haven, source_path: bicep }
+```
+
+`strata validate --deep` resolves every terraform/ansible/bicep provisioner's
+binding ahead of time and reports a failure here as a validation error, so a
+missing/ambiguous binding surfaces before `deploy run`, not partway through it.
+See [ADR-0079](../decisions/0079-terraform-integration-resolution-fallback-by-type.md)
+and [ADR-0080](../decisions/0080-unified-provisioner-integration-contract.md)
+for the full design rationale.
 
 ### Build Output Profile (Terraform only)
 

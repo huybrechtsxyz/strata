@@ -147,6 +147,7 @@ jobs:
     name: Publish VS Code Extension
     runs-on: ubuntu-latest
     needs: release
+    timeout-minutes: 20
 
     steps:
       - name: Set up Node.js
@@ -162,10 +163,62 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ needs.release.outputs.run_id }}
 
+      # The Marketplace gallery API (/_apis/gallery) intermittently fails to
+      # respond, and vsce gives up after a 180s request timeout — which
+      # previously failed the whole release job for a transient blip.
+      #
+      # A timeout means the CLIENT gave up, not that the server rejected the
+      # request: the publish may well have succeeded server-side. So a retry
+      # must treat "version already exists" as success, or the retry itself
+      # fails spuriously after a publish that actually worked.
       - name: Publish to VS Code Marketplace
-        run: npx @vscode/vsce publish --packagePath dist/*.vsix
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          set -uo pipefail
+          VSIX=$(ls dist/*.vsix | head -n1)
+          if [ -z "$VSIX" ]; then
+            echo "::error::No .vsix found in dist/"
+            exit 1
+          fi
+          echo "Publishing $VSIX"
+
+          for attempt in 1 2 3; do
+            echo "::group::Publish attempt $attempt of 3"
+            set +e
+            output=$(npx @vscode/vsce publish --packagePath "$VSIX" 2>&1)
+            status=$?
+            set -e
+            echo "$output"
+            echo "::endgroup::"
+
+            if [ "$status" -eq 0 ]; then
+              echo "Published successfully on attempt $attempt."
+              exit 0
+            fi
+
+            # A prior attempt (or a timed-out request that succeeded server-side)
+            # already landed this version — nothing left to do.
+            if echo "$output" | grep -qiE 'already exists|already published'; then
+              echo "Version is already present on the Marketplace — treating as success."
+              exit 0
+            fi
+
+            # Auth/validation errors will never succeed on retry — fail fast.
+            if echo "$output" | grep -qiE 'unauthorized|access denied|401|invalid publisher'; then
+              echo "::error::Authentication or publisher error — not retrying. Check the VSCE_PAT secret."
+              exit 1
+            fi
+
+            if [ "$attempt" -lt 3 ]; then
+              delay=$((attempt * 60))
+              echo "Attempt $attempt failed (exit $status). Retrying in ${delay}s..."
+              sleep "$delay"
+            fi
+          done
+
+          echo "::error::vsce publish failed after 3 attempts."
+          exit 1
 
   # ---------------------------------------------------------------------------
   # Job 4: Build and push the CLI Docker image to GHCR

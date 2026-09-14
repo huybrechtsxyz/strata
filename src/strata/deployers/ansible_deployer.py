@@ -25,7 +25,7 @@ import subprocess
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, Generator, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, Generator, List, Optional, Tuple, cast
 
 from strata.deployers.base_deployer import (
     STEP_APPLY,
@@ -170,12 +170,18 @@ class AnsibleDeployer(BaseDeployer):
         """Verify ansible-playbook is available on PATH."""
         messages: List[str] = []
 
-        # Create a minimal IntegrationModel for the ansible integration
-        config = IntegrationModel(
-            name="ansible",
-            type="ansible",
-        )
-        ansible = AnsibleIntegration(config=config)
+        if self._iac_model is None:
+            messages.append("validate_workspace() must succeed before validate_environment()")
+            return False, messages
+
+        from strata.exceptions import IntegrationResolutionError
+
+        try:
+            ansible = self._get_ansible_integration()
+        except IntegrationResolutionError as exc:
+            messages.append(str(exc))
+            return False, messages
+
         available, error = ansible.ensure_available()
         if not available:
             messages.append(error)
@@ -184,6 +190,25 @@ class AnsibleDeployer(BaseDeployer):
         self._ansible = ansible
         messages.append(f"ansible-playbook {ansible.get_version()} available")
         return True, messages
+
+    def _get_ansible_integration(self) -> AnsibleIntegration:
+        """Resolve the AnsibleIntegration this provisioner binds to (ADR-0080).
+
+        Delegates to ``IntegrationService.resolve_for_provisioner()``: explicit
+        ``self._iac_model.integration`` wins if set; otherwise auto-binds to the
+        sole registered ``AnsibleIntegration``. Falls back to today's bare default
+        when none is declared, so existing workspaces are unaffected.
+        """
+        from strata.services.integration_service import IntegrationService
+
+        assert self._iac_model is not None  # guarded by validate_environment()
+        svc = IntegrationService.get_instance()
+        integration = svc.resolve_for_provisioner(
+            self._iac_model,
+            AnsibleIntegration,
+            default_factory=lambda: AnsibleIntegration(config=IntegrationModel(name="ansible", type="ansible")),
+        )
+        return cast(AnsibleIntegration, integration)
 
     # ------------------------------------------------------------------
     # Internal helpers

@@ -244,15 +244,21 @@ class TestTerraformDeployerValidateEnvironment:
 
         assert ok is True
 
-    def test_runtime_error_from_registry_returns_false(self, tmp_path):
+    def test_resolution_error_from_registry_returns_false(self, tmp_path):
         d = _make_deployer(tmp_path)
         d._tf = None
 
-        with patch.object(TerraformDeployer, "_get_terraform_integration", side_effect=RuntimeError("not registered")):
+        from strata.exceptions import IntegrationResolutionError
+
+        with patch.object(
+            TerraformDeployer,
+            "_get_terraform_integration",
+            side_effect=IntegrationResolutionError("core_iac", "no TerraformIntegration registered."),
+        ):
             ok, msgs = d.validate_environment()
 
         assert ok is False
-        assert any("not registered" in m for m in msgs)
+        assert any("no TerraformIntegration registered" in m for m in msgs)
 
 
 class TestTerraformDeployerReadyGuard:

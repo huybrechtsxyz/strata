@@ -12,7 +12,8 @@ Description   : WorkspaceService test fixtures and utilities for strata CLI test
 """
 
 from pathlib import Path
-from typing import Any, Dict
+from types import SimpleNamespace
+from typing import Any, Dict, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -97,9 +98,192 @@ class TestWorkspaceServiceSingleRepo:
         service._repo_map = {}  # empty repo map — simulates single-repo workspace
         config_model = MagicMock()
         config_model.get_remote_map.return_value = {}
+        # ADR-0079: the fixture's sole provisioner is `provisioner: terraform` — declare a
+        # matching integration so this test still exercises only what it's meant to (that
+        # source.repository is optional), not the separate integration-binding check.
+        config_model.spec.integrations = [SimpleNamespace(name="tf", type="terraform", enabled=True)]
         is_valid, errors = service._validate_dynamic(configuration_model=config_model)
         assert is_valid, f"Phase 2 errors: {errors}"
         assert errors == []
+
+
+class TestWorkspaceServiceTerraformIntegrationBinding:
+    """ADR-0079: `strata validate --deep` resolves every `provisioner: terraform`
+    entry's integration binding ahead of deploy time."""
+
+    def _service(self, provisioner_extra: Optional[Dict[str, Any]] = None) -> WorkspaceService:
+        spec = {**_MINIMAL_SINGLE_REPO_WORKSPACE["spec"]}
+        provisioner = {**spec["provisioners"][0], **(provisioner_extra or {})}
+        spec = {**spec, "provisioners": [provisioner]}
+        service = WorkspaceService(data={**_MINIMAL_SINGLE_REPO_WORKSPACE, "spec": spec})
+        service.validate()
+        service._repo_map = {}
+        return service
+
+    def _config_model(self, integrations):
+        config_model = MagicMock()
+        config_model.get_remote_map.return_value = {}
+        config_model.spec.integrations = integrations
+        return config_model
+
+    def test_auto_bind_sole_candidate_no_errors(self):
+        service = self._service()
+        config_model = self._config_model([SimpleNamespace(name="tf", type="terraform", enabled=True)])
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid, f"Unexpected errors: {errors}"
+
+    def test_auto_bind_opentofu_counts_as_compatible(self):
+        service = self._service()
+        config_model = self._config_model([SimpleNamespace(name="tofu", type="opentofu", enabled=True)])
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid, f"Unexpected errors: {errors}"
+
+    def test_auto_bind_zero_candidates_fails(self):
+        service = self._service()
+        config_model = self._config_model([])
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid is False
+        assert any("no Terraform-compatible integration registered" in e for e in errors)
+
+    def test_auto_bind_ambiguous_candidates_fails(self):
+        service = self._service()
+        config_model = self._config_model(
+            [
+                SimpleNamespace(name="legacy", type="terraform", enabled=True),
+                SimpleNamespace(name="current", type="terraform", enabled=True),
+            ]
+        )
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid is False
+        assert any("ambiguous" in e for e in errors)
+
+    def test_disabled_integration_excluded_from_candidates(self):
+        """A disabled integration doesn't count — auto-bind still fails with zero candidates."""
+        service = self._service()
+        config_model = self._config_model([SimpleNamespace(name="tf", type="terraform", enabled=False)])
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid is False
+        assert any("no Terraform-compatible integration registered" in e for e in errors)
+
+    def test_explicit_integration_name_wins_over_ambiguity(self):
+        service = self._service(provisioner_extra={"integration": "current"})
+        config_model = self._config_model(
+            [
+                SimpleNamespace(name="legacy", type="terraform", enabled=True),
+                SimpleNamespace(name="current", type="terraform", enabled=True),
+            ]
+        )
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid, f"Unexpected errors: {errors}"
+
+    def test_explicit_integration_name_missing_fails(self):
+        service = self._service(provisioner_extra={"integration": "does_not_exist"})
+        config_model = self._config_model([SimpleNamespace(name="tf", type="terraform", enabled=True)])
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid is False
+        assert any("is not registered" in e for e in errors)
+
+    def test_explicit_integration_wrong_type_fails(self):
+        service = self._service(provisioner_extra={"integration": "git_main"})
+        config_model = self._config_model([SimpleNamespace(name="git_main", type="git", enabled=True)])
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid is False
+        assert any("is not compatible" in e for e in errors)
+
+    def test_non_terraform_provisioner_skips_binding_check(self):
+        """An ansible provisioner IS checked (ADR-0080), but zero declared ansible
+        integrations is not an error for it (unlike terraform) — it falls back to a
+        hardcoded default at deploy time, matching AnsibleDeployer's default_factory."""
+        service = self._service(provisioner_extra={"provisioner": "ansible"})
+        config_model = self._config_model([])
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid, f"Unexpected errors: {errors}"
+
+
+class TestWorkspaceServiceAnsibleBicepIntegrationBinding:
+    """ADR-0080: ansible/bicep provisioners are also resolved by
+    `_validate_provisioner_integration_bindings()`, with a key difference from terraform:
+    zero declared integrations is NOT an error (each has a `default_factory` fallback at
+    deploy time), but ambiguity/explicit-name errors still apply identically."""
+
+    def _service(self, provisioner_type: str, provisioner_extra: Optional[Dict[str, Any]] = None) -> WorkspaceService:
+        spec = {**_MINIMAL_SINGLE_REPO_WORKSPACE["spec"]}
+        provisioner = {**spec["provisioners"][0], "provisioner": provisioner_type, **(provisioner_extra or {})}
+        spec = {**spec, "provisioners": [provisioner]}
+        service = WorkspaceService(data={**_MINIMAL_SINGLE_REPO_WORKSPACE, "spec": spec})
+        service.validate()
+        service._repo_map = {}
+        return service
+
+    def _config_model(self, integrations):
+        config_model = MagicMock()
+        config_model.get_remote_map.return_value = {}
+        config_model.spec.integrations = integrations
+        return config_model
+
+    def test_ansible_zero_declared_is_not_an_error(self):
+        service = self._service("ansible")
+        config_model = self._config_model([])
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid, f"Unexpected errors: {errors}"
+
+    def test_ansible_sole_candidate_auto_binds(self):
+        service = self._service("ansible")
+        config_model = self._config_model([SimpleNamespace(name="config_mgmt", type="ansible", enabled=True)])
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid, f"Unexpected errors: {errors}"
+
+    def test_ansible_ambiguous_candidates_fails(self):
+        service = self._service("ansible")
+        config_model = self._config_model(
+            [
+                SimpleNamespace(name="a", type="ansible", enabled=True),
+                SimpleNamespace(name="b", type="ansible", enabled=True),
+            ]
+        )
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid is False
+        assert any("ambiguous" in e for e in errors)
+
+    def test_ansible_explicit_integration_name_missing_fails(self):
+        service = self._service("ansible", provisioner_extra={"integration": "does_not_exist"})
+        config_model = self._config_model([])
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid is False
+        assert any("is not registered" in e for e in errors)
+
+    def test_bicep_zero_declared_is_not_an_error(self):
+        service = self._service("bicep")
+        config_model = self._config_model([])
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid, f"Unexpected errors: {errors}"
+
+    def test_bicep_sole_candidate_auto_binds(self):
+        service = self._service("bicep")
+        config_model = self._config_model([SimpleNamespace(name="azure_main", type="azure_cli", enabled=True)])
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid, f"Unexpected errors: {errors}"
+
+    def test_bicep_ambiguous_candidates_fails(self):
+        service = self._service("bicep")
+        config_model = self._config_model(
+            [
+                SimpleNamespace(name="a", type="azure_cli", enabled=True),
+                SimpleNamespace(name="b", type="azure_cli", enabled=True),
+            ]
+        )
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid is False
+        assert any("ambiguous" in e for e in errors)
+
+    def test_compose_and_helm_are_not_provisioner_types_so_never_checked(self):
+        """compose/helm aren't provisioner-scoped (ADR-0080) — no `provisioner: compose|helm`
+        entry is ever checked by this method at all (they're resolved via
+        IntegrationService.resolve_by_class() at the deployer level, not per-provisioner)."""
+        service = self._service("compose")
+        config_model = self._config_model([])
+        is_valid, errors = service._validate_dynamic(configuration_model=config_model)
+        assert is_valid, f"Unexpected errors: {errors}"
 
 
 class TestWorkspaceServiceNetworks:
@@ -146,6 +330,9 @@ class TestWorkspaceServiceNetworks:
         service.validate()
         config_model = MagicMock()
         config_model.get_remote_map.return_value = {}
+        # ADR-0079: declare a matching integration so the only failure is the network file
+        # this test is actually about, not an incidental integration-binding error too.
+        config_model.spec.integrations = [SimpleNamespace(name="tf", type="terraform", enabled=True)]
         is_valid, errors = service._validate_dynamic(configuration_model=config_model, work_path=str(self._repo_root()))
         assert is_valid is False
         assert any("net1" in e for e in errors)

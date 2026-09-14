@@ -188,6 +188,62 @@ class TestRunCommand:
         assert result.has_errors
         assert len(result.stderr) > 0
 
+    def test_empty_list_command_does_not_crash(self):
+        """An empty command list (e.g. an HTTP-only integration's version command)
+        must not reach subprocess.Popen([]) — that raises an OS-specific error
+        (WinError 87 on Windows) instead of a clean failure result."""
+        result = run_command([])
+
+        assert isinstance(result, CommandResult)
+        assert result.returncode == 127
+        assert not result.is_successful
+
+    def test_resolves_windows_shim_via_pathext(self, monkeypatch):
+        """A bare command name backed by a .cmd/.bat shim on Windows must be
+        resolved via shutil.which() (PATHEXT-aware) before Popen — CreateProcess
+        (used when shell=False) does not consult PATHEXT itself, so a bare
+        name would otherwise raise FileNotFoundError even though the shim exists."""
+        import strata.utils.system as system_module
+
+        captured = {}
+        real_popen = subprocess.Popen
+
+        def fake_which(cmd):
+            if cmd == "myshimtool":
+                return "C:\\fake\\path\\myshimtool.cmd"
+            return None
+
+        class FakePopen:
+            def __init__(self, command, **kwargs):
+                captured["command"] = command
+                self._inner = real_popen(
+                    [sys.executable, "-c", "print('ok')"],
+                    **{k: v for k, v in kwargs.items() if k != "shell"},
+                )
+
+            def __enter__(self):
+                return self._inner.__enter__()
+
+            def __exit__(self, *a):
+                return self._inner.__exit__(*a)
+
+        monkeypatch.setattr(system_module.shutil, "which", fake_which)
+        monkeypatch.setattr(system_module.subprocess, "Popen", FakePopen)
+
+        run_command(["myshimtool", "version"])
+
+        assert captured["command"][0] == "C:\\fake\\path\\myshimtool.cmd"
+        assert captured["command"][1:] == ["version"]
+
+    def test_leaves_unresolvable_command_unchanged(self, monkeypatch):
+        """When shutil.which() can't resolve the executable, the original
+        command list is passed through unchanged (existing FileNotFoundError
+        handling still applies)."""
+        result = run_command(["nonexistent_command_xyz_123", "--flag"])
+
+        assert result.command == "nonexistent_command_xyz_123 --flag"
+        assert result.returncode == 127
+
 
 # ============================================================================
 # Integration Tests

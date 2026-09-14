@@ -8,7 +8,7 @@ from .base_exception import (
     PlatformStateError,
     PlatformValidationError,
 )
-from .integration_exception import SecretStoreUnavailableError
+from .integration_exception import IntegrationResolutionError, SecretStoreUnavailableError
 from .model_exception import (
     InvalidReferenceError,
     ModelValidationError,
@@ -51,4 +51,5 @@ __all__ = [
     "PathValidationError",
     # Integration exceptions
     "SecretStoreUnavailableError",
+    "IntegrationResolutionError",
 ]

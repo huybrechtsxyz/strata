@@ -42,7 +42,7 @@ Workspace YAML::
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, cast
 
 from strata.deployers.base_deployer import (
     STEP_APPLY,
@@ -217,11 +217,13 @@ class BicepDeployer(BaseDeployer):
             messages.append("validate_workspace() must succeed before validate_environment()")
             return False, messages
 
-        from strata.integrations.azure_cli import AzureCLIIntegration
-        from strata.models.integration_model import IntegrationModel
+        from strata.exceptions import IntegrationResolutionError
 
-        config = IntegrationModel(name="azure", type="azure_cli")
-        self._az = AzureCLIIntegration(config)
+        try:
+            self._az = self._get_azure_cli_integration()
+        except IntegrationResolutionError as exc:
+            messages.append(str(exc))
+            return False, messages
 
         ok, reason = self._az.ensure_available()
         if not ok:
@@ -232,6 +234,27 @@ class BicepDeployer(BaseDeployer):
             messages.append(f"Azure CLI: {self._az._info}")
 
         return True, messages
+
+    def _get_azure_cli_integration(self) -> "AzureCLIIntegration":
+        """Resolve the AzureCLIIntegration this provisioner binds to (ADR-0080).
+
+        Delegates to ``IntegrationService.resolve_for_provisioner()``: explicit
+        ``self._iac_model.integration`` wins if set; otherwise auto-binds to the
+        sole registered ``AzureCLIIntegration``. Falls back to today's bare
+        default when none is declared, so existing workspaces are unaffected.
+        """
+        from strata.integrations.azure_cli import AzureCLIIntegration
+        from strata.models.integration_model import IntegrationModel
+        from strata.services.integration_service import IntegrationService
+
+        assert self._iac_model is not None  # guarded by validate_environment()
+        svc = IntegrationService.get_instance()
+        integration = svc.resolve_for_provisioner(
+            self._iac_model,
+            AzureCLIIntegration,
+            default_factory=lambda: AzureCLIIntegration(IntegrationModel(name="azure", type="azure_cli")),
+        )
+        return cast(AzureCLIIntegration, integration)
 
     # ------------------------------------------------------------------
     # Step methods

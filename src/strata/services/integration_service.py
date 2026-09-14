@@ -19,9 +19,13 @@ Usage::
 """
 
 import threading
-from typing import List, Optional, Set, Tuple, Type
+from typing import TYPE_CHECKING, Callable, List, Optional, Set, Tuple, Type
 
 from strata.logger import get_logger
+
+if TYPE_CHECKING:
+    from strata.integrations.base_integration import BaseIntegration
+    from strata.models.workspace_model import WorkspaceIacModel
 
 logger = get_logger(__name__)
 
@@ -297,6 +301,119 @@ class IntegrationService:
             True if integration is registered and available
         """
         return self.registry.is_integration_available(name)
+
+    def resolve_for_provisioner(
+        self,
+        iac_model: "WorkspaceIacModel",
+        integration_class: Type["BaseIntegration"],
+        default_factory: Optional[Callable[[], "BaseIntegration"]] = None,
+    ) -> "BaseIntegration":
+        """Resolve the integration a workspace provisioner binds to (ADR-0079/ADR-0080).
+
+        Resolution order:
+        1. ``iac_model.integration`` set -> exact name lookup; raises if missing
+           or not an instance of ``integration_class``.
+        2. Unset -> auto-bind to the sole registered integration that is an
+           instance of ``integration_class``; raises if more than one candidate
+           exists (never silently guesses).
+        3. Unset and zero candidates -> if ``default_factory`` is provided, call
+           it and return the result (ADR-0080: preserves a provisioner type's
+           pre-existing ad-hoc default when no integration was ever declared,
+           e.g. Ansible/Helm/Compose/Bicep before this ADR). If not provided
+           (Terraform's contract, ADR-0079), raises instead.
+
+        Matching is by **integration class**, not a type string, so subclasses
+        (e.g. ``OpenTofuIntegration`` subclassing ``TerraformIntegration``) are
+        valid candidates for a ``provisioner: terraform`` entry — mirroring the
+        ``isinstance`` check this replaces.
+
+        Raises:
+            IntegrationResolutionError: no exact-name match, wrong class, or an
+                ambiguous auto-bind candidate set; or an empty candidate set
+                with no ``default_factory`` supplied.
+        """
+        from strata.exceptions import IntegrationResolutionError
+
+        expected = integration_class.__name__
+
+        if iac_model.integration:
+            integration = self.registry.get_integration(iac_model.integration)
+            if integration is None:
+                raise IntegrationResolutionError(
+                    f"Provisioner '{iac_model.name}'",
+                    f"integration '{iac_model.integration}' is not registered. Check "
+                    "configuration.spec.integrations for a matching 'name'.",
+                )
+            if not isinstance(integration, integration_class):
+                raise IntegrationResolutionError(
+                    f"Provisioner '{iac_model.name}'",
+                    f"integration '{iac_model.integration}' (type "
+                    f"'{integration.integration_type}') is not compatible — expected a {expected}.",
+                )
+            return integration
+
+        candidates = [i for i in self.registry.get_all_integrations().values() if isinstance(i, integration_class)]
+        if len(candidates) == 1:
+            return candidates[0]
+        if not candidates:
+            if default_factory is not None:
+                return default_factory()
+            raise IntegrationResolutionError(
+                f"Provisioner '{iac_model.name}'",
+                f"no {expected} registered. Add one to configuration.spec.integrations, or set "
+                "'integration:' explicitly if one already exists under a different name.",
+            )
+        names = ", ".join(c.integration_name for c in candidates)
+        raise IntegrationResolutionError(
+            f"Provisioner '{iac_model.name}'",
+            f"{len(candidates)} compatible integrations registered ({names}) — ambiguous. "
+            "Set 'integration:' explicitly to pick one.",
+        )
+
+    def resolve_by_class(
+        self,
+        integration_class: Type["BaseIntegration"],
+        default_factory: Optional[Callable[[], "BaseIntegration"]] = None,
+    ) -> "BaseIntegration":
+        """Resolve a shared, non-provisioner-scoped integration by class (ADR-0080).
+
+        For deployers that are **not** provisioner-scoped (no ``WorkspaceIacModel``
+        to carry an explicit ``integration:`` override) — e.g. ``ComposeDeployer``
+        and ``HelmDeployer``, which operate over namespace/module services rather
+        than a single named workspace provisioner:
+
+        1. Auto-bind to the sole registered integration that is an instance of
+           ``integration_class``.
+        2. Zero candidates -> ``default_factory()`` if provided (preserves a
+           deployer's pre-ADR-0080 hardcoded default when nothing was ever
+           declared), else raises.
+        3. More than one candidate -> always raises (no explicit-name override
+           exists to disambiguate for these deployers).
+
+        Raises:
+            IntegrationResolutionError: ambiguous candidate set, or an empty
+                candidate set with no ``default_factory`` supplied.
+        """
+        from strata.exceptions import IntegrationResolutionError
+
+        expected = integration_class.__name__
+        candidates = [i for i in self.registry.get_all_integrations().values() if isinstance(i, integration_class)]
+        if len(candidates) == 1:
+            return candidates[0]
+        if not candidates:
+            if default_factory is not None:
+                return default_factory()
+            raise IntegrationResolutionError(
+                f"Integration lookup ({expected})",
+                f"no {expected} registered. Add one to configuration.spec.integrations.",
+            )
+        names = ", ".join(c.integration_name for c in candidates)
+        raise IntegrationResolutionError(
+            f"Integration lookup ({expected})",
+            f"{len(candidates)} compatible integrations registered ({names}) — ambiguous, and no "
+            "provisioner entry exists to disambiguate with an 'integration:' override. Reduce to a "
+            "single registered integration of this type.",
+        )
 
     def list_integrations(self) -> List[str]:
         """

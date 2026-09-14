@@ -25,7 +25,7 @@ import json
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, cast
 
 from strata.deployers.base_deployer import (
     STEP_APPLY,
@@ -39,6 +39,7 @@ from strata.deployers.base_deployer import (
     STEP_SHOW_PLAN,
     BaseDeployer,
 )
+from strata.exceptions import IntegrationResolutionError
 from strata.integrations.terraform import TerraformIntegration
 from strata.models.deployment_model import DeploymentStageModel
 from strata.models.workspace_model import OutputProfileModel, WorkspaceIacModel
@@ -179,8 +180,8 @@ class TerraformDeployer(BaseDeployer):
             return False, messages
 
         try:
-            self._tf = self._get_terraform_integration(self._iac_model.name)
-        except RuntimeError as exc:
+            self._tf = self._get_terraform_integration()
+        except IntegrationResolutionError as exc:
             messages.append(str(exc))
             return False, messages
 
@@ -853,19 +854,19 @@ class TerraformDeployer(BaseDeployer):
             return None
         return self._iac_model.output
 
-    @staticmethod
-    def _get_terraform_integration(name: str) -> TerraformIntegration:
-        """Return the registered TerraformIntegration instance by name."""
+    def _get_terraform_integration(self) -> TerraformIntegration:
+        """Resolve the TerraformIntegration this provisioner binds to (ADR-0079).
+
+        Delegates to ``IntegrationService.resolve_for_provisioner()``: explicit
+        ``self._iac_model.integration`` wins if set; otherwise auto-binds to the
+        sole registered ``TerraformIntegration`` (including subclasses such as
+        ``OpenTofuIntegration``), raising ``IntegrationResolutionError`` if that's
+        ambiguous or empty. The provisioner's own ``name`` is never used as a
+        lookup key.
+        """
         from strata.services.integration_service import IntegrationService
 
+        assert self._iac_model is not None  # guarded by validate_workspace()
         svc = IntegrationService.get_instance()
-        integration = svc.get_integration(name)
-        if integration is None:
-            raise RuntimeError(
-                f"Terraform integration '{name}' is not registered. Ensure integrations are initialized."
-            )
-        if not isinstance(integration, TerraformIntegration):
-            raise RuntimeError(
-                f"Integration '{name}' is not a TerraformIntegration (got {type(integration).__name__})."
-            )
-        return integration
+        integration = svc.resolve_for_provisioner(self._iac_model, TerraformIntegration)
+        return cast(TerraformIntegration, integration)
