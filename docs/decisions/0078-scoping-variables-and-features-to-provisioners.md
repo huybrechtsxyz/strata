@@ -3,7 +3,7 @@
 - Status: proposed — under evaluation, **no option selected**; Option F is the current focus
 - Date: 2026-09-11
 - Revised: 2026-09-14 — Option E's addressing scheme found unworkable against shared/layered environment files; Option F (`spec.references`) added; decision withdrawn pending evaluation
-- Related: [ADR 0073 — Embedded string syntax inventory and creep prevention](./0073-embedded-string-syntax-inventory-and-creep-prevention.md), [ADR 0075 — Unified Terraform/Helm value-expression syntax](./0075-unify-terraform-helm-value-expression-syntax.md), [ADR 0077 — Repo map & cross-repo path resolution](./0077-repo-map-cross-repo-path-resolution.md)
+- Related: [ADR 0073 — Embedded string syntax inventory and creep prevention](./0073-embedded-string-syntax-inventory-and-creep-prevention.md), [ADR 0075 — Unified Terraform/Helm value-expression syntax](./0075-unify-terraform-helm-value-expression-syntax.md), [ADR 0077 — Repo map & cross-repo path resolution](./0077-repo-map-cross-repo-path-resolution.md), [ADR 0068 — Cross-pipeline output publishing](./0068-cross-pipeline-output-publishing.md) (owns resource-to-resource / cross-pipeline output wiring, which this ADR removes inert schema for and explicitly leaves out of scope)
 
 ## Context and Problem Statement
 
@@ -333,15 +333,265 @@ referenced is a new error; a key that is neither is correctly ignored.
    documents can carry references. The triggering case — a value consumed by a
    `script` provisioner — has nowhere to declare them today. The natural home
    would be `references` on the provisioner itself in the workspace file, sitting
-   beside the existing `inputs_from`.
-2. **A name collision, same class as ADR-0010's "repositories".** Two unrelated
-   things are called `references` in the schema:
+   beside the existing `inputs_from`. ⇒ Will need to be designed.
+2. **A name collision — which turns out to be dead schema.** Two unrelated things
+   are called `references` in the schema:
    - `spec.references` on resource/dns/module ⇒ `{variables, secrets, features}` —
-     declares required environment keys.
-   - `references` on a *workspace resource entry* ⇒ `Dict[str, str]` — cross-resource
-     value wiring (`{'storage_connection': 'contoso_storage.connection_string'}`).
+     declares required environment keys. **Live**, consumed by `TerraformBuilder`,
+     `ModuleService`, `NetworkService`.
+   - `references` on a *workspace resource entry* ⇒ `Dict[str, str]` — allegedly
+     cross-resource value wiring
+     (`{'storage_connection': 'contoso_storage.connection_string'}`). **Inert.**
 
-   Different meanings, same word. Worth resolving before building more on top of it.
+   A read of the codebase shows the second is never consumed: the only code that
+   touches it merges environment overrides into it
+   ([`deployment_service.py`](../../src/strata/services/deployment_service.py#L815))
+   and nothing reads the result. It has no validator, appears in no YAML under
+   `config/` or `tests/data/`, and its own example cannot resolve — outputs are
+   keyed by **provisioner** name in `ResolvedValues.stage_outputs`, and strata has
+   no resource-name-keyed output registry at all. The same dead field exists a
+   second time as `EnvironmentResourceOverrideModel.references`
+   ([`environment_model.py`](../../src/strata/models/environment_model.py#L118)).
+
+   ⇒ This is not a collision to rename around. It is **schema to delete**.
+
+## Design — Option F
+
+*(Design for the two gaps above. Does not itself select Option F — see [Status](#status).)*
+
+### Vocabulary
+
+One word, one meaning, across every kind:
+
+| Term              | Lives on                                                                       | Shape                            | Means                                                       |
+| ----------------- | ------------------------------------------------------------------------------ | -------------------------------- | ----------------------------------------------------------- |
+| **`references`**  | `spec` of resource/module/dns/provider/… **and** a workspace provisioner entry | `{variables, secrets, features}` | *"I require these environment keys."*                       |
+| **`inputs_from`** | a workspace **provisioner** entry                                              | `List[mapping]`                  | *"Wire in another provisioner's outputs."* (ADR-0063 Gap 4) |
+| **`outputs`**     | produced by a provisioner run                                                  | `Dict[str, Any]`                 | *"Values I publish downstream."* (ADR-0063 Gap 5, ADR-0068) |
+
+`references` = the **contract** (what a component needs from the environment).
+`inputs_from` = the **wiring** (which upstream provisioner supplies it). These are
+complementary, never interchangeable.
+
+#### Considered and rejected — unifying `inputs_from` into `inputs`
+
+An earlier draft proposed renaming the dead workspace-resource `references` field
+to `inputs`, then absorbing `inputs_from` into it as a second accepted shape, on
+the argument that they are one concept at two granularities. That argument does
+not survive contact with the code:
+
+| Claim                                                      | Reality                                                                                                                                                                                                                     |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "Two fields, one concept"                                  | One **mechanism** (`inputs_from`) plus one **inert field** that was never wired up. Unifying merges a live wire into a dead one.                                                                                            |
+| "`mapping` flattens to exactly the map form"               | `mapping` is `{upstream_output: downstream_name}`; the proposed map form was `{downstream_name: "producer.output"}` — **opposite direction**.                                                                               |
+| "The list form desugars to the map form before validation" | False for `- provisioner: X` with no `mapping`/`select` — that means *all non-sensitive outputs*, a set unknown until the upstream run completes ([`apply_input_mapping`](../../src/strata/utils/resolved_values.py#L333)). |
+| "`from:` can name a resource or a provisioner"             | Resource names and provisioner names are validated for uniqueness **only within their own list** — `from: infra` would be ambiguous.                                                                                        |
+| "Wired keys must appear in `spec.references`"              | `references` means *keys required from the environment*. A value arriving from an upstream output does not come from the environment.                                                                                       |
+
+Deleting the dead field removes the collision outright — no rename, no union type,
+no deprecation cycle on a shipped field. `inputs_from` stays as-is and reads
+correctly: *inputs from `infra`*.
+
+Genuine resource-to-resource wiring would require a resource-name-keyed output
+registry, which does not exist. That is a larger design, closer to
+[ADR-0068](0068-cross-pipeline-output-publishing.md) than to this ADR, and is
+explicitly **out of scope here**.
+
+### Gap 1 — `references` on a provisioner
+
+Add an optional `references` field to `WorkspaceIacModel`, reusing the existing
+`ResourceReferencesModel` shape verbatim. No new model, no new syntax:
+
+```yaml
+spec:
+  provisioners:
+    - name: bootstrap
+      provisioner: script
+      source:
+        repository: haven
+        source_path: scripts
+      # NEW — same shape as spec.references on a resource
+      references:
+        variables:
+          - service_connection_id
+          - build_pipeline_id
+        secrets:
+          - deploy_token
+        features:
+          - enable_preflight_checks
+      inputs_from:
+        - provisioner: infra
+          select: [vnet_id]
+```
+
+This gives `script` (and every other provisioner without a component document) the
+same declaration surface resources already have, and it sits beside `inputs_from`
+so the contract and the wiring are visible together.
+
+### Gap 2 — remove the inert `references` field
+
+Delete, rather than rename:
+
+| Location                                                                                                       | Field                        | Action                                      |
+| -------------------------------------------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------- |
+| `WorkspaceResourceModel` ([workspace_model.py](../../src/strata/models/workspace_model.py#L342))               | `references: Dict[str, str]` | remove                                      |
+| `EnvironmentResourceOverrideModel` ([environment_model.py](../../src/strata/models/environment_model.py#L118)) | `references: Dict[str, str]` | remove                                      |
+| `deployment_service.py` ([L815](../../src/strata/services/deployment_service.py#L815))                         | override merge block         | remove                                      |
+| `.strata/templates/workspace.yaml`, `templates/solution/…`                                                     | `references: {}`             | remove the line and its explanatory comment |
+
+**Migration risk: low, but not zero.** Models use `extra="forbid"`, so a
+workspace in the wild that *does* carry `references:` on a resource entry — copied
+from the shipped template, which emits `references: {}` — would start failing
+validation on upgrade. Mitigation: keep a `model_validator(mode="before")` for one
+minor release that drops the key with a deprecation warning rather than erroring,
+then remove the shim.
+
+Nothing is lost by deleting it. The field was never resolved, never validated, and
+could not have worked: workspace resources are build-time metadata written into
+`terraform.auto.tfvars.json` before any provisioner runs, while outputs are
+post-apply and keyed by *provisioner* name, not resource name. Where both
+resources share a Terraform root, HCL already wires them natively; across
+provisioners `inputs_from` already does it. **The removed schema, the four reasons
+it does not work, and the six things a revival would have to build first are
+recorded in [ADR-0068](0068-cross-pipeline-output-publishing.md#prior-art--the-resource-level-wiring-schema-removed-by-adr-0078)** — that ADR owns output
+publishing and is the right home for the idea if it ever returns. Reviving it is a
+full mechanism (output registry, resource-attributed outputs, late binding), not a
+field.
+
+After removal, `references` has exactly one meaning schema-wide:
+*"keys this component requires from the environment."* That is the property Option F
+needs in order to scope the cross-check, and it now holds without qualification.
+
+### Validation rules
+
+Enforcement is **opt-in per component** and runs **in both directions**. A
+component that declares no `references` keeps today's behaviour exactly.
+
+| #   | Rule                                                                                                                      | When it applies                 | Severity |
+| --- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | -------- |
+| 1   | Every key in `references.variables` must be declared in the provisioner's `variables.tf` (Terraform)                      | component declares `references` | error    |
+| 2   | Every key **used** by the component (`var:`/`${var:…}`) must appear in its `references`                                   | component declares `references` | error    |
+| 3   | Environment keys referenced by **no** component of a provisioner are **not** cross-checked against that provisioner       | always                          | —        |
+| 4   | A key supplied by `inputs_from` is **not** subject to rules 1–2 — it arrives from an upstream output, not the environment | always                          | —        |
+
+Rule 2 is the loop-closer that stops Option F from degrading into "check
+nothing" — it already exists for DNS
+(`DnsSpecModel.validate_references_declared()`) and is extended to
+resource/module/provisioner.
+
+Rule 4 records an existing behaviour rather than adding one:
+`_collect_declared_input_keys()` already folds
+`collect_inputs_from_keys(prov.inputs_from)` into the supplied set
+([terraform_builder.py](../../src/strata/builders/terraform_builder.py#L1452)).
+It is stated explicitly because the contract/wiring split makes the reason for it
+non-obvious: `references` is about the environment, `inputs_from` is not.
+
+`inputs_from` validation is unchanged — `WorkspaceSpecModel.validate_inputs_from()`
+already checks producer existence, self-reference and cycles.
+
+
+### Scoping the Terraform cross-check
+
+`TerraformBuilder._collect_declared_input_keys()` changes from *"every key
+declared in the environment"* to:
+
+```
+for each provisioner P:
+    components(P) = resources ∪ modules ∪ dns ∪ providers bound to P
+                    ∪ P itself (via its own references)
+
+    if no component of P declares references:
+        declared_keys(P) = all environment keys      # unchanged behaviour
+    else:
+        declared_keys(P) = ⋃ references of components that declare them
+                           ∪ all environment keys of components that do not
+```
+
+The mixed case matters: a workspace migrating incrementally has some components
+with `references` and some without. Components that have opted in are checked
+precisely; those that have not fall back to the current wide check. Precision
+improves monotonically as adoption grows, and no workspace breaks on upgrade.
+
+### Worked example — the triggering case
+
+```yaml
+# environment-prd.yaml
+spec:
+  variables:
+    vnet_cidr: "10.0.0.0/16"
+    service_connection_id: "sc-prd-001"   # CI bookkeeping — Terraform never reads this
+```
+
+```yaml
+# config/network.yaml  (kind: resource)
+spec:
+  references:
+    variables: [vnet_cidr]
+```
+
+```yaml
+# workspace.yaml
+spec:
+  provisioners:
+    - name: infra
+      provisioner: terraform
+      source: { repository: haven, source_path: terraform }
+    - name: bootstrap
+      provisioner: script
+      source: { repository: haven, source_path: scripts }
+      references:
+        variables: [service_connection_id]
+  resources:
+    - name: network
+      file: config/network.yaml
+```
+
+Result: `infra`'s declared-key set is `{vnet_cidr}` (from `network`'s
+`references`), so `service_connection_id` is never cross-checked against
+`variables.tf`. **The dummy `variable {}` declaration disappears.** The key is
+still validated — as a requirement of the `bootstrap` provisioner.
+
+### Error messages
+
+```
+ERROR  Provisioner 'infra': references key 'vnet_cidr' has no matching
+       'variable "vnet_cidr"' block in terraform/variables.tf
+
+ERROR  Resource 'app_tier': uses ${var:region} but 'region' is not declared
+       in spec.references.variables
+       → add 'region' to spec.references.variables in config/app.yaml
+
+WARN   Workspace resource 'app_tier': 'references' is no longer supported and
+       has been ignored. The field was never read; remove it.
+```
+
+### Files affected
+
+| File                                                       | Change                                                                                                                     |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `models/workspace_model.py`                                | remove `WorkspaceResourceModel.references`; add `WorkspaceIacModel.references`; add the one-release drop-with-warning shim |
+| `models/environment_model.py`                              | remove `EnvironmentResourceOverrideModel.references`                                                                       |
+| `services/deployment_service.py`                           | remove the `references` override-merge block                                                                               |
+| `models/resource_model.py`, `module_model.py`              | usage-side validator (rule 2), mirroring the DNS one                                                                       |
+| `builders/terraform_builder.py`                            | `_collect_declared_input_keys()` scoping; `_validate_inputs()` messages                                                    |
+| `services/workspace_service.py`                            | resolve provisioner ↔ component binding for the scoping step                                                               |
+| `.strata/templates/workspace.yaml`, `templates/solution/…` | remove the `references: {}` line and its comment                                                                           |
+| `docs/config/workspace.md`, `resource.md`                  | document `references` on provisioners; document the contract/wiring split                                                  |
+
+Unchanged: `inputs_from`, `ProvisionerInputMappingModel`,
+`apply_input_mapping()`, `validate_inputs_from()`, and every deployer.
+
+### Rollout
+
+1. Remove the inert `references` field (both models + the merge block + templates),
+   with the drop-with-warning shim (no behaviour change — nothing read it).
+2. Add `references` to `WorkspaceIacModel` (additive, no behaviour change).
+3. Add rule 2 (usage-side) for resource/module, opt-in via declaring `references`.
+4. Switch `_collect_declared_input_keys()` to the scoped computation.
+5. Next minor: remove the drop-with-warning shim.
+
+Steps 1–3 are independently shippable and individually reversible. Only step 4
+changes what the build accepts, and only for workspaces that opted in at step 3.
 
 ## Analysis — allow- vs deny-by-default
 

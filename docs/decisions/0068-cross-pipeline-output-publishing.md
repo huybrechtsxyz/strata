@@ -2,7 +2,134 @@
 
 - Status: proposed
 - Date: 2026-08-11
-- Related: [ADR-0005](0005-secret-resolution-at-build-time.md) (secret resolution model — `var:`/`secret:` read side this ADR writes into), [ADR-0026](0026-resolved-model-cache.md) (resolved-value cache — staleness lever on the consuming side), [ADR-0058](0058-cross-deployment-dependency-gating.md) (cross-deployment dependency gating — the ordering half of this same problem), [ADR-0063 Gap 4](0063-gap4-output-passing.md) (`inputs_from` — same-deployment, same-invocation output passing this ADR does *not* replace), [ADR-0063 Gap 5](0063-gap5-output-capture.md) (`deployment-outputs.json` — the durable artifact this ADR publishes data out of), [ADR-0065](0065-strata-state-service.md) (state service — a candidate secondary channel, see Option C), [ADR-0067](0067-server-identity-authentication-authorization.md) (server identity/auth — gates the state-service channel)
+- Related: [ADR-0005](0005-secret-resolution-at-build-time.md) (secret resolution model — `var:`/`secret:` read side this ADR writes into), [ADR-0026](0026-resolved-model-cache.md) (resolved-value cache — staleness lever on the consuming side), [ADR-0058](0058-cross-deployment-dependency-gating.md) (cross-deployment dependency gating — the ordering half of this same problem), [ADR-0063 Gap 4](0063-gap4-output-passing.md) (`inputs_from` — same-deployment, same-invocation output passing this ADR does *not* replace), [ADR-0063 Gap 5](0063-gap5-output-capture.md) (`deployment-outputs.json` — the durable artifact this ADR publishes data out of), [ADR-0065](0065-strata-state-service.md) (state service — a candidate secondary channel, see Option C), [ADR-0067](0067-server-identity-authentication-authorization.md) (server identity/auth — gates the state-service channel), [ADR-0078](0078-scoping-variables-and-features-to-provisioners.md) (removes the inert `WorkspaceResourceModel.references` field and defers all resource-to-resource output wiring to this ADR)
+
+## Naming Consistency Note
+
+ADR-0078 established the vocabulary this ADR should extend rather than duplicate:
+
+- **`references`** = *"keys I require from the environment."* Not a wiring mechanism.
+- **`inputs_from`** = *"wire in another provisioner's outputs."* The existing, live
+  wiring mechanism (ADR-0063 Gap 4), addressed by **provisioner name**.
+- **`outputs`** = *"values I publish downstream."*
+
+Two findings from ADR-0078 constrain the design here:
+
+1. **There is no resource-name-keyed output registry.** Outputs live in
+   `ResolvedValues.stage_outputs` keyed by *provisioner* name. ADR-0078 deleted a
+   never-implemented `references: Dict[str, str]` field on workspace resource
+   entries that pretended otherwise. If this ADR wants resource-level addressing,
+   it must build that registry — it cannot assume it exists.
+2. **Prefer extending `inputs_from` over inventing a sibling field.** ADR-0078
+   considered and rejected a unified `inputs` field, because `inputs_from`'s
+   `mapping` runs `{upstream_output: downstream_name}` and its no-arg
+   pass-through form cannot be resolved statically. A cross-pipeline producer is
+   most cheaply expressed as a new producer address on the *existing* shape (for
+   example `- pipeline: other-deployment` alongside `- provisioner: infra`) rather
+   than as a third field with a fourth set of semantics.
+
+## Prior art — the resource-level wiring schema removed by ADR-0078
+
+Resource-level output wiring was **declared but never built**. ADR-0078 removed the
+schema. It is recorded here in full, because this ADR is the natural home for the
+idea if it is ever revived — and because the reasons it did not work are design
+constraints on any revival.
+
+### The removed schema
+
+```python
+# src/strata/models/workspace_model.py — WorkspaceResourceModel
+references: Optional[Dict[str, str]] = Field(
+    None,
+    description=(
+        "Cross-resource value references "
+        "(e.g., {'storage_connection': 'contoso_storage.connection_string'})"
+    ),
+)
+```
+
+```python
+# src/strata/models/environment_model.py — EnvironmentResourceOverrideModel
+references: Optional[Dict[str, str]] = Field(
+    None,
+    description="Cross-resource value references override",
+)
+```
+
+```python
+# src/strata/services/deployment_service.py — the only code that ever touched it
+if resource_override.references is not None:
+    # Merge references (override wins)
+    if workspace_resource.references:
+        workspace_resource.references.update(resource_override.references)
+    else:
+        workspace_resource.references = resource_override.references
+```
+
+In YAML:
+
+```yaml
+spec:
+  resources:
+    - name: app_tier
+      file: config/app.yaml
+      references:
+        storage_connection: "contoso_storage.connection_string"
+```
+
+Total surface: two field declarations, one merge block, and a `references: {}`
+line in the shipped `workspace.yaml` template. No resolver, no validator, no
+tests, no use in any configuration under `config/` or `tests/data/`. The merged
+value was never read by anything.
+
+### Why it does not work
+
+**1. The timing is impossible.** Workspace resources are **build-time** metadata:
+`TerraformBuilder._build_resources_by_category()` writes them into
+`terraform.auto.tfvars.json` during `strata build run`, before any provisioner has
+run. Outputs are **post-apply**: `TerraformDeployer.collect_outputs()` produces
+them only after `terraform apply` succeeds. So the field asked a build-time
+artifact to contain a value that does not exist until deploy time. Nothing could
+have resolved it.
+
+**2. There is no address space.** `"contoso_storage.connection_string"` implies
+outputs are addressable by *resource* name. They are not — `stage_outputs` is
+keyed by *provisioner* name. A strata resource does not produce outputs at all;
+it is metadata that a provisioner's own IaC code consumes.
+
+**3. It duplicates a graph Terraform already owns.** When both resources land in
+the same Terraform root, HCL wires them natively
+(`azurerm_storage_account.x.primary_connection_string`) with real ordering and
+type checking. A YAML mirror would be a second, weaker dependency graph that can
+silently disagree with the authoritative one.
+
+**4. The remaining cases are already served.** Across provisioners,
+`inputs_from` does this at the granularity that actually produces outputs. Across
+deployments, that is this ADR. Resource-level wiring had no residual case left to
+cover.
+
+### What a revival would require — the full monty
+
+Re-introducing resource-level wiring is not a field addition. It needs, at minimum:
+
+| #   | Requirement                                                                                                                                     | Exists today?   |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| 1   | A **resource-name-keyed output registry** — a mapping from `<resource>.<output>` to a value, produced by a deploy and durably persisted         | ❌ no            |
+| 2   | A way for a provisioner's IaC to **declare which resource an output belongs to** (Terraform outputs are flat; nothing ties them to a resource)  | ❌ no            |
+| 3   | **Two-phase rendering**, or late binding: build emits tfvars before apply, so a post-apply value needs a re-render or a deploy-time indirection | ❌ no            |
+| 4   | **Cycle and ordering semantics** across resources, consistent with Terraform's own graph rather than competing with it                          | ❌ no            |
+| 5   | **Staleness rules** — how old may a persisted resource output be before it must not be consumed (same problem this ADR faces for pipelines)     | ⚠️ in scope here |
+| 6   | Validation that the referenced resource and output **actually exist**                                                                           | ❌ no            |
+
+Items 1, 5 and 6 overlap substantially with this ADR's own output registry and
+staleness design — which is why resource-level addressing, if it happens, should
+be an **extension of this ADR's mechanism**, not a separate field on the workspace
+model. Items 2–4 are additional cost that this ADR does not otherwise incur, and
+should be weighed against simply letting Terraform do the wiring.
+
+**Recommendation for any future proposer:** unless items 2–4 have concrete
+answers, prefer `inputs_from` (provisioner granularity) or native HCL references.
+Do not re-add a declarative field that cannot be resolved.
 
 ## Remaining Work
 
