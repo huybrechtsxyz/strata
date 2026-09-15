@@ -112,6 +112,36 @@ class TestVerify:
         assert claims["sub"] == "repo:acme/widgets:ref:refs/heads/main"
         assert claims["_trusted_issuer_name"] == "github-actions"
 
+    def test_subject_defaults_to_sub_claim(self, github_rsa_key: RSAKey, github_issuer: TrustedIssuer) -> None:
+        """ADR-0067 Step 9 — RBAC reads `_subject`, never a raw claim name per issuer."""
+        verifier = M2mVerifier([github_issuer])
+        token = _sign_token(github_rsa_key, _GITHUB_ISSUER, _GITHUB_AUDIENCE)
+        discovery = _discovery_doc(_GITHUB_ISSUER)
+
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=_make_urlopen_mock({"discovery": discovery, "rsa_key": github_rsa_key}),
+        ):
+            claims = verifier.verify(token)
+
+        assert claims["_subject"] == claims["sub"]
+
+    def test_subject_uses_configured_subject_claim(self, github_rsa_key: RSAKey) -> None:
+        issuer = TrustedIssuer(
+            name="github-actions", issuer=_GITHUB_ISSUER, audience=_GITHUB_AUDIENCE, subject_claim="repository"
+        )
+        verifier = M2mVerifier([issuer])
+        token = _sign_token(github_rsa_key, _GITHUB_ISSUER, _GITHUB_AUDIENCE, repository="acme/widgets")
+        discovery = _discovery_doc(_GITHUB_ISSUER)
+
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=_make_urlopen_mock({"discovery": discovery, "rsa_key": github_rsa_key}),
+        ):
+            claims = verifier.verify(token)
+
+        assert claims["_subject"] == "acme/widgets"
+
     def test_selects_the_right_issuer_among_several(
         self, github_rsa_key: RSAKey, ado_rsa_key: RSAKey, github_issuer: TrustedIssuer, ado_issuer: TrustedIssuer
     ) -> None:

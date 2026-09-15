@@ -40,9 +40,15 @@ class _FakeHTTPError(Exception):
 
 
 class _FakeRequest:
-    def __init__(self, headers: Dict[str, str] | None = None, app: Any = None) -> None:
+    def __init__(
+        self,
+        headers: Dict[str, str] | None = None,
+        app: Any = None,
+        query_params: Dict[str, str] | None = None,
+    ) -> None:
         self.headers = headers or {}
         self.app = app
+        self.query_params = query_params or {}
         # Real FastAPI's per-request `Request.state` — an arbitrary-attribute bag some
         # dependencies (e.g. `verify_m2m_token`) stash verified data on for the handler.
         self.state = SimpleNamespace()
@@ -196,6 +202,9 @@ class TestCreateApp:
             ("POST", "/v1/tokens"),
             ("GET", "/v1/tokens"),
             ("DELETE", "/v1/tokens/{token_id}"),
+            ("POST", "/v1/rbac/bindings"),
+            ("GET", "/v1/rbac/bindings"),
+            ("DELETE", "/v1/rbac/bindings/{binding_id}"),
         }
 
     def test_healthz_returns_ok_when_db_reachable(self, fake_fastapi_module: ModuleType, sqlite_engine: Engine) -> None:
@@ -1160,4 +1169,391 @@ class TestM2mRoutes:
 
         with pytest.raises(_FakeHTTPError) as exc_info:
             _call_route(app, "GET", "/v1/whoami", headers={"authorization": f"Bearer {token}"})
+        assert exc_info.value.status_code == 403
+
+
+class TestRbacRoutes:
+    """ADR-0067 Step 9 — /v1/rbac/bindings registration gating, bootstrap via admin_token,
+    and authorization through a real admin-tier session principal.
+    """
+
+    def test_not_registered_without_admin_token(self, fake_fastapi_module: ModuleType, sqlite_engine: Engine) -> None:
+        from strata.server.app import create_app
+
+        app = create_app(sqlite_engine)
+        assert ("POST", "/v1/rbac/bindings") not in app.routes
+        assert ("GET", "/v1/rbac/bindings") not in app.routes
+        assert ("DELETE", "/v1/rbac/bindings/{binding_id}") not in app.routes
+
+    def test_registered_when_admin_token_configured(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from strata.server.app import create_app
+
+        app = create_app(sqlite_engine, admin_token="admin-secret")
+        assert ("POST", "/v1/rbac/bindings") in app.routes
+        assert ("GET", "/v1/rbac/bindings") in app.routes
+        assert ("DELETE", "/v1/rbac/bindings/{binding_id}") in app.routes
+
+    def test_create_binding_with_admin_token(self, fake_fastapi_module: ModuleType, sqlite_engine: Engine) -> None:
+        from strata.server.app import create_app
+
+        app = create_app(sqlite_engine, admin_token="admin-secret")
+
+        result = _call_route(
+            app,
+            "POST",
+            "/v1/rbac/bindings",
+            headers={"authorization": "Bearer admin-secret"},
+            subject_type="user",
+            subject="user-123",
+            tier="admin",
+        )
+
+        assert result["binding_id"]
+
+    def test_create_binding_without_admin_token_or_session_returns_401(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from strata.server.app import create_app
+
+        app = create_app(sqlite_engine, admin_token="admin-secret")
+
+        with pytest.raises(_FakeHTTPError) as exc_info:
+            _call_route(
+                app, "POST", "/v1/rbac/bindings", headers={}, subject_type="user", subject="user-123", tier="admin"
+            )
+        assert exc_info.value.status_code == 401
+
+    def test_create_binding_with_invalid_tier_returns_400(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from strata.server.app import create_app
+
+        app = create_app(sqlite_engine, admin_token="admin-secret")
+
+        with pytest.raises(_FakeHTTPError) as exc_info:
+            _call_route(
+                app,
+                "POST",
+                "/v1/rbac/bindings",
+                headers={"authorization": "Bearer admin-secret"},
+                subject_type="user",
+                subject="user-123",
+                tier="superadmin",
+            )
+        assert exc_info.value.status_code == 400
+
+    def test_list_and_revoke_bindings_with_admin_token(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from strata.server.app import create_app
+
+        app = create_app(sqlite_engine, admin_token="admin-secret")
+        headers = {"authorization": "Bearer admin-secret"}
+        created = _call_route(
+            app, "POST", "/v1/rbac/bindings", headers=headers, subject_type="user", subject="user-123", tier="viewer"
+        )
+
+        listed = _call_route(app, "GET", "/v1/rbac/bindings", headers=headers)
+        assert len(listed["bindings"]) == 1
+
+        revoked = _call_route(
+            app, "DELETE", "/v1/rbac/bindings/{binding_id}", headers=headers, binding_id=created["binding_id"]
+        )
+        assert revoked == {"status": "revoked", "binding_id": created["binding_id"]}
+
+    def test_revoke_unknown_binding_returns_404(self, fake_fastapi_module: ModuleType, sqlite_engine: Engine) -> None:
+        from strata.server.app import create_app
+
+        app = create_app(sqlite_engine, admin_token="admin-secret")
+
+        with pytest.raises(_FakeHTTPError) as exc_info:
+            _call_route(
+                app,
+                "DELETE",
+                "/v1/rbac/bindings/{binding_id}",
+                headers={"authorization": "Bearer admin-secret"},
+                binding_id="does-not-exist",
+            )
+        assert exc_info.value.status_code == 404
+
+    def test_real_admin_tier_session_principal_can_manage_bindings_without_admin_token(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        """Once bootstrapped, a real admin-tier human session is enough — the admin_token
+        is a break-glass credential, not the only way in.
+        """
+        from strata.server.app import create_app
+        from strata.server.auth.session_tokens import mint_session_token
+
+        app = create_app(sqlite_engine, admin_token="admin-secret", session_secret="shh")
+
+        # Bootstrap: use the break-glass admin_token to grant admin-tier to a real subject.
+        _call_route(
+            app,
+            "POST",
+            "/v1/rbac/bindings",
+            headers={"authorization": "Bearer admin-secret"},
+            subject_type="user",
+            subject="admin-user",
+            tier="admin",
+        )
+
+        session_token = mint_session_token({"sub": "admin-user"}, "shh", ttl_seconds=300)
+
+        result = _call_route(
+            app,
+            "POST",
+            "/v1/rbac/bindings",
+            headers={"authorization": f"Bearer {session_token}"},
+            subject_type="user",
+            subject="another-user",
+            tier="viewer",
+        )
+
+        assert result["binding_id"]
+
+    def test_non_admin_session_principal_is_rejected(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from strata.server.app import create_app
+        from strata.server.auth.session_tokens import mint_session_token
+
+        app = create_app(sqlite_engine, admin_token="admin-secret", session_secret="shh")
+        _call_route(
+            app,
+            "POST",
+            "/v1/rbac/bindings",
+            headers={"authorization": "Bearer admin-secret"},
+            subject_type="user",
+            subject="viewer-user",
+            tier="viewer",
+        )
+        session_token = mint_session_token({"sub": "viewer-user"}, "shh", ttl_seconds=300)
+
+        with pytest.raises(_FakeHTTPError) as exc_info:
+            _call_route(
+                app,
+                "GET",
+                "/v1/rbac/bindings",
+                headers={"authorization": f"Bearer {session_token}"},
+            )
+        assert exc_info.value.status_code == 403
+
+    def test_workspace_scoped_admin_session_cannot_manage_bindings(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        """Managing RBAC bindings is platform-wide — a workspace-scoped admin binding
+        must not qualify (mirrors db/rbac.py's own global-vs-scoped resolution rule).
+        """
+        from strata.server.app import create_app
+        from strata.server.auth.session_tokens import mint_session_token
+
+        app = create_app(sqlite_engine, admin_token="admin-secret", session_secret="shh")
+        _call_route(
+            app,
+            "POST",
+            "/v1/rbac/bindings",
+            headers={"authorization": "Bearer admin-secret"},
+            subject_type="user",
+            subject="scoped-admin",
+            tier="admin",
+            workspace="prod",
+        )
+        session_token = mint_session_token({"sub": "scoped-admin"}, "shh", ttl_seconds=300)
+
+        with pytest.raises(_FakeHTTPError) as exc_info:
+            _call_route(app, "GET", "/v1/rbac/bindings", headers={"authorization": f"Bearer {session_token}"})
+        assert exc_info.value.status_code == 403
+
+
+class TestAuthenticatePrincipalAndRequireDependencies:
+    """ADR-0067 Step 9 — `authenticate_principal`, `require_tier`, `require_capability`,
+    exercised directly (no consuming business route exists yet).
+    """
+
+    def test_authenticate_principal_from_session_token(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from strata.server.app import create_app
+        from strata.server.auth.session_tokens import mint_session_token
+        from strata.server.routes.security import authenticate_principal
+
+        app = create_app(sqlite_engine, session_secret="shh")
+        token = mint_session_token({"sub": "user-123", "email": "user@example.test"}, "shh", ttl_seconds=300)
+        request = _FakeRequest(headers={"authorization": f"Bearer {token}"}, app=app)
+
+        principal = authenticate_principal(request)
+
+        assert principal.subject == "user-123"
+        assert principal.email == "user@example.test"
+        assert principal.auth_method == "session"
+
+    def test_authenticate_principal_from_m2m_token(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from joserfc.jwk import RSAKey
+
+        from strata.server.app import create_app
+        from strata.server.auth.m2m_verifier import TrustedIssuer
+
+        issuer = "https://token.actions.githubusercontent.com"
+        audience = "https://control-plane.example.test"
+        rsa_key = RSAKey.generate_key(2048, parameters={"kid": "k1"}, private=True)
+        discovery = {"issuer": issuer, "jwks_uri": f"{issuer}/.well-known/jwks.json"}
+
+        def _urlopen(req: Any, timeout: Any = None) -> Any:
+            import json as _json
+
+            class _Resp:
+                def __init__(self, payload: Dict[str, Any]) -> None:
+                    self._body = _json.dumps(payload).encode("utf-8")
+
+                def read(self) -> bytes:
+                    return self._body
+
+                def __enter__(self) -> "_Resp":
+                    return self
+
+                def __exit__(self, *exc: Any) -> None:
+                    return None
+
+            url = req.full_url if hasattr(req, "full_url") else req
+            if url == f"{issuer}/.well-known/openid-configuration":
+                return _Resp(discovery)
+            if url == discovery["jwks_uri"]:
+                return _Resp({"keys": [rsa_key.as_dict(private=False)]})
+            raise AssertionError(f"Unexpected URL: {url}")
+
+        import time as _time
+
+        from joserfc import jwt as joserfc_jwt
+
+        now = int(_time.time())
+        token = joserfc_jwt.encode(
+            {"alg": "RS256", "kid": rsa_key.kid},
+            {"iss": issuer, "aud": audience, "sub": "repo:acme/widgets:ref:refs/heads/main", "exp": now + 300},
+            rsa_key,
+        )
+
+        app = create_app(
+            sqlite_engine, m2m_trusted_issuers=[TrustedIssuer(name="github-actions", issuer=issuer, audience=audience)]
+        )
+        request = _FakeRequest(headers={"authorization": f"Bearer {token}"}, app=app)
+
+        with patch("urllib.request.urlopen", side_effect=_urlopen):
+            from strata.server.routes.security import authenticate_principal as _auth
+
+            principal = _auth(request)
+
+        assert principal.subject == "repo:acme/widgets:ref:refs/heads/main"
+        assert principal.auth_method == "m2m"
+
+    def test_authenticate_principal_rejects_unrecognized_token(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from strata.server.app import create_app
+        from strata.server.routes.security import authenticate_principal
+
+        app = create_app(sqlite_engine, session_secret="shh")
+        request = _FakeRequest(headers={"authorization": "Bearer not-a-real-token"}, app=app)
+
+        with pytest.raises(_FakeHTTPError) as exc_info:
+            authenticate_principal(request)
+        assert exc_info.value.status_code == 401
+
+    def test_require_tier_allows_sufficient_tier(self, fake_fastapi_module: ModuleType, sqlite_engine: Engine) -> None:
+        from strata.server.app import create_app
+        from strata.server.auth.rbac import Tier
+        from strata.server.auth.session_tokens import mint_session_token
+        from strata.server.db.rbac import create_binding
+        from strata.server.routes.security import require_tier
+
+        app = create_app(sqlite_engine, session_secret="shh")
+        create_binding(sqlite_engine, subject_type="user", subject="user-123", tier="contributor")
+        token = mint_session_token({"sub": "user-123"}, "shh", ttl_seconds=300)
+        request = _FakeRequest(headers={"authorization": f"Bearer {token}"}, app=app)
+
+        principal = require_tier(Tier.APPROVER)(request)
+
+        assert principal.subject == "user-123"
+
+    def test_require_tier_rejects_insufficient_tier(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from strata.server.app import create_app
+        from strata.server.auth.rbac import Tier
+        from strata.server.auth.session_tokens import mint_session_token
+        from strata.server.db.rbac import create_binding
+        from strata.server.routes.security import require_tier
+
+        app = create_app(sqlite_engine, session_secret="shh")
+        create_binding(sqlite_engine, subject_type="user", subject="user-123", tier="viewer")
+        token = mint_session_token({"sub": "user-123"}, "shh", ttl_seconds=300)
+        request = _FakeRequest(headers={"authorization": f"Bearer {token}"}, app=app)
+
+        with pytest.raises(_FakeHTTPError) as exc_info:
+            require_tier(Tier.ADMIN)(request)
+        assert exc_info.value.status_code == 403
+
+    def test_require_capability_allows_granted_capability(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from strata.server.app import create_app
+        from strata.server.auth.rbac import CAPABILITY_DEPLOYER
+        from strata.server.auth.session_tokens import mint_session_token
+        from strata.server.db.rbac import create_binding
+        from strata.server.routes.security import require_capability
+
+        app = create_app(sqlite_engine, session_secret="shh")
+        create_binding(sqlite_engine, subject_type="user", subject="user-123", capabilities=[CAPABILITY_DEPLOYER])
+        token = mint_session_token({"sub": "user-123"}, "shh", ttl_seconds=300)
+        request = _FakeRequest(headers={"authorization": f"Bearer {token}"}, app=app)
+
+        principal = require_capability(CAPABILITY_DEPLOYER)(request)
+
+        assert principal.subject == "user-123"
+
+    def test_require_capability_rejects_missing_capability(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from strata.server.app import create_app
+        from strata.server.auth.rbac import CAPABILITY_DEPLOYER
+        from strata.server.auth.session_tokens import mint_session_token
+        from strata.server.db.rbac import create_binding
+        from strata.server.routes.security import require_capability
+
+        app = create_app(sqlite_engine, session_secret="shh")
+        create_binding(sqlite_engine, subject_type="user", subject="user-123", tier="contributor")
+        token = mint_session_token({"sub": "user-123"}, "shh", ttl_seconds=300)
+        request = _FakeRequest(headers={"authorization": f"Bearer {token}"}, app=app)
+
+        with pytest.raises(_FakeHTTPError) as exc_info:
+            require_capability(CAPABILITY_DEPLOYER)(request)
+        assert exc_info.value.status_code == 403
+
+    def test_require_tier_scoped_reads_workspace_from_query_params(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from strata.server.app import create_app
+        from strata.server.auth.rbac import Tier
+        from strata.server.auth.session_tokens import mint_session_token
+        from strata.server.db.rbac import create_binding
+        from strata.server.routes.security import require_tier
+
+        app = create_app(sqlite_engine, session_secret="shh")
+        create_binding(sqlite_engine, subject_type="user", subject="user-123", tier="admin", workspace="prod")
+        token = mint_session_token({"sub": "user-123"}, "shh", ttl_seconds=300)
+
+        request_matching = _FakeRequest(
+            headers={"authorization": f"Bearer {token}"}, app=app, query_params={"workspace": "prod"}
+        )
+        request_different = _FakeRequest(
+            headers={"authorization": f"Bearer {token}"}, app=app, query_params={"workspace": "staging"}
+        )
+
+        require_tier(Tier.ADMIN, scoped=True)(request_matching)
+        with pytest.raises(_FakeHTTPError) as exc_info:
+            require_tier(Tier.ADMIN, scoped=True)(request_different)
         assert exc_info.value.status_code == 403

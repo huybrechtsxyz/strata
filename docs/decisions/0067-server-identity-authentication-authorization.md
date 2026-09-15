@@ -1,31 +1,17 @@
 # Identity, authentication, and authorization for a strata server component
 
-- Status: partially-implemented — CLI-side (steps 0–6) ✅ Done; OIDC relying party (step 7) ✅ Done; session store (step 8) ✅ Done; M2M authentication (step 10) ✅ Done; RBAC (step 9) ⏳ not started
+- Status: partially-implemented — CLI-side (steps 0–6) ✅ Done; OIDC relying party (step 7) ✅ Done; session store (step 8) ✅ Done; RBAC (step 9) ✅ Done; M2M authentication (step 10) ✅ Done. All steps of this ADR are now implemented.
 - Date: 2026-08-07
 - Related: ADR-0065 (strata state service — Phase 3 control plane, per-workspace bearer tokens), ADR-0066 (audit event routing & policy model — CLI-side `actor` resolution), ADR-0018 (deployment audit & traceability), ADR-0062 (CLI consolidation — `sln doctor`'s health-check surface, extended here), ADR-0057 (deployment workflow orchestration — work items and hand-off gates), ADR-0007 (deployment state locking), ADR-0005 (secret resolution at build time)
 
 ## Remaining Work
 
-- Step 9 — RBAC authorization model (role mapping from IdP group/team claims plus
-  local override) — design settled (see "Step 9 design: two-axis authorization"
-  below), implementation not started. Two independent axes: an ordered tier
-  (`viewer < approver < contributor < admin`) plus an orthogonal `deployer`
-  capability, both sourced from a `role_bindings` table (Kubernetes-`RoleBinding`-
-  style: subject is a user or a group/claim value, scope is workspace/environment,
-  `NULL` = wildcard). Requires a new `authenticate_principal` dependency unifying
-  session-token and M2M verification before any role check can run. Bootstrapped
-  via the existing static `--admin-token` as a break-glass credential on the RBAC
-  management routes only. `M2mVerifier`/`verify_m2m_token` (Step 10) verify *who*
-  a caller is; nothing yet enforces *what* they may do with it.
-- Step 10 — Machine-to-machine authentication for CI/scheduled jobs calling the
-  control plane — ✅ Done. `server/auth/m2m_verifier.py` (`TrustedIssuer` +
-  `M2mVerifier`) generalizes the Step 7 JWKS verification path to M2M access
-  tokens; `--m2m-trusted-issuer` (repeatable) on `serve run` configures the
-  trusted-issuer list; `GET /v1/whoami` (gated by `verify_m2m_token`) lets a
-  caller confirm its credential verifies. Covers GitHub Actions, Azure DevOps,
-  and a generic Client Credentials fallback via one unified mechanism. AWS
-  keyless support remains explicitly **on hold** (a scope decision, not an
-  oversight) — AWS callers use the Client Credentials fallback for now.
+## Remaining Work
+
+All steps (0–10) are implemented. See "Implementation plan" below for what each
+step delivered; see "What this ADR does not decide yet" for deliberately deferred
+details (token-cache file format, etc.) and Step 10's AWS keyless support, which
+remains an explicit, on-hold scope decision rather than outstanding work.
 
 ## Context and Problem Statement
 
@@ -322,7 +308,7 @@ src/strata/
                                                #   for IIdentityProvider integrations
 
 server/  (Phase 3 — deployable shape is ADR-0065's own open question 2, in-package vs separate)
-└── auth/                                      # ✅ Steps 7, 8, 10 done; ⏳ Step 9 not started
+└── auth/                                      # ✅ Steps 7, 8, 9, 10 all done
     ├── pkce.py                               # ✅ Done — PKCE + state + nonce (RFC 7636)
     ├── session_tokens.py                     # ✅ Done — interim stateless bearer token (Step 8 adds the real, revocable one)
     ├── oidc_relying_party.py                 # ✅ Done — Authorization Code+PKCE (human), id_token verification
@@ -330,9 +316,11 @@ server/  (Phase 3 — deployable shape is ADR-0065's own open question 2, in-pac
     │                                          #   no HTTP route (see module docstring); also exposes
     │                                          #   fetch_discovery_document()/fetch_jwks_document() shared by m2m_verifier.py
     ├── session_store.py                      # ✅ Done — db/sessions.py + auth/refresh_crypto.py (see below)
-    ├── rbac.py                               # ⏳ NOT YET — role_bindings table + require_tier()/require_capability()
-                                               #   dependency factories (per-route, not ASGI middleware) +
-                                               #   authenticate_principal() unifying session/M2M verification
+    ├── rbac.py                               # ✅ Done — Tier ordering, Principal, ResolvedAccess, union_access()
+                                               #   (framework/DB-free; db/rbac.py owns role_bindings persistence
+                                               #   and resolve_access(); routes/security.py owns the
+                                               #   authenticate_principal()/require_tier()/require_capability()
+                                               #   dependencies built on top of both)
     └── m2m_verifier.py                       # ✅ Done — TrustedIssuer + M2mVerifier; trusted-issuer list +
                                                #   generalized JWKS verification (GitHub Actions / Azure DevOps
                                                #   federated OIDC, Client Credentials access tokens, and
@@ -367,7 +355,9 @@ Verified via a real signed-JWT test suite (RSA keypair generated per test run, n
 
 **8. Session store.** ✅ Done — implemented exactly as designed above. New `sessions` table (`db/schema.py`), `db/sessions.py` (`create_session`/`get_session`/`list_sessions`/`revoke_session`/`touch_session`), `auth/refresh_crypto.py` (JWE-encrypted refresh tokens via `joserfc`, key derived from `--session-secret`). `/auth/callback` now creates a session row and embeds `session_id` in the access token's claims whenever the exchange returns a `refresh_token` (default scope grew to include `offline_access` to make that happen at all). New routes: `POST /auth/refresh` (silent renewal, no re-login), `GET /auth/sessions` and `DELETE /auth/sessions/{session_id}` (both admin-token gated, the same credential `/v1/tokens` already uses — the literal "who is logged in, kick them out right now" view the "Session model" section promised). `OidcRelyingParty.refresh_access_token()` mirrors `exchange_code()`'s shape for the `refresh_token` grant. Verified via 136 tests (real JWE encrypt/decrypt round trips, tamper/wrong-key rejection, session creation/refresh/revocation through the full `/auth/login` → `/auth/callback` → `/auth/refresh` → `/auth/sessions` flow); full `Check.ps1` green.
 
-**9. RBAC store and enforcement.** ⏳ Not started; design settled (see "Step 9 design: two-axis authorization" above). New `role_bindings` table (subject_type/subject, workspace/environment scope with `NULL` wildcards, nullable `tier`, JSON `capabilities`) plus `db/rbac.py` (create/list/revoke/resolve, mirroring `db/tokens.py`'s shape) and a new `authenticate_principal` dependency that unifies session-token and M2M verification into one `Principal` before `require_tier(min_tier)`/`require_capability(name)` dependencies can run. RBAC is a server-only concern (settled above), so nothing is added to the CLI here. Bootstrapped via the existing `--admin-token` as a break-glass credential on the RBAC management routes (`/v1/rbac/bindings`) only.
+**9. RBAC store and enforcement.** ✅ Done. New `role_bindings` table (`db/schema.py`) — `subject_type`/`subject`, `workspace`/`environment` scope with `NULL` wildcards, nullable `tier`, JSON `capabilities` — plus `server/auth/rbac.py` (framework-free: `Tier` ordering, `Principal`, `ResolvedAccess`, `union_access()`) and `db/rbac.py` (`create_binding`/`list_bindings`/`revoke_binding`/`resolve_access`, mirroring `db/tokens.py`'s shape). `routes/security.py` gained `authenticate_principal()` (unifies session-token and M2M verification into one `Principal` — nothing did this before Step 9), `require_tier(min_tier, scoped=False)`/`require_capability(name, scoped=False)` dependency factories (per-route, not ASGI middleware, matching every other gate this server has), and `require_rbac_admin` (accepts the static `admin_token` *or* a resolved `admin`-tier `Principal` — the bootstrap path). New `routes/rbac.py` (`/v1/rbac/bindings` POST/GET/DELETE), registered only when `admin_token` is configured, the same gating `/v1/tokens` already uses. RBAC is a server-only concern (settled above); nothing was added to the CLI.
+
+Verified via 65 new tests (`test_server_auth_rbac.py`, `test_server_db_rbac.py`, `TestRbacRoutes`/`TestAuthenticatePrincipalAndRequireDependencies` in `test_server_app.py`, plus two new `m2m_verifier.py` `_subject`-claim tests) covering tier ordering, principal/candidate-binding matching (session vs. M2M), union resolution (global vs. workspace/environment-scoped, wildcard vs. exact), admin-implies-deployer, bootstrap via `admin_token`, a real admin-tier session principal managing bindings without the admin token, and rejection of insufficient tier/missing capability/workspace-scoped-admin-attempting-a-global-action. Full `Check.ps1`: 6699 tests passed, ruff/mypy/Sphinx all green.
 
 **10. Machine-to-machine authentication.** ✅ Done. `server/auth/m2m_verifier.py` — `TrustedIssuer` (name/issuer/audience/subject_claim) + `M2mVerifier`, which peeks at a token's unverified `iss` claim only to select which configured trusted issuer's JWKS to check it against, then fully verifies signature/`iss`/`aud`/`exp` via the same `joserfc` machinery Step 7 uses (`oidc_relying_party.py` now exposes `fetch_discovery_document()`/`fetch_jwks_document()` as shared module-level functions rather than duplicating the fetch logic). `serve run --m2m-trusted-issuer name=...,issuer=...,audience=...` (repeatable) configures the trusted-issuer list; `GET /v1/whoami` (`routes/m2m.py`, gated by `routes/security.py`'s `verify_m2m_token`) is registered only when at least one trusted issuer is configured, mirroring `/auth/*`'s and `/v1/tokens`' own all-or-nothing gating. Deliberately no RBAC enforcement (Step 9) and no AWS keyless support (on hold) — both out of scope here by design, not oversight.
 

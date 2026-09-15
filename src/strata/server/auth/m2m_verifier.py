@@ -130,6 +130,11 @@ class M2mVerifier:
 
         claims = dict(decoded.claims)
         claims["_trusted_issuer_name"] = trusted.name
+        # RBAC (ADR-0067 Step 9) needs one normalized "who is this" value regardless of
+        # which claim a given issuer uses for it (`sub` for most IdPs, `repository` for a
+        # GitHub Actions token scoped to one repo) — `Principal` reads this, never a raw
+        # claim name it would otherwise have to know per issuer.
+        claims["_subject"] = claims.get(trusted.subject_claim) or claims.get("sub")
         return claims
 
     def verify(self, token: str) -> Dict[str, Any]:
