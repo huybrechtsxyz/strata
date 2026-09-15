@@ -1,0 +1,105 @@
+# docker-compose.server.yml — strata state-service quickstart (server + PostgreSQL)
+#
+# Bundles the strata state-service (ADR-0065) with a PostgreSQL backend for local
+# trials and small-team deployments. This is NOT a production HA topology — a
+# single Postgres container with one volume has no replication/failover, and the
+# state-service itself only runs one replica here. See
+# docs/guides/strata-state-service.md for production guidance (managed Postgres,
+# a real TLS certificate, multiple replicas behind a load balancer).
+#
+# Required environment (put these in a ".env" file next to this one, or export
+# them before running — never commit real values):
+#   POSTGRES_PASSWORD        - password for the 'strata' database role
+#   STRATA_SERVE_ADMIN_TOKEN - bearer token enabling the /v1/tokens admin routes
+#
+# Usage:
+#   docker compose -f docker-compose.server.yml up --build
+#   curl -k https://localhost:8443/healthz
+#
+# server/config.py's validate_bind() requires TLS for any non-loopback bind —
+# binding 0.0.0.0 (needed so the host can reach the container via the published
+# port) means TLS is mandatory here too. The 'certs' service below generates a
+# throwaway self-signed certificate on first run purely to satisfy that rule;
+# replace the 'strata-certs' volume contents with a real cert/key for anything
+# beyond local trials.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: strata
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD, e.g. in a .env file}
+      POSTGRES_DB: strata_state
+    volumes:
+      - strata-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U strata -d strata_state"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  certs:
+    image: alpine:3.20
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        apk add --no-cache openssl >/dev/null
+        [ -f /certs/cert.pem ] || openssl req -x509 -newkey rsa:4096 -nodes -days 365 \
+          -subj "/CN=localhost" -out /certs/cert.pem -keyout /certs/key.pem
+    volumes:
+      - strata-certs:/certs
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    image: strata-server:local
+    entrypoint: ["strata", "serve", "migrate"]
+    command:
+      - --db-url
+      - postgresql+psycopg://strata:${POSTGRES_PASSWORD}@postgres:5432/strata_state
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    image: strata-server:local
+    command:
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8443"
+      - --tls-cert
+      - /certs/cert.pem
+      - --tls-key
+      - /certs/key.pem
+      - --db-url
+      - postgresql+psycopg://strata:${POSTGRES_PASSWORD}@postgres:5432/strata_state
+      - --admin-token
+      - ${STRATA_SERVE_ADMIN_TOKEN:?Set STRATA_SERVE_ADMIN_TOKEN, e.g. in a .env file}
+    volumes:
+      - strata-certs:/certs:ro
+    ports:
+      - "8443:8443"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      certs:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fkS", "https://127.0.0.1:8443/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  strata-postgres-data:
+  strata-certs:

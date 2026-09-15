@@ -65,6 +65,27 @@ _HTTP_TIMEOUT = 15
 _DEFAULT_SCOPE = "openid profile email offline_access"
 
 
+def fetch_discovery_document(issuer: str) -> Dict[str, Any]:
+    """Fetch one issuer's `.well-known/openid-configuration` document, no caching.
+
+    A module-level function (not a method) so `server/auth/m2m_verifier.py` (ADR-0067
+    Step 10, which must track discovery/JWKS documents for *several* trusted issuers,
+    not the one this class is configured against) can reuse the exact same fetch logic
+    instead of a second, drifting copy of it. Callers own their own caching — this
+    class's `discover()` caches per-instance; `M2mVerifier` caches per-issuer.
+    """
+    url = f"{issuer.rstrip('/')}/.well-known/openid-configuration"
+    with urllib.request.urlopen(url, timeout=_HTTP_TIMEOUT) as resp:
+        return json.loads(resp.read())
+
+
+def fetch_jwks_document(jwks_uri: str) -> KeySet:
+    """Fetch one `jwks_uri` as a joserfc `KeySet`, no caching. See `fetch_discovery_document()`."""
+    with urllib.request.urlopen(jwks_uri, timeout=_HTTP_TIMEOUT) as resp:
+        jwks_data = json.loads(resp.read())
+    return KeySet.import_key_set(jwks_data)
+
+
 @dataclass(frozen=True)
 class OidcRelyingPartyConfig:
     """Server-level OIDC configuration for `serve run` (ADR-0067 Step 7).
@@ -97,11 +118,8 @@ class OidcRelyingParty:
         """Fetch (and cache, process-lifetime) the issuer's OIDC discovery document."""
         if self._discovery_cache is not None:
             return self._discovery_cache
-        url = f"{self._config.issuer.rstrip('/')}/.well-known/openid-configuration"
-        with urllib.request.urlopen(url, timeout=_HTTP_TIMEOUT) as resp:
-            data = json.loads(resp.read())
-        self._discovery_cache = data
-        return data
+        self._discovery_cache = fetch_discovery_document(self._config.issuer)
+        return self._discovery_cache
 
     @property
     def redirect_uri(self) -> str:
@@ -207,11 +225,8 @@ class OidcRelyingParty:
         jwks_uri = discovery.get("jwks_uri")
         if not jwks_uri:
             raise ValueError("issuer's discovery document does not advertise a jwks_uri")
-        with urllib.request.urlopen(jwks_uri, timeout=_HTTP_TIMEOUT) as resp:
-            jwks_data = json.loads(resp.read())
-        key_set = KeySet.import_key_set(jwks_data)
-        self._jwks_cache = key_set
-        return key_set
+        self._jwks_cache = fetch_jwks_document(jwks_uri)
+        return self._jwks_cache
 
     def verify_id_token(self, id_token: str, nonce: str) -> Dict[str, Any]:
         """Verify an `id_token`'s signature and standard claims. Raises ValueError on any failure.

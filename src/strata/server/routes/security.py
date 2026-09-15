@@ -1,15 +1,16 @@
-"""Shared bearer-token auth checks (ADR-0065 Step 2.4) — used by `routes/events.py`
-and `routes/tokens.py`. One implementation, not one per route module.
+"""Shared bearer-token auth checks (ADR-0065 Step 2.4, ADR-0067 Step 10) — used by
+`routes/events.py`, `routes/tokens.py`, and any future M2M-gated route. One
+implementation, not one per route module.
 """
 
 from __future__ import annotations
 
 import hmac
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import HTTPException, Request
 
-from strata.server.routes.state import get_admin_token, get_engine
+from strata.server.routes.state import get_admin_token, get_engine, get_m2m_verifier
 
 
 def bearer_token(request: Request) -> Optional[str]:
@@ -39,6 +40,29 @@ def verify_admin_token(request: Request) -> None:
     admin_token = get_admin_token(request)
     if not admin_token or not hmac.compare_digest(token, admin_token):
         raise HTTPException(status_code=403, detail="Invalid admin token")
+
+
+def verify_m2m_token(request: Request) -> Dict[str, Any]:
+    """Bearer token required for M2M-only routes (ADR-0067 Step 10).
+
+    Verified against the configured trusted-issuer list (`--m2m-trusted-issuer`) —
+    structurally separate from `verify_ingest_token` (workspace-scoped, DB-hash-checked,
+    never a JWT) and from `verify_admin_token` (a single static operator secret). Stores
+    the verified claims on `request.state.m2m_claims` so the route handler can read the
+    calling identity without re-verifying the token itself.
+    """
+    token = bearer_token(request)
+    if token is None:
+        raise HTTPException(status_code=401, detail="Missing or malformed Authorization header")
+    verifier = get_m2m_verifier(request)
+    if verifier is None:
+        raise HTTPException(status_code=503, detail="Machine-to-machine authentication is not configured")
+    try:
+        claims = verifier.verify(token)
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    request.state.m2m_claims = claims
+    return claims
 
 
 def resolve_read_scope(request: Request) -> Optional[str]:

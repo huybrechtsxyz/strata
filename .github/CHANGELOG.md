@@ -8,6 +8,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Added
+
+- **`spec.references` on a workspace provisioner (Terraform, script, etc.) now opts that provisioner into scoped Terraform build validation (ADR-0078)** — new `ProvisionerReferencesModel`, same `{variables, secrets, features}` shape as the existing per-kind `references` on resource/module/dns/provider. When any resource, module, or provider in the workspace declares `spec.references`, every one of them must (a build error otherwise), and the Terraform input cross-check is scoped to the union of their declared keys instead of every key declared anywhere in the environment — the workaround of declaring a dummy, unread `variable {}` block purely to satisfy the validator is no longer needed for keys consumed by a different provisioner. Workspaces that declare no `references` anywhere are completely unaffected — this is opt-in. Deploy-time injection scoping (which values a running deploy actually receives) is a deliberately separate, not-yet-implemented follow-up; see the ADR.
+
 ### Removed
 
 - **The cross-resource `references` field on workspace resource entries and environment resource overrides has been removed (ADR-0078)** — it was declared but never implemented: no resolver, no validation, no use in any shipped configuration. It could not have worked, since workspace resources are build-time metadata while outputs are post-apply and keyed by provisioner, not resource. A `references:` key is now dropped with a deprecation warning rather than failing validation; the shim goes away next minor. Use `inputs_from` for cross-provisioner values, or native Terraform references within a root module. ADR-0068 records the removed schema and what a revival would require.

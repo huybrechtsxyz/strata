@@ -1,15 +1,31 @@
 # Identity, authentication, and authorization for a strata server component
 
-- Status: partially-implemented — CLI-side (steps 0–6) ✅ Done; OIDC relying party (step 7) ✅ Done; session store (step 8) ✅ Done; RBAC/M2M (steps 9–10) ⏳ not started
+- Status: partially-implemented — CLI-side (steps 0–6) ✅ Done; OIDC relying party (step 7) ✅ Done; session store (step 8) ✅ Done; M2M authentication (step 10) ✅ Done; RBAC (step 9) ⏳ not started
 - Date: 2026-08-07
 - Related: ADR-0065 (strata state service — Phase 3 control plane, per-workspace bearer tokens), ADR-0066 (audit event routing & policy model — CLI-side `actor` resolution), ADR-0018 (deployment audit & traceability), ADR-0062 (CLI consolidation — `sln doctor`'s health-check surface, extended here), ADR-0057 (deployment workflow orchestration — work items and hand-off gates), ADR-0007 (deployment state locking), ADR-0005 (secret resolution at build time)
 
 ## Remaining Work
 
 - Step 9 — RBAC authorization model (role mapping from IdP group/team claims plus
-  local override) — not started.
-- Step 10 — Machine-to-machine (Client Credentials grant) tokens for CI/scheduled
-  jobs calling the control plane — not started.
+  local override) — design settled (see "Step 9 design: two-axis authorization"
+  below), implementation not started. Two independent axes: an ordered tier
+  (`viewer < approver < contributor < admin`) plus an orthogonal `deployer`
+  capability, both sourced from a `role_bindings` table (Kubernetes-`RoleBinding`-
+  style: subject is a user or a group/claim value, scope is workspace/environment,
+  `NULL` = wildcard). Requires a new `authenticate_principal` dependency unifying
+  session-token and M2M verification before any role check can run. Bootstrapped
+  via the existing static `--admin-token` as a break-glass credential on the RBAC
+  management routes only. `M2mVerifier`/`verify_m2m_token` (Step 10) verify *who*
+  a caller is; nothing yet enforces *what* they may do with it.
+- Step 10 — Machine-to-machine authentication for CI/scheduled jobs calling the
+  control plane — ✅ Done. `server/auth/m2m_verifier.py` (`TrustedIssuer` +
+  `M2mVerifier`) generalizes the Step 7 JWKS verification path to M2M access
+  tokens; `--m2m-trusted-issuer` (repeatable) on `serve run` configures the
+  trusted-issuer list; `GET /v1/whoami` (gated by `verify_m2m_token`) lets a
+  caller confirm its credential verifies. Covers GitHub Actions, Azure DevOps,
+  and a generic Client Credentials fallback via one unified mechanism. AWS
+  keyless support remains explicitly **on hold** (a scope decision, not an
+  oversight) — AWS callers use the Client Credentials fallback for now.
 
 ## Context and Problem Statement
 
@@ -177,6 +193,16 @@ This directly answers what would otherwise be Open Question 4 (whether scheduled
 
 This is deliberately distinct from ADR-0065's Phase 1 ingest token, and that distinction is not a gap to close later — it is because the two solve different problems at different times. ADR-0065 Phase 1 needs a workspace to push audit events **before** any IdP is configured, possibly before a control plane exists at all; a static, strata-issued, per-workspace bearer token is the right minimal answer there, and nothing in this ADR requires Phase 1 to add an IdP dependency it does not otherwise need. Once Phase 3's control plane and an IdP are in place, a workspace's *other* machine-to-machine access to the control plane's API — as opposed to bare event ingest — goes through Client Credentials like every other service caller. Whether ADR-0065's ingest token is ever migrated onto this same mechanism is a future compatibility question, not a requirement of this ADR.
 
+### Step 10 design: CI/service callers authenticate via federated OIDC trust, verified the same way as human `id_token`s
+
+The control plane must run identically regardless of hosting platform — AKS/Kubernetes, Azure Container Apps, or Azure App Service. That choice affects how the server obtains *its own* outbound credentials (Key Vault, database) and how TLS/ingress terminate; it has no bearing on how M2M callers authenticate *to* the server, because verifying a bearer JWT against a JWKS is pure application logic, portable across all three. The design below is settled independently of hosting platform.
+
+- **Every M2M credential this ADR supports, keyless or not, reduces to the same thing at the server boundary: a signed JWT from a trusted issuer, checked against that issuer's JWKS for an expected audience.** This covers GitHub Actions' own OIDC tokens (issuer `token.actions.githubusercontent.com`), Azure DevOps' workload-identity-federation tokens (issuer `vstoken.dev.azure.com/<org-id>`, one per service connection), an IdP-issued Client Credentials access token, and a caller's own Managed Identity/Workload Identity token when it happens to run inside Azure/GCP itself. The server therefore needs exactly **one** verification code path — a generalization of `OidcRelyingParty.verify_id_token()` (Step 7) that also verifies M2M-flavored access tokens (no `nonce` check, since there is no interactive flow to bind one to; reads `sub`/`repository`/`azp` claims for the calling identity instead of user claims) — not a second implementation per caller type.
+- **Trust is a list, not a single issuer.** Human login (Steps 7–8) is deliberately configured against one IdP per `serve run` invocation (`--oidc-issuer` et al.). M2M callers are different in kind — a real deployment plausibly needs to trust GitHub Actions' issuer *and* Azure DevOps' issuer *and* a generic Client-Credentials-only IdP at the same time. Step 10 therefore introduces a **trusted-issuer list**, additive to and structurally separate from the single human-login `oidc_config` — each entry names an issuer, the audience(s) it must present, and which claim maps to a role/subject for RBAC (Step 9).
+- **Keyless federation is the default recommendation; a Client Credentials grant with a stored secret is the fallback**, per the earlier decision. Register strata's control plane as a federated-identity trust target in GitHub Actions (`permissions: id-token: write`, verified either directly against GitHub's own issuer or via an Azure AD federated credential) and in Azure DevOps (workload identity federation on the service connection) — no secret is ever generated, stored, or rotated for either. Any CI system that cannot present its own OIDC token instead uses classic Client Credentials against the same IdP already configured for human login (`OidcRelyingParty.client_credentials_token()`, already implemented) — a real, supported path, not a deprecated one, since not every CI system federates.
+- **`/v1/events` (ADR-0065 ingest) is explicitly out of scope here and is unchanged.** Its bearer token is workspace-scoped, is not a JWT, is issued by strata itself rather than any IdP, and is verified by a DB hash lookup, not JWKS (`db/tokens.py`). Step 10 is about CI/service calls to *other*, RBAC-scoped control-plane routes (approvals, deployment triggers) that don't exist yet — it does not replace, wrap, or upgrade the ingest token, and the ingest token must never be treated as an M2M credential for those new routes either, the same boundary this ADR already draws for human sessions.
+- **AWS keyless support is on hold — a scope decision, not an oversight.** IAM role credentials (instance/task role, IRSA) are SigV4-signable, not bearer JWTs for an arbitrary audience (see "Relationship to the existing `azure_cli`/`aws_cli`/`gcloud_cli` integrations" above), so it cannot reuse the JWKS verification path Azure/GCP/GitHub/Azure DevOps all share. Two options exist to close it later, both named here so the decision to defer is deliberate rather than undiscovered: (a) trusting the hosting Kubernetes cluster's own OIDC issuer (works for EKS's IRSA-issued pod tokens via the same JWKS path above, but this is a Kubernetes-level trust, not an AWS-IAM-level one — it covers a self-hosted cluster identically, with no AWS involvement at all), or (b) a structurally separate, AWS-specific verifier that forwards a SigV4-signed `sts:GetCallerIdentity` request to AWS's STS endpoint and accepts the returned ARN (the HashiCorp Vault `aws` auth-method pattern). Until either is picked up, an AWS caller uses the classic Client Credentials fallback via a Cognito/IAM Identity Center app client (a stored secret), same as any other non-federating CI system — this is not a degraded state to fix urgently, it is the accepted interim answer for AWS.
+
 ### `actor` gains a second, stronger source when a human is authenticated
 
 ADR-0066 settled `actor` resolution for CLI-invoked commands: cloud provider identity → CI actor env var → OS login. When a deployment or approval originates from the control plane instead of a direct CLI invocation, the authenticated session's identity (the IdP's `sub`/`email`/`preferred_username` claim) becomes the actor — and it outranks all three of ADR-0066's CLI-side sources, because it is the one case where strata itself performed the authentication rather than merely reading an ambient credential. The two resolution paths are not in tension: a deployment is either triggered through an authenticated control-plane session, or it is a direct CLI/CI invocation resolved per ADR-0066 — never both, so there is no precedence conflict to adjudicate at record-write time, only a choice of which resolver ran.
@@ -186,6 +212,49 @@ ADR-0066 settled `actor` resolution for CLI-invoked commands: cloud provider ide
 Roles (at minimum: viewer, approver, deployer, admin) are scoped per workspace/environment, matching the granularity ADR-0065 Phase 3 already names ("who may deploy where"). Role assignment is sourced from the IdP where it offers one (Azure AD / Okta group claims), with a local role-mapping table as the fallback and override for every IdP — including ones like GitHub OAuth Apps that do not expose an equivalent claim by default. The local table is authoritative when present; the IdP claim is only ever a default, never a silent grant of authority the operator did not configure. This mirrors the "global gate, per-destination filter" shape ADR-0066 already used for event routing — one deliberate, inspectable configuration layer sitting in front of whatever a claim happens to say.
 
 **Where role bindings live is settled: the control plane's own store, never workspace YAML.** RBAC is a server concern, full stop — role bindings are not a `spec`-style block checked into `.strata/`. The reasoning is the same separation-of-duties argument ADR-0066 already applied to `spec.audit`: whoever can edit a workspace's YAML must not thereby be able to grant themselves `deployer` or `admin` on that workspace. Putting role bindings in the control plane's database, administered through the control plane itself (and subject to its own RBAC — an admin role is required to change role bindings), keeps that boundary intact the same way ADR-0066 kept audit configuration out of reach of the party being audited.
+
+### Step 9 design: two-axis authorization — an ordered tier plus an orthogonal `deployer` capability
+
+Settled here (2026-09-15), refining this ADR's original flat `viewer/approver/deployer/admin` list into two independent axes, because "how much administrative visibility/control a principal has" and "whether a principal may trigger a deployment" are genuinely different questions — collapsing them into one ordered ladder would force an awkward choice for the common case of a CI service account that must be able to trigger deploys but has no business browsing the dashboard, approving anything, or managing configuration.
+
+- **Tier — an ordered hierarchy**: `viewer < approver < contributor < admin`. Each tier includes every permission of every tier below it.
+  - `viewer` — read-only: audit history, deployment status, drift/cost reports.
+  - `approver` — `viewer` + may approve/reject ADR-0057 workflow hand-off gates.
+  - `contributor` — `approver` + may manage non-secret control-plane configuration for that workspace/environment (e.g. profiles, settings) — **not** role bindings themselves, which stay `admin`-only.
+  - `admin` — `contributor` + full control, including managing role bindings. `admin` also implies the `deployer` capability below (an admin who cannot deploy anything is a confusing, footgun-shaped exception to "full control," and RBAC administration already requires the same trust level); every other tier does **not** imply `deployer`.
+  - This replaces `deployer` as a fourth ordered tier in the ADR's original phrasing above — kept here for the "at minimum" framing's historical record, but `contributor` takes its ordinal place in the ladder and `deployer` moves to the axis below.
+- **`deployer` — an orthogonal capability, not part of the tier ladder.** Grants "may trigger `deploy run`/`destroy` against this workspace/environment through the control plane." Bound explicitly and independently of tier — a CI service account can hold `deployer` on workspace X with no tier at all (no dashboard access, no approval rights), and a human `contributor` does not gain deploy rights merely by being a `contributor` — deploying is deliberately never a silent side effect of an unrelated grant, the same "no silent grant of authority" principle this ADR already applies to IdP group claims.
+- **A binding may set a tier, a set of capabilities (today: only `deployer`), or both** — a binding granting neither is meaningless and is rejected at write time.
+
+**Reusing a standard shape instead of inventing one — Kubernetes-style `RoleBinding`, generalized to two axes:**
+
+```
+role_bindings
+  binding_id      PK
+  subject_type    "user" | "group"   -- "group" covers an IdP group/team claim value
+                                      -- (e.g. an Azure AD group object id) *and* an M2M
+                                      -- TrustedIssuer.subject_claim value (e.g. a GitHub
+                                      -- Actions token's `repository` claim) — both are
+                                      -- "a claim identifying a set of callers," not an
+                                      -- individual, so they share one subject_type
+  subject         the sub / email / group-id / repository string
+  workspace       nullable — NULL = applies to every workspace
+  environment     nullable — NULL = applies to every environment in that workspace
+  tier            nullable — viewer | approver | contributor | admin
+  capabilities    JSON array, e.g. ["deployer"] — the only defined capability today
+  created_at / created_by
+  revoked_at      nullable, NULL = active — the same convention `tokens`/`sessions` already use
+```
+
+A group claim or a GitHub `repository` claim grants nothing by itself — only an explicit `role_bindings` row referencing that group/repository value does, which is what makes "the IdP claim is only ever a default" true mechanically rather than just declared.
+
+**Resolution, given an authenticated principal and a target workspace/environment:** gather every `role_bindings` row whose `(subject_type, subject)` matches either the principal's own identity (`sub`/`email`) or any group/claim value it presents, AND whose `(workspace, environment)` scope matches (exact match, or a `NULL` wildcard at either level) — then union the results: the highest matching `tier`, plus every matching `capabilities` entry (auto-including `deployer` if the resolved tier is `admin`). There is no "most specific binding wins" precedence rule to adjudicate — a principal's effective access is the union of everything explicitly granted to it or its groups, the least surprising option and the one that needs no tie-breaking logic to reason about or test.
+
+**Enforcement is a per-route dependency, not ASGI middleware** — correcting this ADR's earlier looser wording ("middleware on every route"). Every other gate this server has (`verify_admin_token`, `verify_ingest_token`, `verify_m2m_token`) is a `Depends()`-injected dependency, not global middleware; RBAC follows the same convention rather than introducing a second gating mechanism. Two dependency factories, both requiring a resolved `Principal` first (see the authentication gap below): `require_tier(min_tier)` and `require_capability(name)`.
+
+**A prerequisite gap this design surfaces: there is no unified "who is this caller" dependency yet.** `verify_session_token()` (human sessions, Step 7/8) is today only ever called from inside `routes/auth.py` itself — nothing verifies a session token presented as a Bearer credential on any *other* route — and `M2mVerifier.verify()` (Step 10) is a separate mechanism again. RBAC enforcement needs both to converge into one `Principal` (subject, email, groups, auth method) before any tier/capability check can run. Step 9 therefore also adds an `authenticate_principal(request)` dependency that tries session-token verification, then M2M verification, and raises 401 only if neither recognizes the token — every RBAC-gated business route depends on this, not on either verifier directly.
+
+**Bootstrap: the static `--admin-token` is deliberately allowed to satisfy `admin` on the RBAC management routes themselves.** The very first `admin` role binding cannot be created by an `admin`-gated route — nothing exists yet to grant it. Rather than inventing a second bootstrap mechanism (a one-time direct-DB seed command, mirroring `serve migrate`'s privilege-split reasoning but for a problem that does not actually need DDL rights), the RBAC management routes (`POST`/`GET`/`DELETE /v1/rbac/bindings`) accept **either** a valid `admin`-tier `Principal` **or** the existing static `admin_token` — the same break-glass role `admin_token` already plays for `/v1/tokens`. An operator bootstraps real role bindings once using the token they already have from Step 2.4, then everything downstream authorizes through real identities.
 
 ### The CLI has no RBAC of its own — it only gates on login
 
@@ -222,7 +291,7 @@ This reuses the existing `strata sln doctor --deep` health-check surface rather 
 Consistent with ADR-0065's own pattern of separating "what is decided" from "what is deferred," the following are left open deliberately — they are implementation choices that should be made when Phase 3 is actually scheduled, not guessed at now:
 
 - Exact OIDC client library and access-token signing/format details (JWT algorithm choice, claims beyond the minimum described above).
-- Exact role-binding schema in the control plane's own store, and the token-cache file location/format for `IdentityController` (likely alongside where `az`/`gh` already keep theirs).
+- The token-cache file location/format for `IdentityController` (likely alongside where `az`/`gh` already keep theirs) — the role-binding schema itself is now settled above ("Step 9 design: two-axis authorization").
 - Whether this identity model becomes the resolution path for ADR-0066's on-demand secret resolution (its settled topic 6) if `strata audit resend`/`export` ever run server-side rather than CLI-side.
 
 ## Implementation plan
@@ -253,14 +322,23 @@ src/strata/
                                                #   for IIdentityProvider integrations
 
 server/  (Phase 3 — deployable shape is ADR-0065's own open question 2, in-package vs separate)
-└── auth/                                      # ✅ Step 7 done; ⏳ Steps 8–10 not started
+└── auth/                                      # ✅ Steps 7, 8, 10 done; ⏳ Step 9 not started
     ├── pkce.py                               # ✅ Done — PKCE + state + nonce (RFC 7636)
     ├── session_tokens.py                     # ✅ Done — interim stateless bearer token (Step 8 adds the real, revocable one)
     ├── oidc_relying_party.py                 # ✅ Done — Authorization Code+PKCE (human), id_token verification
     │                                          #   via authlib/joserfc (JWKS); Client Credentials (M2M) helper only,
-    │                                          #   no HTTP route (see module docstring)
+    │                                          #   no HTTP route (see module docstring); also exposes
+    │                                          #   fetch_discovery_document()/fetch_jwks_document() shared by m2m_verifier.py
     ├── session_store.py                      # ✅ Done — db/sessions.py + auth/refresh_crypto.py (see below)
-    └── rbac.py                               # ⏳ NOT YET — role-binding store + per-route enforcement middleware
+    ├── rbac.py                               # ⏳ NOT YET — role_bindings table + require_tier()/require_capability()
+                                               #   dependency factories (per-route, not ASGI middleware) +
+                                               #   authenticate_principal() unifying session/M2M verification
+    └── m2m_verifier.py                       # ✅ Done — TrustedIssuer + M2mVerifier; trusted-issuer list +
+                                               #   generalized JWKS verification (GitHub Actions / Azure DevOps
+                                               #   federated OIDC, Client Credentials access tokens, and
+                                               #   Managed/Workload Identity tokens all verified through this one
+                                               #   path; wired to GET /v1/whoami via routes/m2m.py + routes/security.py's
+                                               #   verify_m2m_token; AWS keyless support explicitly on hold)
 ```
 
 **Implemented as designed (steps 0–6).** All six first-class identity-provider integrations exist and are tested (88 passing tests across `tests/strata/integrations/identity/`). The generic OIDC integration implements the OAuth 2.0 Device Authorization Grant (RFC 8628) against any discovery-compliant issuer — discovery-document caching, `authorization_pending`/`slow_down` polling semantics, refresh-before-expiry with a safety buffer, no client secret ever persisted (device-code is a public-client grant). Session state persists via a new shared utility, `utils/identity_token_cache.py` — one JSON file per integration under `~/.strata/identity/`, `chmod 0600` on POSIX (a no-op on Windows, where POSIX permission bits don't translate to ACLs — a known, currently undocumented gap, not a fabricated one). `sln doctor --deep --login` drives a real login inline for any `identity`-capable integration exactly as designed, and `actor_controller.py`'s `resolve_actor()` now calls `IdentityController().get_actor_identity()` ahead of ADR-0066's CLI-local resolution chain, exactly as the ADR describes.
@@ -289,9 +367,11 @@ Verified via a real signed-JWT test suite (RSA keypair generated per test run, n
 
 **8. Session store.** ✅ Done — implemented exactly as designed above. New `sessions` table (`db/schema.py`), `db/sessions.py` (`create_session`/`get_session`/`list_sessions`/`revoke_session`/`touch_session`), `auth/refresh_crypto.py` (JWE-encrypted refresh tokens via `joserfc`, key derived from `--session-secret`). `/auth/callback` now creates a session row and embeds `session_id` in the access token's claims whenever the exchange returns a `refresh_token` (default scope grew to include `offline_access` to make that happen at all). New routes: `POST /auth/refresh` (silent renewal, no re-login), `GET /auth/sessions` and `DELETE /auth/sessions/{session_id}` (both admin-token gated, the same credential `/v1/tokens` already uses — the literal "who is logged in, kick them out right now" view the "Session model" section promised). `OidcRelyingParty.refresh_access_token()` mirrors `exchange_code()`'s shape for the `refresh_token` grant. Verified via 136 tests (real JWE encrypt/decrypt round trips, tamper/wrong-key rejection, session creation/refresh/revocation through the full `/auth/login` → `/auth/callback` → `/auth/refresh` → `/auth/sessions` flow); full `Check.ps1` green.
 
-**9. RBAC store and enforcement middleware.** ⏳ Not started. Role bindings (viewer/approver/deployer/admin per workspace/environment), sourced from IdP group claims with a local override table; middleware on every control-plane API route — RBAC is a server-only concern (settled above), so nothing is added to the CLI here.
+**9. RBAC store and enforcement.** ⏳ Not started; design settled (see "Step 9 design: two-axis authorization" above). New `role_bindings` table (subject_type/subject, workspace/environment scope with `NULL` wildcards, nullable `tier`, JSON `capabilities`) plus `db/rbac.py` (create/list/revoke/resolve, mirroring `db/tokens.py`'s shape) and a new `authenticate_principal` dependency that unifies session-token and M2M verification into one `Principal` before `require_tier(min_tier)`/`require_capability(name)` dependencies can run. RBAC is a server-only concern (settled above), so nothing is added to the CLI here. Bootstrapped via the existing `--admin-token` as a break-glass credential on the RBAC management routes (`/v1/rbac/bindings`) only.
 
-**10. Machine-to-machine Client Credentials path.** ⏳ Not started. Wired for CI pipelines and scheduled jobs calling the control-plane API beyond bare ADR-0065 event ingest — reuses the identity-provider configuration from steps 2/3/5, not a new credential type.
+**10. Machine-to-machine authentication.** ✅ Done. `server/auth/m2m_verifier.py` — `TrustedIssuer` (name/issuer/audience/subject_claim) + `M2mVerifier`, which peeks at a token's unverified `iss` claim only to select which configured trusted issuer's JWKS to check it against, then fully verifies signature/`iss`/`aud`/`exp` via the same `joserfc` machinery Step 7 uses (`oidc_relying_party.py` now exposes `fetch_discovery_document()`/`fetch_jwks_document()` as shared module-level functions rather than duplicating the fetch logic). `serve run --m2m-trusted-issuer name=...,issuer=...,audience=...` (repeatable) configures the trusted-issuer list; `GET /v1/whoami` (`routes/m2m.py`, gated by `routes/security.py`'s `verify_m2m_token`) is registered only when at least one trusted issuer is configured, mirroring `/auth/*`'s and `/v1/tokens`' own all-or-nothing gating. Deliberately no RBAC enforcement (Step 9) and no AWS keyless support (on hold) — both out of scope here by design, not oversight.
+
+Verified via 15 new tests (`test_server_auth_m2m_verifier.py`, `TestM2mRoutes` in `test_server_app.py`, `test_cli_serve.py`) covering valid-token acceptance, multi-issuer selection, untrusted-issuer/wrong-audience/expired/tampered-signature/wrong-signing-key rejection, route registration gating, and confirming an ADR-0065 ingest token cannot authenticate `/v1/whoami`. Full `Check.ps1`: 6637 tests passed, ruff/mypy/Sphinx all green.
 
 **11. Docs.** ⏳ Not started. An identity/auth help topic correcting the same category of doc-drift ADR-0066 found and fixed for `help/audit.md`; changelog entries for the two real CLI-visible changes (a new `identity` capability, `sln doctor --login`).
 

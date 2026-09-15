@@ -13,12 +13,15 @@ from pydantic import (
 
 from strata.models.common_models import (
     CommonLifecycleModel,
+    FeatureRefs,
     PlatformBaseModel,
     PlatformKind,
     PlatformName,
     PlatformVersion,
     ProvisionerType,
+    SecretRefs,
     SourceModel,
+    VariableRefs,
     check_unique_names,
     validate_slot_type,
 )
@@ -440,6 +443,20 @@ class WorkspaceIacAnsiblePropertiesModel(PlatformBaseModel):
     )
 
 
+class ProvisionerReferencesModel(PlatformBaseModel):
+    """References to variables, secrets, and features required by this provisioner.
+
+    For provisioners without a component document (script, compose) to declare
+    references on. Same shape as ResourceReferencesModel and friends, duplicated
+    per this codebase's existing per-kind convention rather than cross-imported
+    from resource_model.py. See ADR-0078.
+    """
+
+    variables: VariableRefs = Field(None, description="Variable keys this provisioner requires from environment")
+    secrets: SecretRefs = Field(None, description="Secret keys this provisioner requires from environment")
+    features: FeatureRefs = Field(None, description="Feature keys this provisioner requires from environment")
+
+
 class ProvisionerInputMappingModel(PlatformBaseModel):
     """Maps outputs from an upstream provisioner to inputs of this provisioner."""
 
@@ -530,6 +547,15 @@ class WorkspaceIacModel(PlatformBaseModel):
         description=(
             "Declare dependencies on other provisioners' outputs. Outputs from the "
             "named provisioners are injected as variables into this provisioner at deploy time."
+        ),
+    )
+    references: Optional[ProvisionerReferencesModel] = Field(
+        None,
+        description=(
+            "Keys this provisioner requires from the environment. Declaring this on any "
+            "provisioner or resource/module/provider in the workspace opts scoped provisioners "
+            "into precise variable/feature/secret injection instead of receiving every "
+            "environment key (ADR-0078)."
         ),
     )
     integration: Optional[str] = Field(

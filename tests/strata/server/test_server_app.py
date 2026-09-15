@@ -43,6 +43,9 @@ class _FakeRequest:
     def __init__(self, headers: Dict[str, str] | None = None, app: Any = None) -> None:
         self.headers = headers or {}
         self.app = app
+        # Real FastAPI's per-request `Request.state` — an arbitrary-attribute bag some
+        # dependencies (e.g. `verify_m2m_token`) stash verified data on for the handler.
+        self.state = SimpleNamespace()
 
 
 def _make_fake_fastapi_module() -> ModuleType:
@@ -1030,3 +1033,131 @@ class TestAuthRoutes:
                 session_id="does-not-exist",
             )
         assert exc_info.value.status_code == 404
+
+
+class TestM2mRoutes:
+    """ADR-0067 Step 10 — GET /v1/whoami registration gating and the verify happy/error paths."""
+
+    _ISSUER = "https://token.actions.githubusercontent.com"
+    _AUDIENCE = "https://control-plane.example.test"
+
+    def _trusted_issuer(self) -> Any:
+        from strata.server.auth.m2m_verifier import TrustedIssuer
+
+        return TrustedIssuer(name="github-actions", issuer=self._ISSUER, audience=self._AUDIENCE)
+
+    def _discovery_doc(self) -> Dict[str, Any]:
+        return {
+            "issuer": self._ISSUER,
+            "jwks_uri": f"{self._ISSUER}/.well-known/jwks.json",
+        }
+
+    def _sign_token(self, rsa_key: Any, **overrides: Any) -> str:
+        import time as _time
+
+        from joserfc import jwt as joserfc_jwt
+
+        now = int(_time.time())
+        claims = {
+            "iss": self._ISSUER,
+            "aud": self._AUDIENCE,
+            "sub": "repo:acme/widgets:ref:refs/heads/main",
+            "exp": now + 300,
+            "iat": now,
+        }
+        claims.update(overrides)
+        return joserfc_jwt.encode({"alg": "RS256", "kid": rsa_key.kid}, claims, rsa_key)
+
+    def _urlopen_mock(self, discovery: Dict[str, Any], rsa_key: Any) -> Any:
+        import json as _json
+
+        class _FakeResponse:
+            def __init__(self, payload: Dict[str, Any]) -> None:
+                self._body = _json.dumps(payload).encode("utf-8")
+                self.status = 200
+
+            def read(self) -> bytes:
+                return self._body
+
+            def __enter__(self) -> "_FakeResponse":
+                return self
+
+            def __exit__(self, *exc: Any) -> None:
+                return None
+
+        def _urlopen(req: Any, timeout: Any = None) -> _FakeResponse:
+            url = req.full_url if hasattr(req, "full_url") else req
+            if url == f"{self._ISSUER}/.well-known/openid-configuration":
+                return _FakeResponse(discovery)
+            if url == discovery["jwks_uri"]:
+                return _FakeResponse({"keys": [rsa_key.as_dict(private=False)]})
+            raise AssertionError(f"Unexpected URL requested in test: {url}")
+
+        return _urlopen
+
+    def test_not_registered_without_trusted_issuers(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from strata.server.app import create_app
+
+        app = create_app(sqlite_engine)
+        assert ("GET", "/v1/whoami") not in app.routes
+
+    def test_registered_when_trusted_issuers_configured(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        from strata.server.app import create_app
+
+        app = create_app(sqlite_engine, m2m_trusted_issuers=[self._trusted_issuer()])
+        assert ("GET", "/v1/whoami") in app.routes
+
+    def test_whoami_returns_verified_claims(self, fake_fastapi_module: ModuleType, sqlite_engine: Engine) -> None:
+        from joserfc.jwk import RSAKey
+
+        from strata.server.app import create_app
+
+        rsa_key = RSAKey.generate_key(2048, parameters={"kid": "k1"}, private=True)
+        discovery = self._discovery_doc()
+        app = create_app(sqlite_engine, m2m_trusted_issuers=[self._trusted_issuer()])
+        token = self._sign_token(rsa_key)
+
+        with patch("urllib.request.urlopen", side_effect=self._urlopen_mock(discovery, rsa_key)):
+            result = _call_route(app, "GET", "/v1/whoami", headers={"authorization": f"Bearer {token}"})
+
+        assert result["claims"]["sub"] == "repo:acme/widgets:ref:refs/heads/main"
+        assert result["claims"]["_trusted_issuer_name"] == "github-actions"
+
+    def test_whoami_missing_token_returns_401(self, fake_fastapi_module: ModuleType, sqlite_engine: Engine) -> None:
+        from strata.server.app import create_app
+
+        app = create_app(sqlite_engine, m2m_trusted_issuers=[self._trusted_issuer()])
+
+        with pytest.raises(_FakeHTTPError) as exc_info:
+            _call_route(app, "GET", "/v1/whoami", headers={})
+        assert exc_info.value.status_code == 401
+
+    def test_whoami_untrusted_issuer_returns_403(self, fake_fastapi_module: ModuleType, sqlite_engine: Engine) -> None:
+        from joserfc.jwk import RSAKey
+
+        from strata.server.app import create_app
+
+        rsa_key = RSAKey.generate_key(2048, parameters={"kid": "k1"}, private=True)
+        app = create_app(sqlite_engine, m2m_trusted_issuers=[self._trusted_issuer()])
+        token = self._sign_token(rsa_key, iss="https://not-configured.example.test")
+
+        with pytest.raises(_FakeHTTPError) as exc_info:
+            _call_route(app, "GET", "/v1/whoami", headers={"authorization": f"Bearer {token}"})
+        assert exc_info.value.status_code == 403
+
+    def test_ingest_token_cannot_authenticate_whoami(
+        self, fake_fastapi_module: ModuleType, sqlite_engine: Engine
+    ) -> None:
+        """An ADR-0065 ingest token is not a JWT — must be rejected, not silently accepted."""
+        from strata.server.app import create_app
+
+        app = create_app(sqlite_engine, admin_token="admin-secret", m2m_trusted_issuers=[self._trusted_issuer()])
+        token = create_token(sqlite_engine, "some-workspace")["token"]
+
+        with pytest.raises(_FakeHTTPError) as exc_info:
+            _call_route(app, "GET", "/v1/whoami", headers={"authorization": f"Bearer {token}"})
+        assert exc_info.value.status_code == 403

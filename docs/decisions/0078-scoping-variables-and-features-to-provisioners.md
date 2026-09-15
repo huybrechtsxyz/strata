@@ -669,25 +669,56 @@ Unchanged: `inputs_from`, `ProvisionerInputMappingModel`,
    + templates + generated schemas + docs), with the drop-with-warning shim
    (no behaviour change — nothing read it). Regression tests in
    `tests/strata/models/test_models_workspace.py::TestRemovedReferencesField`.
-2. Add `references` to `WorkspaceIacModel` — Gap 1 (additive, no behaviour change).
-3. Compute `injected(P)` in `workspace_service` and expose it; no consumer yet
-   (no behaviour change, testable in isolation).
-4. Switch `_collect_declared_input_keys()` to return `injected(P)`, add rule 4,
-   and split rule 3 into 3a/3b (`check_inputs()` gains the full-environment-set
-   parameter). **First behaviour change — build only.**
-5. Scope `ResolvedValues.for_stage()` to `injected(P)` for variables and features.
-   **Second behaviour change — deploy.**
-6. Optional: rule 5 usage-side validators for resource/module.
+2. ✅ **Done.** Add `ProvisionerReferencesModel` + `WorkspaceIacModel.references` —
+   Gap 1 (additive, no behaviour change). Tests in
+   `tests/strata/models/test_models_workspace.py::TestProvisionerReferencesModel`.
+3. ✅ **Done** (folded into step 4 rather than shipped as a separate no-op — see
+   below). `TerraformBuilder._compute_injected_keys()` computes `injected(P)` by
+   reusing `self.variable_refs`/`feature_refs`/`secret_refs` (already populated by
+   `_build_provider_vars`/`_build_resources_by_category`/`_build_module_vars`) plus
+   two new counters (`_components_total`/`_components_declaring_refs`, incremented
+   at the same three call sites) that make rule 4 possible. Tests in
+   `TestTerraformBuilderComponentCounters`/`TestTerraformBuilderComputeInjectedKeys`.
+4. ✅ **Done.** `_validate_inputs()` now computes both `environment_keys` (renamed
+   from `declared_keys`, unchanged logic) and `injected_keys` (via
+   `_compute_injected_keys()`), and `check_inputs()` takes both — `environment_keys`
+   is keyword-only and defaults to `injected_keys` when omitted, so every one of
+   the 12 pre-existing `check_inputs()` call sites in
+   `test_terraform_input_validator.py` needed zero changes and still passes
+   unmodified. Rule 3 is split into 3a (info)/3b (warning). Rule 4 raises a build
+   error, falling back to `environment_keys` so downstream checks still run rather
+   than cascading confusingly. The backend-expression check (ADR-0075) is
+   deliberately left checking against `environment_keys`, not `injected_keys` —
+   backend config is resolved directly at deploy time, not via Terraform tfvars,
+   so it is unaffected by this scoping and its behaviour must not change.
+   **First behaviour change — build only.** New/updated tests: 4 in
+   `test_terraform_input_validator.py` (3a/3b + the environment_keys-defaults
+   regression guard), 2 in `TestTerraformBuilderComponentCounters`, 4 in
+   `TestTerraformBuilderComputeInjectedKeys`. Full suite: 6616 passed.
+5. **Not yet implemented.** Scope `ResolvedValues.for_stage()` to `injected(P)` for
+   variables and features, and update both call sites in
+   `base_deploy_command.py` (lines ~186, ~671) to pass it. **Deploy-time
+   behaviour change** — deliberately kept separate from step 4 (see below).
+6. Optional: rule 5 usage-side validators for resource/module. Not implemented —
+   rule 5 was already established as non-load-bearing (see the Review section);
+   this remains a cheap, independent follow-up, not a blocker for anything.
 7. Next minor: remove the drop-with-warning shim.
 
-Steps 1–3 are no-ops behaviourally and individually reversible. Step 4 changes
-what the build reports; step 5 changes what a deploy injects. Both affect **only
-provisioners whose components declare `references`** — every existing workspace is
-unscoped and unaffected until it opts in.
+Steps 1–4 are no-ops for every workspace that has not opted in (no component
+anywhere declares `references`) — verified by the full 6616-test suite passing
+unchanged, `Check.ps1` green (ruff, mypy, pytest, sphinx docs, smoke test), and
+the explicit regression-guard test asserting `check_inputs()`'s new
+`environment_keys` parameter defaults to reproducing today's behaviour exactly
+when omitted.
 
-Splitting 4 and 5 matters: shipping the build check first means a workspace can
-opt in, see exactly what would and would not be injected, and fix its `references`
-*before* anything changes at deploy time.
+**Step 5 is deliberately not implemented in this pass.** Shipping the build check
+(step 4) first, and stopping there, means a workspace can opt in today, see
+exactly what would and would not be injected via the build's warnings/errors, and
+fix its `references` before anything changes at deploy time. Step 5 changes what a
+running deploy actually injects into a subprocess environment — a higher-risk,
+security-adjacent change — and deserves its own focused pass with the deploy-time
+call sites' existing stage/provisioner resolution logic (`_resolve_iac_model()`)
+studied on its own, rather than being rushed alongside step 4 in the same change.
 
 Step 1 is deliberately decoupled from the rest: it is correct regardless of
 whether Option F is ultimately selected, because the field was inert under every
