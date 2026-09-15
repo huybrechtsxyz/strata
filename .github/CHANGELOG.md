@@ -8,8 +8,12 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-09-15
+
 ### Added
 
+- **Machine-to-machine (M2M) bearer token verification (ADR-0067 Step 10)** — `GET /v1/whoami` verifies a caller's bearer token against one or more configured `--m2m-trusted-issuer` OIDC issuers (GitHub Actions, Azure DevOps, a Client-Credentials IdP, ...) and returns the verified claims, structurally separate from the admin token and human OIDC login.
+- **`docker-compose.server.yml` and a `charts/strata-server` Helm chart** for running the state-service (ADR-0065) with a bundled single-pod PostgreSQL backend — self-contained quickstart/small-team deployments, not a production HA topology. Point `db.existingSecret`/`postgresql.enabled: false` at a managed database instead for production.
 - **`spec.references` on a workspace provisioner (Terraform, script, etc.) now opts that provisioner into scoped Terraform build validation (ADR-0078)** — new `ProvisionerReferencesModel`, same `{variables, secrets, features}` shape as the existing per-kind `references` on resource/module/dns/provider. When any resource, module, or provider in the workspace declares `spec.references`, every one of them must (a build error otherwise), and the Terraform input cross-check is scoped to the union of their declared keys instead of every key declared anywhere in the environment — the workaround of declaring a dummy, unread `variable {}` block purely to satisfy the validator is no longer needed for keys consumed by a different provisioner. Workspaces that declare no `references` anywhere are completely unaffected — this is opt-in. Deploy-time injection scoping (which values a running deploy actually receives) is a deliberately separate, not-yet-implemented follow-up; see the ADR.
 
 ### Removed
@@ -23,6 +27,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Fixed
 
+- **`strata push`/audit git-forwarding failed with "You are not currently on a branch" from a detached-HEAD checkout** (e.g. a CI runner pinned to a specific ref) — `GitIntegration.push()` now always sends a `HEAD:<branch>` refspec when a target branch is given, which pushes the currently checked-out commit regardless of local branch state, instead of relying on a local branch of that exact name existing.
 - **`strata build run` warned `Required variable 'X' (no default) is not supplied by any input` on every build for required Terraform variables supplied via `spec.properties`/`spec.custom`** — a permanent false positive. The check only knew about `spec.variables`/`features`/`secrets`, but properties and custom blocks are emitted as their own `properties.auto.tfvars.json`/`custom.auto.tfvars.json` files and are genuine inputs. Their top-level keys are now recognised, honouring the provisioner's `output:` profile so the warning still fires when the corresponding file isn't emitted.
 
 ## [1.9.11] - 2026-09-11

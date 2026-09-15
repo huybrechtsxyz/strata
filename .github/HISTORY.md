@@ -7,7 +7,29 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-09-15
+
+### Added
+
+#### **Machine-to-machine (M2M) bearer token verification (ADR-0067 Step 10)**
+
+- **Motivation**: `/v1/tokens` (per-workspace ingest tokens) and OIDC login (human sessions) cover two of the three callers the state-service needs to authenticate; a CI pipeline or scheduled job authenticating with its platform's own federated identity (GitHub Actions' OIDC token, Azure DevOps' workload identity, a Client-Credentials IdP) was the missing third.
+- **Design**: `TrustedIssuer` + `M2mVerifier` verify a bearer token's `iss`/`aud` claims against a configured allow-list (`--m2m-trusted-issuer name=...,issuer=...,audience=...`, repeatable — one entry per CI system/IdP), structurally separate from `admin_token` (ingest-token management) and the OIDC relying-party flow (human sessions). `GET /v1/whoami` returns the verified claims so a caller can confirm its own credential resolves correctly, without needing a database round-trip.
+- **Also in this change**: `WorkspaceIacModel` gained `ProvisionerReferencesModel` for scoped variable/secret/feature injection (see ADR-0078's `spec.references` entry above), and input validation was updated to handle scoped provisioners and report errors/warnings accordingly.
+
+#### **`docker-compose.server.yml` and a `charts/strata-server` Helm chart**
+
+- **Motivation**: the state-service (ADR-0065) supports sqlite/postgresql/mssql, but there was no ready-made way to run it with a real database backend without hand-writing deployment manifests — sqlite alone doesn't fit a multi-replica/HA deployment (single-writer lock, no network access), and standing up Postgres separately was left entirely to the operator.
+- **`docker-compose.server.yml`**: four services — `postgres` (official image + volume + health check), `certs` (one-shot self-signed certificate, since binding `0.0.0.0` to publish the port makes TLS mandatory per `server/config.py`'s `validate_bind()`), `migrate` (runs `strata serve migrate` once `postgres` is healthy), and `server`. A quickstart/local-trial shape, not production HA.
+- **`charts/strata-server`**: bundles the server with an optional single-pod PostgreSQL (no operator — same minimal pattern as `haven`'s `firefly-postgres`/`immich-postgres`/`nextcloud-postgres` modules), toggled off via `postgresql.enabled: false` plus `db.existingSecret` to point at a managed database instead. The bundled Postgres password is wired into `STRATA_SERVE_DB_URL` via Kubernetes' own `$(VAR)` env-substitution, so Helm never needs to know it at template time. TLS defaults to a self-signed certificate generated with Helm's `genSelfSignedCert`, reused across upgrades via `lookup` to avoid restarting the pod on every `helm upgrade`; set `tls.secretName` to a real certificate (e.g. cert-manager-issued) for anything reachable outside a single trusted cluster. The schema-migration step is a plain Job, not a Helm hook — a `pre-install` hook would run before the bundled Postgres Deployment/Service (ordinary templates) exist at all, so it relies on the Job's own `backoffLimit` retry instead.
+- **Testing**: `helm lint` and `helm template` verified against the bundled-postgres, external `db.url`, external `db.existingSecret`, and no-database-configured (`fail` guard) cases.
+
 ### Fixed
+
+#### **`strata`'s git push helper failed from a detached-HEAD checkout**
+
+- **Root cause**: `GitIntegration.push()` passed a bare branch name to `git push` when a target branch was given, which only works if a local branch of that exact name already exists — it fails with "You are not currently on a branch" from a detached-HEAD checkout (e.g. a CI runner pinned to a specific ref/commit rather than a branch).
+- **Fix**: pushes to a named branch now always use a `HEAD:<branch>` refspec, which pushes whatever commit is currently checked out to the named remote branch regardless of local branch state.
 
 #### **Required Terraform variables supplied via `spec.properties` were permanently mis-reported as unsupplied**
 
