@@ -1,10 +1,11 @@
 # Scoping Variables and Features to Provisioners — Allow- vs Deny-by-Default
 
-- Status: proposed — under evaluation, **no option selected**; Option F is the current focus
+- Status: **accepted** — Option F selected
 - Date: 2026-09-11
 - Revised: 2026-09-14 — Option E's addressing scheme found unworkable against shared/layered environment files; Option F (`spec.references`) added; decision withdrawn pending evaluation
 - Revised: 2026-09-14 — Gap 2 (inert `references` field) resolved and **implemented** as a removal.
-- Revised: 2026-09-15 — Option F reviewed against the code and reshaped. The target is **injection scoping** (the ADR's title), with the build-time cross-check derived from the injected set rather than designed separately. The blocking objection — that `kind: resource`/`kind: provider` have no in-document usage site, so `references` could not be verified complete — is resolved: **`variables.tf` is the usage site**, and Terraform's own required-variable declarations catch under-declaring. Sub-options F-a…F-d withdrawn as unnecessary.
+- Revised: 2026-09-15 — Option F reviewed against the code and reshaped. The target is **injection scoping** (the ADR's title), with the build-time cross-check derived from the injected set rather than designed separately. The blocking objection — that `kind: resource`/`kind: provider` have no in-document usage site, so `references` could not be verified complete — is resolved: **`variables.tf` is the usage site**, and Terraform's own required-variable declarations catch under-declaring. Sub-options F-a…F-d withdrawn as unnecessary. **Option F selected; status moved to accepted.**
+- Revised: 2026-09-15 — Refined the "optional variable with a default" warning (rule 3) into two cases, so a warning fires only when the environment actually supplied a now-excluded value, not merely because a default exists. Added a section on extending injection scoping and the build check to non-Terraform provisioners.
 - Related: [ADR 0073 — Embedded string syntax inventory and creep prevention](./0073-embedded-string-syntax-inventory-and-creep-prevention.md), [ADR 0075 — Unified Terraform/Helm value-expression syntax](./0075-unify-terraform-helm-value-expression-syntax.md), [ADR 0077 — Repo map & cross-repo path resolution](./0077-repo-map-cross-repo-path-resolution.md), [ADR 0068 — Cross-pipeline output publishing](./0068-cross-pipeline-output-publishing.md) (owns resource-to-resource / cross-pipeline output wiring, which this ADR removes inert schema for and explicitly leaves out of scope)
 
 ## Context and Problem Statement
@@ -492,17 +493,17 @@ components declare no `references` keeps today's behaviour exactly.
 | --- | ------------------------------------------------------------------------------------------------------------------------- | -------------------- | -------- |
 | 1   | Every **injected** key must be declared in the provisioner's `variables.tf` (Terraform)                                   | always               | error    |
 | 2   | Every **required** (`no default`) variable in `variables.tf` must be in the injected set                                  | always               | warning  |
-| 3   | Every **optional** (has `default`) variable in `variables.tf` not in the injected set                                     | scoped provisioner   | warning  |
-| 3′  | Same, for an unscoped provisioner                                                                                         | unscoped provisioner | info     |
+| 3a  | Optional (has `default`) variable absent from the injected set **and** absent from the whole environment                  | always               | info     |
+| 3b  | Optional (has `default`) variable absent from the injected set **but present** in the environment                         | scoped provisioner   | warning  |
 | 4   | Under a scoped provisioner, a component that declares no `references` is an error — not a silent skip                     | scoped provisioner   | error    |
 | 5   | Every key **used** by a component that *has* an in-document usage site (`var:`/`secret:`) must appear in its `references` | dns, network, module | error    |
 | 6   | A key supplied by `inputs_from` is exempt from rules 1–2 — it arrives from an upstream output, not the environment        | always               | —        |
 
-Rules 1–3 are `check_inputs()`'s three existing directions. The only change is
-**what set they run against**: the injected set rather than the whole environment.
-Rule 3 is today's info-level "optional variable not overridden", promoted to a
-warning for scoped provisioners — where an environment-declared, Terraform-declared
-key that no component references is a mistake rather than a choice.
+Rules 1–3 are `check_inputs()`'s three existing directions. The change is **what
+set(s) they run against**: rules 1–2 use the injected set; rule 3 is split into
+3a/3b by also checking the full environment set, so a warning fires only when a
+supplied value is actually being dropped — not whenever a module default simply
+goes unused, which is the common case and must stay quiet.
 
 Rule 2 is the completeness check. It is what makes under-declaring `references`
 fail loudly instead of silently narrowing the check, and it requires no
@@ -599,25 +600,61 @@ WARN   [infra] Required variable 'location' (no default) is not supplied by any 
        → no component of provisioner 'infra' declares 'location' in spec.references
 
 WARN   [infra] Optional variable 'node_count' not supplied — Terraform will use its
-       default (3). 'node_count' is declared in the environment but referenced by
-       no component of this scoped provisioner.
+       default (3). 'node_count' has a value in the environment, but no component of
+       this scoped provisioner references it, so it was not injected. (rule 3b)
 
 ERROR  [infra] Provisioner is scoped (some components declare spec.references) but
        resource 'app_tier' (config/app.yaml) declares none
        → add spec.references to config/app.yaml, or remove it from the other components
 ```
 
+### Extending beyond Terraform
+
+Injection scoping and the build-time check are **two different mechanisms with
+different reach**, and it matters which one is being extended:
+
+**Injection scoping (`ResolvedValues.for_stage()`) is provisioner-agnostic.**
+Every provisioner type — Terraform, Ansible, Helm, Compose, Bicep, script — reads
+from the same `ResolvedValues` object. Once `for_stage()` scopes `variables`/
+`features` the way it already scopes `secrets`, **every provisioner type is scoped
+the moment its components declare `references`** — no per-provisioner-type work is
+needed for rollout step 5.
+
+**The build-time check (`check_inputs()`-style, rules 1–3) is Terraform-only
+today**, because it depends on `parse_variables_tf()` — a ground truth specific to
+Terraform. Whether an equivalent exists elsewhere varies by provisioner:
+
+| Provisioner | Ground truth for "what does it actually consume"                                                           | Parseable today?                                                              |
+| ----------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Terraform   | `variable` blocks in `variables.tf`                                                                        | ✅ `parse_variables_tf()`                                                      |
+| Bicep       | `param` declarations in `.bicep` files — same shape as Terraform (type, optional default)                  | ❌ not implemented; same approach would work                                   |
+| Helm        | `values.schema.json`, if the chart ships one (JSON Schema `required`/`properties`)                         | ⚠️ real when present, but optional per chart — no universal guarantee          |
+| Compose     | `${VAR}` interpolation directly in the compose YAML — an in-document usage site, same shape as DNS `var:`  | ❌ not implemented; a text scan would suffice, no external ground truth needed |
+| Ansible     | none — `defaults/main.yml`/`vars/main.yml` are free-form YAML/Jinja, no typed declaration strata can parse | ❌ no equivalent exists                                                        |
+| script      | none — arbitrary script content                                                                            | ❌ no equivalent exists (already acknowledged in Gap 1)                        |
+
+**Consequence for rollout:** step 5 (injection scoping) ships once, for all
+provisioner types simultaneously. Step 4 (the build check) ships for Terraform
+first, as designed above; Bicep and Compose are natural, low-effort follow-ups
+using the same pattern (`parse_bicep_params()`, a `${VAR}` scanner); Helm gets the
+check conditionally, only for charts that ship `values.schema.json`; Ansible and
+script remain **assertion-only** — `references` documents intent and drives
+injection scoping, but nothing verifies it is complete, the same position Gap 1
+already accepts for `script`. That gap is real but bounded: it is exactly the
+Gap-1 case, not a new one, and injection scoping still narrows what those
+provisioners receive even without a build-time completeness check.
+
 ### Files affected
 
-| File                                          | Change                                                                                         |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `utils/resolved_values.py`                    | `for_stage()` — scope `variables`/`features` to the injected set, mirroring `secrets`          |
-| `services/workspace_service.py`               | resolve provisioner ↔ component binding; compute `injected(P)`                                 |
-| `builders/terraform_builder.py`               | `_collect_declared_input_keys()` returns `injected(P)`; rule 4 error; rule 3 severity by scope |
-| `validators/terraform_input_validator.py`     | promote "optional variable not overridden" from info to warning for scoped provisioners        |
-| `models/workspace_model.py`                   | add `WorkspaceIacModel.references` (Gap 1)                                                     |
-| `models/resource_model.py`, `module_model.py` | rule 5 usage-side validator where a usage site exists (optional, not load-bearing)             |
-| `docs/config/workspace.md`, `resource.md`     | document `references` on provisioners; document the contract/wiring split                      |
+| File                                          | Change                                                                                          |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `utils/resolved_values.py`                    | `for_stage()` — scope `variables`/`features` to the injected set, mirroring `secrets`           |
+| `services/workspace_service.py`               | resolve provisioner ↔ component binding; compute `injected(P)`                                  |
+| `builders/terraform_builder.py`               | `_collect_declared_input_keys()` returns `injected(P)`; rule 4 error; rule 3a/3b split          |
+| `validators/terraform_input_validator.py`     | `check_inputs()` takes both the injected set and the full environment set, to distinguish 3a/3b |
+| `models/workspace_model.py`                   | add `WorkspaceIacModel.references` (Gap 1)                                                      |
+| `models/resource_model.py`, `module_model.py` | rule 5 usage-side validator where a usage site exists (optional, not load-bearing)              |
+| `docs/config/workspace.md`, `resource.md`     | document `references` on provisioners; document the contract/wiring split                       |
 
 Already done (Gap 2): `WorkspaceResourceModel.references` and
 `EnvironmentResourceOverrideModel.references` removed, override-merge block
@@ -636,7 +673,8 @@ Unchanged: `inputs_from`, `ProvisionerInputMappingModel`,
 3. Compute `injected(P)` in `workspace_service` and expose it; no consumer yet
    (no behaviour change, testable in isolation).
 4. Switch `_collect_declared_input_keys()` to return `injected(P)`, add rule 4,
-   and set rule 3 severity by scope. **First behaviour change — build only.**
+   and split rule 3 into 3a/3b (`check_inputs()` gains the full-environment-set
+   parameter). **First behaviour change — build only.**
 5. Scope `ResolvedValues.for_stage()` to `injected(P)` for variables and features.
    **Second behaviour change — deploy.**
 6. Optional: rule 5 usage-side validators for resource/module.
@@ -760,12 +798,36 @@ supplied, and Terraform has already declared it required. **This only works if
 direction B compares `variables.tf` against the *injected* set** — using the full
 environment set would mask precisely this error. Hence the correction in problem 1.
 
-**Residual risk, narrow and nameable:** a variable that has a `default` in
-`variables.tf` and is omitted from `references` is silently given the default
-instead of the environment's value — row 3, currently info-level. Under a scoped
-provisioner it should be promoted to a warning, since for an opted-in provisioner
-"declared in the environment, required by `variables.tf`, but not referenced by
-any component" is a mistake rather than a choice.
+**Row 3 needs a second look — a default was chosen for a reason.** A module
+author's `default` exists so the module works standalone, without every consumer
+supplying a value. Most optional variables in a shared root are *never* meant to
+be overridden by any given deployment — warning every time one is absent would be
+noise, not signal, and would erode trust in the check the same way a decorative
+allowlist does. The single "optional variable not overridden" bucket conflates two
+situations that deserve different severities:
+
+| Case                                                                                          | Meaning                                                                                                             | Severity                            |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| **3a** — key absent from the injected set **and** absent from the environment entirely        | nobody supplied a value anywhere; the module's default is exactly what's intended                                   | info (unchanged, every provisioner) |
+| **3b** — key absent from the injected set **but present** in `spec.variables`/`spec.features` | the environment *does* have a value; scoping excluded it because no component of a scoped provisioner references it | warning (scoped provisioner only)   |
+
+3b is the case worth flagging: someone set a value in the environment, presumably
+to override the default, and it silently never reaches Terraform because
+`references` under-declares it. 3a is not a mistake and must stay quiet — the
+default being unreferenced by anything is the common, unremarkable case for most
+optional variables in a shared root.
+
+This requires `check_inputs()` to see **two** sets, not one: the injected set
+(for rules 1–2 and 3a/3b's first half) and the full environment set, scoped by
+`stage.secrets` exactly as today but *not* narrowed by `references` (to tell 3a
+from 3b). Both are cheap — `_collect_declared_input_keys()` already computes the
+full environment set before this change; scoping produces the injected set as a
+second, narrower value from the same inputs.
+
+**Residual risk, narrow and nameable:** only 3b — a variable with a `default`
+that the environment supplies a value for, but that no component's `references`
+names, silently falls back to the module default instead of the supplied value.
+That is now a warning under a scoped provisioner, not silence.
 
 **Consequences for the rest of the design:**
 
@@ -779,6 +841,245 @@ any component" is a mistake rather than a choice.
 - `spec.references`' sparse population in shipped configs stops being fatal: it
   gates opt-in, and an opted-in provisioner whose components under-declare fails
   loudly at build time rather than silently checking nothing.
+
+## Implementation Plan (executable)
+
+This section specifies exact signatures, exact algorithms, and a test plan, so
+each rollout step can be implemented directly from this doc without re-deriving
+anything. File paths and line numbers are current as of 2026-09-15 and will
+drift; class/function names will not.
+
+### New model — `ProvisionerReferencesModel`
+
+Every kind that carries `references` defines its own `<Kind>ReferencesModel`
+(`ResourceReferencesModel`, `ProviderReferencesModel`, `NetworkReferencesModel`,
+`DnsReferencesModel`, `TenantReferencesModel` — each a separate class, not shared
+via import, per this codebase's existing convention). A provisioner gets the same
+treatment, defined in `workspace_model.py` itself — **do not** import
+`ResourceReferencesModel` from `resource_model.py`; that would be the first
+cross-kind reference-model import and breaks the established pattern:
+
+```python
+class ProvisionerReferencesModel(PlatformBaseModel):
+    """References to variables, secrets, and features required by this provisioner.
+
+    For provisioners without a component document (script, compose) to declare
+    references on. Same shape as ResourceReferencesModel and friends, duplicated
+    per this codebase's existing per-kind convention — see ADR-0078.
+    """
+
+    variables: VariableRefs = Field(None, description="Variable keys this provisioner requires from environment")
+    secrets: SecretRefs = Field(None, description="Secret keys this provisioner requires from environment")
+    features: FeatureRefs = Field(None, description="Feature keys this provisioner requires from environment")
+```
+
+`VariableRefs`/`SecretRefs`/`FeatureRefs` are not currently imported into
+`workspace_model.py` — add them to the existing
+`from strata.models.common_models import (...)` block (they already exist in
+`common_models.py`, used identically by `resource_model.py` et al.).
+
+On `WorkspaceIacModel`, add the field next to `inputs_from` (matches the Gap 1
+YAML example's field order):
+
+```python
+    references: Optional[ProvisionerReferencesModel] = Field(
+        None,
+        description=(
+            "Keys this provisioner requires from the environment. Opts this "
+            "provisioner into scoped injection (ADR-0078) when set on any of a "
+            "workspace's provisioners or on any bound resource/module/dns/provider."
+        ),
+    )
+```
+
+### Computing `injected(P)`
+
+**Architectural fact that constrains this algorithm:** `WorkspaceResourceModel`,
+modules, dns and provider entries are **not bound to a specific provisioner**
+today. `TerraformBuilder._build_resources_by_category()` builds one
+`resources_by_category` dict for the whole workspace and every Terraform-type
+provisioner receives the same tfvars content — there is no
+`WorkspaceResourceModel.provisioner` field or equivalent.
+
+This means `components(P)` cannot, today, be computed as "components bound to
+*this* provisioner" for resource/module/dns/provider-level references — only
+Gap 1's provisioner-level `references` are naturally 1:1. The implementable v1
+algorithm therefore treats resource/module/dns/provider references as
+**workspace-wide**, contributing identically to every Terraform-type provisioner,
+which exactly matches how `resources_by_category` is already emitted uniformly
+today:
+
+```python
+def compute_injected(
+    workspace_model: WorkspaceModel,
+    prov: WorkspaceIacModel,
+    all_environment_keys: Dict[str, Set[str]],  # {"variables": {...}, "secrets": {...}, "features": {...}}
+) -> Optional[Dict[str, Set[str]]]:
+    """Return the injected key sets for `prov`, or None if `prov` is unscoped.
+
+    None means: no component anywhere in the workspace declares `references`,
+    and `prov` itself declares none either — today's unscoped behaviour.
+    """
+    workspace_components = (
+        list(workspace_model.spec.resources or [])
+        + list(workspace_model.spec.modules or [])
+        + list(workspace_model.spec.dns or [])
+        + list(workspace_model.spec.providers or [])
+    )
+    declaring = [c for c in workspace_components if getattr(c, "references", None)]
+
+    scoped = bool(declaring) or bool(prov.references)
+    if not scoped:
+        return None  # unscoped — caller falls back to all_environment_keys
+
+    # Rule 4: every workspace component must declare once ANY component does.
+    missing = [c for c in workspace_components if not getattr(c, "references", None)]
+    if missing:
+        raise ScopingError(
+            f"Provisioner '{prov.name}' is scoped (some components declare "
+            f"spec.references) but {missing[0].name} declares none"
+        )
+
+    injected: Dict[str, Set[str]] = {"variables": set(), "secrets": set(), "features": set()}
+    for c in declaring + ([prov] if prov.references else []):
+        refs = c.references
+        injected["variables"] |= set(refs.variables or [])
+        injected["secrets"] |= set(refs.secrets or [])
+        injected["features"] |= set(refs.features or [])
+
+    # Rule 6: keys supplied by inputs_from are exempt from the completeness/typo
+    # checks — they arrive from an upstream output, not the environment.
+    injected["variables"] |= collect_inputs_from_keys(prov.inputs_from)
+
+    return injected
+```
+
+This is a **stated v1 simplification**, not an oversight: for the common case
+(one Terraform provisioner in the workspace) it is exactly correct — there is
+nothing to disambiguate. For a workspace with two or more Terraform provisioners,
+every one of them gets the same resource/module/dns/provider-derived injected
+set; only their own `WorkspaceIacModel.references` differ. Giving resources a
+`provisioner:` binding field to fix this is real future work, but is **out of
+scope** — it is a new schema surface, not required by the triggering case (one
+Terraform provisioner + one `script` provisioner), and should not be built
+speculatively (see [Open Question 3](#open-questions)).
+
+### Signature changes
+
+**`terraform_input_validator.check_inputs()`** — add the full-environment-set
+parameter needed to distinguish rule 3a from 3b:
+
+```python
+def check_inputs(
+    injected_keys: Set[str],           # was: declared_keys — now the scoped/injected set
+    environment_keys: Set[str],        # NEW — full environment set, unscoped, for 3a/3b
+    module_variables: Dict[str, TerraformVariable],
+    excluded_keys: Optional[Set[str]] = None,
+) -> InputCheckResult:
+    ...
+    # Direction A (rule 1) and direction B (rule 2): unchanged, but run against
+    # injected_keys instead of the old single `declared_keys` parameter.
+    ...
+    # Direction C (rule 3a/3b), replacing the old single "optional not overridden":
+    for var_name, var in module_variables.items():
+        if var_name in excluded or not var.has_default or var_name in injected_keys:
+            continue
+        if var_name in environment_keys:
+            result.warnings.append(   # 3b
+                f"Optional variable '{var_name}' not supplied — Terraform will use its "
+                f"default ({var.default_value!r}). '{var_name}' has a value in the "
+                "environment, but no component of this scoped provisioner references it."
+            )
+        else:
+            result.info.append(f"Optional variable '{var_name}' not overridden (default: {var.default_value!r})")  # 3a, unchanged
+```
+
+Note 3b only fires when the caller passes a **narrower** `injected_keys` than
+`environment_keys` — for an unscoped provisioner the two sets are equal (see
+below), so every case falls through to 3a, i.e. today's behaviour exactly.
+
+**`TerraformBuilder._collect_declared_input_keys()`** — becomes the caller that
+produces both sets and picks which to trust:
+
+```python
+def _collect_declared_input_keys(
+    self, deployment_service: DeploymentService, prov: WorkspaceIacModel, matching_stages: Optional[List[Any]] = None
+) -> Tuple[Set[str], Set[str]]:
+    """Return (injected_keys, environment_keys) for `prov`."""
+    environment_keys = self._collect_all_environment_keys(deployment_service, matching_stages)  # today's existing logic, renamed
+    scoped = compute_injected(workspace_service.model, prov, environment_keys)
+    injected_keys = scoped["variables"] | scoped["secrets"] | scoped["features"] if scoped is not None else environment_keys
+    return injected_keys, environment_keys
+```
+
+Call site in `_validate_inputs()` changes from one `check_inputs(declared_keys, ...)`
+call to `check_inputs(injected_keys, environment_keys, ...)`.
+
+**`ResolvedValues.for_stage()`** — gains scoping for variables/features, mirroring
+the existing `secrets` allowlist parameter shape exactly:
+
+```python
+def for_stage(
+    self,
+    allowed_secrets: Optional[List[str]] = None,
+    allowed_variables: Optional[List[str]] = None,   # NEW
+    allowed_features: Optional[List[str]] = None,    # NEW
+) -> "ResolvedValues":
+    """... existing docstring, extended:
+
+    allowed_variables / allowed_features: same semantics as allowed_secrets —
+    None ⇒ unscoped (all variables/features, today's behaviour), ['*'] ⇒
+    explicit all, ['a','b'] ⇒ only those keys. Every existing call site passes
+    None (or omits the argument) until it opts in, so behaviour is unchanged
+    until step 5's callers are updated to pass the provisioner's injected(P).
+    """
+```
+
+Apply the same filtering pattern already used for `secrets`/`stage_outputs_sensitive`
+to `variables`/`features` in all three branches of the existing `if`/`elif`/`else`.
+
+Both call sites in `base_deploy_command.py` (lines 186, 671) change from
+`_resolved_values.for_stage(stage.secrets)` to passing the resolved provisioner's
+`injected(P)` variables/features alongside `stage.secrets` — resolved via the same
+provisioner-lookup helper `_stages_for_provisioner()`/`_resolve_iac_model()`
+already uses, so no new resolution logic is needed there, only new arguments.
+
+### Test plan
+
+New/updated test files, one bullet per behaviour to cover — no new test
+infrastructure needed, all of this fits the existing per-module test file
+convention (`tests/strata/<area>/test_<module>.py`):
+
+- `tests/strata/models/test_models_workspace.py` — `ProvisionerReferencesModel`
+  validates variables/secrets/features independently; `WorkspaceIacModel.references`
+  round-trips through YAML; rule 4 raises when one component declares and another
+  doesn't (via whatever service method implements `compute_injected()`).
+- `tests/strata/utils/test_utils_resolved_values.py` — `for_stage()`'s three new
+  parameters mirror `allowed_secrets`' None/['*']/['a','b'] cases exactly; a test
+  asserting **omitting** the new parameters preserves current behaviour bit-for-bit
+  (regression guard for the "no workspace breaks on upgrade" claim).
+- `tests/strata/validators/test_terraform_input_validator.py` — `check_inputs()`'s
+  new `environment_keys` parameter: 3a fires when a key is in neither set, 3b fires
+  when a key is in `environment_keys` but not `injected_keys`, unchanged when the
+  two sets are equal.
+- `tests/strata/builders/test_builders_terraform.py` — end-to-end: the worked
+  example's exact YAML (network resource + bootstrap script provisioner) builds
+  clean; a component-under-declares case produces the rule 4 error; the triggering
+  case's dummy `variable {}` is provably no longer required (build a fixture
+  without it and assert no error).
+- `tests/strata/models/test_models_workspace.py::TestRemovedReferencesField` —
+  already exists from Gap 2; no changes needed.
+
+### Task list per rollout step
+
+| Step | Files touched                                                                                     | New tests                                                             |
+| ---- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| 2    | `models/workspace_model.py` (add `ProvisionerReferencesModel`, `WorkspaceIacModel.references`)    | model round-trip tests                                                |
+| 3    | `services/workspace_service.py` (add `compute_injected()` or equivalent, exposed but unconsumed)  | unit tests on `compute_injected()` directly                           |
+| 4    | `builders/terraform_builder.py`, `validators/terraform_input_validator.py`                        | `check_inputs()` 3a/3b tests, rule 4 error, end-to-end worked example |
+| 5    | `utils/resolved_values.py`, `commands/deploy/base_deploy_command.py`                              | `for_stage()` new-parameter tests, deploy-time injection test         |
+| 6    | `models/resource_model.py`, `models/module_model.py` (optional rule 5 validators)                 | mirrors existing `DnsSpecModel.validate_references_declared()` tests  |
+| 7    | remove the `drop_removed_references` validators + `warnings` import from both models (next minor) | delete the now-obsolete deprecation tests                             |
 
 ## Analysis — allow- vs deny-by-default
 
@@ -830,36 +1131,41 @@ be treated as disqualified.
 
 ## Status
 
-**No decision yet.** Options A–E are recorded above; Option F is the current focus
-of evaluation. The open fork is stated in [Open Questions](#open-questions) item 1.
-
-Remaining work is deliberately not enumerated until an option is selected — the
-task list differs substantially between E (new schema field, routing resolution,
-emission filtering) and F (making an existing mechanism load-bearing, plus a
-migration path that does not weaken checks during adoption).
+**Accepted — Option F.** See the header for the decision trail. Options A–E are
+retained below as rejected alternatives with their reasoning; Option F's design,
+review, and executable implementation plan are the sections above and below this
+one.
 
 ## Open Questions
 
-1. **Should `spec.references` become load-bearing, or stay documentation?** This
-   is the real fork. Load-bearing gives a complete, enforced dependency graph and
-   solves this cleanly — but the current 2-occurrence adoption rate has to rise,
-   and every existing workspace needs a migration path that does not silently
-   weaken its checks in the meantime.
-2. **Where does a `script` provisioner declare its required keys?** Probably
-   `references` on the provisioner in the workspace file, beside `inputs_from` —
-   but that needs confirming against how script provisioners are actually
-   configured.
-3. **Is type-level granularity ever insufficient?** Concretely: would a variable
-   ever need to reach *one* Terraform root but not another within the same
-   deployment? If not, several options collapse to the same thing and the
-   finer-grained ones are over-engineering.
-4. **Resolve the `references` name collision** (required-keys vs cross-resource
-   wiring) before building further on the term.
-5. **Does `features` need scoping at all**, or only `variables`? The mechanism is
-   free once variables have it, but if no real case exists it may be surface area
-   with no demand.
-6. **Should the existing dummy declarations be cleaned up** regardless?
+Closed by the 2026-09-15 revision:
+
+1. ~~Should `spec.references` become load-bearing, or stay documentation?~~
+   **Resolved: load-bearing**, opt-in per provisioner (rule 4). See
+   [Validation rules](#validation-rules).
+2. ~~Where does a `script` provisioner declare its required keys?~~ **Resolved:**
+   `references` on `WorkspaceIacModel`, beside `inputs_from` — see
+   [Gap 1](#gap-1--references-on-a-provisioner).
+4. ~~Resolve the `references` name collision.~~ **Resolved: deleted**, not
+   renamed — see [Gap 2](#gap-2--remove-the-inert-references-field--implemented).
+5. ~~Does `features` need scoping at all?~~ **Resolved: yes, same mechanism as
+   variables** — `ProvisionerReferencesModel`/`ResourceReferencesModel` etc. treat
+   `variables`/`secrets`/`features` uniformly; there is no cost to including
+   `features` once the machinery exists for `variables`.
+
+Still open, deliberately deferred:
+
+3. **Is type-level granularity ever insufficient?** i.e. would a variable ever
+   need to reach one Terraform root but not another *within the same workspace*?
+   Real, and larger than this ADR — see
+   [the injected(P) algorithm](#computing-injectedp)'s stated limitation: today
+   resources/modules/dns/providers are not bound to a specific provisioner at
+   all, so this design cannot yet distinguish between two Terraform roots in one
+   workspace. Revisit only if a concrete workspace needs it — do not build the
+   binding mechanism speculatively.
+6. **Should the existing dummy declarations be cleaned up regardless?**
    `enable_platform`, `enable_aks`, `enable_udr_subnet_association`,
-   `privatelink_zones` and `layer_name` are genuinely unused — a different
-   problem, and possibly they should simply be deleted rather than scoped.
+   `privatelink_zones`, `layer_name` become removable once their workspace opts a
+   provisioner into scoping (rollout step 4+). Not a prerequisite for this ADR;
+   revisit per-workspace after adoption.
 
