@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "strata-server.fullname" . }}
+  labels:
+    {{- include "strata-server.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "strata-server.labels" . | nindent 6 }}
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      labels:
+        {{- include "strata-server.labels" . | nindent 8 }}
+        app.kubernetes.io/component: server
+    spec:
+      containers:
+        - name: strata-server
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # Override the image's baked-in CMD (--host 127.0.0.1 --port 8443)
+          # entirely so every setting comes from env vars below — explicit
+          # CLI args would otherwise always win over the same-named env vars.
+          command: ["strata", "serve", "run"]
+          ports:
+            - name: https
+              containerPort: 8443
+          env:
+            - name: STRATA_SERVE_HOST
+              value: "0.0.0.0"
+            - name: STRATA_SERVE_PORT
+              value: "8443"
+            - name: STRATA_SERVE_TLS_CERT
+              value: /etc/certs/tls.crt
+            - name: STRATA_SERVE_TLS_KEY
+              value: /etc/certs/tls.key
+            {{- include "strata-server.dbEnvVars" . | nindent 12 }}
+            {{- if or .Values.adminToken .Values.existingAdminTokenSecret }}
+            - name: STRATA_SERVE_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ if .Values.existingAdminTokenSecret }}{{ .Values.existingAdminTokenSecret }}{{ else }}{{ include "strata-server.fullname" . }}-admin-token{{ end }}
+                  key: token
+            {{- end }}
+          volumeMounts:
+            - name: tls
+              mountPath: /etc/certs
+              readOnly: true
+          # The kubelet does not verify TLS certs for HTTPS probes, so the
+          # self-signed default cert works here without extra configuration.
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8443
+              scheme: HTTPS
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8443
+              scheme: HTTPS
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: tls
+          secret:
+            secretName: {{ include "strata-server.tlsSecretName" . }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

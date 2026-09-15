@@ -36,6 +36,13 @@ class TerraformBuilder(BaseBuilder):
         self.feature_refs: Dict[str, Dict[str, Any]] = {}
         self.secret_refs: Dict[str, Dict[str, Any]] = {}
 
+        # ADR-0078 scoping: how many resources/providers/modules were considered
+        # this build, and how many of them declared spec.references. Used by
+        # _compute_injected_keys() to decide whether a provisioner is scoped, and
+        # to enforce rule 4 (all-or-nothing declaration once any component opts in).
+        self._components_total: int = 0
+        self._components_declaring_refs: int = 0
+
         # Tracks which files were written during the last build() call.
         # Used by after_build() to verify only the files that were actually written.
         self._written_file_names: List[str] = []
@@ -87,6 +94,8 @@ class TerraformBuilder(BaseBuilder):
             self.variable_refs = {}
             self.feature_refs = {}
             self.secret_refs = {}
+            self._components_total = 0
+            self._components_declaring_refs = 0
             self._written_file_names = []
 
             deployment_build_path = deployment_service.get_build_path(build_path)
@@ -381,6 +390,7 @@ class TerraformBuilder(BaseBuilder):
                 }
 
                 if provider.references:
+                    self._components_declaring_refs += 1
                     for key in provider.references.variables or []:
                         self._track_variable(
                             key,
@@ -399,6 +409,8 @@ class TerraformBuilder(BaseBuilder):
                             f"Secret referenced by provider {provider.name}",
                             [provider.name],
                         )
+
+                self._components_total += 1
 
         if self.verbose:
             messages.append(f"Built provider vars: {len(providers_dict)} providers")
@@ -471,6 +483,7 @@ class TerraformBuilder(BaseBuilder):
                 }
 
                 if module.references:
+                    self._components_declaring_refs += 1
                     for key in module.references.variables or []:
                         self._track_variable(
                             key,
@@ -489,6 +502,8 @@ class TerraformBuilder(BaseBuilder):
                             f"Secret referenced by module {module.name}",
                             [module.name],
                         )
+
+                self._components_total += 1
 
         return {"modules": modules_dict}
 
@@ -1445,13 +1460,19 @@ class TerraformBuilder(BaseBuilder):
             # this environment file (e.g. an Ansible/Helm-only app secret) is never
             # injected here and must not be flagged as "not declared in variables.tf".
             matching_stages = self._stages_for_provisioner(workspace_service.model, all_stages, prov)
-            declared_keys = self._collect_declared_input_keys(deployment_service, matching_stages)
+            environment_keys = self._collect_declared_input_keys(deployment_service, matching_stages)
+
+            # ADR-0078: narrow to what this provisioner actually receives, when the
+            # workspace has opted into scoping (some component declares spec.references).
+            # Unscoped provisioners get injected_keys == environment_keys, i.e. today's
+            # behaviour unchanged.
+            injected_keys = self._compute_injected_keys(prov, environment_keys)
 
             # Include keys that will be injected at deploy-time via inputs_from
             if prov.inputs_from:
                 from strata.utils.resolved_values import collect_inputs_from_keys
 
-                declared_keys.update(collect_inputs_from_keys(prov.inputs_from))
+                injected_keys.update(collect_inputs_from_keys(prov.inputs_from))
 
             # Also include keys from the platform structural output (resource categories, etc.)
             # These are emitted by the builder itself and should be excluded from checks.
@@ -1479,7 +1500,9 @@ class TerraformBuilder(BaseBuilder):
             # Backend configuration expressions (${var:KEY} / ${secret:KEY} / ${feature:KEY},
             # ADR-0075) are resolved directly from ResolvedValues at deploy time — never
             # passed as Terraform root-module inputs — so keys referenced only there are
-            # backend plumbing, not undeclared module inputs.
+            # backend plumbing, not undeclared module inputs. Checked against
+            # environment_keys (not injected_keys): backend resolution is unaffected by
+            # ADR-0078 scoping, so this check's behaviour must not change either.
             if prov.backend is not None:
                 backend_refs = collect_expr_refs(prov.backend.configuration)
                 excluded.update(key for _kind, key in backend_refs)
@@ -1489,7 +1512,7 @@ class TerraformBuilder(BaseBuilder):
                 # a typo'd or undeclared name (deploy time now fails loud too, but that's
                 # much later in the pipeline than a build error).
                 for kind, key in sorted(backend_refs):
-                    if key not in declared_keys:
+                    if key not in environment_keys:
                         self._errors.append(
                             f"[{prov.name}] backend.configuration references "
                             f"'${{{kind}:{key}}}', but '{key}' is not declared as a "
@@ -1498,7 +1521,7 @@ class TerraformBuilder(BaseBuilder):
                         has_errors = True
 
             # Run the cross-check
-            result = check_inputs(declared_keys, module_vars, excluded_keys=excluded)
+            result = check_inputs(injected_keys, module_vars, environment_keys=environment_keys, excluded_keys=excluded)
 
             # Report results
             for error in result.errors:
@@ -1510,6 +1533,50 @@ class TerraformBuilder(BaseBuilder):
                 has_errors = True
 
         return not has_errors
+
+    def _compute_injected_keys(self, prov: Any, environment_keys: Set[str]) -> Set[str]:
+        """Return the injected key set for `prov` (ADR-0078).
+
+        Unscoped (no resource/provider/module in the workspace declares
+        `references`, and `prov` itself declares none): return `environment_keys`
+        unchanged — today's behaviour.
+
+        Scoped (at least one component, anywhere in the workspace, declares
+        `references`): every resource/provider/module considered this build must
+        have declared `references` — rule 4. If any did not, record a build error
+        and fall back to `environment_keys` so the rest of validation still runs
+        without cascading confusing failures. Otherwise the injected set is the
+        union of every component's tracked reference keys
+        (`self.variable_refs`/`feature_refs`/`secret_refs`, already populated by
+        `_build_provider_vars`/`_build_resources_by_category`/`_build_module_vars`
+        earlier in this same build) plus this provisioner's own `references`.
+
+        v1 simplification (see ADR-0078's Implementation Plan): resource/module/
+        provider references are workspace-wide, not bound to a specific
+        provisioner — every Terraform provisioner in the workspace sees the same
+        union. DNS is not counted here; it already self-validates via
+        `DnsSpecModel.validate_references_declared()`.
+        """
+        scoped = self._components_declaring_refs > 0 or bool(prov.references)
+        if not scoped:
+            return set(environment_keys)
+
+        if self._components_declaring_refs < self._components_total:
+            self._errors.append(
+                f"[{prov.name}] is scoped (some resources/providers/modules declare "
+                "spec.references) but at least one declares none — add spec.references "
+                "to every resource/provider/module in the workspace, or remove it from all of them"
+            )
+            return set(environment_keys)
+
+        injected: Set[str] = (
+            set(self.variable_refs.keys()) | set(self.feature_refs.keys()) | set(self.secret_refs.keys())
+        )
+        if prov.references:
+            injected |= set(prov.references.variables or [])
+            injected |= set(prov.references.secrets or [])
+            injected |= set(prov.references.features or [])
+        return injected
 
     def _stages_for_provisioner(self, workspace_model: Any, stages: List[Any], prov: Any) -> List[Any]:
         """Return the deployment stages that resolve to *prov*.
@@ -1888,8 +1955,10 @@ class TerraformBuilder(BaseBuilder):
         return True
 
     def _track_resource_requirements(self, resource: Any) -> None:
+        self._components_total += 1
         if not resource.references:
             return
+        self._components_declaring_refs += 1
 
         for key in resource.references.variables or []:
             self._track_variable(

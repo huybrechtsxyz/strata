@@ -111,29 +111,43 @@ def parse_variables_tf(source_path: Path) -> Dict[str, TerraformVariable]:
 
 
 def check_inputs(
-    declared_keys: Set[str],
+    injected_keys: Set[str],
     module_variables: Dict[str, TerraformVariable],
+    *,
+    environment_keys: Optional[Set[str]] = None,
     excluded_keys: Optional[Set[str]] = None,
 ) -> InputCheckResult:
-    """Cross-check declared input keys against module variable declarations.
+    """Cross-check injected input keys against module variable declarations.
 
     Args:
-        declared_keys: Variable/feature keys from environment YAML that will be
-            emitted to tfvars.
+        injected_keys: Variable/feature/secret keys that will actually be emitted
+            to tfvars for this provisioner. Under ADR-0078 scoping this is the
+            union of every declaring component's ``spec.references``; otherwise
+            it is every key declared anywhere in the environment (today's
+            behaviour, unchanged).
         module_variables: Parsed variables from the module's .tf files.
+        environment_keys: The full set of keys declared anywhere in the
+            environment, unnarrowed by scoping. Used only to distinguish an
+            optional variable nobody supplied anywhere (info) from one the
+            environment supplies but scoping excluded (warning) — see rules
+            3a/3b in ADR-0078. Defaults to ``injected_keys`` when omitted,
+            which makes every optional-variable case fall through to the
+            info branch — i.e. today's behaviour, unchanged.
         excluded_keys: Keys to skip (e.g. strata-injected platform variables).
 
     Returns:
-        InputCheckResult with errors (undeclared), warnings (unsupplied required),
-        and info (optional not overridden).
+        InputCheckResult with errors (undeclared), warnings (unsupplied required,
+        or unsupplied-but-available-in-the-environment), and info (optional,
+        genuinely unsupplied anywhere).
     """
     excluded = excluded_keys or set()
+    effective_environment_keys = environment_keys if environment_keys is not None else injected_keys
     result = InputCheckResult()
 
     module_var_names = set(module_variables.keys())
 
     # 1. Find undeclared inputs (typo detection)
-    for key in sorted(declared_keys):
+    for key in sorted(injected_keys):
         if key in excluded:
             continue
         if key not in module_var_names:
@@ -148,17 +162,28 @@ def check_inputs(
         var = module_variables[var_name]
         if var_name in excluded:
             continue
-        if not var.has_default and var_name not in declared_keys:
+        if not var.has_default and var_name not in injected_keys:
             result.warnings.append(f"Required variable '{var_name}' (no default) is not supplied by any input")
 
-    # 3. Info: optional variables not overridden (only in verbose mode)
+    # 3a/3b. Optional variables not supplied. 3a (info): nobody supplied a value
+    # anywhere — the module's default is exactly what's intended, the common,
+    # unremarkable case. 3b (warning, only reachable when scoping actually
+    # narrowed injected_keys below environment_keys): the environment DOES have
+    # a value, but no component's references names it, so it was excluded.
     for var_name in sorted(module_variables.keys()):
         var = module_variables[var_name]
         if var_name in excluded:
             continue
-        if var.has_default and var_name not in declared_keys:
+        if var.has_default and var_name not in injected_keys:
             default_repr = repr(var.default_value) if var.default_value is not None else "null"
-            result.info.append(f"Variable '{var_name}' has default={default_repr} and is not overridden")
+            if var_name in effective_environment_keys:
+                result.warnings.append(
+                    f"Optional variable '{var_name}' not supplied — Terraform will use its "
+                    f"default={default_repr}. '{var_name}' has a value in the environment, but "
+                    "no component of this scoped provisioner references it, so it was not injected."
+                )
+            else:
+                result.info.append(f"Variable '{var_name}' has default={default_repr} and is not overridden")
 
     return result
 

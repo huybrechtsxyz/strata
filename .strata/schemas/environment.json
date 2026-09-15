@@ -1,205 +1,5 @@
 {
   "$defs": {
-    "AuditConfigModel": {
-      "additionalProperties": false,
-      "description": "Top-level audit configuration under spec.audit in environment YAML.",
-      "properties": {
-        "policy": {
-          "$ref": "#/$defs/AuditPolicyModel",
-          "description": "Event type policy"
-        },
-        "sinks": {
-          "description": "Configured sinks",
-          "items": {
-            "$ref": "#/$defs/AuditSinkModel"
-          },
-          "title": "Sinks",
-          "type": "array"
-        },
-        "structure": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Deploy-log directory structure (flat, by-stage, by-execution, by-tenant, full). Defaults to by-execution.",
-          "title": "Structure"
-        },
-        "deploy_log_path": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Custom deploy-log base path relative to workspace root (defaults to .strata/deploy-log)",
-          "title": "Deploy Log Path"
-        }
-      },
-      "title": "AuditConfigModel",
-      "type": "object"
-    },
-    "AuditPolicyModel": {
-      "additionalProperties": false,
-      "description": "Which event types are active. Configured in environment YAML under spec.audit.policy.",
-      "properties": {
-        "events": {
-          "additionalProperties": {
-            "type": "boolean"
-          },
-          "description": "Map of event type \u2192 enabled flag",
-          "title": "Events",
-          "type": "object"
-        }
-      },
-      "title": "AuditPolicyModel",
-      "type": "object"
-    },
-    "AuditSinkModel": {
-      "additionalProperties": false,
-      "description": "A configured audit event sink \u2014 forwards events to a built-in type or integration.",
-      "properties": {
-        "name": {
-          "description": "Unique sink name",
-          "maxLength": 64,
-          "minLength": 1,
-          "pattern": "^[a-z][a-z0-9_-]*$",
-          "title": "Name",
-          "type": "string"
-        },
-        "type": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Built-in sink type: stdout, ndjson, syslog, webhook",
-          "title": "Type"
-        },
-        "integration": {
-          "anyOf": [
-            {
-              "maxLength": 64,
-              "minLength": 1,
-              "pattern": "^[a-z][a-z0-9_-]*$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "References configuration.spec.integrations[].name",
-          "title": "Integration"
-        },
-        "enabled": {
-          "default": true,
-          "description": "Whether this sink is active",
-          "title": "Enabled",
-          "type": "boolean"
-        },
-        "events": {
-          "anyOf": [
-            {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Event filter (None = all enabled events)",
-          "title": "Events"
-        },
-        "path": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Output path (ndjson only)",
-          "title": "Path"
-        },
-        "address": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Target address (syslog only)",
-          "title": "Address"
-        },
-        "url": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Target URL (webhook only)",
-          "title": "Url"
-        },
-        "headers": {
-          "anyOf": [
-            {
-              "additionalProperties": {
-                "type": "string"
-              },
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "HTTP headers (webhook only)",
-          "title": "Headers"
-        },
-        "format": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Payload format for syslog sink: 'json' (default) or 'cef' (Common Event Format)",
-          "title": "Format"
-        }
-      },
-      "required": [
-        "name"
-      ],
-      "title": "AuditSinkModel",
-      "type": "object"
-    },
     "CommonLifecycleModel": {
       "additionalProperties": {
         "$ref": "#/$defs/CommonLifecyclePhaseModel"
@@ -600,6 +400,30 @@
       "title": "EnvironmentOverridesModel",
       "type": "object"
     },
+    "EnvironmentPromotionModel": {
+      "additionalProperties": false,
+      "description": "Declares which promotion strategy and ring this environment belongs to.\n\nDefined at ``environment.spec.promotion``.\n\nExample::\n\n    spec:\n      promotion:\n        strategy: infra-cautious\n        ring: prd",
+      "properties": {
+        "strategy": {
+          "description": "Name of the promotion strategy this environment participates in (must match a strategy in configuration.spec.promotions.strategies)",
+          "minLength": 1,
+          "title": "Strategy",
+          "type": "string"
+        },
+        "ring": {
+          "description": "Ring name within the strategy's progression that this environment is a member of",
+          "minLength": 1,
+          "title": "Ring",
+          "type": "string"
+        }
+      },
+      "required": [
+        "strategy",
+        "ring"
+      ],
+      "title": "EnvironmentPromotionModel",
+      "type": "object"
+    },
     "EnvironmentProviderOverrideModel": {
       "additionalProperties": false,
       "description": "Environment-specific provider overrides.\n\nMirrors WorkspaceProviderModel fields (all optional except provider identifier).\nValues are merged with workspace provider configuration.\nNote: Provider configuration is in the provider file itself, not in workspace.",
@@ -611,6 +435,19 @@
           "pattern": "^[a-z][a-z0-9_-]*$",
           "title": "Provider",
           "type": "string"
+        },
+        "file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Replace the provider file binding for this environment. Supports the same path formats as workspace provider file references (@repo/path, relative, absolute). When set, the workspace's default provider file is ignored and this file is loaded instead, enabling the same workspace to target different regions or cloud accounts per deployment.",
+          "title": "File"
         },
         "description": {
           "anyOf": [
@@ -636,7 +473,7 @@
             }
           ],
           "default": null,
-          "description": "Environment-specific provider configuration overrides (merged with workspace provider config)",
+          "description": "Override individual properties in the loaded provider file's spec.properties (e.g. region, engine, version). Applied after file resolution. Keys that do not correspond to known spec.properties fields are logged and skipped.",
           "title": "Configuration"
         }
       },
@@ -769,22 +606,6 @@
           "default": null,
           "description": "Override resource dependencies",
           "title": "Depends On"
-        },
-        "references": {
-          "anyOf": [
-            {
-              "additionalProperties": {
-                "type": "string"
-              },
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Override cross-resource value references",
-          "title": "References"
         },
         "firewalls": {
           "anyOf": [
@@ -1011,17 +832,17 @@
           "description": "Feature flag declarations - single source of truth for all platform component feature references",
           "title": "Features"
         },
-        "audit": {
+        "promotion": {
           "anyOf": [
             {
-              "$ref": "#/$defs/AuditConfigModel"
+              "$ref": "#/$defs/EnvironmentPromotionModel"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "description": "Environment-level audit overrides (structure, sinks, retention)"
+          "description": "Promotion membership: declares which strategy and ring this environment belongs to"
         }
       },
       "title": "EnvironmentSpecModel",
@@ -1259,6 +1080,7 @@
         "configuration",
         "tenant",
         "deployment",
+        "diagram",
         "dns",
         "environment",
         "firewall",
@@ -1269,7 +1091,10 @@
         "deployment-manifest",
         "provider",
         "resource",
-        "workspace"
+        "workspace",
+        "version-lock",
+        "version",
+        "promotion-record"
       ],
       "title": "PlatformKind",
       "type": "string"
@@ -1509,6 +1334,18 @@
           "description": "Variable identifier: literal value for constant, env var name for environment, config path/key for integration stores",
           "title": "Value"
         },
+        "type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VariableValueType"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Declared HCL type for Terraform emission. When set, strata emits the value as a native HCL literal in .auto.tfvars.json. When omitted (default), values are emitted as strings for backward compatibility."
+        },
         "version": {
           "anyOf": [
             {
@@ -1569,6 +1406,19 @@
         "etcd"
       ],
       "title": "VariableStoreType",
+      "type": "string"
+    },
+    "VariableValueType": {
+      "description": "Declared HCL type for Terraform variable emission.\n\nWhen set on a VariableStoreModel, controls how the value is serialized\nin .auto.tfvars.json:\n- STRING: emit as JSON string (default, backward compatible)\n- NUMBER: emit as bare numeric literal\n- BOOL: emit as true/false\n- OBJECT: emit as JSON object\n- LIST: emit as JSON array\n- MAP: emit as JSON object (string keys)",
+      "enum": [
+        "string",
+        "number",
+        "bool",
+        "object",
+        "list",
+        "map"
+      ],
+      "title": "VariableValueType",
       "type": "string"
     }
   },

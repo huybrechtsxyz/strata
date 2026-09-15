@@ -621,7 +621,15 @@ class GitIntegration(BaseIntegration):
         Args:
             working_dir: Git repository directory.
             remote: Remote name.
-            branch: Branch to push (None pushes current branch).
+            branch: Remote branch to push to (None pushes current branch). When
+                given, this is sent as a ``HEAD:<branch>`` refspec rather than a
+                bare branch name — that form pushes whatever commit is currently
+                checked out to the named remote branch regardless of whether the
+                local working tree is on a real branch or in detached-HEAD state
+                (e.g. a CI checkout pinned to a specific ref). A bare branch name
+                only works when a local branch of that exact name already exists,
+                which fails with "You are not currently on a branch" on a
+                detached-HEAD checkout.
             timeout: Command timeout in seconds.
 
         Returns:
@@ -633,7 +641,7 @@ class GitIntegration(BaseIntegration):
 
         args = ["push", remote]
         if branch:
-            args.append(branch)
+            args.append(f"HEAD:{branch}")
         return self._run_integration(args, cwd=working_dir, timeout=timeout)
 
     def pull_rebase(

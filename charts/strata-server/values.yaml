@@ -1,0 +1,65 @@
+# Default values for the strata-server chart.
+
+image:
+  repository: ghcr.io/huybrechtsxyz/strata-server
+  tag: "" # defaults to .Chart.AppVersion
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 8443
+
+# Admin bearer token, enabling the /v1/tokens management routes (ADR-0065 Step
+# 2.4) used to create/list/revoke per-workspace ingest tokens. Provide exactly
+# one of these — never commit a real token to values.yaml, pass adminToken via
+# --set-string or a separate untracked values file instead.
+adminToken: ""
+existingAdminTokenSecret: "" # name of an existing Secret with key `token`
+
+# TLS is mandatory for any non-loopback bind (server/config.py's
+# validate_bind()), and the Service below needs a non-loopback bind to route
+# traffic to the pod at all.
+tls:
+  # Generate a throwaway self-signed certificate via Helm at install time.
+  # Fine for trials; set secretName instead (e.g. a cert-manager-issued
+  # kubernetes.io/tls Secret) for anything reachable outside a single
+  # trusted cluster.
+  selfSigned: true
+  secretName: ""
+
+# Event-store connection (ADR-0065 Step 2.2). Leave db.url/db.existingSecret
+# empty to build the connection string automatically from the bundled
+# postgresql.* block below. Set db.existingSecret (key: db-url) to point at an
+# external/managed database instead — and set postgresql.enabled: false.
+db:
+  url: "" # dev/testing only — stored in a chart-managed Secret, never a ConfigMap
+  existingSecret: ""
+  existingSecretKey: db-url
+
+# Bundled single-pod PostgreSQL — no operator, no replication, matching
+# haven's firefly-postgres/immich-postgres/nextcloud-postgres modules. Fine
+# for trials/small teams; disable and point db.existingSecret at a managed
+# database for production.
+postgresql:
+  enabled: true
+  image:
+    repository: postgres
+    tag: 16-alpine
+  auth:
+    username: strata
+    password: "" # required when postgresql.enabled and no existingSecret given
+    existingSecret: "" # name of an existing Secret with key `postgres-password`
+    database: strata_state
+  service:
+    port: 5432
+  persistence:
+    storageClassName: ""
+    size: 5Gi
+
+resources: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

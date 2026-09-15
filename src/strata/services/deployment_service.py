@@ -812,12 +812,6 @@ class DeploymentService(BaseService["DeploymentModel"]):
                 workspace_resource.count = resource_override.count
             if resource_override.depends_on is not None:
                 workspace_resource.depends_on = resource_override.depends_on
-            if resource_override.references is not None:
-                # Merge references (override wins)
-                if workspace_resource.references:
-                    workspace_resource.references.update(resource_override.references)
-                else:
-                    workspace_resource.references = resource_override.references
             if resource_override.firewalls is not None:
                 workspace_resource.firewalls = resource_override.firewalls
             if resource_override.configuration is not None:

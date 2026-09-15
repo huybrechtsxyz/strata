@@ -16,6 +16,7 @@ from fastapi import Request
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
 
+    from strata.server.auth.m2m_verifier import M2mVerifier
     from strata.server.auth.oidc_relying_party import OidcRelyingParty
 
 # A pending login does not survive a restart or work behind multiple replicas —
@@ -38,6 +39,13 @@ def get_relying_party(request: Request) -> Optional["OidcRelyingParty"]:
 
 def get_session_secret(request: Request) -> Optional[str]:
     return request.app.state.session_secret
+
+
+def get_m2m_verifier(request: Request) -> Optional["M2mVerifier"]:
+    """The configured M2M verifier (ADR-0067 Step 10), or None if no trusted issuers
+    were configured — the same all-or-nothing gating `oidc_config` uses for `/auth/*`.
+    """
+    return request.app.state.m2m_verifier
 
 
 def get_pending_logins(request: Request) -> Dict[str, Dict[str, Any]]:

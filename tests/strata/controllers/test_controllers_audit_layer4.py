@@ -124,6 +124,58 @@ class TestPushToRemote:
             )
         assert result is False
 
+    @patch("strata.integrations.factory.IntegrationFactory.create_by_type")
+    def test_push_uses_configured_branch_refspec_for_named_repo(self, mock_factory, tmp_path: Path) -> None:
+        """A registered repo's configured branch is resolved and passed through as the push target.
+
+        This must work regardless of the target repo's working-tree state (attached
+        or detached HEAD) — GitIntegration.push() turns a supplied branch into a
+        `HEAD:<branch>` refspec, which doesn't require a local branch of that name
+        to exist. See the detached-HEAD push_to_remote bug report.
+        """
+        from strata.models.solution_model import SolutionSpecRepositoryModel
+
+        git_mock = MagicMock()
+        git_mock.ensure_available.return_value = (True, "")
+        git_mock.add.return_value = MagicMock(returncode=0)
+        git_mock.commit.return_value = MagicMock(returncode=0)
+        git_mock.push.return_value = MagicMock(returncode=0)
+        mock_factory.return_value = git_mock
+
+        remote_repo_dir = tmp_path / "remote_repo"
+        remote_repo_dir.mkdir()
+        local_base = tmp_path / "local"
+        local_base.mkdir()
+        src_file = local_base / "file.json"
+        src_file.write_text("{}", encoding="utf-8")
+
+        repo_model = SolutionSpecRepositoryModel(
+            name="myrepo",
+            url="https://example.com/myrepo.git",
+            path="remote_repo",
+            type="gitops",
+            branch="main",
+        )
+
+        controller = AuditController(work_path=tmp_path)
+        with (
+            patch(
+                "strata.controllers.solution_controller.SolutionController.get_repo_map",
+                return_value={"myrepo": str(remote_repo_dir)},
+            ),
+            patch(
+                "strata.controllers.solution_controller.SolutionController.get_repositories",
+                return_value=([repo_model], []),
+            ),
+            patch("strata.controllers.solution_controller.SolutionController.load", return_value=None),
+        ):
+            result = controller.push_to_remote(
+                [src_file], local_base=local_base, remote_path="deploy-log", repo_name="myrepo"
+            )
+
+        assert result is True
+        git_mock.push.assert_called_once_with(str(remote_repo_dir), remote="origin", branch="main")
+
 
 class TestEnrichWithPrData:
     """Tests for AuditController.enrich_with_pr_data()."""

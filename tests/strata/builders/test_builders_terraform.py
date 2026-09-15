@@ -345,6 +345,91 @@ class TestTerraformBuilderTracking:
         assert result == {"secrets": []}
 
 
+class TestTerraformBuilderComponentCounters:
+    """ADR-0078: _components_total / _components_declaring_refs bookkeeping, used by
+    _compute_injected_keys() to decide whether a provisioner is scoped (rule 4)."""
+
+    def test_track_resource_requirements_counts_component_without_references(self):
+        builder = TerraformBuilder()
+        resource = MagicMock()
+        resource.references = None
+        builder._track_resource_requirements(resource)
+        assert builder._components_total == 1
+        assert builder._components_declaring_refs == 0
+
+    def test_track_resource_requirements_counts_component_with_references(self):
+        builder = TerraformBuilder()
+        resource = MagicMock()
+        resource.name = "network"
+        resource.references.variables = ["vnet_cidr"]
+        resource.references.features = []
+        resource.references.secrets = []
+        builder._track_resource_requirements(resource)
+        assert builder._components_total == 1
+        assert builder._components_declaring_refs == 1
+        assert "vnet_cidr" in builder.variable_refs
+
+
+class TestTerraformBuilderComputeInjectedKeys:
+    """ADR-0078: _compute_injected_keys() — unscoped passthrough, scoped union, rule 4."""
+
+    def _prov(self, references=None, inputs_from=None):
+        prov = MagicMock()
+        prov.name = "infra"
+        prov.references = references
+        prov.inputs_from = inputs_from
+        return prov
+
+    def test_unscoped_returns_environment_keys_unchanged(self):
+        """No component anywhere declares references, and the provisioner itself
+        doesn't either — today's behaviour, unchanged."""
+        builder = TerraformBuilder()
+        environment_keys = {"a", "b", "c"}
+        result = builder._compute_injected_keys(self._prov(references=None), environment_keys)
+        assert result == environment_keys
+        assert not builder.has_errors()
+
+    def test_scoped_by_provisioner_alone_with_no_other_components(self):
+        """The provisioner declares references and no resource/module/provider was
+        considered this build (e.g. a script provisioner with no bound components) —
+        scoped, injected set is exactly the provisioner's own references."""
+        builder = TerraformBuilder()
+        refs = MagicMock()
+        refs.variables = ["service_connection_id"]
+        refs.secrets = []
+        refs.features = []
+        result = builder._compute_injected_keys(self._prov(references=refs), {"unrelated_env_key"})
+        assert result == {"service_connection_id"}
+        assert not builder.has_errors()
+
+    def test_scoped_and_fully_declared_unions_tracked_and_provisioner_references(self):
+        """Every component considered this build declared references, and the
+        provisioner also declares its own — injected is the union of both."""
+        builder = TerraformBuilder()
+        builder._components_total = 1
+        builder._components_declaring_refs = 1
+        builder.variable_refs = {"vnet_cidr": {}}
+        refs = MagicMock()
+        refs.variables = ["service_connection_id"]
+        refs.secrets = []
+        refs.features = []
+        result = builder._compute_injected_keys(self._prov(references=refs), {"vnet_cidr", "service_connection_id"})
+        assert result == {"vnet_cidr", "service_connection_id"}
+        assert not builder.has_errors()
+
+    def test_rule_4_scoped_but_under_declared_is_a_build_error(self):
+        """Some component declared references, but not every component considered
+        this build did — rule 4: error, not a silent narrowing."""
+        builder = TerraformBuilder()
+        builder._components_total = 2
+        builder._components_declaring_refs = 1  # one of two components under-declared
+        environment_keys = {"a", "b"}
+        result = builder._compute_injected_keys(self._prov(references=None), environment_keys)
+        assert builder.has_errors()
+        assert any("scoped" in e for e in builder.get_errors())
+        assert result == environment_keys  # falls back so downstream checks still run
+
+
 class TestTerraformBuilderWorkspaceVars:
     def _make_platform(self, workspace_name="ws", workspace_labels=None, deployment_labels=None):
         platform = MagicMock()

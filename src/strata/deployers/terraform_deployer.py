@@ -514,7 +514,7 @@ class TerraformDeployer(BaseDeployer):
         assert self._tf is not None
 
         try:
-            result = self._tf.output(str(self._working_dir))
+            result = self._tf.output(str(self._working_dir), json_format=True)
             if result.returncode != 0:
                 messages.append(f"terraform output failed:\n{result.stderr}")
                 return False, non_sensitive, sensitive, messages
@@ -545,7 +545,7 @@ class TerraformDeployer(BaseDeployer):
         messages.append("terraform output -json")
 
         try:
-            result = self._tf.output(str(self._working_dir))
+            result = self._tf.output(str(self._working_dir), json_format=True)
             if result.returncode != 0:
                 messages.append(f"terraform output failed:\n{result.stderr}")
                 return False, outputs, messages

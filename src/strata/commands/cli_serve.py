@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import click
 
@@ -21,6 +21,9 @@ from strata.commands.serve.migrate_serve_command import MigrateServeCommand
 from strata.commands.serve.revoke_token_serve_command import RevokeTokenServeCommand
 from strata.commands.serve.tail_serve_command import TailServeCommand
 
+if TYPE_CHECKING:
+    from strata.server.auth.m2m_verifier import TrustedIssuer
+
 # Shared default/envvar for the event-store connection (ADR-0065 Step 2.2) — sqlite
 # is the zero-config default; postgresql+psycopg://... / mssql+pyodbc://... are the
 # opt-in production backends (server-postgres / server-mssql extras).
@@ -32,6 +35,44 @@ _DB_URL_OPTION = click.option(
     show_default=True,
     help="Event-store connection URL (sqlite/postgresql/mssql). [env: STRATA_SERVE_DB_URL]",
 )
+
+_TRUSTED_ISSUER_REQUIRED_FIELDS = ("name", "issuer", "audience")
+
+
+def _parse_trusted_issuer(raw: str) -> "TrustedIssuer":
+    """Parse one `--m2m-trusted-issuer` value into a `TrustedIssuer` (ADR-0067 Step 10).
+
+    Format: `name=<label>,issuer=<url>,audience=<value>[,subject_claim=<claim>]` — a flat
+    comma-separated `key=value` list, the same shape already used elsewhere for compact
+    single-flag structured input, rather than requiring a config file for one line of
+    settings per trusted issuer.
+    """
+    from strata.server.auth.m2m_verifier import TrustedIssuer
+
+    fields: dict = {}
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "=" not in part:
+            raise click.ClickException(
+                f"Invalid --m2m-trusted-issuer entry '{raw}': expected key=value pairs, got '{part}'"
+            )
+        key, _, value = part.partition("=")
+        fields[key.strip()] = value.strip()
+
+    missing = [f for f in _TRUSTED_ISSUER_REQUIRED_FIELDS if not fields.get(f)]
+    if missing:
+        raise click.ClickException(
+            f"Invalid --m2m-trusted-issuer entry '{raw}': missing required field(s) {', '.join(missing)}"
+        )
+
+    return TrustedIssuer(
+        name=fields["name"],
+        issuer=fields["issuer"],
+        audience=fields["audience"],
+        subject_claim=fields.get("subject_claim", "sub"),
+    )
 
 
 @click.group(name="serve", help="Run and check the strata state-service server (ADR-0065).")
@@ -123,6 +164,18 @@ def serve_group() -> None:
         "the --oidc-* flags. [env: STRATA_SERVE_SESSION_SECRET]"
     ),
 )
+@click.option(
+    "--m2m-trusted-issuer",
+    "m2m_trusted_issuers",
+    multiple=True,
+    metavar="name=...,issuer=...,audience=...",
+    help=(
+        "Trust an OIDC issuer for machine-to-machine callers (ADR-0067 Step 10), enabling "
+        "GET /v1/whoami. Repeatable — declare one entry per CI system/IdP (e.g. GitHub Actions, "
+        "Azure DevOps, a Client-Credentials IdP). Format: name=<label>,issuer=<url>,audience=<value>, "
+        "optionally with subject_claim=<claim> (default 'sub')."
+    ),
+)
 @_DB_URL_OPTION
 def serve_run(
     host: str,
@@ -135,6 +188,7 @@ def serve_run(
     oidc_client_secret: Optional[str],
     oidc_redirect_base: Optional[str],
     session_secret: Optional[str],
+    m2m_trusted_issuers: tuple,
     db_url: str,
 ) -> None:
     """Launch the strata state-service server.
@@ -146,9 +200,11 @@ def serve_run(
     `GET /healthz` also verifies database connectivity (ADR-0065 Step 2.2).
     `POST /v1/events` requires a per-workspace bearer token (Step 2.4) — issue one
     via `strata serve token create` once `--admin-token` is configured here.
-    Refuses to start on a non-loopback bind without TLS. Run
-    `strata serve migrate --db-url ...` first to create the schema — this command
-    only ever issues INSERT/SELECT, never CREATE TABLE.
+    `GET /v1/whoami` requires an M2M bearer token verified against `--m2m-trusted-issuer`
+    (ADR-0067 Step 10) — a CI pipeline or scheduled job can call it to confirm its
+    federated credential verifies correctly. Refuses to start on a non-loopback bind
+    without TLS. Run `strata serve migrate --db-url ...` first to create the schema —
+    this command only ever issues INSERT/SELECT, never CREATE TABLE.
 
     Requires the optional server dependency:
         pip install xyz-strata[server]
@@ -201,7 +257,15 @@ def serve_run(
             client_secret=oidc_client_secret,
         )
 
-    app = create_app(engine, admin_token=admin_token, oidc_config=oidc_config, session_secret=session_secret)
+    trusted_issuers = [_parse_trusted_issuer(raw) for raw in m2m_trusted_issuers]
+
+    app = create_app(
+        engine,
+        admin_token=admin_token,
+        oidc_config=oidc_config,
+        session_secret=session_secret,
+        m2m_trusted_issuers=trusted_issuers,
+    )
     uvicorn.run(app, host=host, port=port, ssl_certfile=tls_cert, ssl_keyfile=tls_key)
 
 

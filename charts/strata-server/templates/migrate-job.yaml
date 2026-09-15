@@ -1,0 +1,34 @@
+{{- $tag := .Values.image.tag | default .Chart.AppVersion }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  # Named after the image tag (not the release revision) so a same-version
+  # re-apply is a no-op, and a version bump gets its own fresh run. 'strata
+  # serve migrate' is idempotent (create_all(checkfirst=True)), so re-running
+  # it for an unrelated values-only upgrade would also be harmless — this
+  # naming just avoids doing that unnecessarily.
+  name: {{ printf "%s-migrate-%s" (include "strata-server.fullname" .) $tag | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "strata-server.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrate
+spec:
+  # Not a Helm hook: a pre-install hook would run before the bundled postgres
+  # Deployment/Service (ordinary templates) even exist, so there'd be nothing
+  # to connect to yet. Instead this is a normal Job applied alongside
+  # everything else, and Kubernetes' own retry-with-backoff covers the case
+  # where Postgres isn't reachable on the very first attempt.
+  backoffLimit: 10
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        {{- include "strata-server.labels" . | nindent 8 }}
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: "{{ .Values.image.repository }}:{{ $tag }}"
+          command: ["strata", "serve", "migrate"]
+          env:
+            {{- include "strata-server.dbEnvVars" . | nindent 12 }}

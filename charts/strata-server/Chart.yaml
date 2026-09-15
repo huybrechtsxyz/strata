@@ -1,0 +1,19 @@
+apiVersion: v2
+name: strata-server
+description: >
+  Strata state-service (ADR-0065) — a small HTTP server that stores deployment
+  history, audit events, cost data, and drift records forwarded from strata
+  workspaces. Optionally bundles a single-pod PostgreSQL backend (no operator,
+  same minimal pattern haven uses for its own service databases) for
+  self-contained trial/small-team deployments; set postgresql.enabled: false
+  and configure db.url/db.existingSecret to point at a managed database
+  instead for anything needing HA, backups, or more than one strata-server
+  replica.
+type: application
+version: "1.0.0"
+appVersion: "1.9.11"
+home: https://github.com/huybrechtsxyz/strata
+keywords:
+  - strata
+  - state-service
+  - audit

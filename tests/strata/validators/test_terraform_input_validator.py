@@ -207,6 +207,39 @@ class TestCheckInputs:
         assert result.warnings == []  # tags has default, not a warning
         assert any("tags" in i for i in result.info)
 
+    def test_optional_variable_not_supplied_defaults_environment_keys_to_injected_keys(self):
+        """Omitting environment_keys makes every optional-variable case fall through to
+        info — i.e. today's (unscoped) behaviour, unchanged. Regression guard for the
+        ADR-0078 rule 3a/3b split not silently becoming the default behaviour."""
+        module_vars = self._vars("cluster_name", "tags", defaults={"tags"})
+        declared = {"cluster_name"}
+        result = check_inputs(declared, module_vars)
+        assert result.warnings == []
+        assert any("tags" in i for i in result.info)
+
+    def test_rule_3b_optional_variable_present_in_environment_but_not_injected_is_warning(self):
+        """ADR-0078 rule 3b: the environment DOES have a value for 'tags', but scoping
+        excluded it (no component referenced it) — this must warn, not stay quiet as info,
+        because it's a value silently falling back to the module default."""
+        module_vars = self._vars("cluster_name", "tags", defaults={"tags"})
+        injected = {"cluster_name"}
+        environment = {"cluster_name", "tags"}
+        result = check_inputs(injected, module_vars, environment_keys=environment)
+        assert not result.has_errors
+        assert any("tags" in w for w in result.warnings)
+        assert not any("tags" in i for i in result.info)
+
+    def test_rule_3a_optional_variable_absent_everywhere_stays_info_even_when_scoped(self):
+        """ADR-0078 rule 3a: nobody supplied 'tags' anywhere (not even in the wider
+        environment) — the module's default is exactly what's intended, must stay info
+        even when environment_keys is explicitly passed (i.e. the provisioner is scoped)."""
+        module_vars = self._vars("cluster_name", "tags", defaults={"tags"})
+        injected = {"cluster_name"}
+        environment = {"cluster_name"}  # 'tags' genuinely nowhere
+        result = check_inputs(injected, module_vars, environment_keys=environment)
+        assert result.warnings == []
+        assert any("tags" in i for i in result.info)
+
     def test_excluded_keys_not_checked(self):
         module_vars = self._vars("cluster_name")
         declared = {"cluster_name", "strata_injected"}

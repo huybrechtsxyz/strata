@@ -347,7 +347,6 @@ resources:
     role: manager                      # Optional: role name (e.g. manager, worker, api)
     count: 1                           # Optional: number of instances (1-100, default 1)
     depends_on: []                     # Optional: resource names this depends on
-    references: {}                     # Optional: cross-resource value references
     firewalls: []                      # Optional: firewall names to attach
     subnet: network_name/subnet_name   # Optional: subnet reference
     configuration: {}                  # Optional: workspace-specific config overrides

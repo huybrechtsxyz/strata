@@ -98,7 +98,7 @@ class TestGitPush:
         ):
             result = git.push("/repo", remote="upstream", branch="main")
             assert result.returncode == 0
-            mock_run.assert_called_once_with(["push", "upstream", "main"], cwd="/repo", timeout=60)
+            mock_run.assert_called_once_with(["push", "upstream", "HEAD:main"], cwd="/repo", timeout=60)
 
     def test_push_failure(self):
         git = _make_git()

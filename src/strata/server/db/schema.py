@@ -76,3 +76,27 @@ sessions = Table(
 )
 
 Index("idx_sessions_subject", sessions.c.subject)
+
+# Role bindings (ADR-0067 Step 9) — Kubernetes-`RoleBinding`-style: a subject (a user
+# identity or a group/claim value — the latter covers both IdP group claims and an M2M
+# TrustedIssuer.subject_claim value, e.g. a GitHub Actions token's `repository` claim)
+# is granted an ordered `tier` and/or a set of orthogonal `capabilities` (today: only
+# "deployer"), scoped to a workspace/environment or, when either is NULL, a wildcard
+# across all of them. Mutable (revocation), like `tokens`/`sessions` — access-control
+# state, not an audit fact.
+role_bindings = Table(
+    "role_bindings",
+    metadata,
+    Column("binding_id", String, primary_key=True),
+    Column("subject_type", String, nullable=False),  # "user" | "group"
+    Column("subject", String, nullable=False),
+    Column("workspace", String, nullable=True),  # NULL = every workspace
+    Column("environment", String, nullable=True),  # NULL = every environment in that workspace
+    Column("tier", String, nullable=True),  # viewer | approver | contributor | admin
+    Column("capabilities", JSON, nullable=False),  # e.g. ["deployer"]; [] if only `tier` is granted
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("created_by", String, nullable=True),
+    Column("revoked_at", DateTime(timezone=True), nullable=True),  # NULL = active
+)
+
+Index("idx_role_bindings_subject", role_bindings.c.subject_type, role_bindings.c.subject)

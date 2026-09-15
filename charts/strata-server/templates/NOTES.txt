@@ -1,0 +1,25 @@
+strata state-service deployed as "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+1. Check rollout status:
+     kubectl -n {{ .Release.Namespace }} rollout status deployment/{{ include "strata-server.fullname" . }}
+
+2. The 'events' table is created by a one-off Job ({{ include "strata-server.fullname" . }}-migrate-*).
+   Confirm it completed:
+     kubectl -n {{ .Release.Namespace }} get jobs -l app.kubernetes.io/component=migrate
+
+3. Reach the service from inside the cluster (self-signed cert by default, hence -k):
+     kubectl -n {{ .Release.Namespace }} run curl --rm -it --image=curlimages/curl -- \
+       curl -k https://{{ include "strata-server.fullname" . }}:{{ .Values.service.port }}/healthz
+
+{{- if not (or .Values.adminToken .Values.existingAdminTokenSecret) }}
+
+NOTE: no adminToken/existingAdminTokenSecret was set — the /v1/tokens admin
+routes are NOT registered, so no per-workspace ingest token can be created
+against this instance yet.
+{{- end }}
+{{- if .Values.tls.selfSigned }}
+
+NOTE: tls.selfSigned is enabled — this instance is using a throwaway
+self-signed certificate. Set tls.secretName to a real kubernetes.io/tls
+Secret (e.g. issued by cert-manager) before exposing it outside the cluster.
+{{- end }}

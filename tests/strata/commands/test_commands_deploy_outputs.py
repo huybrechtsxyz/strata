@@ -367,3 +367,39 @@ class TestRecordStageResultOutputsArtifact:
             )
         assert cmd._stage_results[0].outputs_artifact.stage == "infra"
         assert cmd._stage_results[1].outputs_artifact.stage == "network"
+
+
+# ---------------------------------------------------------------------------
+# Tests: _record_stage_result with warnings
+# ---------------------------------------------------------------------------
+
+
+class TestRecordStageResultWarnings:
+    def test_warnings_none_by_default(self, tmp_path):
+        cmd = _make_command(tmp_path)
+        cmd._record_stage_result(
+            stage_name="infra",
+            provisioner="tf_x",
+            topology=None,
+            status="success",
+            started_at="2026-01-01T00:00:00+00:00",
+            completed_at="2026-01-01T00:01:00+00:00",
+        )
+        assert cmd._stage_results[0].warnings is None
+
+    def test_warnings_recorded_when_output_collection_fails(self, tmp_path):
+        cmd = _make_command(tmp_path)
+        cmd._record_stage_result(
+            stage_name="infra",
+            provisioner="tf_x",
+            topology=None,
+            status="success",
+            started_at="2026-01-01T00:00:00+00:00",
+            completed_at="2026-01-01T00:01:00+00:00",
+            outputs=None,
+            warnings=["Stage 'infra': output collection failed \u2014 outputs will be missing from the manifest."],
+        )
+        assert cmd._stage_results[0].outputs is None
+        assert cmd._stage_results[0].warnings == [
+            "Stage 'infra': output collection failed \u2014 outputs will be missing from the manifest."
+        ]

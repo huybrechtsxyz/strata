@@ -280,6 +280,7 @@
         "configuration",
         "tenant",
         "deployment",
+        "diagram",
         "dns",
         "environment",
         "firewall",
@@ -290,7 +291,10 @@
         "deployment-manifest",
         "provider",
         "resource",
-        "workspace"
+        "workspace",
+        "version-lock",
+        "version",
+        "promotion-record"
       ],
       "title": "PlatformKind",
       "type": "string"
@@ -303,6 +307,129 @@
       ],
       "title": "PlatformVersion",
       "type": "string"
+    },
+    "ProvisionerInputMappingModel": {
+      "additionalProperties": false,
+      "description": "Maps outputs from an upstream provisioner to inputs of this provisioner.",
+      "properties": {
+        "provisioner": {
+          "description": "Name of the upstream provisioner whose outputs to consume",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Provisioner",
+          "type": "string"
+        },
+        "mapping": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional output-to-input name mapping. Keys are upstream output names, values are downstream variable names. When omitted, outputs are passed through with their original names.",
+          "title": "Mapping"
+        },
+        "prefix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional prefix to add to all output names when injecting as inputs. Mutually exclusive with 'mapping'. E.g., prefix='baseline_' turns 'vnet_id' into 'baseline_vnet_id'.",
+          "title": "Prefix"
+        },
+        "select": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional allowlist of output names to pass. When set, only these outputs are forwarded. When omitted, all non-sensitive outputs pass.",
+          "title": "Select"
+        }
+      },
+      "required": [
+        "provisioner"
+      ],
+      "title": "ProvisionerInputMappingModel",
+      "type": "object"
+    },
+    "ProvisionerReferencesModel": {
+      "additionalProperties": false,
+      "description": "References to variables, secrets, and features required by this provisioner.\n\nFor provisioners without a component document (script, compose) to declare\nreferences on. Same shape as ResourceReferencesModel and friends, duplicated\nper this codebase's existing per-kind convention rather than cross-imported\nfrom resource_model.py. See ADR-0078.",
+      "properties": {
+        "variables": {
+          "anyOf": [
+            {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Variable keys this provisioner requires from environment",
+          "title": "Variables"
+        },
+        "secrets": {
+          "anyOf": [
+            {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Secret keys this provisioner requires from environment",
+          "title": "Secrets"
+        },
+        "features": {
+          "anyOf": [
+            {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Feature keys this provisioner requires from environment",
+          "title": "Features"
+        }
+      },
+      "title": "ProvisionerReferencesModel",
+      "type": "object"
     },
     "ScriptPathModel": {
       "additionalProperties": false,
@@ -419,6 +546,20 @@
           "default": null,
           "description": "Optional description for documentation purposes",
           "title": "Description"
+        },
+        "reference": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Git ref override (branch, tag, or commit SHA) for this specific source. Takes precedence over the remote's default reference and any environment remote override. Only valid for git-based sources (repository + source_path).",
+          "title": "Reference"
         },
         "chart_name": {
           "anyOf": [
@@ -605,7 +746,7 @@
         },
         "configuration": {
           "additionalProperties": true,
-          "description": "Backend-specific configuration (supports either a constant value or references like ${var:tf_org}, ${secret:tf_token}, ${feat:enable_encryption})",
+          "description": "Backend-specific configuration (supports either a constant value or references like ${var:tf_org}, ${secret:tf_token}, ${feature:enable_encryption})",
           "title": "Configuration",
           "type": "object"
         }
@@ -641,13 +782,21 @@
           "title": "Description"
         },
         "provisioner": {
-          "description": "IaC tool used for provisioning. Built-in types: terraform, ansible, compose, helm, script. Custom provisioner plugins are also accepted.",
+          "description": "IaC tool used for provisioning. Built-in types: terraform, ansible, compose, helm, script, argocd, flux. Custom provisioner plugins are also accepted.",
           "title": "Provisioner",
           "type": "string"
         },
         "source": {
-          "$ref": "#/$defs/SourceModel",
-          "description": "IaC deployment configuration (file path, variables, secrets)"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IaC deployment configuration (file path, variables, secrets). Required for IaC provisioner types (terraform, ansible, helm, compose, script). Optional for sync provisioner types (argocd, flux) which render from the platform artifact."
         },
         "backend": {
           "anyOf": [
@@ -699,6 +848,47 @@
           "default": null,
           "description": "Build output profile for Terraform provisioners. Controls what tfvars files are emitted by 'strata build run'. Defaults to format=strata (current behaviour) when absent."
         },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Pinned tool version for this provisioner. Set by 'strata versions' when a type:tool pin targets this provisioner's name. Used by build/deploy to select the exact tool version (e.g. Terraform, Ansible).",
+          "title": "Version"
+        },
+        "inputs_from": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ProvisionerInputMappingModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Declare dependencies on other provisioners' outputs. Outputs from the named provisioners are injected as variables into this provisioner at deploy time.",
+          "title": "Inputs From"
+        },
+        "references": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProvisionerReferencesModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Keys this provisioner requires from the environment. Declaring this on any provisioner or resource/module/provider in the workspace opts scoped provisioners into precise variable/feature/secret injection instead of receiving every environment key (ADR-0078)."
+        },
         "integration": {
           "anyOf": [
             {
@@ -709,14 +899,13 @@
             }
           ],
           "default": null,
-          "description": "Name of the configuration.spec.integrations[] entry this provisioner binds to (for auth/endpoints/tool-version validation). If unset, auto-binds to the sole registered integration compatible with this provisioner's type — an error (not a guess) if more than one candidate exists (terraform also errors on zero; ansible/bicep fall back to a default when nothing is declared). This provisioner's own 'name' is never used to look up an integration (ADR-0079/ADR-0080). Only valid on provisioner: terraform, ansible, or bicep.",
+          "description": "Name of the configuration.spec.integrations[] entry this provisioner binds to (for auth/endpoints/tool-version validation). If unset, auto-binds to the sole registered integration compatible with this provisioner's type \u2014 an error (not a guess) if more than one candidate exists (terraform also errors on zero; ansible/bicep fall back to a default when nothing is declared). This provisioner's own 'name' is never used to look up an integration (ADR-0079/ADR-0080). Only valid on provisioner: terraform, ansible, or bicep.",
           "title": "Integration"
         }
       },
       "required": [
         "name",
-        "provisioner",
-        "source"
+        "provisioner"
       ],
       "title": "WorkspaceIacModel",
       "type": "object"
@@ -957,9 +1146,31 @@
           "type": "string"
         },
         "file": {
-          "description": "Path to the resource configuration file",
-          "title": "File",
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Path to the resource configuration file. Required unless managed_by is set.",
+          "title": "File"
+        },
+        "managed_by": {
+          "anyOf": [
+            {
+              "const": "provisioner",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Indicates the resource is fully managed externally and no resource file is needed. Currently supported: 'provisioner' (resource details defined in Terraform/Ansible).",
+          "title": "Managed By"
         },
         "description": {
           "anyOf": [
@@ -990,7 +1201,7 @@
             }
           ],
           "default": null,
-          "description": "Conditional expression for resource inclusion (e.g., '${environment} == production')",
+          "description": "Conditional expression for resource inclusion (e.g., '{{ environment }} == production')",
           "title": "Condition"
         },
         "role": {
@@ -1032,22 +1243,6 @@
           "default": null,
           "description": "List of resource names this resource depends on (workspace-specific gluing)",
           "title": "Depends On"
-        },
-        "references": {
-          "anyOf": [
-            {
-              "additionalProperties": {
-                "type": "string"
-              },
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Cross-resource value references (e.g., {'storage_connection': 'contoso_storage.connection_string'})",
-          "title": "References"
         },
         "firewalls": {
           "anyOf": [
@@ -1152,8 +1347,7 @@
         }
       },
       "required": [
-        "name",
-        "file"
+        "name"
       ],
       "title": "WorkspaceResourceModel",
       "type": "object"

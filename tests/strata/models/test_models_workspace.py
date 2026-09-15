@@ -18,9 +18,11 @@ from pydantic import ValidationError
 from strata.models.common_models import ProvisionerType, SourceModel
 from strata.models.workspace_model import (
     OutputProfileModel,
+    ProvisionerReferencesModel,
     WorkspaceIacBackendModel,
     WorkspaceIacModel,
     WorkspaceModel,
+    WorkspaceResourceModel,
 )
 
 
@@ -63,6 +65,25 @@ def test_workspace_yaml_invalid(yaml_path):
     assert model is None
 
 
+class TestRemovedReferencesField:
+    """ADR-0078: the inert cross-resource 'references' field was removed."""
+
+    def test_references_is_not_a_field(self):
+        assert "references" not in WorkspaceResourceModel.model_fields
+
+    def test_legacy_references_key_is_dropped_with_warning(self):
+        with pytest.warns(DeprecationWarning, match="references"):
+            model = WorkspaceResourceModel.model_validate(
+                {"name": "app_tier", "file": "config/app.yaml", "references": {"db": "storage.conn"}}
+            )
+        assert model.name == "app_tier"
+        assert not hasattr(model, "references")
+
+    def test_unknown_keys_still_rejected(self):
+        with pytest.raises(ValidationError):
+            WorkspaceResourceModel.model_validate({"name": "app_tier", "file": "config/app.yaml", "bogus": 1})
+
+
 class TestSourceModelSingleRepo:
     def test_source_path_only_is_valid(self):
         """Phase 1: source_path without repository must pass SourceModel validation."""
@@ -85,6 +106,43 @@ class TestSourceModelSingleRepo:
         """Phase 1: repository alone (no source_path) must fail — source_path is required."""
         with pytest.raises(ValidationError):
             SourceModel(repository="my_repo")
+
+
+class TestProvisionerReferencesModel:
+    """ADR-0078 Gap 1: WorkspaceIacModel.references opts a provisioner (e.g. script,
+    which has no component document of its own) into scoped injection."""
+
+    def test_all_fields_optional(self):
+        model = ProvisionerReferencesModel.model_validate({})
+        assert model.variables is None
+        assert model.secrets is None
+        assert model.features is None
+
+    def test_fields_validate_independently(self):
+        model = ProvisionerReferencesModel.model_validate(
+            {"variables": ["a", "b"], "secrets": ["c"], "features": ["d"]}
+        )
+        assert model.variables == ["a", "b"]
+        assert model.secrets == ["c"]
+        assert model.features == ["d"]
+
+    def test_workspace_iac_model_references_round_trips(self):
+        model = WorkspaceIacModel(
+            name="bootstrap",
+            provisioner=ProvisionerType.SCRIPT,
+            source=SourceModel(repository="haven", source_path="scripts"),
+            references=ProvisionerReferencesModel(variables=["service_connection_id"]),
+        )
+        assert model.references is not None
+        assert model.references.variables == ["service_connection_id"]
+
+    def test_workspace_iac_model_references_defaults_to_none(self):
+        model = WorkspaceIacModel(
+            name="infra",
+            provisioner=ProvisionerType.TERRAFORM,
+            source=SourceModel(repository="haven", source_path="terraform"),
+        )
+        assert model.references is None
 
 
 class TestWorkspaceIacModelProvisionerFieldValidation:
