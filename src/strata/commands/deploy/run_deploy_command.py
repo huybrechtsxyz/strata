@@ -1626,6 +1626,7 @@ class RunDeployCommand(BaseDeployCommand):
 
         # --- collect outputs for downstream stages ---
         out_path = None
+        stage_warnings: List[str] = []
         if STEP_APPLY in steps_to_run:
             _ok_out, _outputs, _sensitive, _out_msgs = deployer.collect_outputs()
             if _ok_out and self._resolved_values is not None:
@@ -1653,6 +1654,23 @@ class RunDeployCommand(BaseDeployCommand):
                 out_path = self._write_outputs_artifact(str(stage.name), _outputs, _sensitive)
                 if out_path and self._is_console_output():
                     click.echo(f"    outputs \u2192 {out_path}")
+            else:
+                _warning = (
+                    f"Stage '{stage.name}': output collection failed \u2014 outputs will be missing from the manifest."
+                )
+                stage_warnings.append(_warning)
+                stage_warnings.extend(_out_msgs)
+                self._messages.append(_warning)
+                self._messages.extend(_out_msgs)
+                self.logger.warning(
+                    "stage_outputs_collection_failed",
+                    stage=stage.name,
+                    messages=_out_msgs,
+                )
+                if self._is_console_output():
+                    click.echo(f"    \u26a0  {_warning}")
+                    for msg in _out_msgs:
+                        click.echo(f"      {msg}")
         elif self._dry_run and self._is_console_output():
             click.echo("    [DRY-RUN] Stage outputs not captured \u2014 apply did not run.")
 
@@ -1697,6 +1715,7 @@ class RunDeployCommand(BaseDeployCommand):
             steps=steps_to_run,
             outputs=stage_outputs,
             outputs_artifact=outputs_artifact_ref,
+            warnings=stage_warnings or None,
         )
 
         # --- stage-level after hook ---

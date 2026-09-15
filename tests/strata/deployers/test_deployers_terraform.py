@@ -495,6 +495,18 @@ class TestTerraformDeployerOutput:
         assert ok is True
         assert outputs == {"vpc_id": "vpc-123"}
 
+    def test_requests_json_format_from_terraform(self, tmp_path):
+        """Regression: output() must pass json_format=True to terraform, same as
+        collect_outputs() -- both parse stdout as JSON.
+        """
+        raw = json.dumps({"vpc_id": {"value": "vpc-123", "type": "string"}})
+        d = _make_deployer(tmp_path)
+        d._tf.output.return_value = _ok(stdout=raw)
+        ok, outputs, msgs = d.output()
+        assert ok is True
+        assert outputs == {"vpc_id": "vpc-123"}
+        assert d._tf.output.call_args.kwargs.get("json_format") is True
+
     def test_empty_output(self, tmp_path):
         d = _make_deployer(tmp_path)
         d._tf.output.return_value = _ok(stdout="{}")
@@ -867,6 +879,19 @@ class TestTerraformDeployerCollectOutputs:
         assert ok is True
         assert non_sensitive == {}
         assert sensitive == {}
+
+    def test_requests_json_format_from_terraform(self, tmp_path):
+        """Regression: collect_outputs() must pass json_format=True, else terraform's
+        plain-text `terraform output` response fails to parse as JSON (returncode 0,
+        non-empty stdout that isn't valid JSON), silently dropping all outputs from
+        the deployment manifest -- see bug report re: outputs/outputs_artifact null.
+        """
+        raw = json.dumps({"vpc_id": {"value": "vpc-123", "type": "string", "sensitive": False}})
+        d = _make_deployer(tmp_path)
+        d._tf.output.return_value = _ok(stdout=raw)
+        ok, non_sensitive, sensitive, msgs = d.collect_outputs()
+        assert ok is True
+        assert d._tf.output.call_args.kwargs.get("json_format") is True
 
     def test_complex_non_sensitive_value_preserved(self, tmp_path):
         raw = json.dumps(

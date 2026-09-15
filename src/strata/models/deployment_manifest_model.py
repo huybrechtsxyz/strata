@@ -182,6 +182,9 @@ class ManifestStageModel(PlatformBaseModel):
         None, description="Reference to the durable outputs artifact file written for this stage"
     )
     error: Optional[str] = Field(None, description="Error message if the stage failed")
+    warnings: Optional[List[str]] = Field(
+        None, description="Non-fatal warnings recorded for this stage (e.g. output collection failures)"
+    )
 
 
 # ---------------------------------------------------------------------------

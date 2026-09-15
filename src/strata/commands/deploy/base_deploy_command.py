@@ -938,6 +938,7 @@ class BaseDeployCommand(BaseCommand):
         outputs: Optional[Dict[str, Any]] = None,
         outputs_artifact: Optional[ManifestOutputsReferenceModel] = None,
         error: Optional[str] = None,
+        warnings: Optional[List[str]] = None,
     ) -> None:
         """Append a stage result for the deployment manifest."""
         duration: Optional[int] = None
@@ -962,6 +963,7 @@ class BaseDeployCommand(BaseCommand):
                 outputs=outputs,
                 outputs_artifact=outputs_artifact,
                 error=error,
+                warnings=warnings,
             )
         )
 
