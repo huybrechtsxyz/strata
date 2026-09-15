@@ -1180,6 +1180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="#singleton-pattern">Singleton Pattern</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#baseintegration-api"><code class="docutils literal notranslate"><span class="pre">BaseIntegration</span></code> API</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#integrationregistry"><code class="docutils literal notranslate"><span class="pre">IntegrationRegistry</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#provisioner-integration-binding-adr-0079-adr-0080">Provisioner → integration binding (ADR-0079 / ADR-0080)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#provisioner-scoped-resolve-for-provisioner">Provisioner-scoped: <code class="docutils literal notranslate"><span class="pre">resolve_for_provisioner()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#not-provisioner-scoped-resolve-by-class">Not provisioner-scoped: <code class="docutils literal notranslate"><span class="pre">resolve_by_class()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#out-of-scope">Out of scope</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#capability-protocols">Capability Protocols</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#store-specific-notes">Store-specific notes</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#vault-and-consul-feature-flags-via-kv-prefix">Vault and Consul — feature flags via KV prefix</a></li>
@@ -1711,6 +1717,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/workspace.html#lifecycle-phases">Lifecycle Phases</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/workspace.html#providers">Providers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/workspace.html#provisioners">Provisioners</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/workspace.html#integration-binding-adr-0079-adr-0080">Integration Binding (ADR-0079 / ADR-0080)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../config/workspace.html#build-output-profile-terraform-only">Build Output Profile (Terraform only)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../config/workspace.html#output-dependencies">Output Dependencies</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../config/workspace.html#provisioner-types">Provisioner types</a></li>
@@ -3734,6 +3741,90 @@
 </pre></div>
 </div>
 <p><strong>Reset between tests:</strong> <code class="docutils literal notranslate"><span class="pre">IntegrationRegistry.reset()</span></code></p>
+</section>
+<section id="provisioner-integration-binding-adr-0079-adr-0080">
+<h2>Provisioner → integration binding (ADR-0079 / ADR-0080)<a class="headerlink" href="#provisioner-integration-binding-adr-0079-adr-0080" title="Link to this heading"></a></h2>
+<p>Two resolution paths exist, depending on whether a deployer is
+<strong>provisioner-scoped</strong> (tied to one named <code class="docutils literal notranslate"><span class="pre">workspace.spec.provisioners[]</span></code>
+entry) or operates over a broader set of namespaces/modules:</p>
+<section id="provisioner-scoped-resolve-for-provisioner">
+<h3>Provisioner-scoped: <code class="docutils literal notranslate"><span class="pre">resolve_for_provisioner()</span></code><a class="headerlink" href="#provisioner-scoped-resolve-for-provisioner" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">TerraformDeployer</span></code>, <code class="docutils literal notranslate"><span class="pre">AnsibleDeployer</span></code>, and <code class="docutils literal notranslate"><span class="pre">BicepDeployer</span></code> each have a
+<code class="docutils literal notranslate"><span class="pre">WorkspaceIacModel</span></code> (<code class="docutils literal notranslate"><span class="pre">self._iac_model</span></code>) to resolve against, via
+<code class="docutils literal notranslate"><span class="pre">IntegrationService.resolve_for_provisioner(iac_model,</span> <span class="pre">integration_class)</span></code>:</p>
+<ol class="arabic simple">
+<li><p>If the provisioner sets <code class="docutils literal notranslate"><span class="pre">integration:</span> <span class="pre">&lt;name&gt;</span></code>, that’s an exact
+<code class="docutils literal notranslate"><span class="pre">IntegrationRegistry.get_integration(name)</span></code> lookup, checked with
+<code class="docutils literal notranslate"><span class="pre">isinstance(result,</span> <span class="pre">integration_class)</span></code>.</p></li>
+<li><p>Otherwise, auto-bind to the sole registered integration that
+<code class="docutils literal notranslate"><span class="pre">isinstance()</span></code> of <code class="docutils literal notranslate"><span class="pre">integration_class</span></code> — matching by <strong>class</strong>, not a type
+string, so <code class="docutils literal notranslate"><span class="pre">OpenTofuIntegration</span></code> (a <code class="docutils literal notranslate"><span class="pre">TerraformIntegration</span></code> subclass) is a
+valid candidate for <code class="docutils literal notranslate"><span class="pre">provisioner:</span> <span class="pre">terraform</span></code>.</p></li>
+<li><p>Zero candidates: if the deployer passed a <code class="docutils literal notranslate"><span class="pre">default_factory</span></code>, that’s called
+instead of raising — <code class="docutils literal notranslate"><span class="pre">AnsibleDeployer</span></code>/<code class="docutils literal notranslate"><span class="pre">BicepDeployer</span></code> do this (preserves
+their pre-ADR-0080 hardcoded default so existing workspaces that never
+declared an integration are unaffected); <code class="docutils literal notranslate"><span class="pre">TerraformDeployer</span></code> does <strong>not</strong>
+(ADR-0079: no integration registered is always an error for Terraform).</p></li>
+<li><p>More than one candidate with no explicit <code class="docutils literal notranslate"><span class="pre">integration:</span></code> set: always
+raises <code class="docutils literal notranslate"><span class="pre">IntegrationResolutionError</span></code> — never silently guesses.</p></li>
+</ol>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Deployer</p></th>
+<th class="head"><p>Integration class</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">default_factory</span></code>?</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">TerraformDeployer</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">TerraformIntegration</span></code> (or <code class="docutils literal notranslate"><span class="pre">OpenTofuIntegration</span></code>)</p></td>
+<td><p>No — zero registered is an error</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">AnsibleDeployer</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">AnsibleIntegration</span></code></p></td>
+<td><p>Yes</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">BicepDeployer</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">AzureCLIIntegration</span></code> (there is no <code class="docutils literal notranslate"><span class="pre">BicepIntegration</span></code> — Bicep provisions via <code class="docutils literal notranslate"><span class="pre">az</span> <span class="pre">bicep</span></code>/<code class="docutils literal notranslate"><span class="pre">az</span> <span class="pre">deployment</span></code>)</p></td>
+<td><p>Yes</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="not-provisioner-scoped-resolve-by-class">
+<h3>Not provisioner-scoped: <code class="docutils literal notranslate"><span class="pre">resolve_by_class()</span></code><a class="headerlink" href="#not-provisioner-scoped-resolve-by-class" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">ComposeDeployer</span></code> and <code class="docutils literal notranslate"><span class="pre">HelmDeployer</span></code> operate over namespace/module services —
+a single stage can deploy many namespaces or charts, so there’s no one
+<code class="docutils literal notranslate"><span class="pre">WorkspaceIacModel</span></code> to carry an <code class="docutils literal notranslate"><span class="pre">integration:</span></code> override.
+<code class="docutils literal notranslate"><span class="pre">IntegrationService.resolve_by_class(integration_class,</span> <span class="pre">default_factory=None)</span></code>
+covers this case: same auto-bind/ambiguous/zero-candidate semantics as above,
+but with <strong>no explicit-name override</strong> — there’s no addressable field to
+put it on.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Deployer</p></th>
+<th class="head"><p>Integration class</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ComposeDeployer</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">DockerIntegration</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">HelmDeployer</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">HelmIntegration</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="out-of-scope">
+<h3>Out of scope<a class="headerlink" href="#out-of-scope" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">ScriptDeployer</span></code> needs no binding (<code class="docutils literal notranslate"><span class="pre">validate_environment()</span></code> always succeeds,
+no external tool). The sync deployers (<code class="docutils literal notranslate"><span class="pre">ArgocdDeployer</span></code>/<code class="docutils literal notranslate"><span class="pre">FluxDeployer</span></code>) still
+do a raw <code class="docutils literal notranslate"><span class="pre">shutil.which(&quot;git&quot;)</span></code> check — they don’t consult <code class="docutils literal notranslate"><span class="pre">IntegrationService</span></code>
+at all; left as a smaller, separate pattern not addressed by ADR-0080.</p>
+<p>See <a class="reference internal" href="../config/workspace.html#integration-binding"><span class="std std-ref">docs/config/workspace.md#integration-binding</span></a>
+for the YAML-level view, and ADR-0079/ADR-0080 for the full design rationale.</p>
+</section>
 </section>
 <section id="capability-protocols">
 <h2>Capability Protocols<a class="headerlink" href="#capability-protocols" title="Link to this heading"></a></h2>

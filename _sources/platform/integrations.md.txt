@@ -128,6 +128,64 @@ if not ok:
 
 **Reset between tests:** `IntegrationRegistry.reset()`
 
+## Provisioner → integration binding (ADR-0079 / ADR-0080)
+
+Two resolution paths exist, depending on whether a deployer is
+**provisioner-scoped** (tied to one named `workspace.spec.provisioners[]`
+entry) or operates over a broader set of namespaces/modules:
+
+### Provisioner-scoped: `resolve_for_provisioner()`
+
+`TerraformDeployer`, `AnsibleDeployer`, and `BicepDeployer` each have a
+`WorkspaceIacModel` (`self._iac_model`) to resolve against, via
+`IntegrationService.resolve_for_provisioner(iac_model, integration_class)`:
+
+1. If the provisioner sets `integration: <name>`, that's an exact
+   `IntegrationRegistry.get_integration(name)` lookup, checked with
+   `isinstance(result, integration_class)`.
+2. Otherwise, auto-bind to the sole registered integration that
+   `isinstance()` of `integration_class` — matching by **class**, not a type
+   string, so `OpenTofuIntegration` (a `TerraformIntegration` subclass) is a
+   valid candidate for `provisioner: terraform`.
+3. Zero candidates: if the deployer passed a `default_factory`, that's called
+   instead of raising — `AnsibleDeployer`/`BicepDeployer` do this (preserves
+   their pre-ADR-0080 hardcoded default so existing workspaces that never
+   declared an integration are unaffected); `TerraformDeployer` does **not**
+   (ADR-0079: no integration registered is always an error for Terraform).
+4. More than one candidate with no explicit `integration:` set: always
+   raises `IntegrationResolutionError` — never silently guesses.
+
+| Deployer            | Integration class                                                                                        | `default_factory`?               |
+| ------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| `TerraformDeployer` | `TerraformIntegration` (or `OpenTofuIntegration`)                                                        | No — zero registered is an error |
+| `AnsibleDeployer`   | `AnsibleIntegration`                                                                                     | Yes                              |
+| `BicepDeployer`     | `AzureCLIIntegration` (there is no `BicepIntegration` — Bicep provisions via `az bicep`/`az deployment`) | Yes                              |
+
+### Not provisioner-scoped: `resolve_by_class()`
+
+`ComposeDeployer` and `HelmDeployer` operate over namespace/module services —
+a single stage can deploy many namespaces or charts, so there's no one
+`WorkspaceIacModel` to carry an `integration:` override.
+`IntegrationService.resolve_by_class(integration_class, default_factory=None)`
+covers this case: same auto-bind/ambiguous/zero-candidate semantics as above,
+but with **no explicit-name override** — there's no addressable field to
+put it on.
+
+| Deployer          | Integration class   |
+| ----------------- | ------------------- |
+| `ComposeDeployer` | `DockerIntegration` |
+| `HelmDeployer`    | `HelmIntegration`   |
+
+### Out of scope
+
+`ScriptDeployer` needs no binding (`validate_environment()` always succeeds,
+no external tool). The sync deployers (`ArgocdDeployer`/`FluxDeployer`) still
+do a raw `shutil.which("git")` check — they don't consult `IntegrationService`
+at all; left as a smaller, separate pattern not addressed by ADR-0080.
+
+See [docs/config/workspace.md#integration-binding](../config/workspace.md#integration-binding)
+for the YAML-level view, and ADR-0079/ADR-0080 for the full design rationale.
+
 ## Capability Protocols
 
 Capability protocols are `runtime_checkable` `Protocol` classes in `integrations.capabilities`. Use `isinstance()` to check capability support:

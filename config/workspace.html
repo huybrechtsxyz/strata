@@ -1180,6 +1180,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../platform/integrations.html#singleton-pattern">Singleton Pattern</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/integrations.html#baseintegration-api"><code class="docutils literal notranslate"><span class="pre">BaseIntegration</span></code> API</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/integrations.html#integrationregistry"><code class="docutils literal notranslate"><span class="pre">IntegrationRegistry</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/integrations.html#provisioner-integration-binding-adr-0079-adr-0080">Provisioner → integration binding (ADR-0079 / ADR-0080)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/integrations.html#provisioner-scoped-resolve-for-provisioner">Provisioner-scoped: <code class="docutils literal notranslate"><span class="pre">resolve_for_provisioner()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/integrations.html#not-provisioner-scoped-resolve-by-class">Not provisioner-scoped: <code class="docutils literal notranslate"><span class="pre">resolve_by_class()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/integrations.html#out-of-scope">Out of scope</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/integrations.html#capability-protocols">Capability Protocols</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/integrations.html#store-specific-notes">Store-specific notes</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="../platform/integrations.html#vault-and-consul-feature-flags-via-kv-prefix">Vault and Consul — feature flags via KV prefix</a></li>
@@ -1711,6 +1717,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#lifecycle-phases">Lifecycle Phases</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#providers">Providers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#provisioners">Provisioners</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#integration-binding-adr-0079-adr-0080">Integration Binding (ADR-0079 / ADR-0080)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#build-output-profile-terraform-only">Build Output Profile (Terraform only)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#output-dependencies">Output Dependencies</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#provisioner-types">Provisioner types</a></li>
@@ -3586,6 +3593,7 @@
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">provisioners</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;provisioner_name&gt;</span>
 <span class="w">    </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform | ansible | bicep</span><span class="w">   </span><span class="c1"># IaC tool</span>
+<span class="w">    </span><span class="nt">integration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;name&gt;</span><span class="w">                </span><span class="c1"># optional, terraform only — see Integration Binding below</span>
 <span class="w">    </span><span class="nt">source</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">repository</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;repository_name&gt;</span><span class="w">    </span><span class="c1"># optional — omit for single-repo workspaces</span>
 <span class="w">      </span><span class="nt">source_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;path&gt;</span><span class="w">              </span><span class="c1"># path within the repo (or workspace root when repository is absent)</span>
@@ -3614,6 +3622,76 @@
 <span class="w">      </span><span class="nt">files</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span><span class="w">                        </span><span class="c1"># custom file definitions (see Build Output Profile)</span>
 </pre></div>
 </div>
+<section id="integration-binding-adr-0079-adr-0080">
+<h3>Integration Binding (ADR-0079 / ADR-0080)<a class="headerlink" href="#integration-binding-adr-0079-adr-0080" title="Link to this heading"></a></h3>
+<p>A <code class="docutils literal notranslate"><span class="pre">terraform</span></code>/<code class="docutils literal notranslate"><span class="pre">ansible</span></code>/<code class="docutils literal notranslate"><span class="pre">bicep</span></code> provisioner needs a <code class="docutils literal notranslate"><span class="pre">configuration.spec.integrations[]</span></code>
+entry (auth, endpoints, tool-version validation) to run against. It is bound as
+follows — the provisioner’s own <code class="docutils literal notranslate"><span class="pre">name</span></code> is <strong>never</strong> used to look up an integration:</p>
+<ol class="arabic simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">integration:</span> <span class="pre">&lt;name&gt;</span></code> set</strong> — exact match against
+<code class="docutils literal notranslate"><span class="pre">configuration.spec.integrations[].name</span></code>. Errors if missing, or if the matched
+entry isn’t compatible (<code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">terraform</span></code>/<code class="docutils literal notranslate"><span class="pre">opentofu</span></code> for a terraform provisioner,
+<code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">ansible</span></code> for ansible, <code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">azure_cli</span></code> for bicep).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">integration</span></code> unset</strong> — auto-binds to the sole registered compatible
+integration. Errors (never guesses) if more than one exists — in that case,
+set <code class="docutils literal notranslate"><span class="pre">integration:</span></code> explicitly on each provisioner that needs a specific one.
+For <strong>terraform</strong>, zero registered is also an error. For <strong>ansible</strong>/<strong>bicep</strong>,
+zero registered falls back to a default (<code class="docutils literal notranslate"><span class="pre">ansible-playbook</span></code>/<code class="docutils literal notranslate"><span class="pre">az</span></code> on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>
+with no extra config) — declaring nothing keeps working exactly as before
+ADR-0080.</p></li>
+</ol>
+<p><code class="docutils literal notranslate"><span class="pre">integration:</span></code> is only accepted on <code class="docutils literal notranslate"><span class="pre">terraform</span></code>/<code class="docutils literal notranslate"><span class="pre">ansible</span></code>/<code class="docutils literal notranslate"><span class="pre">bicep</span></code> provisioners —
+schema validation rejects it on any other type (no binding exists to consume it).
+<code class="docutils literal notranslate"><span class="pre">compose</span></code>/<code class="docutils literal notranslate"><span class="pre">helm</span></code> deployments auto-bind the same way but have <strong>no</strong> <code class="docutils literal notranslate"><span class="pre">integration:</span></code>
+field to target, since they aren’t tied to a single named provisioner (a stage can
+deploy many namespaces/charts) — see
+<a class="reference internal" href="../platform/integrations.html#provisioner-integration-binding-adr-0079-adr-0080"><span class="std std-ref">docs/platform/integrations.md</span></a>
+for that distinction.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># One shared integration, several provisioners — zero-config, no `integration:` needed</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">provisioners</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">control_infra</span>
+<span class="w">      </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> repository</span><span class="p">:</span><span class="w"> </span><span class="nv">haven</span><span class="p p-Indicator">,</span><span class="nt"> source_path</span><span class="p">:</span><span class="w"> </span><span class="nv">terraform/control</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">core_iac</span>
+<span class="w">      </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> repository</span><span class="p">:</span><span class="w"> </span><span class="nv">haven</span><span class="p p-Indicator">,</span><span class="nt"> source_path</span><span class="p">:</span><span class="w"> </span><span class="nv">terraform/core</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># Two integrations (e.g. different Terraform versions/auth) — explicit disambiguation required</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">provisioners</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">env_iac</span>
+<span class="w">      </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform</span>
+<span class="w">      </span><span class="nt">integration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform_legacy</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> repository</span><span class="p">:</span><span class="w"> </span><span class="nv">haven</span><span class="p p-Indicator">,</span><span class="nt"> source_path</span><span class="p">:</span><span class="w"> </span><span class="nv">terraform/legacy-stack</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">core_iac</span>
+<span class="w">      </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform</span>
+<span class="w">      </span><span class="nt">integration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform_current</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> repository</span><span class="p">:</span><span class="w"> </span><span class="nv">haven</span><span class="p p-Indicator">,</span><span class="nt"> source_path</span><span class="p">:</span><span class="w"> </span><span class="nv">terraform/core</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># Ansible/Bicep: same field, same algorithm — usually zero-config</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">provisioners</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">config_mgmt</span>
+<span class="w">      </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ansible</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> repository</span><span class="p">:</span><span class="w"> </span><span class="nv">haven</span><span class="p p-Indicator">,</span><span class="nt"> source_path</span><span class="p">:</span><span class="w"> </span><span class="nv">ansible</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<span class="w">      </span><span class="c1"># integration: unset — auto-binds if one type:ansible integration is</span>
+<span class="w">      </span><span class="c1"># registered, else falls back to a bare `ansible-playbook` on PATH</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infra_bicep</span>
+<span class="w">      </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bicep</span>
+<span class="w">      </span><span class="nt">integration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure_main</span><span class="w">   </span><span class="c1"># explicit — e.g. two type:azure_cli integrations exist</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> repository</span><span class="p">:</span><span class="w"> </span><span class="nv">haven</span><span class="p p-Indicator">,</span><span class="nt"> source_path</span><span class="p">:</span><span class="w"> </span><span class="nv">bicep</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span> <span class="pre">--deep</span></code> resolves every terraform/ansible/bicep provisioner’s
+binding ahead of time and reports a failure here as a validation error, so a
+missing/ambiguous binding surfaces before <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code>, not partway through it.
+See <span class="xref myst">ADR-0079</span>
+and <span class="xref myst">ADR-0080</span>
+for the full design rationale.</p>
+</section>
 <section id="build-output-profile-terraform-only">
 <h3>Build Output Profile (Terraform only)<a class="headerlink" href="#build-output-profile-terraform-only" title="Link to this heading"></a></h3>
 <p>The <code class="docutils literal notranslate"><span class="pre">output</span></code> block on a Terraform provisioner controls what <code class="docutils literal notranslate"><span class="pre">.auto.tfvars.json</span></code> files
@@ -3860,7 +3938,6 @@ Cycles are detected at build time and cause an error.</p>
 <span class="w">    </span><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">manager</span><span class="w">                      </span><span class="c1"># Optional: role name (e.g. manager, worker, api)</span>
 <span class="w">    </span><span class="nt">count</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span><span class="w">                           </span><span class="c1"># Optional: number of instances (1-100, default 1)</span>
 <span class="w">    </span><span class="nt">depends_on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span><span class="w">                     </span><span class="c1"># Optional: resource names this depends on</span>
-<span class="w">    </span><span class="nt">references</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w">                     </span><span class="c1"># Optional: cross-resource value references</span>
 <span class="w">    </span><span class="nt">firewalls</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span><span class="w">                      </span><span class="c1"># Optional: firewall names to attach</span>
 <span class="w">    </span><span class="nt">subnet</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">network_name/subnet_name</span><span class="w">   </span><span class="c1"># Optional: subnet reference</span>
 <span class="w">    </span><span class="nt">configuration</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w">                  </span><span class="c1"># Optional: workspace-specific config overrides</span>
