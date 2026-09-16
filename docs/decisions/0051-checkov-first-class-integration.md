@@ -678,6 +678,53 @@ that gap is unrelated to this revision's bug and is left as the pre-existing "Mu
 support" item under Future Considerations above; this fix stays scoped to `provisioner: terraform`
 entries only (same scope `get_provisioner_path()` and the new `scope` config both assume).
 
+### Implemented (2026-09-16 follow-up): Bicep and Ansible support
+
+Verified against Checkov's actual supported frameworks (CLI/README): Terraform, Terraform Plan,
+CloudFormation, AWS SAM, Kubernetes, Helm, Kustomize, Dockerfile, Serverless Framework, Ansible,
+Bicep, ARM, and OpenTofu. Cross-referenced against strata's own provisioner types and how each one's
+build artifacts are actually laid out on disk:
+
+| strata provisioner | Checkov framework?                               | Build-time path shape                                                                                                | Verdict                                                                          |
+| ------------------ | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `terraform`        | `terraform`                                      | `get_provisioner_path()` — flat, one dir per provisioner                                                             | done                                                                             |
+| `bicep`            | `bicep`                                          | `get_provisioner_path()` — flat, one dir (confirmed `bicep_builder.py` copies source there, same shape as terraform) | done                                                                             |
+| `ansible`          | `ansible`                                        | `get_provisioner_path()` — flat, one dir (confirmed `ansible_builder.py` does the same)                              | done                                                                             |
+| `helm`             | `helm`                                           | `get_module_build_path(namespace, module)` — **one dir per namespace+module pair**, not one dir per provisioner      | structurally different — needs its own design pass, not a drop-in generalization |
+| `compose`          | none — Compose is not a Checkov framework at all | —                                                                                                                    | not supported by Checkov, period                                                 |
+| `argocd` / `flux`  | `kubernetes` (of the rendered manifests)         | no local build-time source — these "render from the platform artifact" per the schema                                | nothing on disk at build time to point Checkov at, normally                      |
+| `script`           | —                                                | arbitrary user script, not IaC                                                                                       | not applicable                                                                   |
+
+**Implemented:**
+
+1. `_FRAMEWORK_PROVISIONER_MAP` replaces the hardcoded `ProvisionerType.TERRAFORM` filter:
+   ```python
+   _FRAMEWORK_PROVISIONER_MAP = {
+       "terraform": (ProvisionerType.TERRAFORM, ("*.tf",)),
+       "bicep": (ProvisionerType.BICEP, ("*.bicep",)),
+       "ansible": (ProvisionerType.ANSIBLE, ("*.yml", "*.yaml")),
+   }
+   ```
+   `configuration.framework` (already existed, defaults to `"terraform"`) also selects the provisioner
+   type via reverse lookup. `_resolve_terraform_dirs()` was renamed `_resolve_provisioner_dirs()` and
+   takes `framework` as a third argument — everything else (`scope: staged|all|<stage-name>`,
+   `get_provisioner_path()` resolution, per-provisioner aggregation, `warnings`) needed no changes,
+   since none of it was actually Terraform-specific once the provisioner-type filter and file-glob
+   were parameterized.
+2. `helm` remains deliberately excluded — scanning it properly means enumerating every
+   `namespaces[].modules[]` pair reachable from the policy's `scope`, then running Checkov once per
+   rendered chart directory (or once over the whole namespace). Left as a separate follow-up design,
+   not folded into this generalization.
+3. `compose`/`argocd`/`flux`/`script` stay unsupported — configuring `framework: compose` (etc.) is a
+   clean, explicit skip+warning ("framework 'compose' has no supported provisioner mapping — use one
+   of: ansible, bicep, terraform"), not a crash.
+4. **One policy instance scans one framework**, confirmed as implemented — `skip_checks`/
+   `severity_gate`/finding IDs live in unrelated namespaces per framework (`CKV_AWS_*` vs
+   `CKV_ANSIBLE_*` vs the Bicep/ARM checks), so mixing them in one enforcement rule would make
+   `skip_checks` ambiguous about which framework's check it silences. A workspace wanting both
+   Terraform and Ansible coverage declares two `checkov` policies,
+   one per framework.
+
 ### Configuration (supersedes the 2026-07-23 example)
 
 ```yaml
@@ -687,7 +734,7 @@ policies:
     phase: build
     enforcement: deny
     configuration:
-      framework: terraform          # default: terraform
+      framework: terraform          # default: terraform | bicep | ansible
       severity_gate: high           # critical|high|medium|low (default: high)
       scope: staged                 # staged (default) | all | <stage-name>
       skip_checks: []

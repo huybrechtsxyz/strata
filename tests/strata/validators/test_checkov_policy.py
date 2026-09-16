@@ -113,11 +113,16 @@ def _make_integration() -> "CheckovIntegration":
 
 
 def _make_provisioner(
-    name: str, source_path: str = "terraform", target_path: Optional[str] = None
+    name: str,
+    source_path: str = "terraform",
+    target_path: Optional[str] = None,
+    provisioner: str = "terraform",
 ) -> WorkspaceIacModel:
-    """Build a real terraform WorkspaceIacModel (ADR-0051 revision, 2026-09-16)."""
+    """Build a real WorkspaceIacModel (ADR-0051 revision, 2026-09-16). ``provisioner``
+    defaults to "terraform" but also supports "bicep"/"ansible" for the
+    multi-framework follow-up (2026-09-16)."""
     source = SourceModel(source_path=source_path, target_path=target_path, repository="repo")
-    return WorkspaceIacModel(name=name, provisioner="terraform", source=source)
+    return WorkspaceIacModel(name=name, provisioner=provisioner, source=source)
 
 
 def _make_stage(name="stage1", provisioner=None, topology=None):
@@ -312,7 +317,7 @@ class TestCheckovPolicyEvaluate:
         return patch.object(CheckovPolicy, "_run_scan", return_value=scan_result)
 
     def _mock_resolve_dirs(self, dirs, reason=None):
-        return patch.object(CheckovPolicy, "_resolve_terraform_dirs", return_value=(dirs, reason))
+        return patch.object(CheckovPolicy, "_resolve_provisioner_dirs", return_value=(dirs, reason))
 
     def test_skip_no_build_path(self):
         policy = CheckovPolicy(_make_policy())
@@ -324,12 +329,12 @@ class TestCheckovPolicyEvaluate:
 
     def test_skip_no_terraform_dir(self, tmp_path):
         policy = CheckovPolicy(_make_policy())
-        with self._mock_resolve_dirs([], "no Terraform artifacts found for the selected scope"):
+        with self._mock_resolve_dirs([], "no terraform artifacts found for the selected scope"):
             context = _make_context(build_path=tmp_path)
             result = policy.evaluate(context)
         assert result.passed
-        assert "no Terraform artifacts" in (result.details or {}).get("skipped", "")
-        assert any("no Terraform artifacts" in w for w in result.warnings)
+        assert "no terraform artifacts" in (result.details or {}).get("skipped", "")
+        assert any("no terraform artifacts" in w for w in result.warnings)
 
     def test_skip_checkov_unavailable(self, tmp_path):
         policy = CheckovPolicy(_make_policy())
@@ -464,26 +469,74 @@ class TestCheckovPolicyEvaluate:
         assert result.passed  # nothing breached among what WAS scanned
         assert any("core_modules" in w for w in result.warnings)
 
+    def test_unsupported_framework_skips_with_supported_list(self, tmp_path):
+        policy = CheckovPolicy(_make_policy())
+        policy.policy.configuration["framework"] = "compose"
+        result = policy.evaluate(_make_context(tmp_path))
+        assert result.passed
+        skipped = (result.details or {}).get("skipped", "")
+        assert "framework 'compose'" in skipped
+        assert "ansible" in skipped and "bicep" in skipped and "terraform" in skipped
+        assert any("framework 'compose'" in w for w in result.warnings)
+
+    def test_bicep_framework_end_to_end(self, tmp_path):
+        bicep = _make_provisioner("platform_bicep", source_path="bicep", provisioner="bicep")
+        stage = _make_stage("infra", provisioner="platform_bicep")
+        dep_svc = _make_deployment_service(tmp_path, [bicep], stages=[stage])
+        (tmp_path / "bicep").mkdir()
+        (tmp_path / "bicep" / "main.bicep").write_text("resource x 'Microsoft.Storage/x@2021-01-01' = {}")
+
+        scan = self._scan_result_from_block(_CHECKOV_SINGLE, framework="bicep")
+        policy = CheckovPolicy(_make_policy(severity_gate="high"))
+        policy.policy.configuration["framework"] = "bicep"
+        with self._mock_policy_scan(scan):
+            result = policy.evaluate(_make_context(tmp_path, deployment_service=dep_svc))
+
+        assert not result.passed
+        assert result.details["provisioners"][0]["provisioner"] == "platform_bicep"
+
+    def test_ansible_framework_end_to_end(self, tmp_path):
+        ansible = _make_provisioner("config", source_path="ansible", provisioner="ansible")
+        stage = _make_stage("configure", provisioner="config")
+        dep_svc = _make_deployment_service(tmp_path, [ansible], stages=[stage])
+        (tmp_path / "ansible").mkdir()
+        (tmp_path / "ansible" / "site.yml").write_text("- hosts: all")
+
+        scan = self._scan_result_from_block(
+            {
+                "results": {"passed_checks": [], "failed_checks": [], "skipped_checks": []},
+                "summary": {"passed": 0, "failed": 0, "skipped": 0},
+            },
+            framework="ansible",
+        )
+        policy = CheckovPolicy(_make_policy())
+        policy.policy.configuration["framework"] = "ansible"
+        with self._mock_policy_scan(scan):
+            result = policy.evaluate(_make_context(tmp_path, deployment_service=dep_svc))
+
+        assert result.passed
+        assert result.details["provisioners"][0]["provisioner"] == "config"
+
 
 # ===========================================================================
-# CheckovPolicy._resolve_terraform_dirs
+# CheckovPolicy._resolve_provisioner_dirs
 # ===========================================================================
 
 
-class TestCheckovPolicyResolveTerraformDirs:
+class TestCheckovPolicyResolveProvisionerDirs:
     def test_no_build_path_skips(self):
         policy = CheckovPolicy(_make_policy())
         context = _make_context(build_path=None)
-        dirs, reason = policy._resolve_terraform_dirs(context, "staged")
+        dirs, reason = policy._resolve_provisioner_dirs(context, "staged", "terraform")
         assert dirs == []
-        assert "no Terraform artifacts" in reason
+        assert "no terraform artifacts" in reason
 
     def test_no_deployment_service_skips(self, tmp_path):
         policy = CheckovPolicy(_make_policy())
         context = _make_context(build_path=tmp_path)  # deployment_service defaults to None
-        dirs, reason = policy._resolve_terraform_dirs(context, "staged")
+        dirs, reason = policy._resolve_provisioner_dirs(context, "staged", "terraform")
         assert dirs == []
-        assert "no Terraform artifacts" in reason
+        assert "no terraform artifacts" in reason
 
     def test_no_terraform_provisioners_declared(self, tmp_path):
         ansible_prov = MagicMock()
@@ -492,7 +545,7 @@ class TestCheckovPolicyResolveTerraformDirs:
         dep_svc = _make_deployment_service(tmp_path, [ansible_prov])
         policy = CheckovPolicy(_make_policy())
         context = _make_context(tmp_path, deployment_service=dep_svc)
-        dirs, reason = policy._resolve_terraform_dirs(context, "staged")
+        dirs, reason = policy._resolve_provisioner_dirs(context, "staged", "terraform")
         assert dirs == []
         assert "no terraform provisioners" in reason
 
@@ -509,7 +562,7 @@ class TestCheckovPolicyResolveTerraformDirs:
 
         policy = CheckovPolicy(_make_policy())
         context = _make_context(tmp_path, deployment_service=dep_svc)  # no solution_controller -> fallback shape
-        dirs, reason = policy._resolve_terraform_dirs(context, "staged")
+        dirs, reason = policy._resolve_provisioner_dirs(context, "staged", "terraform")
 
         assert reason is None
         assert [name for name, _ in dirs] == ["control_infra"]
@@ -527,7 +580,7 @@ class TestCheckovPolicyResolveTerraformDirs:
 
         policy = CheckovPolicy(_make_policy())
         context = _make_context(tmp_path, deployment_service=dep_svc)
-        dirs, reason = policy._resolve_terraform_dirs(context, "all")
+        dirs, reason = policy._resolve_provisioner_dirs(context, "all", "terraform")
 
         assert reason is None
         assert {name for name, _ in dirs} == {"control_infra", "core_modules"}
@@ -545,7 +598,7 @@ class TestCheckovPolicyResolveTerraformDirs:
 
         policy = CheckovPolicy(_make_policy())
         context = _make_context(tmp_path, deployment_service=dep_svc)
-        dirs, reason = policy._resolve_terraform_dirs(context, "infrastructure")
+        dirs, reason = policy._resolve_provisioner_dirs(context, "infrastructure", "terraform")
 
         assert reason is None
         assert [name for name, _ in dirs] == ["control_infra"]
@@ -559,7 +612,7 @@ class TestCheckovPolicyResolveTerraformDirs:
 
         policy = CheckovPolicy(_make_policy())
         context = _make_context(tmp_path, deployment_service=dep_svc)
-        dirs, reason = policy._resolve_terraform_dirs(context, "bogus_stage")
+        dirs, reason = policy._resolve_provisioner_dirs(context, "bogus_stage", "terraform")
 
         assert dirs == []
         assert "invalid scope 'bogus_stage'" in reason
@@ -572,10 +625,10 @@ class TestCheckovPolicyResolveTerraformDirs:
 
         policy = CheckovPolicy(_make_policy())
         context = _make_context(tmp_path, deployment_service=dep_svc)
-        dirs, reason = policy._resolve_terraform_dirs(context, "staged")
+        dirs, reason = policy._resolve_provisioner_dirs(context, "staged", "terraform")
 
         assert dirs == []
-        assert "no Terraform artifacts found for the selected scope" in reason
+        assert "no terraform artifacts found for the selected scope" in reason
 
     def test_uses_solution_controller_get_provisioner_path_when_available(self, tmp_path):
         control = _make_provisioner("control_infra", source_path="control/terraform")
@@ -590,7 +643,7 @@ class TestCheckovPolicyResolveTerraformDirs:
 
         policy = CheckovPolicy(_make_policy())
         context = _make_context(tmp_path, deployment_service=dep_svc, solution_controller=solution_controller)
-        dirs, reason = policy._resolve_terraform_dirs(context, "staged")
+        dirs, reason = policy._resolve_provisioner_dirs(context, "staged", "terraform")
 
         assert reason is None
         assert dirs == [("control_infra", tf_dir)]
@@ -605,7 +658,49 @@ class TestCheckovPolicyResolveTerraformDirs:
 
         policy = CheckovPolicy(_make_policy())
         context = _make_context(tmp_path, deployment_service=dep_svc)  # no solution_controller -> fallback
-        dirs, reason = policy._resolve_terraform_dirs(context, "staged")
+        dirs, reason = policy._resolve_provisioner_dirs(context, "staged", "terraform")
 
         assert reason is None
         assert dirs == [("control_infra", tmp_path / "override" / "terraform")]
+
+    def test_bicep_framework_uses_bicep_glob(self, tmp_path):
+        bicep = _make_provisioner("platform_bicep", source_path="bicep", provisioner="bicep")
+        stage = _make_stage("infra", provisioner="platform_bicep")
+        dep_svc = _make_deployment_service(tmp_path, [bicep], stages=[stage])
+        (tmp_path / "bicep").mkdir()
+        (tmp_path / "bicep" / "main.bicep").write_text("resource x 'Microsoft.Storage/x@2021-01-01' = {}")
+
+        policy = CheckovPolicy(_make_policy())
+        context = _make_context(tmp_path, deployment_service=dep_svc)
+        dirs, reason = policy._resolve_provisioner_dirs(context, "staged", "bicep")
+
+        assert reason is None
+        assert dirs == [("platform_bicep", tmp_path / "bicep")]
+
+    def test_ansible_framework_matches_yml_or_yaml(self, tmp_path):
+        ansible = _make_provisioner("config", source_path="ansible", provisioner="ansible")
+        stage = _make_stage("configure", provisioner="config")
+        dep_svc = _make_deployment_service(tmp_path, [ansible], stages=[stage])
+        (tmp_path / "ansible").mkdir()
+        (tmp_path / "ansible" / "site.yaml").write_text("- hosts: all")  # .yaml, not .yml
+
+        policy = CheckovPolicy(_make_policy())
+        context = _make_context(tmp_path, deployment_service=dep_svc)
+        dirs, reason = policy._resolve_provisioner_dirs(context, "staged", "ansible")
+
+        assert reason is None
+        assert dirs == [("config", tmp_path / "ansible")]
+
+    def test_bicep_provisioner_excluded_when_framework_is_terraform(self, tmp_path):
+        bicep = _make_provisioner("platform_bicep", source_path="bicep", provisioner="bicep")
+        stage = _make_stage("infra", provisioner="platform_bicep")
+        dep_svc = _make_deployment_service(tmp_path, [bicep], stages=[stage])
+        (tmp_path / "bicep").mkdir()
+        (tmp_path / "bicep" / "main.bicep").write_text("resource x 'Microsoft.Storage/x@2021-01-01' = {}")
+
+        policy = CheckovPolicy(_make_policy())
+        context = _make_context(tmp_path, deployment_service=dep_svc)
+        dirs, reason = policy._resolve_provisioner_dirs(context, "staged", "terraform")
+
+        assert dirs == []
+        assert "no terraform provisioners" in reason
