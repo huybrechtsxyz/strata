@@ -146,6 +146,7 @@ class CheckPolicyCommand(BaseCommand):
                 work_path=self._work_path,
                 deployment_service=self._deployment_service,
                 configuration_service=self._configuration_service,
+                solution_controller=self._solution_controller,
                 platform_artifact=platform_artifact if phase in ("build", "plan", "deploy") else None,
                 plan_data=plan_data if phase == "plan" else None,
                 build_path=build_path,
@@ -162,6 +163,7 @@ class CheckPolicyCommand(BaseCommand):
                     "enforcement": result.enforcement,
                     "passed": result.passed,
                     "violations": result.violations or [],
+                    "warnings": result.warnings or [],
                 }
                 self._results.append(entry)
 
@@ -309,6 +311,8 @@ class CheckPolicyCommand(BaseCommand):
                 click.echo(f"  {phase_str:<10}{name_str:<26}{enf_col}{result_col}")
                 for v in entry["violations"]:
                     click.echo(f"      {click.style('↳', fg='red')} {v}")
+            for w in entry.get("warnings", []):
+                click.echo(f"      {click.style('⚠', fg='yellow')} {w}")
 
         click.echo("")
         passed = sum(1 for r in self._results if r["passed"])

@@ -25,6 +25,7 @@ class PolicyContext:
     work_path: Optional[Path]
     deployment_service: Optional[Any] = None  # DeploymentService — Any avoids circular imports
     configuration_service: Optional[Any] = None  # ConfigurationService
+    solution_controller: Optional[Any] = None  # SolutionController — Any avoids circular imports (ADR-0051, 2026-09-16)
     platform_artifact: Optional[Any] = None  # PlatformArtifactModel
     plan_data: Optional[Dict[str, Any]] = None  # terraform show -json output
     build_path: Optional[Path] = None
@@ -44,6 +45,7 @@ class PolicyResult:
     enforcement: str  # deny | warn | audit
     policy_type: str = ""
     violations: List[str] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)  # non-fatal, always-surfaced messages (ADR-0051, 2026-09-16)
     details: Optional[Dict[str, Any]] = None
 
 
