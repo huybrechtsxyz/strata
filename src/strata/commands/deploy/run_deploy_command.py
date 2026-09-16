@@ -1771,6 +1771,7 @@ class RunDeployCommand(BaseDeployCommand):
             work_path=self._work_path,
             deployment_service=self._deployment_service,
             configuration_service=self._configuration_service,
+            solution_controller=self._solution_controller,
             plan_data=plan_data,
             build_path=self._build_path,
             cost_data=cost_data,
@@ -1791,6 +1792,8 @@ class RunDeployCommand(BaseDeployCommand):
                     violations=result.violations or [],
                 )
             )
+            for w in result.warnings:
+                click.echo(f"    \u26a0  Policy '{result.policy_name}': {w}")
             if result.passed:
                 if self._is_verbose() and self._is_console_output():
                     click.echo(f"    \u2713  Policy '{result.policy_name}' passed")

@@ -1,8 +1,9 @@
 # Checkov as a first-class integration
 
-- Status: partially-implemented — Phase 1 done, Phase 2 not started
+- Status: partially-implemented — Phase 1 done (bug found 2026-09-16, fix designed, implementation pending), Phase 2 not started
 - Date: 2026-07-22
 - Revised: 2026-07-23
+- Revised: 2026-09-16 — artifact path resolution bug + provisioner `scope` config (see bottom of document)
 - Supersedes: Partial aspects of ADR-0006 (policy-engine-for-deployment-guardrails)
 
 ## Remaining Work
@@ -556,3 +557,148 @@ Cache is stored locally:
 - **Framework** — IaC tool Checkov scans (terraform, cloudformation, kubernetes, helm, dockerfile, etc.)
 - **ComplianceFinding** — Enriched Checkov result with strata context (tenant, workspace, resource)
 - **Artifact hash** — SHA256 of Terraform artifact directory; used to invalidate/refresh cache
+
+---
+
+## Revised: 2026-09-16 — artifact path resolution bug + provisioner `scope`
+
+### Problem
+
+The Phase 1 scope note above (2026-07-23) explicitly specified `CheckovPolicy` would resolve
+"terraform artifact dir from `context.build_path`" — as literally shipped, `_resolve_terraform_dir()`
+hand-rolls three guessed candidate directories (`{build_path}/{deployment_name}/terraform/`,
+`{build_path}/terraform/`, `{build_path}/` itself), none of which consult a provisioner's
+`source.source_path` / `source.target_path`. For any workspace whose terraform provisioner uses a
+nested `source_path` (e.g. `control/terraform`) — the normal case for any multi-provisioner
+workspace — none of the three candidates match where the builder actually copies IaC source, and
+the policy returns `PolicyResult(passed=True, details={"skipped": "no Terraform artifacts found in
+build path"})`. A `deny`-enforcement security policy silently passes with nothing scanned.
+
+Compounding this, `run_build_command.py`'s `_evaluate_build_policies()` — the code path `strata
+build run` actually uses — never passed `deployment_service` into `PolicyContext` at all, so even
+the policy's own best-case candidate (`context.deployment_service.get_build_path(...) / "terraform"`)
+was dead code in production; only the two flatter, still-wrong candidates were ever tried.
+
+ADR-0071 already established the fix for exactly this class of bug for the builder/deployer pair:
+`SolutionController.get_provisioner_path()` is the single source of truth for a provisioner's build
+output directory (`target_path` if set, else `source_path`, joined onto
+`deployment_service.get_build_path(build_path)`), used by both `TerraformBuilder` (copy destination)
+and `TerraformDeployer` (working directory). `CheckovPolicy` was never updated to use it — this
+revision closes that gap.
+
+### Decision
+
+1. **Path resolution** — `CheckovPolicy` resolves each scanned provisioner's directory via
+   `solution_controller.get_provisioner_path(deployment_service, build_path, prov)`, mirroring
+   `TerraformDeployer._get_working_dir()`'s fallback shape when no `solution_controller` is present
+   (library/test use). `PolicyContext` gains a `solution_controller: Optional[Any] = None` field
+   (same `Any`-typed convention as `deployment_service`, to avoid a circular import), populated from
+   `self._solution_controller` — already unconditionally constructed in `BaseCommand.__init__` — at
+   every `PolicyContext(...)` call site (`run_build_command.py`, `check_policy_command.py`,
+   `run_deploy_command.py`, `base_deploy_command.py`). `run_build_command.py` also starts passing
+   `deployment_service`, fixing the dead-code candidate noted above.
+
+2. **No duplicate reachability logic, and one standardized resolution behavior** — determining
+   which terraform provisioner(s) to scan reuses the stage-reachability resolution that already
+   exists, duplicated, in `BaseDeployer._resolve_iac_model()` (stage → provisioner) and
+   `TerraformBuilder._stages_for_provisioner()` (provisioner → matching stages). Both are
+   extracted into one shared helper (`strata/utils/provisioner_resolution.py` —
+   `resolve_stage_provisioner_name()` + `stage_reachable_provisioner_names(workspace_model,
+   stages)`) that all three call sites, including the new `CheckovPolicy` scope filter, import —
+   per the "one implementation, not copies" rule for introducing new conventions.
+
+   **The two existing implementations were not actually equivalent before this fix**, found while
+   extracting the shared helper:
+   - `BaseDeployer._resolve_iac_model()` falls through across all three priorities even after an
+     explicit-but-invalid reference — a typo'd `stage.provisioner` name still recovers via
+     `stage.topology` or the sole-provisioner fallback, logging only a `warning` (easy to miss).
+   - `TerraformBuilder._stages_for_provisioner()` treats the three priorities as mutually
+     exclusive (`if`/`elif`/`elif`) — a typo'd `stage.provisioner` name resolves to nothing, with
+     no warning at all (this copy only feeds secret-scoping, not a hard resolution path).
+
+   **Standardized on the strict (mutually-exclusive) behavior everywhere**: the first applicable
+   priority — `stage.provisioner`, else `stage.topology`, else the sole workspace provisioner —
+   wins outright; an explicit-but-unresolvable `stage.provisioner`/`stage.topology` reference is a
+   hard resolution failure, never a silent fallback to a different provisioner. Silent recovery
+   from a wrong/typo'd explicit reference is the same class of bug this whole revision exists to
+   fix (a quiet fallback masking a real config error), so `BaseDeployer` loses its fall-through
+   rather than the new code inheriting it.
+
+   **Compatibility note:** this changes real `BaseDeployer` behavior — used by every deployer
+   (terraform/bicep/ansible), not just Checkov. A workspace that today has a typo'd
+   `stage.provisioner` which happens to still resolve via topology or a sole-provisioner fallback
+   (with only a buried warning log) will, after this change, fail `validate_workspace()` outright
+   with the existing "cannot resolve a terraform provisioner" error instead of silently deploying
+   against a different provisioner than named. This is the intended, correct outcome, but it is a
+   behavior change worth its own `CHANGELOG.md` callout ("may surface previously-silent
+   stage/provisioner config errors") rather than folding it silently into the Checkov fix.
+
+3. **New `configuration.scope` field** — controls which terraform provisioner(s) are scanned when a
+   workspace declares more than one (e.g. a root `control_infra` provisioner plus a shared
+   `core_modules` module-library provisioner that no stage targets directly):
+
+   - `staged` (default) — provisioners reachable from at least one deployment stage, via
+     `stage.provisioner` or `stage.topology → topology.provisioner` (the same reachability set
+     `stage_reachable_provisioner_names()` computes). Named `staged`, not `root`, because there is
+     no actual parent/child hierarchy in the schema — the name describes the literal mechanism
+     instead of implying a tree that doesn't exist.
+   - `all` — every `provisioner: terraform` entry in the workspace, staged or not.
+   - `<stage-name>` (e.g. `infrastructure`) — provisioner(s) reachable from that one named stage
+     only. Feasible without making `build` stage-aware at runtime: the full static stage list
+     (`deployment_service.model.spec.stages`) is already available at build time, so this is just a
+     narrower filter over the same data, not a runtime binding to "when that stage deploys." An
+     unrecognized stage name degrades gracefully (skip + warning listing valid stage names), same
+     as an invalid `severity_gate` today.
+   - `configuration.scope` is unrelated to `stages[].scope` (an existing, different, free-form
+     CLI-filter label) despite the shared field name — different namespace
+     (`policies[].configuration.scope` vs `stages[].scope`), called out explicitly here to avoid
+     confusion.
+
+   Aggregation across multiple selected provisioners: any single provisioner breaching
+   `severity_gate` denies the whole policy result (AND semantics, matching how a single
+   `enforcement: deny` policy already behaves) — findings are still reported per provisioner in
+   `PolicyResult.details` and violation strings are prefixed with the provisioner name
+   (e.g. `[control_infra] CKV_AWS_1: ...`).
+
+4. **Silent skip becomes a visible warning** — `PolicyResult` gains a `warnings: List[str]` field
+   (mirrors the `stage_warnings` pattern from the 1.10.0 deploy-output work). All four of
+   `CheckovPolicy`'s graceful-degradation paths (no artifacts found, Checkov not installed, scan
+   subprocess failed, invalid `severity_gate`/`scope`) populate an explicit, actionable message.
+   Every `PolicyContext` call site echoes `result.warnings` as `⚠` lines unconditionally — even when
+   `passed=True` — so a skipped enforcement policy is never silent again.
+
+### Not in scope: multi-framework support
+
+Checkov itself scans far more than Terraform (CloudFormation, Kubernetes, Helm, Dockerfile, ARM/Bicep,
+Serverless Framework, ...), and `CheckovIntegration.scan()` already accepts a `framework` parameter
+that defaults to `"terraform"`. In practice strata's integration is Terraform-only end-to-end today:
+the parameter is named `terraform_dir`, and `CheckovPolicy`'s path resolution only ever looks for
+`.tf` files. Setting `configuration.framework` to anything else currently finds nothing and skips —
+that gap is unrelated to this revision's bug and is left as the pre-existing "Multi-framework
+support" item under Future Considerations above; this fix stays scoped to `provisioner: terraform`
+entries only (same scope `get_provisioner_path()` and the new `scope` config both assume).
+
+### Configuration (supersedes the 2026-07-23 example)
+
+```yaml
+policies:
+  - name: terraform_security_baseline
+    type: checkov
+    phase: build
+    enforcement: deny
+    configuration:
+      framework: terraform          # default: terraform
+      severity_gate: high           # critical|high|medium|low (default: high)
+      scope: staged                 # staged (default) | all | <stage-name>
+      skip_checks: []
+      include_checks: []
+      custom_checks_dir: ".strata/checkov/custom/"
+      timeout: 120
+```
+
+### Remaining work
+
+- Implementation (this revision records the design only — see the tracking session for
+  implementation status).
+- `.github/HISTORY.md` entry (full root-cause/fix/testing narrative) and a terse
+  `.github/CHANGELOG.md` bullet pointing back here, once implemented.

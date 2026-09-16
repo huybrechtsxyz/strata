@@ -302,7 +302,9 @@ class RunBuildCommand(BaseBuildCommand):
         context = PolicyContext(
             phase="build",
             work_path=self._work_path,
+            deployment_service=self._deployment_service,
             configuration_service=self._configuration_service,
+            solution_controller=self._solution_controller,
             platform_artifact=platform_artifact,
             build_path=self._build_path,
             sbom_components=getattr(self, "_sbom_components", None),
@@ -314,6 +316,8 @@ class RunBuildCommand(BaseBuildCommand):
 
         denied = False
         for result in results:
+            for w in result.warnings:
+                click.echo(f"    \u26a0  Policy '{result.policy_name}': {w}")
             if result.passed:
                 if self._is_verbose() and self._is_console_output():
                     click.echo(f"    \u2713  Policy '{result.policy_name}' passed")

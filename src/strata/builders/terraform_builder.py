@@ -1581,34 +1581,15 @@ class TerraformBuilder(BaseBuilder):
     def _stages_for_provisioner(self, workspace_model: Any, stages: List[Any], prov: Any) -> List[Any]:
         """Return the deployment stages that resolve to *prov*.
 
-        Mirrors ``BaseDeployer._resolve_iac_model()``'s resolution order so build-time
-        validation scopes secrets exactly the way deploy-time injection does:
-
-        1. ``stage.provisioner`` — explicit provisioner name match.
-        2. ``stage.topology``    — topology name → ``topology.provisioner`` name match.
-        3. Sole workspace provisioner — every stage implicitly uses it when it's the
-           only one declared and neither of the above is set.
+        Delegates to the shared ``resolve_stage_provisioner_name()`` helper
+        (ADR-0051 revision, 2026-09-16) so build-time secret scoping resolves
+        stages exactly the way ``BaseDeployer._resolve_iac_model()`` and
+        ``CheckovPolicy``'s ``scope: staged`` filter do — one implementation,
+        not three independent copies.
         """
-        provisioners = workspace_model.spec.provisioners or []
-        topologies = workspace_model.spec.topology or []
-        sole_provisioner_name = provisioners[0].name if len(provisioners) == 1 else None
+        from strata.utils.provisioner_resolution import resolve_stage_provisioner_name
 
-        matched: List[Any] = []
-        for stage in stages:
-            resolved_name: Optional[str] = None
-            if stage.provisioner:
-                resolved_name = stage.provisioner
-            elif stage.topology:
-                topo = next((t for t in topologies if str(t.name) == stage.topology), None)
-                if topo:
-                    resolved_name = str(topo.provisioner)
-            elif sole_provisioner_name:
-                resolved_name = sole_provisioner_name
-
-            if resolved_name == prov.name:
-                matched.append(stage)
-
-        return matched
+        return [stage for stage in stages if resolve_stage_provisioner_name(stage, workspace_model) == prov.name]
 
     @staticmethod
     def _allowed_secret_keys_for_stages(stages: List[Any], all_secret_keys: Set[str]) -> Set[str]:

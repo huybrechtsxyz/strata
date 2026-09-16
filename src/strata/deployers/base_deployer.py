@@ -303,56 +303,57 @@ class BaseDeployer(ABC):
     ) -> Optional[WorkspaceIacModel]:
         """Resolve the WorkspaceIacModel for a stage.
 
-        Priority:
-        1. stage.provisioner set — match workspace.spec.provisioners by name.
-        2. stage.topology set   — find topology by name; topo.provisioner is a
-                                  name reference, so look up the IaC entry by name.
-        3. Single provisioner   — use it unconditionally.
+        Delegates the stage → provisioner name resolution to the shared
+        ``resolve_stage_provisioner_name()`` helper (ADR-0051 revision,
+        2026-09-16) — single source of truth shared with
+        ``TerraformBuilder._stages_for_provisioner()`` and ``CheckovPolicy``'s
+        ``scope: staged`` filter.
+
+        Resolution is strict: the first applicable priority (``stage.provisioner``,
+        else ``stage.topology``, else the sole workspace provisioner) wins
+        outright. An explicit-but-unresolvable ``stage.provisioner``/
+        ``stage.topology`` reference is a hard failure (logged, returns None) —
+        it no longer silently falls back to a later priority. Previously this
+        method fell through past a failed explicit match (only logging a
+        warning), which could silently resolve a typo'd reference to the wrong
+        provisioner.
         """
+        from strata.utils.provisioner_resolution import resolve_stage_provisioner_name
+
         spec = workspace_service.model.spec
         provisioners = spec.provisioners or []
 
         if not provisioners:
             return None
 
-        # Priority 1: explicit provisioner name on stage
-        if stage.provisioner:
-            match = next((p for p in provisioners if p.name == stage.provisioner), None)
-            if match:
+        resolved_name = resolve_stage_provisioner_name(stage, workspace_service.model)
+
+        if resolved_name is not None:
+            match = next((p for p in provisioners if p.name == resolved_name), None)
+            if match is not None:
+                if not stage.provisioner and not stage.topology:
+                    self.logger.debug(
+                        "Using sole workspace provisioner for stage (no explicit reference)",
+                        stage=stage.name,
+                        provisioner=match.name,
+                    )
                 return match
+
+        # Nothing resolved to a real provisioner — log a message specific to
+        # whichever explicit reference (if any) was attempted, then fail hard.
+        if stage.provisioner:
             self.logger.warning(
                 "stage.provisioner name not found in workspace.spec.provisioners",
                 stage=stage.name,
                 provisioner=stage.provisioner,
             )
-
-        # Priority 2: resolve via topology (topo.provisioner is a name reference)
-        if stage.topology:
-            topo = next(
-                (t for t in (spec.topology or []) if t.name == stage.topology),
-                None,
-            )
-            if topo:
-                match = next(
-                    (p for p in provisioners if p.name == topo.provisioner),
-                    None,
-                )
-                if match:
-                    return match
-                self.logger.warning(
-                    "No workspace provisioner matches topology.provisioner name",
-                    stage=stage.name,
-                    topology=stage.topology,
-                    provisioner_name=str(topo.provisioner),
-                )
-
-        # Priority 3: single provisioner — use it directly
-        if len(provisioners) == 1:
-            self.logger.debug(
-                "Using sole workspace provisioner for stage (no explicit reference)",
+        elif stage.topology:
+            self.logger.warning(
+                "stage.topology does not resolve to a valid provisioner "
+                "(topology not found, or its provisioner name is unknown)",
                 stage=stage.name,
-                provisioner=provisioners[0].name,
+                topology=stage.topology,
+                resolved_provisioner_name=resolved_name,
             )
-            return provisioners[0]
 
         return None

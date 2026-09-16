@@ -592,15 +592,17 @@ class TestTerraformDeployerResolveIacModel:
         result = d._resolve_iac_model(stage, self._ws([p]))
         assert result is p
 
-    def test_explicit_provisioner_name_not_found_falls_through(self, tmp_path):
+    def test_explicit_provisioner_name_not_found_fails_strict(self, tmp_path):
+        """ADR-0051 revision (2026-09-16): an explicit-but-invalid stage.provisioner
+        no longer silently falls back to the sole provisioner — resolution is now
+        strict per priority, shared via resolve_stage_provisioner_name()."""
         d = _make_deployer(tmp_path)
         p = self._prov("other_tf")
         stage = MagicMock()
         stage.provisioner = "missing"
         stage.topology = None
-        # Single provisioner → falls to priority 3
         result = d._resolve_iac_model(stage, self._ws([p]))
-        assert result is p  # priority 3 fallback
+        assert result is None
 
     def test_single_provisioner_fallback(self, tmp_path):
         d = _make_deployer(tmp_path)

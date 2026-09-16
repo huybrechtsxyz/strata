@@ -8,6 +8,11 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Fixed
+
+- **`CheckovPolicy` artifact path resolution (ADR-0051)** — no longer silently passes a `deny`-enforcement policy without scanning anything; now resolves each terraform provisioner's build directory via the canonical `get_provisioner_path()`, adds a `scope` config (`staged` default | `all` | `<stage-name>`) for multi-provisioner workspaces, and surfaces every skip as a warning instead of a silent pass. See ADR-0051 / HISTORY.md.
+- **Stage → provisioner resolution is now strict everywhere** — a typo'd `stage.provisioner`/`stage.topology` no longer silently falls back to a different provisioner (previously only logged a warning); it now fails `validate_workspace()` outright. May surface previously-silent stage/provisioner config errors. See ADR-0051 / HISTORY.md.
+
 ## [1.10.0] - 2026-09-15
 
 ### Added
