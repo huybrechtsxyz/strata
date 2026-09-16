@@ -685,15 +685,15 @@ CloudFormation, AWS SAM, Kubernetes, Helm, Kustomize, Dockerfile, Serverless Fra
 Bicep, ARM, and OpenTofu. Cross-referenced against strata's own provisioner types and how each one's
 build artifacts are actually laid out on disk:
 
-| strata provisioner | Checkov framework?                               | Build-time path shape                                                                                                | Verdict                                                                          |
-| ------------------ | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `terraform`        | `terraform`                                      | `get_provisioner_path()` — flat, one dir per provisioner                                                             | done                                                                             |
-| `bicep`            | `bicep`                                          | `get_provisioner_path()` — flat, one dir (confirmed `bicep_builder.py` copies source there, same shape as terraform) | done                                                                             |
-| `ansible`          | `ansible`                                        | `get_provisioner_path()` — flat, one dir (confirmed `ansible_builder.py` does the same)                              | done                                                                             |
-| `helm`             | `helm`                                           | `get_module_build_path(namespace, module)` — **one dir per namespace+module pair**, not one dir per provisioner      | structurally different — needs its own design pass, not a drop-in generalization |
-| `compose`          | none — Compose is not a Checkov framework at all | —                                                                                                                    | not supported by Checkov, period                                                 |
-| `argocd` / `flux`  | `kubernetes` (of the rendered manifests)         | no local build-time source — these "render from the platform artifact" per the schema                                | nothing on disk at build time to point Checkov at, normally                      |
-| `script`           | —                                                | arbitrary user script, not IaC                                                                                       | not applicable                                                                   |
+| strata provisioner | Checkov framework?                               | Build-time path shape                                                                                                | Verdict                                                     |
+| ------------------ | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `terraform`        | `terraform`                                      | `get_provisioner_path()` — flat, one dir per provisioner                                                             | done                                                        |
+| `bicep`            | `bicep`                                          | `get_provisioner_path()` — flat, one dir (confirmed `bicep_builder.py` copies source there, same shape as terraform) | done                                                        |
+| `ansible`          | `ansible`                                        | `get_provisioner_path()` — flat, one dir (confirmed `ansible_builder.py` does the same)                              | done                                                        |
+| `helm`             | `helm`                                           | `get_module_build_path(namespace, module)` — **one dir per namespace+module pair**, not one dir per provisioner      | deferred — see "Deferred: Helm support" below               |
+| `compose`          | none — Compose is not a Checkov framework at all | —                                                                                                                    | not supported by Checkov, period                            |
+| `argocd` / `flux`  | `kubernetes` (of the rendered manifests)         | no local build-time source — these "render from the platform artifact" per the schema                                | nothing on disk at build time to point Checkov at, normally |
+| `script`           | —                                                | arbitrary user script, not IaC                                                                                       | not applicable                                              |
 
 **Implemented:**
 
@@ -711,10 +711,8 @@ build artifacts are actually laid out on disk:
    `get_provisioner_path()` resolution, per-provisioner aggregation, `warnings`) needed no changes,
    since none of it was actually Terraform-specific once the provisioner-type filter and file-glob
    were parameterized.
-2. `helm` remains deliberately excluded — scanning it properly means enumerating every
-   `namespaces[].modules[]` pair reachable from the policy's `scope`, then running Checkov once per
-   rendered chart directory (or once over the whole namespace). Left as a separate follow-up design,
-   not folded into this generalization.
+2. `helm` remains deliberately excluded — see "Deferred: Helm support" below for the full feasibility
+   writeup (2026-09-16). Not folded into this generalization.
 3. `compose`/`argocd`/`flux`/`script` stay unsupported — configuring `framework: compose` (etc.) is a
    clean, explicit skip+warning ("framework 'compose' has no supported provisioner mapping — use one
    of: ansible, bicep, terraform"), not a crash.
@@ -724,6 +722,42 @@ build artifacts are actually laid out on disk:
    `skip_checks` ambiguous about which framework's check it silences. A workspace wanting both
    Terraform and Ansible coverage declares two `checkov` policies,
    one per framework.
+
+### Deferred: Helm support (feasibility verified 2026-09-16, not implemented)
+
+Traced the actual Helm build path end-to-end before scoping this. It is feasible, but structurally
+more involved than Bicep/Ansible turned out to be — deferred rather than folded into the same
+generalization, for four compounding reasons:
+
+1. **The "helm provisioner" has no scannable directory of its own.** Unlike terraform/bicep/ansible,
+   `HelmBuilder` never calls `get_provisioner_path()` — zero call sites. The provisioner-level
+   `source.source_path` seen in workspace YAML (e.g. `provisioner: helm` / `source: {source_path:
+   charts}`) is never actually read by the build logic. Each Helm *module* declares its own
+   independent `spec.source` in its own module YAML file, resolved completely separately from the
+   provisioner entry. "The helm provisioner" isn't one directory — it's a loose collection of
+   per-module directories with no shared root.
+2. **Reaching "which modules belong to this helm provisioner" is a multi-hop lookup, not a flat
+   filter.** The chain is: `stage` → provisioner name (existing `resolve_stage_provisioner_name()`)
+   → topology whose `topology.provisioner` matches that name → `topology.namespaces[]` →
+   `namespace.spec.modules[]` → filter to `module.spec.type == "helm"`. Confirmed
+   `WorkspaceNamespaceModel` has no provisioner field at all — the only link from a namespace to a
+   provisioner is via whichever topology references both. `stage_reachable_provisioner_names()` stops
+   at hop 1; Helm needs four more hops that don't exist anywhere in the codebase yet, and would need
+   their own resolver, not a reuse of the existing one.
+3. **Only *local* charts have anything to scan.** Confirmed in `helm_builder.py`: chart source
+   (`Chart.yaml`, `templates/`, etc.) is only `copytree`'d into `get_module_build_path()` when
+   `not source.chart_repository and source.source_path` (a local chart). A registry-pulled chart
+   (`chart_repository` set — the common case for third-party charts) gets only `values.yaml`/
+   `meta.yaml` written; there is no `Chart.yaml`/`templates/` for Checkov to look at. Any
+   implementation must skip registry-chart modules with an explicit warning ("no local chart source
+   to scan"), not silently omit them — consistent with this whole revision's "never silent" theme.
+4. **Checkov's Helm framework needs the `helm` binary itself**, not just Checkov (it shells out to
+   `helm template` to render before scanning) — an extra soft-dependency beyond what
+   `CheckovIntegration.ensure_available()` checks today; would need its own availability check.
+
+**Status: deferred, not scheduled.** If picked up later, it is its own resolver
+(`_resolve_helm_module_dirs()` or similar) with its own multi-hop traversal and per-module reporting
+shape — not an extension of `_FRAMEWORK_PROVISIONER_MAP`.
 
 ### Configuration (supersedes the 2026-07-23 example)
 
