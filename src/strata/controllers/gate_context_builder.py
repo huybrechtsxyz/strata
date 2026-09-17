@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 
 from strata.controllers.gate_controller import GateContext
 from strata.logger import get_logger
+from strata.utils.cost_json import extract_cost_delta
 
 logger = get_logger(__name__)
 
@@ -94,11 +95,13 @@ class GateContextBuilder:
                 return None
 
             data = json.loads(cost_path.read_text(encoding="utf-8"))
-            # cost.json top-level keys OR nested under "diff"
-            diff = data.get("diff", data)
-            total = diff.get("totalMonthlyCost", "0.00")
-            past_total = diff.get("pastTotalMonthlyCost", "0.00")
-            return round(float(total or 0) - float(past_total or 0), 2)
+            # Prefer the unified provisioners-wrapped shape written by the deploy
+            # pipeline's cost diff step (ADR-0031 section 3a); fall back to a
+            # legacy top-level/"diff"-nested shape for older cost.json files.
+            delta = extract_cost_delta(data)
+            if delta is None and isinstance(data.get("diff"), dict):
+                delta = extract_cost_delta(data["diff"])
+            return delta
         except (OSError, json.JSONDecodeError, ValueError, TypeError) as exc:
             logger.debug("gate_context.cost_read_error", error=str(exc))
             return None

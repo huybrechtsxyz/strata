@@ -421,6 +421,23 @@ class TestCostControllerDiff:
         assert success is True
         assert result["diff"]["totalMonthlyCost"] == "200.00"
 
+    def test_success_writes_cost_json(self, tmp_path):
+        """ADR-0031 section 3a: diff() persists cost.json so plan-phase policies
+        and gates evaluated right after (not just `strata cost show`) see it."""
+        plan_file = tmp_path / "plan.json"
+        plan_file.write_text("{}")
+        ctrl, ds, build_path = self._setup(tmp_path)
+        estimator = _make_estimator(available=True, diff_result=_SAMPLE_DIFF)
+        with patch.object(ctrl, "_get_estimator", return_value=estimator):
+            ctrl.diff(ds, build_path, str(plan_file))
+
+        import json
+
+        cost_json_path = tmp_path / "myapp-1.0.0" / "cost.json"
+        assert cost_json_path.exists()
+        written = json.loads(cost_json_path.read_text(encoding="utf-8"))
+        assert written == {"provisioners": {"terraform": _SAMPLE_DIFF}}
+
     def test_passes_currency(self, tmp_path):
         plan_file = tmp_path / "plan.json"
         plan_file.write_text("{}")

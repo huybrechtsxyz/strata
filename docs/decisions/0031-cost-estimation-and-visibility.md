@@ -95,6 +95,112 @@ sibling of `strata build run` (see `src/strata/commands/build/*` and the
 changes to depend on the always-produced build artifact instead of a manually
 triggered one.
 
+### 3a. Immediate bug fix — cost diff/write must not be gated by `--dry-run`
+
+Independent of item 3's future `strata build cost` migration, the *current*
+Infracost-based `plan`-phase flow has two compounding defects, found while
+reviewing this ADR (2026-09-17):
+
+1. **`cost.json` is never written by `strata deploy run` at all.** The pipeline's
+   own cost step (`_run_cost_diff_for_stage` in
+   `src/strata/commands/deploy/run_deploy_command.py`) calls `estimator.diff(...)`
+   and only echoes the result to the console — it never calls
+   `CostController._write_cost_json`. That method is only reachable via
+   `CostController.show()`, which only runs from the separate, on-demand
+   `strata cost show` command. Both on-disk consumers of cost data
+   (`cost_threshold_policy._extract_total_monthly` and
+   `GateContextBuilder._read_cost_delta`) read `cost.json` from the build dir and
+   see `None` unless a human separately remembers to run `cost show` first.
+2. **Even if it were written, it would be written too late for the same run.**
+   `_evaluate_phase_policies("plan", ...)` and
+   `_evaluate_condition_gates_post_plan(...)` run *inside* the per-step loop,
+   immediately after the `STEP_PLAN` step completes. The plan-JSON save and cost
+   diff call run in a separate block *after that entire loop finishes* — so a
+   `cost.json` write there could only ever benefit the *next* deploy invocation,
+   never the one that produced it.
+3. **The diff only runs at all when `--dry-run` is passed.** A plain
+   `strata deploy run --force` — the actual apply path, where a cost gate matters
+   most — never computes a cost diff, so `cost_threshold` can never fire on a
+   real deploy no matter how it's configured.
+
+**Decision — execution is driven by what's declared, not by dry-run mode:**
+
+- If a cost estimator integration is declared (`ICostEstimator` capability, e.g.
+  `type: infracost`) → the pipeline **always** computes a cost diff after
+  `STEP_PLAN` and writes `cost.json` to the build dir, on every
+  `strata deploy run` — dry-run or real, `--force` or not. Still non-fatal:
+  estimator errors are caught and logged at debug level exactly as today; the
+  only change is that they no longer depend on `--dry-run` to be attempted in
+  the first place.
+- If a `cost_threshold` policy (or a cost-based gate condition) is declared → it
+  validates against that `cost.json`, exactly as it already does. What changes
+  is only that the artifact reliably exists and is fresh for the run being
+  evaluated, because of the reordering below.
+- **`--dry-run` is not part of this decision at all.** It already controls
+  whether `apply` actually mutates infrastructure; it must not also silently
+  control whether a configured cost gate is even capable of firing. Whether cost
+  is computed and/or validated is fully determined by what's *declared*
+  (estimator integration present? cost policy present?) — never by which deploy
+  flags were passed on a given invocation.
+- **Reordering fix**: move `deployer.save_plan_json()` and the cost diff call to
+  run immediately after the `STEP_PLAN` step function completes, *before*
+  `_evaluate_phase_policies("plan", ...)` and
+  `_evaluate_condition_gates_post_plan(...)` in that same loop iteration —
+  instead of the separate post-loop block they run in today. This is what makes
+  "fresh for the run being evaluated" true, instead of "fresh starting next run."
+- **Unify the parser**: `cost_threshold_policy._extract_total_monthly` and
+  `GateContextBuilder._read_cost_delta` currently parse two different assumed
+  shapes of the same file independently. Replace both with one shared helper so
+  there is a single source of truth for "what does cost.json mean."
+
+This is a standalone bug fix that applies to the Infracost-based flow as it
+exists today — it does not wait on item 2/3's `azure-retail-prices`/
+`strata build cost` migration. The same declared-integration / declared-policy
+rule carries over unchanged if/when `cost_threshold` later moves from
+`phase: plan` to `phase: build`.
+
+### 3b. Known gaps not covered by 3a — tracked separately, not yet scheduled
+
+3a fixes the two defects that make `cost_threshold` a permanent no-op. It does
+**not** make the Infracost-based flow fully correct end-to-end — two more gaps
+were found during review (2026-09-17) and are recorded here so they aren't lost,
+without blocking 3a itself:
+
+1. **Multi-stage deployments overwrite instead of accumulate.**
+   `CostController._write_cost_json` writes to
+   `deployment_service.get_build_path(build_path) / "cost.json"` — a
+   **deployment-level** path (`build/{name}-{version}/cost.json`) shared across
+   *every* stage, not a per-stage path. A deployment with multiple terraform
+   stages (e.g. `infra` then `network`) calls `_run_cost_diff_for_stage` once per
+   stage, each targeting the same file. Written naively (overwrite), the last
+   stage planned silently erases every earlier stage's entry, so a
+   deployment-wide `cost_threshold` never sees the true combined total — only
+   the last stage's. Fix direction: read-modify-write — merge this stage's
+   entry into the existing `cost.json`'s `provisioners` map (keyed by
+   provisioner/stage name) instead of overwriting the file.
+2. **History/audit recording stays wired only to `strata cost show`.**
+   `_record_history_snapshot` (which also drives `_push_cost_history` and the
+   `cost.threshold_exceeded` / `cost.recorded` audit events — ADR items 5/6,
+   ADR-0066) is only called from `CostController.show()`, never from `diff()`.
+   Once 3a lands, deploys become the place cost actually gets computed
+   day-to-day — but `strata cost history` and those audit events stay
+   sparse/empty unless someone *still* separately runs `cost show`, which
+   defeats 3a's purpose. Fix direction: route the deploy-triggered `diff()`
+   result through the same history/audit plumbing `show()` already uses, or
+   explicitly accept this as a scoped-out limitation until decided otherwise.
+
+Secondary notes (not gaps, just worth stating explicitly so they aren't
+mistaken for regressions later):
+- `diff()` has no cache layer, unlike `show()`'s 7-day-TTL cache — expected,
+  since a diff is inherently plan-specific and should always be recomputed
+  fresh, not reused from a previous plan.
+- If `STEP_PLAN` isn't part of `steps_to_run` at all (e.g. an apply-only fast
+  path, or `destroy`), there is no plan to diff against, so the cost gate
+  simply cannot evaluate for that run. Inherent limitation, not a defect.
+
+Status: recorded, not scheduled. 3a is implemented first; 1 and 2 above are
+picked up afterward as their own follow-up once 3a is verified working.
+
 ### 4. Attribution follows the tenant hierarchy, not an environment-name glob
 
 `cost_threshold`'s `environment_pattern` (a glob over environment *names*) is the
@@ -1846,6 +1952,21 @@ From the 2026-09-17 revision (numbering matches that section's items):
    `cost.json` unconditionally as part of `strata build run`; move
    `cost_threshold` from `phase: plan` to `phase: build`; remove the
    `.terraform/` init dependency for the default estimator path.
+3a. Bug fix (does not wait on item 3): in `run_deploy_command.py`, move the
+   cost diff call to run right after `STEP_PLAN` completes and before
+   `_evaluate_phase_policies("plan", ...)` / `_evaluate_condition_gates_post_plan`;
+   always write `cost.json` when a cost estimator integration is declared,
+   regardless of `--dry-run`; remove the `if self._dry_run` guard around
+   `_run_cost_diff_for_stage`; unify `cost_threshold_policy._extract_total_monthly`
+   and `GateContextBuilder._read_cost_delta` into one shared parser. **In
+   progress next.**
+3b. Follow-up after 3a (not yet scheduled): merge (not overwrite) each stage's
+   diff into `cost.json`'s `provisioners` map for multi-stage deployments; wire
+   the deploy-triggered `diff()` path into the same history/audit plumbing
+   (`_record_history_snapshot`, `_push_cost_history`, `cost.threshold_exceeded`,
+   `cost.recorded`) that `CostController.show()` already uses, so history/audit
+   don't stay empty once deploys — not manual `cost show` runs — become the
+   primary place cost gets computed.
 4. Design and add a budget-attribution field shape declared per
    customer/zone in `config/*/config` (inherited via `extends`), keyed by
    `common_tags`; keep `environment_pattern` only as a secondary filter.

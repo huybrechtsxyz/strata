@@ -384,7 +384,18 @@ class CostController(BaseController):
         currency: Optional[str] = None,
         provisioner_filter: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
-        """Get cost diff for a terraform plan (used during deploy --dry-run).
+        """Get cost diff for a terraform plan.
+
+        Called by the deploy pipeline right after a plan is produced — on every
+        `strata deploy run` where a cost estimator is declared, not just
+        `--dry-run` (ADR-0031 section 3a). Writes `cost.json` to the deployment's
+        build directory so `cost_threshold`/cost-based gates evaluated later in
+        the same run see fresh data for the plan that was just produced.
+
+        Note: this overwrites `cost.json` rather than merging per-provisioner
+        entries across stages — a deployment with multiple terraform stages will
+        only see the most-recently-planned stage's cost in the file. Merging is
+        tracked separately (ADR-0031 section 3b), not yet implemented.
 
         Args:
             deployment_service: Loaded deployment service.
@@ -421,6 +432,7 @@ class CostController(BaseController):
         try:
             result = estimator.diff(str(terraform_path), plan_file, currency=currency)
             self._add_message(f"Cost diff retrieved for provisioner '{iac.name}'")
+            self._write_cost_json({"provisioners": {str(iac.name): result}}, deployment_service, build_path)
             return True, result
         except Exception as exc:
             return self._fail(f"Cost diff failed: {exc}")

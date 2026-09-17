@@ -40,6 +40,7 @@ from typing import Any, Dict, List, Optional
 
 from strata.logger import get_logger
 from strata.utils.config import get_cost_dir
+from strata.utils.cost_json import extract_provisioner_value
 
 logger = get_logger(__name__)
 
@@ -203,43 +204,10 @@ class CostHistoryStore:
 
     @staticmethod
     def _extract_total(prov_data: Any) -> Optional[float]:
-        """Extract totalMonthlyCost from a provisioner result dict."""
-        if not isinstance(prov_data, dict):
-            return None
+        """Extract totalMonthlyCost from a provisioner result dict.
 
-        # breakdown.totalMonthlyCost (Infracost standard)
-        breakdown = prov_data.get("breakdown")
-        if isinstance(breakdown, dict):
-            value = breakdown.get("totalMonthlyCost")
-            if value is not None:
-                try:
-                    return float(value)
-                except (ValueError, TypeError):
-                    pass
-
-        # projects[].breakdown.totalMonthlyCost (multi-project)
-        projects = prov_data.get("projects")
-        if isinstance(projects, list):
-            total = 0.0
-            found = False
-            for project in projects:
-                proj_breakdown = project.get("breakdown", {}) if isinstance(project, dict) else {}
-                value = proj_breakdown.get("totalMonthlyCost")
-                if value is not None:
-                    try:
-                        total += float(value)
-                        found = True
-                    except (ValueError, TypeError):
-                        pass
-            if found:
-                return total
-
-        # Top-level totalMonthlyCost
-        value = prov_data.get("totalMonthlyCost")
-        if value is not None:
-            try:
-                return float(value)
-            except (ValueError, TypeError):
-                pass
-
-        return None
+        Delegates to ``strata.utils.cost_json`` — the single shared parser also
+        used by ``cost_threshold_policy`` and ``GateContextBuilder`` (ADR-0031
+        section 3a).
+        """
+        return extract_provisioner_value(prov_data, "totalMonthlyCost")
