@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pydantic model for deployment configuration validation."""
 
-from typing import Annotated, Any, Dict, List, Literal, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
 from pydantic import (
     Field,
@@ -285,6 +285,46 @@ class DeploymentStageModel(PlatformBaseModel):
             "whose scope matches the supplied value. Omit to run all stages."
         ),
     )
+    enabled: Optional[Union[bool, str]] = Field(
+        None,
+        description=(
+            "Whether this stage applies at all (ADR-0083). Accepts a literal boolean or a "
+            "'${feature:KEY}' / '${var:KEY}' expression resolved per-environment at deploy time. "
+            "Omit (the default) to always run. A disabled stage is recorded as skipped in the "
+            "deployment manifest and deploy-log — never silently omitted. "
+            "Gates 'deploy run' ONLY: 'deploy destroy' always considers every stage, so disabling "
+            "a stage never orphans infrastructure it already created. "
+            "Note 'enabled: false' means 'stop deploying this', NOT 'destroy this'. "
+            "'${secret:KEY}' is rejected — a gate's resolved value is persisted to the manifest."
+        ),
+        examples=[True, False, "${feature:enable_dispatcher_api}"],
+    )
+
+    @field_validator("enabled", mode="before")
+    @classmethod
+    def validate_enabled(cls, v):
+        """Accept only a boolean or a non-blank string.
+
+        Rejecting other scalars (``enabled: 1``) at the schema boundary avoids
+        relying on Pydantic's union coercion for a field whose misreading would
+        silently skip a deployment stage. A blank string is rejected for the same
+        reason: it would otherwise coerce to False via ``parse_bool``, disabling a
+        stage by accident.
+        """
+        if v is None or isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            if not v.strip():
+                raise ValueError(
+                    "'enabled' is blank. Use a boolean (true/false) or an expression "
+                    "such as '${feature:KEY}'; remove the field entirely to always run."
+                )
+            return v.strip()
+        raise ValueError(
+            f"'enabled' must be a boolean or an expression string, got {type(v).__name__}. "
+            "Use true/false, or '${feature:KEY}' / '${var:KEY}'."
+        )
+
     scripts: Optional[ScriptsModel] = Field(
         None,
         description="Additional scripts to execute for this stage (extends provisioner behavior)",

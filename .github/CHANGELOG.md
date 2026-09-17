@@ -8,6 +8,17 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Added
+
+- **Declarative stage gating via `stages[].enabled` (ADR-0083)** — a deployment stage can declare `enabled: ${feature:my_flag}` (or a literal `true`/`false`) and is skipped per-environment without constructing its deployer or touching its state backend. Skips cascade through `depends_on`, matching GitHub Actions' `needs:` default. A skipped stage is **recorded** as `status: skipped` with the expression and resolved value in both the deployment manifest and the deploy-log, so an audit can tell "deliberately not deployed at this version" from "deployed, no changes". Gates `deploy run` only: `deploy destroy`, `build`, and drift detection still see every stage, so turning a flag off never strands infrastructure. `--stage` cannot select a disabled stage. See [deployment.md](../docs/config/deployment.md#enabled--declarative-stage-gating).
+- **`strata build plan` marks stages that `deploy run` would skip** — a plan still previews every stage (it is not gated), but a disabled one now carries `would_skip` / `skip_reason`, so "disabled in this environment" is distinguishable from "deleted from the deployment".
+- **`strata validate` now redirects `condition:`/`when:`/`if:` to `enabled`** — strata accepts one spelling with no alias, so the unknown-field error teaches the word instead of listing every valid field. Fuzzy matching alone never reached `enabled` from those words.
+
+### Changed
+
+- **`stages[].depends_on` now controls execution order (ADR-0083)** — previously it was inert at deploy time, used only to draw diagram edges. Stages now run in dependency order, with ready stages keeping their declaration order, so a deployment file already written in a valid order runs exactly as before (verified against every shipped example). A file whose stages were declared out of dependency order **will** now be reordered, and a `depends_on` naming an unknown stage, listing itself, or forming a cycle now fails validation instead of being ignored. `deploy destroy` is deliberately not reordered — teardown needs the reverse order, which strata does not derive.
+- **`strata deploy destroy --stage <unknown>` now reports the same message as `deploy run`** — the two commands' `--stage`/`--scope` filters were duplicated and had drifted to different wording; both now share one implementation (ADR-0083 Phase 1). Groundwork for declarative stage gating; no behaviour change beyond the error text.
+
 ### Fixed
 
 - **`CheckovPolicy` artifact path resolution (ADR-0051)** — no longer silently passes a `deny`-enforcement policy without scanning anything; now resolves each terraform provisioner's build directory via the canonical `get_provisioner_path()`, adds a `scope` config (`staged` default | `all` | `<stage-name>`) for multi-provisioner workspaces, and surfaces every skip as a warning instead of a silent pass. See ADR-0051 / HISTORY.md.

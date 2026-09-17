@@ -12,6 +12,37 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Dict, Generator, List, Optional, Set, Tuple
 
+# ---------------------------------------------------------------------------
+# Truthiness — one definition of "what counts as false" (ADR-0083)
+# ---------------------------------------------------------------------------
+
+#: Strings that mean "off". Everything else (including any other non-empty
+#: string) means "on". Matches the long-standing feature-flag behaviour this
+#: constant was extracted from.
+FALSE_TOKENS = frozenset({"false", "0", "no", ""})
+
+
+def parse_bool(value: Any) -> bool:
+    """Coerce a YAML / env-var / expression-resolved value to a boolean.
+
+    Shared by feature-flag parsing (``BaseBuilder._build_template_context``) and
+    stage gating (``stage_selection``), so "what counts as false" is defined in
+    exactly one place rather than re-derived per call site (ADR-0083 D7).
+
+    Args:
+        value: A bool (returned as-is), a string (compared against
+            :data:`FALSE_TOKENS`, case-insensitively and whitespace-stripped),
+            or any other object (coerced with :func:`bool`).
+
+    Returns:
+        The boolean interpretation of *value*.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() not in FALSE_TOKENS
+    return bool(value)
+
 
 @dataclass
 class ResolvedValues:

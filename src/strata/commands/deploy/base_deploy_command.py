@@ -942,6 +942,7 @@ class BaseDeployCommand(BaseCommand):
         outputs_artifact: Optional[ManifestOutputsReferenceModel] = None,
         error: Optional[str] = None,
         warnings: Optional[List[str]] = None,
+        skip_reason: Optional[str] = None,
     ) -> None:
         """Append a stage result for the deployment manifest."""
         duration: Optional[int] = None
@@ -967,6 +968,7 @@ class BaseDeployCommand(BaseCommand):
                 outputs_artifact=outputs_artifact,
                 error=error,
                 warnings=warnings,
+                skip_reason=skip_reason,
             )
         )
 
@@ -1457,6 +1459,8 @@ class BaseDeployCommand(BaseCommand):
                         provisioner=sr.provisioner,
                         topology=sr.topology,
                         success=(sr.status == "success"),
+                        status=sr.status,
+                        skip_reason=sr.skip_reason,
                         started_at=sr.started_at or self._deploy_started_at or "",
                         completed_at=sr.completed_at or datetime.now(timezone.utc).isoformat(),
                         duration_seconds=float(sr.duration_seconds or 0),

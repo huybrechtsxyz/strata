@@ -29,6 +29,7 @@ from strata.controllers.value_controller import ResolvedValues, ValueController
 from strata.deployers.base_deployer import STEP_CHECK, STEP_PLAN, STEP_SETUP
 from strata.deployers.terraform_deployer import TerraformDeployer
 from strata.models.deployment_model import DeploymentStageModel
+from strata.utils.stage_selection import evaluate_enabled
 
 
 class PlanBuildCommand(BaseBuildCommand):
@@ -360,7 +361,19 @@ class PlanBuildCommand(BaseBuildCommand):
             "ok": False,
             "messages": [],
             "error": None,
+            "would_skip": False,
+            "skip_reason": None,
         }
+
+        # ADR-0083 D11: `build plan` is a preview and is deliberately NOT gated — the
+        # stage is still planned. But a plan that silently omitted the marker would
+        # make "disabled in this environment" indistinguishable from "deleted from the
+        # deployment", which is the exact confusion stage gating exists to remove.
+        _enabled, skip, _error = evaluate_enabled(stage, resolved)
+        if skip is not None:
+            result["would_skip"] = True
+            result["skip_reason"] = skip.detail
+            result["messages"].append(f"⏭️  Disabled in this environment ({skip.detail}) — 'deploy run' would skip it.")
 
         if self._configuration_service is None:
             result["error"] = "Configuration service not loaded"

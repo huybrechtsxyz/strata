@@ -118,10 +118,15 @@ now before anyone designs against a wrong assumption:
      result"). `enabled`/`condition` were simply not reviewed at that time.
      Neither field is documented in `docs/config/workspace.md` or
      `docs/config/environment.md`.
-- **The `--stage`/`--scope` filter is already duplicated**, byte-for-byte, between
+- **The `--stage`/`--scope` filter is already duplicated** between
   [`run_deploy_command.py`](../../src/strata/commands/deploy/run_deploy_command.py#L1142)
-  and [`destroy_deploy_command.py`](../../src/strata/commands/deploy/destroy_deploy_command.py#L186).
-  Adding gating to each would make a third and fourth copy.
+  and [`destroy_deploy_command.py`](../../src/strata/commands/deploy/destroy_deploy_command.py#L186)
+  — identical logic, and an identical `--scope` error message, but the two
+  `--stage` not-found messages have **drifted apart**: run says `"Stage 'x' not
+  found in deployment definition. Available: […]"`, destroy says `"Stage 'x' not
+  found. Available: […]"`. A textbook illustration of why the repo's
+  "one implementation, not copies" rule exists. Adding gating to each would make a
+  third and fourth copy.
 - **String→bool coercion is already duplicated too** — `raw.lower() not in
   ("false", "0", "no", "")` appears twice within
   [`base_builder.py`](../../src/strata/builders/base_builder.py#L157) alone
@@ -902,9 +907,21 @@ that follows contains only new behaviour.
 **Exit criteria:** existing deploy/destroy tests pass **unmodified** — the proof
 this phase changed nothing. Plus `parse_bool` parity tests (Design §7).
 
-**Risk:** the two inline filters must be byte-equivalent in behaviour, including
-their exact error strings, which existing tests assert on. Diff the messages
-rather than retyping them.
+**Two known snags, both verified against the code:**
+
+1. *The two filters have already drifted.* Their `--stage` not-found messages
+   differ (see Facts). No test asserts on either string, so unifying is safe —
+   but it is still a user-visible change to `destroy`'s error text and belongs in
+   the changelog, not silently in a "pure refactor". Unify on the more
+   informative `run` wording.
+2. *`_make_stage()` is a bare `MagicMock`.* The shared test helper in
+   [`test_commands_deploy.py`](../../tests/strata/commands/test_commands_deploy.py#L343)
+   sets `name`/`provisioner`/`topology`/`scope`/`on_failure`/`approval` but not
+   `enabled` or `depends_on`. An unset `MagicMock` attribute is **truthy**, and
+   iterates as **empty** rather than raising — so from Phase 3 onward a stage
+   would look gated-by-expression, and from Phase 5 its `depends_on` would look
+   like an empty list. Set both to `None` in this phase, while the helper is
+   already being touched, rather than debugging it later.
 
 ### Phase 2 — `enabled` field + validation (schema only, still inert)
 

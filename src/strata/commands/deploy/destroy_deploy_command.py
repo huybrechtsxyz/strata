@@ -16,6 +16,7 @@ from strata.integrations.lock.base_lock_backend import (
     LockHandle,
 )
 from strata.models.deployment_model import DeploymentStageModel
+from strata.utils.stage_selection import select_stages
 
 
 class DestroyDeployCommand(BaseDeployCommand):
@@ -183,21 +184,23 @@ class DestroyDeployCommand(BaseDeployCommand):
                 click.echo("⚠️  No deployment stages defined — nothing to destroy.")
             return True
 
-        stages_to_run = [s for s in all_stages if s.name == self._stage] if self._stage else all_stages
-
-        if self._stage and not stages_to_run:
-            self._errors.append(f"Stage '{self._stage}' not found. Available: {[s.name for s in all_stages]}")
+        # Filter by --stage / --scope (shared with RunDeployCommand — ADR-0083 D7).
+        # apply_gating=False is deliberate (D3): gating destroy would strand
+        # infrastructure a stage created before its `enabled` flag was turned off.
+        # apply_ordering=False likewise: a correct teardown needs the REVERSE
+        # dependency order, which ADR-0083 does not decide — so destroy keeps its
+        # existing declaration-order behaviour rather than gaining the wrong one.
+        selection, selection_errors = select_stages(
+            all_stages,
+            stage=self._stage,
+            scope=self._scope,
+            apply_gating=False,
+            apply_ordering=False,
+        )
+        if selection_errors:
+            self._errors.extend(selection_errors)
             return False
-
-        # Filter by --scope label when supplied
-        if self._scope:
-            stages_to_run = [s for s in stages_to_run if s.scope == self._scope]
-            if not stages_to_run:
-                self._errors.append(
-                    f"No stages match scope '{self._scope}'. "
-                    f"Available scopes: {[s.scope for s in all_stages if s.scope]}"
-                )
-                return False
+        stages_to_run = selection.to_run
 
         # ADR-0074 Phase 2 — 'destroy_before' policies (e.g. change_reference_required)
         # evaluate once per run, before any stage executes — same fail-fast spot and

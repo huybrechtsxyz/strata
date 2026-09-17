@@ -48,6 +48,23 @@ class TestDeployLogStageModel:
         assert m.steps == []
         assert m.errors == []
 
+    def test_status_defaults_to_success_when_successful(self):
+        """ADR-0083: status is always populated, derived from success if not given."""
+        assert self._make_stage().status == "success"
+
+    def test_status_defaults_to_failed_when_unsuccessful(self):
+        assert self._make_stage(success=False).status == "failed"
+
+    def test_explicit_status_wins_over_the_derived_one(self):
+        """A skipped stage is neither a success nor a failure."""
+        m = self._make_stage(success=False, status="skipped", skip_reason="'enabled' is false")
+
+        assert m.status == "skipped"
+        assert m.skip_reason == "'enabled' is false"
+
+    def test_skip_reason_defaults_to_none(self):
+        assert self._make_stage().skip_reason is None
+
     def test_with_provisioner(self):
         m = self._make_stage(provisioner="terraform")
         assert m.provisioner == "terraform"
