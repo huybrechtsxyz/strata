@@ -21,6 +21,12 @@ Graceful degradation
   ``skip`` — pass; ``warn`` — pass with a visible warning; ``block`` — fail
   per ``enforcement``). See ADR-0082.
 
+  **Recommended: set ``on_missing_data: block``.** The default (``skip``) means
+  this policy silently passes whenever no SBOM was ever built and the scanner
+  couldn't self-heal — indistinguishable from "scanned, found nothing." For a
+  security-flavored guardrail, "never actually scanned" should not look the
+  same as "scanned and clean."
+
 Example configuration YAML::
 
     policies:
@@ -28,6 +34,7 @@ Example configuration YAML::
         type: cve_max_severity
         phase: build
         enforcement: deny
+        on_missing_data: block     # fail the build if no scan could be produced
         description: "Block builds with CRITICAL vulnerabilities"
         configuration:
           max_severity: CRITICAL     # CRITICAL | HIGH | MEDIUM | LOW
