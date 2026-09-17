@@ -5,6 +5,8 @@
   corrected path (second estimator, build-phase cost, attribution rework).
 - Date: 2026-07-11
 - Updated: 2026-09-17
+- Related: ADR-0082 (uniform missing-data handling for policies and gates — the
+  generalized form of section 3's original defect)
 - Note: phase 1 complete (Infracost integration), phase 2 (scenarios) partially
   superseded — see "Revision (2026-09-17)" section
 
@@ -209,6 +211,14 @@ Status: implemented. `src/strata/controllers/cost_controller.py`
 Tests: `tests/strata/controllers/test_controllers_cost.py`
 (`TestWriteCostJsonMerge`, `TestRecordFinalHistorySnapshot`),
 `tests/strata/commands/test_commands_deploy.py` (`TestRecordFinalCostHistory`).
+
+**Generalization spun off separately**: reviewing this fix found the identical
+fail-open-on-missing-data shape in the (unrelated) gate engine
+(`security_review`'s `cve_critical` condition — see
+[ADR-0082](0082-uniform-missing-data-handling-for-policies-and-gates.md)), which
+now owns the cross-cutting `on_missing_data` design for both the policy engine and
+the gate engine. `cost_threshold_policy`'s own missing-data skip will migrate to
+that shared mechanism as part of ADR-0082, not here.
 
 ### 4. Attribution follows the tenant hierarchy, not an environment-name glob
 
