@@ -523,6 +523,29 @@ class RunDeployCommand(BaseDeployCommand):
             # Cost diff is always non-fatal
             self.logger.debug("cost_diff_error", stage=stage.name, error=str(exc))
 
+    def _record_final_cost_history(self) -> None:
+        """Record exactly one cost-history snapshot for this whole deploy run.
+
+        Called once, after all stages have finished (success or failure) — not
+        per stage. Reads whatever `cost.json` exists at that point (merged
+        across every stage's cost diff, see `CostController._write_cost_json`)
+        and appends a single history entry / fires audit events off of it.
+        Non-fatal, and a no-op when no cost estimator was declared (no
+        `cost.json` ever gets written). See ADR-0031 section 3b.
+        """
+        if self._deployment_service is None or self._build_path is None:
+            return
+        try:
+            from strata.controllers.cost_controller import CostController
+
+            CostController(work_path=self._work_path).record_final_history_snapshot(
+                deployment_service=self._deployment_service,
+                build_path=self._build_path,
+            )
+        except Exception as exc:
+            # Cost history recording is always non-fatal
+            self.logger.debug("cost_history_final_snapshot_error", error=str(exc))
+
     # -------------------------------------------------------------------------
     # AI advisory helpers
     # -------------------------------------------------------------------------
@@ -1254,6 +1277,11 @@ class RunDeployCommand(BaseDeployCommand):
                     click.echo("\n✅  All stages completed.")
                 return True
             finally:
+                # --- cost history: exactly one snapshot per deploy run, not per stage
+                # (ADR-0031 section 3b) — real deploys only, dry-run is a preview and
+                # must not pollute permanent cost history/audit trail.
+                if not self._dry_run:
+                    self._record_final_cost_history()
                 coordinator.clear_lock()
                 if lock_handle is not None and lock_backend is not None:
                     self._release_lock(lock_backend, lock_handle)

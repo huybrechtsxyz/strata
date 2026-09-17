@@ -159,35 +159,39 @@ exists today — it does not wait on item 2/3's `azure-retail-prices`/
 rule carries over unchanged if/when `cost_threshold` later moves from
 `phase: plan` to `phase: build`.
 
-### 3b. Known gaps not covered by 3a — tracked separately, not yet scheduled
+### 3b. Known gaps not covered by 3a — implemented
 
-3a fixes the two defects that make `cost_threshold` a permanent no-op. It does
-**not** make the Infracost-based flow fully correct end-to-end — two more gaps
-were found during review (2026-09-17) and are recorded here so they aren't lost,
-without blocking 3a itself:
+3a fixes the two defects that make `cost_threshold` a permanent no-op. It did
+**not**, on its own, make the Infracost-based flow fully correct end-to-end —
+two more gaps were found during review (2026-09-17) and are recorded here, now
+implemented as a follow-up to 3a:
 
-1. **Multi-stage deployments overwrite instead of accumulate.**
-   `CostController._write_cost_json` writes to
-   `deployment_service.get_build_path(build_path) / "cost.json"` — a
-   **deployment-level** path (`build/{name}-{version}/cost.json`) shared across
-   *every* stage, not a per-stage path. A deployment with multiple terraform
-   stages (e.g. `infra` then `network`) calls `_run_cost_diff_for_stage` once per
-   stage, each targeting the same file. Written naively (overwrite), the last
-   stage planned silently erases every earlier stage's entry, so a
-   deployment-wide `cost_threshold` never sees the true combined total — only
-   the last stage's. Fix direction: read-modify-write — merge this stage's
-   entry into the existing `cost.json`'s `provisioners` map (keyed by
-   provisioner/stage name) instead of overwriting the file.
-2. **History/audit recording stays wired only to `strata cost show`.**
-   `_record_history_snapshot` (which also drives `_push_cost_history` and the
-   `cost.threshold_exceeded` / `cost.recorded` audit events — ADR items 5/6,
-   ADR-0066) is only called from `CostController.show()`, never from `diff()`.
-   Once 3a lands, deploys become the place cost actually gets computed
-   day-to-day — but `strata cost history` and those audit events stay
-   sparse/empty unless someone *still* separately runs `cost show`, which
-   defeats 3a's purpose. Fix direction: route the deploy-triggered `diff()`
-   result through the same history/audit plumbing `show()` already uses, or
-   explicitly accept this as a scoped-out limitation until decided otherwise.
+1. **Multi-stage deployments overwrite instead of accumulate.** Fixed:
+   `CostController._write_cost_json` now reads any existing `cost.json`,
+   merges the new call's `provisioners` entries into the existing map (new
+   entries win on a key collision), and writes the merged result back —
+   instead of overwriting the whole file. It returns the merged dict so
+   callers can act on the full accumulated state. Bounded by the deployment's
+   build path being version-scoped (`build/{name}-{version}/`): a version bump
+   starts a fresh `cost.json`. A stage/provisioner renamed *within the same
+   version* between re-runs can still leave an orphaned entry behind —
+   accepted as a known, documented limitation, not solved.
+2. **History/audit recording stays wired only to `strata cost show`.** Fixed,
+   but not by simply also calling `_record_history_snapshot` from `diff()` —
+   that would fire once **per stage**, and `CostHistoryStore`'s
+   `delta_from_previous` diffs consecutive entries, so a multi-stage deploy
+   would produce meaningless within-run "deltas" (stage 2's entry looking like
+   a real cost change when it's really just "stage 2 got added") — the same
+   "right data, wrong point in time" class of bug 3a itself fixed. Instead:
+   `CostController.record_final_history_snapshot()` reads the final, fully
+   merged `cost.json` off disk and records **exactly one** snapshot, called
+   once after the whole stage loop finishes (`RunDeployCommand._run_stages()`'s
+   `finally` block calls the new `_record_final_cost_history()` helper) —
+   never per stage. Gated on `not self._dry_run`: a dry-run is a preview, and
+   must not be written into permanent cost history or trigger
+   `cost.threshold_exceeded`/`cost.recorded` audit events. `strata cost show`
+   is unaffected — it still records its own snapshot immediately, since it's
+   already a single, one-shot, human-invoked operation.
 
 Secondary notes (not gaps, just worth stating explicitly so they aren't
 mistaken for regressions later):
@@ -198,8 +202,13 @@ mistaken for regressions later):
   path, or `destroy`), there is no plan to diff against, so the cost gate
   simply cannot evaluate for that run. Inherent limitation, not a defect.
 
-Status: recorded, not scheduled. 3a is implemented first; 1 and 2 above are
-picked up afterward as their own follow-up once 3a is verified working.
+Status: implemented. `src/strata/controllers/cost_controller.py`
+(`_write_cost_json` merge, `record_final_history_snapshot`),
+`src/strata/commands/deploy/run_deploy_command.py`
+(`_record_final_cost_history`, wired into `_run_stages()`'s `finally` block).
+Tests: `tests/strata/controllers/test_controllers_cost.py`
+(`TestWriteCostJsonMerge`, `TestRecordFinalHistorySnapshot`),
+`tests/strata/commands/test_commands_deploy.py` (`TestRecordFinalCostHistory`).
 
 ### 4. Attribution follows the tenant hierarchy, not an environment-name glob
 
@@ -1958,15 +1967,13 @@ From the 2026-09-17 revision (numbering matches that section's items):
    always write `cost.json` when a cost estimator integration is declared,
    regardless of `--dry-run`; remove the `if self._dry_run` guard around
    `_run_cost_diff_for_stage`; unify `cost_threshold_policy._extract_total_monthly`
-   and `GateContextBuilder._read_cost_delta` into one shared parser. **In
-   progress next.**
-3b. Follow-up after 3a (not yet scheduled): merge (not overwrite) each stage's
-   diff into `cost.json`'s `provisioners` map for multi-stage deployments; wire
-   the deploy-triggered `diff()` path into the same history/audit plumbing
-   (`_record_history_snapshot`, `_push_cost_history`, `cost.threshold_exceeded`,
-   `cost.recorded`) that `CostController.show()` already uses, so history/audit
-   don't stay empty once deploys — not manual `cost show` runs — become the
-   primary place cost gets computed.
+   and `GateContextBuilder._read_cost_delta` into one shared parser. **Done.**
+3b. Follow-up after 3a. **Done**: `CostController._write_cost_json` merges
+   (not overwrites) each stage's diff into `cost.json`'s `provisioners` map for
+   multi-stage deployments; `CostController.record_final_history_snapshot()` +
+   `RunDeployCommand._record_final_cost_history()` record exactly one
+   history/audit snapshot per deploy run (not per stage), reading the final
+   merged `cost.json`, gated on `not self._dry_run`.
 4. Design and add a budget-attribution field shape declared per
    customer/zone in `config/*/config` (inherited via `extends`), keyed by
    `common_tags`; keep `environment_pattern` only as a secondary filter.

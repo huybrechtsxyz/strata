@@ -687,3 +687,112 @@ class TestCostJson:
         # Cost result is still returned — write failure is non-fatal
         assert success is True
         assert "provisioners" in result
+
+
+# ---------------------------------------------------------------------------
+# _write_cost_json — merge (not overwrite) across multiple stages/writes
+# (ADR-0031 section 3b)
+# ---------------------------------------------------------------------------
+
+
+class TestWriteCostJsonMerge:
+    def test_second_write_merges_instead_of_overwriting(self, tmp_path):
+        """A multi-stage deployment calls diff() once per stage — each covering
+        only that stage's provisioner. The second write must not erase the
+        first stage's entry."""
+        import json
+
+        ctrl = CostController(work_path=tmp_path)
+        ds = _make_deployment_service()
+
+        merged_1 = ctrl._write_cost_json({"provisioners": {"infra": {"totalMonthlyCost": "100.00"}}}, ds, tmp_path)
+        merged_2 = ctrl._write_cost_json({"provisioners": {"platform": {"totalMonthlyCost": "50.00"}}}, ds, tmp_path)
+
+        assert merged_1 == {"provisioners": {"infra": {"totalMonthlyCost": "100.00"}}}
+        assert merged_2 == {
+            "provisioners": {
+                "infra": {"totalMonthlyCost": "100.00"},
+                "platform": {"totalMonthlyCost": "50.00"},
+            }
+        }
+
+        cost_file = tmp_path / "myapp-1.0.0" / "cost.json"
+        on_disk = json.loads(cost_file.read_text(encoding="utf-8"))
+        assert on_disk == merged_2
+
+    def test_same_provisioner_written_twice_takes_latest(self, tmp_path):
+        """Re-running the same stage's plan updates its own entry rather than
+        duplicating or leaving the stale value behind."""
+        ctrl = CostController(work_path=tmp_path)
+        ds = _make_deployment_service()
+
+        ctrl._write_cost_json({"provisioners": {"infra": {"totalMonthlyCost": "100.00"}}}, ds, tmp_path)
+        merged = ctrl._write_cost_json({"provisioners": {"infra": {"totalMonthlyCost": "120.00"}}}, ds, tmp_path)
+
+        assert merged == {"provisioners": {"infra": {"totalMonthlyCost": "120.00"}}}
+
+    def test_corrupt_existing_file_is_treated_as_empty(self, tmp_path):
+        ctrl = CostController(work_path=tmp_path)
+        ds = _make_deployment_service()
+        deployment_build = tmp_path / "myapp-1.0.0"
+        deployment_build.mkdir(parents=True)
+        (deployment_build / "cost.json").write_text("not json", encoding="utf-8")
+
+        merged = ctrl._write_cost_json({"provisioners": {"infra": {"totalMonthlyCost": "100.00"}}}, ds, tmp_path)
+
+        assert merged == {"provisioners": {"infra": {"totalMonthlyCost": "100.00"}}}
+
+    def test_returns_none_on_write_failure(self, tmp_path):
+        ctrl = CostController(work_path=tmp_path)
+        ds = _make_deployment_service()
+        with patch("pathlib.Path.write_text", side_effect=OSError("disk full")):
+            merged = ctrl._write_cost_json({"provisioners": {"infra": {"totalMonthlyCost": "100.00"}}}, ds, tmp_path)
+        assert merged is None
+
+
+# ---------------------------------------------------------------------------
+# record_final_history_snapshot — exactly one snapshot per deploy run, read
+# back from the final cost.json on disk (ADR-0031 section 3b)
+# ---------------------------------------------------------------------------
+
+
+class TestRecordFinalHistorySnapshot:
+    def test_no_op_when_cost_json_missing(self, tmp_path):
+        ctrl = CostController(work_path=tmp_path)
+        ds = _make_deployment_service()
+        with patch.object(ctrl, "_record_history_snapshot") as mock_record:
+            ctrl.record_final_history_snapshot(ds, tmp_path)
+        mock_record.assert_not_called()
+
+    def test_records_from_final_merged_cost_json(self, tmp_path):
+        ctrl = CostController(work_path=tmp_path)
+        ds = _make_deployment_service()
+
+        # Simulate two stages' diffs already merged onto disk.
+        ctrl._write_cost_json({"provisioners": {"infra": {"totalMonthlyCost": "100.00"}}}, ds, tmp_path)
+        ctrl._write_cost_json({"provisioners": {"platform": {"totalMonthlyCost": "50.00"}}}, ds, tmp_path)
+
+        with patch.object(ctrl, "_record_history_snapshot") as mock_record:
+            ctrl.record_final_history_snapshot(ds, tmp_path, currency="EUR")
+
+        mock_record.assert_called_once()
+        _, kwargs = mock_record.call_args
+        assert kwargs["cost_data"] == {
+            "provisioners": {
+                "infra": {"totalMonthlyCost": "100.00"},
+                "platform": {"totalMonthlyCost": "50.00"},
+            }
+        }
+        assert kwargs["currency"] == "EUR"
+
+    def test_nonfatal_on_malformed_cost_json(self, tmp_path):
+        ctrl = CostController(work_path=tmp_path)
+        ds = _make_deployment_service()
+        deployment_build = tmp_path / "myapp-1.0.0"
+        deployment_build.mkdir(parents=True)
+        (deployment_build / "cost.json").write_text("not json", encoding="utf-8")
+
+        with patch.object(ctrl, "_record_history_snapshot") as mock_record:
+            ctrl.record_final_history_snapshot(ds, tmp_path)  # must not raise
+
+        mock_record.assert_not_called()
