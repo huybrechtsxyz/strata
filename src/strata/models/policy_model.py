@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional
 from pydantic import Field
 
 from strata.models.common_models import PlatformBaseModel, PlatformName
+from strata.models.missing_data_model import MissingDataPolicy
 
 
 class PolicyModel(PlatformBaseModel):
@@ -33,3 +34,12 @@ class PolicyModel(PlatformBaseModel):
     description: Optional[str] = None
     configuration: Optional[Dict[str, Any]] = None
     enabled: bool = True
+    on_missing_data: MissingDataPolicy = Field(
+        MissingDataPolicy.SKIP,
+        description=(
+            "How this policy behaves when its required input data was never produced "
+            "(as opposed to simply not applying in this context): skip (default, pass "
+            "silently) | warn (pass, but surface a visible warning) | block (treat as "
+            "a violation, enforced per `enforcement`). See ADR-0082."
+        ),
+    )

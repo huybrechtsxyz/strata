@@ -14,9 +14,12 @@ Context resolution
 
 Graceful degradation
 --------------------
-- No SBOM in build path and no pre-computed result → pass (skip)
-- No CVE scanner available → pass (skip, warning logged)
-- ``max_severity`` not configured → pass (skip)
+- ``max_severity`` not configured or invalid → always pass (skip) — not
+  applicable, unaffected by ``on_missing_data``.
+- No SBOM in build path and no pre-computed result, and self-healing (running
+  the scanner directly) also fails → governed by ``on_missing_data`` (default:
+  ``skip`` — pass; ``warn`` — pass with a visible warning; ``block`` — fail
+  per ``enforcement``). See ADR-0082.
 
 Example configuration YAML::
 
@@ -68,12 +71,7 @@ class CveMaxSeverityPolicy(BasePolicy):
         if audit_result is None:
             audit_result = self._run_scan(context, severity_threshold)
             if audit_result is None:
-                return PolicyResult(
-                    passed=True,
-                    policy_name=self.name,
-                    enforcement=self.enforcement,
-                    details={"skipped": "no SBOM available or scanner not found"},
-                )
+                return self._missing_data("no SBOM available or scanner not found")
 
         # --- Apply allowlist from work_path if context provides it -----------
         audit_result = self._apply_allowlist(audit_result, context.work_path)
