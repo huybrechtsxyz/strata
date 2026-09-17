@@ -96,6 +96,39 @@ now before anyone designs against a wrong assumption:
   "Overridden per-run by `strata deploy run --namespace NAME`, which takes
   precedence over this declarative list" — an established, working
   declarative-plus-CLI-override pattern already shipped in this exact model.
+- **`enabled` + `condition` already exist on workspace resources — and both are
+  inert.** [`WorkspaceResourceModel`](../../src/strata/models/workspace_model.py#L333)
+  declares `enabled: bool = True` and
+  `condition: Optional[str]` ("Conditional expression for resource inclusion
+  (e.g., `'{{ environment }} == production'`)"), mirrored as overrides on
+  [`EnvironmentResourceOverrideModel`](../../src/strata/models/environment_model.py#L116).
+  Neither is consumed anywhere: the only code that touches them is the override
+  merge in [`deployment_service.py`](../../src/strata/services/deployment_service.py#L805),
+  which copies the values, and **nothing reads the result** — every builder
+  iterates `spec.resources` with no `.enabled` guard. Setting `enabled: false` on
+  a workspace resource changes nothing today. Three consequences for this ADR:
+  1. `enabled` is **not** new syntax — but the existing precedent is a broken
+     one. Shipping a working `stages[].enabled` alongside a silently-inert
+     `resources[].enabled` would be actively misleading.
+  2. `condition`'s documented example syntax (`'{{ environment }} == production'`)
+     matches **no** grammar implemented anywhere in the codebase — it is a fifth
+     shape, never parsed, and it is missing from ADR-0073's expression inventory.
+  3. This is the same defect class [ADR-0078](0078-scoping-variables-and-features-to-provisioners.md)
+     removed the `references` field for ("never consumed… nothing reads the
+     result"). `enabled`/`condition` were simply not reviewed at that time.
+     Neither field is documented in `docs/config/workspace.md` or
+     `docs/config/environment.md`.
+- **The `--stage`/`--scope` filter is already duplicated**, byte-for-byte, between
+  [`run_deploy_command.py`](../../src/strata/commands/deploy/run_deploy_command.py#L1142)
+  and [`destroy_deploy_command.py`](../../src/strata/commands/deploy/destroy_deploy_command.py#L186).
+  Adding gating to each would make a third and fourth copy.
+- **String→bool coercion is already duplicated too** — `raw.lower() not in
+  ("false", "0", "no", "")` appears twice within
+  [`base_builder.py`](../../src/strata/builders/base_builder.py#L157) alone
+  (constant-store and environment-store feature branches). Any gating check needs
+  the same predicate, since `resolve_expr_string()` returns a *string*
+  (`${feature:x}` → `"true"`/`"false"`), which would make it a third copy.
+
 - **GitHub Actions' `needs:`/`if:` model is a well-known, directly analogous prior
   art** for the exact shape of problem this ADR describes: a job's `if:` condition
   gates whether it runs at all; a skipped job gets a first-class, recorded
@@ -117,16 +150,21 @@ now before anyone designs against a wrong assumption:
   `gate_controller.py`'s cost/CVE threshold conditions independently made the
   same choice (a hand-rolled `_compare()` over `>=`/`<=`/etc., not Jinja).
   Separately, [`ExpressionModel`](../../src/strata/models/expression_model.py#L1)
-  (ADR-0073) already defines a `kind="jinja"` variant — boolean/comparison
-  expression evaluation via Jinja2's `Environment.compile_expression()` — but per
-  its own module docstring it is "defined for completeness," **not wired to any
-  real call site today**. So a GitHub-Actions-style raw expression (`enabled:
-  "{{ features.enable_dispatcher_api }}"`) would be a genuinely new pattern for
-  an authored condition field in this codebase, going against the one existing
-  decision on this exact question — whereas `${feature:KEY}` (ADR-0075) is
-  already a closed, single-purpose, fully-implemented token that fits the
-  original proposal's own example (`enabled: ${feature:enable_dispatcher_api}`)
-  with zero new grammar and zero new code.
+  (ADR-0073) defines a `kind="jinja"` variant — boolean/comparison expression
+  evaluation via Jinja2's `Environment.compile_expression()` — which **is** wired
+  to a real call site ([`gate_controller._compare()`](../../src/strata/controllers/gate_controller.py#L61)).
+  Note carefully *how*: the author writes a closed expression (`">= 1000"`), and
+  strata compiles that down to a machine-built Jinja fragment
+  (`f"actual {op} threshold"`). Jinja is the **execution engine**, never the
+  authored surface. `diagram_expressions.py` does the same thing. So a
+  GitHub-Actions-style raw authored expression (`enabled: "{{ features.enable_dispatcher_api }}"`)
+  would still be a new pattern for an *authored* condition field — whereas
+  `${feature:KEY}` (ADR-0075) is already a closed, single-purpose, fully-implemented
+  token that fits the original proposal's own example
+  (`enabled: ${feature:enable_dispatcher_api}`) with zero new grammar and zero new
+  code. See [ADR-0073's 2026-09-17 addition](0073-embedded-string-syntax-inventory-and-creep-prevention.md#addition-2026-09-17-impact-of-converging-every-expression-on-jinja2-syntax)
+  for the full impact analysis of converging every expression on Jinja syntax, and
+  why it concluded against it for existing sites.
 
 ## Non-goals (for this ADR)
 
@@ -142,6 +180,9 @@ now before anyone designs against a wrong assumption:
   open question rather than a settled decision.
 
 ## Open Questions
+
+**All resolved 2026-09-17 — see [Decision Outcome](#decision-outcome). Retained as
+the record of what had to be settled, and why each mattered.**
 
 These need explicit answers — each has a distinct audit-trail or execution
 consequence — before a solution is designed, not left to emerge implicitly during
@@ -182,30 +223,102 @@ implementation:
    at the same point `self._resolved_values` becomes available — not a
    boolean-only field, since that would preclude the `${feature:}`/`${var:}` reuse
    that is the entire premise of the original proposal.
-6. **Expression syntax — how open should the condition be?** Three shapes were
-   surfaced when comparing this to how other tools (GitHub Actions `if:`) and how
-   strata itself (`ExpressionModel`, diagram highlight conditions) solve the same
-   "should this run?" question:
-   - **`${feature:KEY}` / `${var:KEY}` tokens (ADR-0075)** — already fully
-     implemented, closed (single reference, resolves to a string compared
-     truthy/falsy), matches the original proposal's own example verbatim.
-     Cannot express compound conditions (`feature A AND environment == prod`).
-   - **A closed `<field> <op> <value>` grammar**, matching
-     `diagram_expressions.py`'s existing precedent — more expressive than a bare
-     token (supports `==`/`!=`/`in`) while keeping the "typo → validation error,
-     not a silent false" property that motivated that precedent in the first
-     place. Would be new code, but reuses an established *pattern*, not a new
-     one invented from scratch.
-   - **Raw Jinja expression** (`ExpressionModel(kind="jinja")`, or GitHub
-     Actions-style `${{ ... }}`) — most expressive, but goes against strata's
-     own stated precedent of avoiding raw Jinja for authored conditions
-     (silent-false-on-typo risk), and `kind="jinja"` has no real call site to
-     copy from today despite existing in the model.
-   No option is chosen here — the original proposal's own example only ever
-   needed the first (simplest) shape, so the question is whether compound
-   conditions are a real, current need or a hypothetical one worth deferring.
+6. **Expression syntax — how open should the condition be?** Every candidate maps
+   onto an expression mechanism strata already has (ADR-0073's expression-system
+   inventory), so this is a reuse choice, not a greenfield design. See the
+   dedicated section below; the real fork is whether **compound** conditions
+   (more than one flag, `AND`/`OR`, negation) are a current need or a
+   hypothetical one.
 
-## Considered Options
+## Candidate condition syntaxes, mapped onto strata's existing expression system
+
+ADR-0073 inventoried every embedded-string expression in the codebase and split
+them into kinds. A stage-gating condition is a new consumer of that system, not a
+new system — so the table below places each candidate next to the existing
+mechanism it would reuse, with the concrete YAML it produces for the running
+`dispatcher_api` example.
+
+| Candidate                            | Existing mechanism it reuses                                                                                             | Status today                                                  | Expressiveness                                                          | New code needed                                                        |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| **A.** `${feature:KEY}`/`${var:KEY}` | [`resolved_values.py`](../../src/strata/utils/resolved_values.py) — `resolve_expr_string()` / `EXPR_PATTERN` (ADR-0075)  | Fully implemented, 2 live call sites (Terraform, Helm)        | Single reference, truthy/falsy. No `AND`/`OR`/negation.                 | None for resolution; only the consuming gate check                     |
+| **B.** `<field> <op> <value>`        | [`diagram_expressions.py`](../../src/strata/utils/diagram_expressions.py#L24) — closed grammar → compiled Jinja fragment | Implemented for diagrams (ADR-0034); pattern, not shared code | `==`, `!=`, `in`. Still no `AND`/`OR` at the existing precedent's scope | A new grammar module mirroring the existing one (different vocabulary) |
+| **C.** `op value` threshold string   | [`gate_controller.py`](../../src/strata/controllers/gate_controller.py#L57) — `_compare()` over `>=`/`<=`/etc.           | Implemented for gates (cost/CVE/time)                         | Numeric/ordinal comparison                                              | n/a — see "why C doesn't transfer" below                               |
+| **D.** raw Jinja / GH-Actions style  | [`ExpressionModel(kind="jinja")`](../../src/strata/models/expression_model.py#L81) — `Environment.compile_expression()`  | Wired, but only as an *engine* for machine-built fragments    | Arbitrary boolean logic                                                 | Making Jinja an **authored** surface for the first time                |
+
+### A — `${feature:KEY}` / `${var:KEY}` (ADR-0075)
+
+```yaml
+stages:
+  - name: dispatcher_api
+    provisioner: dispatcher_api
+    enabled: ${feature:enable_dispatcher_api}
+```
+
+Resolution is already built — this is the same call `TerraformDeployer` makes for
+backend config and `HelmDeployer` makes for chart values. It matches the original
+proposal's own example verbatim. Limitation: one reference, evaluated
+truthy/falsy. A "disabled when X" case has no negation form today
+(`${feature:!x}` does not exist), so it would need either a second field or an
+inverted flag in the environment.
+
+### B — closed `<field> <op> <value>` grammar (ADR-0034 pattern)
+
+```yaml
+stages:
+  - name: dispatcher_api
+    enabled: "features.enable_dispatcher_api == true"
+  - name: reporting
+    enabled: "variables.tier in [gold, platinum]"
+```
+
+Reuses the *pattern* (anchored regex grammar compiled down to a Jinja fragment,
+values always emitted as quoted literals so an authored value can never become
+code), not the diagram module itself — the field vocabulary differs
+(`features.x`/`variables.x` against `ResolvedValues` vs. a diagram node's
+attributes). Keeps ADR-0034's stated motivation intact: a typo produces a named
+validation error instead of an expression that silently evaluates false.
+
+### C — gate-style `op value` (why it doesn't transfer)
+
+`GateWhenConditionsModel`'s operator strings (`">= 1000"`, `">= high"`,
+`"02:00-04:00"`) exist because gates compare **numeric/ordinal/time** thresholds,
+where an operator carries real meaning. A boolean "is this feature on" needs no
+operator — Option A already expresses it directly. Listed here for completeness
+so the inventory is exhaustive, not as a contender.
+
+### D — raw Jinja / GitHub Actions style
+
+```yaml
+stages:
+  - name: dispatcher_api
+    enabled: "{{ features.enable_dispatcher_api and variables.region == 'eu' }}"
+```
+
+The most expressive option and the one most authors would recognise (GH Actions'
+`if: ${{ ... }}`). It is also the only candidate that would make Jinja an
+*authored* surface: today Jinja is used purely as an execution engine for
+fragments strata itself constructs (`gate_controller._compare()`,
+`diagram_expressions.parse_condition()`), never for a string a user typed.
+ADR-0034 explicitly rejected raw authored Jinja for conditions, and
+[ADR-0073's impact analysis](0073-embedded-string-syntax-inventory-and-creep-prevention.md#addition-2026-09-17-impact-of-converging-every-expression-on-jinja2-syntax)
+concluded against converging authored syntaxes on Jinja generally. Choosing it
+means overturning that precedent knowingly — which is legitimate, but should be
+recorded as such rather than arrived at by default.
+
+### Where this actually forks
+
+A and B are the real contenders; C does not apply and D is precedent-breaking.
+The deciding question is narrow: **does stage gating need compound conditions?**
+The originating example (`enabled: ${feature:enable_dispatcher_api}`) never asked
+for more than a single flag. If single-flag gating is the requirement, A ships
+with no new expression machinery at all. If compound conditions are a real
+near-term need, B is the smallest step that keeps ADR-0034's safety property; D
+is only warranted if even B proves insufficient.
+
+## Considered Options — where the gate lives
+
+(Syntax options are covered in their own section above; this section is only about
+*which schema position* carries the condition.)
 
 - **Gate on the stage** (`spec.stages[].<field>`) — resolves per-deployment against
   `ResolvedValues`, which is itself already deployment/environment-scoped. Matches
@@ -224,31 +337,691 @@ implementation:
 
 ## Decision Outcome
 
-Not yet decided. This ADR intentionally stops at the problem statement, verified
-facts, and open questions above per explicit request to separate problem-framing
-from solutioning. A follow-up revision of this ADR (or a superseding one) should
-record the chosen field shape, skip/manifest/deploy-log schema changes, and the
-`depends_on` scope decision once Open Questions 1–5 are answered.
+Chosen: **a `stages[].enabled` field on `DeploymentStageModel`, accepting a YAML
+boolean or an existing `${feature:}`/`${var:}` expression (candidate A), evaluated
+before pre-flight, with skip propagating through `depends_on`.**
+
+```yaml
+stages:
+  - name: core_iac
+    provisioner: platform_iac
+
+  - name: dispatcher_api
+    provisioner: dispatcher_api
+    enabled: ${feature:enable_dispatcher_api}   # or a plain true / false
+    depends_on: [core_iac]
+    on_failure: stop
+```
+
+### D1 — Field and syntax
+
+`enabled: Optional[Union[bool, str]] = None`, where `None` ≡ enabled (non-breaking
+for every existing deployment file). The field name is fixed by D9 below —
+`enabled`, the same word on every schema that gates inclusion, with no alias. A
+string value is resolved with the existing `resolve_expr_string()`; an
+unresolvable reference is a **hard error**, never a silent "disabled"
+(ADR-0075's fail-loud driver). Syntax candidate A is chosen over B/C/D per the
+candidate-syntax section above: the requirement is single-flag gating, and A needs
+no new expression machinery. Compound conditions are deliberately deferred — B
+remains the upgrade path if they become a real need.
+
+### D2 — Where the gate is evaluated
+
+Immediately **after** the `--stage`/`--scope` filters and **before**
+`_preflight_check_provisioners()`. This is not an arbitrary placement: pre-flight
+calls `_create_deployer(stage)` plus `validate_workspace()`/`validate_environment()`
+for *every* stage it is given, so gating any later would still require a disabled
+estate's tooling and cloud auth to be present. Gating here makes Goal 3 (no backend
+initialisation for a skipped stage) true by construction rather than by assertion.
+
+### D3 — `deploy run` only; `deploy destroy` is never gated
+
+`enabled` gates `deploy run`. `deploy destroy` always considers every stage.
+
+Rationale: if a flag is flipped `true → false` *after* a stage has deployed real
+infrastructure, a gated destroy would silently skip tearing that infrastructure
+down — leaving orphaned resources that still bill, still present a security
+surface, and are no longer visible to strata. The converse is harmless: destroying
+a never-deployed stage is a no-op against empty state. Asymmetry is the safe
+direction here.
+
+**Corollary that must be documented prominently:** `enabled: false` means *"stop
+deploying this"*, **not** *"remove this"*. Flipping a flag off does not destroy
+anything.
+
+### D4 — `--stage` cannot select a disabled stage (CLI does **not** override)
+
+`strata deploy run --stage dispatcher_api` against a deployment where that stage
+is disabled is a **hard error** naming the stage and the condition that disabled
+it — not a silent skip, and not a forced run.
+
+This deliberately departs from the `helm_namespaces` precedent, and the difference
+is substantive: `helm_namespaces` is a *scoping* list (which of N namespaces to
+act on), whereas `enabled` is a *correctness condition* tied to an environment.
+Forcing a stage that an environment declares inapplicable creates infrastructure
+that should not exist there — a materially larger blast radius than narrowing a
+namespace list. The restriction can be relaxed later behind an explicit opt-out
+flag; the reverse (tightening a permissive default after people depend on it)
+cannot.
+
+### D5 — Skip propagates through `depends_on`
+
+A stage whose `depends_on` includes a skipped stage is itself skipped,
+transitively, and recorded as such. This follows GitHub Actions' `needs:` default,
+which is the behaviour most operators will already expect.
+
+This is the largest part of the change, because it requires giving `depends_on`
+runtime meaning for the first time (today it only draws diagram edges). Required:
+dependency-ordered execution, cycle detection, and a validation error for a
+`depends_on` naming a stage that does not exist. The skip-propagation pass runs
+once, up front, alongside D2's gate evaluation — not lazily inside the stage loop
+— so the full skip set is known before pre-flight.
+
+### D6 — Skipped stages are recorded, never omitted
+
+Each gated-out stage is recorded via the existing `_record_stage_result()` with
+`status="skipped"` — finally making real the value `ManifestStageModel.status` has
+documented all along. Because the deploy-log is assembled *from*
+`self._stage_results`, this reaches both artifacts from one call site.
+
+The one schema gap must be closed: `DeployLogStageModel` carries only
+`success: bool` (computed as `sr.status == "success"`), so a skipped stage would be
+indistinguishable from a failed one. Add a `status` field mirroring the manifest's,
+carried straight through as `status=sr.status`, leaving `success` untouched for
+backward compatibility.
+
+The recorded skip should also carry *why* — the condition expression and its
+resolved value — so the audit trail answers "deliberately not deployed at v1.2.0"
+rather than merely "absent".
+
+### D7 — Shared implementations, not copies (ADR-0073 rule)
+
+Two extractions are **required** by this change, not optional cleanups — without
+them this ADR adds a third and fourth copy of logic that is already duplicated:
+
+1. **Stage selection.** The `--stage`/`--scope` filter block is currently
+   copy-pasted between
+   [`run_deploy_command.py`](../../src/strata/commands/deploy/run_deploy_command.py#L1142)
+   and [`destroy_deploy_command.py`](../../src/strata/commands/deploy/destroy_deploy_command.py#L186).
+   It becomes one shared helper that both commands call, taking a flag for
+   whether gating applies (per D3: on for run, off for destroy). Gating,
+   skip-propagation and the D4 error all live inside it — one place, one set of
+   semantics, one set of error messages.
+2. **String→bool coercion.** `raw.lower() not in ("false", "0", "no", "")` already
+   appears twice inside [`base_builder.py`](../../src/strata/builders/base_builder.py#L157).
+   It becomes one shared predicate that both existing call sites and the new
+   gating check import, so "what counts as false" is defined once.
+
+### D8 — Cross-schema cleanup: making `enabled` mean the same thing everywhere
+
+Shipping a working `stages[].enabled` while `resources[].enabled` remains silently
+inert is a trap: the same word would mean "gates deployment" in one file and
+"nothing at all" in another. Worse, the fields are not merely dead — the scaffold
+template shipped by `strata sln init`
+([`templates/solution/dot.strata/templates/workspace.yaml`](../../src/strata/templates/solution/dot.strata/templates/workspace.yaml#L91))
+actively advertises both to every new user:
+
+```yaml
+- name: template_resource
+  file: config/{platform}/resources/template-resource.yaml
+  # enabled: true
+  # condition: "{{ environment }} == production" # conditional inclusion
+```
+
+No ADR, doc, or code comment records why they exist, and git history offers
+nothing — the only commit touching the `condition` description is the bulk
+`Rename xyz-platform to strata (#30)`, so both fields predate strata's current
+identity. The intent is nonetheless legible from their placement: they sit under a
+`# Conditional inclusion` header beside `count` and `depends_on`, and
+`EnvironmentResourceOverrideModel` mirrors both so an environment can flip them.
+The design intent was "include/exclude a resource, statically or per-environment";
+the override plumbing was built, the consumer never was.
+
+This ADR does not fix them, but makes them a blocking follow-up — with a different
+disposition for each:
+
+- **`condition`: remove.** It is not only inert, it is *redundant*.
+  `EnvironmentResourceOverrideModel` already lets an environment set
+  `enabled: false` for a named resource, so per-environment inclusion is fully
+  expressible with plain `enabled` plus the existing override mechanism — no
+  expression language needed. That redundancy is the most likely reason nobody
+  ever implemented it. Its phantom `'{{ environment }} == production'` example
+  must go regardless: a fifth expression shape that no engine has ever parsed,
+  absent from ADR-0073's inventory, and advertised in the scaffold. Removal is
+  also required by D9 — `condition` must not survive as a second spelling of
+  `enabled`.
+- **`enabled`: implement rather than remove.** Unlike ADR-0078's `references`, it
+  has a coherent meaning, an existing per-environment override path, and is
+  already in the template users copy from. Removing it would break a reasonable
+  (if currently ineffective) mental model; making it live delivers what the
+  schema has always claimed — and completes the D9 convention, taking `enabled`
+  from six live positions out of nine to all nine.
+
+Note also that `modules[].enabled` is only marginally live: read in exactly one
+place ([`workspace_model.py`](../../src/strata/models/workspace_model.py#L809)),
+and only to decide which modules count when validating the "exactly one `main`
+slot" rule — no builder filters modules by it either.
+
+#### Full cross-schema inventory — every `enabled` / `condition` / `when` in the codebase
+
+A complete sweep of `src/strata/models/` for these three field names, with each
+one's verified consumer (or absence of one) and the disposition this ADR assigns.
+This is the actionable cleanup list — nothing below is left to be rediscovered.
+
+| #   | Model / field                                | Declared                                                                           | Consumed by                                                                                         | State     | Disposition                              |
+| --- | -------------------------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | --------- | ---------------------------------------- |
+| 1   | `PolicyModel.enabled`                        | [policy_model.py#L36](../../src/strata/models/policy_model.py#L36)                 | [policy_engine.py#L30](../../src/strata/validators/policies/policy_engine.py#L30)                   | live      | keep as-is                               |
+| 2   | `IntegrationModel.enabled`                   | [integration_model.py#L81](../../src/strata/models/integration_model.py#L81)       | [integration_service.py#L128](../../src/strata/services/integration_service.py#L128)                | live      | keep as-is                               |
+| 3   | `AuditEventPolicyModel.enabled`              | [audit_config_model.py#L94](../../src/strata/models/audit_config_model.py#L94)     | [audit_config_model.py#L166](../../src/strata/models/audit_config_model.py#L166)                    | live      | keep as-is                               |
+| 4   | audit sink `.enabled`                        | [audit_config_model.py#L178](../../src/strata/models/audit_config_model.py#L178)   | [audit_controller.py#L644](../../src/strata/controllers/audit_controller.py#L644)                   | live      | keep as-is                               |
+| 5   | `ConfigurationOutputsModel.enabled`          | [configuration_model.py#L428](../../src/strata/models/configuration_model.py#L428) | [base_deploy_command.py#L1209](../../src/strata/commands/deploy/base_deploy_command.py#L1209)       | live      | keep as-is                               |
+| 6   | `DeploymentLockingModel.enabled`             | [deployment_model.py#L385](../../src/strata/models/deployment_model.py#L385)       | [base_deploy_command.py#L151](../../src/strata/commands/deploy/base_deploy_command.py#L151)         | live      | keep as-is                               |
+| 7   | `WorkspaceModuleModel.enabled`               | [workspace_model.py#L211](../../src/strata/models/workspace_model.py#L211)         | [workspace_model.py#L809](../../src/strata/models/workspace_model.py#L809) — *validation rule only* | marginal  | **implement** — must filter builds too   |
+| 8   | `EnvironmentModuleOverrideModel.enabled`     | [environment_model.py#L189](../../src/strata/models/environment_model.py#L189)     | [deployment_service.py#L879](../../src/strata/services/deployment_service.py#L879) — *copy only*    | marginal  | follows #7 automatically                 |
+| 9   | `WorkspaceResourceModel.enabled`             | [workspace_model.py#L333](../../src/strata/models/workspace_model.py#L333)         | [deployment_service.py#L805](../../src/strata/services/deployment_service.py#L805) — *copy only*    | **inert** | **implement**                            |
+| 10  | `EnvironmentResourceOverrideModel.enabled`   | [environment_model.py#L116](../../src/strata/models/environment_model.py#L116)     | [deployment_service.py#L805](../../src/strata/services/deployment_service.py#L805) — *copy only*    | **inert** | follows #9 automatically                 |
+| 11  | `WorkspaceResourceModel.condition`           | [workspace_model.py#L337](../../src/strata/models/workspace_model.py#L337)         | [deployment_service.py#L807](../../src/strata/services/deployment_service.py#L807) — *copy only*    | **inert** | **remove**                               |
+| 12  | `EnvironmentResourceOverrideModel.condition` | [environment_model.py#L120](../../src/strata/models/environment_model.py#L120)     | [deployment_service.py#L807](../../src/strata/services/deployment_service.py#L807) — *copy only*    | **inert** | **remove** (with #11)                    |
+| 13  | `DiagramHighlightModel.condition`            | [diagram_model.py#L146](../../src/strata/models/diagram_model.py#L146)             | [diagram_service.py#L100](../../src/strata/services/diagram_service.py#L100)                        | live      | **keep** — different concept (see below) |
+| 14  | `DeploymentGateModel.when`                   | [gate_model.py#L94](../../src/strata/models/gate_model.py#L94)                     | [gate_controller.py](../../src/strata/controllers/gate_controller.py#L61)                           | live      | **keep** — different concept (see below) |
+| 15  | `DeploymentStageModel.enabled`               | *new — this ADR*                                                                   | *new — D2*                                                                                          | new       | **add**                                  |
+
+Summary: 10 `enabled` positions today (6 live, 2 marginal, 2 inert) → 11 with #15,
+all live. 3 `condition` positions (1 live, 2 inert) → 1, the diagram one. 1 `when`,
+unchanged.
+
+**Rows 13 and 14 are deliberately excluded from the `enabled` convention** — they
+are different concepts, not different spellings:
+
+- `style.highlight[].condition` is a predicate evaluated **per diagram node** to
+  decide styling. It is not a property of the rule's own existence. If a highlight
+  rule ever needs include/exclude, it would gain `enabled` *alongside* `condition`.
+- `gates[].when` decides **when an approval gate fires**, not whether the gate is
+  configured. A gate with `when: {cost_delta_monthly: ">= 1000"}` is always
+  present; `when` governs triggering. Same rule: a gate needing include/exclude
+  would gain `enabled` alongside `when`.
+
+**Rows 7/8 carry a behavioural risk worth calling out.** `modules[].enabled`
+currently *looks* implemented — it is read, and a `main`-slot validation rule
+honours it — but no builder filters modules by it. Making it actually filter is a
+behaviour change for any workspace that already sets `enabled: false` on a module
+expecting it to work (it does not) or expecting it to be ignored (it is). That
+needs a changelog entry, unlike rows 9–12 where nothing can depend on current
+behaviour because there is none.
+
+### D9 — The field is named `enabled`, on every schema that gates inclusion, with no alias
+
+`enabled` is the single word strata uses for "is this thing included", everywhere
+it applies — `stages[]`, `resources[]`, `modules[]`, and the positions that
+already use it. No alias, no synonym accepted.
+
+**`if` is eliminated on a technical ground, not a stylistic one:** it is a Python
+keyword and cannot be a model attribute. It would require
+`if_: str = Field(alias="if")`, forcing `by_alias=True` through every
+`model_dump()` and breaking the direct-attribute-access style used throughout the
+codebase. GitHub Actions can afford `if:` because its schema is not bound to
+Python identifiers; ours is.
+
+**Industry precedent does not settle it** — there is no consensus word:
+Azure Pipelines uses `condition:`, GitHub Actions `if:`, Jenkins/Ansible/Tekton/Argo
+`when:`, GitLab `rules: - if:`, CloudFormation `Condition:`. Notably Helm — the
+most-copied pattern in the Kubernetes ecosystem — uses `enabled:` in values, and
+its `Chart.yaml` `condition:` field takes a *pointer to an `enabled` key*
+(`condition: subchart.enabled`).
+
+**Strata's own footprint decides it.** `enabled` is already the de facto
+convention, in six live positions: `policy_model`
+([`policy_engine.py`](../../src/strata/validators/policies/policy_engine.py#L30)),
+`integration_model` ([`integration_service.py`](../../src/strata/services/integration_service.py#L128)),
+audit event + sink ([`audit_controller.py`](../../src/strata/controllers/audit_controller.py#L644)),
+`configuration_model` outputs, and `deployment_model` locking — plus the two
+inert/marginal ones this ADR fixes (D8). By comparison `condition` appears twice
+(one live, for diagrams; one inert) and `when` once (gates).
+
+**The cross-schema test is what makes it decisive.** `condition`/`when` are
+conjunctions: they read correctly with an expression but absurdly with a literal
+(`condition: false`, `when: false`). `enabled` reads correctly with both, and most
+of the positions that need this word hold a plain boolean:
+
+| Position                                | `enabled:`                | `condition:` | `when:` |
+| --------------------------------------- | ------------------------- | ------------ | ------- |
+| `stages[]`                              | `enabled: ${feature:x}` ✓ | ✓            | ✓       |
+| `resources[]`                           | `enabled: false` ✓        | ✗            | ✗       |
+| `modules[]`                             | ✓                         | ✗            | ✗       |
+| `policies[]`/`integrations[]`/`sinks[]` | ✓ (already)               | ✗            | ✗       |
+
+#### No `condition` alias for Azure Pipelines familiarity
+
+Considered and rejected. **Every alias in strata today exists because the YAML word
+is unusable as a Python identifier** — `as`
+([`diagram_model.py`](../../src/strata/models/diagram_model.py#L111)), `from`
+([`firewall_model.py`](../../src/strata/models/firewall_model.py#L70)), and
+`validate` ([`configuration_model.py`](../../src/strata/models/configuration_model.py#L247),
+which shadows Pydantic's own method). A `condition` → `enabled` alias would be the
+first alias added for ergonomics rather than necessity, breaking a rule that is
+currently clean and self-explaining.
+
+It also costs real things: grepping `enabled:` would no longer find every gate;
+`model_dump()` would emit one spelling while the user's file says the other; and a
+validator plus error message would be needed for "both set" — a problem that only
+exists because the alias created it.
+
+**Instead, the error message teaches the word.** `_generate_fix_suggestions()`
+([`run_validate_command.py`](../../src/strata/commands/validate/run_validate_command.py#L717))
+already handles `extra_forbidden` with `difflib.get_close_matches(..., cutoff=0.5)`.
+`condition` versus `enabled` scores far below that cutoff, so it currently falls
+through to the generic "Valid fields: …" list. Adding a small known-synonym map
+(`condition`/`when`/`if` → `enabled`) ahead of the difflib pass makes it explicit:
+
+> Unknown field `'condition'`. Did you mean `'enabled'`? strata uses `enabled` for
+> conditional inclusion on every schema; it accepts `true`/`false` or
+> `${feature:KEY}`.
+
+Azure Pipelines users get the discovery benefit on first encounter, strata keeps
+one spelling permanently, and the same hint generalises to `when:`/`if:`.
+
+### D10 — Plain `${...}` via `resolve_expr_string()`, **not** `ExpressionModel`
+
+`enabled` holds a bare value (`true`, `false`, or `"${feature:KEY}"`) resolved by
+[`resolve_expr_string()`](../../src/strata/utils/resolved_values.py#L211). It is
+**not** an [`ExpressionModel`](../../src/strata/models/expression_model.py), and
+gains no `kind:` discriminator. Three independent reasons, any one sufficient:
+
+1. **ADR-0073's own scope rule forbids it.** That ADR states `kind:` is warranted
+   only where *the same schema position* can validly hold more than one kind of
+   expression — and explicitly names over-application as the same "creep" it exists
+   to prevent, "just pointed the other direction," citing
+   `GateWhenConditionsModel.cost_delta_monthly` and
+   `style.highlight[].condition` as fields that correctly do *not* get one.
+   `enabled` is exactly that case: the position always means one thing, so the
+   field name already carries everything a discriminator would.
+2. **`ExpressionModel` has no kind that fits.** Its kinds are `path`, `yaml`,
+   `regex`, `jinja`. `${var:}`/`${secret:}`/`${feature:}` substitution is **not**
+   one of them — it lives in `resolved_values.py` and appears as a *separate row*
+   in ADR-0073's inventory table, outside the `ExpressionModel` family. Routing
+   `enabled` through `ExpressionModel` would mean inventing a fifth kind, i.e.
+   new machinery — directly contradicting this ADR's "no new resolution
+   machinery" premise (Goal 1).
+3. **The YAML shape is wrong for this field.** `ExpressionModel` serialises as a
+   nested mapping (`{kind: …, expression: …}`, as in
+   `PathConventionModel.rules`). That would force
+   `enabled: {kind: …, expression: "${feature:x}"}` instead of
+   `enabled: ${feature:x}`, and a plain `enabled: true` could not be expressed at
+   all without wrapping — breaking D1's requirement that one field accept both a
+   boolean and an expression, and breaking D9's cross-schema uniformity (every
+   other `enabled` in strata is a bare bool).
+
+If compound conditions later arrive (candidate B), that decision is revisited on
+its own merits — a closed `field op value` grammar would still be a plain string,
+and would still not need a `kind:` unless the position becomes genuinely
+ambiguous.
+
+### D11 — Which commands `enabled` affects
+
+`enabled` is a **deploy-time** gate only. Stated explicitly per command, because
+several other surfaces also enumerate `spec.stages[]` and would otherwise acquire
+the behaviour by accident:
+
+| Surface                                                                       | Gated?  | Why                                                                                                                                                                                                                                                 |
+| ----------------------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `deploy run`                                                                  | **Yes** | The originating requirement (D2).                                                                                                                                                                                                                   |
+| `deploy destroy`                                                              | **No**  | D3 — gating destroy orphans already-deployed infrastructure.                                                                                                                                                                                        |
+| `build run`                                                                   | **No**  | Artifacts are generated per provisioner, not per stage. Building an artifact is inert until applied, and not building it would make `--stage` recovery of a re-enabled estate impossible.                                                           |
+| [`build plan`](../../src/strata/commands/builders/plan_build_command.py#L340) | **No**  | A plan is a *preview*. Showing "this stage is disabled and would be skipped" is more useful than hiding the stage; suppressing it would make a disabled stage indistinguishable from a deleted one — the exact confusion this ADR exists to remove. |
+| [drift detection](../../src/strata/controllers/drift_controller.py#L152)      | **No**  | Same reasoning as D3, and more acute: drift against a *disabled* stage is precisely how an operator discovers infrastructure orphaned by a flag flip. Gating it would hide the failure mode D3 is designed to prevent.                              |
+| gates (`_evaluate_deployment_gates`)                                          | **Yes** | Falls out of D2 for free — gates are evaluated after the filter, so a disabled stage cannot trigger an approval gate for work that will not happen.                                                                                                 |
+
+The consistent principle: **gating suppresses *making changes*, never *observing
+state*.** Anything that reports, plans, or detects continues to see every stage.
 
 ### Consequences
 
-- Good: no design work is thrown away — the verified facts above (feature
-  resolution already works, `ResolvedValues` timing, the manifest/deploy-log skip
-  gap, the `depends_on` non-enforcement gap) are exactly the inputs the eventual
-  decision needs, and won't need re-discovering.
-- Bad: nothing is implemented yet; the audit-trail gap described in the Problem
-  Statement remains open until a follow-up decision is made.
+- Good: no new expression syntax, no new resolution machinery — one additional
+  call site for `resolve_expr_string()` (D1/D10) and one additional consumer for
+  the `status="skipped"` value the manifest model already declares (D6).
+- Good: fixes two pre-existing duplications rather than extending them (D7), and
+  surfaces two inert fields that were quietly lying to users (D8).
+- Good: the audit trail can finally distinguish "deliberately not deployed" from
+  "absent" and from "deployed, no changes" — the originating requirement.
+- Bad: D5 is a genuine scope increase. `depends_on` gains execution semantics for
+  the first time, which brings ordering, cycle detection, and dangling-reference
+  validation with it — meaningful new surface with its own test burden.
+- Bad: D3's asymmetry (run gated, destroy not) is a rule people must learn. It is
+  the safe asymmetry, but it is still one more thing that is not obvious from the
+  schema alone, so it needs explicit documentation.
+- Bad: D4 knowingly diverges from the `helm_namespaces` precedent, so "CLI always
+  wins" ceases to be a blanket rule and becomes per-field. Justified above, but it
+  is a consistency cost.
+- Bad: D9 accepts a familiarity cost. For someone arriving from Azure Pipelines,
+  `condition:` on a stage would feel more native than `enabled:`. Internal
+  consistency across nine schema positions was judged worth more than matching one
+  CI tool's vocabulary at one of them — mitigated, not erased, by the synonym hint.
+
+## Design
+
+Concrete shape of the implementation. Two behaviours below (§3.1 and §4) are
+decisions in their own right that only surface once the algorithm is written out;
+both are called out explicitly rather than left to the implementer.
+
+### 1. New module — `strata/utils/stage_selection.py`
+
+All selection logic lives in one module that both deploy commands import. A new
+module rather than an addition to the existing
+[`provisioner_resolution.py`](../../src/strata/utils/provisioner_resolution.py)
+(which answers *"which namespaces/secrets does this stage touch"*) — "which stages
+run at all" is a distinct question, and the module name should say so.
+
+```python
+@dataclass(frozen=True)
+class StageSkip:
+    """A stage that will not run, and why — the audit record for D6."""
+    stage_name: str
+    reason: Literal["disabled", "dependency_skipped"]
+    detail: str                          # human-readable, persisted verbatim
+    expression: Optional[str] = None     # raw `enabled` source, when reason == "disabled"
+    resolved_value: Optional[str] = None # what it resolved to, when reason == "disabled"
+
+
+@dataclass(frozen=True)
+class StageSelection:
+    to_run: List[DeploymentStageModel]   # dependency-ordered (§4)
+    skipped: List[StageSkip]             # declaration order
+
+
+def select_stages(
+    all_stages: List[DeploymentStageModel],
+    *,
+    stage: Optional[str] = None,
+    scope: Optional[str] = None,
+    resolved: Optional[ResolvedValues] = None,
+    apply_gating: bool = True,
+) -> Tuple[StageSelection, List[str]]:
+    """Resolve which stages run. Returns (selection, errors).
+
+    Errors are returned, not raised — matching the commands' existing
+    ``self._errors.append(...)`` convention.
+    """
+```
+
+`apply_gating=False` is how `destroy` gets D3's behaviour: identical `--stage`/
+`--scope` semantics, no `enabled` evaluation.
+
+### 2. Shared predicate — `parse_bool()` in `resolved_values.py`
+
+```python
+_FALSE_TOKENS = frozenset({"false", "0", "no", ""})
+
+def parse_bool(value: Any) -> bool:
+    """One definition of 'what counts as false', shared by feature-flag parsing
+    and stage gating (D7)."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() not in _FALSE_TOKENS
+    return bool(value)
+```
+
+Behaviour is byte-identical to the two existing copies in
+[`base_builder.py`](../../src/strata/builders/base_builder.py#L153) (bool → as-is;
+str → token test; else → `bool()`), so replacing them is a pure refactor.
+`resolved_values.py` is the right home: it already owns `${...}` resolution, and
+it is a **pure leaf module** (zero `strata` imports), so no call site can create an
+import cycle by depending on it.
+
+### 3. Selection algorithm
+
+```
+1. evaluate `enabled` for every stage in all_stages   → disabled set
+2. propagate skip transitively through depends_on     → skipped set        (D5)
+3. apply --stage filter    → error if unknown, or if it names a skipped stage (D4)
+4. apply --scope filter    → error if no match
+5. to_run = (filtered stages) - (skipped set), dependency-ordered            (§4)
+```
+
+Steps 1–2 run over **`all_stages`**, never the CLI-filtered subset — the
+dependency graph must be complete for cascade to be correct.
+
+Step 1 per stage:
+
+| `enabled` value           | Result                                                   |
+| ------------------------- | -------------------------------------------------------- |
+| absent / `None`           | enabled (default — non-breaking for every existing file) |
+| `bool`                    | used directly                                            |
+| `str` with no `${...}`    | `parse_bool()` on the literal                            |
+| `str` with `${...}`       | `resolve_expr_string()`, then `parse_bool()`             |
+| unresolvable `${...}`     | **error** — never silently disabled (ADR-0075 fail-loud) |
+| `str`, `resolved is None` | **error** — gating requested without resolved values     |
+
+#### 3.1 Cascade applies to `enabled`, **not** to `--stage`/`--scope`
+
+A stage skipped by `enabled` cascades to its dependents (D5). A stage merely *not
+selected* by `--stage`/`--scope` does **not**.
+
+This distinction is essential, not incidental: cascading CLI filtering would make
+`--stage B` fail or self-skip whenever `B` declares `depends_on: [A]`, since `A`
+is not in the filtered set — breaking the partial-run workflow `--stage` exists
+for. The two are different statements: `enabled: false` is *"this does not apply
+here"* (a durable fact that dependents must respect), while `--stage B` is *"run
+only this, now"* (a deliberate operator-scoped action).
+
+### 4. Dependency ordering must be **stable**
+
+`depends_on` gains execution semantics for the first time (D5), so ordering is new
+behaviour applied to files that already exist. Kahn's algorithm, with ready nodes
+dequeued in **original declaration order**.
+
+This guarantees: *if a deployment file is already in a valid order, the output
+order is identical to the input.* Without that property, giving `depends_on`
+meaning would silently reorder stages in every existing deployment — a breaking
+change disguised as a feature. Any implementation that does not preserve this is
+wrong, and it deserves a dedicated test.
+
+Two failure modes, both surfaced as validation errors naming the offenders:
+a cycle (`a → b → a`), and a `depends_on` naming a stage that does not exist.
+
+### 5. Model changes
+
+| Model                                                                             | Change                                                                                                     |
+| --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| [`DeploymentStageModel`](../../src/strata/models/deployment_model.py#L244)        | `enabled: Optional[Union[bool, str]] = None`                                                               |
+| [`ManifestStageModel`](../../src/strata/models/deployment_manifest_model.py#L169) | `skip_reason: Optional[str]` — `status="skipped"` already valid, just never emitted                        |
+| [`DeployLogStageModel`](../../src/strata/models/deploy_log_model.py#L31)          | `status: str` (mirrors the manifest) + `skip_reason: Optional[str]`; `success` unchanged for compatibility |
+
+`DeployLogStageModel.success` stays `sr.status == "success"`, so a skipped stage
+reads `success=false, status="skipped"` — unambiguous, and no existing consumer
+breaks. A skipped stage keeps the existing timestamp fallbacks (deploy start,
+duration 0); no new optionality is needed there.
+
+### 6. Call-site changes
+
+| Site                                                                                                       | Change                                                                                                                                                                                   |
+| ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`run_deploy_command._execute_provisioning`](../../src/strata/commands/deploy/run_deploy_command.py#L1142) | replace the inline filter with `select_stages(..., apply_gating=True)`; record each `StageSkip` via `_record_stage_result(status="skipped", skip_reason=...)`; pass only `to_run` onward |
+| [`destroy_deploy_command`](../../src/strata/commands/deploy/destroy_deploy_command.py#L186)                | replace the inline filter with `select_stages(..., apply_gating=False)`                                                                                                                  |
+| [`base_builder._build_template_context`](../../src/strata/builders/base_builder.py#L153)                   | both truthiness copies → `parse_bool()`                                                                                                                                                  |
+| [`DeploymentService._validate_dynamic`](../../src/strata/services/deployment_service.py)                   | new `_validate_stage_depends_on()` (dangling refs + cycles), sibling to the existing `_validate_helm_stage_namespaces()`                                                                 |
+| `TerraformBuilder._validate_inputs`-equivalent                                                             | build-time check that every `${...}` in an `enabled` resolves against a declared variable/feature, mirroring the existing backend-config check                                           |
+
+`self._resolved_values` is confirmed available: `_resolve_values()` runs at
+[run_deploy_command.py#L161](../../src/strata/commands/deploy/run_deploy_command.py#L161),
+`_execute_provisioning()` at
+[#L178](../../src/strata/commands/deploy/run_deploy_command.py#L178).
+
+Ordering within `_execute_provisioning` is load-bearing (D2): selection must
+precede `_preflight_check_provisioners()`, which calls `_create_deployer()` per
+stage.
+
+### 7. Test matrix
+
+| Area            | Cases                                                                                                                                     |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `parse_bool`    | bool passthrough; `"false"`/`"0"`/`"no"`/`""`/whitespace; `"true"`; non-string; **parity with the pre-refactor `base_builder` behaviour** |
+| gate evaluation | absent; bool; literal string; `${feature:}` true/false; `${var:}`; unresolvable → error; string with `resolved=None` → error              |
+| cascade         | direct; transitive (a→b→c); diamond; dependent of an *enabled* stage still runs                                                           |
+| ordering        | **already-ordered file is unchanged** (§4); out-of-order file is reordered; cycle → error; dangling `depends_on` → error                  |
+| CLI             | `--stage` on a disabled stage → error (D4); `--stage` on a stage whose dependency is disabled → **runs** (§3.1); `--scope` likewise       |
+| recording       | manifest `status="skipped"` + `skip_reason`; deploy-log mirrors it; skipped ≠ failed                                                      |
+| non-gated paths | `destroy`, `build run`, `build plan`, drift all still see a disabled stage (D11) — the regression tests from Phase 6                      |
+
+### 8. Deliberately out of scope
+
+- No `enabled` on `provisioners[]` — D-options section: a workspace provisioner has
+  no environment context to resolve against.
+- No compound conditions — candidate B remains the upgrade path (D1/D10).
+- No parallel stage execution. `depends_on` gains *ordering*, not concurrency;
+  the existing single-threaded loop is preserved so this change stays reviewable.
 
 ## Remaining Work
 
-- Answer Open Questions 1–5 above.
-- Decide `depends_on` scope (Open Question 3) — this is the single biggest scope
-  multiplier for implementation effort and should be settled before estimating.
-- Once answered, record the Decision Outcome (field shape, gating location,
-  manifest/deploy-log schema changes) and implement:
-  - Gating field on `DeploymentStageModel` (or wherever decided).
-  - Skip path through `_record_stage_result()` / manifest / deploy-log, including
-    the `DeployLogStageModel` tri-state gap.
-  - CLI precedence behavior and any warning on forced-disabled-stage execution.
-  - Docs: `docs/config/deployment.md` — new section analogous to the existing
-    `namespace` vs `helm_namespaces` comparison.
+Nothing implemented yet. Seven phases, each independently landable and reviewable.
+Every phase ends green on `scripts/Check.ps1` (ruff, `mypy ./src ./tests`, pytest,
+docs build) — never "green after the next phase".
+
+Phases 1–4 deliver stage gating **with its full audit trail** — a complete,
+shippable feature. Phase 5 (`depends_on` cascade) is an additive enhancement on
+top. Phase 6 is optional polish. Phase 7 is the cross-schema cleanup and is
+**not** a prerequisite for anything above it.
+
+Skip recording precedes the cascade deliberately: the reverse order would ship
+cascade-skipping while the manifest and deploy-log still could not record a skip,
+leaving cascade-skipped stages silently absent — the exact audit gap this ADR
+exists to close.
+
+### Phase 1 — Shared helpers (pure refactor, no behaviour change)
+
+Lands the D7 extractions *before* anything depends on them, so the gating diff
+that follows contains only new behaviour.
+
+| Change                                                                                                                                                                             | Detail                                                                                                                                                                                                                                                       |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `parse_bool()` → [`resolved_values.py`](../../src/strata/utils/resolved_values.py)                                                                                                 | Design §2                                                                                                                                                                                                                                                    |
+| [`base_builder.py`](../../src/strata/builders/base_builder.py#L153)                                                                                                                | both truthiness copies call it                                                                                                                                                                                                                               |
+| new [`stage_selection.py`](../../src/strata/utils/stage_selection.py)                                                                                                              | `select_stages()` with `--stage`/`--scope` only; **no gating, no ordering**. `StageSkip`/`StageSelection` are defined in full here — including `reason="dependency_skipped"`, unreachable until Phase 5 — so the return shape never changes in a later phase |
+| [`run_deploy_command`](../../src/strata/commands/deploy/run_deploy_command.py#L1142) + [`destroy_deploy_command`](../../src/strata/commands/deploy/destroy_deploy_command.py#L186) | inline filters replaced by the helper                                                                                                                                                                                                                        |
+
+**Exit criteria:** existing deploy/destroy tests pass **unmodified** — the proof
+this phase changed nothing. Plus `parse_bool` parity tests (Design §7).
+
+**Risk:** the two inline filters must be byte-equivalent in behaviour, including
+their exact error strings, which existing tests assert on. Diff the messages
+rather than retyping them.
+
+### Phase 2 — `enabled` field + validation (schema only, still inert)
+
+| Change                                                                             | Detail                                                                                                                  |
+| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| [`DeploymentStageModel.enabled`](../../src/strata/models/deployment_model.py#L244) | `Optional[Union[bool, str]] = None` (D1)                                                                                |
+| build-time reference check                                                         | every `${...}` in an `enabled` resolves to a declared variable/feature, mirroring `TerraformBuilder._validate_inputs()` |
+| `docs/config/deployment.md`                                                        | field documented                                                                                                        |
+
+**Exit criteria:** a deployment declaring `enabled` validates; an `enabled`
+referencing an undeclared feature fails `strata validate` with a message naming
+the key. Nothing gates yet — deliberately.
+
+### Phase 3 — Gate evaluation (the feature becomes real)
+
+| Change                            | Detail                                                                        |
+| --------------------------------- | ----------------------------------------------------------------------------- |
+| `select_stages(apply_gating=...)` | Design §3 steps 1, 3–5; **no cascade yet**                                    |
+| `run_deploy_command`              | `apply_gating=True`, positioned before `_preflight_check_provisioners()` (D2) |
+| `destroy_deploy_command`          | `apply_gating=False` (D3)                                                     |
+| D4 error                          | `--stage` naming a disabled stage                                             |
+
+**Exit criteria:** a disabled stage does not deploy, **and** no deployer is
+constructed for it — assert on `_create_deployer` not being called, not merely on
+the stage being absent from results. That is the only test that actually proves
+Goal 3.
+
+Ship-able here: gating works end to end without Phase 5.
+
+### Phase 4 — Skip recording (closes the audit-trail requirement)
+
+| Change                                                                                        | Detail                                                                                        |
+| --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| [`ManifestStageModel.skip_reason`](../../src/strata/models/deployment_manifest_model.py#L169) | `status="skipped"` finally emitted                                                            |
+| [`DeployLogStageModel`](../../src/strata/models/deploy_log_model.py#L31)                      | `+ status`, `+ skip_reason`; `success` unchanged                                              |
+| `run_deploy_command`                                                                          | records each `StageSkip` via `_record_stage_result()`                                         |
+| docs                                                                                          | D3 corollary (`enabled: false` ≠ destroy) stated prominently; D9 keyword rationale; D11 table |
+
+**Exit criteria:** manifest and deploy-log both distinguish skipped from failed,
+and the recorded reason names the expression and its resolved value. This is the
+originating requirement — not optional.
+
+Only `reason="disabled"` is reachable at this point; `StageSkip.reason`'s
+`Literal` carries `"dependency_skipped"` from Phase 1 regardless, so Phase 5 adds
+no model or signature churn — its cascade skips are recorded by this machinery for
+free.
+
+**Changelog + `.github/HISTORY.md`** entry lands with this phase (1–3 lines in
+CHANGELOG pointing at this ADR; full narrative in HISTORY).
+
+**Phases 1–4 are a complete, coherent feature**: gating plus a full audit trail.
+Everything after this point is additive.
+
+### Phase 5 — `depends_on` runtime semantics (largest, highest risk)
+
+Gives `depends_on` execution meaning for the first time. Worth re-confirming it is
+still wanted once Phase 4 has shipped, since gating is complete without it.
+
+| Change                                | Detail                                                                                               |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| stable topological order (Design §4)  | Kahn, ready nodes in declaration order                                                               |
+| cycle + dangling-reference validation | new `DeploymentService._validate_stage_depends_on()`, sibling to `_validate_helm_stage_namespaces()` |
+| transitive skip propagation           | Design §3 step 2                                                                                     |
+
+**Exit criteria:** the stability test (already-ordered file → identical order) is
+the gate for this phase. Additionally, assert a `dependency_skipped` entry reaches
+the manifest — Phase 4's recording should cover it with no new code, and a test is
+what proves that rather than assumes it.
+
+**Risk:** this is the only phase that can silently alter existing deployments'
+behaviour; if stability cannot be demonstrated, stop and reconsider rather than
+shipping. Sequencing it here means that risk lands on top of a fully tested
+gating-plus-recording baseline, so any ordering regression is diffed against a
+known-good state.
+
+### Phase 6 — Polish (independent, any order)
+
+- **Regression tests for non-gated surfaces (D11)** — `destroy`, `build run`,
+  `build plan`, drift each still see a disabled stage. These guard the paths most
+  likely to acquire gating by accident now the shared helper exists; without them
+  the D3 orphan scenario regresses invisibly. *Arguably belongs in Phase 3 — move
+  it there if the reviewer prefers.*
+- **`build plan` disabled marker (D11)** — label a stage `enabled` would gate, so a
+  preview distinguishes "disabled, would be skipped" from "deleted".
+- **Synonym hint (D9)** — `condition`/`when`/`if` → `enabled` map ahead of the
+  `difflib` pass in `_generate_fix_suggestions()`.
+
+### Phase 7 — Cross-schema cleanup (D8) — separate change set
+
+Per the inventory table's disposition column. Independent of Phases 1–6 and of
+each other. Reuses `parse_bool()` from Phase 1 but is otherwise unrelated to
+stage gating — **do not bundle these into the gating PR.**
+
+- **Remove `condition`** (rows 11–12) from `WorkspaceResourceModel` and
+  `EnvironmentResourceOverrideModel`, plus its phantom
+  `'{{ environment }} == production'` example in the `sln init` scaffold
+  ([workspace.yaml#L92](../../src/strata/templates/solution/dot.strata/templates/workspace.yaml#L92)).
+  Deprecation shim in the `model_validator(mode="before")` that already handles
+  ADR-0078's `references`, so an upgrade warns rather than hard-fails.
+- **Implement `resources[].enabled`** (rows 9–10) — filter resources in the
+  builders. Nothing can depend on current behaviour, so no changelog risk.
+- **Implement `modules[].enabled`** (rows 7–8) — make it filter builds, not only
+  the `main`-slot validation rule. **Needs a changelog entry**: unlike the rows
+  above, this changes behaviour for any workspace already setting
+  `enabled: false` on a module.
+- **Leave rows 13–14 alone** (`highlight[].condition`, `gates[].when`) — different
+  concepts, explicitly out of the convention.
+
+### Decision points during implementation
+
+Two places where the plan should stop and re-confirm rather than proceed on
+momentum:
+
+1. **After Phase 4** — is Phase 5 (`depends_on`) still wanted? Gating and its audit
+   trail are complete without it, and Phase 5 carries the only breaking-change
+   risk in this ADR.
+2. **During Phase 5** — if stable ordering cannot be demonstrated against existing
+   deployment files, stop. Reordering stages silently is worse than not having
+   cascade.
+
