@@ -18,8 +18,8 @@ directories under ``context.build_path`` that never consulted a provisioner's
 workspace whose terraform provisioner used a nested ``source_path``. See
 ADR-0051's 2026-09-16 revision for the full writeup.
 
-Supported frameworks (ADR-0051, 2026-09-16 multi-provisioner follow-up)
-------------------------------------------------------------------------
+Supported frameworks (ADR-0051, 2026-09-16 multi-provisioner follow-up; helm added 2026-09-17)
+------------------------------------------------------------------------------------------------
 ``configuration.framework`` selects both the Checkov framework AND, via
 ``_FRAMEWORK_PROVISIONER_MAP``, which strata provisioner type is scanned:
 
@@ -29,44 +29,53 @@ Supported frameworks (ADR-0051, 2026-09-16 multi-provisioner follow-up)
   copies source there too).
 - ``ansible`` — ``provisioner: ansible`` entries, ``*.yml``/``*.yaml`` files. Also
   fits the same flat shape (confirmed: ``ansible_builder.py`` copies source there too).
+- ``helm`` — resolved differently from the three above, since Helm has no single
+  directory per provisioner (build output is organized per namespace+module via
+  ``get_module_build_path()``). Resolution: ``scope`` selects target namespace(s) via
+  ``helm_namespaces_for_stage()`` (a stage's ``helm_namespaces`` allowlist, or every
+  namespace when unset/scope is ``all``); each namespace's modules are enumerated via
+  the already-loaded ``NamespaceService`` (same source ``HelmBuilder`` uses) and
+  filtered to ``spec.type == helm``. Only **local** charts (no ``chart_repository``)
+  have chart source on disk to scan — a registry-pulled chart's module is skipped with
+  an explicit warning, never silently, since only ``values.yaml``/``meta.yaml`` exist
+  for those at build time, never a ``Chart.yaml``. Findings are reported per
+  ``namespace/module`` instead of per provisioner name.
 
-An unrecognized ``framework`` (including ``helm``, ``compose``, ``argocd``, ``flux``,
-``script`` — all real strata provisioner types, none of them supported by this
-policy) skips gracefully with a message listing the supported values. ``helm``
-is deliberately excluded even though Checkov supports it: Helm's build output is
-organized per namespace+module (``get_module_build_path()``), not one directory
-per provisioner, so it needs its own resolution design rather than fitting this
-generalization — see ADR-0051's "Proposed design" section. ``compose`` has no
-Checkov framework at all; ``argocd``/``flux`` render from the platform artifact
-with no stable build-time source directory; ``script`` is not IaC.
+``compose``/``argocd``/``flux``/``script`` remain unsupported: ``compose`` has no
+Checkov framework at all; ``argocd``/``flux`` render from the platform artifact with
+no stable build-time source directory; ``script`` is not IaC. An unrecognized
+``framework`` skips gracefully with a message listing the supported values.
 
 One policy instance scans one framework — ``skip_checks``/finding IDs live in
 unrelated namespaces per framework (``CKV_AWS_*`` vs ``CKV_ANSIBLE_*`` vs Bicep/ARM
 checks), so a workspace wanting coverage across multiple frameworks declares one
 ``checkov`` policy per framework.
 
-``configuration.scope`` controls which provisioner(s) of the selected framework
-are scanned when a workspace declares more than one:
+``configuration.scope`` controls which provisioner(s) (or, for ``helm``, namespaces)
+of the selected framework are scanned when a workspace declares more than one:
 
 - ``staged`` (default) — provisioners reachable from at least one deployment
   stage (``stage.provisioner`` or ``stage.topology`` → ``topology.provisioner``).
   A shared module-library provisioner that no stage targets directly is
-  excluded by construction — no extra metadata needed.
+  excluded by construction — no extra metadata needed. For ``helm``: namespaces
+  reachable via a staged helm provisioner's ``helm_namespaces`` (or every
+  namespace, when that stage doesn't set it).
 - ``all`` — every provisioner of the selected framework in the workspace,
-  staged or not.
-- ``<stage-name>`` — provisioner(s) reachable from that one named stage only.
-  This is a static filter over the same stage list ``staged`` uses, not a
-  runtime binding to "when that stage deploys" — ``build`` evaluates once,
-  regardless of deploy stages.
+  staged or not (for ``helm``: every namespace in the workspace).
+- ``<stage-name>`` — provisioner(s)/namespace(s) reachable from that one named
+  stage only. This is a static filter over the same stage list ``staged`` uses,
+  not a runtime binding to "when that stage deploys" — ``build`` evaluates
+  once, regardless of deploy stages.
 
 Note: ``configuration.scope`` is unrelated to the existing, different,
 free-form ``stages[].scope`` CLI-filter label — same field name, different
 namespace.
 
-When more than one provisioner is scanned, a breach in any one of them denies
-the whole policy result (AND semantics) — findings are still reported per
-provisioner in ``PolicyResult.details["provisioners"]`` and violation strings
-are prefixed with the provisioner name (e.g. ``[control_infra] CKV_AWS_1: ...``).
+When more than one provisioner (or namespace/module, for helm) is scanned, a breach
+in any one of them denies the whole policy result (AND semantics) — findings are
+still reported individually in ``PolicyResult.details["provisioners"]`` and
+violation strings are prefixed with the provisioner name or ``namespace/module``
+label (e.g. ``[control_infra] CKV_AWS_1: ...`` or ``[prod/nginx] CKV_K8S_1: ...``).
 
 Graceful degradation
 --------------------
@@ -110,13 +119,19 @@ from strata.validators.policies.base_policy import BasePolicy, PolicyContext, Po
 _SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"]
 
 # Framework -> (strata provisioner type, glob patterns used to confirm artifacts
-# are actually present on disk before scanning). Helm/Compose/ArgoCD/Flux/Script
-# are deliberately absent — see the module docstring's "Supported frameworks" note.
+# are actually present on disk before scanning). "helm" is deliberately absent —
+# it has no single directory per provisioner, so it's resolved by
+# _resolve_helm_module_dirs() instead of _resolve_provisioner_dirs(). Compose/
+# ArgoCD/Flux/Script remain unsupported — see the module docstring.
 _FRAMEWORK_PROVISIONER_MAP: Dict[str, Tuple[ProvisionerType, Tuple[str, ...]]] = {
     "terraform": (ProvisionerType.TERRAFORM, ("*.tf",)),
     "bicep": (ProvisionerType.BICEP, ("*.bicep",)),
     "ansible": (ProvisionerType.ANSIBLE, ("*.yml", "*.yaml")),
 }
+
+# Frameworks this policy knows how to resolve artifact paths for — supersets
+# _FRAMEWORK_PROVISIONER_MAP with "helm", which uses its own resolver.
+_SUPPORTED_FRAMEWORKS = frozenset(_FRAMEWORK_PROVISIONER_MAP) | {"helm"}
 
 
 class CheckovPolicy(BasePolicy):
@@ -139,17 +154,21 @@ class CheckovPolicy(BasePolicy):
         if severity_gate not in _SEVERITY_ORDER:
             return self._skip(f"invalid severity_gate '{severity_gate}' — use CRITICAL|HIGH|MEDIUM|LOW")
 
-        if framework not in _FRAMEWORK_PROVISIONER_MAP:
-            supported = ", ".join(sorted(_FRAMEWORK_PROVISIONER_MAP))
+        if framework not in _SUPPORTED_FRAMEWORKS:
+            supported = ", ".join(sorted(_SUPPORTED_FRAMEWORKS))
             return self._skip(f"framework '{framework}' has no supported provisioner mapping — use one of: {supported}")
 
-        provisioner_dirs, skip_reason = self._resolve_provisioner_dirs(context, scope, framework)
+        extra_warnings: List[str] = []
+        if framework == "helm":
+            provisioner_dirs, skip_reason, extra_warnings = self._resolve_helm_module_dirs(context, scope)
+        else:
+            provisioner_dirs, skip_reason = self._resolve_provisioner_dirs(context, scope, framework)
         if skip_reason is not None:
-            return self._skip(skip_reason)
+            return self._skip(skip_reason, extra_warnings=extra_warnings)
 
         per_provisioner: List[Dict[str, Any]] = []
         violations: List[str] = []
-        warnings: List[str] = []
+        warnings: List[str] = list(extra_warnings)
         passed = True
 
         for prov_name, provisioner_dir in provisioner_dirs:
@@ -211,14 +230,20 @@ class CheckovPolicy(BasePolicy):
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _skip(self, reason: str) -> PolicyResult:
-        """Build a graceful-degradation PolicyResult: pass=True, but never silent."""
+    def _skip(self, reason: str, extra_warnings: Optional[List[str]] = None) -> PolicyResult:
+        """Build a graceful-degradation PolicyResult: pass=True, but never silent.
+
+        ``extra_warnings`` carries any per-item context accumulated before the
+        decision to skip entirely (e.g. Helm registry-chart skips found while
+        resolving module directories) — surfaced alongside the generic skip
+        message rather than discarded.
+        """
         return PolicyResult(
             passed=True,
             policy_name=self.name,
             enforcement=self.enforcement,
             details={"skipped": reason},
-            warnings=[f"checkov: {reason} — scan skipped, nothing was enforced"],
+            warnings=[f"checkov: {reason} — scan skipped, nothing was enforced", *(extra_warnings or [])],
         )
 
     def _resolve_provisioner_dirs(
@@ -286,6 +311,132 @@ class CheckovPolicy(BasePolicy):
             return [], f"no {framework} artifacts found for the selected scope"
 
         return dirs, None
+
+    def _resolve_helm_module_dirs(
+        self, context: PolicyContext, scope: str
+    ) -> Tuple[List[Tuple[str, Path]], Optional[str], List[str]]:
+        """Resolve ``(namespace/module, path)`` pairs for local Helm charts matching *scope*.
+
+        Unlike terraform/bicep/ansible, Helm has no single directory per provisioner —
+        each namespace's modules own their own chart source independently (ADR-0051's
+        Helm follow-up, 2026-09-17). Resolution:
+
+        1. Determine target namespace names from *scope* via ``helm_namespaces_for_stage()``
+           (a direct, single-hop mapping — no topology traversal needed).
+        2. For each namespace, enumerate its modules via the already-loaded
+           ``NamespaceService`` (the same source ``HelmBuilder`` uses) and load each
+           module YAML to check ``spec.type == helm``.
+        3. Registry-pulled charts (``source.chart_repository`` set) have no local chart
+           source at build time — skipped with an explicit warning, never silently.
+        4. Local charts are confirmed scannable by checking for a copied ``Chart.yaml``
+           at ``get_module_build_path()``.
+
+        Returns ``(dirs, skip_reason, extra_warnings)``. ``skip_reason`` is ``None`` on
+        success; when set, the caller must skip and surface it (``dirs`` is empty).
+        ``extra_warnings`` (e.g. registry-chart skips) is merged into the final
+        ``PolicyResult.warnings`` even when some other modules scanned successfully.
+        """
+        from strata.models.common_models import ProvisionerType, ServiceDeployerType
+        from strata.services.module_service import ModuleService
+        from strata.utils.provisioner_resolution import helm_namespaces_for_stage, resolve_stage_provisioner_name
+        from strata.utils.system import resolve_path
+
+        if not context.build_path or context.deployment_service is None:
+            return [], "no helm artifacts found in build path", []
+
+        deployment_service = context.deployment_service
+        workspace_service = deployment_service.get_workspace_service()
+        if workspace_service is None or workspace_service.model is None:
+            return [], "no helm artifacts found in build path", []
+
+        all_namespaces = {ns.name for ns in (workspace_service.model.spec.namespaces or [])}
+        if not all_namespaces:
+            return [], "no namespaces declared in this workspace", []
+
+        deployment_model = deployment_service.model
+        stages = list(deployment_model.spec.stages or []) if deployment_model and deployment_model.spec else []
+        provisioners = workspace_service.model.spec.provisioners or []
+
+        if scope == "all":
+            target_namespaces = set(all_namespaces)
+        elif scope == "staged":
+            target_namespaces = set()
+            for stage in stages:
+                resolved_name = resolve_stage_provisioner_name(stage, workspace_service.model)
+                prov = next((p for p in provisioners if p.name == resolved_name), None)
+                if prov is not None and prov.provisioner == ProvisionerType.HELM:
+                    target_namespaces |= helm_namespaces_for_stage(stage, workspace_service.model)
+        else:
+            stage = next((s for s in stages if s.name == scope), None)
+            if stage is None:
+                valid_names = ", ".join(sorted(s.name for s in stages)) or "none declared"
+                return (
+                    [],
+                    (
+                        f"invalid scope '{scope}' — use 'staged', 'all', or a declared stage name "
+                        f"(available: {valid_names})"
+                    ),
+                    [],
+                )
+            target_namespaces = helm_namespaces_for_stage(stage, workspace_service.model)
+
+        if not target_namespaces:
+            return [], "no helm artifacts found for the selected scope", []
+
+        namespace_services = deployment_service.get_namespace_services() or {}
+        build_path = Path(context.build_path)
+        work_path = context.work_path
+        repo_map = context.solution_controller.get_repo_map() if context.solution_controller is not None else {}
+
+        extra_warnings: List[str] = []
+        dirs: List[Tuple[str, Path]] = []
+        for ns_name in sorted(target_namespaces):
+            ns_service = namespace_services.get(ns_name)
+            if ns_service is None or not ns_service.is_validated() or not ns_service.model:
+                continue
+
+            for module_ref in ns_service.model.spec.modules or []:
+                if not work_path:
+                    continue
+                try:
+                    module_path = resolve_path(str(work_path), module_ref.file, repo_map=repo_map)
+                except Exception:
+                    continue
+                if not module_path.exists():
+                    continue
+
+                mod_service = ModuleService.load(str(module_path), validate=True)
+                if not mod_service.is_validated() or not mod_service.model:
+                    continue
+
+                module = mod_service.model
+                if module.spec.type != ServiceDeployerType.HELM:
+                    continue
+
+                module_name = str(module.meta.name)
+                label = f"{ns_name}/{module_name}"
+
+                if module.spec.source.chart_repository:
+                    extra_warnings.append(
+                        f"checkov: module '{label}' pulls its chart from a registry "
+                        "(chart_repository set) — no local chart source to scan, skipped"
+                    )
+                    continue
+
+                module_dir = (
+                    context.solution_controller.get_module_build_path(
+                        deployment_service, build_path, ns_name, module_name
+                    )
+                    if context.solution_controller is not None
+                    else deployment_service.get_build_path(build_path) / ns_name / module_name
+                )
+                if module_dir.is_dir() and (module_dir / "Chart.yaml").exists():
+                    dirs.append((label, module_dir))
+
+        if not dirs:
+            return [], "no helm artifacts found for the selected scope", extra_warnings
+
+        return dirs, None, extra_warnings
 
     def _run_scan(
         self,

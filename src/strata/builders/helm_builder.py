@@ -611,10 +611,13 @@ class HelmBuilder(BaseBuilder):
         rendered values document against declared variables/secrets/features
         (ADR-0075). An undeclared name blocks the build.
 
-        Unlike ``TerraformBuilder``'s equivalent check, this is not scoped to a
-        stage's ``secrets:`` allowlist — Helm modules aren't associated with a
-        deployment stage at build time the way Terraform provisioners are, so
-        this checks against everything declared anywhere in the environment.
+        Secret references ARE now scoped to the stage(s) that actually deploy this
+        namespace via the helm provisioner (ADR-0051 follow-up, 2026-09-17), mirroring
+        ``TerraformBuilder``'s equivalent ``stage.secrets`` scoping — using
+        ``stage.helm_namespaces`` (a direct, single-hop mapping; no topology traversal
+        needed) rather than checking against everything declared anywhere in the
+        environment. Variables/features remain unscoped, matching
+        ``ResolvedValues.for_stage()``, which never filters them either.
         """
         refs = collect_expr_refs(values_doc)
         if not refs:
@@ -629,8 +632,12 @@ class HelmBuilder(BaseBuilder):
             declared.add(var.key)
         for feat in env_service.get_features():
             declared.add(feat.key)
+        all_secret_keys: Set[str] = set()
         if env_service.model.spec and env_service.model.spec.secrets:
-            declared.update(secret.key for secret in env_service.model.spec.secrets)
+            all_secret_keys = {secret.key for secret in env_service.model.spec.secrets}
+        declared.update(all_secret_keys)
+
+        allowed_secret_keys = self._allowed_secret_keys_for_namespace(namespace_name, deployment_service)
 
         for kind, key in sorted(refs):
             if key not in declared:
@@ -638,3 +645,39 @@ class HelmBuilder(BaseBuilder):
                     f"Namespace '{namespace_name}', module '{module_name}': values reference "
                     f"'${{{kind}:{key}}}', but '{key}' is not declared as a variable, secret, or feature."
                 )
+            elif kind == "secret" and key not in allowed_secret_keys:
+                self._errors.append(
+                    f"Namespace '{namespace_name}', module '{module_name}': values reference "
+                    f"'${{secret:{key}}}', which is declared in the environment but not included "
+                    "in the deploying stage's secrets: allowlist."
+                )
+
+    def _allowed_secret_keys_for_namespace(
+        self,
+        namespace_name: str,
+        deployment_service: DeploymentService,
+    ) -> Set[str]:
+        """Return the secret keys the deploying stage(s) actually grant this namespace.
+
+        No matching stages at all (no ``stages:`` defined, workspace unavailable, or no
+        stage's helm provisioner deploys this namespace) — no per-stage scoping signal
+        available, so this returns every declared secret key (legacy unscoped
+        behavior), same fallback ``TerraformBuilder`` already uses.
+        """
+        from strata.utils.provisioner_resolution import allowed_secret_keys_for_stages, stages_for_helm_namespace
+
+        all_secret_keys: Set[str] = set()
+        env_service = deployment_service.get_environment_service()
+        if env_service is not None and env_service.model is not None:
+            if env_service.model.spec and env_service.model.spec.secrets:
+                all_secret_keys = {secret.key for secret in env_service.model.spec.secrets}
+
+        workspace_service = deployment_service.get_workspace_service()
+        if workspace_service is None or workspace_service.model is None:
+            return all_secret_keys
+
+        deployment_model = deployment_service.model
+        all_stages = list(deployment_model.spec.stages or []) if deployment_model and deployment_model.spec else []
+
+        matching_stages = stages_for_helm_namespace(namespace_name, all_stages, workspace_service.model)
+        return allowed_secret_keys_for_stages(matching_stages, all_secret_keys)

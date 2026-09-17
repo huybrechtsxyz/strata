@@ -736,14 +736,16 @@ generalization, for four compounding reasons:
    independent `spec.source` in its own module YAML file, resolved completely separately from the
    provisioner entry. "The helm provisioner" isn't one directory — it's a loose collection of
    per-module directories with no shared root.
-2. **Reaching "which modules belong to this helm provisioner" is a multi-hop lookup, not a flat
-   filter.** The chain is: `stage` → provisioner name (existing `resolve_stage_provisioner_name()`)
-   → topology whose `topology.provisioner` matches that name → `topology.namespaces[]` →
-   `namespace.spec.modules[]` → filter to `module.spec.type == "helm"`. Confirmed
-   `WorkspaceNamespaceModel` has no provisioner field at all — the only link from a namespace to a
-   provisioner is via whichever topology references both. `stage_reachable_provisioner_names()` stops
-   at hop 1; Helm needs four more hops that don't exist anywhere in the codebase yet, and would need
-   their own resolver, not a reuse of the existing one.
+2. **Reaching "which modules belong to this helm provisioner" still needs its own resolver** — though
+   simpler than first assessed. **Correction (2026-09-17):** it is not a 4-hop topology traversal.
+   `DeploymentStageModel.helm_namespaces` is a direct, single-hop mapping — a stage declares which
+   namespaces it deploys via the helm provisioner (default: every namespace in the workspace, when
+   unset), with no topology involved at all. This is exactly the mechanism the 2026-09-17 secret-scoping
+   fix below (`helm_namespaces_for_stage()` / `stages_for_helm_namespace()`,
+   `strata/utils/provisioner_resolution.py`) now uses. What's still missing for Checkov-Helm scanning
+   specifically is the second half: namespace → its `modules[]` → filter to `module.spec.type ==
+   "helm"` → resolve each module's own `get_module_build_path()`. Smaller than originally scoped, but
+   still its own resolver, not a reuse of `_FRAMEWORK_PROVISIONER_MAP`'s flat per-provisioner shape.
 3. **Only *local* charts have anything to scan.** Confirmed in `helm_builder.py`: chart source
    (`Chart.yaml`, `templates/`, etc.) is only `copytree`'d into `get_module_build_path()` when
    `not source.chart_repository and source.source_path` (a local chart). A registry-pulled chart
@@ -757,7 +759,32 @@ generalization, for four compounding reasons:
 
 **Status: deferred, not scheduled.** If picked up later, it is its own resolver
 (`_resolve_helm_module_dirs()` or similar) with its own multi-hop traversal and per-module reporting
-shape — not an extension of `_FRAMEWORK_PROVISIONER_MAP`.
+shape — not an extension of `_FRAMEWORK_PROVISIONER_MAP`. Half of that traversal
+(stage → deployed namespaces) already exists and is reusable, per the correction above.
+
+### Related fix (2026-09-17): Helm build-time secret check is now stage-scoped
+
+Separate from Checkov, but built on the same discovery: `HelmBuilder._validate_expr_refs()` (ADR-0075)
+previously checked a Helm module's `${secret:KEY}` references against *every* secret declared
+anywhere in the environment — unlike `TerraformBuilder`'s equivalent check, which was already scoped
+to the deploying stage's `secrets:` allowlist. The builder's own docstring explicitly called this out
+as a known gap ("Helm modules aren't associated with a deployment stage at build time the way
+Terraform provisioners are"). Symptom: a module could reference a secret that's registered in the
+environment file but excluded from the deploying stage's `secrets:` allowlist, pass the build cleanly,
+and only fail at real deploy time with a message indistinguishable from "never registered at all" —
+costing a full deploy cycle to diagnose.
+
+Fixed using the `stage.helm_namespaces` single-hop mechanism discovered above:
+`helm_namespaces_for_stage()` / `stages_for_helm_namespace()` (new, `provisioner_resolution.py`)
+resolve which stage(s) deploy a given namespace via the helm provisioner;
+`allowed_secret_keys_for_stages()` (extracted from `TerraformBuilder`, now shared) unions their
+`secrets:` allowlists. `HelmBuilder._validate_expr_refs()` now reports two distinct error messages —
+"not declared as a variable, secret, or feature" (never registered) vs. "declared in the environment
+but not included in the deploying stage's secrets: allowlist" (the new check) — so the two failure
+classes are distinguishable without reading source. Variables/features remain unscoped, matching
+`ResolvedValues.for_stage()`, which never filters them either. Non-breaking: no stages, or no stage
+matching the namespace, falls back to the legacy unscoped behavior (same fallback `TerraformBuilder`
+already has).
 
 ### Configuration (supersedes the 2026-07-23 example)
 

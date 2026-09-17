@@ -130,6 +130,9 @@ def _make_stage(name="stage1", provisioner=None, topology=None):
     stage.name = name
     stage.provisioner = provisioner
     stage.topology = topology
+    stage.helm_namespaces = None  # "no filtering" default — a bare MagicMock attr would
+    # otherwise iterate as empty (MagicMock auto-configures __iter__ -> iter([])),
+    # silently narrowing helm_namespaces_for_stage() to zero namespaces instead of "all".
     return stage
 
 
@@ -662,6 +665,333 @@ class TestCheckovPolicyResolveProvisionerDirs:
 
         assert reason is None
         assert dirs == [("control_infra", tmp_path / "override" / "terraform")]
+
+
+# ===========================================================================
+# CheckovPolicy._resolve_helm_module_dirs (ADR-0051 Helm follow-up, 2026-09-17)
+# ===========================================================================
+
+
+def _make_module_ref(file_name: str) -> MagicMock:
+    ref = MagicMock()
+    ref.file = file_name
+    return ref
+
+
+def _make_module_service(name: str, chart_repository: Optional[str] = None, module_type: str = "helm") -> MagicMock:
+    mod_service = MagicMock()
+    mod_service.is_validated.return_value = True
+    mod_service.model.meta.name = name
+    mod_service.model.spec.type = module_type
+    mod_service.model.spec.source.chart_repository = chart_repository
+    return mod_service
+
+
+def _make_helm_deployment_service(
+    tmp_path: Path,
+    namespace_names,
+    stages=None,
+    helm_provisioner_name: str = "helm",
+    namespace_module_refs=None,
+) -> MagicMock:
+    """Deployment service scaffolded for Helm resolution tests: a workspace with one
+    helm provisioner, the given namespaces, and get_namespace_services() returning a
+    NamespaceService per name whose spec.modules is namespace_module_refs[name]."""
+    from strata.models.common_models import ProvisionerType
+    from strata.models.workspace_model import WorkspaceNamespaceModel
+
+    svc = MagicMock()
+    svc.get_build_path.side_effect = lambda bp: bp
+    svc.model.spec.stages = stages or []
+
+    helm_prov = MagicMock()
+    helm_prov.name = helm_provisioner_name
+    helm_prov.provisioner = ProvisionerType.HELM
+
+    workspace_service = MagicMock()
+    workspace_service.model.spec.provisioners = [helm_prov]
+    workspace_service.model.spec.namespaces = [
+        WorkspaceNamespaceModel(name=n, file=f"{n}.yaml") for n in namespace_names
+    ]
+    svc.get_workspace_service.return_value = workspace_service
+
+    namespace_module_refs = namespace_module_refs or {}
+    ns_services = {}
+    for name in namespace_names:
+        ns_service = MagicMock()
+        ns_service.is_validated.return_value = True
+        ns_service.model.spec.modules = namespace_module_refs.get(name, [])
+        ns_services[name] = ns_service
+    svc.get_namespace_services.return_value = ns_services
+
+    return svc
+
+
+class TestCheckovPolicyHelmResolution:
+    def test_no_build_path_skips(self):
+        policy = CheckovPolicy(_make_policy())
+        context = _make_context(build_path=None)
+        dirs, reason, warnings = policy._resolve_helm_module_dirs(context, "staged")
+        assert dirs == []
+        assert "no helm artifacts" in reason
+        assert warnings == []
+
+    def test_no_namespaces_declared_skips(self, tmp_path):
+        dep_svc = _make_helm_deployment_service(tmp_path, [])
+        policy = CheckovPolicy(_make_policy())
+        context = _make_context(tmp_path, deployment_service=dep_svc)
+        dirs, reason, warnings = policy._resolve_helm_module_dirs(context, "staged")
+        assert dirs == []
+        assert "no namespaces declared" in reason
+
+    def test_staged_scope_finds_local_chart(self, tmp_path):
+        (tmp_path / "module.yaml").write_text("kind: module")
+        module_ref = _make_module_ref("module.yaml")
+        dep_svc = _make_helm_deployment_service(
+            tmp_path,
+            ["prod"],
+            stages=[_make_stage("platform", provisioner="helm")],
+            namespace_module_refs={"prod": [module_ref]},
+        )
+
+        chart_dir = tmp_path / "prod" / "nginx"
+        chart_dir.mkdir(parents=True)
+        (chart_dir / "Chart.yaml").write_text("apiVersion: v2")
+
+        mod_service = _make_module_service("nginx")
+        policy = CheckovPolicy(_make_policy())
+        context = _make_context(tmp_path, deployment_service=dep_svc)  # no solution_controller -> fallback shape
+        with patch("strata.services.module_service.ModuleService.load", return_value=mod_service):
+            dirs, reason, warnings = policy._resolve_helm_module_dirs(context, "staged")
+
+        assert reason is None
+        assert dirs == [("prod/nginx", chart_dir)]
+        assert warnings == []
+
+    def test_registry_chart_module_skipped_with_warning(self, tmp_path):
+        (tmp_path / "module.yaml").write_text("kind: module")
+        module_ref = _make_module_ref("module.yaml")
+        dep_svc = _make_helm_deployment_service(
+            tmp_path,
+            ["prod"],
+            stages=[_make_stage("platform", provisioner="helm")],
+            namespace_module_refs={"prod": [module_ref]},
+        )
+
+        mod_service = _make_module_service("authentik", chart_repository="https://charts.goauthentik.io")
+        policy = CheckovPolicy(_make_policy())
+        context = _make_context(tmp_path, deployment_service=dep_svc)
+        with patch("strata.services.module_service.ModuleService.load", return_value=mod_service):
+            dirs, reason, warnings = policy._resolve_helm_module_dirs(context, "staged")
+
+        assert dirs == []
+        assert "no helm artifacts found for the selected scope" in reason
+        assert any("authentik" in w and "registry" in w for w in warnings)
+
+    def test_mixed_local_and_registry_modules(self, tmp_path):
+        (tmp_path / "local_module.yaml").write_text("kind: module")
+        (tmp_path / "registry_module.yaml").write_text("kind: module")
+        local_ref = _make_module_ref("local_module.yaml")
+        registry_ref = _make_module_ref("registry_module.yaml")
+        dep_svc = _make_helm_deployment_service(
+            tmp_path,
+            ["prod"],
+            stages=[_make_stage("platform", provisioner="helm")],
+            namespace_module_refs={"prod": [local_ref, registry_ref]},
+        )
+
+        chart_dir = tmp_path / "prod" / "nginx"
+        chart_dir.mkdir(parents=True)
+        (chart_dir / "Chart.yaml").write_text("apiVersion: v2")
+
+        local_mod = _make_module_service("nginx")
+        registry_mod = _make_module_service("authentik", chart_repository="https://charts.goauthentik.io")
+        policy = CheckovPolicy(_make_policy())
+        context = _make_context(tmp_path, deployment_service=dep_svc)
+        with patch("strata.services.module_service.ModuleService.load", side_effect=[local_mod, registry_mod]):
+            dirs, reason, warnings = policy._resolve_helm_module_dirs(context, "staged")
+
+        assert reason is None
+        assert dirs == [("prod/nginx", chart_dir)]
+        assert any("authentik" in w for w in warnings)
+
+    def test_missing_chart_yaml_excludes_module(self, tmp_path):
+        (tmp_path / "module.yaml").write_text("kind: module")
+        module_ref = _make_module_ref("module.yaml")
+        dep_svc = _make_helm_deployment_service(
+            tmp_path,
+            ["prod"],
+            stages=[_make_stage("platform", provisioner="helm")],
+            namespace_module_refs={"prod": [module_ref]},
+        )
+        (tmp_path / "prod" / "nginx").mkdir(parents=True)  # no Chart.yaml written
+
+        mod_service = _make_module_service("nginx")
+        policy = CheckovPolicy(_make_policy())
+        context = _make_context(tmp_path, deployment_service=dep_svc)
+        with patch("strata.services.module_service.ModuleService.load", return_value=mod_service):
+            dirs, reason, warnings = policy._resolve_helm_module_dirs(context, "staged")
+
+        assert dirs == []
+        assert "no helm artifacts found for the selected scope" in reason
+
+    def test_non_helm_module_type_excluded(self, tmp_path):
+        (tmp_path / "module.yaml").write_text("kind: module")
+        module_ref = _make_module_ref("module.yaml")
+        dep_svc = _make_helm_deployment_service(
+            tmp_path,
+            ["prod"],
+            stages=[_make_stage("platform", provisioner="helm")],
+            namespace_module_refs={"prod": [module_ref]},
+        )
+        chart_dir = tmp_path / "prod" / "app"
+        chart_dir.mkdir(parents=True)
+        (chart_dir / "Chart.yaml").write_text("apiVersion: v2")
+
+        mod_service = _make_module_service("app", module_type="compose")
+        policy = CheckovPolicy(_make_policy())
+        context = _make_context(tmp_path, deployment_service=dep_svc)
+        with patch("strata.services.module_service.ModuleService.load", return_value=mod_service):
+            dirs, reason, warnings = policy._resolve_helm_module_dirs(context, "staged")
+
+        assert dirs == []
+        assert "no helm artifacts found for the selected scope" in reason
+
+    def test_named_stage_scope_respects_helm_namespaces_allowlist(self, tmp_path):
+        for ns in ("prod", "staging"):
+            (tmp_path / f"{ns}_module.yaml").write_text("kind: module")
+        prod_ref = _make_module_ref("prod_module.yaml")
+        staging_ref = _make_module_ref("staging_module.yaml")
+
+        stage = _make_stage("prod_only", provisioner="helm")
+        stage.helm_namespaces = ["prod"]
+        dep_svc = _make_helm_deployment_service(
+            tmp_path,
+            ["prod", "staging"],
+            stages=[stage],
+            namespace_module_refs={"prod": [prod_ref], "staging": [staging_ref]},
+        )
+
+        for ns in ("prod", "staging"):
+            chart_dir = tmp_path / ns / "nginx"
+            chart_dir.mkdir(parents=True)
+            (chart_dir / "Chart.yaml").write_text("apiVersion: v2")
+
+        mod_service = _make_module_service("nginx")
+        policy = CheckovPolicy(_make_policy())
+        context = _make_context(tmp_path, deployment_service=dep_svc)
+        with patch("strata.services.module_service.ModuleService.load", return_value=mod_service):
+            dirs, reason, warnings = policy._resolve_helm_module_dirs(context, "prod_only")
+
+        assert reason is None
+        assert dirs == [("prod/nginx", tmp_path / "prod" / "nginx")]
+
+    def test_invalid_scope_lists_valid_stage_names(self, tmp_path):
+        dep_svc = _make_helm_deployment_service(
+            tmp_path, ["prod"], stages=[_make_stage("platform", provisioner="helm")]
+        )
+        policy = CheckovPolicy(_make_policy())
+        context = _make_context(tmp_path, deployment_service=dep_svc)
+        dirs, reason, warnings = policy._resolve_helm_module_dirs(context, "bogus_stage")
+        assert dirs == []
+        assert "invalid scope 'bogus_stage'" in reason
+        assert "platform" in reason
+
+    def test_all_scope_includes_namespace_with_no_matching_stage(self, tmp_path):
+        (tmp_path / "module.yaml").write_text("kind: module")
+        module_ref = _make_module_ref("module.yaml")
+        # No stages at all -> "staged" would find nothing, but "all" still works.
+        dep_svc = _make_helm_deployment_service(
+            tmp_path, ["prod"], stages=[], namespace_module_refs={"prod": [module_ref]}
+        )
+        chart_dir = tmp_path / "prod" / "nginx"
+        chart_dir.mkdir(parents=True)
+        (chart_dir / "Chart.yaml").write_text("apiVersion: v2")
+
+        mod_service = _make_module_service("nginx")
+        policy = CheckovPolicy(_make_policy())
+        context = _make_context(tmp_path, deployment_service=dep_svc)
+        with patch("strata.services.module_service.ModuleService.load", return_value=mod_service):
+            dirs, reason, warnings = policy._resolve_helm_module_dirs(context, "all")
+
+        assert reason is None
+        assert dirs == [("prod/nginx", chart_dir)]
+
+    def test_uses_solution_controller_get_module_build_path_when_available(self, tmp_path):
+        (tmp_path / "module.yaml").write_text("kind: module")
+        module_ref = _make_module_ref("module.yaml")
+        dep_svc = _make_helm_deployment_service(
+            tmp_path,
+            ["prod"],
+            stages=[_make_stage("platform", provisioner="helm")],
+            namespace_module_refs={"prod": [module_ref]},
+        )
+        chart_dir = tmp_path / "elsewhere" / "nginx"
+        chart_dir.mkdir(parents=True)
+        (chart_dir / "Chart.yaml").write_text("apiVersion: v2")
+
+        solution_controller = MagicMock()
+        solution_controller.get_module_build_path.return_value = chart_dir
+        solution_controller.get_repo_map.return_value = {}
+
+        mod_service = _make_module_service("nginx")
+        policy = CheckovPolicy(_make_policy())
+        context = _make_context(tmp_path, deployment_service=dep_svc, solution_controller=solution_controller)
+        with patch("strata.services.module_service.ModuleService.load", return_value=mod_service):
+            dirs, reason, warnings = policy._resolve_helm_module_dirs(context, "staged")
+
+        assert reason is None
+        assert dirs == [("prod/nginx", chart_dir)]
+        solution_controller.get_module_build_path.assert_called_once_with(dep_svc, tmp_path, "prod", "nginx")
+
+
+class TestCheckovPolicyHelmFrameworkEvaluate:
+    def test_evaluate_with_helm_framework_end_to_end(self, tmp_path):
+        (tmp_path / "module.yaml").write_text("kind: module")
+        module_ref = _make_module_ref("module.yaml")
+        dep_svc = _make_helm_deployment_service(
+            tmp_path,
+            ["prod"],
+            stages=[_make_stage("platform", provisioner="helm")],
+            namespace_module_refs={"prod": [module_ref]},
+        )
+        chart_dir = tmp_path / "prod" / "nginx"
+        chart_dir.mkdir(parents=True)
+        (chart_dir / "Chart.yaml").write_text("apiVersion: v2")
+
+        mod_service = _make_module_service("nginx")
+        policy = CheckovPolicy(_make_policy())
+        policy.policy.configuration["framework"] = "helm"
+        scan = _make_integration()._parse_output(json.dumps(_CHECKOV_SINGLE), "helm", "/build")
+        context = _make_context(tmp_path, deployment_service=dep_svc)
+        with (
+            patch("strata.services.module_service.ModuleService.load", return_value=mod_service),
+            patch.object(CheckovPolicy, "_run_scan", return_value=scan),
+        ):
+            result = policy.evaluate(context)
+
+        assert not result.passed
+        assert result.details["provisioners"][0]["provisioner"] == "prod/nginx"
+        assert "[prod/nginx]" in result.violations[0]
+
+    def test_evaluate_helm_all_registry_modules_skips_with_warnings(self, tmp_path):
+        (tmp_path / "module.yaml").write_text("kind: module")
+        module_ref = _make_module_ref("module.yaml")
+        dep_svc = _make_helm_deployment_service(
+            tmp_path,
+            ["prod"],
+            stages=[_make_stage("platform", provisioner="helm")],
+            namespace_module_refs={"prod": [module_ref]},
+        )
+        mod_service = _make_module_service("authentik", chart_repository="https://charts.goauthentik.io")
+        policy = CheckovPolicy(_make_policy())
+        policy.policy.configuration["framework"] = "helm"
+        context = _make_context(tmp_path, deployment_service=dep_svc)
+        with patch("strata.services.module_service.ModuleService.load", return_value=mod_service):
+            result = policy.evaluate(context)
+
+        assert result.passed
+        assert any("authentik" in w and "registry" in w for w in result.warnings)
 
     def test_bicep_framework_uses_bicep_glob(self, tmp_path):
         bicep = _make_provisioner("platform_bicep", source_path="bicep", provisioner="bicep")

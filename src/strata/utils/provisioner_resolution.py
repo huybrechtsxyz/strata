@@ -22,7 +22,7 @@ dangling reference (e.g. ``BaseDeployer``) do so themselves using the returned
 ``None``; this module has no logging side effects of its own.
 """
 
-from typing import TYPE_CHECKING, List, Optional, Set
+from typing import TYPE_CHECKING, Any, List, Optional, Set
 
 if TYPE_CHECKING:
     from strata.models.deployment_model import DeploymentStageModel
@@ -74,3 +74,76 @@ def stage_reachable_provisioner_names(
         if name is not None:
             names.add(name)
     return names
+
+
+def allowed_secret_keys_for_stages(stages: List[Any], all_secret_keys: Set[str]) -> Set[str]:
+    """Scope declared secret keys to what ``ResolvedValues.for_stage()`` would inject.
+
+    Single source of truth for a widespread pattern (originally
+    ``TerraformBuilder._allowed_secret_keys_for_stages()``, now also used for Helm —
+    ADR-0051 follow-up, 2026-09-17):
+
+    - No matching stages at all (no ``stages:`` defined, or nothing resolves to this
+      provisioner/namespace) — no per-stage scoping signal available, so fall back to
+      the legacy unscoped behavior rather than silently skipping validation.
+    - Any matching stage with ``secrets: ['*']`` — all secrets (escape hatch, same as
+      ``ResolvedValues.for_stage()``).
+    - Otherwise — the union of every matching stage's ``secrets:`` allowlist.
+    """
+    if not stages:
+        return set(all_secret_keys)
+
+    allowed: Set[str] = set()
+    for stage in stages:
+        stage_secrets = getattr(stage, "secrets", None)
+        if not stage_secrets:
+            continue
+        if stage_secrets == ["*"]:
+            return set(all_secret_keys)
+        allowed.update(stage_secrets)
+    return allowed
+
+
+def helm_namespaces_for_stage(stage: "DeploymentStageModel", workspace_model: "WorkspaceModel") -> Set[str]:
+    """Return the namespace names *stage* deploys, for the helm provisioner.
+
+    Mirrors ``HelmDeployer``'s own runtime filtering: ``stage.helm_namespaces`` is a
+    default-deny allowlist when set; when unset, the stage deploys every namespace
+    declared in the workspace (today's default, non-breaking behavior) — see
+    ``DeploymentStageModel.helm_namespaces``'s docstring. No topology traversal is
+    needed; this is a direct, single-hop mapping.
+    """
+    all_names = {ns.name for ns in (workspace_model.spec.namespaces or [])}
+    helm_namespaces = getattr(stage, "helm_namespaces", None)
+    if helm_namespaces:
+        return set(helm_namespaces) & all_names
+    return all_names
+
+
+def stages_for_helm_namespace(
+    namespace_name: str,
+    stages: List["DeploymentStageModel"],
+    workspace_model: "WorkspaceModel",
+) -> List["DeploymentStageModel"]:
+    """Return the deployment stages that deploy *namespace_name* via the helm provisioner.
+
+    Mirrors ``TerraformBuilder._stages_for_provisioner()``'s pattern: a stage matches
+    when its resolved provisioner (``resolve_stage_provisioner_name()``) is of type
+    ``helm`` AND ``namespace_name`` is in that stage's ``helm_namespaces_for_stage()``
+    set. Used to scope Helm's build-time secret-reference check to the stage(s) that
+    actually deploy a given namespace (ADR-0051 follow-up, 2026-09-17) — previously
+    this checked against every secret declared anywhere in the environment,
+    unconditionally, because no stage-to-namespace resolver existed.
+    """
+    from strata.models.common_models import ProvisionerType
+
+    provisioners = workspace_model.spec.provisioners or []
+    matched: List["DeploymentStageModel"] = []
+    for stage in stages:
+        resolved_name = resolve_stage_provisioner_name(stage, workspace_model)
+        prov = next((p for p in provisioners if p.name == resolved_name), None)
+        if prov is None or prov.provisioner != ProvisionerType.HELM:
+            continue
+        if namespace_name in helm_namespaces_for_stage(stage, workspace_model):
+            matched.append(stage)
+    return matched

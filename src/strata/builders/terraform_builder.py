@@ -1595,25 +1595,14 @@ class TerraformBuilder(BaseBuilder):
     def _allowed_secret_keys_for_stages(stages: List[Any], all_secret_keys: Set[str]) -> Set[str]:
         """Scope declared secret keys to what ``ResolvedValues.for_stage()`` would inject.
 
-        - No matching stages at all (no ``stages:`` defined, or this provisioner isn't
-          referenced by any stage) — no per-stage scoping signal available, so fall back
-          to the legacy unscoped behavior rather than silently skipping validation.
-        - Any matching stage with ``secrets: ['*']`` — all secrets (escape hatch, same as
-          ``ResolvedValues.for_stage()``).
-        - Otherwise — the union of every matching stage's ``secrets:`` allowlist.
+        Thin wrapper around the shared ``allowed_secret_keys_for_stages()`` helper
+        (ADR-0051 follow-up, 2026-09-17 — now also used by ``HelmBuilder``) — kept as a
+        method here so existing call sites/tests referencing
+        ``TerraformBuilder._allowed_secret_keys_for_stages`` are unaffected.
         """
-        if not stages:
-            return set(all_secret_keys)
+        from strata.utils.provisioner_resolution import allowed_secret_keys_for_stages
 
-        allowed: Set[str] = set()
-        for stage in stages:
-            stage_secrets = getattr(stage, "secrets", None)
-            if not stage_secrets:
-                continue
-            if stage_secrets == ["*"]:
-                return set(all_secret_keys)
-            allowed.update(stage_secrets)
-        return allowed
+        return allowed_secret_keys_for_stages(stages, all_secret_keys)
 
     def _collect_declared_input_keys(
         self, deployment_service: DeploymentService, matching_stages: Optional[List[Any]] = None
