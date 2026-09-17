@@ -2012,6 +2012,46 @@ class TestRunCostDiffForStage:
         mock_controller.diff.assert_not_called()
 
 
+# ---------------------------------------------------------------------------
+# _record_final_cost_history — exactly one snapshot per deploy run (ADR-0031
+# section 3b), called once after all stages finish, not per stage.
+# ---------------------------------------------------------------------------
+
+
+class TestRecordFinalCostHistory:
+    def test_no_op_when_no_deployment_service(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        cmd._deployment_service = None
+
+        with patch("strata.controllers.cost_controller.CostController") as mock_cls:
+            cmd._record_final_cost_history()
+
+        mock_cls.assert_not_called()
+
+    def test_delegates_to_cost_controller(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        cmd._deployment_service = MagicMock()
+
+        mock_controller = MagicMock()
+        with patch("strata.controllers.cost_controller.CostController", return_value=mock_controller) as mock_cls:
+            cmd._record_final_cost_history()
+
+        mock_cls.assert_called_once_with(work_path=cmd._work_path)
+        mock_controller.record_final_history_snapshot.assert_called_once_with(
+            deployment_service=cmd._deployment_service,
+            build_path=cmd._build_path,
+        )
+
+    def test_nonfatal_on_exception(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        cmd._deployment_service = MagicMock()
+
+        mock_controller = MagicMock()
+        mock_controller.record_final_history_snapshot.side_effect = RuntimeError("boom")
+        with patch("strata.controllers.cost_controller.CostController", return_value=mock_controller):
+            cmd._record_final_cost_history()  # must not raise
+
+
 def _make_mock_deployer(step_names=("setup", "destroy")):
     deployer = MagicMock()
     deployer.get_deployer_name.return_value = "terraform"

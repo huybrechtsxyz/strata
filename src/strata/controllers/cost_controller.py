@@ -156,11 +156,11 @@ class CostController(BaseController):
         combined = {"provisioners": results}
 
         # Write cost.json alongside platform.json in the build directory
-        self._write_cost_json(combined, deployment_service, build_path)
+        merged = self._write_cost_json(combined, deployment_service, build_path)
 
         # Append snapshot to cost history
         self._record_history_snapshot(
-            cost_data=combined,
+            cost_data=merged or combined,
             deployment_service=deployment_service,
             currency=currency or "USD",
         )
@@ -172,17 +172,87 @@ class CostController(BaseController):
         data: Dict[str, Any],
         deployment_service: "DeploymentService",
         build_path: Path,
-    ) -> None:
-        """Write cost.json alongside platform.json in the deployment build directory. Non-fatal."""
+    ) -> Optional[Dict[str, Any]]:
+        """Merge *data*'s ``provisioners`` into any existing cost.json and write it back. Non-fatal.
+
+        Deployments with multiple terraform stages call this once per stage
+        (each covering only that stage's provisioner) — read-modify-write instead
+        of overwrite so an earlier stage's entry isn't erased by a later one
+        (ADR-0031 section 3b). Naturally bounded by the deployment's build path
+        being version-scoped (``build/{name}-{version}/``): a version bump starts
+        a fresh ``cost.json`` with no stale entries. A stage/provisioner renamed
+        *within the same version* between re-runs can still leave an orphaned
+        entry behind — accepted as a known limitation, not solved here.
+
+        Returns the merged dict on success (so callers can record history/audit
+        against the full accumulated state, not just their own slice), or
+        ``None`` if the write failed.
+        """
         try:
             deployment_build_path = deployment_service.get_build_path(build_path)
             deployment_build_path.mkdir(parents=True, exist_ok=True)
             cost_path = deployment_build_path / "cost.json"
-            cost_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+            existing_provisioners: Dict[str, Any] = {}
+            if cost_path.exists():
+                try:
+                    existing = json.loads(cost_path.read_text(encoding="utf-8"))
+                    if isinstance(existing, dict) and isinstance(existing.get("provisioners"), dict):
+                        existing_provisioners = existing["provisioners"]
+                except (OSError, json.JSONDecodeError):
+                    pass  # corrupt/unreadable existing file — treat as empty, overwrite with *data*
+
+            new_provisioners = data.get("provisioners", {}) if isinstance(data, dict) else {}
+            merged = {"provisioners": {**existing_provisioners, **new_provisioners}}
+
+            cost_path.write_text(json.dumps(merged, indent=2), encoding="utf-8")
             self._add_message(f"cost.json written: {cost_path}")
+            return merged
         except Exception as exc:
             self.logger.debug("cost_json_write_failed", error=str(exc))
             # Non-fatal — cost.json write failure does not affect the estimate result
+            return None
+
+    def record_final_history_snapshot(
+        self,
+        deployment_service: "DeploymentService",
+        build_path: Path,
+        currency: str = "USD",
+    ) -> None:
+        """Record exactly one cost-history snapshot for a whole ``deploy run`` invocation.
+
+        Reads the final, fully-merged ``cost.json`` from disk (after every stage's
+        plan-time cost diff has been written) and appends a single history entry —
+        never once per stage. Recording per-stage instead would pollute
+        ``CostHistoryStore``'s ``delta_from_previous`` with meaningless
+        within-run deltas (stage 2's snapshot "delta" would just be "stage 2 got
+        added", not a real cost change between deploys/versions) — the same
+        "right data, wrong point in time" class of bug ADR-0031 section 3a fixed
+        for policy evaluation (ADR-0031 section 3b).
+
+        Call this once, after all stages have finished (success or failure) —
+        e.g. at the end of the deploy run's stage loop. Non-fatal: swallows all
+        errors, including a missing ``cost.json`` (no estimator declared, or no
+        stage ever reached a successful plan).
+        """
+        try:
+            deployment_build_path = deployment_service.get_build_path(build_path)
+            cost_path = deployment_build_path / "cost.json"
+            if not cost_path.exists():
+                return
+
+            cost_data = json.loads(cost_path.read_text(encoding="utf-8"))
+            if not isinstance(cost_data, dict):
+                return
+
+            self._record_history_snapshot(
+                cost_data=cost_data,
+                deployment_service=deployment_service,
+                currency=currency,
+            )
+        except Exception as exc:
+            self.logger.debug("cost_history_final_snapshot_failed", error=str(exc))
+            # Non-fatal
 
     def _record_history_snapshot(
         self,
@@ -384,7 +454,18 @@ class CostController(BaseController):
         currency: Optional[str] = None,
         provisioner_filter: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
-        """Get cost diff for a terraform plan (used during deploy --dry-run).
+        """Get cost diff for a terraform plan.
+
+        Called by the deploy pipeline right after a plan is produced — on every
+        `strata deploy run` where a cost estimator is declared, not just
+        `--dry-run` (ADR-0031 section 3a). Writes `cost.json` to the deployment's
+        build directory so `cost_threshold`/cost-based gates evaluated later in
+        the same run see fresh data for the plan that was just produced.
+
+        Note: this overwrites `cost.json` rather than merging per-provisioner
+        entries across stages — a deployment with multiple terraform stages will
+        only see the most-recently-planned stage's cost in the file. Merging is
+        tracked separately (ADR-0031 section 3b), not yet implemented.
 
         Args:
             deployment_service: Loaded deployment service.
@@ -421,6 +502,7 @@ class CostController(BaseController):
         try:
             result = estimator.diff(str(terraform_path), plan_file, currency=currency)
             self._add_message(f"Cost diff retrieved for provisioner '{iac.name}'")
+            self._write_cost_json({"provisioners": {str(iac.name): result}}, deployment_service, build_path)
             return True, result
         except Exception as exc:
             return self._fail(f"Cost diff failed: {exc}")

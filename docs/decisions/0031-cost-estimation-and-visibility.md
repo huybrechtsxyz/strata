@@ -1,52 +1,342 @@
 # Cost estimation and visibility
 
-- Status: completed
+- Status: partially-implemented — Phase 1 (Infracost) shipped but validated non-viable
+  in restricted-network environments; see 2026-09-17 revision below for the
+  corrected path (second estimator, build-phase cost, attribution rework).
 - Date: 2026-07-11
-- Updated: 2026-07-22
-- Note: phase 1 complete (Infracost integration), phase 2 (scenarios) is for future work
+- Updated: 2026-09-17
+- Note: phase 1 complete (Infracost integration), phase 2 (scenarios) partially
+  superseded — see "Revision (2026-09-17)" section
+
+## Revision (2026-09-17) — Infracost validated non-viable here; corrected path
+
+External review (another team, with direct network/account verification) confirmed
+a problem this ADR's Phase 1 choice didn't anticipate: Infracost's `breakdown`/`diff`
+commands are **not actually offline**. Every estimate is a live call to
+`pricing.api.infracost.io`, requiring an Infracost account and an
+`INFRACOST_API_KEY`. In this org's network that endpoint is blocked by firewall, and
+the mandatory-account requirement is a second, independent blocker. The same review
+verified the **Azure Retail Prices API works from this network with no account, no
+key, and no firewall exception** — the one alternative this ADR's own "Why No
+Alternatives?" section had already flagged as viable but deprioritized.
+
+This section amends — it does not replace — the ADR above. Filed as a revision to
+ADR-0031 rather than a new ADR number: it's the same architectural question (how
+strata estimates cost), the capability abstraction (`ICostEstimator`) that makes
+this change low-risk is the thing this ADR already got right, and Phase 2/3 of this
+same document already anticipated most of what changes below (Azure Retail Prices
+as a scenario data source, `cost_threshold` at `build` phase, cost reconciliation).
+Splitting it into a second ADR would fragment one topic across two files for no
+reader benefit — see `docs/decisions/README.md`'s "no index table, the files are
+the index" rationale.
+
+### 1. Infracost stays, but is no longer the default/primary estimator
+
+No code changes required here — `InfracostIntegration` (reworked in PR #239 to
+target the 0.10.x/"legacy" CLI surface, see `src/strata/integrations/infracost.py`)
+remains a valid, optional `ICostEstimator` for workspaces that *do* have network
+egress to `pricing.api.infracost.io` and an API key. What changes is guidance and
+default config: new workspace scaffolds should not assume Infracost works, and the
+provider cost-support matrix below is corrected to note the account/network
+prerequisite explicitly instead of implying "just install the binary."
+
+### 2. Add `azure-retail-prices` as a second `ICostEstimator` — narrowly scoped
+
+Decision: a **second estimator**, not a replacement, implementing the same
+`ICostEstimator` protocol (`breakdown`, `diff`) already defined in
+`src/strata/models/capabilities.py`. Registered the same way Infracost is —
+`type: azure-retail-prices` in the integration factory, declared in
+`spec.integrations` per config.
+
+Deliberately **not** the general-purpose "dimensions + scenarios" mapper originally
+sketched in this ADR's Phase 2 (metrics/measures/dimension-files covering arbitrary
+resource types). That remains a large lift — Infracost's own value is largely its
+~1,100-resource-type mapping, and reproducing that generically is not a good use of
+effort. Instead the mapper is scoped to **this repo's known component library**: the
+enumerable set of ~16 components actually used across `config/*/stack` (AKS node
+pools, Application Gateway, storage accounts, Log Analytics ingestion, public IPs,
+APIM, Key Vault operations, etc.). A mapper over a small, closed set of resource
+types is tractable; a generic one is not — scoped deliberately rather than
+pretending otherwise. The original dimensions/scenarios design later in this
+document is kept for reference but is **deferred, not built**, in favor of this
+narrower mapper.
+
+### 3. Cost becomes a build artifact — fixes a real ordering defect
+
+This ADR's original "Key architectural constraint: Build stays offline" (see
+Decision Outcome above) is **superseded**. As implemented, `cost_threshold` is a
+`plan`-phase policy (`src/strata/validators/policies/cost_threshold_policy.py`)
+that reads `cost.json` — but `cost.json` is only ever produced by the separate,
+on-demand `strata cost show` command, never by `strata build`. A CI pipeline that
+never manually runs `cost show` first has a policy whose input can never exist at
+the phase it runs. Worse, the policy **fails open** (skips/passes) when
+`cost.json` is missing (`context.cost_data is None` branch) — so the gate doesn't
+error, it silently no-ops forever, exactly the "looks enforced and is not" trap
+`docs/help/policies.md` already warns about for other policy types.
+
+Fix, with a direct precedent already in this repo: `strata build sbom` is a
+sibling of `strata build run` (see `src/strata/commands/build/*` and the
+`build-sbom` CI wiring) that writes an artifact unconditionally next to
+`platform.json`. `strata build cost` follows the exact same shape:
+- Runs as part of (or immediately after) `strata build run`, not gated behind a
+  separate manual command.
+- Writes `cost.json` next to `platform.json` in the build tree, every build,
+  unconditionally.
+- Works from parsed HCL/the build tree directly — an `azure-retail-prices`
+  estimator scoped to a known component library does not need `terraform init`
+  the way Infracost's plan-diffing does, removing the `.terraform/` dependency
+  entirely for the default path.
+- `cost_threshold` moves from `phase: plan` to `phase: build` (evaluated right
+  after `build cost` produces its artifact, not a phase later where the artifact
+  structurally cannot exist yet).
+
+`strata cost show`/`strata cost diff` remain as on-demand, human-facing commands
+(and keep working with Infracost where available) — only the *policy-gated* path
+changes to depend on the always-produced build artifact instead of a manually
+triggered one.
+
+### 3a. Immediate bug fix — cost diff/write must not be gated by `--dry-run`
+
+Independent of item 3's future `strata build cost` migration, the *current*
+Infracost-based `plan`-phase flow has two compounding defects, found while
+reviewing this ADR (2026-09-17):
+
+1. **`cost.json` is never written by `strata deploy run` at all.** The pipeline's
+   own cost step (`_run_cost_diff_for_stage` in
+   `src/strata/commands/deploy/run_deploy_command.py`) calls `estimator.diff(...)`
+   and only echoes the result to the console — it never calls
+   `CostController._write_cost_json`. That method is only reachable via
+   `CostController.show()`, which only runs from the separate, on-demand
+   `strata cost show` command. Both on-disk consumers of cost data
+   (`cost_threshold_policy._extract_total_monthly` and
+   `GateContextBuilder._read_cost_delta`) read `cost.json` from the build dir and
+   see `None` unless a human separately remembers to run `cost show` first.
+2. **Even if it were written, it would be written too late for the same run.**
+   `_evaluate_phase_policies("plan", ...)` and
+   `_evaluate_condition_gates_post_plan(...)` run *inside* the per-step loop,
+   immediately after the `STEP_PLAN` step completes. The plan-JSON save and cost
+   diff call run in a separate block *after that entire loop finishes* — so a
+   `cost.json` write there could only ever benefit the *next* deploy invocation,
+   never the one that produced it.
+3. **The diff only runs at all when `--dry-run` is passed.** A plain
+   `strata deploy run --force` — the actual apply path, where a cost gate matters
+   most — never computes a cost diff, so `cost_threshold` can never fire on a
+   real deploy no matter how it's configured.
+
+**Decision — execution is driven by what's declared, not by dry-run mode:**
+
+- If a cost estimator integration is declared (`ICostEstimator` capability, e.g.
+  `type: infracost`) → the pipeline **always** computes a cost diff after
+  `STEP_PLAN` and writes `cost.json` to the build dir, on every
+  `strata deploy run` — dry-run or real, `--force` or not. Still non-fatal:
+  estimator errors are caught and logged at debug level exactly as today; the
+  only change is that they no longer depend on `--dry-run` to be attempted in
+  the first place.
+- If a `cost_threshold` policy (or a cost-based gate condition) is declared → it
+  validates against that `cost.json`, exactly as it already does. What changes
+  is only that the artifact reliably exists and is fresh for the run being
+  evaluated, because of the reordering below.
+- **`--dry-run` is not part of this decision at all.** It already controls
+  whether `apply` actually mutates infrastructure; it must not also silently
+  control whether a configured cost gate is even capable of firing. Whether cost
+  is computed and/or validated is fully determined by what's *declared*
+  (estimator integration present? cost policy present?) — never by which deploy
+  flags were passed on a given invocation.
+- **Reordering fix**: move `deployer.save_plan_json()` and the cost diff call to
+  run immediately after the `STEP_PLAN` step function completes, *before*
+  `_evaluate_phase_policies("plan", ...)` and
+  `_evaluate_condition_gates_post_plan(...)` in that same loop iteration —
+  instead of the separate post-loop block they run in today. This is what makes
+  "fresh for the run being evaluated" true, instead of "fresh starting next run."
+- **Unify the parser**: `cost_threshold_policy._extract_total_monthly` and
+  `GateContextBuilder._read_cost_delta` currently parse two different assumed
+  shapes of the same file independently. Replace both with one shared helper so
+  there is a single source of truth for "what does cost.json mean."
+
+This is a standalone bug fix that applies to the Infracost-based flow as it
+exists today — it does not wait on item 2/3's `azure-retail-prices`/
+`strata build cost` migration. The same declared-integration / declared-policy
+rule carries over unchanged if/when `cost_threshold` later moves from
+`phase: plan` to `phase: build`.
+
+### 3b. Known gaps not covered by 3a — implemented
+
+3a fixes the two defects that make `cost_threshold` a permanent no-op. It did
+**not**, on its own, make the Infracost-based flow fully correct end-to-end —
+two more gaps were found during review (2026-09-17) and are recorded here, now
+implemented as a follow-up to 3a:
+
+1. **Multi-stage deployments overwrite instead of accumulate.** Fixed:
+   `CostController._write_cost_json` now reads any existing `cost.json`,
+   merges the new call's `provisioners` entries into the existing map (new
+   entries win on a key collision), and writes the merged result back —
+   instead of overwriting the whole file. It returns the merged dict so
+   callers can act on the full accumulated state. Bounded by the deployment's
+   build path being version-scoped (`build/{name}-{version}/`): a version bump
+   starts a fresh `cost.json`. A stage/provisioner renamed *within the same
+   version* between re-runs can still leave an orphaned entry behind —
+   accepted as a known, documented limitation, not solved.
+2. **History/audit recording stays wired only to `strata cost show`.** Fixed,
+   but not by simply also calling `_record_history_snapshot` from `diff()` —
+   that would fire once **per stage**, and `CostHistoryStore`'s
+   `delta_from_previous` diffs consecutive entries, so a multi-stage deploy
+   would produce meaningless within-run "deltas" (stage 2's entry looking like
+   a real cost change when it's really just "stage 2 got added") — the same
+   "right data, wrong point in time" class of bug 3a itself fixed. Instead:
+   `CostController.record_final_history_snapshot()` reads the final, fully
+   merged `cost.json` off disk and records **exactly one** snapshot, called
+   once after the whole stage loop finishes (`RunDeployCommand._run_stages()`'s
+   `finally` block calls the new `_record_final_cost_history()` helper) —
+   never per stage. Gated on `not self._dry_run`: a dry-run is a preview, and
+   must not be written into permanent cost history or trigger
+   `cost.threshold_exceeded`/`cost.recorded` audit events. `strata cost show`
+   is unaffected — it still records its own snapshot immediately, since it's
+   already a single, one-shot, human-invoked operation.
+
+Secondary notes (not gaps, just worth stating explicitly so they aren't
+mistaken for regressions later):
+- `diff()` has no cache layer, unlike `show()`'s 7-day-TTL cache — expected,
+  since a diff is inherently plan-specific and should always be recomputed
+  fresh, not reused from a previous plan.
+- If `STEP_PLAN` isn't part of `steps_to_run` at all (e.g. an apply-only fast
+  path, or `destroy`), there is no plan to diff against, so the cost gate
+  simply cannot evaluate for that run. Inherent limitation, not a defect.
+
+Status: implemented. `src/strata/controllers/cost_controller.py`
+(`_write_cost_json` merge, `record_final_history_snapshot`),
+`src/strata/commands/deploy/run_deploy_command.py`
+(`_record_final_cost_history`, wired into `_run_stages()`'s `finally` block).
+Tests: `tests/strata/controllers/test_controllers_cost.py`
+(`TestWriteCostJsonMerge`, `TestRecordFinalHistorySnapshot`),
+`tests/strata/commands/test_commands_deploy.py` (`TestRecordFinalCostHistory`).
+
+### 4. Attribution follows the tenant hierarchy, not an environment-name glob
+
+`cost_threshold`'s `environment_pattern` (a glob over environment *names*) is the
+wrong shape for a platform whose real cost boundaries are
+landscape → zone → spoke → customer → ring. Decision: cost budgets are declared
+alongside the same hierarchy other per-tenant concerns already use (e.g.
+`zones.yaml` under `config/*/config`), inherited down through the existing
+`extends` chain rather than restated per leaf deployment — reusing an existing
+strata mechanism instead of inventing a new one, per the "prefer reuse" rule in
+`docs/decisions/README.md`.
+
+The join key is tagging, already scaffolded: every root stamps `common_tags`, and
+`required_labels: [env, owner, cost_center]` already exists (commented) as an
+example in `required_labels_policy.py`. Budgets keyed by the same tags Azure bills
+against make estimate and actual cost reconcilable (see below); `environment_pattern`
+does not, and is kept only as a secondary/legacy filter, not the primary targeting
+mechanism, once this lands.
+
+### 5. Estimate and actual are two different features — track both
+
+Infracost/`azure-retail-prices` answer "what will this cost before I apply it."
+That's necessary but not sufficient — the question that matters once customers are
+live is "what is this costing now, and why did it change," which lives in Azure
+Cost Management, reachable through the SPN the deploy pipelines already hold
+(Contributor per subscription) with no new credential. Today `cost_history.py`
+records **estimates only** — a growing gap between predicted and billed cost is
+currently invisible. Decision: extend the cost history model to record both an
+estimated snapshot (at build/deploy time) and an actual snapshot (pulled from Cost
+Management, on a schedule or on-demand), and compute drift between them —
+following the same estimate/actual split pattern this repo already uses for
+infrastructure drift (`drift.detected`, ADR-0066).
+
+**Considered for the "actual" half: OpenCost (CNCF, Apache-2.0), not adopted as a
+requirement.** Checked as the open-source alternative to Infracost this revision
+was asked to evaluate. Verdict: **not a substitute for Infracost/azure-retail-prices**
+— it solves a different problem. OpenCost is a Kubernetes cost-*allocation* tool: it
+runs as a workload inside a live cluster (official Helm chart, needs Prometheus
+scraping the cluster), and allocates real, already-incurred spend across
+namespace/node/pod/controller using on-demand pricing from the AWS/Azure/GCP
+billing APIs. It has no Terraform-plan or pre-deploy estimation mode at all — there
+is nothing to run before `apply`, so it cannot fill Infracost's or
+`azure-retail-prices`'s role (items 1–3 above).
+
+Where it's a genuine fit is the *actual* side of this exact item: this repo's
+Kubernetes-based stacks (`azure-aks`, `aws-eks`, `gcp-gke`) already run Prometheus
+per the existing observability namespace, and OpenCost's Helm chart would drop
+into that the same way any other Helm-deployed component in this repo's `charts/`
+does — no new account, no API key, self-hosted, matching this ADR's "no new
+vendor" bar as well as the Cost Management API path does. Its allocation dimension
+(Kubernetes namespace) also lines up naturally with item 4's attribution-by-tag
+work if per-customer workloads land in per-customer namespaces, giving a live
+"what is *this* namespace costing right now" view without waiting for a Cost
+Management export cycle. **Caveat:** it only covers the k8s-based providers —
+Hetzner (compose) and Kamatera (swarm) have no OpenCost story, so it would be one
+input alongside Cost Management, not a replacement for it. Treated as an
+**option to evaluate during item 5's implementation**, not a separate decision —
+no new work item added for it beyond that.
+
+### 6. CI history persistence rides the existing manifest channel
+
+`CostHistoryStore` persists to `.strata/cost/{deployment}.cost-history.json` on
+local disk. Deploy pipelines run on fresh, ephemeral Microsoft-hosted agents, so
+that directory is destroyed every run — `strata cost history` can only ever show a
+single snapshot in CI as currently wired. This repo already has a durable artifact
+channel for exactly this problem: `ConfigurationManifestModel`'s
+`push_manifest`/gitops path already commits deployment manifests to a remote
+state repository after every deploy. Decision: cost snapshots ride that same path
+(or an equivalent push) instead of — or in addition to — local disk, so history
+isn't local-dev-only by construction.
+
+### 7. Non-blocking-by-default posture is kept, not changed
+
+The existing choice that a cost diff is always non-fatal remains correct and is
+**not** revised here. Recommendation carried over unchanged: don't flip
+`cost_threshold` straight to `deny` — use `cost_review`-style `warn`/`audit`
+enforcement for outliers until the numbers (particularly the new
+`azure-retail-prices` estimator) have a track record of being trusted.
 
 ## Implementation Status
 
-### Phase 1 — Infracost Integration ✅ Complete
+### Phase 1 — Infracost Integration ✅ Complete (validated non-viable as the default — see revision)
 
-| Item                                                              | Status | Where                                                  |
-| ----------------------------------------------------------------- | ------ | ------------------------------------------------------ |
-| `ICostEstimator` capability protocol                              | ✅      | `src/strata/integrations/capabilities.py`              |
-| `InfracostIntegration` class (`breakdown`, `diff`)                | ✅      | `src/strata/integrations/infracost.py`                 |
-| Factory registration (`type: infracost`)                          | ✅      | `src/strata/integrations/factory.py`                   |
-| Config YAML integration entries (azure-aks, aws-eks, gcp-gke)     | ✅      | `config/*/config/*.yaml`                               |
-| `CostController` with caching, path resolution, multi-provisioner | ✅      | `src/strata/controllers/cost_controller.py`            |
-| `strata cost show` command (console + JSON output, --refresh)     | ✅      | `src/strata/commands/cost/show_cost_command.py`        |
-| `strata cost diff` command                                        | ✅      | `src/strata/commands/cost/diff_cost_command.py`        |
-| CLI group registered in main (`strata cost`)                      | ✅      | `src/strata/commands/cli_cost.py`, `src/strata/cli.py` |
-| Local cache (`.strata/cache/cost/`, 7-day TTL, content hash key)  | ✅      | `src/strata/controllers/cost_controller.py`            |
-| `cost.json` written alongside `platform.json` in build artifacts  | ✅      | `src/strata/controllers/cost_controller.py`            |
-| `deploy --dry-run` auto cost diff (non-fatal, per-stage)          | ✅      | `src/strata/commands/deploy/run_deploy_command.py`     |
-| Error handling + graceful degradation if infracost missing        | ✅      | Throughout                                             |
-| Provider `engine` field removed (was unused/confusing)            | ✅      | `src/strata/models/provider_model.py`                  |
+| Item                                                                                                       | Status             | Where                                                                                   |
+| ---------------------------------------------------------------------------------------------------------- | ------------------ | --------------------------------------------------------------------------------------- |
+| `ICostEstimator` capability protocol                                                                       | ✅                  | `src/strata/integrations/capabilities.py`                                               |
+| `InfracostIntegration` class (`breakdown`, `diff`)                                                         | ✅                  | `src/strata/integrations/infracost.py`                                                  |
+| Factory registration (`type: infracost`)                                                                   | ✅                  | `src/strata/integrations/factory.py`                                                    |
+| Config YAML integration entries (azure-aks, aws-eks, gcp-gke)                                              | ✅                  | `config/*/config/*.yaml`                                                                |
+| `CostController` with caching, path resolution, multi-provisioner                                          | ✅                  | `src/strata/controllers/cost_controller.py`                                             |
+| `strata cost show` command (console + JSON output, --refresh)                                              | ✅                  | `src/strata/commands/cost/show_cost_command.py`                                         |
+| `strata cost diff` command                                                                                 | ✅                  | `src/strata/commands/cost/diff_cost_command.py`                                         |
+| CLI group registered in main (`strata cost`)                                                               | ✅                  | `src/strata/commands/cli_cost.py`, `src/strata/cli.py`                                  |
+| Local cache (`.strata/cache/cost/`, 7-day TTL, content hash key)                                           | ✅                  | `src/strata/controllers/cost_controller.py`                                             |
+| `cost.json` written alongside `platform.json`, but only from `cost show`, never from `build`               | ⚠️                  | `CostController._write_cost_json()` — this is the ordering defect fixed in the revision |
+| `deploy --dry-run` auto cost diff (non-fatal, per-stage)                                                   | ✅                  | `src/strata/commands/deploy/run_deploy_command.py`                                      |
+| Error handling + graceful degradation if infracost missing                                                 | ✅                  | Throughout                                                                              |
+| Provider `engine` field removed (was unused/confusing)                                                     | ✅                  | `src/strata/models/provider_model.py`                                                   |
+| Reworked to target Infracost 0.10.x ("legacy") CLI surface, not 2.0                                        | ✅                  | `src/strata/integrations/infracost.py` (PR #239)                                        |
+| Requires Infracost account + `INFRACOST_API_KEY` + network egress — verified blocked in this org's network | ⚠️ known limitation | See revision item 1                                                                     |
 
-### Phase 2 — Scenarios + Policies ⏳ Not started
+### Phase 2 — Scenarios + Policies ⏳ Not started (narrowed — see revision item 2)
 
-| Item                                                       | Status | Notes                                                                  |
-| ---------------------------------------------------------- | ------ | ---------------------------------------------------------------------- |
-| `cost-scenario` YAML schema + model                        | ❌      | New `kind`, new Pydantic model                                         |
-| `cost-dimensions` YAML schema + model                      | ❌      | New `kind`, per resource-type metrics                                  |
-| `scenario` field on `EnvironmentModel`                     | ❌      | `env.spec.scenario = "enterprise"`                                     |
-| `DimensionsRegistry` (local + repo sources)                | ❌      | Resolution: custom > community > built-in                              |
-| Cost policy gates (`cost_threshold`, `scenario_check`)     | ✅      | `cost_threshold` implemented; `scenario_check` pending scenarios model |
-| `strata cost compare` command                              | ❌      | Compare scenario estimates                                             |
-| Ship built-in dimension files for top Azure resource types | ❌      |                                                                        |
-| Historical cost tracking                                   | ✅      | `.strata/cost/`, `strata cost history` command                         |
+| Item                                                                                                                      | Status | Notes                                                                                                               |
+| ------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------- |
+| `azure-retail-prices` estimator (`ICostEstimator`, scoped to this repo's ~16-component library)                           | ❌      | Supersedes the generic dimensions/scenarios mapper below as the near-term Phase 2 deliverable — see revision item 2 |
+| `strata build cost` (writes `cost.json` unconditionally, sibling of `strata build sbom`)                                  | ❌      | Fixes the ordering defect above — see revision item 3                                                               |
+| `cost_threshold` moved from `phase: plan` to `phase: build`                                                               | ❌      | See revision item 3                                                                                                 |
+| Budget attribution via tenant hierarchy (`extends`) + `common_tags`, replacing `environment_pattern` as primary targeting | ❌      | See revision item 4                                                                                                 |
+| `cost-scenario` YAML schema + model (generic, deferred)                                                                   | ❌      | New `kind`, new Pydantic model — deferred in favor of the narrower mapper above                                     |
+| `cost-dimensions` YAML schema + model (generic, deferred)                                                                 | ❌      | New `kind`, per resource-type metrics — deferred in favor of the narrower mapper above                              |
+| `scenario` field on `EnvironmentModel`                                                                                    | ❌      | `env.spec.scenario = "enterprise"`                                                                                  |
+| `DimensionsRegistry` (local + repo sources)                                                                               | ❌      | Resolution: custom > community > built-in                                                                           |
+| Cost policy gates (`cost_threshold`, `scenario_check`)                                                                    | ✅      | `cost_threshold` implemented; `scenario_check` pending scenarios model                                              |
+| `strata cost compare` command                                                                                             | ❌      | Compare scenario estimates                                                                                          |
+| Ship built-in dimension files for top Azure resource types                                                                | ❌      |                                                                                                                     |
+| Historical cost tracking                                                                                                  | ✅      | `.strata/cost/`, `strata cost history` command                                                                      |
 
 ### Phase 3 — Advanced ⏳ Not started
 
-| Item                                              | Status | Notes                       |
-| ------------------------------------------------- | ------ | --------------------------- |
-| AWS/GCP integration tests                         | ❌      | Currently only Azure tested |
-| Right-sizing recommendations                      | ❌      | Compare estimated vs actual |
-| Cost reconciliation (estimated vs actual billing) | ❌      |                             |
-| VS Code extension integration                     | ❌      | Extension-side work         |
-| AI scenario generation (VS Code chat)             | ❌      |                             |
+| Item                                                                                                    | Status | Notes                       |
+| ------------------------------------------------------------------------------------------------------- | ------ | --------------------------- |
+| AWS/GCP integration tests                                                                               | ❌      | Currently only Azure tested |
+| Right-sizing recommendations                                                                            | ❌      | Compare estimated vs actual |
+| Cost reconciliation (estimated vs actual billing, via Azure Cost Management API + existing deploy SPN)  | ❌      | See revision item 5         |
+| Cost snapshot persistence via existing manifest/gitops push channel (fixes CI-only-single-snapshot gap) | ❌      | See revision item 6         |
+| VS Code extension integration                                                                           | ❌      | Extension-side work         |
+| AI scenario generation (VS Code chat)                                                                   | ❌      |                             |
 
 ---
 
@@ -1657,3 +1947,46 @@ Phase 5: Deploy (actual infrastructure)
 
 - [Cost Estimation and Visibility Guide](../guides/cost-estimation.md) — user-facing
   walkthrough of running `strata cost` commands
+
+## Remaining Work
+
+From the 2026-09-17 revision (numbering matches that section's items):
+
+1. No action — Infracost integration is kept as-is, but docs/scaffolds must stop
+   presenting it as the default/recommended estimator.
+2. Build `azure-retail-prices` `ICostEstimator` implementation, scoped to this
+   repo's known component library (not a generic resource-type mapper). Register
+   via the existing integration factory pattern.
+3. Add `strata build cost` (sibling of `strata build sbom`); make it write
+   `cost.json` unconditionally as part of `strata build run`; move
+   `cost_threshold` from `phase: plan` to `phase: build`; remove the
+   `.terraform/` init dependency for the default estimator path.
+3a. Bug fix (does not wait on item 3): in `run_deploy_command.py`, move the
+   cost diff call to run right after `STEP_PLAN` completes and before
+   `_evaluate_phase_policies("plan", ...)` / `_evaluate_condition_gates_post_plan`;
+   always write `cost.json` when a cost estimator integration is declared,
+   regardless of `--dry-run`; remove the `if self._dry_run` guard around
+   `_run_cost_diff_for_stage`; unify `cost_threshold_policy._extract_total_monthly`
+   and `GateContextBuilder._read_cost_delta` into one shared parser. **Done.**
+3b. Follow-up after 3a. **Done**: `CostController._write_cost_json` merges
+   (not overwrites) each stage's diff into `cost.json`'s `provisioners` map for
+   multi-stage deployments; `CostController.record_final_history_snapshot()` +
+   `RunDeployCommand._record_final_cost_history()` record exactly one
+   history/audit snapshot per deploy run (not per stage), reading the final
+   merged `cost.json`, gated on `not self._dry_run`.
+4. Design and add a budget-attribution field shape declared per
+   customer/zone in `config/*/config` (inherited via `extends`), keyed by
+   `common_tags`; keep `environment_pattern` only as a secondary filter.
+5. Extend `cost_history.py`/`CostHistoryStore` to record actual costs pulled from
+   Azure Cost Management (via the existing deploy SPN) alongside estimates, and
+   compute/report drift between the two. Evaluate OpenCost (Helm-deployed,
+   in-cluster, no new account/API key) as a live source for the k8s-based
+   providers specifically, feeding the same actual-cost snapshot rather than
+   replacing the Cost Management path — it has no pre-deploy estimation mode so
+   it cannot substitute for items 2/3.
+6. Wire cost snapshot persistence through the existing
+   `ConfigurationManifestModel` `push_manifest`/gitops channel so
+   `strata cost history` is not local-dev-only in CI.
+7. No action — non-blocking-by-default posture for `cost_threshold` is
+   unchanged; keep new gates at `warn`/`audit` until trusted.
+

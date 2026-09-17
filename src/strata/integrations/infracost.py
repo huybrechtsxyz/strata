@@ -2,7 +2,10 @@
 
 import json
 import re
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
+
+from packaging import version as version_lib
 
 from strata.integrations.base_integration import BaseIntegration
 from strata.logger import get_logger
@@ -12,6 +15,12 @@ from strata.utils.system import run_command
 
 logger = get_logger(__name__)
 
+# This integration drives the 0.10.x ("legacy") Infracost CLI command surface
+# (`breakdown`, `diff`). Infracost 2.0 moved to a separate CLI (infracost/cli)
+# with a different command set (`auth login`, `setup`, `scan`, `inspect`,
+# `update`) and is not supported by this integration.
+_MAX_SUPPORTED_VERSION = "0.99.99"
+
 
 class InfracostIntegration(BaseIntegration):
     """
@@ -20,11 +29,18 @@ class InfracostIntegration(BaseIntegration):
     Provides cost breakdown and diff capabilities for Terraform configurations.
     Supports Azure, AWS, and GCP resources natively.
 
-    Invoked as a CLI binary — no API key required for basic estimation
-    (uses bundled pricing database). Network access required for fresh
-    price lookups; results are cached locally by Infracost.
+    Invoked as a CLI binary. There is no bundled pricing database and no
+    anonymous/offline mode — every estimate is a live call to
+    ``pricing.api.infracost.io``, which requires an Infracost account and an
+    ``INFRACOST_API_KEY`` (or a token from ``infracost auth login``). A
+    self-hosted Cloud Pricing API can be used instead via
+    ``INFRACOST_PRICING_API_ENDPOINT``.
 
-    Install: https://www.infracost.io/docs/install
+    Only the 0.10.x ("legacy") CLI is supported — Infracost 2.0 replaced
+    ``breakdown``/``diff`` with a different command set (``scan``,
+    ``inspect``, etc.) that this integration does not drive.
+
+    Install: https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh
     """
 
     COMMAND = "infracost"
@@ -61,15 +77,28 @@ class InfracostIntegration(BaseIntegration):
         return {
             "name": "infracost",
             "command": "infracost",
-            "install_url": "https://www.infracost.io/docs/install",
-            "env_vars": [],
+            "install_url": "https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh",
+            "env_vars": [
+                {
+                    "name": "INFRACOST_API_KEY",
+                    "purpose": "Infracost Cloud Pricing API authentication",
+                    "required": True,
+                },
+            ],
             "auth_methods": [
                 {
-                    "method": "Cloud credentials",
+                    "method": "infracost auth login",
+                    "description": "Interactive login; stores a token in ~/.config/infracost/credentials.yml.",
+                },
+                {
+                    "method": "INFRACOST_API_KEY",
+                    "description": "Non-interactive/CI authentication via a free Infracost account API key.",
+                },
+                {
+                    "method": "INFRACOST_PRICING_API_ENDPOINT",
                     "description": (
-                        "Uses the same cloud credentials as Terraform "
-                        "(Azure CLI, AWS env vars, GCP application credentials). "
-                        "No additional authentication required."
+                        "Points at a self-hosted Cloud Pricing API instead of "
+                        "pricing.api.infracost.io (useful where that host is unreachable)."
                     ),
                 },
             ],
@@ -80,13 +109,15 @@ class InfracostIntegration(BaseIntegration):
                 "  required: false\n"
                 "  validation:\n"
                 "    command: infracost --version\n"
-                '    min_version: "0.10.0"'
+                '    min_version: "0.10.0"\n'
+                f'    max_version: "{_MAX_SUPPORTED_VERSION}"  # reject Infracost 2.x (unsupported CLI)'
             ),
         }
 
     def ensure_available(self) -> Tuple[bool, str]:
         """
-        Ensure infracost binary is available.
+        Ensure infracost binary is available, on a supported (0.10.x) version,
+        and has a resolvable API key.
 
         Returns:
             Tuple of (success, error_message)
@@ -94,7 +125,8 @@ class InfracostIntegration(BaseIntegration):
         if not self.is_available():
             msg = (
                 f"{self.integration_name} CLI is not installed or not in PATH. "
-                "Install from: https://www.infracost.io/docs/install"
+                "Install the 0.10.x CLI from: "
+                "https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh"
             )
             self._info = msg
             logger.warning("Infracost CLI not found", name=self.integration_name)
@@ -110,9 +142,56 @@ class InfracostIntegration(BaseIntegration):
             )
             return False, version_error
 
+        current_version = self.get_version()
+        if current_version and self._is_unsupported_v2(current_version):
+            msg = (
+                f"{self.integration_name} version {current_version} is Infracost 2.x, which replaced "
+                "the 'breakdown'/'diff' commands this integration relies on with 'scan'/'inspect'. "
+                "Install a 0.10.x release instead: "
+                "https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh"
+            )
+            self._info = msg
+            logger.warning("Infracost major version unsupported", name=self.integration_name, version=current_version)
+            return False, msg
+
+        key_ok, key_error = self._has_resolvable_api_key()
+        if not key_ok:
+            self._info = key_error
+            logger.warning("Infracost API key not resolvable", name=self.integration_name)
+            return False, key_error
+
         self._info = f"{self.integration_name} {self.get_version()} is available"
         logger.debug("Infracost is available", name=self.integration_name, version=self.get_version())
         return True, ""
+
+    def _is_unsupported_v2(self, version_str: str) -> bool:
+        """Return True if ``version_str`` is Infracost 2.0+, which this integration cannot drive."""
+        try:
+            return version_lib.parse(version_str) > version_lib.parse(_MAX_SUPPORTED_VERSION)
+        except Exception:
+            return False
+
+    def _has_resolvable_api_key(self) -> Tuple[bool, str]:
+        """Check for an ``INFRACOST_API_KEY`` env var or an ``infracost auth login`` credentials file.
+
+        Infracost has no anonymous/offline mode — every estimate is a live call to
+        the (or a self-hosted) Cloud Pricing API, so a missing key must surface
+        here at pre-flight rather than as a ``RuntimeError`` from a failed
+        subprocess mid-deploy.
+        """
+        if self._get_env_var("INFRACOST_API_KEY"):
+            return True, ""
+        if self._get_env_var("INFRACOST_PRICING_API_ENDPOINT"):
+            # Self-hosted Cloud Pricing API — may not require a key at all.
+            return True, ""
+        if (Path.home() / ".config" / "infracost" / "credentials.yml").exists():
+            return True, ""
+        msg = (
+            f"{self.integration_name} has no resolvable API key. Run 'infracost auth login', "
+            "set INFRACOST_API_KEY, or point INFRACOST_PRICING_API_ENDPOINT at a self-hosted "
+            "Cloud Pricing API."
+        )
+        return False, msg
 
     # ------------------------------------------------------------------
     # ICostEstimator implementation

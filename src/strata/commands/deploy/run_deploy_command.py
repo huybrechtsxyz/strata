@@ -466,9 +466,15 @@ class RunDeployCommand(BaseDeployCommand):
     # -------------------------------------------------------------------------
 
     def _run_cost_diff_for_stage(self, stage: "DeploymentStageModel", plan_json_path) -> None:
-        """Run infracost diff after plan in dry-run mode. Non-fatal — cost errors never block deploy.
+        """Run infracost diff after plan, on every deploy — dry-run or real, `--force` or not.
 
-        Displays cost impact (before/after/delta) in console output.
+        Non-fatal — cost errors never block deploy. Writes `cost.json` to the
+        deployment build directory (via `CostController.diff`) so `cost_threshold`
+        and cost-based gates evaluated right after this call see fresh data for
+        the plan just produced, and displays the cost impact (before/after/delta)
+        in console output. Not gated by `--dry-run` (ADR-0031 section 3a):
+        whether cost is computed is decided entirely by whether a cost estimator
+        is declared, never by which deploy flags were passed.
         Requires a cost estimator (e.g. Infracost) to be declared in
         ``spec.integrations`` — an installed binary alone is not enough (see
         ``CostController.is_auto_diff_enabled``). Skips silently if not
@@ -516,6 +522,29 @@ class RunDeployCommand(BaseDeployCommand):
         except Exception as exc:
             # Cost diff is always non-fatal
             self.logger.debug("cost_diff_error", stage=stage.name, error=str(exc))
+
+    def _record_final_cost_history(self) -> None:
+        """Record exactly one cost-history snapshot for this whole deploy run.
+
+        Called once, after all stages have finished (success or failure) — not
+        per stage. Reads whatever `cost.json` exists at that point (merged
+        across every stage's cost diff, see `CostController._write_cost_json`)
+        and appends a single history entry / fires audit events off of it.
+        Non-fatal, and a no-op when no cost estimator was declared (no
+        `cost.json` ever gets written). See ADR-0031 section 3b.
+        """
+        if self._deployment_service is None or self._build_path is None:
+            return
+        try:
+            from strata.controllers.cost_controller import CostController
+
+            CostController(work_path=self._work_path).record_final_history_snapshot(
+                deployment_service=self._deployment_service,
+                build_path=self._build_path,
+            )
+        except Exception as exc:
+            # Cost history recording is always non-fatal
+            self.logger.debug("cost_history_final_snapshot_error", error=str(exc))
 
     # -------------------------------------------------------------------------
     # AI advisory helpers
@@ -1248,6 +1277,11 @@ class RunDeployCommand(BaseDeployCommand):
                     click.echo("\n✅  All stages completed.")
                 return True
             finally:
+                # --- cost history: exactly one snapshot per deploy run, not per stage
+                # (ADR-0031 section 3b) — real deploys only, dry-run is a preview and
+                # must not pollute permanent cost history/audit trail.
+                if not self._dry_run:
+                    self._record_final_cost_history()
                 coordinator.clear_lock()
                 if lock_handle is not None and lock_backend is not None:
                     self._release_lock(lock_backend, lock_handle)
@@ -1540,6 +1574,22 @@ class RunDeployCommand(BaseDeployCommand):
                     )
                     return False
 
+            # --- save plan JSON + cost diff (always, when declared — not gated by
+            # --dry-run; see ADR-0031 section 3a). Runs before the plan-phase
+            # policy/gate evaluation below so cost_threshold and cost-based gates
+            # see fresh data for *this* run, not a stale/absent artifact. ---
+            if step_name == STEP_PLAN:
+                ok_save, plan_json_path, save_msgs = deployer.save_plan_json()
+                self._messages.extend(save_msgs)
+                if self._is_console_output():
+                    for msg in save_msgs:
+                        click.echo(f"      {msg}")
+                    if ok_save and plan_json_path:
+                        click.echo(f"    plan JSON → {plan_json_path}")
+
+                if ok_save and plan_json_path:
+                    self._run_cost_diff_for_stage(stage, plan_json_path)
+
             # --- plan gate: enforce deploy_plan_after hook before apply ---
             if step_name == STEP_PLAN and STEP_APPLY in steps_to_run:
                 if not self._run_lifecycle_phase(
@@ -1609,20 +1659,6 @@ class RunDeployCommand(BaseDeployCommand):
                             error="AI plan review blocked deployment",
                         )
                         return False
-
-        # --- save plan JSON for artifact upload / downstream use ---
-        if STEP_PLAN in steps_to_run:
-            ok_save, plan_json_path, save_msgs = deployer.save_plan_json()
-            self._messages.extend(save_msgs)
-            if self._is_console_output():
-                for msg in save_msgs:
-                    click.echo(f"      {msg}")
-                if ok_save and plan_json_path:
-                    click.echo(f"    plan JSON → {plan_json_path}")
-
-            # --- cost diff after plan (dry-run only, non-fatal) ---
-            if self._dry_run and ok_save and plan_json_path:
-                self._run_cost_diff_for_stage(stage, plan_json_path)
 
         # --- collect outputs for downstream stages ---
         out_path = None
