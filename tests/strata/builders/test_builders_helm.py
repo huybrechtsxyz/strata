@@ -201,6 +201,7 @@ class TestHelmBuilderValidateExprRefs:
         builder = HelmBuilder()
         deployment_service = MagicMock()
         deployment_service.get_environment_service.return_value = _mock_env_service(variables=["APP_VERSION"])
+        deployment_service.get_workspace_service.return_value = None
         values_doc = {"nginx": {"env": {"APP_VERSION": "${var:APP_VERSION}"}}}
         builder._validate_expr_refs(values_doc, deployment_service, "prod", "nginx")
         assert builder.get_errors() == []
@@ -209,6 +210,7 @@ class TestHelmBuilderValidateExprRefs:
         builder = HelmBuilder()
         deployment_service = MagicMock()
         deployment_service.get_environment_service.return_value = _mock_env_service(secret_keys=["DB_PASSWORD"])
+        deployment_service.get_workspace_service.return_value = None
         values_doc = {"nginx": {"env": {"DB_PASSWORD": "${secret:DB_PASSWORD}"}}}
         builder._validate_expr_refs(values_doc, deployment_service, "prod", "nginx")
         assert builder.get_errors() == []
@@ -217,6 +219,7 @@ class TestHelmBuilderValidateExprRefs:
         builder = HelmBuilder()
         deployment_service = MagicMock()
         deployment_service.get_environment_service.return_value = _mock_env_service(features=["enable_tls"])
+        deployment_service.get_workspace_service.return_value = None
         values_doc = {"nginx": {"env": {"ENABLE_TLS": "${feature:enable_tls}"}}}
         builder._validate_expr_refs(values_doc, deployment_service, "prod", "nginx")
         assert builder.get_errors() == []
@@ -225,6 +228,7 @@ class TestHelmBuilderValidateExprRefs:
         builder = HelmBuilder()
         deployment_service = MagicMock()
         deployment_service.get_environment_service.return_value = _mock_env_service()
+        deployment_service.get_workspace_service.return_value = None
         values_doc = {"nginx": {"env": {"DB_PASSWORD": "${secret:DB_PASSWORD}"}}}
         builder._validate_expr_refs(values_doc, deployment_service, "prod", "nginx")
         errors = builder.get_errors()
@@ -241,6 +245,118 @@ class TestHelmBuilderValidateExprRefs:
         deployment_service.get_environment_service.return_value = None
         values_doc = {"nginx": {"env": {"DB_PASSWORD": "${secret:DB_PASSWORD}"}}}
         builder._validate_expr_refs(values_doc, deployment_service, "prod", "nginx")
+        assert builder.get_errors() == []
+
+    def test_no_workspace_service_falls_back_to_unscoped(self):
+        """No workspace loaded — no per-stage scoping signal, so a declared secret is
+        still accepted (legacy unscoped behavior, matching TerraformBuilder's fallback)."""
+        builder = HelmBuilder()
+        deployment_service = MagicMock()
+        deployment_service.get_environment_service.return_value = _mock_env_service(secret_keys=["DB_PASSWORD"])
+        deployment_service.get_workspace_service.return_value = None
+        values_doc = {"nginx": {"env": {"DB_PASSWORD": "${secret:DB_PASSWORD}"}}}
+        builder._validate_expr_refs(values_doc, deployment_service, "prod", "nginx")
+        assert builder.get_errors() == []
+
+    def test_secret_declared_but_excluded_by_stage_allowlist_produces_distinct_error(self):
+        """ADR-0051 follow-up (2026-09-17): a secret registered in the environment but
+        not in the deploying stage's secrets: allowlist must be flagged distinctly
+        from "not declared anywhere"."""
+        from strata.models.common_models import ProvisionerType
+        from strata.models.workspace_model import SourceModel, WorkspaceIacModel, WorkspaceNamespaceModel
+
+        builder = HelmBuilder()
+        deployment_service = MagicMock()
+        deployment_service.get_environment_service.return_value = _mock_env_service(secret_keys=["DB_PASSWORD"])
+
+        helm_prov = WorkspaceIacModel(
+            name="helm", provisioner=ProvisionerType.HELM, source=SourceModel(source_path="charts")
+        )
+        workspace_service = MagicMock()
+        workspace_service.model.spec.provisioners = [helm_prov]
+        workspace_service.model.spec.namespaces = [WorkspaceNamespaceModel(name="prod", file="ns.yaml")]
+        deployment_service.get_workspace_service.return_value = workspace_service
+
+        stage = MagicMock()
+        stage.name = "platform"
+        stage.provisioner = "helm"
+        stage.topology = None
+        stage.helm_namespaces = None  # deploys every namespace, including "prod"
+        stage.secrets = []  # allowlist excludes DB_PASSWORD
+        deployment_service.model.spec.stages = [stage]
+
+        values_doc = {"nginx": {"env": {"DB_PASSWORD": "${secret:DB_PASSWORD}"}}}
+        builder._validate_expr_refs(values_doc, deployment_service, "prod", "nginx")
+
+        errors = builder.get_errors()
+        assert len(errors) == 1
+        assert "DB_PASSWORD" in errors[0]
+        assert "not declared" not in errors[0]  # distinct from the "never registered" message
+        assert "allowlist" in errors[0]
+
+    def test_secret_declared_and_included_by_stage_allowlist_produces_no_error(self):
+        from strata.models.common_models import ProvisionerType
+        from strata.models.workspace_model import SourceModel, WorkspaceIacModel, WorkspaceNamespaceModel
+
+        builder = HelmBuilder()
+        deployment_service = MagicMock()
+        deployment_service.get_environment_service.return_value = _mock_env_service(secret_keys=["DB_PASSWORD"])
+
+        helm_prov = WorkspaceIacModel(
+            name="helm", provisioner=ProvisionerType.HELM, source=SourceModel(source_path="charts")
+        )
+        workspace_service = MagicMock()
+        workspace_service.model.spec.provisioners = [helm_prov]
+        workspace_service.model.spec.namespaces = [WorkspaceNamespaceModel(name="prod", file="ns.yaml")]
+        deployment_service.get_workspace_service.return_value = workspace_service
+
+        stage = MagicMock()
+        stage.name = "platform"
+        stage.provisioner = "helm"
+        stage.topology = None
+        stage.helm_namespaces = None
+        stage.secrets = ["DB_PASSWORD"]
+        deployment_service.model.spec.stages = [stage]
+
+        values_doc = {"nginx": {"env": {"DB_PASSWORD": "${secret:DB_PASSWORD}"}}}
+        builder._validate_expr_refs(values_doc, deployment_service, "prod", "nginx")
+
+        assert builder.get_errors() == []
+
+    def test_stage_helm_namespaces_excludes_other_namespace(self):
+        """A stage scoped to a different namespace via helm_namespaces doesn't grant
+        (or restrict) secrets for THIS namespace — falls back to unscoped since no
+        stage actually matches "prod"."""
+        from strata.models.common_models import ProvisionerType
+        from strata.models.workspace_model import SourceModel, WorkspaceIacModel, WorkspaceNamespaceModel
+
+        builder = HelmBuilder()
+        deployment_service = MagicMock()
+        deployment_service.get_environment_service.return_value = _mock_env_service(secret_keys=["DB_PASSWORD"])
+
+        helm_prov = WorkspaceIacModel(
+            name="helm", provisioner=ProvisionerType.HELM, source=SourceModel(source_path="charts")
+        )
+        workspace_service = MagicMock()
+        workspace_service.model.spec.provisioners = [helm_prov]
+        workspace_service.model.spec.namespaces = [
+            WorkspaceNamespaceModel(name="prod", file="ns.yaml"),
+            WorkspaceNamespaceModel(name="staging", file="ns2.yaml"),
+        ]
+        deployment_service.get_workspace_service.return_value = workspace_service
+
+        stage = MagicMock()
+        stage.name = "staging_only"
+        stage.provisioner = "helm"
+        stage.topology = None
+        stage.helm_namespaces = ["staging"]  # excludes "prod"
+        stage.secrets = ["DB_PASSWORD"]
+        deployment_service.model.spec.stages = [stage]
+
+        values_doc = {"nginx": {"env": {"DB_PASSWORD": "${secret:DB_PASSWORD}"}}}
+        builder._validate_expr_refs(values_doc, deployment_service, "prod", "nginx")
+
+        # No stage matches "prod" -> unscoped fallback -> DB_PASSWORD is still allowed
         assert builder.get_errors() == []
 
 

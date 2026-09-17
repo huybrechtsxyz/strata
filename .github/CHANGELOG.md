@@ -12,6 +12,9 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 - **`CheckovPolicy` artifact path resolution (ADR-0051)** — no longer silently passes a `deny`-enforcement policy without scanning anything; now resolves each terraform provisioner's build directory via the canonical `get_provisioner_path()`, adds a `scope` config (`staged` default | `all` | `<stage-name>`) for multi-provisioner workspaces, and surfaces every skip as a warning instead of a silent pass. See ADR-0051 / HISTORY.md.
 - **Stage → provisioner resolution is now strict everywhere** — a typo'd `stage.provisioner`/`stage.topology` no longer silently falls back to a different provisioner (previously only logged a warning); it now fails `validate_workspace()` outright. May surface previously-silent stage/provisioner config errors. See ADR-0051 / HISTORY.md.
+- **`CheckovPolicy` now also scans Bicep and Ansible provisioners** (`configuration.framework: bicep|ansible`), not just Terraform. One policy still scans one framework — declare a `checkov` policy per framework for multi-framework coverage. See ADR-0051 / HISTORY.md.
+- **Helm's build-time secret check is now scoped to the deploying stage** — a module referencing a secret that's registered in the environment but excluded from the deploying stage's `secrets:` allowlist is now flagged at build time with a distinct message, instead of only failing later at real deploy time with a message indistinguishable from "never registered". See ADR-0051 / HISTORY.md.
+- **`CheckovPolicy` now also scans Helm charts** (`configuration.framework: helm`) — local charts only (registry-pulled charts are skipped with an explicit warning, since there's no local source to scan). Findings are reported per `namespace/module`. See ADR-0051 / HISTORY.md.
 
 ## [1.10.0] - 2026-09-15
 
