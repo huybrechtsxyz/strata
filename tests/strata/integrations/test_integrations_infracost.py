@@ -50,8 +50,30 @@ class TestInfracostIntegrationMetadata:
     def test_setup_info_has_install_url(self):
         i = InfracostIntegration(_cfg())
         info = i.get_setup_info()
-        assert "infracost.io" in info["install_url"]
+        assert "infracost" in info["install_url"]
+        assert "install.sh" in info["install_url"]
         assert info["command"] == "infracost"
+
+    def test_setup_info_requires_api_key_env_var(self):
+        i = InfracostIntegration(_cfg())
+        info = i.get_setup_info()
+        env_vars = info["env_vars"]
+        assert len(env_vars) == 1
+        assert env_vars[0]["name"] == "INFRACOST_API_KEY"
+        assert env_vars[0]["required"] is True
+
+    def test_setup_info_auth_methods_do_not_mention_cloud_credentials(self):
+        i = InfracostIntegration(_cfg())
+        info = i.get_setup_info()
+        methods = [m["method"] for m in info["auth_methods"]]
+        assert "Cloud credentials" not in methods
+        assert "INFRACOST_API_KEY" in methods
+        assert "infracost auth login" in methods
+
+    def test_setup_info_yaml_example_has_max_version(self):
+        i = InfracostIntegration(_cfg())
+        info = i.get_setup_info()
+        assert "max_version" in info["yaml_example"]
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +118,7 @@ class TestInfracostEnsureAvailable:
             patch.object(i, "is_available", return_value=True),
             patch.object(i, "validate_version", return_value=(True, "")),
             patch.object(i, "get_version", return_value="0.10.40"),
+            patch.object(i, "_has_resolvable_api_key", return_value=(True, "")),
         ):
             ok, msg = i.ensure_available()
         assert ok is True
@@ -107,7 +130,7 @@ class TestInfracostEnsureAvailable:
             ok, msg = i.ensure_available()
         assert ok is False
         assert "not installed" in msg or "not in PATH" in msg
-        assert "infracost.io" in msg
+        assert "install.sh" in msg
 
     def test_ensure_available_version_invalid(self):
         i = InfracostIntegration(_cfg())
@@ -118,6 +141,70 @@ class TestInfracostEnsureAvailable:
             ok, msg = i.ensure_available()
         assert ok is False
         assert "version too old" in msg
+
+    def test_ensure_available_rejects_v2(self):
+        i = InfracostIntegration(_cfg())
+        with (
+            patch.object(i, "is_available", return_value=True),
+            patch.object(i, "validate_version", return_value=(True, "")),
+            patch.object(i, "get_version", return_value="2.3.1"),
+        ):
+            ok, msg = i.ensure_available()
+        assert ok is False
+        assert "2.3.1" in msg
+        assert "0.10.x" in msg
+
+    def test_ensure_available_no_api_key(self):
+        i = InfracostIntegration(_cfg())
+        with (
+            patch.object(i, "is_available", return_value=True),
+            patch.object(i, "validate_version", return_value=(True, "")),
+            patch.object(i, "get_version", return_value="0.10.40"),
+            patch.object(i, "_has_resolvable_api_key", return_value=(False, "no resolvable API key")),
+        ):
+            ok, msg = i.ensure_available()
+        assert ok is False
+        assert "no resolvable API key" in msg
+
+
+class TestInfracostApiKeyResolution:
+    def setup_method(self):
+        BaseIntegration._instances.clear()
+
+    def test_has_api_key_from_env_var(self, monkeypatch):
+        monkeypatch.setenv("INFRACOST_API_KEY", "ico-xxxx")
+        i = InfracostIntegration(_cfg())
+        ok, msg = i._has_resolvable_api_key()
+        assert ok is True
+        assert msg == ""
+
+    def test_has_api_key_from_self_hosted_endpoint(self, monkeypatch):
+        monkeypatch.delenv("INFRACOST_API_KEY", raising=False)
+        monkeypatch.setenv("INFRACOST_PRICING_API_ENDPOINT", "https://internal-pricing.example.com")
+        i = InfracostIntegration(_cfg())
+        ok, msg = i._has_resolvable_api_key()
+        assert ok is True
+
+    def test_has_api_key_from_credentials_file(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("INFRACOST_API_KEY", raising=False)
+        monkeypatch.delenv("INFRACOST_PRICING_API_ENDPOINT", raising=False)
+        creds_dir = tmp_path / ".config" / "infracost"
+        creds_dir.mkdir(parents=True)
+        (creds_dir / "credentials.yml").write_text("api_key: ico-xxxx")
+        monkeypatch.setattr("strata.integrations.infracost.Path.home", lambda: tmp_path)
+        i = InfracostIntegration(_cfg())
+        ok, msg = i._has_resolvable_api_key()
+        assert ok is True
+
+    def test_no_api_key_fails_with_actionable_message(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("INFRACOST_API_KEY", raising=False)
+        monkeypatch.delenv("INFRACOST_PRICING_API_ENDPOINT", raising=False)
+        monkeypatch.setattr("strata.integrations.infracost.Path.home", lambda: tmp_path)
+        i = InfracostIntegration(_cfg())
+        ok, msg = i._has_resolvable_api_key()
+        assert ok is False
+        assert "infracost auth login" in msg
+        assert "INFRACOST_API_KEY" in msg
 
 
 # ---------------------------------------------------------------------------

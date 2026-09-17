@@ -106,5 +106,6 @@ spec:
       validation:
         command: infracost --version
         min_version: "0.10.0"
+        max_version: "0.99.99" # reject Infracost 2.x (unsupported CLI)
       authentication:
         method: cli

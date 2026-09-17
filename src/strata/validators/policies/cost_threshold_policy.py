@@ -72,7 +72,11 @@ class CostThresholdPolicy(BasePolicy):
 
         # --- skip if no cost data available ---
         if context.cost_data is None:
-            return self._skip("cost.json not found — run 'strata cost show' before deploying")
+            reason = "cost.json not found — run 'strata cost show' before deploying"
+            # A cost gate that has never once evaluated is worth more than debug-level
+            # visibility: warn so the skip surfaces in command output, not just logs.
+            self.logger.warning("cost_threshold_policy_skipped_no_data", policy=self.name, reason=reason)
+            return self._skip(reason)
 
         # --- resolve total monthly cost from cost.json ---
         total = self._extract_total_monthly(context.cost_data)
