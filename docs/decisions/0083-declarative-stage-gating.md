@@ -1,8 +1,47 @@
 # Declarative Stage Gating for Deployment Stages
 
-- Status: proposed
+- Status: implemented
 - Date: 2026-09-17
 - Related: [ADR-0075](0075-unify-terraform-helm-value-expression-syntax.md) (`${var:}`/`${secret:}`/`${feature:}` resolver), [ADR-0064](0064-deployment-metrics-record.md) (deployment record / audit trail), [ADR-0066](0066-audit-event-routing-policy-model.md) (manifest.recorded), [ADR-0073](0073-embedded-string-syntax-inventory-and-creep-prevention.md) (embedded-string syntax inventory, `ExpressionModel`), [ADR-0034](0034-diagram-visualization-in-vscode-extension.md) (closed-grammar-over-raw-Jinja precedent)
+
+## Implementation Notes
+
+**Completed 2026-09-18.** All eight phases implemented in order; full suite 6981
+passed, 16 skipped, with ruff/mypy/Sphinx green at the end of each phase.
+
+| Phase | Delivered                                                                                               |
+| ----- | ------------------------------------------------------------------------------------------------------- |
+| 1     | `parse_bool()` + `stage_selection.py`; the two duplicated `--stage`/`--scope` filters extracted (D7)    |
+| 2     | `stages[].enabled` field, `${secret:}` rejection, undeclared-key validation                             |
+| 3     | Gate evaluation before pre-flight; `--stage` on a disabled stage errors (D2/D3/D4)                      |
+| 4     | Skip recording — manifest `status="skipped"` + `skip_reason`, mirrored into the deploy-log (D6)         |
+| 5     | `depends_on` ordering + transitive skip cascade (D5)                                                    |
+| 6     | Non-gated-surface guards, `build plan` `would_skip` marker, `condition`→`enabled` synonym hint          |
+| 7     | Cross-schema cleanup: `condition` removed; `resources[].enabled` and `modules[].enabled` made real (D8) |
+| 8     | `StageSelectionMixin` + `StageSelectionMode`; all seven `--stage` copies consolidated                   |
+
+Three findings surfaced during implementation that the original plan did not
+anticipate, each recorded in place above:
+
+- The `--stage` filter had **seven** copies, not the two D7 first identified, with
+  three divergent messages between them.
+- `resources[].enabled` / `modules[].enabled` were inert, and `resources[].condition`
+  was inert *and* redundant — the whole test suite passed unchanged after removing
+  it, which is itself the evidence.
+- A `StageController` was designed and then **rejected** on review (Phase 8): three
+  lines of delegation, and its testability argument proved false.
+
+### Deliberately left open
+
+Neither is part of this decision; both are recorded so they are not rediscovered:
+
+- **`deploy show` does not disclose gating** — see
+  [Adjacent finding](#adjacent-finding--deploy-show-previews-a-deployment-without-disclosing-gating).
+  The preview lists every stage with no indication which will not run, and
+  separately its `--stage` appears inert.
+- **The `condition` deprecation shim** (`workspace_model.py`,
+  `environment_model.py`) is marked for removal in the next minor release,
+  alongside ADR-0078's `references` shim it sits beside.
 
 ## Context and Problem Statement
 
@@ -915,11 +954,15 @@ stage.
 - No parallel stage execution. `depends_on` gains *ordering*, not concurrency;
   the existing single-threaded loop is preserved so this change stays reviewable.
 
-## Remaining Work
+## Implementation Phases
 
-Nothing implemented yet. Seven phases, each independently landable and reviewable.
-Every phase ends green on `scripts/Check.ps1` (ruff, `mypy ./src ./tests`, pytest,
-docs build) — never "green after the next phase".
+**All eight phases implemented — see [Implementation Notes](#implementation-notes)
+for the completion summary.** Retained as the record of how it was built: the
+sequence, each phase's exit criteria, and the two stop-and-reconsider points.
+
+Eight phases, each independently landable and reviewable. Every phase ends green
+on `scripts/Check.ps1` (ruff, `mypy ./src ./tests`, pytest, docs build) — never
+"green after the next phase".
 
 Phases 1–4 deliver stage gating **with its full audit trail** — a complete,
 shippable feature. Phase 5 (`depends_on` cascade) is an additive enhancement on
