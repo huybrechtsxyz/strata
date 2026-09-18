@@ -1519,7 +1519,7 @@ strata deploy destroy --stage production --force
 ### `deploy show`
 
 ```
-strata deploy show [-f FILE] [--stage NAME] [standard options]
+strata deploy show [-f FILE] [--stage NAME] [--scope LABEL] [standard options]
 ```
 
 Show resolved deployment configuration: effective remote versions after applying
@@ -1531,17 +1531,32 @@ and an overrides summary.
 For each remote, displays the effective reference and whether it came from an
 environment override or the workspace default.
 
-| Option         | Description                                                              |
-| -------------- | ------------------------------------------------------------------------ |
-| `--stage NAME` | Filter secrets visibility to a specific stage's allowlist (default: all) |
+This is the preview surface for `deploy run`, so `--stage` and `--scope` select
+stages exactly as they do there. Stage gating is **disclosed, never applied**: a
+stage that `deploy run` would skip is still listed, marked with the reason
+(`would_skip` / `skip_reason`). Filtering it out would make "disabled in this
+environment" indistinguishable from "deleted from the deployment".
+
+| Option          | Description                                                                   |
+| --------------- | ----------------------------------------------------------------------------- |
+| `--stage NAME`  | Limit display to one deployment stage (default: all)                          |
+| `--scope LABEL` | Limit display to stages whose `scope` field matches this label (default: all) |
+
+When either flag is given, the secrets view narrows to the selected stages'
+`secrets:` allowlists — what a run of those stages would actually receive.
+Out-of-scope secrets are still listed, with `in_scope: false` and no value, so a
+secret that is excluded stays distinguishable from one that was never declared.
+Variables and features are never narrowed, because they are never stage-scoped at
+deploy time either.
 
 ```bash
 strata deploy show -f xyz-deploy-prd.yaml
 strata deploy show -f xyz-deploy-prd.yaml --stage production
+strata deploy show -f xyz-deploy-prd.yaml --scope infra
 strata deploy show -f xyz-deploy-prd.yaml --output json
 ```
 
-**JSON output keys:** `file`, `deployment`, `workspace`, `environment`, `environment_file`, `remotes[]`, `stages[]`, `environment_detail{}` (`name`, `labels{}`, `annotations{}`, `properties{}`, `custom{}`, `variables[]`, `secrets[]`, `features[]`, `overrides{}`).
+**JSON output keys:** `file`, `deployment`, `workspace`, `environment`, `environment_file`, `remotes[]`, `stages[]` (`name`, `provisioner`, `scope`, `depends_on[]`, `enabled`, `would_skip`, `skip_reason`), `environment_detail{}` (`name`, `labels{}`, `annotations{}`, `properties{}`, `custom{}`, `variables[]`, `secrets[]` (`key`, `value`, `store`, `resolved`, `in_scope`), `features[]`, `overrides{}`).
 
 Example output:
 

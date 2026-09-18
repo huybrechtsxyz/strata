@@ -334,7 +334,13 @@ def deploy_destroy(
     "--stage",
     default=None,
     metavar="NAME",
-    help="Filter secrets visibility to a specific stage's allowlist.",
+    help="Limit display to a specific deployment stage; secrets narrow to what it would receive.",
+)
+@click.option(
+    "--scope",
+    default=None,
+    metavar="LABEL",
+    help="Limit display to deployment stages whose scope field matches this label.",
 )
 @click_no_cache
 @click_refresh_cache
@@ -345,6 +351,7 @@ def deploy_show(
     file: Optional[str] = None,
     work_path: Optional[str] = None,
     stage: Optional[str] = None,
+    scope: Optional[str] = None,
     no_cache: bool = False,
     refresh_cache: bool = False,
     output: Optional[str] = None,
@@ -356,6 +363,7 @@ def deploy_show(
         file=file,
         work_path=work_path,
         stage=stage,
+        scope=scope,
         no_cache=no_cache,
         refresh_cache=refresh_cache,
         output=output,
