@@ -457,6 +457,39 @@ them this ADR adds a third and fourth copy of logic that is already duplicated:
    It becomes one shared predicate that both existing call sites and the new
    gating check import, so "what counts as false" is defined once.
 
+#### Follow-up discovered during implementation — five more copies
+
+The `--stage` filter turned out to have **seven** copies, not two. Beyond the
+run/destroy pair above, the same block is reimplemented in five more commands,
+each with its own terser wording (`"Stage 'X' not found. Available: …"`) — the
+exact drift D7 fixed between run and destroy, repeated five times over:
+
+| Command                                                                          | Base class             | Filter | `--scope`? | Message                                    |
+| -------------------------------------------------------------------------------- | ---------------------- | ------ | ---------- | ------------------------------------------ |
+| `deploy run`                                                                     | `BaseDeployCommand`    | shared | yes        | "…not found **in deployment definition**." |
+| `deploy destroy`                                                                 | `BaseDeployCommand`    | shared | yes        | same                                       |
+| [`build plan`](../../src/strata/commands/builders/plan_build_command.py#L346)    | **`BaseBuildCommand`** | inline | no         | "…not found."                              |
+| [`deploy drift`](../../src/strata/commands/deploy/drift_deploy_command.py#L82)   | `BaseDeployCommand`    | inline | no         | "…not found."                              |
+| [`deploy health`](../../src/strata/commands/deploy/health_deploy_command.py#L83) | `BaseDeployCommand`    | inline | no         | "…not found."                              |
+| [`deploy plan`](../../src/strata/commands/deploy/plan_deploy_command.py#L60)     | `BaseDeployCommand`    | inline | no         | "…not found."                              |
+| [`deploy status`](../../src/strata/commands/deploy/status_deploy_command.py#L81) | `BaseDeployCommand`    | inline | no         | "…not found." + `str(s.name)`              |
+
+Two things this surfaced that are worth more than the duplication itself:
+
+- **The repeated code is mostly plumbing, not the filter.** Every site repeats
+  spec-lookup → filter → `self._errors.append(...)` → `return False`. Routing to
+  `select_stages` alone makes call sites *longer* (5 lines vs 4); the win only
+  appears if the plumbing is absorbed too.
+- **`--scope` is supported on `run`/`destroy` only.** The five read-only commands
+  accept `--stage` but not `--scope` — arguably a larger user-facing
+  inconsistency than the duplicate message. Consolidation makes closing it nearly
+  free, but it is new feature surface and is deliberately **not** part of Phase 8.
+
+Nothing was consolidated during Phases 1–6: all five are correctly **non-gated**
+(D11) and none calls `select_stages`, so there is no correctness bug today, and
+changing their error text does not belong inside a gating change. Tracked as
+Phase 8 rather than left to be rediscovered.
+
 ### D8 — Cross-schema cleanup: making `enabled` mean the same thing everywhere
 
 Shipping a working `stages[].enabled` while `resources[].enabled` remains silently
@@ -679,6 +712,12 @@ the behaviour by accident:
 The consistent principle: **gating suppresses *making changes*, never *observing
 state*.** Anything that reports, plans, or detects continues to see every stage.
 
+**Corollary, easy to miss:** "not gated" is not the same as "ignores `enabled`".
+A read-only surface must never *filter* on it — but a human-facing one should
+*disclose* it, the way `build plan` marks a stage `would_skip`. `deploy show`
+currently does the first and not the second; see
+[Adjacent finding](#adjacent-finding--deploy-show-previews-a-deployment-without-disclosing-gating).
+
 ### Consequences
 
 - Good: no new expression syntax, no new resolution machinery — one additional
@@ -884,8 +923,8 @@ docs build) — never "green after the next phase".
 
 Phases 1–4 deliver stage gating **with its full audit trail** — a complete,
 shippable feature. Phase 5 (`depends_on` cascade) is an additive enhancement on
-top. Phase 6 is optional polish. Phase 7 is the cross-schema cleanup and is
-**not** a prerequisite for anything above it.
+top. Phase 6 is optional polish. Phases 7–8 are cleanup and are **not**
+prerequisites for anything above them.
 
 Skip recording precedes the cascade deliberately: the reverse order would ship
 cascade-skipping while the manifest and deploy-log still could not record a skip,
@@ -1029,6 +1068,243 @@ stage gating — **do not bundle these into the gating PR.**
   `enabled: false` on a module.
 - **Leave rows 13–14 alone** (`highlight[].condition`, `gates[].when`) — different
   concepts, explicitly out of the convention.
+
+### Phase 8 — `StageSelectionMixin`: one answer to "which stages?" (D7 follow-up)
+
+Discovered during implementation, not in the original plan. Seven commands
+hand-roll the `--stage` filter (see D7's follow-up table). **Designed, not yet
+implemented.**
+
+#### Layering fixes where the algorithm lives
+
+ADR-0003's table is binding: `commands → controllers → services → … → utils`,
+one-way, with `utils/` holding *pure functions*.
+
+This **forbids** moving the algorithm anywhere higher:
+`DeploymentService._validate_stage_depends_on()` calls
+`validate_stage_dependencies`, and a service importing a controller would be an
+upward dependency. **No logic moves** — every pure function stays in
+`utils/stage_selection.py`; Phase 8 adds only command-side plumbing.
+
+#### `StageSelectionMode` replaces the boolean pair
+
+`select_stages`' `apply_gating`/`apply_ordering` booleans admit four
+combinations, only two of which are meaningful, and a wrong pairing fails
+silently. Replaced by an enum **in `utils/`, on `select_stages` itself** — at the
+lowest level, so invalid states are unrepresentable for every caller including
+tests, not only for callers who go through the shared helper:
+
+| Mode      | Gating | Ordering    | Why                                                                                           |
+| --------- | ------ | ----------- | --------------------------------------------------------------------------------------------- |
+| `DEPLOY`  | yes    | dependency  | `deploy run` — the feature.                                                                   |
+| `DESTROY` | no     | declaration | D3: gating strands infrastructure. Declaration order because *reverse* ordering is undecided. |
+| `INSPECT` | no     | declaration | D11: read-only surfaces never gate and never reorder.                                         |
+
+`DESTROY` and `INSPECT` behave identically today but exist separately because
+their *reasons* differ. When destroy eventually gains reverse ordering, that is
+one line in the helper rather than an audit of seven call sites.
+
+**`INSPECT` is load-bearing for a Phase 6 feature, not merely descriptive.**
+`build plan`'s `would_skip` marker is computed in `_plan_stage`, which only runs
+for stages the selection returns. Passing `DEPLOY` there would filter disabled
+stages out first and silently turn the marker into dead code. The Phase 6 guards
+in `test_commands_gating_not_applied.py` catch exactly this.
+
+#### One mixin, no controller
+
+```python
+# src/strata/commands/stage_mixin.py
+
+class StageSelectionMixin:
+    """Shared stage resolution for commands that act on deployment stages.
+
+    Collapses four blocks duplicated across seven commands: the null-service
+    guard, the spec.stages extraction, the --stage/--scope filter, and the
+    error routing.
+
+    Opt-in, not automatic: eleven commands set ``_stage`` but only seven filter
+    by it this way, so inheriting this mixin does not change a command's
+    behaviour until it actually calls ``_resolve_stages``.
+    """
+
+    # Declared, not read via getattr: a command that renamed these would
+    # otherwise silently select every stage instead of failing.
+    #
+    # The split is deliberate. `_stage`/`_scope` default to None because they are
+    # genuinely optional — most commands have no --scope at all. `_deployment_service`
+    # and `_errors` are annotation-only, so a subclass that fails to set them raises
+    # AttributeError: that is a programming error and should fail loudly rather than
+    # be masked as a user-facing "not loaded" message.
+    _stage: Optional[str] = None
+    _scope: Optional[str] = None
+    _deployment_service: Optional[DeploymentService]
+    _errors: List[str]
+
+    def _resolve_stages(
+        self,
+        mode: StageSelectionMode,
+        *,
+        resolved: Optional[ResolvedValues] = None,
+    ) -> Optional[StageSelection]:
+        """Return the selection, or None when the caller should abort."""
+        model = self._deployment_service.model if self._deployment_service else None
+        if model is None:
+            self._errors.append("Deployment service not loaded")
+            return None
+
+        selection, errors = select_stages(
+            model.spec.stages or [],
+            stage=self._stage,
+            scope=self._scope,
+            resolved=resolved,
+            mode=mode,
+        )
+        if errors:
+            self._errors.extend(errors)
+            return None
+        return selection
+```
+
+Inherited by **both** `BaseDeployCommand` and `BaseBuildCommand` — both already
+declare `_deployment_service` and `_errors` — so all seven sites collapse to:
+
+```python
+selection = self._resolve_stages(StageSelectionMode.INSPECT)
+if selection is None:
+    return False
+stages = selection.to_run
+```
+
+A mixin rather than a method on `BaseCommand`: stage selection is not a concern
+of every command, and `BaseCommand` should not learn about deployment stages.
+
+**The mixin must absorb the null-service guard, not just the filter.** That guard
+is a *separate* duplication at the same seven sites — and `status_deploy_command`
+carries a second variant of it (`"Deployment model not loaded"`). Without it the
+helper would save one line per site and would not be worth having.
+
+#### Considered and rejected: a `StageController`
+
+A `StageController(BaseController)` was designed first, on the reasoning that
+"orchestrating services for one operation" is a controller's job. Rejected on
+review:
+
+- **Its body would be three lines of delegation.** The mixin has to exist anyway
+  to get two-line call sites, so the controller would add a layer without adding
+  behaviour — two new abstractions for one operation.
+- **The testability argument was false.** It was justified partly by Phase 6's
+  pain (`__new__` plus reverse-engineering `_output_quiet`/`_output_verbose` to
+  reach `_run_drift_detection`). But a mixin is testable with a five-line stub
+  class — *easier* than a controller test, not harder.
+- **The layering objection was theoretical.** `BaseDeployCommand` already hosts
+  `_create_deployer`, `_record_stage_result` and `_write_deployment_manifest`,
+  all of which orchestrate services. A `_resolve_stages` helper is consistent
+  with that; the controller would have been the outlier.
+
+Recorded here so it is not re-proposed: the deciding factor is that the
+*algorithm* already lives in `utils/`, leaving only plumbing, and plumbing
+belongs with the commands that need it.
+
+#### Scope
+
+Seven sites, with an explicitly excluded eighth (below).
+
+- Migrate all seven sites; **unify the message** on the richer
+  `"…not found in deployment definition. Available: …"` wording. Five commands
+  change error text, and `status` additionally changes its guard text →
+  changelog entry, as in Phase 1.
+- `build plan` and drift must be passed `INSPECT` (see above).
+- **`--scope` is not added** to the five read-only commands. Nearly free once
+  shared, but new feature surface does not belong in a consolidation change.
+- `DeploymentService._validate_stage_depends_on()` **keeps calling the util
+  directly** — the trap most likely to be walked into later, hence stating it.
+- `status_deploy_command` still re-reads `self._deployment_service.model` after a
+  successful resolve, for `meta.name` in its header. The *guard* collapses; the
+  model access does not.
+- **Churn to budget for:** replacing the boolean pair with `mode=` touches the
+  64 existing tests in `test_utils_stage_selection.py`. Mechanical, but it is
+  part of the change, not a surprise to discover mid-flight.
+
+#### Explicitly out of scope: `output_deploy_command`
+
+[`output_deploy_command.py`](../../src/strata/commands/deploy/output_deploy_command.py#L124)
+is an eighth site that **must not** be migrated. It filters by stage *type*
+before applying `--stage`:
+
+```python
+terraform_stages = [s for s in all_stages if self._is_terraform_stage(s)]
+if self._stage:
+    terraform_stages = [s for s in terraform_stages if s.name == self._stage]
+    if not terraform_stages:
+        self._errors.append(
+            f"Stage '{self._stage}' not found or is not a terraform stage. …"
+        )
+```
+
+Its error covers a case the shared helper has no concept of — *"exists, but is
+the wrong kind"*. Routed through `_resolve_stages`, a named non-terraform stage
+would be returned happily, the type filter would then empty the list, and the
+command would fall through reporting **nothing at all**. Left alone deliberately;
+recorded here so a later tidy-up does not "finish the job" and silently remove
+that error.
+
+The seven-site inventory is verified complete: a search for `name == self._stage`
+returns exactly the six inline sites plus `output`, matching D7's table.
+
+Independent of Phase 7 and of the gating work; safe to defer indefinitely, since
+no command is mis-gated today — this is duplication, not a defect.
+
+### Adjacent finding — `deploy show` previews a deployment without disclosing gating
+
+Surfaced while inventorying the stage-filter copies. **Out of scope for this
+ADR**, recorded because it is a gap this decision creates rather than one it
+found.
+
+`deploy show` is the *preview* surface: it renders the resolved deployment so an
+operator can see what a run would do. After this ADR, that preview is
+incomplete — it lists every stage with no indication that some of them will not
+run.
+
+The gap is unusually cheap to close, because the command already has both halves
+and simply does not join them:
+
+- it **already resolves values**, including feature flags
+  ([`show_deploy_command.py#L185`](../../src/strata/commands/deploy/show_deploy_command.py#L185)),
+  and displays them in its own section;
+- it **already lists stages**
+  ([`#L132`](../../src/strata/commands/deploy/show_deploy_command.py#L132)),
+  emitting `name`/`provisioner`/`scope`/`depends_on` per row.
+
+So today a user can read `enable_dispatcher_api: false` in one section and
+`dispatcher_api` in another, and is left to join them by hand — exactly the
+"deliberately not deployed vs. absent" confusion this ADR exists to remove, just
+relocated from the audit trail to the preview.
+
+The pattern to follow already exists: Phase 6 added `would_skip`/`skip_reason` to
+`build plan`'s per-stage result for the same reason. `deploy show` would add the
+same two fields to its stage rows.
+
+#### This sharpens D11
+
+D11 says gating suppresses *making changes*, never *observing state*. Correct,
+but incomplete as written: "not gated" is not the same as "ignores `enabled`".
+The fuller rule the `build plan` marker actually embodies is:
+
+> A read-only surface must never **filter** on `enabled` — and a human-facing one
+> should always **disclose** it.
+
+`build plan` follows both halves. `deploy show` follows only the first. Worth
+stating explicitly whenever a new stage-listing surface is added, so the second
+half is not forgotten again.
+
+#### Separately: `--stage` looks inert here
+
+[`show_deploy_command.py#L54`](../../src/strata/commands/deploy/show_deploy_command.py#L54)
+stores `self._stage`, but the stage-list code iterates *every* stage and never
+reads the attribute back — written and never used, so `deploy show --stage X`
+appears to accept `X` and ignore it. A different question from the disclosure gap
+above (what is `--stage` *meant* to do here — filter the listing, or scope some
+other section?), and worth its own issue rather than a guess.
 
 ### Decision points during implementation
 

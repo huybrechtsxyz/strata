@@ -42,6 +42,37 @@ from strata.services.platform_artifact_service import PlatformService
 from strata.services.tenant_service import TenantService
 
 
+def collect_disabled_names(resource_refs) -> Tuple[set, set]:
+    """Return the names excluded by ``enabled: false`` (ADR-0083 D8).
+
+    Filtering happens once, here, rather than in each provisioner's builder: a
+    disabled resource or module simply never enters the platform artifact, so
+    every downstream consumer excludes it without needing its own check.
+
+    It is deliberately a *build* concern, not a *loading* one — the YAML is still
+    loaded and validated, so mistakes in a disabled resource still surface before
+    someone switches it back on.
+
+    Args:
+        resource_refs: ``workspace.spec.resources`` entries, or None.
+
+    Returns:
+        ``(disabled_resource_names, disabled_module_keys)``, where a module key is
+        ``"<resource>:<module>"`` — matching ``WorkspaceService.get_module_services()``.
+        The compound key means the same module can be enabled on one resource and
+        disabled on another without ambiguity.
+    """
+    disabled_resources: set = set()
+    disabled_module_keys: set = set()
+    for res_ref in resource_refs or []:
+        if not res_ref.enabled:
+            disabled_resources.add(str(res_ref.name))
+        for mod_ref in getattr(res_ref, "modules", None) or []:
+            if not mod_ref.enabled:
+                disabled_module_keys.add(f"{res_ref.name}:{mod_ref.name}")
+    return disabled_resources, disabled_module_keys
+
+
 class PlatformBuilder(BaseBuilder):
     """Builder that assembles a PlatformModel artifact from a fully-loaded
     DeploymentService and persists it as platform.json / platform.yaml."""
@@ -351,6 +382,9 @@ class PlatformBuilder(BaseBuilder):
         resource_to_firewalls: dict = {}
         resource_to_role: dict = {}
         resource_to_count: dict = {}
+        # ADR-0083: `enabled: false` excludes a resource/module from the platform
+        # artifact, and therefore from every provisioner that consumes it.
+        disabled_resources, disabled_module_keys = collect_disabled_names(workspace_model.spec.resources)
         if workspace_model.spec.resources:
             for res_ref in workspace_model.spec.resources:
                 if res_ref.firewalls:
@@ -368,7 +402,7 @@ class PlatformBuilder(BaseBuilder):
                     count=resource_to_count.get(str(svc.model.meta.name), 1),
                 )
                 for svc in resource_services.values()
-                if svc is not None and svc.model is not None
+                if svc is not None and svc.model is not None and str(svc.model.meta.name) not in disabled_resources
             ]
 
         # Enrich topology components with role/count now that resource maps exist
@@ -401,10 +435,12 @@ class PlatformBuilder(BaseBuilder):
         modules = None
         module_services = workspace_service.get_module_services()
         if module_services:
+            # Keys are "<resource>:<module>", so a module referenced by two resources
+            # can be enabled in one and disabled in the other without ambiguity.
             all_modules = [
                 PlatformModuleModel.from_module_model(svc.model)
-                for svc in module_services.values()
-                if svc.model is not None
+                for key, svc in module_services.items()
+                if svc.model is not None and key not in disabled_module_keys
             ]
             if all_modules:
                 modules = all_modules

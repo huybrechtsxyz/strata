@@ -92,20 +92,26 @@ class EnvironmentResourceOverrideModel(PlatformBaseModel):
     @model_validator(mode="before")
     @classmethod
     def drop_removed_references(cls, data):
-        """Drop the removed 'references' key with a warning instead of failing validation.
+        """Drop removed keys with a warning instead of failing validation.
 
-        ADR-0078: mirrors the same removal on WorkspaceResourceModel. The override
-        was merged into a field nothing ever read. Deprecation shim; remove in the
-        next minor release.
+        ADR-0078 ('references') and ADR-0083 ('condition') — mirrors the same
+        removals on WorkspaceResourceModel. Both overrides were merged into fields
+        nothing ever read. Deprecation shim; remove in the next minor release.
         """
-        if isinstance(data, dict) and "references" in data:
-            data = {k: v for k, v in data.items() if k != "references"}
-            warnings.warn(
-                f"Environment resource override '{data.get('resource', '<unnamed>')}': 'references' has been "
-                "removed (ADR-0078) and is ignored. The field was never read; remove it from your environment file.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+        if not isinstance(data, dict):
+            return data
+        for removed, adr, guidance in (
+            ("references", "ADR-0078", "The field was never read; remove it from your environment file."),
+            ("condition", "ADR-0083", "Override 'enabled' instead."),
+        ):
+            if removed in data:
+                data = {k: v for k, v in data.items() if k != removed}
+                warnings.warn(
+                    f"Environment resource override '{data.get('resource', '<unnamed>')}': '{removed}' has been "
+                    f"removed ({adr}) and is ignored. {guidance}",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
         return data
 
     resource: PlatformName = Field(description="Resource name to override (must match a resource in the workspace)")
@@ -115,11 +121,7 @@ class EnvironmentResourceOverrideModel(PlatformBaseModel):
     )
     enabled: Optional[bool] = Field(
         None,
-        description="Override whether this resource is enabled/deployed in this environment",
-    )
-    condition: Optional[str] = Field(
-        None,
-        description="Override conditional expression for resource inclusion",
+        description="Override whether this resource is deployed in this environment (ADR-0083)",
     )
     role: Optional[PlatformName] = Field(None, description="Override role of the resource")
     count: Optional[int] = Field(None, ge=1, le=100, description="Override resource instance count")

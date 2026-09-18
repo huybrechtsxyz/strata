@@ -950,8 +950,6 @@ class DeploymentService(BaseService["DeploymentModel"]):
                 workspace_resource.description = resource_override.description
             if resource_override.enabled is not None:
                 workspace_resource.enabled = resource_override.enabled
-            if resource_override.condition is not None:
-                workspace_resource.condition = resource_override.condition
             if resource_override.role is not None:
                 workspace_resource.role = resource_override.role
             if resource_override.count is not None:

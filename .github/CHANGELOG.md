@@ -19,6 +19,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 - **`stages[].depends_on` now controls execution order (ADR-0083)** — previously it was inert at deploy time, used only to draw diagram edges. Stages now run in dependency order, with ready stages keeping their declaration order, so a deployment file already written in a valid order runs exactly as before (verified against every shipped example). A file whose stages were declared out of dependency order **will** now be reordered, and a `depends_on` naming an unknown stage, listing itself, or forming a cycle now fails validation instead of being ignored. `deploy destroy` is deliberately not reordered — teardown needs the reverse order, which strata does not derive.
 - **`strata deploy destroy --stage <unknown>` now reports the same message as `deploy run`** — the two commands' `--stage`/`--scope` filters were duplicated and had drifted to different wording; both now share one implementation (ADR-0083 Phase 1). Groundwork for declarative stage gating; no behaviour change beyond the error text.
 
+### Removed
+
+- **`resources[].condition` and its environment override have been removed (ADR-0083)** — inert (never parsed by any engine; its documented `'{{ environment }} == production'` syntax matched nothing in the codebase) and redundant, since an environment can already switch a resource off by overriding `enabled`. The key is now dropped with a deprecation warning rather than failing validation, mirroring ADR-0078's `references`; the shim goes away next minor. The phantom example has also been removed from the `strata sln init` scaffold.
+
 ### Fixed
 
 - **`CheckovPolicy` artifact path resolution (ADR-0051)** — no longer silently passes a `deny`-enforcement policy without scanning anything; now resolves each terraform provisioner's build directory via the canonical `get_provisioner_path()`, adds a `scope` config (`staged` default | `all` | `<stage-name>`) for multi-provisioner workspaces, and surfaces every skip as a warning instead of a silent pass. See ADR-0051 / HISTORY.md.
@@ -26,6 +30,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 - **`CheckovPolicy` now also scans Bicep and Ansible provisioners** (`configuration.framework: bicep|ansible`), not just Terraform. One policy still scans one framework — declare a `checkov` policy per framework for multi-framework coverage. See ADR-0051 / HISTORY.md.
 - **Helm's build-time secret check is now scoped to the deploying stage** — a module referencing a secret that's registered in the environment but excluded from the deploying stage's `secrets:` allowlist is now flagged at build time with a distinct message, instead of only failing later at real deploy time with a message indistinguishable from "never registered". See ADR-0051 / HISTORY.md.
 - **`CheckovPolicy` now also scans Helm charts** (`configuration.framework: helm`) — local charts only (registry-pulled charts are skipped with an explicit warning, since there's no local source to scan). Findings are reported per `namespace/module`. See ADR-0051 / HISTORY.md.
+
+### Removed
+
+- **`resources[].condition` and its environment override have been removed (ADR-0083)** — inert (never parsed by any engine; its documented `'{{ environment }} == production'` syntax matched nothing in the codebase) and redundant, since an environment can already switch a resource off by overriding `enabled`. The key is now dropped with a deprecation warning rather than failing validation, mirroring ADR-0078's `references`; the shim goes away next minor. The phantom example has also been removed from the `strata sln init` scaffold.
 
 ## [1.10.0] - 2026-09-15
 
