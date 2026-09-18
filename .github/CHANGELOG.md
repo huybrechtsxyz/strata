@@ -18,6 +18,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 - **`stages[].depends_on` now controls execution order (ADR-0083)** — previously it was inert at deploy time, used only to draw diagram edges. Stages now run in dependency order, with ready stages keeping their declaration order, so a deployment file already written in a valid order runs exactly as before (verified against every shipped example). A file whose stages were declared out of dependency order **will** now be reordered, and a `depends_on` naming an unknown stage, listing itself, or forming a cycle now fails validation instead of being ignored. `deploy destroy` is deliberately not reordered — teardown needs the reverse order, which strata does not derive.
 - **`strata deploy destroy --stage <unknown>` now reports the same message as `deploy run`** — the two commands' `--stage`/`--scope` filters were duplicated and had drifted to different wording; both now share one implementation (ADR-0083 Phase 1). Groundwork for declarative stage gating; no behaviour change beyond the error text.
+- **`deploy status`, `deploy plan`, `deploy health`, `deploy drift` and `build plan` now report the same `--stage` not-found message as `deploy run`** — seven commands hand-rolled the same filter with three different messages between them; all now share one implementation (ADR-0083 Phase 8). `deploy status` additionally drops its separate "Deployment model not loaded" variant. No behaviour change beyond the error text.
 
 ### Removed
 

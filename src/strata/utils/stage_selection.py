@@ -34,6 +34,7 @@ Two properties are load-bearing and easy to break:
 
 import heapq
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple
 
 from strata.utils.resolved_values import collect_expr_refs, parse_bool, resolve_expr_string
@@ -41,6 +42,41 @@ from strata.utils.resolved_values import collect_expr_refs, parse_bool, resolve_
 if TYPE_CHECKING:  # pragma: no cover - import for typing only
     from strata.models.deployment_model import DeploymentStageModel
     from strata.utils.resolved_values import ResolvedValues
+
+
+class StageSelectionMode(Enum):
+    """What a command intends to do with the stages it selects (ADR-0083 D7).
+
+    Replaces an ``apply_gating``/``apply_ordering`` boolean pair, which admitted
+    four combinations of which only two were meaningful — and where a wrong
+    pairing failed silently. Each member records *why* it behaves as it does, so
+    the reasons survive even where two modes currently behave identically.
+    """
+
+    DEPLOY = "deploy"
+    """Honour ``enabled``; run in dependency order. ``deploy run`` only."""
+
+    DESTROY = "destroy"
+    """Never gate — gating a teardown would strand infrastructure created while
+    the flag was on (D3). Declaration order, because a correct teardown needs the
+    *reverse* order and that is a decision ADR-0083 does not make."""
+
+    INSPECT = "inspect"
+    """Read-only surfaces: never gate, never reorder (D11).
+
+    Load-bearing, not merely descriptive: ``build plan``'s ``would_skip`` marker
+    is computed per returned stage, so gating here would filter disabled stages
+    out first and silently turn that marker into dead code."""
+
+    @property
+    def gates(self) -> bool:
+        """Whether ``enabled`` is honoured in this mode."""
+        return self is StageSelectionMode.DEPLOY
+
+    @property
+    def orders(self) -> bool:
+        """Whether ``to_run`` is sorted into dependency order."""
+        return self is StageSelectionMode.DEPLOY
 
 
 #: Why a stage was excluded. ``dependency_skipped`` is declared now but cannot
@@ -293,8 +329,7 @@ def select_stages(
     stage: Optional[str] = None,
     scope: Optional[str] = None,
     resolved: Optional["ResolvedValues"] = None,
-    apply_gating: bool = True,
-    apply_ordering: bool = True,
+    mode: StageSelectionMode = StageSelectionMode.DEPLOY,
 ) -> Tuple[StageSelection, List[str]]:
     """Resolve which stages run for this invocation.
 
@@ -303,14 +338,9 @@ def select_stages(
         stage: Value of ``--stage`` — restrict to the single stage of that name.
         scope: Value of ``--scope`` — restrict to stages carrying that label.
         resolved: Values used to evaluate ``enabled`` expressions.
-        apply_gating: Whether ``enabled`` is honoured. ``deploy run`` passes True;
-            ``deploy destroy`` passes False so that turning a flag off can never
-            strand infrastructure the stage created while it was on (ADR-0083 D3).
-        apply_ordering: Whether ``to_run`` is sorted into dependency order.
-            ``deploy destroy`` passes False: tearing down correctly needs the
-            *reverse* order (dependents before dependencies), which is a separate
-            decision this ADR does not make — so destroy keeps its existing
-            declaration-order behaviour rather than silently gaining the wrong one.
+        mode: What the caller intends to do with the result — see
+            :class:`StageSelectionMode`. Determines whether ``enabled`` is
+            honoured and whether ``to_run`` is dependency-ordered.
 
     Returns:
         ``(selection, errors)``. Errors are returned rather than raised, matching
@@ -321,7 +351,7 @@ def select_stages(
     errors: List[str] = []
     gated_out: List[StageSkip] = []
 
-    if apply_gating:
+    if mode.gates:
         for candidate in all_stages:
             _enabled, skip, error = evaluate_enabled(candidate, resolved)
             if error:
@@ -372,7 +402,7 @@ def select_stages(
     selected_names = {s.name for s in selected}
     to_run = [s for s in selected if s.name not in disabled_names]
 
-    if apply_ordering:
+    if mode.orders:
         to_run, order_errors = order_stages(to_run)
         if order_errors:
             return StageSelection(), order_errors

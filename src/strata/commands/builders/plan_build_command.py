@@ -29,7 +29,7 @@ from strata.controllers.value_controller import ResolvedValues, ValueController
 from strata.deployers.base_deployer import STEP_CHECK, STEP_PLAN, STEP_SETUP
 from strata.deployers.terraform_deployer import TerraformDeployer
 from strata.models.deployment_model import DeploymentStageModel
-from strata.utils.stage_selection import evaluate_enabled
+from strata.utils.stage_selection import StageSelectionMode, evaluate_enabled
 
 
 class PlanBuildCommand(BaseBuildCommand):
@@ -334,21 +334,14 @@ class PlanBuildCommand(BaseBuildCommand):
         tmp_build_path: Path,
         resolved: Optional[ResolvedValues],
     ) -> List[Dict[str, Any]]:
-        if self._deployment_service is None:
+        # INSPECT, and load-bearing: a plan previews every stage, and _plan_stage
+        # marks the disabled ones `would_skip`. Gating here would filter them out
+        # first and silently turn that marker into dead code (ADR-0083 D11).
+        selection = self._resolve_stages(StageSelectionMode.INSPECT)
+        if selection is None:
             return []
 
-        spec = self._deployment_service.model.spec  # type: ignore[union-attr]
-        all_stages: List[DeploymentStageModel] = spec.stages or []
-
-        if self._stage:
-            stages = [s for s in all_stages if s.name == self._stage]
-            if not stages:
-                self._errors.append(f"Stage '{self._stage}' not found. Available: {[s.name for s in all_stages]}")
-                return []
-        else:
-            stages = all_stages
-
-        return [self._plan_stage(stage, tmp_build_path, resolved) for stage in stages]
+        return [self._plan_stage(stage, tmp_build_path, resolved) for stage in selection.to_run]
 
     def _plan_stage(
         self,

@@ -21,7 +21,7 @@ from strata.models.deployment_manifest_model import (
     ManifestOutputsReferenceModel,
 )
 from strata.models.deployment_model import DeploymentStageModel
-from strata.utils.stage_selection import select_stages
+from strata.utils.stage_selection import StageSelectionMode
 from strata.utils.system import local_relative_part
 
 
@@ -1142,15 +1142,8 @@ class RunDeployCommand(BaseDeployCommand):
         # Filter by --stage / --scope and apply `enabled` gating (ADR-0083 D2/D7).
         # Runs BEFORE _preflight_check_provisioners(), which constructs a deployer per
         # stage — a disabled estate must not require its tooling or auth to be present.
-        selection, selection_errors = select_stages(
-            all_stages,
-            stage=self._stage,
-            scope=self._scope,
-            resolved=self._resolved_values,
-            apply_gating=True,
-        )
-        if selection_errors:
-            self._errors.extend(selection_errors)
+        selection = self._resolve_stages(StageSelectionMode.DEPLOY, resolved=self._resolved_values)
+        if selection is None:
             return False
         stages_to_run = selection.to_run
 

@@ -1,14 +1,14 @@
 """Command to detect infrastructure drift across deployment stages."""
 
-from typing import List, Optional
+from typing import Optional
 
 import click
 
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
 from strata.controllers.drift_controller import DriftController
-from strata.models.deployment_model import DeploymentStageModel
 from strata.models.drift_model import DriftSeverity
 from strata.utils.drift_history import DriftHistoryStore
+from strata.utils.stage_selection import StageSelectionMode
 
 
 class DriftDeployCommand(BaseDeployCommand):
@@ -70,17 +70,12 @@ class DriftDeployCommand(BaseDeployCommand):
     # -------------------------------------------------------------------------
 
     def _run_drift_detection(self) -> bool:
-        if self._deployment_service is None:
-            self._errors.append("Deployment service not loaded")
+        # INSPECT: drift against a *disabled* stage is precisely how orphaned
+        # infrastructure is discovered, so this must never gate (ADR-0083 D11).
+        selection = self._resolve_stages(StageSelectionMode.INSPECT)
+        if selection is None:
             return False
-
-        spec = self._deployment_service.model.spec  # type: ignore[union-attr]
-        all_stages: List[DeploymentStageModel] = spec.stages or []
-
-        stages = [s for s in all_stages if s.name == self._stage] if self._stage else all_stages
-        if self._stage and not stages:
-            self._errors.append(f"Stage '{self._stage}' not found. Available: {[s.name for s in all_stages]}")
-            return False
+        stages = selection.to_run
 
         if self._is_console_output():
             thresh = self._severity_threshold.value

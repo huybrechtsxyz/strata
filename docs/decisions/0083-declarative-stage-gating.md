@@ -1222,8 +1222,9 @@ Seven sites, with an explicitly excluded eighth (below).
   successful resolve, for `meta.name` in its header. The *guard* collapses; the
   model access does not.
 - **Churn to budget for:** replacing the boolean pair with `mode=` touches the
-  64 existing tests in `test_utils_stage_selection.py`. Mechanical, but it is
-  part of the change, not a surprise to discover mid-flight.
+  test call sites that pass those flags in `test_utils_stage_selection.py`.
+  Mechanical, and smaller than it first appears — only three of that module's
+  tests pass the flags explicitly; the rest rely on the default.
 
 #### Explicitly out of scope: `output_deploy_command`
 

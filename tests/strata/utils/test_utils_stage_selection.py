@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 from strata.utils.resolved_values import ResolvedValues
 from strata.utils.stage_selection import (
     StageSelection,
+    StageSelectionMode,
     StageSkip,
     evaluate_enabled,
     order_stages,
@@ -240,7 +241,7 @@ class TestGating:
         """D3: destroy must still see a disabled stage."""
         stages = [_stage("a"), _stage("b", enabled=False)]
 
-        selection, errors = select_stages(stages, apply_gating=False)
+        selection, errors = select_stages(stages, mode=StageSelectionMode.DESTROY)
 
         assert errors == []
         assert [s.name for s in selection.to_run] == ["a", "b"]
@@ -555,7 +556,7 @@ class TestDependencySkipCascade:
     def test_no_cascade_when_gating_is_off(self):
         stages = [_stage("a", enabled=False), _stage("b", depends_on=["a"])]
 
-        selection, _ = select_stages(stages, apply_gating=False)
+        selection, _ = select_stages(stages, mode=StageSelectionMode.DESTROY)
 
         assert [s.name for s in selection.to_run] == ["a", "b"]
 
@@ -603,7 +604,7 @@ class TestOrderingInSelection:
         """Teardown needs the reverse order, which this ADR does not decide."""
         stages = [_stage("b", depends_on=["a"]), _stage("a")]
 
-        selection, errors = select_stages(stages, apply_gating=False, apply_ordering=False)
+        selection, errors = select_stages(stages, mode=StageSelectionMode.DESTROY)
 
         assert errors == []
         assert [s.name for s in selection.to_run] == ["b", "a"]

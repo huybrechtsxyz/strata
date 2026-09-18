@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 import click
 
 from strata.commands.base_command import BaseCommand
+from strata.commands.stage_mixin import StageSelectionMixin
 from strata.controllers.actor_controller import resolve_actor
 from strata.integrations.lock.base_lock_backend import (
     BaseLockBackend,
@@ -45,7 +46,7 @@ from strata.utils.duration import parse_duration
 from strata.utils.resolved_values import resolve_expr_string
 
 
-class BaseDeployCommand(BaseCommand):
+class BaseDeployCommand(StageSelectionMixin, BaseCommand):
     """Base class for deploy command implementations."""
 
     OPERATION = "deploy"

@@ -6,6 +6,7 @@ import click
 
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
 from strata.models.deployment_model import DeploymentStageModel
+from strata.utils.stage_selection import StageSelectionMode
 
 
 class PlanDeployCommand(BaseDeployCommand):
@@ -48,17 +49,11 @@ class PlanDeployCommand(BaseDeployCommand):
     # -------------------------------------------------------------------------
 
     def _execute(self) -> bool:
-        if self._deployment_service is None:
-            self._errors.append("Deployment service not loaded")
+        # INSPECT: shows a previously saved plan — pure read (ADR-0083 D11).
+        selection = self._resolve_stages(StageSelectionMode.INSPECT)
+        if selection is None:
             return False
-
-        spec = self._deployment_service.model.spec  # type: ignore[union-attr]
-        all_stages: List[DeploymentStageModel] = spec.stages or []
-
-        stages = [s for s in all_stages if s.name == self._stage] if self._stage else all_stages
-        if self._stage and not stages:
-            self._errors.append(f"Stage '{self._stage}' not found. Available: {[s.name for s in all_stages]}")
-            return False
+        stages = selection.to_run
 
         if self._is_console_output():
             click.echo(f"\n📋  Last saved plan for {len(stages)} stage(s)…\n")

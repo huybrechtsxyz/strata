@@ -16,7 +16,7 @@ from strata.integrations.lock.base_lock_backend import (
     LockHandle,
 )
 from strata.models.deployment_model import DeploymentStageModel
-from strata.utils.stage_selection import select_stages
+from strata.utils.stage_selection import StageSelectionMode
 
 
 class DestroyDeployCommand(BaseDeployCommand):
@@ -185,20 +185,12 @@ class DestroyDeployCommand(BaseDeployCommand):
             return True
 
         # Filter by --stage / --scope (shared with RunDeployCommand — ADR-0083 D7).
-        # apply_gating=False is deliberate (D3): gating destroy would strand
-        # infrastructure a stage created before its `enabled` flag was turned off.
-        # apply_ordering=False likewise: a correct teardown needs the REVERSE
-        # dependency order, which ADR-0083 does not decide — so destroy keeps its
-        # existing declaration-order behaviour rather than gaining the wrong one.
-        selection, selection_errors = select_stages(
-            all_stages,
-            stage=self._stage,
-            scope=self._scope,
-            apply_gating=False,
-            apply_ordering=False,
-        )
-        if selection_errors:
-            self._errors.extend(selection_errors)
+        # DESTROY mode is deliberate: gating a teardown would strand infrastructure a
+        # stage created before its `enabled` flag was turned off (D3), and a correct
+        # teardown needs the REVERSE dependency order, which ADR-0083 does not decide —
+        # so destroy keeps declaration order rather than gaining the wrong one.
+        selection = self._resolve_stages(StageSelectionMode.DESTROY)
+        if selection is None:
             return False
         stages_to_run = selection.to_run
 

@@ -11,6 +11,7 @@ from strata.commands.deploy.base_deploy_command import BaseDeployCommand
 from strata.deployers.factory import DeployerFactory
 from strata.deployers.terraform_deployer import TerraformDeployer
 from strata.models.deployment_model import DeploymentStageModel
+from strata.utils.stage_selection import StageSelectionMode
 
 
 class StatusDeployCommand(BaseDeployCommand):
@@ -64,21 +65,17 @@ class StatusDeployCommand(BaseDeployCommand):
     # ------------------------------------------------------------------
 
     def _execute(self) -> bool:
-        if self._deployment_service is None:
+        # INSPECT: reports deployment state, changes nothing (ADR-0083 D11).
+        selection = self._resolve_stages(StageSelectionMode.INSPECT)
+        if selection is None:
+            return False
+        stages = selection.to_run
+
+        # _resolve_stages has already proven both are non-None; re-narrow for the
+        # type checker rather than asserting an invariant it cannot see.
+        deployment_model = self._deployment_service.model if self._deployment_service else None
+        if deployment_model is None:  # pragma: no cover - unreachable after _resolve_stages
             self._errors.append("Deployment service not loaded")
-            return False
-
-        deployment_model = self._deployment_service.model
-        if deployment_model is None:
-            self._errors.append("Deployment model not loaded")
-            return False
-
-        spec = deployment_model.spec
-        all_stages: List[DeploymentStageModel] = spec.stages or []
-
-        stages = [s for s in all_stages if s.name == self._stage] if self._stage else all_stages
-        if self._stage and not stages:
-            self._errors.append(f"Stage '{self._stage}' not found. Available: {[str(s.name) for s in all_stages]}")
             return False
 
         if self._is_console_output():
