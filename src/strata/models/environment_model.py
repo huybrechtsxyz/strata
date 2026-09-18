@@ -92,26 +92,22 @@ class EnvironmentResourceOverrideModel(PlatformBaseModel):
     @model_validator(mode="before")
     @classmethod
     def drop_removed_references(cls, data):
-        """Drop removed keys with a warning instead of failing validation.
+        """Drop 'condition' with a warning instead of failing validation.
 
-        ADR-0078 ('references') and ADR-0083 ('condition') — mirrors the same
-        removals on WorkspaceResourceModel. Both overrides were merged into fields
-        nothing ever read. Deprecation shim; remove in the next minor release.
+        ADR-0083 — mirrors the same removal on WorkspaceResourceModel. The override
+        was merged into a field nothing ever read. Deprecation shim; see that model
+        for why it outlives ADR-0078's 'references' shim.
         """
         if not isinstance(data, dict):
             return data
-        for removed, adr, guidance in (
-            ("references", "ADR-0078", "The field was never read; remove it from your environment file."),
-            ("condition", "ADR-0083", "Override 'enabled' instead."),
-        ):
-            if removed in data:
-                data = {k: v for k, v in data.items() if k != removed}
-                warnings.warn(
-                    f"Environment resource override '{data.get('resource', '<unnamed>')}': '{removed}' has been "
-                    f"removed ({adr}) and is ignored. {guidance}",
-                    DeprecationWarning,
-                    stacklevel=2,
-                )
+        if "condition" in data:
+            data = {k: v for k, v in data.items() if k != "condition"}
+            warnings.warn(
+                f"Environment resource override '{data.get('resource', '<unnamed>')}': 'condition' has been "
+                "removed (ADR-0083) and is ignored. Override 'enabled' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         return data
 
     resource: PlatformName = Field(description="Resource name to override (must match a resource in the workspace)")

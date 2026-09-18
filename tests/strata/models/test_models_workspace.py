@@ -71,13 +71,16 @@ class TestRemovedReferencesField:
     def test_references_is_not_a_field(self):
         assert "references" not in WorkspaceResourceModel.model_fields
 
-    def test_legacy_references_key_is_dropped_with_warning(self):
-        with pytest.warns(DeprecationWarning, match="references"):
-            model = WorkspaceResourceModel.model_validate(
+    def test_legacy_references_key_is_now_rejected(self):
+        """The deprecation shim served its cycle in v1.10.0 and has been removed.
+
+        A user who upgraded through 1.10.0 was warned; `extra="forbid"` now rejects
+        the key outright, which is the point of a deprecation period ending.
+        """
+        with pytest.raises(ValidationError):
+            WorkspaceResourceModel.model_validate(
                 {"name": "app_tier", "file": "config/app.yaml", "references": {"db": "storage.conn"}}
             )
-        assert model.name == "app_tier"
-        assert not hasattr(model, "references")
 
     def test_unknown_keys_still_rejected(self):
         with pytest.raises(ValidationError):

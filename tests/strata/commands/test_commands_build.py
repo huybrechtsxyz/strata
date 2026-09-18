@@ -693,6 +693,83 @@ class TestPlanBuildCacheWarm:
         mock_warm.assert_not_called()
 
 
+class TestPlanBuildStrictAiReviewGate:
+    """`--strict-ai-review` is documented as failing non-interactively and sold for CI.
+
+    It appended to `self._errors` and `_run_ai_analysis`'s docstring claimed that made
+    the caller propagate a non-zero exit code — but build commands define no
+    `has_validation_errors()`, which is all `handle_command_exit` inspects, so the gate
+    printed "Plan blocked" and exited 0. A gate that does not gate is worse than no
+    gate: CI reports green on exactly the change someone asked to be stopped.
+    """
+
+    def _cmd(self, tmp_path):
+        from unittest.mock import MagicMock
+
+        cmd = _make_plan_cmd(tmp_path)
+        svc = MagicMock()
+        svc.model.meta.name = "test-deploy"
+        svc.get_build_path.return_value = tmp_path / "build"
+        svc.get_environment_service.return_value = None
+        cmd._deployment_service = svc
+        cmd._artifacts_only = True
+        cmd._no_cache_warm = True
+        return cmd
+
+    def _run(self, cmd, ai_side_effect):
+        from unittest.mock import patch
+
+        with (
+            patch.object(cmd, "_build_to_temp", return_value=True),
+            patch.object(cmd, "_compute_artifact_diff", return_value=[]),
+            patch.object(cmd, "_print_console"),
+            patch.object(cmd, "_run_ai_analysis", side_effect=ai_side_effect),
+        ):
+            return cmd._run_plan()
+
+    def test_blocked_review_fails_the_command(self, tmp_path):
+        cmd = self._cmd(tmp_path)
+        cmd._strict_ai_review = "high"
+
+        def blocked(_plan_results):
+            cmd._errors.append("AI plan review: risk=CRITICAL ≥ threshold=HIGH (--strict-ai-review)")
+            return {"provider": "x", "content": "{}"}
+
+        assert self._run(cmd, blocked) is False
+
+    def test_passing_review_still_succeeds(self, tmp_path):
+        cmd = self._cmd(tmp_path)
+        cmd._strict_ai_review = "high"
+
+        assert self._run(cmd, lambda _r: {"provider": "x", "content": "{}"}) is True
+
+    def test_plain_ai_flag_never_gates(self, tmp_path):
+        """`--ai` is advisory; only `--strict-ai-review` blocks."""
+        cmd = self._cmd(tmp_path)
+        cmd._ai = True
+        cmd._strict_ai_review = None
+
+        assert self._run(cmd, lambda _r: {"provider": "x", "content": "{}"}) is True
+
+    def test_no_ai_flags_leaves_the_command_unaffected(self, tmp_path):
+        from unittest.mock import patch
+
+        cmd = self._cmd(tmp_path)
+        cmd._ai = False
+        cmd._strict_ai_review = None
+
+        with (
+            patch.object(cmd, "_build_to_temp", return_value=True),
+            patch.object(cmd, "_compute_artifact_diff", return_value=[]),
+            patch.object(cmd, "_print_console"),
+            patch.object(cmd, "_run_ai_analysis") as ai,
+        ):
+            ok = cmd._run_plan()
+
+        ai.assert_not_called()
+        assert ok is True
+
+
 # ---------------------------------------------------------------------------
 # TestBuildRunNdjsonStreaming — NDJSON stage events emitted per build phase
 # ---------------------------------------------------------------------------

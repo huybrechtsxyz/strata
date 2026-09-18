@@ -18,6 +18,7 @@ import warnings
 from unittest.mock import MagicMock
 
 import pytest
+from pydantic import ValidationError
 
 from strata.builders.platform_builder import collect_disabled_names
 from strata.models.environment_model import EnvironmentResourceOverrideModel
@@ -46,9 +47,24 @@ class TestConditionRemovedFromWorkspaceResource:
         """The whole point of the shim: `extra=forbid` would otherwise break upgrades."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            model = WorkspaceResourceModel(name="web", file="r.yaml", condition="x", references={})
+            model = WorkspaceResourceModel(name="web", file="r.yaml", condition="x")
 
         assert model.name == "web"
+
+    def test_references_shim_is_gone_but_condition_remains(self):
+        """The two shims are not interchangeable, despite being introduced together.
+
+        ADR-0078's `references` shipped a warning in v1.10.0 and was removed after
+        that cycle. ADR-0083's `condition` was still an accepted, documented field in
+        v1.10.0 — it has not yet served a single release as a warning, so removing it
+        at the same time would turn a valid file into a hard failure with no notice.
+        """
+        with pytest.raises(ValidationError):
+            WorkspaceResourceModel(name="web", file="r.yaml", references={})
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            assert WorkspaceResourceModel(name="web", file="r.yaml", condition="x").name == "web"
 
     def test_enabled_survives_and_still_defaults_to_true(self):
         assert WorkspaceResourceModel(name="web", file="r.yaml").enabled is True

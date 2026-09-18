@@ -133,15 +133,27 @@ class PlanBuildCommand(BaseBuildCommand):
         }
 
         ai_analysis: Optional[Dict[str, Any]] = None
+        gate_blocked = False
         if self._ai or self._strict_ai_review:
+            # Every `self._errors.append()` inside `_run_ai_analysis` is guarded by
+            # `if self._strict_ai_review`, so a new error here means the gate tripped:
+            # risk over threshold, no ai_agent integration, or the provider failed.
+            errors_before = len(self._errors)
             ai_analysis = self._run_ai_analysis(plan_results)
             if ai_analysis:
                 self._output_data["ai_analysis"] = ai_analysis
+            gate_blocked = len(self._errors) > errors_before
 
         if self._is_console_output():
             self._print_console(deployment_name, diff_rows, plan_results, value_rows, provider_rows, ai_analysis)
 
-        return True
+        # `--strict-ai-review` is documented as failing non-interactively and is sold
+        # for CI. It appended to `self._errors` and `_run_ai_analysis`'s own docstring
+        # claimed that made the caller "propagate a non-zero exit code" — but build
+        # commands define no `has_validation_errors()`, which is all `handle_command_exit`
+        # inspects, so the gate printed "Plan blocked" and exited 0. `deploy run`'s
+        # equivalent gate returns False; this one now matches it.
+        return not gate_blocked
 
     # ------------------------------------------------------------------
     # Layer 1: build artifacts into temp dir
@@ -653,8 +665,9 @@ class PlanBuildCommand(BaseBuildCommand):
     def _run_ai_analysis(self, plan_results: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         """Run AI plan analysis if an ai_agent integration is configured.
 
-        When ``--strict-ai-review`` is set and risk ≥ threshold the command fails
-        (adds to ``self._errors`` so the caller propagates a non-zero exit code).
+        When ``--strict-ai-review`` is set and risk ≥ threshold — or the gate cannot
+        run at all — this appends to ``self._errors``. ``_run_plan`` detects that and
+        returns False, so the process exits non-zero.
         """
         import json as _json
 

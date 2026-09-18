@@ -297,38 +297,30 @@ class WorkspaceResourceModel(PlatformBaseModel):
     @model_validator(mode="before")
     @classmethod
     def drop_removed_references(cls, data):
-        """Drop removed keys with a warning instead of failing validation.
+        """Drop 'condition' with a warning instead of failing validation.
 
-        ADR-0078: the cross-resource 'references' field was inert — never resolved,
-        never validated — and has been removed. Shipped workspace templates emitted
-        'references: {}', so extra="forbid" would turn an upgrade into a hard error.
-
-        ADR-0083: 'condition' was inert for the same reason, and additionally
-        *redundant* — an environment can already switch a resource off by
-        overriding 'enabled', so per-environment inclusion needs no expression
+        ADR-0083: 'condition' was inert — never resolved, never validated — and
+        additionally *redundant*, since an environment can already switch a resource
+        off by overriding 'enabled', so per-environment inclusion needs no expression
         language. Its documented syntax ('{{ environment }} == production') matched
         no engine in the codebase, and the shipped scaffold advertised it.
 
-        Deprecation shim; remove in the next minor release.
+        Deprecation shim. It was still an accepted, documented field in v1.10.0, so
+        it has not yet served a single release as a warning — remove it one minor
+        after the release that first carries this shim, not before. ADR-0078's
+        'references' shim was removed on exactly that schedule.
         """
         if not isinstance(data, dict):
             return data
-        for removed, adr, guidance in (
-            ("references", "ADR-0078", "The field was never read; remove it from your workspace file."),
-            (
-                "condition",
-                "ADR-0083",
-                "Use 'enabled' instead — an environment can override it per environment.",
-            ),
-        ):
-            if removed in data:
-                data = {k: v for k, v in data.items() if k != removed}
-                warnings.warn(
-                    f"Workspace resource '{data.get('name', '<unnamed>')}': '{removed}' has been removed "
-                    f"({adr}) and is ignored. {guidance}",
-                    DeprecationWarning,
-                    stacklevel=2,
-                )
+        if "condition" in data:
+            data = {k: v for k, v in data.items() if k != "condition"}
+            warnings.warn(
+                f"Workspace resource '{data.get('name', '<unnamed>')}': 'condition' has been removed "
+                "(ADR-0083) and is ignored. Use 'enabled' instead — an environment can override it "
+                "per environment.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         return data
 
     name: PlatformName = Field(description="Unique resource name")

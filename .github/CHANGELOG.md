@@ -23,20 +23,18 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Removed
 
-- **`resources[].condition` and its environment override have been removed (ADR-0083)** — inert (never parsed by any engine; its documented `'{{ environment }} == production'` syntax matched nothing in the codebase) and redundant, since an environment can already switch a resource off by overriding `enabled`. The key is now dropped with a deprecation warning rather than failing validation, mirroring ADR-0078's `references`; the shim goes away next minor. The phantom example has also been removed from the `strata sln init` scaffold.
+- **`resources[].references` is now rejected rather than ignored (ADR-0078)** — its deprecation shim shipped the warning in v1.10.0 and has served its cycle, so the key now fails validation under `extra="forbid"`. Upgrading from v1.10.0 means you were already warned; upgrading from ≤v1.9.x skips the warning phase, so remove any `references:` key first.
+- **`resources[].condition` and its environment override have been removed (ADR-0083)** — inert (never parsed by any engine; its documented `'{{ environment }} == production'` syntax matched nothing in the codebase) and redundant, since an environment can already switch a resource off by overriding `enabled`. The key is now dropped with a deprecation warning rather than failing validation, mirroring ADR-0078's `references`. Unlike `references`, this is the **first** release in which `condition` warns at all — it was still an accepted, documented field in v1.10.0 — so the shim stays for one more minor. The phantom example has also been removed from the `strata sln init` scaffold.
 
 ### Fixed
 
+- **`strata build plan --strict-ai-review` now actually fails** — it printed "Plan blocked" and exited **0**, so a CI pipeline using it as a gate reported green on exactly the change it was asked to stop. The flag is documented as failing non-interactively; it recorded the error but build commands define no `has_validation_errors()`, which is all the exit-code handler inspects. `deploy run`'s equivalent gate was unaffected and already blocked correctly.
 - **`strata build plan` now reports a stage whose `enabled` expression cannot be resolved** — previously the error was discarded and the stage appeared in the plan as ordinary and unmarked, even though `deploy run` would abort on it. It is now reported as a failed row naming the unresolvable reference.
 - **`CheckovPolicy` artifact path resolution (ADR-0051)** — no longer silently passes a `deny`-enforcement policy without scanning anything; now resolves each terraform provisioner's build directory via the canonical `get_provisioner_path()`, adds a `scope` config (`staged` default | `all` | `<stage-name>`) for multi-provisioner workspaces, and surfaces every skip as a warning instead of a silent pass. See ADR-0051 / HISTORY.md.
 - **Stage → provisioner resolution is now strict everywhere** — a typo'd `stage.provisioner`/`stage.topology` no longer silently falls back to a different provisioner (previously only logged a warning); it now fails `validate_workspace()` outright. May surface previously-silent stage/provisioner config errors. See ADR-0051 / HISTORY.md.
 - **`CheckovPolicy` now also scans Bicep and Ansible provisioners** (`configuration.framework: bicep|ansible`), not just Terraform. One policy still scans one framework — declare a `checkov` policy per framework for multi-framework coverage. See ADR-0051 / HISTORY.md.
 - **Helm's build-time secret check is now scoped to the deploying stage** — a module referencing a secret that's registered in the environment but excluded from the deploying stage's `secrets:` allowlist is now flagged at build time with a distinct message, instead of only failing later at real deploy time with a message indistinguishable from "never registered". See ADR-0051 / HISTORY.md.
 - **`CheckovPolicy` now also scans Helm charts** (`configuration.framework: helm`) — local charts only (registry-pulled charts are skipped with an explicit warning, since there's no local source to scan). Findings are reported per `namespace/module`. See ADR-0051 / HISTORY.md.
-
-### Removed
-
-- **`resources[].condition` and its environment override have been removed (ADR-0083)** — inert (never parsed by any engine; its documented `'{{ environment }} == production'` syntax matched nothing in the codebase) and redundant, since an environment can already switch a resource off by overriding `enabled`. The key is now dropped with a deprecation warning rather than failing validation, mirroring ADR-0078's `references`; the shim goes away next minor. The phantom example has also been removed from the `strata sln init` scaffold.
 
 ## [1.10.0] - 2026-09-15
 

@@ -38,10 +38,16 @@ Neither is part of this decision; both are recorded so they are not rediscovered
 - **`deploy show` does not disclose gating** — see
   [Adjacent finding](#adjacent-finding--deploy-show-previews-a-deployment-without-disclosing-gating).
   The preview lists every stage with no indication which will not run, and
-  separately its `--stage` appears inert.
+  separately its `--stage` appears inert. *(Resolved 2026-09-18.)*
 - **The `condition` deprecation shim** (`workspace_model.py`,
-  `environment_model.py`) is marked for removal in the next minor release,
-  alongside ADR-0078's `references` shim it sits beside.
+  `environment_model.py`) sits beside ADR-0078's `references` shim, but the two do
+  **not** come off on the same schedule, despite being introduced together.
+  `references` shipped its warning in v1.10.0 and was removed after that cycle
+  (2026-09-18). `condition` was still an accepted, documented field in v1.10.0 —
+  advertised by the shipped scaffold — so this shim is the *first* release in which
+  it warns at all. Removing it before it has served one full release would take a
+  valid v1.10.0 file straight to a hard `extra="forbid"` failure with no notice.
+  Remove it one minor after the release that first carries it.
 
 ## Context and Problem Statement
 
