@@ -27,6 +27,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Fixed
 
+- **`strata build plan` now reports a stage whose `enabled` expression cannot be resolved** — previously the error was discarded and the stage appeared in the plan as ordinary and unmarked, even though `deploy run` would abort on it. It is now reported as a failed row naming the unresolvable reference.
 - **`CheckovPolicy` artifact path resolution (ADR-0051)** — no longer silently passes a `deny`-enforcement policy without scanning anything; now resolves each terraform provisioner's build directory via the canonical `get_provisioner_path()`, adds a `scope` config (`staged` default | `all` | `<stage-name>`) for multi-provisioner workspaces, and surfaces every skip as a warning instead of a silent pass. See ADR-0051 / HISTORY.md.
 - **Stage → provisioner resolution is now strict everywhere** — a typo'd `stage.provisioner`/`stage.topology` no longer silently falls back to a different provisioner (previously only logged a warning); it now fails `validate_workspace()` outright. May surface previously-silent stage/provisioner config errors. See ADR-0051 / HISTORY.md.
 - **`CheckovPolicy` now also scans Bicep and Ansible provisioners** (`configuration.framework: bicep|ansible`), not just Terraform. One policy still scans one framework — declare a `checkov` policy per framework for multi-framework coverage. See ADR-0051 / HISTORY.md.

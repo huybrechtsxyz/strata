@@ -362,7 +362,15 @@ class PlanBuildCommand(BaseBuildCommand):
         # stage is still planned. But a plan that silently omitted the marker would
         # make "disabled in this environment" indistinguishable from "deleted from the
         # deployment", which is the exact confusion stage gating exists to remove.
-        _enabled, skip, _error = evaluate_enabled(stage, resolved)
+        _enabled, skip, enabled_error = evaluate_enabled(stage, resolved)
+        if enabled_error:
+            # A gate that cannot be evaluated is neither "enabled" nor "skipped": it is
+            # a stage `deploy run` would abort on. Reporting it as an ordinary, unmarked
+            # stage would be the same silence the marker above exists to break — and the
+            # worse half of it, since the marker at least tells the truth about a stage
+            # that resolves. Planning it anyway is pointless: it cannot be run.
+            result["error"] = enabled_error
+            return result
         if skip is not None:
             result["would_skip"] = True
             result["skip_reason"] = skip.detail

@@ -110,6 +110,21 @@ class TestBuildPlanMarksDisabledStages:
         assert result["would_skip"] is True
         assert "${feature:enable_api}" in result["skip_reason"]
 
+    def test_unresolvable_gate_is_reported_not_silently_planned(self, tmp_path):
+        """A gate that cannot be evaluated is the one case the marker cannot describe:
+        the stage is neither enabled nor skipped, it is a run that would abort. Showing
+        it as an ordinary unmarked stage is worse than showing a disabled one unmarked,
+        because nothing at all hints that anything is wrong."""
+        cmd = self._command(tmp_path)
+        resolved = ResolvedValues(features={})
+
+        result = cmd._plan_stage(_stage("api", enabled="${feature:missing_flag}"), tmp_path, resolved)
+
+        assert result["error"] is not None
+        assert "missing_flag" in result["error"]
+        assert result["would_skip"] is False
+        assert result["ok"] is False
+
 
 class TestDriftIsNotGated:
     """Drift against a disabled stage is how orphaned infrastructure is found."""
