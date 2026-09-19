@@ -44,8 +44,9 @@ def deploy():
         "  0  success\n"
         "  1  system error (infrastructure unavailable, timeout, permissions) — alert\n"
         "  2  usage error (bad arguments, file not found) — fix script\n"
-        "  3  validation error (schema, cross-ref) — fix config\n"
-        "  4  lock conflict (another deployment in progress) — retry after delay"
+        "  3  refused (schema/cross-ref invalid, or a policy or AI review denied it) — fix config\n"
+        "  4  lock conflict (another deployment in progress) — retry after delay\n"
+        "  5  hand-off required (a gate paused the deploy) — resolve, then --resume"
     ),
 )
 @click_file

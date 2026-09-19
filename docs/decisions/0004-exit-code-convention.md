@@ -30,8 +30,21 @@ The five codes and their intended CI responses:
 | `0`  | Success                                        | Proceed                                                        |
 | `1`  | System failure (crash, permissions, timeout)   | Alert — file a bug                                             |
 | `2`  | Usage error (bad arguments, file not found)    | Fix the script                                                 |
-| `3`  | Validation failure (schema, cross-ref)         | Fix the config, block PR                                       |
+| `3`  | Refused (schema/cross-ref, or a gate said no)  | Fix the config, block PR                                       |
 | `4`  | Lock conflict (another deployment in progress) | Retry after delay — **`deploy run` and `deploy destroy` only** |
+
+> Exit `3` broadened 2026-09-19. It originally read "validation failure (schema,
+> cross-ref)", but `strata policies check` had already been shipping
+> "`3` — one or more deny-enforcement policies failed" without updating this table.
+> The unifying idea is **refusal**, not schema: strata processed the input and
+> declined to proceed, and the CI response is the same either way — a human must
+> change something, and retrying unchanged is pointless. `deploy run` was brought
+> into line at the same time; its policy and AI-review denials previously exited `1`,
+> which made a governance decision indistinguishable from a crashed provider.
+>
+> Exit `1` stays for genuine execution failures, including a lifecycle hook that
+> returns non-zero — a hook that blocks deliberately cannot be told apart from one
+> that crashed, so it is not claimed as a refusal.
 
 ### Consequences
 
@@ -65,7 +78,7 @@ The five codes and their intended CI responses:
 
 `handle_command_exit(command, success)` in `cli_common.py` maps command outcomes to the correct exit code. All commands use this function — `sys.exit()` is never called directly.
 
-Exit code `3` specifically is used by: `strata validate`, `strata deploy health` (when health checks fail), and `strata build plan` (when `--strict-ai-review` rejects an otherwise-working plan).
+Exit code `3` specifically is used by: `strata validate`, `strata deploy health` (when health checks fail), `strata policies check` (when a deny-enforcement policy fails), `strata deploy run` (when a policy or AI plan review denies the deployment), and `strata build plan` (when `--strict-ai-review` rejects an otherwise-working plan).
 
 > Corrected 2026-09-19. This previously read "`strata build plan` (when plan shows changes in strict mode)", describing a mode that never existed — there is no `--strict` flag on `build plan`, and finding changes is deliberately **not** a failure there (the `build-plan` GitHub Action reports them as a `has_changes` output). `build plan` splits its two real failures: exit `3` when a gate rejects a plan that ran, exit `1` when the plan could not run at all.
 

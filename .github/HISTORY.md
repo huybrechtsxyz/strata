@@ -9,6 +9,16 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Added
 
+#### **Exit code `3` unified: "refused" rather than "schema-invalid"**
+
+- **Problem**: `deploy run` reported a policy denial and a crashed terraform provider with the same exit code, `1`. The CI responses are opposite — a crash may be worth retrying, a refusal never is — so a pipeline with retry-on-failure would keep re-running a deployment that governance had deliberately stopped.
+- **The repo had already answered this.** `CheckPolicyCommand` documents its contract in its own class docstring — "`3` — one or more `deny`-enforcement policies failed" — and implements it with a `_denied` flag OR'd into `has_validation_errors()`, with a comment distinguishing it from schema failure. So `strata policies check -f x.yaml` exits `3` for a deny policy, while `deploy run` evaluating that identical policy through the identical engine exited `1`. The convention existed; one command ignored it. Nothing new was invented here — `RunDeployCommand` now uses the same `_denied` pattern.
+- **This also retroactively justified `build plan --strict-ai-review` → exit `3`**, decided a day earlier from the flag's own help text without knowing `policies check` had set the precedent.
+- **Scope, deliberately narrow**: policy denials (plan and deploy phases) and a blocking AI plan review set `_denied`. Lifecycle hooks that block an apply **stay at exit 1** — a hook returning non-zero is indistinguishable from a hook that crashed, so claiming it as a refusal would assert something strata cannot know.
+- **Precedence verified, not assumed**: exit `5` (hand-off) and `4` (lock) still win over `3`. A gate that *paused* is resumable via `--resume`; a refusal is not — conflating them would tell CI to retry something that cannot proceed, or to abandon something that can.
+- **Docs corrected**: ADR-0004's table and its "used by" list both said exit `3` meant schema/cross-ref validation, which `policies check` had already outgrown without updating them. `docs/platform/exit-codes.md` was rewritten — its "Usage by Command" table was also structurally broken, with the `deploy` row carrying six cells under a four-column header, so the lock and gate columns rendered as stray text.
+- **Breaking, accepted**: pipelines branching on `deploy run` exiting `1` for a denial must move to `3`.
+
 #### **`deploy run`'s AI plan gate was unreachable — now wired up**
 
 - **Problem**: `RunDeployCommand._check_ai_plan_gate()` — roughly a hundred lines guarding the apply step — was complete, correct, and **impossible to invoke**. `cli_deploy.py`'s `deploy_run()` accepted `ai` and `strict_ai_review` as function parameters and forwarded them to the command, but never declared the matching `@click.option`s. Click therefore never supplied them, both defaulted to `False`/`None`, and the `if self._ai or self._strict_ai_review:` guard in `_execute_stage` was permanently false. `docs/help/ai_agent.md` listed both flags as working. Found while auditing `build plan`'s exit-code contract; confirmed with `strata deploy run --help`, which listed neither.

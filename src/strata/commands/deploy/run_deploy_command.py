@@ -103,11 +103,37 @@ class RunDeployCommand(BaseDeployCommand):
         self._strict_ai_review: Optional[str] = strict_ai_review.lower() if strict_ai_review else None
         self._resume_id: Optional[str] = resume_id
         self._hand_off_required: bool = False
+        # True when a gate returned a deliberate verdict of "no" — a deny-enforcement
+        # policy or a blocking AI plan review. Distinct from _validation_failed (the
+        # deployment file itself is malformed); both map to exit 3, matching
+        # CheckPolicyCommand, which already documents "3 — one or more deny-enforcement
+        # policies failed". Evaluating the same policy standalone and inside a deploy
+        # must not produce different exit codes.
+        self._denied: bool = False
         self._resolved_values: Optional[ResolvedValues] = None
 
     def has_hand_off_required(self) -> bool:
         """Return True when a gate work item was created and the deploy is paused."""
         return self._hand_off_required
+
+    def has_validation_errors(self) -> bool:
+        """True for exit code 3 — the deployment was *refused*, not broken.
+
+        Covers two cases that call for the same CI response (a human must change
+        something; retrying unchanged is pointless):
+
+        - the deployment file failed schema/cross-reference validation
+        - a gate returned a deny verdict (policy engine, blocking AI plan review)
+
+        Exit 1 is reserved for execution failures — terraform crashed, a provider was
+        unreachable, a lifecycle hook returned non-zero. That last one stays at 1
+        deliberately: a hook that exits non-zero is indistinguishable from a hook that
+        crashed, so calling it a denial would assert something strata cannot know.
+
+        Exit 5 (``has_hand_off_required``) remains separate and takes priority: a gate
+        that *paused* pending approval is resumable, which a denial is not.
+        """
+        return self._denied or self._validation_failed
 
     # -------------------------------------------------------------------------
     # Finalize override — writes deploy-log before standard finalization
@@ -1621,6 +1647,7 @@ class RunDeployCommand(BaseDeployCommand):
 
                 # --- policy evaluation: plan phase ---
                 if not self._evaluate_phase_policies("plan", stage, deployer):
+                    self._denied = True
                     self._record_stage_result(
                         stage_name=str(stage.name),
                         provisioner=stage.provisioner,
@@ -1635,6 +1662,7 @@ class RunDeployCommand(BaseDeployCommand):
 
                 # --- policy evaluation: deploy phase ---
                 if not self._evaluate_phase_policies("deploy", stage, deployer):
+                    self._denied = True
                     self._record_stage_result(
                         stage_name=str(stage.name),
                         provisioner=stage.provisioner,
@@ -1658,6 +1686,7 @@ class RunDeployCommand(BaseDeployCommand):
                 if self._ai or self._strict_ai_review:
                     ai_ok = self._check_ai_plan_gate(stage, msgs)
                     if not ai_ok:
+                        self._denied = True
                         self._record_stage_result(
                             stage_name=str(stage.name),
                             provisioner=stage.provisioner,
