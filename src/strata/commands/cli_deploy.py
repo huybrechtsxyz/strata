@@ -150,6 +150,27 @@ def deploy():
     help="Abort if the command does not complete within N seconds (0 = no timeout).",
 )
 @click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help=(
+        "Run AI plan review between plan and apply (requires an ai_agent integration). "
+        "Advisory: prompts on high risk when interactive, blocks when not. Use --force to override."
+    ),
+)
+@click.option(
+    "--strict-ai-review",
+    "strict_ai_review",
+    metavar="THRESHOLD",
+    default=None,
+    help=(
+        "Block the apply when AI plan risk ≥ THRESHOLD, without prompting. "
+        "THRESHOLD: low|medium|high|critical (default: high). Implies --ai. "
+        "Unlike --ai, --force does not override this."
+    ),
+)
+@click.option(
     "--resume",
     "resume_id",
     default=None,

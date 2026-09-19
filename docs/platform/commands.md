@@ -1488,16 +1488,35 @@ All `deploy` subcommands accept `--file/-f PATH` and `--stage NAME`.
 ### `deploy run`
 
 ```
-strata deploy run [-f FILE] [--stage NAME] [--force] [--dry-run] [standard options]
+strata deploy run [-f FILE] [--stage NAME] [--force] [--dry-run] [--ai] [--strict-ai-review THRESHOLD] [standard options]
 ```
 
 Execute the deploy pipeline (setup → check → plan → apply).
 
-| Option         | Description                                  |
-| -------------- | -------------------------------------------- |
-| `--stage NAME` | Limit execution to one deployment stage      |
-| `--force`      | Skip confirmation prompts and approval gates |
-| `--dry-run`    | Validate and plan only — no provisioners run |
+| Option                         | Description                                      |
+| ------------------------------ | ------------------------------------------------ |
+| `--stage NAME`                 | Limit execution to one deployment stage          |
+| `--force`                      | Skip confirmation prompts and approval gates     |
+| `--dry-run`                    | Validate and plan only — no provisioners run     |
+| `--ai`                         | AI plan review between plan and apply (advisory) |
+| `--strict-ai-review THRESHOLD` | Block the apply when plan risk ≥ THRESHOLD       |
+
+#### AI plan review
+
+Both flags run between `plan` and `apply`, so nothing is applied before the review
+completes. Neither runs under `--dry-run`, where there is no apply to guard.
+
+| Situation                          | `--ai` (advisory)                         | `--strict-ai-review`  |
+| ---------------------------------- | ----------------------------------------- | --------------------- |
+| Risk below threshold               | Proceed                                   | Proceed               |
+| Risk ≥ threshold, interactive TTY  | Prompt the operator                       | Block                 |
+| Risk ≥ threshold, non-interactive  | Block (use `--force` to override)         | Block                 |
+| `--force` given                    | Overrides the block                       | **Does not override** |
+| No / unreachable ai_agent provider | Proceed (advisory failures are not fatal) | Block                 |
+
+The threshold defaults to `high`; accepted values are `low`, `medium`, `high`,
+`critical`. A blocked apply exits `1`, the same as every other `deploy run` gate
+(policy deny, approval and condition gates).
 
 After resolving values, the command prints a summary of any values that were seeded or generated for the first time:
 
