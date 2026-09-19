@@ -26,15 +26,26 @@ and resumable with `--resume`.
 | `profile`        | ✅   | ✅   | ⚠️ Click only | ❌                                     | ❌           | ❌             |
 | `ref`            | ✅   | ✅   | ⚠️ Click only | ❌                                     | ❌           | ❌             |
 | `validate`       | ✅   | ✅   | ⚠️ Click only | ✅ Schema-invalid file                 | ❌           | ❌             |
-| `build run`      | ✅   | ✅   | ⚠️ Click only | ✅ Invalid deployment                  | ❌           | ❌             |
+| `build run`      | ✅   | ✅   | ⚠️ Click only | ❌                                     | ❌           | ❌             |
 | `build plan`     | ✅   | ✅   | ⚠️ Click only | ✅ `--strict-ai-review` rejected it    | ❌           | ❌             |
 | `policies check` | ✅   | ✅   | ⚠️ Click only | ✅ A `deny` policy failed              | ❌           | ❌             |
 | `deploy run`     | ✅   | ✅   | ⚠️ Click only | ✅ Invalid, or a policy/review said no | ✅ Lock held | ✅ Gate paused |
-| `deploy destroy` | ✅   | ✅   | ⚠️ Click only | ✅ Invalid deployment                  | ✅ Lock held | ❌             |
-| `values`         | ✅   | ✅   | ⚠️ Click only | ✅ Unresolved entries                  | ❌           | ❌             |
+| `deploy destroy` | ✅   | ✅   | ⚠️ Click only | ✅ Schema-invalid file                 | ✅ Lock held | ❌             |
+| `deploy health`  | ✅   | ✅   | ⚠️ Click only | ✅ Schema-invalid file                 | ❌           | ❌             |
+| `values`         | ✅   | ✅   | ⚠️ Click only | ✅ Schema-invalid file                 | ❌           | ❌             |
 | `log`            | ✅   | ✅   | ⚠️ Click only | ❌                                     | ❌           | ❌             |
 
 **Legend:** ✅ Used | ⚠️ Automatic | ❌ Not used
+
+Every command built on `BaseDeployCommand` (`deploy *`, `values *`, `cost *`) can
+return `3` when the deployment file itself fails schema/cross-reference validation
+— that check runs before the command does anything. Only `deploy run` and
+`policies check` additionally return `3` for a *refusal*.
+
+> Corrected 2026-09-19. This table previously claimed `build run` returns `3` for
+> an invalid deployment (it has no exit-3 classification at all — every failure is
+> `1`) and that `values` returns `3` for unresolved entries (unresolved values exit
+> `1`; `3` there means the file is schema-invalid).
 
 ## Examples
 
