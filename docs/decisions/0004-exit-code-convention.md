@@ -65,7 +65,9 @@ The five codes and their intended CI responses:
 
 `handle_command_exit(command, success)` in `cli_common.py` maps command outcomes to the correct exit code. All commands use this function — `sys.exit()` is never called directly.
 
-Exit code `3` specifically is used by: `strata validate`, `strata deploy health` (when health checks fail), and `strata build plan` (when plan shows changes in strict mode).
+Exit code `3` specifically is used by: `strata validate`, `strata deploy health` (when health checks fail), and `strata build plan` (when `--strict-ai-review` rejects an otherwise-working plan).
+
+> Corrected 2026-09-19. This previously read "`strata build plan` (when plan shows changes in strict mode)", describing a mode that never existed — there is no `--strict` flag on `build plan`, and finding changes is deliberately **not** a failure there (the `build-plan` GitHub Action reports them as a `has_changes` output). `build plan` splits its two real failures: exit `3` when a gate rejects a plan that ran, exit `1` when the plan could not run at all.
 
 Exit code `4` is used exclusively by `strata deploy run` and `strata deploy destroy` when a deployment lock is already held by another process. Implementation: raise `LockConflictError` in the lock-acquisition path; the top-level error handler catches it and calls `sys.exit(4)`. No other commands may return exit code `4`.
 

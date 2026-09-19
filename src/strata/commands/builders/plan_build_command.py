@@ -37,6 +37,12 @@ class PlanBuildCommand(BaseBuildCommand):
 
     OPERATION = "build_plan"
 
+    # Class-level, not set in __init__, so they exist even when the command is
+    # constructed without it — `_run_plan` reads both unconditionally, and a missing
+    # attribute there would turn a reporting bug into an AttributeError crash.
+    _gate_blocked: bool = False
+    _plan_failed: bool = False
+
     def __init__(
         self,
         file: Optional[str] = None,
@@ -62,6 +68,29 @@ class PlanBuildCommand(BaseBuildCommand):
         self._ai = ai
         self._strict_ai_review: Optional[str] = strict_ai_review.lower() if strict_ai_review else None
         self._no_cache_warm = no_cache_warm
+
+    def has_validation_errors(self) -> bool:
+        """True when a gate rejected an otherwise-working plan — exit 3, not 1 (ADR-0004).
+
+        `build plan` has three outcomes that all used to exit 0:
+
+        - the plan ran and found nothing — success
+        - the plan ran and found changes — **also success**. Changes are data, not
+          failure: the shipped ``build-plan`` GitHub Action surfaces them as a
+          ``has_changes`` *output*, and its documented recipe branches on that. An
+          exit code here would break every PR-preview pipeline.
+        - the plan could not run at all — a failure, and the one this distinguishes.
+
+        Of the two real failures, ``--strict-ai-review`` blocking is exit 3 ("fix the
+        config, block the PR" — and what the flag's own help text promises), while a
+        terraform init/validate/plan error is exit 1 ("alert, something is broken").
+        A CI pipeline can retry the second and must not retry the first.
+
+        ``_plan_failed`` wins when both happen: if terraform never produced a plan,
+        the AI reviewed nothing meaningful, and the broken toolchain is the finding
+        worth surfacing.
+        """
+        return self._gate_blocked and not self._plan_failed
 
     # ------------------------------------------------------------------
     # Core logic
@@ -133,7 +162,6 @@ class PlanBuildCommand(BaseBuildCommand):
         }
 
         ai_analysis: Optional[Dict[str, Any]] = None
-        gate_blocked = False
         if self._ai or self._strict_ai_review:
             # Every `self._errors.append()` inside `_run_ai_analysis` is guarded by
             # `if self._strict_ai_review`, so a new error here means the gate tripped:
@@ -142,7 +170,16 @@ class PlanBuildCommand(BaseBuildCommand):
             ai_analysis = self._run_ai_analysis(plan_results)
             if ai_analysis:
                 self._output_data["ai_analysis"] = ai_analysis
-            gate_blocked = len(self._errors) > errors_before
+            self._gate_blocked = len(self._errors) > errors_before
+
+        # A stage that reports `error` never produced a plan — terraform init, validate
+        # or plan failed. Returning success here told CI the preview was fine, and the
+        # GitHub Action's `has_changes` jq counts *rows*, not successful ones, so a
+        # wholly broken plan was reported as "plan shows changes".
+        failed_stages = [r["stage"] for r in plan_results if r.get("error")]
+        if failed_stages:
+            self._plan_failed = True
+            self._errors.append(f"Plan failed for stage(s): {', '.join(str(s) for s in failed_stages)}")
 
         if self._is_console_output():
             self._print_console(deployment_name, diff_rows, plan_results, value_rows, provider_rows, ai_analysis)
@@ -150,10 +187,9 @@ class PlanBuildCommand(BaseBuildCommand):
         # `--strict-ai-review` is documented as failing non-interactively and is sold
         # for CI. It appended to `self._errors` and `_run_ai_analysis`'s own docstring
         # claimed that made the caller "propagate a non-zero exit code" — but build
-        # commands define no `has_validation_errors()`, which is all `handle_command_exit`
-        # inspects, so the gate printed "Plan blocked" and exited 0. `deploy run`'s
-        # equivalent gate returns False; this one now matches it.
-        return not gate_blocked
+        # commands defined no `has_validation_errors()`, which is all
+        # `handle_command_exit` inspects, so the gate printed "Plan blocked" and exited 0.
+        return not (self._gate_blocked or self._plan_failed)
 
     # ------------------------------------------------------------------
     # Layer 1: build artifacts into temp dir

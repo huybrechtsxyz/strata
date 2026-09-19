@@ -92,8 +92,17 @@ runs:
             echo '```json'
             echo "${RESULT}" | head -100
             echo '```'
+          elif [ "${EXIT_CODE}" -eq 3 ]; then
+            # The plan ran fine and a gate rejected it (e.g. --strict-ai-review).
+            # Actionable by a human: fix the change or override. Never retry.
+            echo "⛔ **Plan blocked by a gate** (exit 3) — review the finding below"
+            echo '```json'
+            echo "${RESULT}" | head -100
+            echo '```'
           else
-            echo "❌ **Plan failed** (exit code ${EXIT_CODE})"
+            # The plan could not run — terraform init/validate/plan failed, or strata
+            # itself errored. Nothing was previewed; has_changes is meaningless here.
+            echo "❌ **Plan failed** (exit code ${EXIT_CODE}) — no preview was produced"
           fi
         } >> "$GITHUB_STEP_SUMMARY"
 

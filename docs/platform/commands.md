@@ -790,6 +790,18 @@ strata build plan -f xyz-deploy-prd.yaml
 strata build plan --stage production --artifacts-only
 ```
 
+**Exit codes.** Finding changes is *not* a failure — that is the normal, successful
+case. Only a plan that did not produce a usable preview is non-zero:
+
+| Code | Meaning                                                  | CI response                   |
+| ---- | -------------------------------------------------------- | ----------------------------- |
+| `0`  | Plan ran — with or without pending changes               | Proceed                       |
+| `1`  | Plan could not run (terraform init/validate/plan failed) | Alert — nothing was previewed |
+| `3`  | Plan ran but `--strict-ai-review` rejected it            | Block the PR — do not retry   |
+
+When both apply, exit `1` wins: if terraform never produced a plan, the AI review
+had nothing meaningful to assess.
+
 ### `build sbom`
 
 ```
