@@ -790,6 +790,16 @@ strata build plan -f xyz-deploy-prd.yaml
 strata build plan --stage production --artifacts-only
 ```
 
+**JSON output keys:** `file`, `deployment`, `artifact_diff[]`, `terraform_plan[]`
+(`stage`, `ok`, `messages[]`, `error`, `would_skip`, `skip_reason`, `has_changes`),
+`values[]`, `providers[]`.
+
+`has_changes` is terraform's own `-detailed-exitcode` verdict for that stage:
+`true` when the plan found pending changes, `false` when it found none, and `null`
+when the plan did not run (the stage failed, so nothing is known). Test this rather
+than the presence of a row — every stage that plans produces a row, including ones
+with nothing to do.
+
 **Exit codes.** Finding changes is *not* a failure — that is the normal, successful
 case. Only a plan that did not produce a usable preview is non-zero:
 

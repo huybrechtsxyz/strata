@@ -693,6 +693,78 @@ class TestPlanBuildCacheWarm:
         mock_warm.assert_not_called()
 
 
+class TestPlanStageHasChanges:
+    """Each plan row carries terraform's own change verdict.
+
+    The `build-plan` GitHub Action used to derive `has_changes` from
+    `.data.terraform_plan | length > 0` — row *presence*. Every stage that planned
+    produced a row, so the documented recipe (`if has_changes == 'true'`) fired on
+    every run, including runs where terraform found nothing to do. The verdict is
+    now taken from `-detailed-exitcode`, which terraform already computes.
+    """
+
+    def _cmd(self, tmp_path):
+        from unittest.mock import MagicMock
+
+        cmd = _make_plan_cmd(tmp_path)
+        cmd._deployment_service = MagicMock()
+        cmd._configuration_service = MagicMock()
+        return cmd
+
+    def _plan(self, tmp_path, *, has_changes, plan_ok=True):
+        from unittest.mock import MagicMock, patch
+
+        cmd = self._cmd(tmp_path)
+        deployer = MagicMock()
+        deployer.validate_workspace.return_value = (True, [])
+        deployer.validate_environment.return_value = (True, [])
+        deployer.setup.return_value = (True, [])
+        deployer.check.return_value = (True, [])
+        deployer.plan.return_value = (plan_ok, [])
+        deployer.plan_has_changes = has_changes
+
+        stage = MagicMock()
+        stage.name = "core"
+        stage.enabled = None
+
+        with patch("strata.commands.builders.plan_build_command.TerraformDeployer", return_value=deployer):
+            return cmd._plan_stage(stage, tmp_path, None)
+
+    def test_changes_present(self, tmp_path):
+        assert self._plan(tmp_path, has_changes=True)["has_changes"] is True
+
+    def test_no_changes(self, tmp_path):
+        """The case the old row-count logic got wrong."""
+        assert self._plan(tmp_path, has_changes=False)["has_changes"] is False
+
+    def test_failed_plan_reports_unknown_not_false(self, tmp_path):
+        """A stage that could not plan knows nothing about whether it would change
+        anything. Reporting False would claim knowledge it does not have."""
+        result = self._plan(tmp_path, has_changes=None, plan_ok=False)
+
+        assert result["has_changes"] is None
+        assert result["error"] is not None
+
+    def test_key_always_present(self, tmp_path):
+        """Consumers index this key directly; it must never be absent."""
+        assert "has_changes" in self._plan(tmp_path, has_changes=True)
+
+
+class TestTerraformDeployerPlanHasChanges:
+    def test_property_reflects_detailed_exitcode(self):
+        from strata.deployers.terraform_deployer import TerraformDeployer
+
+        deployer = TerraformDeployer.__new__(TerraformDeployer)
+        deployer._plan_has_changes = None
+        assert deployer.plan_has_changes is None
+
+        deployer._plan_has_changes = False
+        assert deployer.plan_has_changes is False
+
+        deployer._plan_has_changes = True
+        assert deployer.plan_has_changes is True
+
+
 class TestPlanBuildStrictAiReviewGate:
     """`--strict-ai-review` is documented as failing non-interactively and sold for CI.
 

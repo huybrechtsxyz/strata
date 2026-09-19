@@ -33,6 +33,12 @@ Show artifact diff + terraform plan without writing to the real build path. Noth
 | `has_changes` | `true`/`false` — whether any artifacts or terraform resources would change |
 | `result`      | Raw JSON output (the full strata response envelope)                        |
 
+`has_changes` is `true` when an artifact diff row is not `unchanged`, or when any
+terraform stage reports `has_changes: true` — terraform's own `-detailed-exitcode`
+verdict. A stage that planned successfully and found nothing to do does **not**
+count, and neither does a stage that failed to plan (its verdict is `null`, meaning
+unknown rather than "no").
+
 ## Exit codes
 
 Finding changes is **not** a failure — that is what `has_changes` is for. The step
