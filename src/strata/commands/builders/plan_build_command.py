@@ -404,6 +404,10 @@ class PlanBuildCommand(BaseBuildCommand):
             "error": None,
             "would_skip": False,
             "skip_reason": None,
+            # None until terraform plan actually runs. Consumers must treat null as
+            # "unknown", not "no changes" — a stage that failed to plan knows nothing
+            # about whether it would have changed anything.
+            "has_changes": None,
         }
 
         # ADR-0083 D11: `build plan` is a preview and is deliberately NOT gated — the
@@ -500,6 +504,12 @@ class PlanBuildCommand(BaseBuildCommand):
                         }
                     )
                 return result
+
+        # terraform's own `-detailed-exitcode` verdict, captured during the plan step.
+        # Recorded per stage because the alternative — inferring "changes" from the
+        # presence of a result row — is true for every stage that ran, including ones
+        # that found nothing to do.
+        result["has_changes"] = deployer.plan_has_changes
 
         if self._is_ndjson_output():
             self.emit_ndjson(

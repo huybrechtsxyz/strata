@@ -75,10 +75,14 @@ runs:
 
         # Note: strata's JSON output is wrapped in an envelope — fields live
         # under .data, not top-level (base_command.py's envelope: success/data/errors/messages).
+        #
+        # terraform_plan rows carry a per-stage `has_changes` (terraform's own
+        # -detailed-exitcode verdict). Test that, not row count: every stage that
+        # planned produces a row, including stages that found nothing to do.
         if [ "${EXIT_CODE}" -eq 0 ] && command -v jq &>/dev/null; then
           HAS_CHANGES=$(echo "${RESULT}" | jq -r '
             (.data.artifact_diff // [] | map(select(.status != "unchanged")) | length > 0) or
-            (.data.terraform_plan // [] | length > 0)
+            (.data.terraform_plan // [] | map(.has_changes == true) | any)
           ' 2>/dev/null || echo "false")
         else
           HAS_CHANGES="false"
