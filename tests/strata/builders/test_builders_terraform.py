@@ -262,7 +262,7 @@ class TestTerraformBuilderAfterBuild:
         svc = _mock_svc(build_path=tmp_path / "dep-1.0.0")
         builder = TerraformBuilder()
         # Simulate that build() planned these files (one of which is missing)
-        builder._written_file_names = ["workspace.auto.tfvars.json", "providers.auto.tfvars.json"]
+        builder._written_file_names = {terraform_dir: ["workspace.auto.tfvars.json", "providers.auto.tfvars.json"]}
         result = builder.after_build(svc, tmp_path, tmp_path, dry_run=False)
         assert result is False
         assert builder.has_errors()
@@ -277,9 +277,93 @@ class TestTerraformBuilderAfterBuild:
 
         svc = _mock_svc(build_path=tmp_path / "dep-1.0.0")
         builder = TerraformBuilder(verbose=True)
-        builder._written_file_names = ["workspace.auto.tfvars.json"]
+        builder._written_file_names = {terraform_dir: ["workspace.auto.tfvars.json"]}
         builder.after_build(svc, tmp_path, tmp_path, dry_run=False)
         assert builder.has_messages()
+
+    def test_multi_provisioner_files_verified_against_own_path(self, tmp_path):
+        """Regression test: each provisioner's files must be checked against its own
+        directory, not the union of every provisioner's files checked against the
+        first provisioner's directory (previously produced false "missing" failures
+        whenever provisioners had differing ``output`` profiles)."""
+        prov_a_dir = tmp_path / "control_infra"
+        prov_b_dir = tmp_path / "core_modules"
+        prov_a_dir.mkdir(parents=True)
+        prov_b_dir.mkdir(parents=True)
+
+        # Provisioner A only emits 3 files (its configured output.emits subset)
+        for name in ("features.auto.tfvars.json", "variables.auto.tfvars.json", "properties.auto.tfvars.json"):
+            (prov_a_dir / name).write_text("{}")
+
+        # Provisioner B (default profile) emits the full 6-file strata set
+        for name in (
+            "workspace.auto.tfvars.json",
+            "providers.auto.tfvars.json",
+            "topologies.auto.tfvars.json",
+            "features.auto.tfvars.json",
+            "variables.auto.tfvars.json",
+            "properties.auto.tfvars.json",
+        ):
+            (prov_b_dir / name).write_text("{}")
+
+        svc = _mock_svc(build_path=tmp_path)
+        prov_a = MagicMock()
+        prov_a.provisioner = ProvisionerType.TERRAFORM
+        prov_b = MagicMock()
+        prov_b.provisioner = ProvisionerType.TERRAFORM
+        svc.get_workspace_service.return_value.model.spec.provisioners = [prov_a, prov_b]
+
+        solution_controller = MagicMock()
+        solution_controller.get_provisioner_path.side_effect = lambda dep, bp, prov: (
+            prov_a_dir if prov is prov_a else prov_b_dir
+        )
+
+        builder = TerraformBuilder()
+        builder._written_file_names = {
+            prov_a_dir: ["features.auto.tfvars.json", "variables.auto.tfvars.json", "properties.auto.tfvars.json"],
+            prov_b_dir: [
+                "workspace.auto.tfvars.json",
+                "providers.auto.tfvars.json",
+                "topologies.auto.tfvars.json",
+                "features.auto.tfvars.json",
+                "variables.auto.tfvars.json",
+                "properties.auto.tfvars.json",
+            ],
+        }
+
+        result = builder.after_build(svc, tmp_path, tmp_path, dry_run=False, solution_controller=solution_controller)
+        assert result is True
+        assert not builder.has_errors()
+
+    def test_multi_provisioner_reports_only_truly_missing_files(self, tmp_path):
+        prov_a_dir = tmp_path / "control_infra"
+        prov_b_dir = tmp_path / "core_modules"
+        prov_a_dir.mkdir(parents=True)
+        prov_b_dir.mkdir(parents=True)
+        # Provisioner B is missing one of its expected files
+        (prov_b_dir / "workspace.auto.tfvars.json").write_text("{}")
+
+        svc = _mock_svc(build_path=tmp_path)
+        prov_a = MagicMock()
+        prov_a.provisioner = ProvisionerType.TERRAFORM
+        prov_b = MagicMock()
+        prov_b.provisioner = ProvisionerType.TERRAFORM
+        svc.get_workspace_service.return_value.model.spec.provisioners = [prov_a, prov_b]
+
+        solution_controller = MagicMock()
+        solution_controller.get_provisioner_path.side_effect = lambda dep, bp, prov: (
+            prov_a_dir if prov is prov_a else prov_b_dir
+        )
+
+        builder = TerraformBuilder()
+        builder._written_file_names = {
+            prov_a_dir: [],
+            prov_b_dir: ["workspace.auto.tfvars.json", "providers.auto.tfvars.json"],
+        }
+
+        result = builder.after_build(svc, tmp_path, tmp_path, dry_run=False, solution_controller=solution_controller)
+        assert result is False
+        assert any("providers.auto.tfvars.json" in e for e in builder.get_errors())
 
 
 class TestTerraformBuilderTracking:

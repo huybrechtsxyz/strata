@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from strata.models.missing_data_model import resolve_missing_data
 from strata.models.policy_model import PolicyModel
 
 
@@ -76,3 +77,25 @@ class BasePolicy(ABC):
     @property
     def name(self) -> str:
         return str(self.policy.name)
+
+    def _missing_data(self, reason: str) -> PolicyResult:
+        """Required input data was never produced for this ACTIVE policy — as
+        opposed to the policy simply not applying here (which should stay a
+        plain, unconditional pass — not this method; see ADR-0082's
+        "not applicable" vs. "missing data" distinction).
+
+        Delegates the skip/warn/block decision to the one shared
+        ``resolve_missing_data`` function (ADR-0082) instead of hardcoding
+        today's silent-skip behavior — default (``on_missing_data: skip``)
+        reproduces the exact same silent pass every policy already returns.
+        """
+        outcome = resolve_missing_data(self.policy.on_missing_data, reason)
+        return PolicyResult(
+            passed=not outcome.blocked,
+            policy_name=self.name,
+            enforcement=self.enforcement,
+            policy_type=self.policy.type,
+            violations=[f"Required data unavailable: {reason}"] if outcome.blocked else [],
+            warnings=[outcome.warning] if outcome.warning else [],
+            details=None if outcome.blocked else {"skipped": reason},
+        )

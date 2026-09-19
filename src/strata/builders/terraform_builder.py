@@ -43,9 +43,15 @@ class TerraformBuilder(BaseBuilder):
         self._components_total: int = 0
         self._components_declaring_refs: int = 0
 
-        # Tracks which files were written during the last build() call.
-        # Used by after_build() to verify only the files that were actually written.
-        self._written_file_names: List[str] = []
+        # Tracks which files were written during the last build() call, keyed by the
+        # per-provisioner terraform_path they were written to. Used by after_build() to
+        # verify each provisioner's files exist in *that provisioner's* own directory,
+        # instead of checking the union of all provisioners' files against one path.
+        self._written_file_names: Dict[Path, List[str]] = {}
+
+    def _track_written(self, terraform_path: Path, filename: str) -> None:
+        """Record that *filename* was written to *terraform_path* during this build."""
+        self._written_file_names.setdefault(terraform_path, []).append(filename)
 
     def _has_terraform_provisioner(self, deployment_service: DeploymentService) -> bool:
         """Return True when the workspace declares at least one TERRAFORM provisioner.
@@ -96,7 +102,7 @@ class TerraformBuilder(BaseBuilder):
             self.secret_refs = {}
             self._components_total = 0
             self._components_declaring_refs = 0
-            self._written_file_names = []
+            self._written_file_names = {}
 
             deployment_build_path = deployment_service.get_build_path(build_path)
 
@@ -297,19 +303,26 @@ class TerraformBuilder(BaseBuilder):
         terraform_paths = self._resolve_terraform_paths(deployment_service, build_path, solution_controller)
         if not terraform_paths:
             terraform_paths = [deployment_service.get_build_path(build_path) / "terraform"]
-        terraform_path = terraform_paths[0]
 
-        # Verify only the files that were actually written during build()
-        missing = [f for f in self._written_file_names if not (terraform_path / f).exists()]
+        # Verify only the files that were actually written during build(), checking each
+        # provisioner's files against that same provisioner's own directory (not the union
+        # of every provisioner's files against a single directory).
+        missing: List[str] = []
+        for terraform_path in terraform_paths:
+            for filename in self._written_file_names.get(terraform_path, []):
+                if not (terraform_path / filename).exists():
+                    missing.append(f"{terraform_path / filename}")
         if missing:
             self._errors.append(f"Terraform artifact files missing: {', '.join(missing)}")
             return False
 
-        type_files = list(terraform_path.glob("resx_*.auto.tfvars.json"))
         if self.verbose:
-            written_count = len(self._written_file_names)
-            self._messages.append(f"Terraform artifacts created at: {terraform_path}")
-            self._messages.append(f"Generated {written_count} file(s) ({len(type_files)} resource type file(s))")
+            written_count = sum(len(names) for names in self._written_file_names.values())
+            for terraform_path in terraform_paths:
+                type_files = list(terraform_path.glob("resx_*.auto.tfvars.json"))
+                self._messages.append(f"Terraform artifacts created at: {terraform_path}")
+                self._messages.append(f"Generated {len(type_files)} resource type file(s) in {terraform_path}")
+            self._messages.append(f"Generated {written_count} file(s) total across {len(terraform_paths)} path(s)")
 
         return True
 
@@ -1095,7 +1108,7 @@ class TerraformBuilder(BaseBuilder):
             return True
 
         self._write_json(terraform_path / file_def.name, payload)
-        self._written_file_names.append(file_def.name)
+        self._track_written(terraform_path, file_def.name)
         return True
 
     def _write_sources_file(
@@ -1124,7 +1137,7 @@ class TerraformBuilder(BaseBuilder):
             return True
 
         self._write_json(terraform_path / file_def.name, payload)
-        self._written_file_names.append(file_def.name)
+        self._track_written(terraform_path, file_def.name)
         return True
 
     def _execute_file_script(
@@ -1187,7 +1200,7 @@ class TerraformBuilder(BaseBuilder):
                 f"⚠ output.files['{file_def.name}']: script exited 0 but did not write the expected file."
             )
         else:
-            self._written_file_names.append(file_def.name)
+            self._track_written(terraform_path, file_def.name)
         return True
 
     def _execute_format_script(
@@ -1280,7 +1293,7 @@ class TerraformBuilder(BaseBuilder):
                 terraform_path = deployment_service.get_build_path(build_path) / "terraform"
                 terraform_path.mkdir(parents=True, exist_ok=True)
                 planned = self._planned_files(terraform_vars, profile=None)
-                self._written_file_names = [name for name, _ in planned]
+                self._written_file_names[terraform_path] = [name for name, _ in planned]
                 for filename, payload in planned:
                     self._write_json(terraform_path / filename, payload)
                 messages.append(f"✓ Terraform artifacts saved to: {terraform_path}")
@@ -1378,7 +1391,7 @@ class TerraformBuilder(BaseBuilder):
                     if not ok:
                         return messages
 
-                self._written_file_names.extend(written)
+                self._written_file_names.setdefault(terraform_path, []).extend(written)
                 messages.append(f"✓ Terraform artifacts saved to: {terraform_path}")
 
         except Exception as exc:

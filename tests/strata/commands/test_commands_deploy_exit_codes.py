@@ -110,6 +110,73 @@ class TestHandleCommandExit:
         assert exc_info.value.exit_code == 3
 
 
+class TestDeployRunRefusalVsBreakage:
+    """A deliberate "no" must not share an exit code with a crash.
+
+    `strata policies check` has always documented "3 — one or more deny-enforcement
+    policies failed". `deploy run` evaluates the *same* policies through the same
+    engine, but its denials exited 1 — so the identical verdict on the identical
+    policy produced a different exit code depending on which command asked, and a
+    pipeline that retries on 1 would retry a governance decision. `deploy run` now
+    follows the convention `policies check` established.
+    """
+
+    def _cmd(self):
+        from strata.commands.deploy.run_deploy_command import RunDeployCommand
+
+        cmd = RunDeployCommand.__new__(RunDeployCommand)
+        cmd._denied = False
+        cmd._validation_failed = False
+        cmd._lock_conflict = False
+        cmd._hand_off_required = False
+        return cmd
+
+    def _exit_code(self, cmd, success=False):
+        try:
+            handle_command_exit(cmd, success=success)
+        except Exit as exc:
+            return exc.exit_code
+        return 0
+
+    def test_policy_denial_exits_3(self):
+        cmd = self._cmd()
+        cmd._denied = True
+
+        assert self._exit_code(cmd) == 3
+
+    def test_schema_failure_still_exits_3(self):
+        cmd = self._cmd()
+        cmd._validation_failed = True
+
+        assert self._exit_code(cmd) == 3
+
+    def test_execution_failure_still_exits_1(self):
+        """Terraform crashing, a provider being unreachable, a hook returning
+        non-zero — none of these are refusals."""
+        cmd = self._cmd()
+
+        assert self._exit_code(cmd) == 1
+
+    def test_paused_gate_wins_over_denial(self):
+        """Exit 5 is "paused, resumable"; exit 3 is "refused". If a work item was
+        created the deploy can still complete, so the hand-off must be reported."""
+        cmd = self._cmd()
+        cmd._denied = True
+        cmd._hand_off_required = True
+
+        assert self._exit_code(cmd) == 5
+
+    def test_lock_conflict_wins_over_denial(self):
+        cmd = self._cmd()
+        cmd._denied = True
+        cmd._lock_conflict = True
+
+        assert self._exit_code(cmd) == 4
+
+    def test_clean_run_exits_0(self):
+        assert self._exit_code(self._cmd(), success=True) == 0
+
+
 # ---------------------------------------------------------------------------
 # BaseDeployCommand._before_execute — exit-code classification bug fix
 #

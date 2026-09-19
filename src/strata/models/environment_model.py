@@ -92,17 +92,19 @@ class EnvironmentResourceOverrideModel(PlatformBaseModel):
     @model_validator(mode="before")
     @classmethod
     def drop_removed_references(cls, data):
-        """Drop the removed 'references' key with a warning instead of failing validation.
+        """Drop 'condition' with a warning instead of failing validation.
 
-        ADR-0078: mirrors the same removal on WorkspaceResourceModel. The override
-        was merged into a field nothing ever read. Deprecation shim; remove in the
-        next minor release.
+        ADR-0083 — mirrors the same removal on WorkspaceResourceModel. The override
+        was merged into a field nothing ever read. Deprecation shim; see that model
+        for why it outlives ADR-0078's 'references' shim.
         """
-        if isinstance(data, dict) and "references" in data:
-            data = {k: v for k, v in data.items() if k != "references"}
+        if not isinstance(data, dict):
+            return data
+        if "condition" in data:
+            data = {k: v for k, v in data.items() if k != "condition"}
             warnings.warn(
-                f"Environment resource override '{data.get('resource', '<unnamed>')}': 'references' has been "
-                "removed (ADR-0078) and is ignored. The field was never read; remove it from your environment file.",
+                f"Environment resource override '{data.get('resource', '<unnamed>')}': 'condition' has been "
+                "removed (ADR-0083) and is ignored. Override 'enabled' instead.",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -115,11 +117,7 @@ class EnvironmentResourceOverrideModel(PlatformBaseModel):
     )
     enabled: Optional[bool] = Field(
         None,
-        description="Override whether this resource is enabled/deployed in this environment",
-    )
-    condition: Optional[str] = Field(
-        None,
-        description="Override conditional expression for resource inclusion",
+        description="Override whether this resource is deployed in this environment (ADR-0083)",
     )
     role: Optional[PlatformName] = Field(None, description="Override role of the resource")
     count: Optional[int] = Field(None, ge=1, le=100, description="Override resource instance count")

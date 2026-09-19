@@ -155,6 +155,49 @@ class TestCveMaxSeverityPolicyNoContext:
 
 
 # ---------------------------------------------------------------------------
+# Tests: on_missing_data (ADR-0082) — genuine missing-data path only
+# ---------------------------------------------------------------------------
+
+
+class TestCveMaxSeverityPolicyOnMissingData:
+    def _no_data_context(self):
+        return PolicyContext(phase="build", work_path=None, cve_audit_result=None, build_path=None)
+
+    def test_default_skip_passes_silently(self):
+        policy = CveMaxSeverityPolicy(make_policy(configuration={"max_severity": "HIGH"}))
+        result = policy.evaluate(self._no_data_context())
+        assert result.passed is True
+        assert result.warnings == []
+
+    def test_warn_passes_but_surfaces_warning(self):
+        model = make_policy(configuration={"max_severity": "HIGH"})
+        model = model.model_copy(update={"on_missing_data": "warn"})
+        policy = CveMaxSeverityPolicy(model)
+        result = policy.evaluate(self._no_data_context())
+        assert result.passed is True
+        assert result.warnings == ["no SBOM available or scanner not found"]
+
+    def test_block_fails_with_violation(self):
+        model = make_policy(configuration={"max_severity": "HIGH"})
+        model = model.model_copy(update={"on_missing_data": "block"})
+        policy = CveMaxSeverityPolicy(model)
+        result = policy.evaluate(self._no_data_context())
+        assert result.passed is False
+        assert len(result.violations) == 1
+        assert "no SBOM available or scanner not found" in result.violations[0]
+
+    def test_not_applicable_skip_ignores_block(self):
+        """max_severity not configured is NOT a missing-data case — it must
+        stay a silent pass even when on_missing_data is set to block."""
+        model = make_policy(configuration={})  # no max_severity at all
+        model = model.model_copy(update={"on_missing_data": "block"})
+        policy = CveMaxSeverityPolicy(model)
+        result = policy.evaluate(self._no_data_context())
+        assert result.passed is True
+        assert result.violations == []
+
+
+# ---------------------------------------------------------------------------
 # Tests: policy engine registration
 # ---------------------------------------------------------------------------
 

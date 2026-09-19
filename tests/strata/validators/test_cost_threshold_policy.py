@@ -20,6 +20,7 @@ def _policy(
     currency="EUR",
     env_pattern=None,
     enforcement="deny",
+    on_missing_data=None,
 ) -> CostThresholdPolicy:
     config = {}
     if max_monthly is not None:
@@ -28,12 +29,16 @@ def _policy(
         config["currency"] = currency
     if env_pattern:
         config["environment_pattern"] = env_pattern
+    kwargs = {}
+    if on_missing_data is not None:
+        kwargs["on_missing_data"] = on_missing_data
     model = PolicyModel(
         name="test_cost_policy",
         type="cost_threshold",
         phase="plan",
         enforcement=enforcement,
         configuration=config or None,
+        **kwargs,
     )
     return CostThresholdPolicy(model)
 
@@ -123,6 +128,62 @@ class TestCostThresholdSkip:
         policy = _policy(max_monthly="not_a_number")
         result = policy.evaluate(_context(cost_data=_COST_DATA_5000))
         assert result.passed is True
+
+
+# ---------------------------------------------------------------------------
+# on_missing_data (ADR-0082) — genuine missing-data path only
+# ---------------------------------------------------------------------------
+
+
+class TestCostThresholdOnMissingData:
+    def test_default_skip_passes_silently_when_no_cost_data(self):
+        policy = _policy(max_monthly=10000)
+        result = policy.evaluate(_context(cost_data=None))
+        assert result.passed is True
+        assert result.warnings == []
+
+    def test_warn_passes_but_surfaces_warning_when_no_cost_data(self):
+        policy = _policy(max_monthly=10000, on_missing_data="warn")
+        result = policy.evaluate(_context(cost_data=None))
+        assert result.passed is True
+        assert len(result.warnings) == 1
+        assert "cost.json" in result.warnings[0]
+
+    def test_block_fails_with_violation_when_no_cost_data(self):
+        policy = _policy(max_monthly=10000, on_missing_data="block")
+        result = policy.evaluate(_context(cost_data=None))
+        assert result.passed is False
+        assert len(result.violations) == 1
+        assert "cost.json" in result.violations[0]
+
+    def test_block_fails_when_cost_data_unparseable(self):
+        policy = _policy(max_monthly=10000, on_missing_data="block")
+        result = policy.evaluate(_context(cost_data={"provisioners": {}}))
+        assert result.passed is False
+        assert "no parseable cost data" in result.violations[0]
+
+    def test_not_applicable_skips_ignore_block(self):
+        """Not-applicable skips (unconfigured max_monthly, non-matching
+        environment_pattern, exactly-zero cost) must stay a silent pass even
+        when on_missing_data is block — they are not missing-data cases."""
+        # max_monthly not configured
+        policy = _policy(max_monthly=None, on_missing_data="block")
+        result = policy.evaluate(_context(cost_data=_COST_DATA_5000))
+        assert result.passed is True
+        assert result.violations == []
+
+        # environment_pattern doesn't match
+        policy = _policy(max_monthly=10000, env_pattern="prd*", on_missing_data="block")
+        result = policy.evaluate(_context(cost_data=_COST_DATA_5000, env_name="dev"))
+        assert result.passed is True
+        assert result.violations == []
+
+        # cost is exactly zero
+        policy = _policy(max_monthly=10000, on_missing_data="block")
+        cost_data = {"provisioners": {"terraform": {"breakdown": {"totalMonthlyCost": "0.00"}}}}
+        result = policy.evaluate(_context(cost_data=cost_data))
+        assert result.passed is True
+        assert result.violations == []
 
 
 # ---------------------------------------------------------------------------

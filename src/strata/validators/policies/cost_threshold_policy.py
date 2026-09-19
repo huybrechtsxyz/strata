@@ -10,10 +10,15 @@ by ``--dry-run`` (ADR-0031 section 3a) — and is also written by the on-demand
 
 Graceful degradation
 --------------------
-- ``cost.json`` not found (no cost estimator declared) → skip (pass).
-- ``max_monthly`` not configured → skip (pass).
-- Cost data is zero or unparseable → skip (pass with warning).
-- ``environment_pattern`` configured → only evaluate for matching environment names.
+- ``cost.json`` not found or unparseable → governed by ``on_missing_data``
+  (default: ``skip`` — pass; ``warn`` — pass with a visible warning; ``block`` —
+  fail per ``enforcement``). See ADR-0082.
+- ``max_monthly`` not configured → always skip (pass) — not applicable, not a
+  missing-data case, unaffected by ``on_missing_data``.
+- Cost data is exactly zero → always skip (pass) — a real computed value, not
+  an absence, unaffected by ``on_missing_data``.
+- ``environment_pattern`` configured → only evaluate for matching environment
+  names; non-matching environments always skip regardless of ``on_missing_data``.
 
 Example configuration YAML::
 
@@ -74,7 +79,7 @@ class CostThresholdPolicy(BasePolicy):
             if env_name and not fnmatch.fnmatchcase(env_name, env_pattern):
                 return self._skip(f"environment '{env_name}' does not match pattern '{env_pattern}'")
 
-        # --- skip if no cost data available ---
+        # --- missing data if no cost data available (ADR-0082: on_missing_data) ---
         if context.cost_data is None:
             reason = (
                 "cost.json not found — declare a cost estimator integration "
@@ -83,12 +88,12 @@ class CostThresholdPolicy(BasePolicy):
             # A cost gate that has never once evaluated is worth more than debug-level
             # visibility: warn so the skip surfaces in command output, not just logs.
             self.logger.warning("cost_threshold_policy_skipped_no_data", policy=self.name, reason=reason)
-            return self._skip(reason)
+            return self._missing_data(reason)
 
         # --- resolve total monthly cost from cost.json ---
         total = self._extract_total_monthly(context.cost_data)
         if total is None:
-            return self._skip("cost.json contains no parseable cost data")
+            return self._missing_data("cost.json contains no parseable cost data")
 
         if total == 0.0:
             return self._skip("cost.json total is zero — skipping threshold check")

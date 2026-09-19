@@ -417,3 +417,109 @@ Documentation (`configuration.md`, `policies.md`, ADR-0072) was migrated to the 
 Whether new conventions need explicit justification was decided: yes, formalized in
 [docs/decisions/README.md#introducing-a-new-convention](README.md#introducing-a-new-convention).
 Nothing from the original inventory or the follow-up work remains open.
+
+## Addition (2026-09-17): impact of converging every expression on Jinja2 syntax
+
+Raised while scoping [ADR-0083](0083-declarative-stage-gating.md) (a new consumer of the
+expression system): *could all the syntaxes above merge into one — Jinja2 syntax — even if
+some sites don't execute Jinja, so there is **one place where everything is parsed**?*
+
+Analysed here rather than in ADR-0083 because the question is about this ADR's inventory as
+a whole, not about stage gating.
+
+### First, separate two things the question conflates
+
+The inventory contains two independent axes, and strata has already converged on one of them:
+
+| Axis                        | What it means                                   | Status today                                                                                                                                                                                                                                                                                   |
+| --------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Execution engine**        | What actually evaluates a condition once parsed | **Already largely Jinja.** `gate_controller._compare()` builds `f"actual {op} threshold"` and runs it through `ExpressionModel(kind=JINJA)` → `Environment.compile_expression()`. `diagram_expressions.parse_condition()` compiles its grammar down to a Jinja fragment run by `templater.py`. |
+| **Authored surface syntax** | What a human types in YAML                      | Deliberately *not* Jinja at most sites — closed grammars (`">= 1000"`, `"status == disabled"`), typed tokens (`${var:KEY}`), placeholders (`{segment}`), JMESPath (`spec.zones[*].name`).                                                                                                      |
+
+So "compile down to Jinja and evaluate there" is the **existing** pattern, not a proposal.
+The open part of the question is only the second axis: making the *authored* surface Jinja
+everywhere.
+
+### Correction to a claim made elsewhere
+
+`ExpressionModel(kind="jinja")` is **not** unwired. It has a real call site —
+[`gate_controller._compare()`](../../src/strata/controllers/gate_controller.py#L61). The
+module docstring's "defined for completeness" line predates that wiring and is stale for
+`jinja` (it remains accurate for `regex`).
+
+### The goal is already met without merging syntaxes
+
+"One place where everything is parsed" is precisely what `ExpressionModel` was built to be:
+one model, one compile-once `model_validator`, one import site. The `kind:` discriminator is
+what *enables* one parser to serve four different surface syntaxes — it is the mechanism that
+delivers the goal, not an obstacle to it. Merging the surface syntaxes is therefore a
+**separate** change that buys consistency of appearance, not centralisation of parsing.
+
+### Blockers found — sites that cannot adopt Jinja surface syntax
+
+1. **Helm values (`${var:}`/`${secret:}`/`${feature:}`) — hard collision.** `{{ }}` is Helm's
+   own Go-template/Sprig delimiter. Off-the-shelf charts ship `values.yaml` files containing
+   literal `{{ }}` text. This ADR already recorded this as the reason `regex` must stay a
+   first-class kind. Adopting Jinja delimiters here would make strata references
+   indistinguishable from chart-native templating. Escaping via custom Jinja delimiters
+   (`variable_start_string=...`) defeats the purpose — the result is no longer Jinja syntax.
+2. **`{segment}` path patterns — must stay invertible.** `path_convention.match_pattern()`
+   runs the pattern *backwards*: given a concrete file path, it recovers the segment values
+   (this is how ADR-0072 auto-detects a deployment's layer convention from its own path).
+   A closed `{segment}` shape is invertible; an arbitrary Jinja expression
+   (`{{ a if b else c }}`, filters, loops) is not. Jinja syntax here would permit patterns
+   that cannot be matched in reverse, turning a total function into a partial one.
+3. **Static reference collection — a security-relevant regression.** `collect_expr_refs()`
+   returns every `(kind, key)` pair *without evaluating anything*. Three live behaviours
+   depend on it: build-time validation that every backend-config reference resolves to a
+   declared variable/secret/feature; `HelmDeployer`'s routing of secret-bearing leaves to
+   `--set-string` (never written to disk) versus var/feature-only leaves written to
+   `<stem>.resolved.yaml`; and stage secret-scoping allowlists. Jinja's static analysis
+   (`jinja2.meta.find_undeclared_variables`, already used in `templater.py`) returns only
+   **top-level names** — `{{ secret.DB_PASSWORD }}` yields `{"secret"}`, not the key. Worse,
+   `{{ secret[name] }}` or `{{ secrets | first }}` is statically undecidable, so "does this
+   leaf contain a secret?" becomes unanswerable without evaluation — and the safe fallback
+   (treat every unprovable leaf as secret) would collapse the disk/`--set-string` split that
+   ADR-0075 deliberately built.
+4. **JMESPath (`spec.zones[*].name`) is a query language, not a template.** The Jinja
+   equivalent (`{{ spec.zones | map(attribute='name') | list }}`) is strictly less readable
+   and discards ADR-0073's own reuse argument — the current syntax is valid JMESPath,
+   already familiar from `az`/`aws --query` and Ansible's `json_query`.
+
+### Non-blockers (properties Jinja can preserve)
+
+Recording these so the analysis isn't one-sided:
+
+- **Fail-loud on an unresolved reference** (ADR-0075's decision driver) survives —
+  `StrictUndefined` raises, and `templater.py` already maintains a `_STRICT_ENV` for exactly
+  this.
+- **"Typo → named error, not silent false"** (ADR-0034's driver) also largely survives under
+  `StrictUndefined`, which raises on both undefined names and undefined attributes.
+- **Compile-once caching** is unaffected — `Environment.compile_expression()` is already the
+  cached path in `ExpressionModel`.
+
+### New cost Jinja surface syntax would introduce
+
+Authored YAML becomes executable code. `diagram_expressions.py` deliberately emits authored
+values as **quoted literals** so an authored value can never become part of the expression;
+a Jinja surface removes that guarantee by construction, and strata YAML is routinely consumed
+from other repositories. Mitigable with `jinja2.sandbox.SandboxedEnvironment`, but that is a
+new security surface to own, not a free swap.
+
+### Conclusion
+
+**No change recommended to the existing sites.** The stated goal — one parse location — is
+already delivered by `ExpressionModel`; merging surface syntaxes would not improve it, while
+blockers 1–3 would cost real, load-bearing behaviour (Helm interop, path-pattern
+invertibility, static secret routing).
+
+The defensible middle ground, and what ADR-0083 should weigh for a *new* expression site:
+
+- Keep compiling down to Jinja as the shared execution engine (existing pattern).
+- Keep kind-specific authored surfaces where a blocker applies.
+- For a **new** site where no blocker applies, prefer reusing an existing authored surface
+  (`${feature:KEY}`, or a closed `field op value` grammar) over introducing Jinja surface
+  syntax, so the inventory above does not grow a fifth shape.
+
+This section is analysis only — it opens no work item and does not change this ADR's status.
+

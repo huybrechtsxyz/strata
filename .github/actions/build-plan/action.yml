@@ -75,10 +75,14 @@ runs:
 
         # Note: strata's JSON output is wrapped in an envelope — fields live
         # under .data, not top-level (base_command.py's envelope: success/data/errors/messages).
+        #
+        # terraform_plan rows carry a per-stage `has_changes` (terraform's own
+        # -detailed-exitcode verdict). Test that, not row count: every stage that
+        # planned produces a row, including stages that found nothing to do.
         if [ "${EXIT_CODE}" -eq 0 ] && command -v jq &>/dev/null; then
           HAS_CHANGES=$(echo "${RESULT}" | jq -r '
             (.data.artifact_diff // [] | map(select(.status != "unchanged")) | length > 0) or
-            (.data.terraform_plan // [] | length > 0)
+            (.data.terraform_plan // [] | map(.has_changes == true) | any)
           ' 2>/dev/null || echo "false")
         else
           HAS_CHANGES="false"
@@ -92,8 +96,17 @@ runs:
             echo '```json'
             echo "${RESULT}" | head -100
             echo '```'
+          elif [ "${EXIT_CODE}" -eq 3 ]; then
+            # The plan ran fine and a gate rejected it (e.g. --strict-ai-review).
+            # Actionable by a human: fix the change or override. Never retry.
+            echo "⛔ **Plan blocked by a gate** (exit 3) — review the finding below"
+            echo '```json'
+            echo "${RESULT}" | head -100
+            echo '```'
           else
-            echo "❌ **Plan failed** (exit code ${EXIT_CODE})"
+            # The plan could not run — terraform init/validate/plan failed, or strata
+            # itself errored. Nothing was previewed; has_changes is meaningless here.
+            echo "❌ **Plan failed** (exit code ${EXIT_CODE}) — no preview was produced"
           fi
         } >> "$GITHUB_STEP_SUMMARY"
 

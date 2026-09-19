@@ -29,12 +29,19 @@ from strata.controllers.value_controller import ResolvedValues, ValueController
 from strata.deployers.base_deployer import STEP_CHECK, STEP_PLAN, STEP_SETUP
 from strata.deployers.terraform_deployer import TerraformDeployer
 from strata.models.deployment_model import DeploymentStageModel
+from strata.utils.stage_selection import StageSelectionMode, evaluate_enabled
 
 
 class PlanBuildCommand(BaseBuildCommand):
     """Show the build plan: artifact diff + per-stage terraform plan."""
 
     OPERATION = "build_plan"
+
+    # Class-level, not set in __init__, so they exist even when the command is
+    # constructed without it — `_run_plan` reads both unconditionally, and a missing
+    # attribute there would turn a reporting bug into an AttributeError crash.
+    _gate_blocked: bool = False
+    _plan_failed: bool = False
 
     def __init__(
         self,
@@ -61,6 +68,29 @@ class PlanBuildCommand(BaseBuildCommand):
         self._ai = ai
         self._strict_ai_review: Optional[str] = strict_ai_review.lower() if strict_ai_review else None
         self._no_cache_warm = no_cache_warm
+
+    def has_validation_errors(self) -> bool:
+        """True when a gate rejected an otherwise-working plan — exit 3, not 1 (ADR-0004).
+
+        `build plan` has three outcomes that all used to exit 0:
+
+        - the plan ran and found nothing — success
+        - the plan ran and found changes — **also success**. Changes are data, not
+          failure: the shipped ``build-plan`` GitHub Action surfaces them as a
+          ``has_changes`` *output*, and its documented recipe branches on that. An
+          exit code here would break every PR-preview pipeline.
+        - the plan could not run at all — a failure, and the one this distinguishes.
+
+        Of the two real failures, ``--strict-ai-review`` blocking is exit 3 ("fix the
+        config, block the PR" — and what the flag's own help text promises), while a
+        terraform init/validate/plan error is exit 1 ("alert, something is broken").
+        A CI pipeline can retry the second and must not retry the first.
+
+        ``_plan_failed`` wins when both happen: if terraform never produced a plan,
+        the AI reviewed nothing meaningful, and the broken toolchain is the finding
+        worth surfacing.
+        """
+        return self._gate_blocked and not self._plan_failed
 
     # ------------------------------------------------------------------
     # Core logic
@@ -133,14 +163,33 @@ class PlanBuildCommand(BaseBuildCommand):
 
         ai_analysis: Optional[Dict[str, Any]] = None
         if self._ai or self._strict_ai_review:
+            # Every `self._errors.append()` inside `_run_ai_analysis` is guarded by
+            # `if self._strict_ai_review`, so a new error here means the gate tripped:
+            # risk over threshold, no ai_agent integration, or the provider failed.
+            errors_before = len(self._errors)
             ai_analysis = self._run_ai_analysis(plan_results)
             if ai_analysis:
                 self._output_data["ai_analysis"] = ai_analysis
+            self._gate_blocked = len(self._errors) > errors_before
+
+        # A stage that reports `error` never produced a plan — terraform init, validate
+        # or plan failed. Returning success here told CI the preview was fine, and the
+        # GitHub Action's `has_changes` jq counts *rows*, not successful ones, so a
+        # wholly broken plan was reported as "plan shows changes".
+        failed_stages = [r["stage"] for r in plan_results if r.get("error")]
+        if failed_stages:
+            self._plan_failed = True
+            self._errors.append(f"Plan failed for stage(s): {', '.join(str(s) for s in failed_stages)}")
 
         if self._is_console_output():
             self._print_console(deployment_name, diff_rows, plan_results, value_rows, provider_rows, ai_analysis)
 
-        return True
+        # `--strict-ai-review` is documented as failing non-interactively and is sold
+        # for CI. It appended to `self._errors` and `_run_ai_analysis`'s own docstring
+        # claimed that made the caller "propagate a non-zero exit code" — but build
+        # commands defined no `has_validation_errors()`, which is all
+        # `handle_command_exit` inspects, so the gate printed "Plan blocked" and exited 0.
+        return not (self._gate_blocked or self._plan_failed)
 
     # ------------------------------------------------------------------
     # Layer 1: build artifacts into temp dir
@@ -333,21 +382,14 @@ class PlanBuildCommand(BaseBuildCommand):
         tmp_build_path: Path,
         resolved: Optional[ResolvedValues],
     ) -> List[Dict[str, Any]]:
-        if self._deployment_service is None:
+        # INSPECT, and load-bearing: a plan previews every stage, and _plan_stage
+        # marks the disabled ones `would_skip`. Gating here would filter them out
+        # first and silently turn that marker into dead code (ADR-0083 D11).
+        selection = self._resolve_stages(StageSelectionMode.INSPECT)
+        if selection is None:
             return []
 
-        spec = self._deployment_service.model.spec  # type: ignore[union-attr]
-        all_stages: List[DeploymentStageModel] = spec.stages or []
-
-        if self._stage:
-            stages = [s for s in all_stages if s.name == self._stage]
-            if not stages:
-                self._errors.append(f"Stage '{self._stage}' not found. Available: {[s.name for s in all_stages]}")
-                return []
-        else:
-            stages = all_stages
-
-        return [self._plan_stage(stage, tmp_build_path, resolved) for stage in stages]
+        return [self._plan_stage(stage, tmp_build_path, resolved) for stage in selection.to_run]
 
     def _plan_stage(
         self,
@@ -360,7 +402,31 @@ class PlanBuildCommand(BaseBuildCommand):
             "ok": False,
             "messages": [],
             "error": None,
+            "would_skip": False,
+            "skip_reason": None,
+            # None until terraform plan actually runs. Consumers must treat null as
+            # "unknown", not "no changes" — a stage that failed to plan knows nothing
+            # about whether it would have changed anything.
+            "has_changes": None,
         }
+
+        # ADR-0083 D11: `build plan` is a preview and is deliberately NOT gated — the
+        # stage is still planned. But a plan that silently omitted the marker would
+        # make "disabled in this environment" indistinguishable from "deleted from the
+        # deployment", which is the exact confusion stage gating exists to remove.
+        _enabled, skip, enabled_error = evaluate_enabled(stage, resolved)
+        if enabled_error:
+            # A gate that cannot be evaluated is neither "enabled" nor "skipped": it is
+            # a stage `deploy run` would abort on. Reporting it as an ordinary, unmarked
+            # stage would be the same silence the marker above exists to break — and the
+            # worse half of it, since the marker at least tells the truth about a stage
+            # that resolves. Planning it anyway is pointless: it cannot be run.
+            result["error"] = enabled_error
+            return result
+        if skip is not None:
+            result["would_skip"] = True
+            result["skip_reason"] = skip.detail
+            result["messages"].append(f"⏭️  Disabled in this environment ({skip.detail}) — 'deploy run' would skip it.")
 
         if self._configuration_service is None:
             result["error"] = "Configuration service not loaded"
@@ -438,6 +504,12 @@ class PlanBuildCommand(BaseBuildCommand):
                         }
                     )
                 return result
+
+        # terraform's own `-detailed-exitcode` verdict, captured during the plan step.
+        # Recorded per stage because the alternative — inferring "changes" from the
+        # presence of a result row — is true for every stage that ran, including ones
+        # that found nothing to do.
+        result["has_changes"] = deployer.plan_has_changes
 
         if self._is_ndjson_output():
             self.emit_ndjson(
@@ -639,8 +711,9 @@ class PlanBuildCommand(BaseBuildCommand):
     def _run_ai_analysis(self, plan_results: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         """Run AI plan analysis if an ai_agent integration is configured.
 
-        When ``--strict-ai-review`` is set and risk ≥ threshold the command fails
-        (adds to ``self._errors`` so the caller propagates a non-zero exit code).
+        When ``--strict-ai-review`` is set and risk ≥ threshold — or the gate cannot
+        run at all — this appends to ``self._errors``. ``_run_plan`` detects that and
+        returns False, so the process exits non-zero.
         """
         import json as _json
 

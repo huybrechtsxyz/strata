@@ -12,6 +12,7 @@ from strata.integrations.workitem.base_workitem_backend import WorkItem, WorkIte
 from strata.logger import get_logger
 from strata.models.expression_model import ExpressionKind, ExpressionModel
 from strata.models.gate_model import DeploymentGateModel, GateWhenConditionsModel
+from strata.models.missing_data_model import MissingDataPolicy, resolve_missing_data
 
 logger = get_logger(__name__)
 
@@ -44,8 +45,8 @@ class GateContext:
     """Runtime values used to evaluate gate `when:` conditions."""
 
     cost_delta_monthly: Optional[float] = None
-    cve_critical_count: int = 0
-    cve_high_count: int = 0
+    cve_critical_count: Optional[int] = None
+    cve_high_count: Optional[int] = None
     ai_risk: Optional[str] = None
     current_time_utc: Optional[datetime] = field(default_factory=lambda: datetime.now(timezone.utc))
     extra: Dict = field(default_factory=dict)
@@ -71,11 +72,24 @@ def _compare(op: str, actual: float, threshold: float) -> bool:
     return bool(model.evaluate({"actual": actual, "threshold": threshold}))
 
 
-def _eval_numeric_expr(expr: str, actual: Optional[float]) -> bool:
+def _eval_numeric_expr(
+    expr: str,
+    actual: Optional[float],
+    on_missing_data: MissingDataPolicy = MissingDataPolicy.SKIP,
+    gate_name: str = "",
+    reason: str = "",
+) -> bool:
     """Evaluate ">= 1000" style expression against a numeric value.
-    Returns False (don't trigger) when actual is None (data not available)."""
+
+    When ``actual`` is None (required data was never produced), delegates the
+    skip/warn/block decision to the shared ``resolve_missing_data`` (ADR-0082)
+    instead of unconditionally returning False.
+    """
     if actual is None:
-        return False
+        outcome = resolve_missing_data(on_missing_data, reason)
+        if outcome.warning:
+            logger.warning("gate.missing_data", gate=gate_name, reason=outcome.warning)
+        return outcome.blocked
     m = _OPERATOR_RE.match(expr.strip())
     if not m:
         logger.warning("gate.invalid_numeric_expr", expr=expr)
@@ -89,10 +103,24 @@ def _eval_numeric_expr(expr: str, actual: Optional[float]) -> bool:
     return _compare(op, actual, threshold)
 
 
-def _eval_risk_expr(expr: str, actual: Optional[str]) -> bool:
-    """Evaluate ">= high" style expression against an AI risk string."""
+def _eval_risk_expr(
+    expr: str,
+    actual: Optional[str],
+    on_missing_data: MissingDataPolicy = MissingDataPolicy.SKIP,
+    gate_name: str = "",
+    reason: str = "",
+) -> bool:
+    """Evaluate ">= high" style expression against an AI risk string.
+
+    When ``actual`` is None (no AI risk analysis was run), delegates the
+    skip/warn/block decision to the shared ``resolve_missing_data`` (ADR-0082)
+    instead of unconditionally returning False.
+    """
     if actual is None:
-        return False
+        outcome = resolve_missing_data(on_missing_data, reason)
+        if outcome.warning:
+            logger.warning("gate.missing_data", gate=gate_name, reason=outcome.warning)
+        return outcome.blocked
     m = _OPERATOR_RE.match(expr.strip())
     if not m:
         logger.warning("gate.invalid_risk_expr", expr=expr)
@@ -150,16 +178,50 @@ class GateConditionEvaluator:
         checks: List[bool] = []
 
         if cond.cost_delta_monthly is not None:
-            checks.append(_eval_numeric_expr(cond.cost_delta_monthly, context.cost_delta_monthly))
+            checks.append(
+                _eval_numeric_expr(
+                    cond.cost_delta_monthly,
+                    context.cost_delta_monthly,
+                    gate.on_missing_data,
+                    gate.name,
+                    "no cost.json — cost was not estimated",
+                )
+            )
 
         if cond.cve_critical is not None:
-            checks.append(_eval_numeric_expr(cond.cve_critical, float(context.cve_critical_count)))
+            actual = float(context.cve_critical_count) if context.cve_critical_count is not None else None
+            checks.append(
+                _eval_numeric_expr(
+                    cond.cve_critical,
+                    actual,
+                    gate.on_missing_data,
+                    gate.name,
+                    "no cve-audit.json — CVE scan was not run",
+                )
+            )
 
         if cond.cve_high is not None:
-            checks.append(_eval_numeric_expr(cond.cve_high, float(context.cve_high_count)))
+            actual = float(context.cve_high_count) if context.cve_high_count is not None else None
+            checks.append(
+                _eval_numeric_expr(
+                    cond.cve_high,
+                    actual,
+                    gate.on_missing_data,
+                    gate.name,
+                    "no cve-audit.json — CVE scan was not run",
+                )
+            )
 
         if cond.ai_risk is not None:
-            checks.append(_eval_risk_expr(cond.ai_risk, context.ai_risk))
+            checks.append(
+                _eval_risk_expr(
+                    cond.ai_risk,
+                    context.ai_risk,
+                    gate.on_missing_data,
+                    gate.name,
+                    "no AI risk analysis — --ai/--strict-ai-review was not run",
+                )
+            )
 
         if cond.time_utc is not None:
             checks.append(_eval_time_window(cond.time_utc, context.current_time_utc))

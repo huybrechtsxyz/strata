@@ -297,18 +297,27 @@ class WorkspaceResourceModel(PlatformBaseModel):
     @model_validator(mode="before")
     @classmethod
     def drop_removed_references(cls, data):
-        """Drop the removed 'references' key with a warning instead of failing validation.
+        """Drop 'condition' with a warning instead of failing validation.
 
-        ADR-0078: the cross-resource 'references' field was inert — never resolved,
-        never validated — and has been removed. Shipped workspace templates emitted
-        'references: {}', so extra="forbid" would turn an upgrade into a hard error.
-        Deprecation shim; remove in the next minor release.
+        ADR-0083: 'condition' was inert — never resolved, never validated — and
+        additionally *redundant*, since an environment can already switch a resource
+        off by overriding 'enabled', so per-environment inclusion needs no expression
+        language. Its documented syntax ('{{ environment }} == production') matched
+        no engine in the codebase, and the shipped scaffold advertised it.
+
+        Deprecation shim. It was still an accepted, documented field in v1.10.0, so
+        it has not yet served a single release as a warning — remove it one minor
+        after the release that first carries this shim, not before. ADR-0078's
+        'references' shim was removed on exactly that schedule.
         """
-        if isinstance(data, dict) and "references" in data:
-            data = {k: v for k, v in data.items() if k != "references"}
+        if not isinstance(data, dict):
+            return data
+        if "condition" in data:
+            data = {k: v for k, v in data.items() if k != "condition"}
             warnings.warn(
-                f"Workspace resource '{data.get('name', '<unnamed>')}': 'references' has been removed "
-                "(ADR-0078) and is ignored. The field was never read; remove it from your workspace file.",
+                f"Workspace resource '{data.get('name', '<unnamed>')}': 'condition' has been removed "
+                "(ADR-0083) and is ignored. Use 'enabled' instead — an environment can override it "
+                "per environment.",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -332,11 +341,13 @@ class WorkspaceResourceModel(PlatformBaseModel):
     # Conditional inclusion
     enabled: bool = Field(
         default=True,
-        description="Whether this resource is enabled/deployed in this workspace",
-    )
-    condition: Optional[str] = Field(
-        None,
-        description="Conditional expression for resource inclusion (e.g., '{{ environment }} == production')",
+        description=(
+            "Whether this resource is deployed in this workspace (ADR-0083). "
+            "Set false to exclude it from the built platform artifact, and therefore from every "
+            "provisioner that consumes it. Override per-environment via "
+            "environment.spec.resources[].enabled. Same keyword strata uses for conditional "
+            "inclusion on every schema — 'condition'/'when'/'if' are not accepted."
+        ),
     )
 
     # Resource metadata

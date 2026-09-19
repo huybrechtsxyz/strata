@@ -8,6 +8,7 @@ from typing import Dict, List, Literal, Optional, Union
 from pydantic import Field
 
 from strata.models.common_models import PlatformBaseModel
+from strata.models.missing_data_model import MissingDataPolicy
 
 
 class ApproverType(str, Enum):
@@ -119,4 +120,17 @@ class DeploymentGateModel(PlatformBaseModel):
     description: Optional[str] = Field(
         None,
         description="Human-readable note shown in the work-item context.",
+    )
+    on_missing_data: MissingDataPolicy = Field(
+        MissingDataPolicy.SKIP,
+        description=(
+            "How this gate's condition(s) behave when their required input data was "
+            "never produced (e.g. cve-audit.json absent because --audit wasn't run, "
+            "or cost.json absent because no cost estimator is declared): skip "
+            "(default, condition never triggers) | warn (condition never triggers, "
+            "but a visible warning is logged) | block (condition counts as MATCHED "
+            "— the gate fires and requires its configured resolution, e.g. human "
+            "approval, exactly as if the real threshold had been exceeded). One "
+            "setting per gate, not per condition. See ADR-0082."
+        ),
     )

@@ -112,6 +112,69 @@ class TestGateConditionEvaluatorShouldTrigger:
 
 
 # ---------------------------------------------------------------------------
+# on_missing_data (ADR-0082 Phase 3) — the fix for the confirmed
+# security_review/cve_critical fail-open bug found 2026-09-17.
+# ---------------------------------------------------------------------------
+
+
+class TestGateConditionEvaluatorOnMissingData:
+    def test_default_skip_does_not_trigger_when_cve_data_missing(self):
+        """This is the exact bug found 2026-09-17: --audit wasn't run, so
+        cve-audit.json never existed, and cve_critical_count stays None. With
+        the default (skip), the gate still doesn't trigger — reproduces
+        today's existing (if flawed) behavior unchanged."""
+        gate = _gate(type="security_review", when={"cve_critical": ">= 1"})
+        context = GateContext(cve_critical_count=None)
+        assert GateConditionEvaluator.should_trigger(gate, context) is False
+
+    def test_block_triggers_when_cve_data_missing(self):
+        """The actual fix: on_missing_data: block makes the gate fire — forcing
+        the security review that was supposed to happen — instead of silently
+        assuming zero vulnerabilities."""
+        gate = _gate(type="security_review", when={"cve_critical": ">= 1"}, on_missing_data="block")
+        context = GateContext(cve_critical_count=None)
+        assert GateConditionEvaluator.should_trigger(gate, context) is True
+
+    def test_warn_does_not_trigger_but_logs_a_warning(self):
+        from unittest.mock import patch
+
+        gate = _gate(type="security_review", when={"cve_critical": ">= 1"}, on_missing_data="warn")
+        context = GateContext(cve_critical_count=None)
+        with patch("strata.controllers.gate_controller.logger") as mock_logger:
+            triggered = GateConditionEvaluator.should_trigger(gate, context)
+        assert triggered is False
+        mock_logger.warning.assert_called_once()
+        _, kwargs = mock_logger.warning.call_args
+        assert kwargs["gate"] == "g"
+        assert "cve-audit.json" in kwargs["reason"]
+
+    def test_block_triggers_when_cve_high_missing(self):
+        gate = _gate(type="security_review", when={"cve_high": ">= 5"}, on_missing_data="block")
+        context = GateContext(cve_high_count=None)
+        assert GateConditionEvaluator.should_trigger(gate, context) is True
+
+    def test_block_triggers_when_cost_delta_missing(self):
+        gate = _gate(type="cost_review", when={"cost_delta_monthly": ">= 1000"}, on_missing_data="block")
+        context = GateContext(cost_delta_monthly=None)
+        assert GateConditionEvaluator.should_trigger(gate, context) is True
+
+    def test_block_triggers_when_ai_risk_missing(self):
+        """Corrected scope: ai_risk is exactly as nullable as cost_delta_monthly
+        (populated only when --ai/--strict-ai-review ran) — the original design
+        draft incorrectly excluded it."""
+        gate = _gate(when={"ai_risk": ">= high"}, on_missing_data="block")
+        context = GateContext(ai_risk=None)
+        assert GateConditionEvaluator.should_trigger(gate, context) is True
+
+    def test_time_utc_is_unaffected_by_on_missing_data(self):
+        """Wall-clock time is never 'missing' — on_missing_data has nothing to
+        do here regardless of its value."""
+        gate = _gate(type="scheduled", when={"time_utc": "02:00-04:00"}, on_missing_data="block")
+        inside = datetime(2026, 7, 29, 3, 0, tzinfo=timezone.utc)
+        assert GateConditionEvaluator.should_trigger(gate, GateContext(current_time_utc=inside)) is False
+
+
+# ---------------------------------------------------------------------------
 # _compare / _eval_numeric_expr / _eval_risk_expr (ADR-0073 consolidation)
 # ---------------------------------------------------------------------------
 

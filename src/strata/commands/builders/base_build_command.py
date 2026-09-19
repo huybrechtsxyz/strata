@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from strata.commands.base_command import BaseCommand
+from strata.commands.stage_mixin import StageSelectionMixin
 from strata.controllers.repository_controller import RepositoryController
 from strata.integrations.cve_scanner import CveScannerIntegration
 from strata.models.integration_model import IntegrationModel
@@ -11,7 +12,7 @@ from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_service import DeploymentService
 
 
-class BaseBuildCommand(BaseCommand):
+class BaseBuildCommand(StageSelectionMixin, BaseCommand):
     """Base class for build command implementations."""
 
     OPERATION = "build"

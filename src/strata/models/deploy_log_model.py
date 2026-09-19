@@ -14,7 +14,7 @@ using Jinja2 path templates.
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from strata.models.change_reference_model import ChangeReferenceModel
 from strata.models.common_models import PlatformBaseModel, PlatformName
@@ -35,12 +35,36 @@ class DeployLogStageModel(PlatformBaseModel):
     provisioner: Optional[str] = Field(default=None, description="Provisioner type used")
     topology: Optional[str] = Field(default=None, description="Topology reference if used")
     success: bool = Field(description="Whether the stage succeeded")
+    status: Optional[str] = Field(
+        default=None,
+        description=(
+            "Outcome: success | failed | skipped. Mirrors the deployment manifest's stage status "
+            "so a skipped stage is distinguishable from a failed one — 'success' alone cannot "
+            "express that (ADR-0083). Derived from 'success' when not supplied."
+        ),
+    )
+    skip_reason: Optional[str] = Field(
+        default=None,
+        description="Why the stage was skipped — set only when status is 'skipped' (ADR-0083).",
+    )
     started_at: str = Field(description="ISO 8601 UTC start timestamp")
     completed_at: str = Field(description="ISO 8601 UTC completion timestamp")
     duration_seconds: float = Field(description="Stage duration in seconds")
     steps: List[DeployLogStepModel] = Field(default_factory=list, description="Step-level results")
     errors: List[str] = Field(default_factory=list, description="Errors encountered")
     messages: List[str] = Field(default_factory=list, description="Informational messages")
+
+    @model_validator(mode="after")
+    def derive_status(self) -> "DeployLogStageModel":
+        """Populate ``status`` from ``success`` when it was not supplied.
+
+        Keeps the field always-present in the written artifact without inventing a
+        default that could contradict ``success`` — a caller that knows better
+        (e.g. a skipped stage) passes ``status`` explicitly and wins.
+        """
+        if self.status is None:
+            self.status = "success" if self.success else "failed"
+        return self
 
 
 class DeployLogPullRequestModel(PlatformBaseModel):

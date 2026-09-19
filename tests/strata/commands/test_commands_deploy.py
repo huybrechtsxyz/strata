@@ -9,6 +9,7 @@ from strata.commands.cli_deploy import deploy
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
 from strata.commands.deploy.run_deploy_command import RunDeployCommand
 from strata.integrations.lock.base_lock_backend import LockBackendError, LockTimeoutError
+from strata.utils.resolved_values import ResolvedValues
 
 
 class TestDeployRun:
@@ -348,6 +349,12 @@ def _make_stage(name: str = "production") -> MagicMock:
     stage.scope = None
     stage.on_failure = "stop"
     stage.approval = None
+    # Optional[...] fields must be set explicitly: an unset MagicMock attribute is
+    # truthy AND iterates as empty, so leaving these off would silently exercise
+    # the wrong branch (gated-by-expression / empty depends_on) instead of the
+    # "not set" default. See ADR-0083 Phase 1.
+    stage.enabled = None
+    stage.depends_on = None
     return stage
 
 
@@ -1088,6 +1095,283 @@ class TestExecuteProvisioningNamespaceFilter:
         # Fails fast — never even reaches the preflight/stage-execution phase
         preflight.assert_not_called()
         stage_exec.assert_not_called()
+
+
+class TestExecuteProvisioningStageGating:
+    """ADR-0083 Phase 3 — `enabled` gating inside _execute_provisioning()."""
+
+    def _make_command(self, tmp_path, stages, resolved=None):
+        cmd = _make_run_command(tmp_path)
+        cmd._dry_run = False
+        cmd._output_format = "json"
+        svc = MagicMock()
+        spec = _make_locking_spec(enabled=False)
+        spec.stages = stages
+        svc.model.spec = spec
+        svc.model.meta.name = "my-deploy"
+        cmd._deployment_service = svc
+        cmd._resolved_values = resolved
+        return cmd
+
+    def test_disabled_stage_never_constructs_a_deployer(self, tmp_path):
+        """Goal 3: a gated-out stage must not initialise a backend.
+
+        Asserting only that the stage did not deploy would pass even if pre-flight
+        had already built its deployer and authenticated — which is the cost this
+        feature exists to avoid. So _create_deployer is left real and observed.
+        """
+        core, api = _make_stage("core"), _make_stage("api")
+        api.enabled = False
+        cmd = self._make_command(tmp_path, [core, api])
+
+        deployer = MagicMock()
+        deployer.validate_workspace.return_value = (True, [])
+        deployer.validate_environment.return_value = (True, [])
+
+        with (
+            patch.object(cmd, "_create_deployer", return_value=deployer) as create_deployer,
+            patch.object(cmd, "_execute_stage_provisioning", return_value=True) as stage_exec,
+            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
+        ):
+            result = cmd._execute_provisioning()  # type: ignore[call-arg]
+
+        assert result is True
+        assert [c.args[0].name for c in create_deployer.call_args_list] == ["core"]
+        assert [c.args[0].name for c in stage_exec.call_args_list] == ["core"]
+
+    def test_feature_expression_gates_the_stage(self, tmp_path):
+        core, api = _make_stage("core"), _make_stage("api")
+        api.enabled = "${feature:enable_api}"
+        cmd = self._make_command(tmp_path, [core, api], resolved=ResolvedValues(features={"enable_api": False}))
+
+        with (
+            patch.object(cmd, "_preflight_check_provisioners", return_value=[]),
+            patch.object(cmd, "_execute_stage_provisioning", return_value=True) as stage_exec,
+            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
+        ):
+            result = cmd._execute_provisioning()  # type: ignore[call-arg]
+
+        assert result is True
+        assert [c.args[0].name for c in stage_exec.call_args_list] == ["core"]
+
+    def test_enabled_expression_runs_the_stage(self, tmp_path):
+        api = _make_stage("api")
+        api.enabled = "${feature:enable_api}"
+        cmd = self._make_command(tmp_path, [api], resolved=ResolvedValues(features={"enable_api": True}))
+
+        with (
+            patch.object(cmd, "_preflight_check_provisioners", return_value=[]),
+            patch.object(cmd, "_execute_stage_provisioning", return_value=True) as stage_exec,
+            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
+        ):
+            result = cmd._execute_provisioning()  # type: ignore[call-arg]
+
+        assert result is True
+        assert [c.args[0].name for c in stage_exec.call_args_list] == ["api"]
+
+    def test_unresolvable_gate_aborts_before_any_stage_runs(self, tmp_path):
+        api = _make_stage("api")
+        api.enabled = "${feature:typo}"
+        cmd = self._make_command(tmp_path, [api], resolved=ResolvedValues(features={"other": True}))
+
+        with (
+            patch.object(cmd, "_preflight_check_provisioners", return_value=[]) as preflight,
+            patch.object(cmd, "_execute_stage_provisioning") as stage_exec,
+        ):
+            result = cmd._execute_provisioning()  # type: ignore[call-arg]
+
+        assert result is False
+        assert any("typo" in e for e in cmd._errors), cmd._errors
+        preflight.assert_not_called()
+        stage_exec.assert_not_called()
+
+    def test_stage_flag_naming_a_disabled_stage_is_rejected(self, tmp_path):
+        """D4: --stage does not override `enabled`."""
+        api = _make_stage("api")
+        api.enabled = False
+        cmd = self._make_command(tmp_path, [_make_stage("core"), api])
+        cmd._stage = "api"
+
+        with (
+            patch.object(cmd, "_preflight_check_provisioners", return_value=[]) as preflight,
+            patch.object(cmd, "_execute_stage_provisioning") as stage_exec,
+        ):
+            result = cmd._execute_provisioning()  # type: ignore[call-arg]
+
+        assert result is False
+        assert any("is disabled in this environment" in e for e in cmd._errors), cmd._errors
+        preflight.assert_not_called()
+        stage_exec.assert_not_called()
+
+    def test_all_stages_disabled_succeeds_without_deploying_anything(self, tmp_path):
+        a, b = _make_stage("a"), _make_stage("b")
+        a.enabled = False
+        b.enabled = False
+        cmd = self._make_command(tmp_path, [a, b])
+
+        with (
+            patch.object(cmd, "_preflight_check_provisioners", return_value=[]),
+            patch.object(cmd, "_execute_stage_provisioning") as stage_exec,
+            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
+        ):
+            result = cmd._execute_provisioning()  # type: ignore[call-arg]
+
+        assert result is True
+        stage_exec.assert_not_called()
+
+
+class TestSkippedStageIsRecorded:
+    """ADR-0083 Phase 4 / D6 — a gated-out stage is recorded, never silently absent."""
+
+    def _make_command(self, tmp_path, stages, resolved=None):
+        cmd = _make_run_command(tmp_path)
+        cmd._dry_run = False
+        cmd._output_format = "json"
+        svc = MagicMock()
+        spec = _make_locking_spec(enabled=False)
+        spec.stages = stages
+        svc.model.spec = spec
+        svc.model.meta.name = "my-deploy"
+        cmd._deployment_service = svc
+        cmd._resolved_values = resolved
+        return cmd
+
+    def _run(self, cmd):
+        with (
+            patch.object(cmd, "_preflight_check_provisioners", return_value=[]),
+            patch.object(cmd, "_execute_stage_provisioning", return_value=True),
+            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
+        ):
+            return cmd._execute_provisioning()  # type: ignore[call-arg]
+
+    def test_skipped_stage_appears_in_stage_results_with_skipped_status(self, tmp_path):
+        core, api = _make_stage("core"), _make_stage("api")
+        api.enabled = False
+        api.provisioner = "dispatcher_tf"
+        cmd = self._make_command(tmp_path, [core, api])
+
+        assert self._run(cmd) is True
+
+        recorded = {sr.name: sr for sr in cmd._stage_results}
+        assert "api" in recorded, "a gated-out stage must not be silently absent"
+        assert recorded["api"].status == "skipped"
+        assert recorded["api"].provisioner == "dispatcher_tf"
+
+    def test_skip_reason_names_the_expression_and_resolved_value(self, tmp_path):
+        api = _make_stage("api")
+        api.enabled = "${feature:enable_api}"
+        cmd = self._make_command(tmp_path, [api], resolved=ResolvedValues(features={"enable_api": False}))
+
+        assert self._run(cmd) is True
+
+        reason = next(sr.skip_reason for sr in cmd._stage_results if sr.name == "api")
+        assert "${feature:enable_api}" in reason
+        assert "false" in reason
+
+    def test_skipped_is_distinguishable_from_failed(self, tmp_path):
+        api = _make_stage("api")
+        api.enabled = False
+        cmd = self._make_command(tmp_path, [api])
+
+        assert self._run(cmd) is True
+
+        result = cmd._stage_results[0]
+        assert result.status == "skipped"
+        assert result.error is None, "a skip is not a failure"
+
+    def test_skip_is_recorded_even_when_the_run_aborts_afterwards(self, tmp_path):
+        """The audit fact must survive a later failure in the same invocation."""
+        core, api = _make_stage("core"), _make_stage("api")
+        api.enabled = False
+        cmd = self._make_command(tmp_path, [core, api])
+        cmd._namespaces = ["does-not-exist"]
+        cmd._deployment_service.get_namespace_services.return_value = {}
+
+        with patch.object(cmd, "_execute_stage_provisioning") as stage_exec:
+            result = cmd._execute_provisioning()  # type: ignore[call-arg]
+
+        assert result is False
+        stage_exec.assert_not_called()
+        assert [sr.name for sr in cmd._stage_results] == ["api"]
+        assert cmd._stage_results[0].status == "skipped"
+
+    def test_deploy_log_carries_status_and_reason(self, tmp_path):
+        """The deploy-log is built from the same stage results (one call site)."""
+        from strata.models.deploy_log_model import DeployLogStageModel
+
+        api = _make_stage("api")
+        api.enabled = False
+        cmd = self._make_command(tmp_path, [api])
+        assert self._run(cmd) is True
+
+        sr = cmd._stage_results[0]
+        entry = DeployLogStageModel(
+            name=sr.name,
+            success=(sr.status == "success"),
+            status=sr.status,
+            skip_reason=sr.skip_reason,
+            started_at="2026-09-17T00:00:00Z",
+            completed_at="2026-09-17T00:00:00Z",
+            duration_seconds=0.0,
+        )
+
+        assert entry.status == "skipped"
+        assert entry.success is False
+        assert entry.skip_reason is not None
+
+    def test_cascade_skipped_stage_reaches_the_manifest(self, tmp_path):
+        """ADR-0083 Phase 5 exit criterion — recorded by Phase 4's machinery, no new code."""
+        core, api = _make_stage("core"), _make_stage("api")
+        core.enabled = False
+        api.depends_on = ["core"]
+        cmd = self._make_command(tmp_path, [core, api])
+
+        assert self._run(cmd) is True
+
+        recorded = {sr.name: sr for sr in cmd._stage_results}
+        assert set(recorded) == {"core", "api"}
+        assert recorded["api"].status == "skipped"
+        assert "depends on skipped stage 'core'" in recorded["api"].skip_reason
+
+    def test_dependency_ordering_applies_to_execution(self, tmp_path):
+        """depends_on now controls run order, not just diagram edges."""
+        later, earlier = _make_stage("later"), _make_stage("earlier")
+        later.depends_on = ["earlier"]
+        cmd = self._make_command(tmp_path, [later, earlier])
+
+        with (
+            patch.object(cmd, "_preflight_check_provisioners", return_value=[]),
+            patch.object(cmd, "_execute_stage_provisioning", return_value=True) as stage_exec,
+            patch.object(cmd, "_evaluate_deployment_gates", return_value=None),
+        ):
+            assert cmd._execute_provisioning() is True  # type: ignore[call-arg]
+
+        assert [c.args[0].name for c in stage_exec.call_args_list] == ["earlier", "later"]
+
+
+class TestDestroyIsNeverGated:
+    """ADR-0083 D3 — gating destroy would strand already-created infrastructure."""
+
+    def test_destroy_still_sees_a_disabled_stage(self, tmp_path):
+        cmd = _make_destroy_command(tmp_path)
+        cmd._dry_run = False
+        disabled = _make_stage("api")
+        disabled.enabled = False
+        svc = MagicMock()
+        spec = _make_locking_spec(enabled=False)
+        spec.stages = [disabled]
+        svc.model.spec = spec
+        svc.model.meta.name = "my-deploy"
+        cmd._deployment_service = svc
+
+        with (
+            patch.object(cmd, "_evaluate_preflight_policies", return_value=True),
+            patch.object(cmd, "_execute_stage_destroy", return_value=True) as stage_destroy,
+        ):
+            result = cmd._execute_provisioning()  # type: ignore[call-arg]
+
+        assert result is True
+        assert [c.args[0].name for c in stage_destroy.call_args_list] == ["api"]
 
     """Tests for `strata deploy list`."""
 
