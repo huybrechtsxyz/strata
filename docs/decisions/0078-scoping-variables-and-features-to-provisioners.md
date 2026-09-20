@@ -466,7 +466,7 @@ from the shipped template, which emits `references: {}` — would start failing
 validation on upgrade. Mitigation, implemented on both models: a
 `model_validator(mode="before")` that drops the key with a `DeprecationWarning`
 rather than erroring. Unknown keys are still rejected. Remove the shim in the next
-minor release.
+minor release. *(Removed 2026-09-18 — `references:` is now rejected outright.)*
 
 Nothing is lost by deleting it. The field was never resolved, never validated, and
 could not have worked: workspace resources are build-time metadata written into
@@ -702,7 +702,7 @@ Unchanged: `inputs_from`, `ProvisionerInputMappingModel`,
 6. Optional: rule 5 usage-side validators for resource/module. Not implemented —
    rule 5 was already established as non-load-bearing (see the Review section);
    this remains a cheap, independent follow-up, not a blocker for anything.
-7. Next minor: remove the drop-with-warning shim.
+7. Next minor: remove the drop-with-warning shim. *(Done 2026-09-18.)*
 
 Steps 1–4 are no-ops for every workspace that has not opted in (no component
 anywhere declares `references`) — verified by the full 6616-test suite passing

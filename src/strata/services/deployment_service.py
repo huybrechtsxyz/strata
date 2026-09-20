@@ -2,7 +2,7 @@
 
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union
 
 if TYPE_CHECKING:
     from strata.models.environment_model import EnvironmentModel
@@ -192,6 +192,14 @@ class DeploymentService(BaseService["DeploymentModel"]):
             helm_ns_errors = self._validate_helm_stage_namespaces(work_path, configuration_model)
             errors.extend(helm_ns_errors)
 
+        # Validate ${...} references in stage 'enabled' gates (ADR-0083)
+        if self.model:
+            errors.extend(self._validate_stage_enabled_refs(work_path, configuration_model))
+
+        # Validate stage depends_on graph — dangling references and cycles (ADR-0083)
+        if self.model:
+            errors.extend(self._validate_stage_depends_on())
+
         # Shadowed-override check (non-fatal warnings, not errors)
         if work_path and self.model and self.model.spec.versions:
             self._validation_warnings = self._check_version_pin_shadows(
@@ -366,6 +374,144 @@ class DeploymentService(BaseService["DeploymentModel"]):
                 )
 
         return errors
+
+    def _validate_stage_enabled_refs(
+        self,
+        work_path: Optional[str],
+        configuration_model: Optional["ConfigurationModel"],
+    ) -> List[str]:
+        """Validate ``${...}`` references inside stage ``enabled`` expressions (ADR-0083).
+
+        Two distinct failures, both caught here rather than at deploy time:
+
+        1. ``${secret:KEY}`` is rejected outright, unconditionally. A gate's
+           resolved value is persisted to the deployment manifest and deploy-log
+           as the skip reason, so gating on a secret would write that secret into
+           an audit artifact. Feature flags and variables are the right tool.
+        2. A ``${var:}``/``${feature:}`` key that no environment declares is a typo
+           that would otherwise only surface at deploy time, after earlier stages
+           had already made real infrastructure changes.
+
+        Check 2 is skipped whenever the declared-key set cannot be established
+        *completely* — a partial set would produce false "not declared" errors,
+        which is worse than no check at all. See
+        :meth:`_load_environment_declared_keys`.
+        """
+        errors: List[str] = []
+        if not self.model:
+            return errors
+
+        gated = [s for s in (self.model.spec.stages or []) if isinstance(s.enabled, str)]
+        if not gated:
+            return errors
+
+        from strata.utils.resolved_values import collect_expr_refs
+
+        stage_refs = [(stage, sorted(collect_expr_refs(stage.enabled))) for stage in gated]
+
+        for stage, refs in stage_refs:
+            for _kind, key in refs:
+                if _kind == "secret":
+                    errors.append(
+                        f"Stage '{stage.name}': 'enabled' references '${{secret:{key}}}'. "
+                        "Secrets cannot gate a stage — the resolved value is recorded as the "
+                        "skip reason in the deployment manifest and deploy-log. "
+                        "Use '${feature:KEY}' or '${var:KEY}' instead."
+                    )
+
+        declared = self._load_environment_declared_keys(work_path, configuration_model)
+        if declared is None:
+            return errors
+
+        for stage, refs in stage_refs:
+            for kind, key in refs:
+                if kind != "secret" and key not in declared:
+                    errors.append(
+                        f"Stage '{stage.name}': 'enabled' references '${{{kind}:{key}}}', "
+                        f"but '{key}' is not declared as a variable or feature. "
+                        f"Available: {sorted(declared) or ['(none declared)']}"
+                    )
+
+        return errors
+
+    def _validate_stage_depends_on(self) -> List[str]:
+        """Validate the stage ``depends_on`` graph (ADR-0083 D5).
+
+        Catches a ``depends_on`` naming a stage that does not exist, a stage
+        depending on itself, and dependency cycles. Before ADR-0083 these were
+        silently inert — ``depends_on`` only drew diagram edges — so a typo here
+        had no effect at all. Now that it controls execution order, a bad graph
+        must fail validation rather than reorder a deployment unpredictably.
+
+        Delegates to the shared implementation in ``stage_selection`` so ordering
+        and validation cannot disagree about what a valid graph is.
+        """
+        if not self.model:
+            return []
+
+        from strata.utils.stage_selection import validate_stage_dependencies
+
+        return validate_stage_dependencies(self.model.spec.stages or [])
+
+    def _load_environment_declared_keys(
+        self,
+        work_path: Optional[str],
+        configuration_model: Optional["ConfigurationModel"],
+    ) -> Optional[Set[str]]:
+        """Return every variable/feature key declared across the deployment's environments.
+
+        Returns ``None`` — meaning "cannot be determined, do not check" — rather
+        than a partial set, because a missing key would otherwise be reported as an
+        authoring error when it is really a loading limitation.
+
+        Prefers the fully-merged environment service when one is loaded (deploy
+        time). Falls back to raw YAML parsing of ``spec.environments`` so the check
+        also runs during a plain ``strata validate``, where no related services are
+        loaded — the same technique :meth:`_load_workspace_namespaces` uses.
+        """
+        if not self.model:
+            return None
+
+        # Use the private attribute, not get_environment_service(): the public getter
+        # raises ServiceNotValidatedError when related services were never loaded,
+        # which is exactly the normal case during a plain `strata validate`.
+        env_service = self._environment_service
+        if env_service is not None and env_service.model is not None:
+            return {var.key for var in env_service.get_variables()} | {feat.key for feat in env_service.get_features()}
+
+        # A tenant prepends its own environment files to the merge, and resolving
+        # those here would duplicate real loading logic — skip rather than risk a
+        # false positive.
+        if not work_path or self.model.spec.tenant:
+            return None
+
+        env_refs = self.model.spec.environments or []
+        if not env_refs:
+            return None
+
+        from pathlib import Path as _Path
+
+        import yaml
+
+        repo_map = self._merged_repo_map(configuration_model) or {}
+        keys: Set[str] = set()
+        for env_ref in env_refs:
+            try:
+                env_file = self._resolve_file_path(env_ref.file, work_path, repo_map)
+                if not _Path(env_file).exists():
+                    return None  # remote or missing environment — cannot be complete
+                raw = yaml.safe_load(_Path(env_file).read_text(encoding="utf-8"))
+            except Exception:  # pragma: no cover - defensive, mirrors _load_workspace_namespaces
+                return None
+            if not isinstance(raw, dict):
+                return None
+            spec = raw.get("spec") or {}
+            for section in ("variables", "features"):
+                for entry in spec.get(section) or []:
+                    if isinstance(entry, dict) and entry.get("key"):
+                        keys.add(str(entry["key"]))
+
+        return keys
 
     def _load_workspace_namespaces(
         self,
@@ -804,8 +950,6 @@ class DeploymentService(BaseService["DeploymentModel"]):
                 workspace_resource.description = resource_override.description
             if resource_override.enabled is not None:
                 workspace_resource.enabled = resource_override.enabled
-            if resource_override.condition is not None:
-                workspace_resource.condition = resource_override.condition
             if resource_override.role is not None:
                 workspace_resource.role = resource_override.role
             if resource_override.count is not None:

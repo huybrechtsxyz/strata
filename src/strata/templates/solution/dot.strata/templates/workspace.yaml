@@ -88,8 +88,7 @@ spec:
     - name: template_resource
       file: config/{platform}/resources/template-resource.yaml
       # description: "Primary application VM"
-      # enabled: true
-      # condition: "{{ environment }} == production" # conditional inclusion
+      # enabled: true                            # false excludes it from the build
       role: manager # manager, worker, standalone
       count: 1 # Number of instances
       firewalls:

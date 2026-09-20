@@ -14,9 +14,18 @@ Context resolution
 
 Graceful degradation
 --------------------
-- No SBOM in build path and no pre-computed result → pass (skip)
-- No CVE scanner available → pass (skip, warning logged)
-- ``max_severity`` not configured → pass (skip)
+- ``max_severity`` not configured or invalid → always pass (skip) — not
+  applicable, unaffected by ``on_missing_data``.
+- No SBOM in build path and no pre-computed result, and self-healing (running
+  the scanner directly) also fails → governed by ``on_missing_data`` (default:
+  ``skip`` — pass; ``warn`` — pass with a visible warning; ``block`` — fail
+  per ``enforcement``). See ADR-0082.
+
+  **Recommended: set ``on_missing_data: block``.** The default (``skip``) means
+  this policy silently passes whenever no SBOM was ever built and the scanner
+  couldn't self-heal — indistinguishable from "scanned, found nothing." For a
+  security-flavored guardrail, "never actually scanned" should not look the
+  same as "scanned and clean."
 
 Example configuration YAML::
 
@@ -25,6 +34,7 @@ Example configuration YAML::
         type: cve_max_severity
         phase: build
         enforcement: deny
+        on_missing_data: block     # fail the build if no scan could be produced
         description: "Block builds with CRITICAL vulnerabilities"
         configuration:
           max_severity: CRITICAL     # CRITICAL | HIGH | MEDIUM | LOW
@@ -68,12 +78,7 @@ class CveMaxSeverityPolicy(BasePolicy):
         if audit_result is None:
             audit_result = self._run_scan(context, severity_threshold)
             if audit_result is None:
-                return PolicyResult(
-                    passed=True,
-                    policy_name=self.name,
-                    enforcement=self.enforcement,
-                    details={"skipped": "no SBOM available or scanner not found"},
-                )
+                return self._missing_data("no SBOM available or scanner not found")
 
         # --- Apply allowlist from work_path if context provides it -----------
         audit_result = self._apply_allowlist(audit_result, context.work_path)

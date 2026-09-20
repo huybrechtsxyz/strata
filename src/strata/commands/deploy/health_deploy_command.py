@@ -11,6 +11,7 @@ import click
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
 from strata.deployers.factory import DeployerFactory
 from strata.models.deployment_model import DeploymentStageModel, HealthCheckModel
+from strata.utils.stage_selection import StageSelectionMode
 
 
 class HealthDeployCommand(BaseDeployCommand):
@@ -71,17 +72,11 @@ class HealthDeployCommand(BaseDeployCommand):
     # -------------------------------------------------------------------------
 
     def _run_health_checks(self) -> bool:
-        if self._deployment_service is None:
-            self._errors.append("Deployment service not loaded")
+        # INSPECT: health checks observe state, they do not change it (ADR-0083 D11).
+        selection = self._resolve_stages(StageSelectionMode.INSPECT)
+        if selection is None:
             return False
-
-        spec = self._deployment_service.model.spec  # type: ignore[union-attr]
-        all_stages: List[DeploymentStageModel] = spec.stages or []
-
-        stages = [s for s in all_stages if s.name == self._stage] if self._stage else all_stages
-        if self._stage and not stages:
-            self._errors.append(f"Stage '{self._stage}' not found. Available: {[s.name for s in all_stages]}")
-            return False
+        stages = selection.to_run
 
         # Stages with explicit health_checks entries (HTTP/TCP probes)
         http_checkable = [s for s in stages if s.health_checks]

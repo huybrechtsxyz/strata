@@ -21,6 +21,7 @@ from strata.models.deployment_manifest_model import (
     ManifestOutputsReferenceModel,
 )
 from strata.models.deployment_model import DeploymentStageModel
+from strata.utils.stage_selection import StageSelectionMode
 from strata.utils.system import local_relative_part
 
 
@@ -102,11 +103,40 @@ class RunDeployCommand(BaseDeployCommand):
         self._strict_ai_review: Optional[str] = strict_ai_review.lower() if strict_ai_review else None
         self._resume_id: Optional[str] = resume_id
         self._hand_off_required: bool = False
+        # True when a gate returned a deliberate verdict of "no" — a deny-enforcement
+        # policy or a blocking AI plan review. Distinct from _validation_failed (the
+        # deployment file itself is malformed); both map to exit 3, matching
+        # CheckPolicyCommand, which already documents "3 — one or more deny-enforcement
+        # policies failed". Evaluating the same policy standalone and inside a deploy
+        # must not produce different exit codes.
+        self._denied: bool = False
         self._resolved_values: Optional[ResolvedValues] = None
 
     def has_hand_off_required(self) -> bool:
         """Return True when a gate work item was created and the deploy is paused."""
         return self._hand_off_required
+
+    def has_validation_errors(self) -> bool:
+        """True for exit code 3 — the deployment was *refused*, not broken.
+
+        Covers two cases that call for the same CI response (a human must change
+        something; retrying unchanged is pointless):
+
+        - the deployment file failed schema/cross-reference validation
+        - a gate returned a deny verdict (policy engine, blocking AI plan review)
+
+        Exit 1 is reserved for execution failures — terraform crashed, a provider was
+        unreachable, a lifecycle hook returned non-zero. That last one stays at 1
+        deliberately: a hook that exits non-zero is indistinguishable from a hook that
+        crashed, so calling it a denial would assert something strata cannot know.
+        Deliberate enforcement has its own mechanism — a `type: script` policy runs the
+        same command at the same phase and *is* reported as a refusal (docs/platform/
+        lifecycles.md, "Blocking a deploy on purpose").
+
+        Exit 5 (``has_hand_off_required``) remains separate and takes priority: a gate
+        that *paused* pending approval is resumable, which a denial is not.
+        """
+        return self._denied or self._validation_failed
 
     # -------------------------------------------------------------------------
     # Finalize override — writes deploy-log before standard finalization
@@ -1138,24 +1168,33 @@ class RunDeployCommand(BaseDeployCommand):
                 click.echo("⚠️  No deployment stages defined — nothing to deploy.")
             return True
 
-        # Filter to a single stage when --stage is supplied
-        stages_to_run = [s for s in all_stages if s.name == self._stage] if self._stage else all_stages
-
-        if self._stage and not stages_to_run:
-            self._errors.append(
-                f"Stage '{self._stage}' not found in deployment definition. Available: {[s.name for s in all_stages]}"
-            )
+        # Filter by --stage / --scope and apply `enabled` gating (ADR-0083 D2/D7).
+        # Runs BEFORE _preflight_check_provisioners(), which constructs a deployer per
+        # stage — a disabled estate must not require its tooling or auth to be present.
+        selection = self._resolve_stages(StageSelectionMode.DEPLOY, resolved=self._resolved_values)
+        if selection is None:
             return False
+        stages_to_run = selection.to_run
 
-        # Filter by --scope label when supplied
-        if self._scope:
-            stages_to_run = [s for s in stages_to_run if s.scope == self._scope]
-            if not stages_to_run:
-                self._errors.append(
-                    f"No stages match scope '{self._scope}'. "
-                    f"Available scopes: {[s.scope for s in all_stages if s.scope]}"
+        # ADR-0083 D6 — a gated-out stage is RECORDED as skipped, never silently
+        # absent. Recorded here rather than after the stage loop so the fact survives
+        # an abort later in this method: "deliberately not deployed at v1.2.0" must be
+        # distinguishable from "this deployment never mentioned the stage".
+        if selection.skipped:
+            stages_by_name = {s.name: s for s in all_stages}
+            for skip in selection.skipped:
+                skipped_stage = stages_by_name.get(skip.stage_name)
+                self._record_stage_result(
+                    stage_name=skip.stage_name,
+                    provisioner=getattr(skipped_stage, "provisioner", None),
+                    topology=getattr(skipped_stage, "topology", None),
+                    status="skipped",
+                    started_at=None,
+                    completed_at=None,
+                    skip_reason=skip.detail,
                 )
-                return False
+                if self._is_console_output():
+                    click.echo(f"  ⏭️  Stage '{skip.stage_name}' skipped — {skip.detail}")
 
         # Validate --namespace values (if supplied) against the workspace's declared
         # namespaces before running anything. Only the helm provisioner honors this
@@ -1611,6 +1650,7 @@ class RunDeployCommand(BaseDeployCommand):
 
                 # --- policy evaluation: plan phase ---
                 if not self._evaluate_phase_policies("plan", stage, deployer):
+                    self._denied = True
                     self._record_stage_result(
                         stage_name=str(stage.name),
                         provisioner=stage.provisioner,
@@ -1625,6 +1665,7 @@ class RunDeployCommand(BaseDeployCommand):
 
                 # --- policy evaluation: deploy phase ---
                 if not self._evaluate_phase_policies("deploy", stage, deployer):
+                    self._denied = True
                     self._record_stage_result(
                         stage_name=str(stage.name),
                         provisioner=stage.provisioner,
@@ -1648,6 +1689,7 @@ class RunDeployCommand(BaseDeployCommand):
                 if self._ai or self._strict_ai_review:
                     ai_ok = self._check_ai_plan_gate(stage, msgs)
                     if not ai_ok:
+                        self._denied = True
                         self._record_stage_result(
                             stage_name=str(stage.name),
                             provisioner=stage.provisioner,

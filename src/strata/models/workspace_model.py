@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Pydantic models for workspace configuration validation."""
 
-import warnings
 from typing import Annotated, Any, Dict, List, Literal, Optional
 
 from pydantic import (
@@ -294,26 +293,6 @@ class WorkspaceTopologyModel(PlatformBaseModel):
 class WorkspaceResourceModel(PlatformBaseModel):
     """Model for workspace resource definition (gluing layer)."""
 
-    @model_validator(mode="before")
-    @classmethod
-    def drop_removed_references(cls, data):
-        """Drop the removed 'references' key with a warning instead of failing validation.
-
-        ADR-0078: the cross-resource 'references' field was inert — never resolved,
-        never validated — and has been removed. Shipped workspace templates emitted
-        'references: {}', so extra="forbid" would turn an upgrade into a hard error.
-        Deprecation shim; remove in the next minor release.
-        """
-        if isinstance(data, dict) and "references" in data:
-            data = {k: v for k, v in data.items() if k != "references"}
-            warnings.warn(
-                f"Workspace resource '{data.get('name', '<unnamed>')}': 'references' has been removed "
-                "(ADR-0078) and is ignored. The field was never read; remove it from your workspace file.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        return data
-
     name: PlatformName = Field(description="Unique resource name")
     file: Optional[str] = Field(
         None,
@@ -332,11 +311,13 @@ class WorkspaceResourceModel(PlatformBaseModel):
     # Conditional inclusion
     enabled: bool = Field(
         default=True,
-        description="Whether this resource is enabled/deployed in this workspace",
-    )
-    condition: Optional[str] = Field(
-        None,
-        description="Conditional expression for resource inclusion (e.g., '{{ environment }} == production')",
+        description=(
+            "Whether this resource is deployed in this workspace (ADR-0083). "
+            "Set false to exclude it from the built platform artifact, and therefore from every "
+            "provisioner that consumes it. Override per-environment via "
+            "environment.spec.resources[].enabled. Same keyword strata uses for conditional "
+            "inclusion on every schema — 'condition'/'when'/'if' are not accepted."
+        ),
     )
 
     # Resource metadata

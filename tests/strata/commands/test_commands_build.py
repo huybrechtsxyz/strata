@@ -693,6 +693,290 @@ class TestPlanBuildCacheWarm:
         mock_warm.assert_not_called()
 
 
+class TestPlanStageHasChanges:
+    """Each plan row carries terraform's own change verdict.
+
+    The `build-plan` GitHub Action used to derive `has_changes` from
+    `.data.terraform_plan | length > 0` — row *presence*. Every stage that planned
+    produced a row, so the documented recipe (`if has_changes == 'true'`) fired on
+    every run, including runs where terraform found nothing to do. The verdict is
+    now taken from `-detailed-exitcode`, which terraform already computes.
+    """
+
+    def _cmd(self, tmp_path):
+        from unittest.mock import MagicMock
+
+        cmd = _make_plan_cmd(tmp_path)
+        cmd._deployment_service = MagicMock()
+        cmd._configuration_service = MagicMock()
+        return cmd
+
+    def _plan(self, tmp_path, *, has_changes, plan_ok=True):
+        from unittest.mock import MagicMock, patch
+
+        cmd = self._cmd(tmp_path)
+        deployer = MagicMock()
+        deployer.validate_workspace.return_value = (True, [])
+        deployer.validate_environment.return_value = (True, [])
+        deployer.setup.return_value = (True, [])
+        deployer.check.return_value = (True, [])
+        deployer.plan.return_value = (plan_ok, [])
+        deployer.plan_has_changes = has_changes
+
+        stage = MagicMock()
+        stage.name = "core"
+        stage.enabled = None
+
+        with patch("strata.commands.builders.plan_build_command.TerraformDeployer", return_value=deployer):
+            return cmd._plan_stage(stage, tmp_path, None)
+
+    def test_changes_present(self, tmp_path):
+        assert self._plan(tmp_path, has_changes=True)["has_changes"] is True
+
+    def test_no_changes(self, tmp_path):
+        """The case the old row-count logic got wrong."""
+        assert self._plan(tmp_path, has_changes=False)["has_changes"] is False
+
+    def test_failed_plan_reports_unknown_not_false(self, tmp_path):
+        """A stage that could not plan knows nothing about whether it would change
+        anything. Reporting False would claim knowledge it does not have."""
+        result = self._plan(tmp_path, has_changes=None, plan_ok=False)
+
+        assert result["has_changes"] is None
+        assert result["error"] is not None
+
+    def test_key_always_present(self, tmp_path):
+        """Consumers index this key directly; it must never be absent."""
+        assert "has_changes" in self._plan(tmp_path, has_changes=True)
+
+
+class TestTerraformDeployerPlanHasChanges:
+    def test_property_reflects_detailed_exitcode(self):
+        from strata.deployers.terraform_deployer import TerraformDeployer
+
+        deployer = TerraformDeployer.__new__(TerraformDeployer)
+        deployer._plan_has_changes = None
+        assert deployer.plan_has_changes is None
+
+        deployer._plan_has_changes = False
+        assert deployer.plan_has_changes is False
+
+        deployer._plan_has_changes = True
+        assert deployer.plan_has_changes is True
+
+
+class TestPlanBuildStrictAiReviewGate:
+    """`--strict-ai-review` is documented as failing non-interactively and sold for CI.
+
+    It appended to `self._errors` and `_run_ai_analysis`'s docstring claimed that made
+    the caller propagate a non-zero exit code — but build commands define no
+    `has_validation_errors()`, which is all `handle_command_exit` inspects, so the gate
+    printed "Plan blocked" and exited 0. A gate that does not gate is worse than no
+    gate: CI reports green on exactly the change someone asked to be stopped.
+    """
+
+    def _cmd(self, tmp_path):
+        from unittest.mock import MagicMock
+
+        cmd = _make_plan_cmd(tmp_path)
+        svc = MagicMock()
+        svc.model.meta.name = "test-deploy"
+        svc.get_build_path.return_value = tmp_path / "build"
+        svc.get_environment_service.return_value = None
+        cmd._deployment_service = svc
+        cmd._artifacts_only = True
+        cmd._no_cache_warm = True
+        return cmd
+
+    def _run(self, cmd, ai_side_effect):
+        from unittest.mock import patch
+
+        with (
+            patch.object(cmd, "_build_to_temp", return_value=True),
+            patch.object(cmd, "_compute_artifact_diff", return_value=[]),
+            patch.object(cmd, "_print_console"),
+            patch.object(cmd, "_run_ai_analysis", side_effect=ai_side_effect),
+        ):
+            return cmd._run_plan()
+
+    def test_blocked_review_fails_the_command(self, tmp_path):
+        cmd = self._cmd(tmp_path)
+        cmd._strict_ai_review = "high"
+
+        def blocked(_plan_results):
+            cmd._errors.append("AI plan review: risk=CRITICAL ≥ threshold=HIGH (--strict-ai-review)")
+            return {"provider": "x", "content": "{}"}
+
+        assert self._run(cmd, blocked) is False
+
+    def test_blocked_review_exits_3_not_1(self, tmp_path):
+        """The flag's own help promises "Fail (exit 3)". Exit 3 means "fix the config,
+        block the PR"; exit 1 means "something is broken, alert". A pipeline that
+        retries on 1 must not retry a gate rejection."""
+        cmd = self._cmd(tmp_path)
+        cmd._strict_ai_review = "high"
+
+        def blocked(_plan_results):
+            cmd._errors.append("blocked")
+            return {"provider": "x", "content": "{}"}
+
+        self._run(cmd, blocked)
+
+        assert cmd.has_validation_errors() is True
+
+    def test_passing_review_still_succeeds(self, tmp_path):
+        cmd = self._cmd(tmp_path)
+        cmd._strict_ai_review = "high"
+
+        assert self._run(cmd, lambda _r: {"provider": "x", "content": "{}"}) is True
+
+    def test_plain_ai_flag_never_gates(self, tmp_path):
+        """`--ai` is advisory; only `--strict-ai-review` blocks."""
+        cmd = self._cmd(tmp_path)
+        cmd._ai = True
+        cmd._strict_ai_review = None
+
+        assert self._run(cmd, lambda _r: {"provider": "x", "content": "{}"}) is True
+
+    def test_no_ai_flags_leaves_the_command_unaffected(self, tmp_path):
+        from unittest.mock import patch
+
+        cmd = self._cmd(tmp_path)
+        cmd._ai = False
+        cmd._strict_ai_review = None
+
+        with (
+            patch.object(cmd, "_build_to_temp", return_value=True),
+            patch.object(cmd, "_compute_artifact_diff", return_value=[]),
+            patch.object(cmd, "_print_console"),
+            patch.object(cmd, "_run_ai_analysis") as ai,
+        ):
+            ok = cmd._run_plan()
+
+        ai.assert_not_called()
+        assert ok is True
+
+
+class TestPlanBuildFailureSplit:
+    """Three outcomes that all used to exit 0, now split along what CI must do.
+
+    Changes found is **not** a failure — the shipped `build-plan` action reports it
+    as a `has_changes` output and its documented recipe branches on that. Only the
+    two real failures are non-zero, and they are kept apart: a gate rejection is
+    exit 3 (block the PR), a plan that could not run is exit 1 (alert).
+    """
+
+    def _cmd(self, tmp_path):
+        from unittest.mock import MagicMock
+
+        cmd = _make_plan_cmd(tmp_path)
+        svc = MagicMock()
+        svc.model.meta.name = "test-deploy"
+        svc.get_build_path.return_value = tmp_path / "build"
+        svc.get_environment_service.return_value = None
+        cmd._deployment_service = svc
+        cmd._artifacts_only = False
+        cmd._no_cache_warm = True
+        cmd._ai = False
+        cmd._strict_ai_review = None
+        return cmd
+
+    def _run(self, cmd, plan_results):
+        from unittest.mock import patch
+
+        with (
+            patch.object(cmd, "_build_to_temp", return_value=True),
+            patch.object(cmd, "_compute_artifact_diff", return_value=[]),
+            patch.object(cmd, "_print_console"),
+            patch.object(cmd, "_resolve_values", return_value=None),
+            patch.object(cmd, "_run_terraform_plan", return_value=plan_results),
+        ):
+            return cmd._run_plan()
+
+    def _row(self, stage="core", error=None, ok=True):
+        return {
+            "stage": stage,
+            "ok": ok,
+            "error": error,
+            "messages": [],
+            "would_skip": False,
+            "skip_reason": None,
+        }
+
+    def test_failed_stage_fails_the_command(self, tmp_path):
+        cmd = self._cmd(tmp_path)
+
+        ok = self._run(cmd, [self._row(error="terraform plan failed")])
+
+        assert ok is False
+        assert any("core" in e for e in cmd._errors)
+
+    def test_failed_stage_exits_1_not_3(self, tmp_path):
+        """A broken toolchain is not a config-validation problem."""
+        cmd = self._cmd(tmp_path)
+
+        self._run(cmd, [self._row(error="terraform plan failed")])
+
+        assert cmd.has_validation_errors() is False
+
+    def test_successful_plan_succeeds(self, tmp_path):
+        cmd = self._cmd(tmp_path)
+
+        assert self._run(cmd, [self._row(), self._row(stage="api")]) is True
+
+    def test_changes_alone_are_not_a_failure(self, tmp_path):
+        """The whole reason the split exists: a plan full of pending changes is the
+        normal, successful case, and `has_changes` — not the exit code — reports it."""
+        from unittest.mock import patch
+
+        cmd = self._cmd(tmp_path)
+        with (
+            patch.object(cmd, "_build_to_temp", return_value=True),
+            patch.object(cmd, "_compute_artifact_diff", return_value=[{"status": "changed", "path": "main.tf"}]),
+            patch.object(cmd, "_print_console"),
+            patch.object(cmd, "_resolve_values", return_value=None),
+            patch.object(cmd, "_run_terraform_plan", return_value=[self._row()]),
+        ):
+            ok = cmd._run_plan()
+
+        assert ok is True
+        assert cmd.has_validation_errors() is False
+
+    def test_only_the_failing_stages_are_named(self, tmp_path):
+        cmd = self._cmd(tmp_path)
+
+        self._run(cmd, [self._row(stage="core"), self._row(stage="api", error="boom")])
+
+        joined = " ".join(cmd._errors)
+        assert "api" in joined
+        assert "core" not in joined
+
+    def test_broken_plan_wins_over_a_blocked_gate(self, tmp_path):
+        """If terraform never produced a plan, the AI reviewed nothing meaningful —
+        the broken toolchain is the finding worth surfacing, so exit 1 wins."""
+        from unittest.mock import patch
+
+        cmd = self._cmd(tmp_path)
+        cmd._strict_ai_review = "high"
+
+        def blocked(_plan_results):
+            cmd._errors.append("AI plan review: risk=CRITICAL (--strict-ai-review)")
+            return {"provider": "x", "content": "{}"}
+
+        with (
+            patch.object(cmd, "_build_to_temp", return_value=True),
+            patch.object(cmd, "_compute_artifact_diff", return_value=[]),
+            patch.object(cmd, "_print_console"),
+            patch.object(cmd, "_resolve_values", return_value=None),
+            patch.object(cmd, "_run_ai_analysis", side_effect=blocked),
+            patch.object(cmd, "_run_terraform_plan", return_value=[self._row(error="boom")]),
+        ):
+            ok = cmd._run_plan()
+
+        assert ok is False
+        assert cmd.has_validation_errors() is False
+
+
 # ---------------------------------------------------------------------------
 # TestBuildRunNdjsonStreaming — NDJSON stage events emitted per build phase
 # ---------------------------------------------------------------------------

@@ -182,6 +182,14 @@ class ManifestStageModel(PlatformBaseModel):
         None, description="Reference to the durable outputs artifact file written for this stage"
     )
     error: Optional[str] = Field(None, description="Error message if the stage failed")
+    skip_reason: Optional[str] = Field(
+        None,
+        description=(
+            "Why the stage was skipped — set only when status is 'skipped' (ADR-0083). "
+            "Names the 'enabled' expression and the value it resolved to, so the audit trail "
+            "distinguishes 'deliberately not deployed at this version' from 'absent'."
+        ),
+    )
     warnings: Optional[List[str]] = Field(
         None, description="Non-fatal warnings recorded for this stage (e.g. output collection failures)"
     )

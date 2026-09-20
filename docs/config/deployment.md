@@ -292,6 +292,7 @@ stages:
     provisioner: my_tf     # Name of a provisioner in workspace.spec.provisioners
     # topology: k8s_aks   # Alternative to provisioner — resolved via topology map
     # scope: infra        # Optional label for --scope CLI filtering (see deploy run --scope)
+    # enabled: true       # Optional gate — bool or ${feature:KEY} (see "enabled" below)
     secrets:               # Allowlist of secrets this stage may access (default-deny)
       - hetzner_api_token
     # helm_namespaces:      # helm-only allowlist (see "namespace vs helm_namespaces" below)
@@ -324,6 +325,88 @@ strata deploy run -f deploy/deploy-prd.yaml                 # all stages (no sco
 ```
 
 Stages without a `scope` field are skipped when `--scope` is set. This is intentional — unlabelled stages are treated as "always run" only when no filter is active.
+
+### `enabled` — declarative stage gating
+
+`enabled` declares whether a stage applies **at all**, resolved per-environment. Omit it (the default) to always run.
+
+```yaml
+stages:
+  - name: core_iac
+    provisioner: platform_iac
+
+  - name: dispatcher_api
+    provisioner: dispatcher_api
+    enabled: ${feature:enable_dispatcher_api}   # or a literal true / false
+```
+
+Accepted values:
+
+| Value            | Meaning                                                                  |
+| ---------------- | ------------------------------------------------------------------------ |
+| *(omitted)*      | Always runs — the default, and the behaviour of every pre-existing file. |
+| `true` / `false` | Literal on/off.                                                          |
+| `${feature:KEY}` | Resolved from the active environment's `spec.features`.                  |
+| `${var:KEY}`     | Resolved from the active environment's `spec.variables`.                 |
+
+A string resolving to `false`, `0`, `no`, or empty counts as disabled; any other value counts as enabled.
+
+`enabled` is the same keyword strata uses for conditional inclusion on every schema (policies, integrations, audit sinks, outputs, locking). `condition:`, `when:` and `if:` are deliberately **not** accepted — one spelling, everywhere.
+
+#### What gating does and does not do
+
+> **`enabled: false` means "stop deploying this" — not "destroy this".**
+> Flipping a flag off leaves any infrastructure the stage already created exactly where it is. To remove it, run a destroy while the stage is still enabled.
+
+Gating deliberately applies to changes only, never to observation:
+
+| Command                           | Gated? | Why                                                                                         |
+| --------------------------------- | ------ | ------------------------------------------------------------------------------------------- |
+| `strata deploy run`               | Yes    | The point of the feature.                                                                   |
+| `strata deploy destroy`           | No     | Gating destroy would strand infrastructure created before the flag was turned off.          |
+| `strata build run` / `build plan` | No     | A plan is a preview; hiding a stage would make "disabled" indistinguishable from "deleted". |
+| drift detection                   | No     | Drift against a disabled stage is exactly how orphaned infrastructure is discovered.        |
+
+A disabled stage is **recorded as skipped**, with its expression and resolved value, in both the deployment manifest and the deploy-log — never silently omitted. That is what lets an audit distinguish "deliberately not deployed at this version" from "deployed, no changes".
+
+#### Validation
+
+- `${secret:KEY}` is **rejected**. A gate's resolved value is written to the manifest as the skip reason, so gating on a secret would copy it into an audit artifact. Use a feature flag or variable.
+- A `${var:}`/`${feature:}` key that no environment declares fails `strata validate`, naming the key and listing what is available — rather than surfacing only at deploy time, after earlier stages have already changed real infrastructure.
+- A blank string, or a non-boolean scalar such as `enabled: 1`, is rejected at parse time.
+
+#### Skips cascade through `depends_on`
+
+A stage whose `depends_on` names a skipped stage is itself skipped, transitively — matching GitHub Actions' `needs:` default:
+
+```yaml
+stages:
+  - name: core_iac
+    enabled: ${feature:enable_dispatcher}   # resolves false
+  - name: dispatcher_api
+    depends_on: [core_iac]                  # skipped: depends on skipped stage 'core_iac'
+  - name: dispatcher_worker
+    depends_on: [dispatcher_api]            # skipped: depends on skipped stage 'dispatcher_api'
+```
+
+Each cascade reason names the **direct** dependency, so a long chain can be walked back one hop at a time. Cascaded skips are recorded exactly like directly-disabled ones, with `reason: dependency_skipped`.
+
+`--stage`/`--scope` narrowing deliberately does **not** cascade. `enabled: false` is a durable statement that dependents must respect; scoping a single run is not — and cascading it would make `--stage B` impossible whenever `B` declares any dependency.
+
+### `depends_on` — execution order
+
+`depends_on` controls the order stages execute in. Stages run in dependency order, and **ready stages keep their declaration order**, so a file already written in a valid order runs exactly as before.
+
+```yaml
+stages:
+  - name: infrastructure
+  - name: services
+    depends_on: [infrastructure]    # runs after infrastructure
+```
+
+Validation rejects a `depends_on` naming a stage that does not exist, a stage listing itself, and dependency cycles.
+
+> **`deploy destroy` is not reordered.** A correct teardown needs the *reverse* order (dependents before dependencies), which strata does not currently derive — destroy runs stages in declaration order. Write destroy-sensitive deployments accordingly, or scope teardown with `--stage`.
 
 ### `namespace` vs `helm_namespaces` — Kubernetes namespace scoping
 

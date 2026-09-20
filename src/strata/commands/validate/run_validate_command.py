@@ -11,6 +11,18 @@ from strata.commands.base_command import BaseCommand
 from strata.controllers.lifecycle_controller import LifecycleController
 from strata.validators.platform_validator import PlatformValidator
 
+#: Field names from other tools that mean what strata spells ``enabled``.
+#: ``difflib`` scores these far below its cutoff against "enabled", so without an
+#: explicit map an Azure Pipelines or Ansible user writing ``condition:``/``when:``
+#: only gets a generic "valid fields are ..." list. ADR-0083 D9 deliberately chose
+#: one spelling with no alias, so the error message is where the word is taught.
+_FIELD_SYNONYMS = {
+    "condition": "enabled",
+    "when": "enabled",
+    "if": "enabled",
+    "disabled": "enabled",
+}
+
 
 class ValidateCommand(BaseCommand):
     """Validate a platform YAML file, or run cross-manifest overlap checks.
@@ -721,8 +733,15 @@ class ValidateCommand(BaseCommand):
                 # Try to find valid fields from the model
                 valid_fields = self._get_valid_fields_for_path(field_parts[:-1])
                 if valid_fields:
+                    synonym = _FIELD_SYNONYMS.get(bad_field.lower())
                     matches = difflib.get_close_matches(bad_field, valid_fields, n=3, cutoff=0.5)
-                    if matches:
+                    if synonym and synonym in valid_fields:
+                        suggestion = (
+                            f"Unknown field '{bad_field}'. Did you mean '{synonym}'? "
+                            "strata uses 'enabled' for conditional inclusion on every schema; "
+                            "it accepts true/false or an expression such as '${feature:KEY}'."
+                        )
+                    elif matches:
                         suggestion = f"Unknown field '{bad_field}'. Did you mean: {', '.join(matches)}?"
                     else:
                         suggestion = f"Unknown field '{bad_field}'. Valid fields: {', '.join(sorted(valid_fields)[:8])}"

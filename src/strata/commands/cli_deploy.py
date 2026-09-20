@@ -44,8 +44,9 @@ def deploy():
         "  0  success\n"
         "  1  system error (infrastructure unavailable, timeout, permissions) — alert\n"
         "  2  usage error (bad arguments, file not found) — fix script\n"
-        "  3  validation error (schema, cross-ref) — fix config\n"
-        "  4  lock conflict (another deployment in progress) — retry after delay"
+        "  3  refused (schema/cross-ref invalid, or a policy or AI review denied it) — fix config\n"
+        "  4  lock conflict (another deployment in progress) — retry after delay\n"
+        "  5  hand-off required (a gate paused the deploy) — resolve, then --resume"
     ),
 )
 @click_file
@@ -148,6 +149,27 @@ def deploy():
     default=0,
     metavar="SECONDS",
     help="Abort if the command does not complete within N seconds (0 = no timeout).",
+)
+@click.option(
+    "--ai",
+    "ai",
+    is_flag=True,
+    default=False,
+    help=(
+        "Run AI plan review between plan and apply (requires an ai_agent integration). "
+        "Advisory: prompts on high risk when interactive, blocks when not. Use --force to override."
+    ),
+)
+@click.option(
+    "--strict-ai-review",
+    "strict_ai_review",
+    metavar="THRESHOLD",
+    default=None,
+    help=(
+        "Block the apply when AI plan risk ≥ THRESHOLD, without prompting. "
+        "THRESHOLD: low|medium|high|critical (default: high). Implies --ai. "
+        "Unlike --ai, --force does not override this."
+    ),
 )
 @click.option(
     "--resume",
@@ -334,7 +356,13 @@ def deploy_destroy(
     "--stage",
     default=None,
     metavar="NAME",
-    help="Filter secrets visibility to a specific stage's allowlist.",
+    help="Limit display to a specific deployment stage; secrets narrow to what it would receive.",
+)
+@click.option(
+    "--scope",
+    default=None,
+    metavar="LABEL",
+    help="Limit display to deployment stages whose scope field matches this label.",
 )
 @click_no_cache
 @click_refresh_cache
@@ -345,6 +373,7 @@ def deploy_show(
     file: Optional[str] = None,
     work_path: Optional[str] = None,
     stage: Optional[str] = None,
+    scope: Optional[str] = None,
     no_cache: bool = False,
     refresh_cache: bool = False,
     output: Optional[str] = None,
@@ -356,6 +385,7 @@ def deploy_show(
         file=file,
         work_path=work_path,
         stage=stage,
+        scope=scope,
         no_cache=no_cache,
         refresh_cache=refresh_cache,
         output=output,

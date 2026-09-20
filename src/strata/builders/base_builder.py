@@ -11,6 +11,7 @@ from jinja2 import TemplateError
 from strata.logger import get_logger
 from strata.models.store_models import FeatureStoreType, VariableStoreType
 from strata.services.deployment_service import DeploymentService
+from strata.utils.resolved_values import parse_bool
 from strata.utils.templater import TemplateProcessor
 
 if TYPE_CHECKING:
@@ -150,17 +151,11 @@ class BaseBuilder(ABC):
             features: Dict[str, Any] = {}
             for feat in env_svc.get_features():
                 if feat.store == FeatureStoreType.CONSTANT:
-                    raw = feat.value
-                    if isinstance(raw, bool):
-                        features[feat.key] = raw
-                    elif isinstance(raw, str):
-                        features[feat.key] = raw.lower() not in ("false", "0", "no", "")
-                    else:
-                        features[feat.key] = bool(raw)
+                    features[feat.key] = parse_bool(feat.value)
                 elif feat.store == FeatureStoreType.ENVIRONMENT:
                     env_val = os.environ.get(str(feat.value))
                     if env_val is not None:
-                        features[feat.key] = env_val.lower() not in ("false", "0", "no", "")
+                        features[feat.key] = parse_bool(env_val)
             if features:
                 ctx["features"] = features
 

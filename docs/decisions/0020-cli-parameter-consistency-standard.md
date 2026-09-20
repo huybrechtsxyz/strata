@@ -551,10 +551,17 @@ Tear down provisioned infrastructure for a deployment definition.
 #### `strata deploy show`
 Show resolved deployment configuration: remote versions, workspace, and environment.
 - `-f, --file FILE` (required) — Path to deployment YAML file
+- `--stage NAME` (optional) — Limit display to specific deployment stage
+- `--scope LABEL` (optional) — Limit display to stages whose scope field matches
 - `--work-path PATH` — Workspace root (default: current directory)
 - `--output FORMAT` — Output format (choices: console, text, json; default: console)
 - `--verbose` — Enable verbose output
 - `--quiet` — Suppress non-error output
+
+  > `--stage`/`--scope` were added to this spec in 2026-09 after the fact: `--stage`
+  > had been implemented outside the standard with a different meaning ("filter
+  > secrets visibility"), and was never wired up. Giving it the standard meaning
+  > brought the command back into line rather than deviating from it.
 
 #### `strata deploy plan`
 Show the resource change summary from the last saved .tfplan file.

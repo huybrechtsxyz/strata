@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Pydantic model for environment configuration validation."""
 
-import warnings
 from enum import Enum
 from typing import Annotated, Any, Dict, List, Optional
 
@@ -89,25 +88,6 @@ class EnvironmentResourceOverrideModel(PlatformBaseModel):
     Values are merged with workspace resource configuration.
     """
 
-    @model_validator(mode="before")
-    @classmethod
-    def drop_removed_references(cls, data):
-        """Drop the removed 'references' key with a warning instead of failing validation.
-
-        ADR-0078: mirrors the same removal on WorkspaceResourceModel. The override
-        was merged into a field nothing ever read. Deprecation shim; remove in the
-        next minor release.
-        """
-        if isinstance(data, dict) and "references" in data:
-            data = {k: v for k, v in data.items() if k != "references"}
-            warnings.warn(
-                f"Environment resource override '{data.get('resource', '<unnamed>')}': 'references' has been "
-                "removed (ADR-0078) and is ignored. The field was never read; remove it from your environment file.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        return data
-
     resource: PlatformName = Field(description="Resource name to override (must match a resource in the workspace)")
     description: Optional[str] = Field(
         None,
@@ -115,11 +95,7 @@ class EnvironmentResourceOverrideModel(PlatformBaseModel):
     )
     enabled: Optional[bool] = Field(
         None,
-        description="Override whether this resource is enabled/deployed in this environment",
-    )
-    condition: Optional[str] = Field(
-        None,
-        description="Override conditional expression for resource inclusion",
+        description="Override whether this resource is deployed in this environment (ADR-0083)",
     )
     role: Optional[PlatformName] = Field(None, description="Override role of the resource")
     count: Optional[int] = Field(None, ge=1, le=100, description="Override resource instance count")

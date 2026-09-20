@@ -1,11 +1,14 @@
 """Command to show resolved deployment configuration: remote versions, workspace, and environment."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 import click
 
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
 from strata.services.deployment_service import DeploymentService
+from strata.utils.provisioner_resolution import allowed_secret_keys_for_stages
+from strata.utils.resolved_values import ResolvedValues
+from strata.utils.stage_selection import StageSelectionMode, evaluate_enabled
 
 
 def _mask(value: Any) -> str:
@@ -27,6 +30,11 @@ class ShowDeployCommand(BaseDeployCommand):
     stage list, and the full resolved environment: meta, properties, custom
     settings, resolved variables (full values), resolved secrets (masked),
     resolved feature flags, and an overrides summary.
+
+    ``--stage``/``--scope`` select which stages to preview, exactly as they do on
+    ``deploy run``, and the secrets view narrows to what those stages would
+    actually receive. Gating is *disclosed*, never applied: a disabled stage is
+    still listed, marked with the reason a run would skip it (ADR-0083 D11).
     """
 
     OPERATION = "deploy_show"
@@ -36,6 +44,7 @@ class ShowDeployCommand(BaseDeployCommand):
         file: Optional[str] = None,
         work_path: Optional[str] = None,
         stage: Optional[str] = None,
+        scope: Optional[str] = None,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -52,6 +61,7 @@ class ShowDeployCommand(BaseDeployCommand):
             refresh_cache=refresh_cache,
         )
         self._stage = stage
+        self._scope = scope
         self._resolved_remotes: List[Dict[str, str]] = []
 
     # -------------------------------------------------------------------------
@@ -127,11 +137,23 @@ class ShowDeployCommand(BaseDeployCommand):
 
         self._resolved_remotes = remotes_out
 
+        # Resolved once, here, and threaded down — the stage rows need it (to evaluate
+        # `enabled`) and so does the environment detail. Resolving separately in each
+        # place would hit the secret stores twice, which `_resolve_values`' own cache
+        # does not prevent: it caches variables and features, never secrets.
+        _, resolved, _ = self._resolve_values(strict=False)
+
         # --- Deployment stage list ---
-        deployment_model = self._deployment_service.model
-        all_stages = deployment_model.spec.stages or [] if deployment_model else []
+        # INSPECT, and load-bearing: it applies --stage/--scope without gating. DEPLOY
+        # would filter disabled stages out and leave the `would_skip` marker below with
+        # nothing to mark — a preview that cannot preview a skip (ADR-0083 D11).
+        selection = self._resolve_stages(StageSelectionMode.INSPECT)
+        if selection is None:
+            return False
+
+        stages_ok = True
         stage_rows: List[Dict[str, Any]] = []
-        for s in all_stages:
+        for s in selection.to_run:
             row: Dict[str, Any] = {
                 "name": str(s.name),
                 "provisioner": s.provisioner or "terraform",
@@ -139,10 +161,30 @@ class ShowDeployCommand(BaseDeployCommand):
             }
             if s.depends_on:
                 row["depends_on"] = [str(d) for d in s.depends_on]
+
+            row["enabled"] = s.enabled
+            _is_enabled, skip, enabled_error = evaluate_enabled(s, resolved)
+            row["would_skip"] = skip is not None
+            row["skip_reason"] = skip.detail if skip is not None else None
+            if enabled_error:
+                # An unresolvable gate is not "enabled" and not "skipped" — it is a run
+                # that would abort. Reporting it is what makes this an honest preview.
+                self._errors.append(enabled_error)
+                stages_ok = False
             stage_rows.append(row)
 
         # --- Full resolved environment (meta/properties/values/overrides) ---
-        environment_detail, env_resolved_ok = self._collect_environment(env_service)
+        # Only narrow the secrets view when the operator actually narrowed the
+        # selection. Unscoped, every stage is selected and the union of their
+        # allowlists would be *empty* for any deployment that declares no `secrets:`
+        # at all — accurate about what a run injects, but a silent, drastic change to
+        # the default view. Scoping stays opt-in, tied to the flag that asked for it.
+        allowed_secrets: Optional[Set[str]] = None
+        if self._stage or self._scope:
+            declared = {item.key for item in env_service.get_secrets()} if env_service else set()
+            allowed_secrets = allowed_secret_keys_for_stages(list(selection.to_run), declared)
+
+        environment_detail, env_resolved_ok = self._collect_environment(env_service, resolved, allowed_secrets)
 
         self._output_data: Dict[str, Any] = {
             "file": str(self._file_path),
@@ -154,10 +196,23 @@ class ShowDeployCommand(BaseDeployCommand):
             "stages": stage_rows,
             "environment_detail": environment_detail,
         }
-        return env_resolved_ok
+        return env_resolved_ok and stages_ok
 
-    def _collect_environment(self, env_service: Any) -> tuple[Optional[Dict[str, Any]], bool]:
+    def _collect_environment(
+        self,
+        env_service: Any,
+        resolved: ResolvedValues,
+        allowed_secrets: Optional[Set[str]] = None,
+    ) -> tuple[Optional[Dict[str, Any]], bool]:
         """Build the full resolved-environment payload (meta, properties, values, overrides).
+
+        Takes *resolved* rather than resolving internally: :meth:`_collect` needs the
+        same values to evaluate stage ``enabled`` gates, and a second resolution pass
+        would re-read every secret store.
+
+        *allowed_secrets* is the set of secret keys the selected stages would actually
+        receive, or ``None`` for the unscoped view. Out-of-scope secrets are still
+        listed — see :meth:`_secret_row`.
 
         Returns ``(data, ok)`` where ``ok`` is False when one or more declared
         variables/secrets/features could not be resolved.
@@ -181,9 +236,6 @@ class ShowDeployCommand(BaseDeployCommand):
             if env_model.spec.custom:
                 env_data["custom"] = dict(env_model.spec.custom)
 
-        assert self._deployment_service is not None
-        _, resolved, _ = self._resolve_values(strict=False)
-
         declared_vars = env_service.get_variables()
         var_rows = []
         for item in declared_vars:
@@ -199,17 +251,7 @@ class ShowDeployCommand(BaseDeployCommand):
         env_data["variables"] = var_rows
 
         declared_secrets = env_service.get_secrets()
-        secret_rows = []
-        for item in declared_secrets:
-            val = resolved.secrets.get(item.key)
-            secret_rows.append(
-                {
-                    "key": item.key,
-                    "value": _mask(val) if val is not None else None,
-                    "store": item.store.value,
-                    "resolved": item.key in resolved.secrets,
-                }
-            )
+        secret_rows = [self._secret_row(item, resolved, allowed_secrets) for item in declared_secrets]
         env_data["secrets"] = secret_rows
 
         declared_features = env_service.get_features()
@@ -250,6 +292,35 @@ class ShowDeployCommand(BaseDeployCommand):
             return env_data, False
 
         return env_data, True
+
+    @staticmethod
+    def _secret_row(
+        item: Any,
+        resolved: ResolvedValues,
+        allowed_secrets: Optional[Set[str]],
+    ) -> Dict[str, Any]:
+        """One secret row, with its value withheld when out of the selected stages' scope.
+
+        An out-of-scope secret is *listed*, not omitted. Omitting it would make a
+        secret that exists but is excluded indistinguishable from one that was never
+        declared — and "why can't my stage see SECRET_FOO?" is exactly the question
+        omission answers worst. ``in_scope: false`` answers it outright.
+
+        Withholding the value is modelling, not a security boundary: the same operator
+        sees every value by dropping ``--stage``. The row answers "what would this
+        stage receive?", and for an out-of-scope secret the answer is nothing.
+        """
+        in_scope = allowed_secrets is None or item.key in allowed_secrets
+        val = resolved.secrets.get(item.key)
+        return {
+            "key": item.key,
+            "value": _mask(val) if (in_scope and val is not None) else None,
+            "store": item.store.value,
+            # Resolution is a property of the secret, not of the selection: a secret
+            # that resolved fine but is out of scope must not be reported as a failure.
+            "resolved": item.key in resolved.secrets,
+            "in_scope": in_scope,
+        }
 
     def _print_output(self) -> None:
         """Render deployment show summary to console."""
@@ -301,7 +372,14 @@ class ShowDeployCommand(BaseDeployCommand):
             for s in stages:
                 scope = f" [{s['scope']}]" if s.get("scope") else ""
                 deps = f" → depends: {', '.join(s['depends_on'])}" if s.get("depends_on") else ""
-                click.echo(f"      • {s['name']}  ({s['provisioner']}){scope}{deps}")
+                # Names the flag and what it resolved to, not just "skipped" — a marker
+                # that says only "skipped" recreates the guesswork one level down.
+                gate = (
+                    click.style(f"  ⏭\ufe0f would skip — {s['skip_reason']}", fg="yellow")
+                    if s.get("would_skip")
+                    else ""
+                )
+                click.echo(f"      • {s['name']}  ({s['provisioner']}){scope}{deps}{gate}")
             click.echo()
 
         if not env:
@@ -341,7 +419,12 @@ class ShowDeployCommand(BaseDeployCommand):
             click.echo(f"\n  Secrets ({len(secret_rows)}):")
             col_key = max(len(r["key"]) for r in secret_rows)
             for r in secret_rows:
-                status = r["value"] if r["resolved"] else click.style("⚠ unresolved", fg="yellow")
+                if not r.get("in_scope", True):
+                    status = click.style("— not in the selected stage's allowlist", fg="cyan")
+                elif r["resolved"]:
+                    status = r["value"]
+                else:
+                    status = click.style("⚠ unresolved", fg="yellow")
                 click.echo(f"    {r['key']:<{col_key}}  = {status}")
 
         feature_rows = env.get("features", [])

@@ -113,15 +113,53 @@ spec:
 
 Gates evaluate conditions at evaluation time. Available conditions:
 
-| Condition            | Phase     | Data source               | Example                            |
-| -------------------- | --------- | ------------------------- | ---------------------------------- |
-| `cost_delta_monthly` | post-plan | `cost.json` artifact      | `">= 1000"` or `"< 500"`           |
-| `cve_critical`       | post-plan | `cve-audit.json` artifact | `">= 1"`                           |
-| `cve_high`           | post-plan | `cve-audit.json` artifact | `">= 5"`                           |
-| `ai_risk`            | post-plan | `cve-audit.json` artifact | `">= high"` (high, medium, low)    |
-| `time_utc`           | pre-plan  | system clock              | `"02:00-04:00"` or `"14:30-15:30"` |
+| Condition            | Phase     | Data source                                    | Example                            |
+| -------------------- | --------- | ---------------------------------------------- | ---------------------------------- |
+| `cost_delta_monthly` | post-plan | `cost.json` artifact                           | `">= 1000"` or `"< 500"`           |
+| `cve_critical`       | post-plan | `cve-audit.json` artifact                      | `">= 1"`                           |
+| `cve_high`           | post-plan | `cve-audit.json` artifact                      | `">= 5"`                           |
+| `ai_risk`            | post-plan | AI plan analysis (`--ai`/`--strict-ai-review`) | `">= high"` (high, medium, low)    |
+| `time_utc`           | pre-plan  | system clock                                   | `"02:00-04:00"` or `"14:30-15:30"` |
 
 Operators: `>`, `>=`, `<`, `<=`, `==`, `!=`
+
+---
+
+## When condition data is missing (`on_missing_data`)
+
+Every condition above depends on something being produced *before* the gate
+evaluates it — `cve_critical`/`cve_high` need `strata build run --audit` to have
+run; `cost_delta_monthly` needs a cost estimator declared in
+`spec.integrations`; `ai_risk` needs `--ai`/`--strict-ai-review` on the deploy
+command. If that prerequisite was never met, the condition has **no data to
+evaluate** — a fundamentally different situation from "data says zero."
+
+Each gate has an `on_missing_data` field controlling what happens in that case:
+
+```yaml
+spec:
+  gates:
+    - name: sbom-audit
+      type: security_review
+      when:
+        cve_critical: ">= 1"
+      on_missing_data: block   # fire the gate if the scan never ran, don't assume clean
+```
+
+| Value            | Behavior                                                                                                                                                               |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `skip` (default) | The condition never triggers — matches every gate's behavior before this field existed.                                                                                |
+| `warn`           | The condition never triggers, but a warning is logged (visible in normal console output, not just debug logs).                                                         |
+| `block`          | The condition counts as **matched** — the gate fires and requires its configured resolution (e.g. human approval), exactly as if the real threshold had been exceeded. |
+
+**Recommendation: set `on_missing_data: block` for `security_review` gates and
+any `cve_critical`/`cve_high` condition.** The default (`skip`) means a gate
+like the `sbom-audit` example above never fires unless `--audit` happens to
+have been passed to a prior `build run` — silently indistinguishable from "scan
+ran, found nothing." `block` makes that prerequisite enforced instead of assumed.
+For `cost_review`/`cost_delta_monthly`, `skip` is a more defensible default —
+missing cost data is lower-stakes than missing vulnerability data — but `warn`
+is worth considering so a misconfigured cost estimator doesn't go unnoticed.
 
 ---
 

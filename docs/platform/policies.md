@@ -17,10 +17,16 @@ Unlike [lifecycle hooks](lifecycles.md), which run arbitrary scripts at named po
 | What they do     | Run arbitrary scripts                   | Evaluate structured rules against config/plans |
 | Where declared   | `lifecycle:` on any YAML document       | `configuration.spec.policies`                  |
 | Failure mode     | Non-zero exit code stops the pipeline   | Configurable: `deny`, `warn`, or `audit`       |
+| Reported as      | System failure (exit `1`)               | Refusal (exit `3`) when enforcement is `deny`  |
 | Scope            | Single document (workspace/namespace/…) | Whole deployment (cross-document visibility)   |
 | Example use case | Run a backup before apply               | Prevent resources in disallowed regions        |
 
 The practical difference: if you need to *enforce* something about the infrastructure plan or configuration values, use a policy. If you need to *do* something at a lifecycle point (download a file, rotate a secret, send a notification), use a lifecycle hook.
+
+That difference is visible in the exit code, which matters in CI. A failed hook is
+reported as a system error, because a script exiting non-zero because it *chose* to
+stop the deploy cannot be told apart from one that crashed. A `deny` policy is
+reported as a refusal, so a pipeline knows not to retry it.
 
 ---
 

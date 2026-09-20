@@ -381,6 +381,16 @@ class TerraformDeployer(BaseDeployer):
 
         return True, messages
 
+    @property
+    def plan_has_changes(self) -> Optional[bool]:
+        """Whether the last :meth:`plan` found pending changes.
+
+        ``None`` when ``plan()`` has not run. Sourced from terraform's own
+        ``-detailed-exitcode``, so this is terraform's verdict rather than a count
+        inferred by re-reading the plan file.
+        """
+        return self._plan_has_changes
+
     def apply(
         self,
         line_callback: Optional[Callable[[str, str], None]] = None,
