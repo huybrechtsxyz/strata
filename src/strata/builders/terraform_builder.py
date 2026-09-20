@@ -1534,7 +1534,13 @@ class TerraformBuilder(BaseBuilder):
                         has_errors = True
 
             # Run the cross-check
-            result = check_inputs(injected_keys, module_vars, environment_keys=environment_keys, excluded_keys=excluded)
+            result = check_inputs(
+                injected_keys,
+                module_vars,
+                environment_keys=environment_keys,
+                excluded_keys=excluded,
+                referenced_keys=self._compute_referenced_keys(prov, matching_stages),
+            )
 
             # Report results
             for error in result.errors:
@@ -1590,6 +1596,43 @@ class TerraformBuilder(BaseBuilder):
             injected |= set(prov.references.secrets or [])
             injected |= set(prov.references.features or [])
         return injected
+
+    def _compute_referenced_keys(self, prov: Any, matching_stages: Optional[List[Any]] = None) -> Set[str]:
+        """Keys something explicitly asked for, by name (ADR-0084).
+
+        Distinct from :meth:`_compute_injected_keys`, which answers "what will this
+        provisioner receive". This answers "what did anything actually *request*",
+        and is empty when nothing declares anything.
+
+        Two sources count as an explicit request:
+
+        - ``spec.references`` on a resource/provider/module, or on the provisioner.
+        - A **literal** key in a matching stage's ``secrets:`` allowlist. Naming a
+          secret for a stage is as deliberate as declaring a reference, so a stage
+          allowlisting a secret the root cannot accept is a real mismatch.
+          ``['*']`` is deliberately *not* counted — it is "whatever exists", not a
+          request for any particular key, and neither is the no-matching-stages
+          fallback that yields every secret.
+
+        Used to split the undeclared-input check by severity: a key something asked
+        for but the root cannot accept is a mismatch (error), whereas a key that
+        merely exists in the environment and this root does not use is normal
+        (warning) — Terraform itself treats the latter as a warning and plans
+        regardless.
+        """
+        referenced: Set[str] = (
+            set(self.variable_refs.keys()) | set(self.feature_refs.keys()) | set(self.secret_refs.keys())
+        )
+        if prov.references:
+            referenced |= set(prov.references.variables or [])
+            referenced |= set(prov.references.secrets or [])
+            referenced |= set(prov.references.features or [])
+
+        for stage in matching_stages or []:
+            stage_secrets = getattr(stage, "secrets", None) or []
+            referenced |= {key for key in stage_secrets if key != "*"}
+
+        return referenced
 
     def _stages_for_provisioner(self, workspace_model: Any, stages: List[Any], prov: Any) -> List[Any]:
         """Return the deployment stages that resolve to *prov*.

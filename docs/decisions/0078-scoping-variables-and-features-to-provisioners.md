@@ -695,10 +695,25 @@ Unchanged: `inputs_from`, `ProvisionerInputMappingModel`,
    `test_terraform_input_validator.py` (3a/3b + the environment_keys-defaults
    regression guard), 2 in `TestTerraformBuilderComponentCounters`, 4 in
    `TestTerraformBuilderComputeInjectedKeys`. Full suite: 6616 passed.
-5. **Not yet implemented.** Scope `ResolvedValues.for_stage()` to `injected(P)` for
-   variables and features, and update both call sites in
-   `base_deploy_command.py` (lines ~186, ~671) to pass it. **Deploy-time
-   behaviour change** — deliberately kept separate from step 4 (see below).
+5. **Not yet implemented.** Scope injection to `injected(P)` for variables and
+   features. Designed in full at
+   [Step 5 — deploy-time injection scoping](#step-5--deploy-time-injection-scoping-design)
+   (2026-09-20). **It does not narrow one provisioner relative to another** — see
+   [Step 5 does not narrow per provisioner](#step-5-does-not-narrow-per-provisioner)
+   before planning around it. Three sub-steps, in order:
+   **5a** extract `injected(P)` out of `TerraformBuilder` into a shared helper
+   returning `(injected, violations)` (behaviour-preserving for the builder; the
+   error-append and the unscoped fallback must be split apart) — this is a
+   prerequisite, because the shipped step 3 put the computation in builder-local
+   state and there is no builder at deploy time;
+   **5b** add `allowed_variables`/`allowed_features` to `ResolvedValues.for_stage()`,
+   defaulting to `None` ⇒ unscoped;
+   **5c** pass `injected(P)` at the **deployer** call site only
+   (`base_deploy_command.py:672`), failing closed on a non-empty `violations` rather
+   than inheriting the build's widen-and-continue fallback. The lock-backend call
+   site (:187) stays unscoped for variables/features — step 4 deliberately kept the
+   backend-expression check on `environment_keys`. **Deploy-time behaviour change**
+   — deliberately kept separate from step 4 (see below).
 6. Optional: rule 5 usage-side validators for resource/module. Not implemented —
    rule 5 was already established as non-load-bearing (see the Review section);
    this remains a cheap, independent follow-up, not a blocker for anything.
@@ -1069,11 +1084,183 @@ def for_stage(
 Apply the same filtering pattern already used for `secrets`/`stage_outputs_sensitive`
 to `variables`/`features` in all three branches of the existing `if`/`elif`/`else`.
 
-Both call sites in `base_deploy_command.py` (lines 186, 671) change from
-`_resolved_values.for_stage(stage.secrets)` to passing the resolved provisioner's
-`injected(P)` variables/features alongside `stage.secrets` — resolved via the same
-provisioner-lookup helper `_stages_for_provisioner()`/`_resolve_iac_model()`
-already uses, so no new resolution logic is needed there, only new arguments.
+### Step 5 — deploy-time injection scoping (design)
+
+Written 2026-09-20, after steps 1–4 shipped. Steps 1–4 changed **validation**;
+this step changes **what a subprocess actually receives**, so it is specified
+separately rather than inferred from the build-time design.
+
+> **Read this first if you are waiting on step 5 to narrow one provisioner's
+> inputs: it will not.** See
+> [Step 5 does not narrow per provisioner](#step-5-does-not-narrow-per-provisioner).
+
+#### Step 5 does not narrow per provisioner
+
+Validated against installed 1.11.0 by the Dispatcher integration work, 2026-09-20.
+This is the single most important thing to understand before planning around this
+step, because the ADR's own title invites the opposite conclusion.
+
+`TerraformBuilder` resets `variable_refs` / `feature_refs` / `secret_refs` and the
+two component counters **once per `build()`**
+([terraform_builder.py:100–104](../../src/strata/builders/terraform_builder.py#L100-L104)),
+accumulates them across **every** component in the workspace, then reads that one
+accumulated set inside the per-provisioner loop. Combined with the v1
+simplification already recorded under [Computing `injected(P)`](#computing-injectedp),
+the actual semantics are:
+
+```
+injected(P) = ⋃ references(c) for every component c in the workspace
+              ∪ references(P)
+```
+
+The per-provisioner term can only **add**. `injected(P)` can never fall below the
+workspace-wide union. So in a workspace where `core_iac` legitimately requires 22
+keys, the union is at least 22, and a second provisioner such as `dispatcher_api`
+still receives all 22 — measured on both 1.10.0 and 1.11.0.
+
+Step 5 changes *what a subprocess receives* from the resolved set; it does not
+change *the set that is computed*. A workspace wanting one provisioner to see
+fewer keys than another needs the v1 simplification lifted — per-provisioner
+binding of component references — which is
+[explicitly deferred as out of scope](#computing-injectedp) and is a new schema
+surface, not part of this step.
+
+Recorded prominently because "wait for step 5" is the natural assumption and would
+cost a release cycle to no effect.
+
+#### Blocker found: `injected(P)` has no home outside the builder
+
+The rollout's step 3 planned `compute_injected()` on **`services/workspace_service.py`**,
+"exposed but unconsumed". The shipped implementation instead folded it into step 4
+as `TerraformBuilder._compute_injected_keys()`, deriving the set from **builder
+instance state** — `self.variable_refs` / `feature_refs` / `secret_refs` and the
+`_components_total` / `_components_declaring_refs` counters, all populated by
+`_build_provider_vars` / `_build_resources_by_category` / `_build_module_vars`
+during a build.
+
+That was a reasonable local call for step 4, and it is the thing that blocks step 5:
+**there is no builder at deploy time**, so `injected(P)` is currently uncomputable
+from `base_deploy_command.py`. Any step-5 attempt must resolve this first. Three
+options:
+
+| Option                                                  | Verdict                                                                                                                                                                                                                                               |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A** — recompute independently in the deploy path      | **Rejected.** Two implementations of one rule, drifting apart, with the deploy-side copy silently deciding what a provisioner receives. This is the duplication the repo's convention rule exists to prevent.                                         |
+| **B** — persist `injected(P)` into the build artifact   | **Rejected.** Cheap to read, but couples the guarantee to build freshness: `deploy run` against a stale build would scope against yesterday's `references`. Introduces a new failure mode ("scoped by an artifact nobody looked at") to avoid a walk. |
+| **C** — extract the computation to a shared pure helper | **Chosen.** One implementation, no artifact, no staleness.                                                                                                                                                                                            |
+
+Option C is viable because the inputs are already available on both sides.
+`WorkspaceService.get_resource_services()`
+([workspace_service.py:972](../../src/strata/services/workspace_service.py#L972), with
+`get_provider_services()` :946 and `get_module_services()` :913) returns the loaded
+documents — and `references` lives on those documents
+([`ResourceSpecModel.references`](../../src/strata/models/resource_model.py#L293);
+`_track_resource_requirements(resource)` reads `resource.references`), not on the
+workspace entry. `deploy run` loads the full workspace, so the same documents the
+builder walked are in hand.
+
+The precedent for the shape is already in the tree:
+[`allowed_secret_keys_for_stages()`](../../src/strata/utils/provisioner_resolution.py#L79)
+in `utils/`, wrapped by `TerraformBuilder._allowed_secret_keys_for_stages()`, whose
+docstring gives the argument against option A in as many words — *"one
+implementation, not three independent copies."*
+
+`TerraformBuilder._compute_injected_keys()` becomes a thin wrapper over the new
+helper, keeping its counter-based fast path only as an internal detail.
+
+**Do not start step 5 by editing `for_stage()`.** Extracting the helper and proving
+the builder is unchanged by it is a self-contained, behaviour-preserving change
+that should land and be verified green on its own first.
+
+#### The extraction is not a pure lift — and the fallback is the danger
+
+`_compute_injected_keys()` is **not** side-effect-free today. On a rule-4 violation
+it does two things at once
+([terraform_builder.py:1550](../../src/strata/builders/terraform_builder.py#L1550)):
+
+```python
+if self._components_declaring_refs < self._components_total:
+    self._errors.append(f"[{prov.name}] is scoped ... but at least one declares none")
+    return set(environment_keys)      # ← falls back to the FULL set
+```
+
+It records a build error **and** returns the unscoped fallback. The shared helper
+must separate these — return `(injected, violations)` and let each caller decide —
+because the two callers need opposite behaviour, and the difference is not
+cosmetic:
+
+| Caller | On a rule-4 violation                                                                                                                                                 |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Build  | Append a build error, fall back to `environment_keys` so later checks still run without cascading. Today's behaviour, deliberately lenient — **the build fails.**     |
+| Deploy | Must **not** silently widen. Falling back to the full set here means an inconsistently-scoped workspace quietly injects everything, with no error channel to stop it. |
+
+That asymmetry is the real hazard in this step. A build catches the violation
+loudly; a deploy inheriting the same fallback would turn it into **silent
+widening** — the scoping appears to be in force while doing nothing. It is the
+stale-artifact exposure named below, but failing open instead of failing loudly,
+which is strictly worse for a mechanism whose whole purpose is to restrict.
+
+Step 5c must therefore treat a non-empty `violations` as a hard deploy error, not
+as a reason to fall back.
+
+#### Only one of the two call sites may be scoped
+
+The signature sketch above says "both call sites ... change". **That is wrong**, and
+following it would contradict a decision already shipped in step 4.
+
+| Call site                                                     | Scope variables/features?                                                                                                                                                                                                                                                           |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `base_deploy_command.py:187` — lock backend config resolution | **No.** Step 4 deliberately left the backend-expression check validating against `environment_keys`, not `injected_keys`, because backend config is resolved directly at deploy time rather than through tfvars. Scoping here would break a backend referencing an un-injected key. |
+| `base_deploy_command.py:672` — deployer construction          | **Yes.** This is the injection path the ADR is about.                                                                                                                                                                                                                               |
+
+Both keep passing `stage.secrets`; only the second gains the variable/feature sets.
+
+The carve-out is not inferred — it is stated at the build-time check itself
+([terraform_builder.py:1517](../../src/strata/builders/terraform_builder.py#L1517)):
+*"Checked against environment_keys (not injected_keys): backend resolution is
+unaffected by ADR-0078 scoping, so this check's behaviour must not change either."*
+
+#### `stage_outputs` stays unfiltered
+
+`for_stage()` also carries `stage_outputs`, which arrive from an upstream
+provisioner via `inputs_from` — not from the environment. Rule 6 already exempts
+them from the build-time completeness check, and the same reasoning applies here:
+`injected(P)` is a statement about environment keys and says nothing about wired
+outputs. Filtering them would break `inputs_from` for every scoped provisioner.
+(`stage_outputs_sensitive` continues to follow `allowed_secrets`, unchanged.)
+
+#### The failure mode changes character — this is the real risk
+
+Under step 4 a missing `references` entry is a **build error**, fixed before
+anything runs. Under step 5 the same mistake becomes a **missing `TF_VAR_<key>` at
+apply time**, surfacing as terraform's own "No value for required variable" — later,
+in a subprocess, mid-deploy, and against infrastructure that may be half-applied.
+
+That is a strictly worse failure, and it is only tolerable because step 4 catches
+the case first. The mitigation is therefore a **sequencing guarantee, not a runtime
+check**: step 5 must not add a new deploy-time validation pass. The exposure is
+`deploy run` against a build that predates a `references` edit, which is the
+already-understood stale-artifact hazard rather than a new one.
+
+#### Honest scope of the benefit
+
+Worth stating plainly so this is not oversold. The security-relevant half of this
+ADR is already done: **secrets** are filtered per stage today, and they are what
+carries real exposure. Variables and features are non-sensitive *by convention* —
+not by definition, and not by any schema constraint: nothing stops an operator
+putting a credential in a variable. The guarantee is a naming discipline, not a
+type boundary. The conclusion is unchanged — `service_connection_id` in the
+triggering case really is CI bookkeeping, not a credential — but the distinction
+matters for anyone reasoning about what this step protects.
+
+Step 5 therefore buys hygiene and blast-radius reduction, not a new security
+boundary. Its strongest concrete argument is **non-Terraform provisioners**: a
+`script` or `ansible` provisioner currently receives every environment variable and
+feature flag in its process environment regardless of what it declared, and that set
+grows with the environment rather than with the provisioner's needs.
+
+This is a large part of why step 5 was safe to defer, and why it should be judged on
+that argument rather than on an implied security benefit it does not provide.
 
 ### Test plan
 
@@ -1103,14 +1290,16 @@ convention (`tests/strata/<area>/test_<module>.py`):
 
 ### Task list per rollout step
 
-| Step | Files touched                                                                                     | New tests                                                             |
-| ---- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| 2    | `models/workspace_model.py` (add `ProvisionerReferencesModel`, `WorkspaceIacModel.references`)    | model round-trip tests                                                |
-| 3    | `services/workspace_service.py` (add `compute_injected()` or equivalent, exposed but unconsumed)  | unit tests on `compute_injected()` directly                           |
-| 4    | `builders/terraform_builder.py`, `validators/terraform_input_validator.py`                        | `check_inputs()` 3a/3b tests, rule 4 error, end-to-end worked example |
-| 5    | `utils/resolved_values.py`, `commands/deploy/base_deploy_command.py`                              | `for_stage()` new-parameter tests, deploy-time injection test         |
-| 6    | `models/resource_model.py`, `models/module_model.py` (optional rule 5 validators)                 | mirrors existing `DnsSpecModel.validate_references_declared()` tests  |
-| 7    | remove the `drop_removed_references` validators + `warnings` import from both models (next minor) | delete the now-obsolete deprecation tests                             |
+| Step | Files touched                                                                                     | New tests                                                                                             |
+| ---- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| 2    | `models/workspace_model.py` (add `ProvisionerReferencesModel`, `WorkspaceIacModel.references`)    | model round-trip tests                                                                                |
+| 3    | `services/workspace_service.py` (add `compute_injected()` or equivalent, exposed but unconsumed)  | unit tests on `compute_injected()` directly                                                           |
+| 4    | `builders/terraform_builder.py`, `validators/terraform_input_validator.py`                        | `check_inputs()` 3a/3b tests, rule 4 error, end-to-end worked example                                 |
+| 5a   | new shared helper in `utils/` returning `(injected, violations)` + builder wrapper                | helper unit tests incl. violation split; builder tests pass **unchanged**                             |
+| 5b   | `utils/resolved_values.py` (`allowed_variables`/`allowed_features` on `for_stage()`)              | new-parameter None/`['*']`/list tests + omitted-args regression guard                                 |
+| 5c   | `commands/deploy/base_deploy_command.py` (deployer call site only)                                | deploy-time injection test; fail-closed-on-violations test; lock-backend site asserted still unscoped |
+| 6    | `models/resource_model.py`, `models/module_model.py` (optional rule 5 validators)                 | mirrors existing `DnsSpecModel.validate_references_declared()` tests                                  |
+| 7    | remove the `drop_removed_references` validators + `warnings` import from both models (next minor) | delete the now-obsolete deprecation tests                                                             |
 
 ## Analysis — allow- vs deny-by-default
 

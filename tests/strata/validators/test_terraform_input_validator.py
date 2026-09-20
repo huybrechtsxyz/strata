@@ -272,6 +272,101 @@ class TestCheckInputs:
         assert len(result.errors) == 2
 
 
+class TestUndeclaredInputSeverity:
+    """ADR-0084: rule 1's severity depends on *who asked* for the key.
+
+    A component that declares `spec.references: [x]` for a root that cannot accept
+    `x` has made a real mistake — error. A key that merely exists in the shared
+    environment and this root does not use is normal: Terraform itself emits
+    "Value for undeclared variable" and plans regardless (verified on 1.12.2 with
+    21 such keys — all warnings, plan produced).
+
+    Without this split, composing an externally-authored root into a shared
+    environment is impossible: every key the root does not consume is fatal.
+    """
+
+    def _vars(self, *names):
+        return {name: TerraformVariable(name=name, has_default=True, default_value="d") for name in names}
+
+    def test_referenced_but_undeclared_is_an_error(self):
+        result = check_inputs(
+            {"vnet_name"},
+            self._vars("location"),
+            referenced_keys={"vnet_name"},
+        )
+
+        assert any("vnet_name" in e for e in result.errors)
+        assert not result.warnings
+
+    def test_merely_present_in_environment_is_a_warning(self):
+        result = check_inputs(
+            {"enable_aks"},
+            self._vars("location"),
+            referenced_keys=set(),
+        )
+
+        assert not result.errors
+        assert any("enable_aks" in w for w in result.warnings)
+
+    def test_omitting_referenced_keys_preserves_legacy_behaviour(self):
+        """Regression guard: every pre-existing call site must be unaffected."""
+        result = check_inputs({"enable_aks"}, self._vars("location"))
+
+        assert any("enable_aks" in e for e in result.errors)
+        assert not result.warnings
+
+    def test_suggestion_survives_the_demotion_to_warning(self):
+        """The near-miss is the signal worth keeping — 'daily_quota_gb' against a
+        root declaring 'log_workspace_daily_quota_gb' is a real estate-wiring
+        mismatch, and demoting the severity must not demote the content."""
+        result = check_inputs(
+            {"daily_quota_gb"},
+            self._vars("log_workspace_daily_quota_gb"),
+            referenced_keys=set(),
+        )
+
+        assert not result.errors
+        assert len(result.warnings) == 1
+        assert "did you mean 'log_workspace_daily_quota_gb'" in result.warnings[0]
+
+    def test_mixed_referenced_and_incidental(self):
+        result = check_inputs(
+            {"typo_key", "enable_aks"},
+            self._vars("location"),
+            referenced_keys={"typo_key"},
+        )
+
+        assert any("typo_key" in e for e in result.errors)
+        assert any("enable_aks" in w for w in result.warnings)
+
+    def test_excluded_keys_still_skipped_entirely(self):
+        result = check_inputs(
+            {"enable_aks"},
+            self._vars("location"),
+            referenced_keys=set(),
+            excluded_keys={"enable_aks"},
+        )
+
+        assert not result.errors
+        assert not result.warnings
+
+    def test_a_stage_allowlisted_secret_counts_as_referenced(self):
+        """`stages[].secrets: [X]` is an explicit request for X, the same as a
+        `references` entry — so a root that cannot accept X is a real mismatch.
+
+        The builder folds literal stage-secret names into `referenced_keys` for
+        this reason; `['*']` and the no-matching-stages fallback are excluded,
+        because neither names a particular key.
+        """
+        result = check_inputs(
+            {"TYPO_SECRET"},
+            self._vars("SOME_OTHER_VAR"),
+            referenced_keys={"TYPO_SECRET"},
+        )
+
+        assert any("TYPO_SECRET" in e for e in result.errors)
+
+
 # ---------------------------------------------------------------------------
 # _find_closest
 # ---------------------------------------------------------------------------
