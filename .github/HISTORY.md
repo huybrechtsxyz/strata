@@ -7,6 +7,18 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Fixed
+
+#### **1.11.1's fix was itself only partially correct — a second bug in the same mechanism**
+
+- **Symptom, reported by the integration team testing 1.11.1 against the real ring/dispatcher_api workspace**: 21 errors became 14 errors + 7 warnings, not 21 warnings. The split was exact: every `enable_*` **feature** correctly warned; every **variable** still errored. Nothing in the workspace declares `references`, so per ADR-0084 all 21 should have warned.
+- **Root cause**: `_compute_referenced_keys()` (the "who asked" set introduced in 1.11.1) read `self.variable_refs`/`self.feature_refs`/`self.secret_refs` — but those three dicts are **dual-purpose**. They also feed the requirements inventory (`_document_required_variables()`/`_document_required_features()`/`_document_required_secrets()`), so `_collect_environment_variables()`/`_collect_environment_secrets()` populate `variable_refs`/`secret_refs` with **every** environment variable/secret unconditionally — whether or not anything referenced them. There is no analogous `_collect_environment_features()`, so `feature_refs` only ever held genuinely-referenced keys. The features path was accidentally right, precisely because nobody had written a features collector; variables and secrets were both silently broken by the same collector pattern the report initially attributed to variables alone.
+- **This contradicted the shipped code's own claims**: `_compute_referenced_keys()`'s docstring said "empty when nothing declares anything", and the validator's own rule said "key merely present in the environment → warning". Neither held for variables or secrets.
+- **Fix**: a new `self._referenced_keys: Set[str]` (reset in both `__init__` and `before_build()`, alongside the three existing dicts) populated **only** at the three genuinely-gated call sites — `_track_resource_requirements()`, and the `if provider.references:` / `if module.references:` blocks in `_build_provider_vars()`/`_build_module_vars()` — each adding to the new set at the same point it calls `_track_variable()`/`_track_feature()`/`_track_secret()`. `_compute_referenced_keys()` now reads only this set (plus `prov.references` and literal stage-secret allowlist entries, unchanged from 1.11.1), never the inventory dicts.
+- **The validator branch itself needed no change** — `check_inputs()`'s `if referenced_keys is None or key in referenced_keys: error else: warning` was correct all along; it was being fed the wrong input.
+- **Tests**: a new `TestComputeReferencedKeys` class unit-tests `_compute_referenced_keys()` directly (mirroring `TestTerraformBuilderComputeInjectedKeys`'s existing style) — including the core regression (populating the inventory dicts alone must not count as a request), the wildcard/no-matching-stage exclusions carried over from 1.11.1, and that a genuine mismatch (something references a key the root doesn't declare) still errors. A new `TestUnreferencedVariablesAndSecretsAreWarningsNotErrors` class exercises the reported bug end-to-end through `_validate_inputs()` for both variables and secrets — the original 1.11.1 tests only covered the variable/feature asymmetry the integration team's real workspace happened to exercise, not secrets, which suffer the identical bug via the same poisoned dict.
+- **What landed correctly in 1.11.1 and needed no rework**: the "did you mean?" suggestion still appears on both severities, and the validator's docstring citation of the Terraform 1.12.2 measurement stands — only the input feeding the severity split was wrong, not the design.
+
 ## [1.11.1] - 2026-09-20
 
 ### Fixed
