@@ -8,6 +8,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [1.11.1] - 2026-09-20
+
 ### Fixed
 
 - **An environment key a Terraform root does not declare is now a warning, not a build error (ADR-0084)** — composing an externally-authored root into a shared environment was impossible: every key the root did not consume failed the build. Terraform itself treats these as `Value for undeclared variable` warnings and plans normally (verified on 1.12.2). Severity now depends on *who asked*: a key named by a component's `spec.references` **or** by a stage's `secrets:` allowlist is still an **error** when the root cannot accept it — that is a real mismatch — while a key merely present in the environment is a **warning**. The "did you mean?" suggestion is kept on both, because a near-miss like `daily_quota_gb` against `log_workspace_daily_quota_gb` is exactly the signal worth surfacing. This changes severity only: the root still receives every value, as before.
