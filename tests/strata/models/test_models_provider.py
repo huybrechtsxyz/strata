@@ -40,11 +40,18 @@ def test_provider_full_is_valid():
         "variables": ["internal_network_cidr"],
         "secrets": ["api_token"],
     }
-    data["spec"]["lifecycle"] = {"plan": {"timeout": 300}}
+    data["spec"]["lifecycle"] = {
+        "deploy_plan_before": {"scripts": ["scripts/validate.sh"]},
+        "deploy_provision": {"description": "Provision the provider", "scripts": ["scripts/provision.py"]},
+    }
+    data["spec"]["configuration"] = {"skip_provider_registration": True}
+    data["spec"]["custom"] = {"costcenter": "strata"}
     model = ProviderModel.model_validate(data)
     assert model.spec.authentication.method == "cli"
     assert model.spec.references.variables == ["internal_network_cidr"]
-    assert model.spec.lifecycle.plan == {"timeout": 300}
+    assert model.spec.lifecycle.root["deploy_plan_before"].scripts == ["scripts/validate.sh"]
+    assert model.spec.configuration == {"skip_provider_registration": True}
+    assert model.spec.custom == {"costcenter": "strata"}
 
 
 def test_provider_missing_required_field_is_invalid():

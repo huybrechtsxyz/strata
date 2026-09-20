@@ -90,10 +90,10 @@ class ProviderSpecModel(PlatformBaseModel):
     """
     Provider specification containing properties, references, and lifecycle configuration.
     """
-
     lifecycle: CommonLifecycleModel | None = Field(
         None,
-        description="IaC workflow lifecycle phases (setup, validate, plan, apply, output, destroy)",
+        description="IaC workflow lifecycle phases, keyed by phase name "
+        "(e.g. deploy_check, deploy_plan_before, deploy_provision, deploy_destroy_after)",
     )
     properties: ProviderPropertiesModel = Field(
         description="Provider configuration (cloud provider, IaC tool, datacenter location)"
@@ -105,7 +105,21 @@ class ProviderSpecModel(PlatformBaseModel):
         None,
         description="Variable and secret mappings for runtime configuration injection",
     )
-    custom: dict[str, Any] | None = Field(None, description="Optional custom key-value pairs for automation")
+    configuration: dict[str, Any] | None = Field(
+        None,
+        description="Raw provisioner-specific passthrough configuration (e.g. extra Terraform "
+        "provider-block arguments such as 'skip_provider_registration' or 'partner_id'). "
+        "Unlike `properties`, these keys are not validated by strata and are passed through "
+        "as-is to the provisioner. Must be consumed by the corresponding builder/service — "
+        "a field here is inert until that layer exists.",
+    )
+    custom: dict[str, Any] | None = Field(
+        None,
+        description="Optional custom key-value pairs for automation/bookkeeping (e.g. cost center, "
+        "billing account). Not consumed by any provisioner — for external tooling/documentation "
+        "only. Must be explicitly wired through by the builder/service layer if it needs to reach "
+        "build output; it is not automatic.",
+    )
     default_tags: dict[str, str] | None = Field(
         None,
         description="Default tags to apply to all resources created by this provider (ignored if provider doesn't support tagging)",

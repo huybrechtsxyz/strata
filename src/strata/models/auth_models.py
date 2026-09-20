@@ -7,7 +7,7 @@ environment variable, secret, and feature declarations.
 
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from strata.models.common_models import PlatformBaseModel
 
@@ -184,3 +184,34 @@ class AuthenticationModel(PlatformBaseModel):
         None,
         description="Human-readable description of this authentication configuration and setup instructions",
     )
+
+    @model_validator(mode="after")
+    def validate_method_matches_populated_config(self) -> "AuthenticationModel":
+        """Ensure exactly the config matching `method` is populated.
+
+        `method` selects which of the method-specific fields applies. The matching
+        field must be set, and no other method's field may be set at the same time
+        (that would be ambiguous about which credentials actually apply).
+        """
+        method_fields = (
+            "oauth2",
+            "aws",
+            "gcp",
+            "api_key",
+            "certificate",
+            "saml",
+            "cli",
+            "managed_identity",
+        )
+        populated = [name for name in method_fields if getattr(self, name) is not None]
+
+        if self.method not in populated:
+            raise ValueError(f"method is '{self.method}' but '{self.method}' configuration is not set")
+
+        extra = [name for name in populated if name != self.method]
+        if extra:
+            raise ValueError(
+                f"method is '{self.method}' but unrelated configuration is also set: {', '.join(extra)}"
+            )
+
+        return self
