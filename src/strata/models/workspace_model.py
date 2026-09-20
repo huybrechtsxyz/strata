@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Pydantic models for workspace configuration validation."""
 
-import warnings
 from typing import Annotated, Any, Dict, List, Literal, Optional
 
 from pydantic import (
@@ -293,35 +292,6 @@ class WorkspaceTopologyModel(PlatformBaseModel):
 
 class WorkspaceResourceModel(PlatformBaseModel):
     """Model for workspace resource definition (gluing layer)."""
-
-    @model_validator(mode="before")
-    @classmethod
-    def drop_removed_references(cls, data):
-        """Drop 'condition' with a warning instead of failing validation.
-
-        ADR-0083: 'condition' was inert — never resolved, never validated — and
-        additionally *redundant*, since an environment can already switch a resource
-        off by overriding 'enabled', so per-environment inclusion needs no expression
-        language. Its documented syntax ('{{ environment }} == production') matched
-        no engine in the codebase, and the shipped scaffold advertised it.
-
-        Deprecation shim. It was still an accepted, documented field in v1.10.0, so
-        it has not yet served a single release as a warning — remove it one minor
-        after the release that first carries this shim, not before. ADR-0078's
-        'references' shim was removed on exactly that schedule.
-        """
-        if not isinstance(data, dict):
-            return data
-        if "condition" in data:
-            data = {k: v for k, v in data.items() if k != "condition"}
-            warnings.warn(
-                f"Workspace resource '{data.get('name', '<unnamed>')}': 'condition' has been removed "
-                "(ADR-0083) and is ignored. Use 'enabled' instead — an environment can override it "
-                "per environment.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        return data
 
     name: PlatformName = Field(description="Unique resource name")
     file: Optional[str] = Field(

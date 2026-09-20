@@ -33,21 +33,22 @@ anticipate, each recorded in place above:
 
 ### Deliberately left open
 
-Neither is part of this decision; both are recorded so they are not rediscovered:
+Neither is part of this decision; both are recorded so they are not rediscovered.
+**Both are now resolved:**
 
 - **`deploy show` does not disclose gating** — see
   [Adjacent finding](#adjacent-finding--deploy-show-previews-a-deployment-without-disclosing-gating).
   The preview lists every stage with no indication which will not run, and
   separately its `--stage` appears inert. *(Resolved 2026-09-18.)*
 - **The `condition` deprecation shim** (`workspace_model.py`,
-  `environment_model.py`) sits beside ADR-0078's `references` shim, but the two do
-  **not** come off on the same schedule, despite being introduced together.
-  `references` shipped its warning in v1.10.0 and was removed after that cycle
-  (2026-09-18). `condition` was still an accepted, documented field in v1.10.0 —
-  advertised by the shipped scaffold — so this shim is the *first* release in which
-  it warns at all. Removing it before it has served one full release would take a
+  `environment_model.py`) sat beside ADR-0078's `references` shim. The two were
+  introduced together but deliberately did **not** come off together: `references`
+  shipped its warning in v1.10.0 and was removed after that cycle (2026-09-18),
+  while `condition` was still an accepted, documented field in v1.10.0 — advertised
+  by the shipped scaffold — so removing it at the same time would have taken a
   valid v1.10.0 file straight to a hard `extra="forbid"` failure with no notice.
-  Remove it one minor after the release that first carries it.
+  *(Removed 2026-09-20, ahead of that schedule, on the owner's call that the field
+  had no real users. `condition:` and `references:` are now both rejected outright.)*
 
 ## Context and Problem Statement
 
@@ -1107,8 +1108,9 @@ stage gating — **do not bundle these into the gating PR.**
   `EnvironmentResourceOverrideModel`, plus its phantom
   `'{{ environment }} == production'` example in the `sln init` scaffold
   ([workspace.yaml#L92](../../src/strata/templates/solution/dot.strata/templates/workspace.yaml#L92)).
-  Deprecation shim in the `model_validator(mode="before")` that already handles
-  ADR-0078's `references`, so an upgrade warns rather than hard-fails.
+  Shipped with a deprecation shim in the `model_validator(mode="before")` that
+  already handled ADR-0078's `references`, so the upgrade warned rather than
+  hard-failed. *(Shim removed 2026-09-20 — the key is now rejected outright.)*
 - **Implement `resources[].enabled`** (rows 9–10) — filter resources in the
   builders. Nothing can depend on current behaviour, so no changelog risk.
 - **Implement `modules[].enabled`** (rows 7–8) — make it filter builds, not only
