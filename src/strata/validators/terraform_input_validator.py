@@ -116,6 +116,7 @@ def check_inputs(
     *,
     environment_keys: Optional[Set[str]] = None,
     excluded_keys: Optional[Set[str]] = None,
+    referenced_keys: Optional[Set[str]] = None,
 ) -> InputCheckResult:
     """Cross-check injected input keys against module variable declarations.
 
@@ -134,6 +135,21 @@ def check_inputs(
             which makes every optional-variable case fall through to the
             info branch — i.e. today's behaviour, unchanged.
         excluded_keys: Keys to skip (e.g. strata-injected platform variables).
+        referenced_keys: Keys some component explicitly asked for via
+            ``spec.references``. Splits rule 1 by *who asked* (ADR-0084):
+
+            - key **is** referenced but the root does not declare it → **error**.
+              A component asked for something this root cannot accept; that is a
+              typo or a genuine mismatch, and the build should stop.
+            - key is merely present in the environment → **warning**. The root
+              simply does not use this value. Terraform agrees: it emits
+              "Value for undeclared variable" and plans normally (verified
+              against Terraform 1.12.2 with 21 such keys — all warnings, plan
+              produced).
+
+            ``None`` (the default) preserves the original behaviour of treating
+            every undeclared input as an error, so existing callers are
+            unaffected.
 
     Returns:
         InputCheckResult with errors (undeclared), warnings (unsupplied required,
@@ -146,7 +162,12 @@ def check_inputs(
 
     module_var_names = set(module_variables.keys())
 
-    # 1. Find undeclared inputs (typo detection)
+    # 1. Find undeclared inputs (typo detection). Severity depends on who asked for
+    # the key — see `referenced_keys`. The "did you mean" suggestion is attached to
+    # BOTH severities on purpose: a near-miss between an environment key and a root
+    # variable is exactly the signal worth surfacing when wiring an estate together
+    # (e.g. 'daily_quota_gb' vs 'log_workspace_daily_quota_gb'), and demoting the
+    # message must not demote its content.
     for key in sorted(injected_keys):
         if key in excluded:
             continue
@@ -155,7 +176,10 @@ def check_inputs(
             msg = f"Input '{key}' is not declared in variables.tf"
             if suggestion:
                 msg += f" (did you mean '{suggestion}'?)"
-            result.errors.append(msg)
+            if referenced_keys is None or key in referenced_keys:
+                result.errors.append(msg)
+            else:
+                result.warnings.append(msg)
 
     # 2. Find required variables not supplied
     for var_name in sorted(module_variables.keys()):

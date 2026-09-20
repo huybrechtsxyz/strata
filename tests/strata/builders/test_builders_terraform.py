@@ -1336,7 +1336,14 @@ class TestValidateInputsBackendConfigExclusion:
 
     def test_genuine_undeclared_variable_still_reported_with_backend_present(self, tmp_path):
         """Backend exclusion must be scoped to the keys it actually references —
-        an unrelated undeclared variable is still an error."""
+        an unrelated undeclared variable is still reported.
+
+        ADR-0084 changed the *severity*, not the reporting: nothing declares
+        `references` here, so `typo_var` is only "present in the environment" and
+        the root does not use it. Terraform treats that as a warning and plans
+        normally, so strata does too. What must not change is that the message
+        still appears, and that the backend's own key stays excluded entirely.
+        """
         prov = _make_provisioner(source_path="terraform")
         prov.name = "infra"
         prov.backend = WorkspaceIacBackendModel(
@@ -1356,9 +1363,10 @@ class TestValidateInputsBackendConfigExclusion:
         builder = TerraformBuilder()
         ok = builder._validate_inputs(deployment_service, tmp_path)
 
-        assert ok is False
-        assert any("typo_var" in e for e in builder.get_errors())
-        assert not any("tf_state_resource_group" in e for e in builder.get_errors())
+        assert ok is True
+        reported = builder.get_errors() + builder.get_messages()
+        assert any("typo_var" in m for m in reported)
+        assert not any("tf_state_resource_group" in m for m in reported)
 
     def test_no_backend_configured_behaves_as_before(self, tmp_path):
         prov = _make_provisioner(source_path="terraform")
