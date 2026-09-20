@@ -18,6 +18,8 @@ dev = [
     "pytest-cov>=4.0",
     "mypy>=1.0",
     "ruff>=0.1.0",
+    "import-linter>=2.0",
+    "types-PyYAML",
 ]
 docs = [
     "sphinx",
@@ -46,6 +48,57 @@ strict = true
 warn_unused_ignores = true
 mypy_path = "src"
 
+[tool.importlinter]
+root_package = "strata"
+exclude_type_checking_imports = "True"
+
+[[tool.importlinter.contracts]]
+name = "Layered architecture (ADR-0003, ported from v1)"
+type = "layers"
+layers = [
+    "strata.services",
+    "strata.models",
+]
+# v1's full layering (for reference, extend as these packages are built):
+# strata.server > strata.commands > strata.controllers >
+# (strata.builders | strata.deployers) > strata.validators > strata.services >
+# strata.integrations > strata.models > strata.utils
+
 [tool.ruff]
+exclude = [
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".env",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "build",
+    "dist",
+    "site-packages",
+    "venv",
+    "docs", # Sphinx docs — RST/MD, not Python
+]
 line-length = 120
+indent-width = 4
 target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "B", "I", "N"]
+ignore = ["E402", "F841", "E203", "E302", "E305", "E501", "N815"]
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"

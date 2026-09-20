@@ -48,7 +48,9 @@ FeatureRefs = list[VariableKey] | None
 class PlatformKind(str, Enum):
     """Enumeration of supported platform kinds."""
 
+    CONFIGURATION = "configuration"
     PROVIDER = "provider"
+    RESOURCE = "resource"
 
 
 # Enumeration of supported workspace versions
@@ -144,3 +146,19 @@ class CommonLifecycleModel(RootModel[dict[str, CommonLifecyclePhaseModel]]):
     """
 
     root: dict[str, CommonLifecyclePhaseModel] = Field(default_factory=dict)
+
+
+def check_unique_names(items: list[str], label: str) -> None:
+    """Raise ``ValueError`` if `items` contains duplicate values.
+
+    Uses O(n) set-based detection instead of the O(n^2) `.count()` pattern.
+    The error message lists duplicates in sorted order for deterministic output.
+    """
+    seen: set[str] = set()
+    dupes: set[str] = set()
+    for item in items:
+        if item in seen:
+            dupes.add(item)
+        seen.add(item)
+    if dupes:
+        raise ValueError(f"Duplicate {label}: {', '.join(sorted(dupes))}")

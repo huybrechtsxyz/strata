@@ -8,10 +8,13 @@ concrete need for them exists (see ADR-0003 and follow-ups).
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Generic, TypeVar
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 import yaml
 from pydantic import BaseModel, ValidationError
+
+if TYPE_CHECKING:
+    from strata.models.configuration_model import ConfigurationModel
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
@@ -43,11 +46,12 @@ class BaseService(ABC, Generic[ModelT]):
         """Return the Pydantic model class used for validation."""
         raise NotImplementedError
 
-    def _validate_dynamic(self) -> tuple[bool, list[str]]:
+    def _validate_dynamic(self, configuration_model: "ConfigurationModel | None" = None) -> tuple[bool, list[str]]:
         """Phase 2: validation requiring external/dynamic context.
 
         Default: no-op (nothing to check yet). Subclasses override when they
-        have dynamic checks to perform (e.g. against a configuration registry).
+        have dynamic checks to perform (e.g. against `configuration_model`, a
+        configuration registry).
         """
         return True, []
 
@@ -60,8 +64,13 @@ class BaseService(ABC, Generic[ModelT]):
         loaded = yaml.safe_load(content)
         return loaded or {}
 
-    def validate(self) -> tuple[bool, list[str]]:
+    def validate(self, configuration_model: "ConfigurationModel | None" = None) -> tuple[bool, list[str]]:
         """Run Phase 1 (schema) then Phase 2 (dynamic) validation.
+
+        Args:
+            configuration_model: Optional configuration registry for Phase 2
+                cross-checks (e.g. validating a provider's type/region against
+                the known provider registry). Omitted means Phase 2 is skipped.
 
         Returns:
             (is_valid, error_messages)
@@ -78,7 +87,7 @@ class BaseService(ABC, Generic[ModelT]):
             self._validated = True
             return False, self._errors
 
-        dynamic_ok, dynamic_errors = self._validate_dynamic()
+        dynamic_ok, dynamic_errors = self._validate_dynamic(configuration_model)
         if not dynamic_ok:
             self.model = None
             self._errors = dynamic_errors
