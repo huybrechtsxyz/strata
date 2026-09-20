@@ -7,6 +7,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [1.11.2] - 2026-09-20
+
 ### Fixed
 
 #### **1.11.1's fix was itself only partially correct — a second bug in the same mechanism**
