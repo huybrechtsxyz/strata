@@ -7,6 +7,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [1.11.1] - 2026-09-20
+
 ### Fixed
 
 #### **An undeclared environment key blocked composing an external Terraform root (ADR-0084)**
