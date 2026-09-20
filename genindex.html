@@ -695,7 +695,10 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="platform/commands.html#deploy"><code class="docutils literal notranslate"><span class="pre">deploy</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="platform/commands.html#deploy-run"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="platform/commands.html#deploy-run"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="platform/commands.html#ai-plan-review">AI plan review</a></li>
+</ul>
+</li>
 <li class="toctree-l3"><a class="reference internal" href="platform/commands.html#deploy-destroy"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">destroy</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="platform/commands.html#deploy-show"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">show</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="platform/commands.html#deploy-list"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">list</span></code></a></li>
@@ -887,6 +890,7 @@
 <li class="toctree-l2"><a class="reference internal" href="platform/exit-codes.html#usage-by-command">Usage by Command</a></li>
 <li class="toctree-l2"><a class="reference internal" href="platform/exit-codes.html#examples">Examples</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="platform/exit-codes.html#bash">Bash</a></li>
+<li class="toctree-l3"><a class="reference internal" href="platform/exit-codes.html#distinguishing-a-refusal-from-a-breakage">Distinguishing a refusal from a breakage</a></li>
 <li class="toctree-l3"><a class="reference internal" href="platform/exit-codes.html#powershell">PowerShell</a></li>
 </ul>
 </li>
@@ -1541,7 +1545,10 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="platform/lifecycles.html#phase-naming-convention">Phase Naming Convention</a></li>
-<li class="toctree-l2"><a class="reference internal" href="platform/lifecycles.html#gate-behaviour">Gate Behaviour</a></li>
+<li class="toctree-l2"><a class="reference internal" href="platform/lifecycles.html#gate-behaviour">Gate Behaviour</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="platform/lifecycles.html#blocking-a-deploy-on-purpose-use-a-policy-not-a-hook">Blocking a deploy on purpose? Use a policy, not a hook</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="platform/lifecycles.html#examples">Examples</a></li>
 <li class="toctree-l2"><a class="reference internal" href="platform/lifecycles.html#best-practices">Best Practices</a></li>
 </ul>
@@ -1720,7 +1727,10 @@
 <li class="toctree-l3"><a class="reference internal" href="config/workspace.html#provisioner-types">Provisioner types</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="config/workspace.html#resources">Resources</a></li>
+<li class="toctree-l2"><a class="reference internal" href="config/workspace.html#resources">Resources</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="config/workspace.html#enabled-excluding-a-resource-or-module-from-the-build"><code class="docutils literal notranslate"><span class="pre">enabled</span></code> — excluding a resource or module from the build</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="config/workspace.html#topology">Topology</a></li>
 <li class="toctree-l2"><a class="reference internal" href="config/workspace.html#namespaces">Namespaces</a></li>
 <li class="toctree-l2"><a class="reference internal" href="config/workspace.html#variables-secrets">Variables &amp; Secrets</a></li>
@@ -1748,6 +1758,13 @@
 <li class="toctree-l2"><a class="reference internal" href="config/deployment.html#stages">Stages</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="config/deployment.html#provisioner-vs-topology"><code class="docutils literal notranslate"><span class="pre">provisioner</span></code> vs <code class="docutils literal notranslate"><span class="pre">topology</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="config/deployment.html#scope-stage-filtering"><code class="docutils literal notranslate"><span class="pre">scope</span></code> — stage filtering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config/deployment.html#enabled-declarative-stage-gating"><code class="docutils literal notranslate"><span class="pre">enabled</span></code> — declarative stage gating</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="config/deployment.html#what-gating-does-and-does-not-do">What gating does and does not do</a></li>
+<li class="toctree-l4"><a class="reference internal" href="config/deployment.html#validation">Validation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="config/deployment.html#skips-cascade-through-depends-on">Skips cascade through <code class="docutils literal notranslate"><span class="pre">depends_on</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="config/deployment.html#depends-on-execution-order"><code class="docutils literal notranslate"><span class="pre">depends_on</span></code> — execution order</a></li>
 <li class="toctree-l3"><a class="reference internal" href="config/deployment.html#namespace-vs-helm-namespaces-kubernetes-namespace-scoping"><code class="docutils literal notranslate"><span class="pre">namespace</span></code> vs <code class="docutils literal notranslate"><span class="pre">helm_namespaces</span></code> — Kubernetes namespace scoping</a></li>
 </ul>
 </li>
@@ -1775,7 +1792,7 @@
 <li class="toctree-l3"><a class="reference internal" href="config/deployment.html#requiring-a-change-reference-phase-2">Requiring a change reference (Phase 2)</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="config/deployment.html#validation">Validation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="config/deployment.html#id1">Validation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="config/deployment.html#troubleshooting">Troubleshooting</a></li>
 <li class="toctree-l2"><a class="reference internal" href="config/deployment.html#summary">Summary</a></li>
 </ul>
@@ -2923,6 +2940,7 @@
 <li class="toctree-l2"><a class="reference internal" href="guides/deployment-approval-gates.html#declaring-gates">Declaring Gates</a></li>
 <li class="toctree-l2"><a class="reference internal" href="guides/deployment-approval-gates.html#gate-types">Gate Types</a></li>
 <li class="toctree-l2"><a class="reference internal" href="guides/deployment-approval-gates.html#conditions">Conditions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="guides/deployment-approval-gates.html#when-condition-data-is-missing-on-missing-data">When condition data is missing (<code class="docutils literal notranslate"><span class="pre">on_missing_data</span></code>)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="guides/deployment-approval-gates.html#workflow-deploy-pause-approve-resume">Workflow: Deploy → Pause → Approve → Resume</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="guides/deployment-approval-gates.html#step-1-initial-deploy-may-pause">Step 1: Initial Deploy (may pause)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="guides/deployment-approval-gates.html#step-2-approve-or-reject">Step 2: Approve (or Reject)</a></li>

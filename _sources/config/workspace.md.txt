@@ -342,8 +342,7 @@ resources:
   - name: <resource_name>
     file: <resource_path>              # Path to resource configuration YAML
     description: "Optional documentation"
-    enabled: true                      # Optional: default true
-    condition: "{{ environment }} == production"  # Optional: conditional inclusion
+    enabled: true                      # Optional: default true — false excludes it from the build
     role: manager                      # Optional: role name (e.g. manager, worker, api)
     count: 1                           # Optional: number of instances (1-100, default 1)
     depends_on: []                     # Optional: resource names this depends on
@@ -370,6 +369,36 @@ resources:
 | ------------- | ------------------------------------------------------------------------------------ |
 | (not set)     | Resource definition must be in `file:`; strata loads and validates the resource spec |
 | `provisioner` | Provisioner (Terraform/Ansible) fully defines the resource; no resource file needed  |
+
+### `enabled` — excluding a resource or module from the build
+
+`enabled: false` keeps a resource (or one of its `modules[]`) out of the built platform artifact, and therefore out of every provisioner that consumes it. It defaults to `true`.
+
+```yaml
+resources:
+  - name: db_replica
+    file: config/resources/db-replica.yaml
+    enabled: false                     # declared, but not built or deployed
+    modules:
+      - name: monitoring_agent
+        file: config/modules/agent.yaml
+        enabled: false                 # this resource does not get the agent
+```
+
+The flag is a **build** concern, not a loading one: a disabled resource's YAML is still loaded and validated, so mistakes in it surface before someone switches it back on.
+
+Module enablement is per *reference*, not per module — the same module can be enabled on one resource and disabled on another.
+
+To vary inclusion by environment, override it rather than writing a condition:
+
+```yaml
+# environment file
+resources:
+  - resource: db_replica
+    enabled: true                      # on in this environment only
+```
+
+`enabled` is the same keyword strata uses for conditional inclusion on every schema. `condition:` was removed in favour of it (it was never evaluated by anything) — `condition`/`when`/`if` are not accepted.
 
 **Validation rules:**
 

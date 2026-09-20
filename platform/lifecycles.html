@@ -698,7 +698,10 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="commands.html#deploy"><code class="docutils literal notranslate"><span class="pre">deploy</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="commands.html#deploy-run"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#deploy-run"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="commands.html#ai-plan-review">AI plan review</a></li>
+</ul>
+</li>
 <li class="toctree-l3"><a class="reference internal" href="commands.html#deploy-destroy"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">destroy</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="commands.html#deploy-show"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">show</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="commands.html#deploy-list"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">list</span></code></a></li>
@@ -890,6 +893,7 @@
 <li class="toctree-l2"><a class="reference internal" href="exit-codes.html#usage-by-command">Usage by Command</a></li>
 <li class="toctree-l2"><a class="reference internal" href="exit-codes.html#examples">Examples</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="exit-codes.html#bash">Bash</a></li>
+<li class="toctree-l3"><a class="reference internal" href="exit-codes.html#distinguishing-a-refusal-from-a-breakage">Distinguishing a refusal from a breakage</a></li>
 <li class="toctree-l3"><a class="reference internal" href="exit-codes.html#powershell">PowerShell</a></li>
 </ul>
 </li>
@@ -1544,7 +1548,10 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#phase-naming-convention">Phase Naming Convention</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#gate-behaviour">Gate Behaviour</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#gate-behaviour">Gate Behaviour</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#blocking-a-deploy-on-purpose-use-a-policy-not-a-hook">Blocking a deploy on purpose? Use a policy, not a hook</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#examples">Examples</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#best-practices">Best Practices</a></li>
 </ul>
@@ -1723,7 +1730,10 @@
 <li class="toctree-l3"><a class="reference internal" href="../config/workspace.html#provisioner-types">Provisioner types</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="../config/workspace.html#resources">Resources</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/workspace.html#resources">Resources</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/workspace.html#enabled-excluding-a-resource-or-module-from-the-build"><code class="docutils literal notranslate"><span class="pre">enabled</span></code> — excluding a resource or module from the build</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../config/workspace.html#topology">Topology</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/workspace.html#namespaces">Namespaces</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/workspace.html#variables-secrets">Variables &amp; Secrets</a></li>
@@ -1751,6 +1761,13 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#stages">Stages</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../config/deployment.html#provisioner-vs-topology"><code class="docutils literal notranslate"><span class="pre">provisioner</span></code> vs <code class="docutils literal notranslate"><span class="pre">topology</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../config/deployment.html#scope-stage-filtering"><code class="docutils literal notranslate"><span class="pre">scope</span></code> — stage filtering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/deployment.html#enabled-declarative-stage-gating"><code class="docutils literal notranslate"><span class="pre">enabled</span></code> — declarative stage gating</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/deployment.html#what-gating-does-and-does-not-do">What gating does and does not do</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../config/deployment.html#validation">Validation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../config/deployment.html#skips-cascade-through-depends-on">Skips cascade through <code class="docutils literal notranslate"><span class="pre">depends_on</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/deployment.html#depends-on-execution-order"><code class="docutils literal notranslate"><span class="pre">depends_on</span></code> — execution order</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../config/deployment.html#namespace-vs-helm-namespaces-kubernetes-namespace-scoping"><code class="docutils literal notranslate"><span class="pre">namespace</span></code> vs <code class="docutils literal notranslate"><span class="pre">helm_namespaces</span></code> — Kubernetes namespace scoping</a></li>
 </ul>
 </li>
@@ -1778,7 +1795,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../config/deployment.html#requiring-a-change-reference-phase-2">Requiring a change reference (Phase 2)</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#validation">Validation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#id1">Validation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#troubleshooting">Troubleshooting</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#summary">Summary</a></li>
 </ul>
@@ -2926,6 +2943,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/deployment-approval-gates.html#declaring-gates">Declaring Gates</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/deployment-approval-gates.html#gate-types">Gate Types</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/deployment-approval-gates.html#conditions">Conditions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deployment-approval-gates.html#when-condition-data-is-missing-on-missing-data">When condition data is missing (<code class="docutils literal notranslate"><span class="pre">on_missing_data</span></code>)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/deployment-approval-gates.html#workflow-deploy-pause-approve-resume">Workflow: Deploy → Pause → Approve → Resume</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../guides/deployment-approval-gates.html#step-1-initial-deploy-may-pause">Step 1: Initial Deploy (may pause)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/deployment-approval-gates.html#step-2-approve-or-reject">Step 2: Approve (or Reject)</a></li>
@@ -3869,6 +3887,45 @@
 <li><p><code class="docutils literal notranslate"><span class="pre">deploy_apply_before</span></code> — non-zero exit <strong>blocks</strong> the apply step</p></li>
 <li><p>All other before/after hooks — non-zero exit <strong>aborts</strong> the command</p></li>
 </ul>
+<section id="blocking-a-deploy-on-purpose-use-a-policy-not-a-hook">
+<h3>Blocking a deploy on purpose? Use a policy, not a hook<a class="headerlink" href="#blocking-a-deploy-on-purpose-use-a-policy-not-a-hook" title="Link to this heading"></a></h3>
+<p>A hook that blocks the apply makes <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> exit <strong>1</strong> — “system error, alert”.
+That is not a limitation to work around; it is the honest answer. A script that
+exits non-zero because it <em>decided</em> to stop the deploy is indistinguishable, from
+strata’s side, from one that crashed, hit a network timeout, or was killed. strata
+will not claim a verdict it cannot observe.</p>
+<p>If the intent is enforcement, declare a <a class="reference internal" href="policies.html"><span class="std std-doc">policy</span></a> instead. A
+<code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">script</span></code> policy runs the same arbitrary command at the same <code class="docutils literal notranslate"><span class="pre">plan</span></code> or
+<code class="docutils literal notranslate"><span class="pre">deploy</span></code> phase, but:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p></p></th>
+<th class="head"><p>Blocking hook</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">script</span></code> policy</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Exit code</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">1</span></code> — indistinguishable from a crash</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">3</span></code> — refused; CI must not retry</p></td>
+</tr>
+<tr class="row-odd"><td><p>Enforcement</p></td>
+<td><p>Always fatal</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">deny</span></code>, <code class="docutils literal notranslate"><span class="pre">warn</span></code>, or <code class="docutils literal notranslate"><span class="pre">audit</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Testable alone</p></td>
+<td><p>No</p></td>
+<td><p>Yes — <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">policies</span> <span class="pre">check</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Recorded</p></td>
+<td><p>As a failed stage</p></td>
+<td><p>As a policy result, with the violation</p></td>
+</tr>
+</tbody>
+</table>
+<p>Keep hooks for <em>doing</em> things — take a backup, rotate a secret, send a
+notification — where a non-zero exit genuinely does mean the work failed.</p>
+</section>
 </section>
 <section id="examples">
 <h2>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h2>
@@ -3906,7 +3963,7 @@
 <ul class="simple">
 <li><p><strong>Order matters:</strong> Scripts within a phase execute in the order listed in YAML</p></li>
 <li><p><strong>Idempotency:</strong> Design scripts to be safe to run multiple times</p></li>
-<li><p><strong>Exit codes:</strong> Exit non-zero on failure — strata treats any non-zero as an error</p></li>
+<li><p><strong>Exit codes:</strong> Exit non-zero on failure — strata treats any non-zero as an error, and reports it as a system failure (exit <code class="docutils literal notranslate"><span class="pre">1</span></code>). To <em>refuse</em> a deployment rather than report a failure, use a <a class="reference internal" href="policies.html"><span class="std std-doc">policy</span></a> — see <a class="reference internal" href="#gate-behaviour">Gate Behaviour</a></p></li>
 <li><p><strong>Logging:</strong> Write to stdout/stderr; strata captures and logs both</p></li>
 <li><p><strong>Timeout:</strong> 5 minutes default per script; design accordingly</p></li>
 </ul>

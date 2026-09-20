@@ -790,6 +790,28 @@ strata build plan -f xyz-deploy-prd.yaml
 strata build plan --stage production --artifacts-only
 ```
 
+**JSON output keys:** `file`, `deployment`, `artifact_diff[]`, `terraform_plan[]`
+(`stage`, `ok`, `messages[]`, `error`, `would_skip`, `skip_reason`, `has_changes`),
+`values[]`, `providers[]`.
+
+`has_changes` is terraform's own `-detailed-exitcode` verdict for that stage:
+`true` when the plan found pending changes, `false` when it found none, and `null`
+when the plan did not run (the stage failed, so nothing is known). Test this rather
+than the presence of a row — every stage that plans produces a row, including ones
+with nothing to do.
+
+**Exit codes.** Finding changes is *not* a failure — that is the normal, successful
+case. Only a plan that did not produce a usable preview is non-zero:
+
+| Code | Meaning                                                  | CI response                   |
+| ---- | -------------------------------------------------------- | ----------------------------- |
+| `0`  | Plan ran — with or without pending changes               | Proceed                       |
+| `1`  | Plan could not run (terraform init/validate/plan failed) | Alert — nothing was previewed |
+| `3`  | Plan ran but `--strict-ai-review` rejected it            | Block the PR — do not retry   |
+
+When both apply, exit `1` wins: if terraform never produced a plan, the AI review
+had nothing meaningful to assess.
+
 ### `build sbom`
 
 ```
@@ -1476,16 +1498,35 @@ All `deploy` subcommands accept `--file/-f PATH` and `--stage NAME`.
 ### `deploy run`
 
 ```
-strata deploy run [-f FILE] [--stage NAME] [--force] [--dry-run] [standard options]
+strata deploy run [-f FILE] [--stage NAME] [--force] [--dry-run] [--ai] [--strict-ai-review THRESHOLD] [standard options]
 ```
 
 Execute the deploy pipeline (setup → check → plan → apply).
 
-| Option         | Description                                  |
-| -------------- | -------------------------------------------- |
-| `--stage NAME` | Limit execution to one deployment stage      |
-| `--force`      | Skip confirmation prompts and approval gates |
-| `--dry-run`    | Validate and plan only — no provisioners run |
+| Option                         | Description                                      |
+| ------------------------------ | ------------------------------------------------ |
+| `--stage NAME`                 | Limit execution to one deployment stage          |
+| `--force`                      | Skip confirmation prompts and approval gates     |
+| `--dry-run`                    | Validate and plan only — no provisioners run     |
+| `--ai`                         | AI plan review between plan and apply (advisory) |
+| `--strict-ai-review THRESHOLD` | Block the apply when plan risk ≥ THRESHOLD       |
+
+#### AI plan review
+
+Both flags run between `plan` and `apply`, so nothing is applied before the review
+completes. Neither runs under `--dry-run`, where there is no apply to guard.
+
+| Situation                          | `--ai` (advisory)                         | `--strict-ai-review`  |
+| ---------------------------------- | ----------------------------------------- | --------------------- |
+| Risk below threshold               | Proceed                                   | Proceed               |
+| Risk ≥ threshold, interactive TTY  | Prompt the operator                       | Block                 |
+| Risk ≥ threshold, non-interactive  | Block (use `--force` to override)         | Block                 |
+| `--force` given                    | Overrides the block                       | **Does not override** |
+| No / unreachable ai_agent provider | Proceed (advisory failures are not fatal) | Block                 |
+
+The threshold defaults to `high`; accepted values are `low`, `medium`, `high`,
+`critical`. A blocked apply exits `1`, the same as every other `deploy run` gate
+(policy deny, approval and condition gates).
 
 After resolving values, the command prints a summary of any values that were seeded or generated for the first time:
 
@@ -1519,7 +1560,7 @@ strata deploy destroy --stage production --force
 ### `deploy show`
 
 ```
-strata deploy show [-f FILE] [--stage NAME] [standard options]
+strata deploy show [-f FILE] [--stage NAME] [--scope LABEL] [standard options]
 ```
 
 Show resolved deployment configuration: effective remote versions after applying
@@ -1531,17 +1572,32 @@ and an overrides summary.
 For each remote, displays the effective reference and whether it came from an
 environment override or the workspace default.
 
-| Option         | Description                                                              |
-| -------------- | ------------------------------------------------------------------------ |
-| `--stage NAME` | Filter secrets visibility to a specific stage's allowlist (default: all) |
+This is the preview surface for `deploy run`, so `--stage` and `--scope` select
+stages exactly as they do there. Stage gating is **disclosed, never applied**: a
+stage that `deploy run` would skip is still listed, marked with the reason
+(`would_skip` / `skip_reason`). Filtering it out would make "disabled in this
+environment" indistinguishable from "deleted from the deployment".
+
+| Option          | Description                                                                   |
+| --------------- | ----------------------------------------------------------------------------- |
+| `--stage NAME`  | Limit display to one deployment stage (default: all)                          |
+| `--scope LABEL` | Limit display to stages whose `scope` field matches this label (default: all) |
+
+When either flag is given, the secrets view narrows to the selected stages'
+`secrets:` allowlists — what a run of those stages would actually receive.
+Out-of-scope secrets are still listed, with `in_scope: false` and no value, so a
+secret that is excluded stays distinguishable from one that was never declared.
+Variables and features are never narrowed, because they are never stage-scoped at
+deploy time either.
 
 ```bash
 strata deploy show -f xyz-deploy-prd.yaml
 strata deploy show -f xyz-deploy-prd.yaml --stage production
+strata deploy show -f xyz-deploy-prd.yaml --scope infra
 strata deploy show -f xyz-deploy-prd.yaml --output json
 ```
 
-**JSON output keys:** `file`, `deployment`, `workspace`, `environment`, `environment_file`, `remotes[]`, `stages[]`, `environment_detail{}` (`name`, `labels{}`, `annotations{}`, `properties{}`, `custom{}`, `variables[]`, `secrets[]`, `features[]`, `overrides{}`).
+**JSON output keys:** `file`, `deployment`, `workspace`, `environment`, `environment_file`, `remotes[]`, `stages[]` (`name`, `provisioner`, `scope`, `depends_on[]`, `enabled`, `would_skip`, `skip_reason`), `environment_detail{}` (`name`, `labels{}`, `annotations{}`, `properties{}`, `custom{}`, `variables[]`, `secrets[]` (`key`, `value`, `store`, `resolved`, `in_scope`), `features[]`, `overrides{}`).
 
 Example output:
 

@@ -23,17 +23,17 @@ strata deploy run -f deploy/prd.yaml     # deploys (also shows cost diff in --dr
 
 ## Prerequisites
 
-Install [Infracost](https://www.infracost.io/docs/install):
+Install the **0.10.x** [Infracost](https://www.infracost.io) CLI. Infracost 2.0 replaced the
+`breakdown`/`diff` commands this integration uses with a different command set (`scan`,
+`inspect`, etc.), so the generic `infracost.io/docs/install` page — which now installs v2 —
+should **not** be used here; install a pinned 0.10.x release instead:
 
 ```bash
-# macOS
-brew install infracost
-
-# Windows
-choco install infracost
-
-# Linux / download binary
+# Script (restricted to <1.0.0 releases)
 curl -fsSL https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh | sh
+
+# Or download a specific 0.10.x release directly
+# https://github.com/infracost/infracost/releases
 ```
 
 Verify the installation:
@@ -42,8 +42,35 @@ Verify the installation:
 infracost --version
 ```
 
-Infracost uses the **same cloud credentials** already configured in your environment
-(Azure CLI, AWS env vars, GCP application credentials). No extra authentication is needed.
+Infracost has **no bundled pricing database and no offline/anonymous mode** — every
+estimate is a live call to `pricing.api.infracost.io`, which requires a free Infracost
+account. Authenticate with one of:
+
+```bash
+infracost auth login              # interactive
+export INFRACOST_API_KEY=ico-xxxx # CI / non-interactive
+```
+
+Cloud credentials (Azure CLI, AWS env vars, GCP application-default credentials) are used
+by Terraform itself and do **not** satisfy Infracost's separate pricing-lookup auth.
+
+If `pricing.api.infracost.io` is unreachable from your network, point Infracost at a
+self-hosted Cloud Pricing API instead: `export INFRACOST_PRICING_API_ENDPOINT=https://...`.
+
+Declare a `max_version` alongside `min_version` in your integration config so a v2
+install fails validation with a clear message rather than failing later at command
+dispatch:
+
+```yaml
+integrations:
+  - name: infracost
+    type: infracost
+    capabilities: [cost]
+    validation:
+      command: infracost --version
+      min_version: "0.10.0"
+      max_version: "0.99.99"
+```
 
 ---
 
@@ -114,6 +141,12 @@ fresh estimate.
 
 A `cost.json` file is written alongside `platform.json` in the build directory
 (`build/{deployment}-{version}/cost.json`) after each successful estimate.
+
+`strata cost show` requires the provisioner's `.terraform/` directory to already exist
+(step 2 above). For workspaces whose remote backend state is only reachable from CI
+credentials, this makes `cost show` a CI-only workflow — running `terraform init
+-backend=false` locally is enough for module resolution if a state-aware diff isn't
+needed.
 
 ### `strata cost diff`
 
@@ -243,8 +276,9 @@ spec:
       validation:
         command: infracost --version
         min_version: "0.10.0"
+        max_version: "0.99.99"  # reject Infracost 2.x (unsupported CLI)
       authentication:
-        method: cli           # uses existing cloud credentials
+        method: cli           # unrelated to Infracost's own INFRACOST_API_KEY auth
 ```
 
 Add this to the configuration for deployments using Azure, AWS, or GCP. Infracost is
@@ -254,12 +288,13 @@ already included in the built-in `azure-aks`, `aws-eks`, and `gcp-gke` templates
 
 ## Troubleshooting
 
-| Problem                        | Solution                                                                    |
-| ------------------------------ | --------------------------------------------------------------------------- |
-| `No cost estimator available`  | Install Infracost: https://www.infracost.io/docs/install                    |
-| `Terraform not initialized`    | Run `terraform init` in the build directory first                           |
-| `No build artifacts found`     | Run `strata build run` first                                                |
-| `No terraform provisioners`    | Check workspace YAML has a `terraform` provisioner                          |
-| Estimate seems stale           | Use `--refresh` to bypass the 7-day cache                                   |
-| `cost.json` missing for policy | Run `strata cost show` before `strata deploy`                               |
-| Provider not supported         | Infracost only covers Azure, AWS, GCP — Hetzner/Kamatera return no estimate |
+| Problem                        | Solution                                                                                                |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `No cost estimator available`  | Install the 0.10.x CLI: https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh |
+| `INFRACOST_API_KEY` missing    | Run `infracost auth login` or `export INFRACOST_API_KEY=...` — there is no anonymous mode               |
+| `Terraform not initialized`    | Run `terraform init` in the build directory first                                                       |
+| `No build artifacts found`     | Run `strata build run` first                                                                            |
+| `No terraform provisioners`    | Check workspace YAML has a `terraform` provisioner                                                      |
+| Estimate seems stale           | Use `--refresh` to bypass the 7-day cache                                                               |
+| `cost.json` missing for policy | Run `strata cost show` before `strata deploy`                                                           |
+| Provider not supported         | Infracost only covers Azure, AWS, GCP — Hetzner/Kamatera return no estimate                             |
