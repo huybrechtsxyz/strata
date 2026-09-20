@@ -7,14 +7,16 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-09-20
+
 ### Added
 
-#### **Both deprecation shims removed \u2014 `references` and `condition`**
+#### **Both deprecation shims removed — `references` and `condition`**
 
 - ADR-0078's `references` shim shipped its `DeprecationWarning` in v1.10.0 and came off on schedule (2026-09-18) having served its cycle.
-- ADR-0083's `condition` shim was deliberately held back at that point, because `condition` was still an accepted, *documented* field in v1.10.0 \u2014 advertised by the shipped `sln init` scaffold \u2014 so it had not yet warned in a single release. Removing both together would have taken a valid v1.10.0 file straight to a hard `extra="forbid"` failure with no notice.
-- Removed anyway (2026-09-20) on the owner's call that the field had no real users. The argument holds: `condition` was **inert in every version that accepted it** \u2014 never parsed, never resolved, its documented `'{{ environment }} == production'` syntax matching no engine in the codebase. A warning release protects configurations that *work*; nothing here worked. The only cost is an edit to files carrying a key that did nothing.
-- Both models lost their `model_validator(mode="before")` and their now-unused `import warnings`. The tests that asserted the drop-with-warning behaviour were replaced with rejection tests, including one asserting the `ValidationError` names the offending key \u2014 without the shim's bespoke guidance message, `extra="forbid"`'s own error is what has to be actionable.
+- ADR-0083's `condition` shim was deliberately held back at that point, because `condition` was still an accepted, *documented* field in v1.10.0 — advertised by the shipped `sln init` scaffold — so it had not yet warned in a single release. Removing both together would have taken a valid v1.10.0 file straight to a hard `extra="forbid"` failure with no notice.
+- Removed anyway (2026-09-20) on the owner's call that the field had no real users. The argument holds: `condition` was **inert in every version that accepted it** — never parsed, never resolved, its documented `'{{ environment }} == production'` syntax matching no engine in the codebase. A warning release protects configurations that *work*; nothing here worked. The only cost is an edit to files carrying a key that did nothing.
+- Both models lost their `model_validator(mode="before")` and their now-unused `import warnings`. The tests that asserted the drop-with-warning behaviour were replaced with rejection tests, including one asserting the `ValidationError` names the offending key — without the shim's bespoke guidance message, `extra="forbid"`'s own error is what has to be actionable.
 
 #### **Exit code `3` unified: "refused" rather than "schema-invalid"**
 
