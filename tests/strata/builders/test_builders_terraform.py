@@ -452,6 +452,87 @@ class TestTerraformBuilderComponentCounters:
         assert builder._components_total == 1
         assert builder._components_declaring_refs == 1
         assert "vnet_cidr" in builder.variable_refs
+        assert "vnet_cidr" in builder._referenced_keys
+
+
+class TestComputeReferencedKeys:
+    """ADR-0084: `_compute_referenced_keys()` must answer "what did anything
+    explicitly request", not "what does the environment happen to contain".
+
+    Regression coverage for the bug found testing 1.11.1: `variable_refs`/
+    `secret_refs` are dual-purpose (also feed the requirements inventory) and are
+    populated with *every* environment variable/secret regardless of whether
+    anything referenced them. Reading those dicts here made every unreferenced
+    variable/secret look "requested" and therefore an error, while features
+    correctly warned only because no equivalent unconditional collector for
+    features exists. The fix is a dedicated `_referenced_keys` set, populated only
+    by the three genuinely-gated call sites.
+    """
+
+    def _prov(self, references=None):
+        prov = MagicMock()
+        prov.name = "infra"
+        prov.references = references
+        return prov
+
+    def test_environment_inventory_alone_is_not_referenced(self):
+        """The core regression: populating variable_refs/secret_refs the way the
+        unconditional environment collectors do must NOT make _compute_referenced_keys
+        treat those keys as requested."""
+        builder = TerraformBuilder()
+        builder.variable_refs = {"vnet_name": {}, "aks_cluster_id": {}}
+        builder.secret_refs = {"some_secret": {}}
+        builder.feature_refs = {}
+
+        result = builder._compute_referenced_keys(self._prov())
+
+        assert result == set()
+
+    def test_referenced_keys_set_is_what_is_read(self):
+        builder = TerraformBuilder()
+        builder._referenced_keys = {"vnet_name"}
+
+        result = builder._compute_referenced_keys(self._prov())
+
+        assert result == {"vnet_name"}
+
+    def test_provisioner_own_references_are_included(self):
+        builder = TerraformBuilder()
+        refs = MagicMock()
+        refs.variables = ["service_connection_id"]
+        refs.secrets = []
+        refs.features = []
+
+        result = builder._compute_referenced_keys(self._prov(references=refs))
+
+        assert result == {"service_connection_id"}
+
+    def test_literal_stage_secret_counts_as_referenced(self):
+        builder = TerraformBuilder()
+        stage = MagicMock()
+        stage.secrets = ["DB_PASSWORD"]
+
+        result = builder._compute_referenced_keys(self._prov(), matching_stages=[stage])
+
+        assert result == {"DB_PASSWORD"}
+
+    def test_wildcard_stage_secret_is_not_a_request_for_any_key(self):
+        builder = TerraformBuilder()
+        stage = MagicMock()
+        stage.secrets = ["*"]
+
+        result = builder._compute_referenced_keys(self._prov(), matching_stages=[stage])
+
+        assert result == set()
+
+    def test_no_matching_stages_is_not_a_request_for_every_secret(self):
+        """Mirrors the ADR-0084 docstring: absence of a matching stage is the
+        unscoped fallback, not an implicit request for every secret."""
+        builder = TerraformBuilder()
+
+        result = builder._compute_referenced_keys(self._prov(), matching_stages=[])
+
+        assert result == set()
 
 
 class TestTerraformBuilderComputeInjectedKeys:
@@ -1240,6 +1321,145 @@ class TestValidateInputsProvisionerScoping:
 
         assert ok is False
         assert any("TYPO_SECRET" in e for e in builder.get_errors())
+
+
+class TestUnreferencedVariablesAndSecretsAreWarningsNotErrors:
+    """Regression for the bug found by the integration team testing 1.11.1: an
+    unscoped workspace (nothing anywhere declares `spec.references`) still reported
+    every undeclared environment *variable* and *secret* as an error, while features
+    correctly came through as warnings.
+
+    Root cause: `variable_refs`/`secret_refs` are dual-purpose — they also feed the
+    requirements inventory (`_document_required_*()`), so
+    `_collect_environment_variables()`/`_collect_environment_secrets()` populate them
+    with *every* environment variable/secret unconditionally. There is no analogous
+    unconditional collector for features, so `feature_refs` only ever holds
+    genuinely-referenced keys — which is why the bug looked like it was fixed for
+    features and broken for everything else. `_compute_referenced_keys()` must read
+    a dedicated set populated only by the three gated `spec.references` call sites,
+    never the inventory dicts.
+    """
+
+    def _write_variables_tf(self, prov_dir: Path, var_names):
+        prov_dir.mkdir(parents=True, exist_ok=True)
+        body = "\n".join(f'variable "{name}" {{\n  type = string\n}}\n' for name in var_names)
+        (prov_dir / "variables.tf").write_text(body, encoding="utf-8")
+
+    def _make_deployment_service(self, tmp_path, prov, variables, features, secret_keys):
+        workspace_model = MagicMock()
+        workspace_model.spec.provisioners = [prov]
+        workspace_model.spec.topology = []
+
+        workspace_service = MagicMock()
+        workspace_service.model = workspace_model
+
+        env_service = MagicMock()
+        env_service.model.spec.secrets = [MagicMock(key=k) for k in secret_keys]
+        env_service.get_variables.return_value = [MagicMock(key=k) for k in variables]
+        env_service.get_features.return_value = [MagicMock(key=k) for k in features]
+
+        deployment_service = MagicMock()
+        deployment_service.get_workspace_service.return_value = workspace_service
+        deployment_service.get_environment_service.return_value = env_service
+        deployment_service.get_build_path.return_value = tmp_path
+        deployment_service.model.spec.stages = []
+        return deployment_service
+
+    def test_unreferenced_variable_is_a_warning_not_an_error(self, tmp_path):
+        """This is the exact bug: before the fix, this was an error."""
+        prov = _make_provisioner(source_path="terraform")
+        prov.name = "dispatcher_api"
+
+        prov_dir = tmp_path / "terraform"
+        self._write_variables_tf(prov_dir, ["vnet_name"])
+
+        deployment_service = self._make_deployment_service(
+            tmp_path,
+            prov,
+            variables=["vnet_name", "aks_cluster_id", "worker_pools"],
+            features=[],
+            secret_keys=[],
+        )
+
+        builder = TerraformBuilder()
+        ok = builder._validate_inputs(deployment_service, tmp_path)
+
+        assert ok is True, builder.get_errors()
+        assert not builder.get_errors()
+        assert any("aks_cluster_id" in w for w in builder.get_messages())
+        assert any("worker_pools" in w for w in builder.get_messages())
+
+    def test_unreferenced_secret_is_a_warning_not_an_error(self, tmp_path):
+        """Secrets suffer the identical bug, via the same poisoned dict — the
+        reported symptom only mentioned variables because that workspace declared
+        no secrets, not because secrets were unaffected."""
+        prov = _make_provisioner(source_path="terraform")
+        prov.name = "dispatcher_api"
+
+        prov_dir = tmp_path / "terraform"
+        self._write_variables_tf(prov_dir, ["used_secret"])
+
+        deployment_service = self._make_deployment_service(
+            tmp_path,
+            prov,
+            variables=[],
+            features=[],
+            secret_keys=["used_secret", "unrelated_secret"],
+        )
+
+        builder = TerraformBuilder()
+        ok = builder._validate_inputs(deployment_service, tmp_path)
+
+        assert ok is True, builder.get_errors()
+        assert not builder.get_errors()
+        assert any("unrelated_secret" in w for w in builder.get_messages())
+
+    def test_referenced_variable_still_errors_when_root_cannot_accept_it(self, tmp_path):
+        """The fix must not swallow genuine mismatches: a variable something
+        explicitly referenced, that this root does not declare, is still an error.
+
+        `_referenced_keys` is populated during the build phase that walks
+        resources/providers/modules — before `_validate_inputs()` runs later in the
+        same `build()` — so it is set directly here, matching how
+        `TestTerraformBuilderComputeInjectedKeys` pre-seeds `variable_refs` /
+        `_components_total` rather than re-driving the whole build pipeline.
+        """
+        prov = _make_provisioner(source_path="terraform")
+        prov.name = "dispatcher_api"
+
+        prov_dir = tmp_path / "terraform"
+        self._write_variables_tf(prov_dir, ["some_other_var"])
+
+        deployment_service = self._make_deployment_service(
+            tmp_path,
+            prov,
+            variables=["vnet_name"],
+            features=[],
+            secret_keys=[],
+        )
+
+        builder = TerraformBuilder()
+        builder._referenced_keys = {"vnet_name"}
+        ok = builder._validate_inputs(deployment_service, tmp_path)
+
+        assert ok is False
+        assert any("vnet_name" in e for e in builder.get_errors())
+
+    def test_referenced_keys_populated_only_by_gated_sites(self, tmp_path):
+        """Direct unit check on the new tracking set: environment collection alone
+        must not populate it, only actual `spec.references` declarations do."""
+        deployment_service = self._make_deployment_service(
+            tmp_path,
+            _make_provisioner(source_path="terraform"),
+            variables=["a", "b"],
+            features=["c"],
+            secret_keys=["d"],
+        )
+
+        builder = TerraformBuilder()
+        builder._collect_declared_input_keys(deployment_service, [])
+
+        assert builder._referenced_keys == set()
 
 
 class TestValidateInputsBackendConfigExclusion:

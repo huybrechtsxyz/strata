@@ -36,6 +36,12 @@ class TerraformBuilder(BaseBuilder):
         self.feature_refs: Dict[str, Dict[str, Any]] = {}
         self.secret_refs: Dict[str, Dict[str, Any]] = {}
 
+        # ADR-0084: keys some component/provisioner/stage explicitly requested by
+        # name — distinct from the three dicts above, which are also populated with
+        # every environment variable/secret regardless of whether anything referenced
+        # them. See _compute_referenced_keys() for why this must not read those dicts.
+        self._referenced_keys: Set[str] = set()
+
         # ADR-0078 scoping: how many resources/providers/modules were considered
         # this build, and how many of them declared spec.references. Used by
         # _compute_injected_keys() to decide whether a provisioner is scoped, and
@@ -100,6 +106,14 @@ class TerraformBuilder(BaseBuilder):
             self.variable_refs = {}
             self.feature_refs = {}
             self.secret_refs = {}
+            # Distinct from the three dicts above, which are dual-purpose (they also
+            # feed the requirements inventory documented in _document_required_*())
+            # and are therefore populated with EVERY environment variable/secret via
+            # _collect_environment_variables()/_collect_environment_secrets(), whether
+            # or not anything referenced them. This set holds only keys some
+            # component/provisioner/stage explicitly requested via spec.references or
+            # a literal stages[].secrets entry — see _compute_referenced_keys() (ADR-0084).
+            self._referenced_keys: Set[str] = set()
             self._components_total = 0
             self._components_declaring_refs = 0
             self._written_file_names = {}
@@ -410,18 +424,21 @@ class TerraformBuilder(BaseBuilder):
                             f"Variable referenced by provider {provider.name}",
                             [provider.name],
                         )
+                        self._referenced_keys.add(key)
                     for key in provider.references.features or []:
                         self._track_feature(
                             key,
                             f"Feature referenced by provider {provider.name}",
                             [provider.name],
                         )
+                        self._referenced_keys.add(key)
                     for key in provider.references.secrets or []:
                         self._track_secret(
                             key,
                             f"Secret referenced by provider {provider.name}",
                             [provider.name],
                         )
+                        self._referenced_keys.add(key)
 
                 self._components_total += 1
 
@@ -503,18 +520,21 @@ class TerraformBuilder(BaseBuilder):
                             f"Variable referenced by module {module.name}",
                             [module.name],
                         )
+                        self._referenced_keys.add(key)
                     for key in module.references.features or []:
                         self._track_feature(
                             key,
                             f"Feature referenced by module {module.name}",
                             [module.name],
                         )
+                        self._referenced_keys.add(key)
                     for key in module.references.secrets or []:
                         self._track_secret(
                             key,
                             f"Secret referenced by module {module.name}",
                             [module.name],
                         )
+                        self._referenced_keys.add(key)
 
                 self._components_total += 1
 
@@ -1619,10 +1639,18 @@ class TerraformBuilder(BaseBuilder):
         merely exists in the environment and this root does not use is normal
         (warning) — Terraform itself treats the latter as a warning and plans
         regardless.
+
+        Deliberately does **not** read ``variable_refs``/``feature_refs``/
+        ``secret_refs``: those three dicts are dual-purpose (they also feed the
+        requirements inventory in ``_document_required_*()``) and are populated with
+        *every* environment variable/secret by ``_collect_environment_variables()``/
+        ``_collect_environment_secrets()``, regardless of whether anything referenced
+        them — there is no analogous unconditional collector for features, which is
+        why an earlier version of this method appeared to work for features and not
+        for variables/secrets. ``self._referenced_keys`` is populated only at the
+        three genuinely-gated call sites (provider/module/resource ``references``).
         """
-        referenced: Set[str] = (
-            set(self.variable_refs.keys()) | set(self.feature_refs.keys()) | set(self.secret_refs.keys())
-        )
+        referenced: Set[str] = set(self._referenced_keys)
         if prov.references:
             referenced |= set(prov.references.variables or [])
             referenced |= set(prov.references.secrets or [])
@@ -1992,6 +2020,7 @@ class TerraformBuilder(BaseBuilder):
                 f"Variable referenced by resource {resource.name}",
                 [resource.name],
             )
+            self._referenced_keys.add(key)
 
         for key in resource.references.features or []:
             self._track_feature(
@@ -1999,6 +2028,7 @@ class TerraformBuilder(BaseBuilder):
                 f"Feature referenced by resource {resource.name}",
                 [resource.name],
             )
+            self._referenced_keys.add(key)
 
         for key in resource.references.secrets or []:
             self._track_secret(
@@ -2006,6 +2036,7 @@ class TerraformBuilder(BaseBuilder):
                 f"Secret referenced by resource {resource.name}",
                 [resource.name],
             )
+            self._referenced_keys.add(key)
 
     def _track_variable(
         self,
