@@ -7,7 +7,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
-## [1.10.1] - 2026-09-20
+## [1.11.0] - 2026-09-20
 
 ### Added
 

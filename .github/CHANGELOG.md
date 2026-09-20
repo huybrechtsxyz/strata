@@ -8,10 +8,12 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
-## [1.10.1] - 2026-09-20
+## [1.11.0] - 2026-09-20
 
-> **Upgrade notes — this release contains breaking changes.** All three affect CI
-> rather than local use. Read before upgrading:
+> **Upgrade notes — this release contains breaking changes.** It ships as a minor
+> rather than a major because a fix here is needed downstream now, with further
+> work already in flight; treat it as you would a major. All three breaks affect
+> CI rather than local use. Read before upgrading:
 >
 > 1. **`strata deploy run` exits `3` instead of `1`** when a policy or AI plan
 >    review denies a deployment. This one fails *quietly*: a pipeline branching on
