@@ -8,24 +8,24 @@ Defines cloud infrastructure providers and connection parameters. YAML files spe
 apiVersion: strata.huybrechts.xyz/v1
 kind: provider
 meta:
-  name: <resource_name> # Required: ^[a-z][a-z0-9_]*$
+  name: <resource_name>         # Required: ^[a-z][a-z0-9_-]*$
   annotations:
     description: <description>
   labels:
     version: "<version>"
 spec:
   properties:
-    type: <provider_type> # Required: kamatera, azure, aws, gcp, local
-    region: <region> # Optional: provider region/location
+    type: <provider_type>       # Required: kamatera, azure, aws, gcp, local
+    region: <region>            # Required: provider region/location
   references:
-    variables: {} # Non-sensitive config (key-value)
-    secrets: {} # Sensitive credentials (key-value)
+    variables: []               # List of variable key names required from environment
+    secrets: []                 # List of secret key names required from environment
+    features: []                # List of feature flag names required from environment
 ```
 
-**Key-Value Format:**
+**References:**
 
-- **Key:** IaC template parameter name
-- **Value:** Environment variable/secret reference name
+Lists the key names that must be defined in the environment configuration (`environment.yaml`). Actual values and secret stores are defined at the environment level, not in the provider file.
 
 ## Provider Types
 
@@ -42,6 +42,8 @@ spec:
 **Kamatera:**
 
 ```yaml
+apiVersion: strata.huybrechts.xyz/v1
+kind: provider
 meta:
   name: kamatera_europe
   labels:
@@ -52,35 +54,44 @@ spec:
     region: eu-fr
   references:
     variables:
-      kamatera_manager_id: KAMATERA_MANAGER_ID
+      - kamatera_manager_id
+      - datacenter_location
     secrets:
-      kamatera_api_key: KAMATERA_API_KEY
-      kamatera_api_secret: KAMATERA_API_SECRET
-      kamatera_private_key: KAMATERA_PRIVATE_KEY
+      - kamatera_api_key
+      - kamatera_api_secret
+      - kamatera_private_key
+    features:
+      - enable_auto_scaling
 ```
 
 **Azure:**
 
 ```yaml
+apiVersion: strata.huybrechts.xyz/v1
+kind: provider
 meta:
   name: azure_westeurope
+  labels:
+    version: "1.0.0"
 spec:
   properties:
     type: azure
     region: westeurope
   references:
     variables:
-      subscription_id: AZURE_SUBSCRIPTION_ID
-      resource_group: AZURE_RESOURCE_GROUP
+      - azure_subscription_id
+      - azure_resource_group
     secrets:
-      tenant_id: AZURE_TENANT_ID
-      client_id: AZURE_CLIENT_ID
-      client_secret: AZURE_CLIENT_SECRET
+      - azure_tenant_id
+      - azure_client_id
+      - azure_client_secret
 ```
 
 **Local:**
 
 ```yaml
+apiVersion: strata.huybrechts.xyz/v1
+kind: provider
 meta:
   name: local_dev
 spec:
@@ -88,24 +99,65 @@ spec:
     type: local
   references:
     variables:
-      ssh_user: LOCAL_SSH_USER
+      - ssh_user
     secrets:
-      ssh_private_key: LOCAL_SSH_PRIVATE_KEY
+      - ssh_private_key
 ```
 
 ## Variables vs Secrets
 
-**Reference-based approach:** Provider files map IaC parameters to environment variables. Actual values loaded externally (env vars, workspace config, secret managers). Credentials never in version control.
+**How references work:**
+
+Provider files declare the key names they require via `spec.references`. Actual values are defined in the environment configuration file (`environment.yaml`), which maps keys to their sources (constants, environment variables, secret stores like Bitwarden, Azure Key Vault, HashiCorp Vault).
 
 **Variables** (non-sensitive, visible in logs):
 
-- Subscription IDs, resource groups, manager IDs
+- Infrastructure details: subscription IDs, resource groups, manager IDs, datacenter locations
+- Resolved at build time from environment configuration
 
 **Secrets** (sensitive, encrypted/secret managers):
 
-- API keys, passwords, private keys, access tokens
+- API keys, passwords, private keys, access tokens, authentication credentials
+- Resolved at build time from the configured secret store
+- Never written to version control, only to encrypted build artifacts
 
-Example: `kamatera_api_key: KAMATERA_API_KEY` → IaC uses `kamatera_api_key`, platform loads from `KAMATERA_API_KEY` env var/secret
+**Features** (boolean feature flags):
+
+- Enable/disable optional capabilities: monitoring, auto-scaling, high-availability
+- Resolved at build time to "true" or "false"
+
+### Example
+
+**Provider declares requirements:**
+```yaml
+kind: provider
+meta:
+  name: kamatera_europe
+spec:
+  references:
+    variables:
+      - kamatera_manager_id
+    secrets:
+      - kamatera_api_key
+```
+
+**Environment provides actual values:**
+```yaml
+kind: environment
+meta:
+  name: prod
+spec:
+  variables:
+    - key: kamatera_manager_id
+      store: constant
+      value: "manager-prod-001"
+  secrets:
+    - key: kamatera_api_key
+      store: bitwarden
+      value: "d47e736b-2db8-47d5-b46b-b2c8016ece73"  # Bitwarden item UUID
+```
+
+At build time, strata validates all declared keys exist in the environment, fetches their values, and injects them into the build artifacts (Terraform, Helm, compose files).
 
 ## Workspace Integration
 

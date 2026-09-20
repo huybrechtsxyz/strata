@@ -1879,7 +1879,10 @@
 <li class="toctree-l2"><a class="reference internal" href="#schema">Schema</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#provider-types">Provider Types</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#examples">Examples</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#variables-vs-secrets">Variables vs Secrets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#variables-vs-secrets">Variables vs Secrets</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#example">Example</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#workspace-integration">Workspace Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#environment-specific-provider-overrides">Environment-Specific Provider Overrides</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#validation">Validation</a></li>
@@ -3512,25 +3515,23 @@
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v1</span>
 <span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">provider</span>
 <span class="nt">meta</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;resource_name&gt;</span><span class="w"> </span><span class="c1"># Required: ^[a-z][a-z0-9_]*$</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;resource_name&gt;</span><span class="w">         </span><span class="c1"># Required: ^[a-z][a-z0-9_-]*$</span>
 <span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;description&gt;</span>
 <span class="w">  </span><span class="nt">labels</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">"&lt;version&gt;"</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;provider_type&gt;</span><span class="w"> </span><span class="c1"># Required: kamatera, azure, aws, gcp, local</span>
-<span class="w">    </span><span class="nt">region</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;region&gt;</span><span class="w"> </span><span class="c1"># Optional: provider region/location</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;provider_type&gt;</span><span class="w">       </span><span class="c1"># Required: kamatera, azure, aws, gcp, local</span>
+<span class="w">    </span><span class="nt">region</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;region&gt;</span><span class="w">            </span><span class="c1"># Required: provider region/location</span>
 <span class="w">  </span><span class="nt">references</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">variables</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w"> </span><span class="c1"># Non-sensitive config (key-value)</span>
-<span class="w">    </span><span class="nt">secrets</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w"> </span><span class="c1"># Sensitive credentials (key-value)</span>
+<span class="w">    </span><span class="nt">variables</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span><span class="w">               </span><span class="c1"># List of variable key names required from environment</span>
+<span class="w">    </span><span class="nt">secrets</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span><span class="w">                 </span><span class="c1"># List of secret key names required from environment</span>
+<span class="w">    </span><span class="nt">features</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span><span class="w">                </span><span class="c1"># List of feature flag names required from environment</span>
 </pre></div>
 </div>
-<p><strong>Key-Value Format:</strong></p>
-<ul class="simple">
-<li><p><strong>Key:</strong> IaC template parameter name</p></li>
-<li><p><strong>Value:</strong> Environment variable/secret reference name</p></li>
-</ul>
+<p><strong>References:</strong></p>
+<p>Lists the key names that must be defined in the environment configuration (<code class="docutils literal notranslate"><span class="pre">environment.yaml</span></code>). Actual values and secret stores are defined at the environment level, not in the provider file.</p>
 </section>
 <section id="provider-types">
 <h2>Provider Types<a class="headerlink" href="#provider-types" title="Link to this heading"></a></h2>
@@ -3568,7 +3569,9 @@
 <section id="examples">
 <h2>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h2>
 <p><strong>Kamatera:</strong></p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">meta</span><span class="p">:</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">provider</span>
+<span class="nt">meta</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kamatera_europe</span>
 <span class="w">  </span><span class="nt">labels</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">"1.0.0"</span>
@@ -3578,56 +3581,104 @@
 <span class="w">    </span><span class="nt">region</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">eu-fr</span>
 <span class="w">  </span><span class="nt">references</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">variables</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">kamatera_manager_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">KAMATERA_MANAGER_ID</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kamatera_manager_id</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">datacenter_location</span>
 <span class="w">    </span><span class="nt">secrets</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">kamatera_api_key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">KAMATERA_API_KEY</span>
-<span class="w">      </span><span class="nt">kamatera_api_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">KAMATERA_API_SECRET</span>
-<span class="w">      </span><span class="nt">kamatera_private_key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">KAMATERA_PRIVATE_KEY</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kamatera_api_key</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kamatera_api_secret</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kamatera_private_key</span>
+<span class="w">    </span><span class="nt">features</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">enable_auto_scaling</span>
 </pre></div>
 </div>
 <p><strong>Azure:</strong></p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">meta</span><span class="p">:</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">provider</span>
+<span class="nt">meta</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure_westeurope</span>
+<span class="w">  </span><span class="nt">labels</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">"1.0.0"</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure</span>
 <span class="w">    </span><span class="nt">region</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">westeurope</span>
 <span class="w">  </span><span class="nt">references</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">variables</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">subscription_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AZURE_SUBSCRIPTION_ID</span>
-<span class="w">      </span><span class="nt">resource_group</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AZURE_RESOURCE_GROUP</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure_subscription_id</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure_resource_group</span>
 <span class="w">    </span><span class="nt">secrets</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">tenant_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AZURE_TENANT_ID</span>
-<span class="w">      </span><span class="nt">client_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AZURE_CLIENT_ID</span>
-<span class="w">      </span><span class="nt">client_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AZURE_CLIENT_SECRET</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure_tenant_id</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure_client_id</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure_client_secret</span>
 </pre></div>
 </div>
 <p><strong>Local:</strong></p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">meta</span><span class="p">:</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">provider</span>
+<span class="nt">meta</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local_dev</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
 <span class="w">  </span><span class="nt">references</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">variables</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">ssh_user</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">LOCAL_SSH_USER</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssh_user</span>
 <span class="w">    </span><span class="nt">secrets</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">ssh_private_key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">LOCAL_SSH_PRIVATE_KEY</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssh_private_key</span>
 </pre></div>
 </div>
 </section>
 <section id="variables-vs-secrets">
 <h2>Variables vs Secrets<a class="headerlink" href="#variables-vs-secrets" title="Link to this heading"></a></h2>
-<p><strong>Reference-based approach:</strong> Provider files map IaC parameters to environment variables. Actual values loaded externally (env vars, workspace config, secret managers). Credentials never in version control.</p>
+<p><strong>How references work:</strong></p>
+<p>Provider files declare the key names they require via <code class="docutils literal notranslate"><span class="pre">spec.references</span></code>. Actual values are defined in the environment configuration file (<code class="docutils literal notranslate"><span class="pre">environment.yaml</span></code>), which maps keys to their sources (constants, environment variables, secret stores like Bitwarden, Azure Key Vault, HashiCorp Vault).</p>
 <p><strong>Variables</strong> (non-sensitive, visible in logs):</p>
 <ul class="simple">
-<li><p>Subscription IDs, resource groups, manager IDs</p></li>
+<li><p>Infrastructure details: subscription IDs, resource groups, manager IDs, datacenter locations</p></li>
+<li><p>Resolved at build time from environment configuration</p></li>
 </ul>
 <p><strong>Secrets</strong> (sensitive, encrypted/secret managers):</p>
 <ul class="simple">
-<li><p>API keys, passwords, private keys, access tokens</p></li>
+<li><p>API keys, passwords, private keys, access tokens, authentication credentials</p></li>
+<li><p>Resolved at build time from the configured secret store</p></li>
+<li><p>Never written to version control, only to encrypted build artifacts</p></li>
 </ul>
-<p>Example: <code class="docutils literal notranslate"><span class="pre">kamatera_api_key:</span> <span class="pre">KAMATERA_API_KEY</span></code> → IaC uses <code class="docutils literal notranslate"><span class="pre">kamatera_api_key</span></code>, platform loads from <code class="docutils literal notranslate"><span class="pre">KAMATERA_API_KEY</span></code> env var/secret</p>
+<p><strong>Features</strong> (boolean feature flags):</p>
+<ul class="simple">
+<li><p>Enable/disable optional capabilities: monitoring, auto-scaling, high-availability</p></li>
+<li><p>Resolved at build time to “true” or “false”</p></li>
+</ul>
+<section id="example">
+<h3>Example<a class="headerlink" href="#example" title="Link to this heading"></a></h3>
+<p><strong>Provider declares requirements:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">provider</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kamatera_europe</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">references</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">variables</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kamatera_manager_id</span>
+<span class="w">    </span><span class="nt">secrets</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kamatera_api_key</span>
+</pre></div>
+</div>
+<p><strong>Environment provides actual values:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prod</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">variables</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kamatera_manager_id</span>
+<span class="w">      </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">constant</span>
+<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">"manager-prod-001"</span>
+<span class="w">  </span><span class="nt">secrets</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kamatera_api_key</span>
+<span class="w">      </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bitwarden</span>
+<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">"d47e736b-2db8-47d5-b46b-b2c8016ece73"</span><span class="w">  </span><span class="c1"># Bitwarden item UUID</span>
+</pre></div>
+</div>
+<p>At build time, strata validates all declared keys exist in the environment, fetches their values, and injects them into the build artifacts (Terraform, Helm, compose files).</p>
+</section>
 </section>
 <section id="workspace-integration">
 <h2>Workspace Integration<a class="headerlink" href="#workspace-integration" title="Link to this heading"></a></h2>
