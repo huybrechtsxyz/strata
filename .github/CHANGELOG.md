@@ -8,6 +8,32 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Fixed
+
+- **An environment key a Terraform root does not declare is now a warning, not a build error (ADR-0084)** — composing an externally-authored root into a shared environment was impossible: every key the root did not consume failed the build. Terraform itself treats these as `Value for undeclared variable` warnings and plans normally (verified on 1.12.2). Severity now depends on *who asked*: a key named by a component's `spec.references` **or** by a stage's `secrets:` allowlist is still an **error** when the root cannot accept it — that is a real mismatch — while a key merely present in the environment is a **warning**. The "did you mean?" suggestion is kept on both, because a near-miss like `daily_quota_gb` against `log_workspace_daily_quota_gb` is exactly the signal worth surfacing. This changes severity only: the root still receives every value, as before.
+
+## [1.11.0] - 2026-09-20
+
+> **Upgrade notes — this release contains breaking changes.** It ships as a minor
+> rather than a major because a fix here is needed downstream now, with further
+> work already in flight; treat it as you would a major. All three breaks affect
+> CI rather than local use. Read before upgrading:
+>
+> 1. **`strata deploy run` exits `3` instead of `1`** when a policy or AI plan
+>    review denies a deployment. This one fails *quietly*: a pipeline branching on
+>    `exit == 1` stops matching and falls through to whatever its default is.
+>    Search your pipelines for `deploy run` exit-code checks.
+> 2. **`resources[].references` is now rejected** rather than dropped with a
+>    warning. Delete the key — nothing ever read it.
+> 3. **`resources[].condition` is now rejected.** Replace it with `enabled:`,
+>    which an environment can override per environment.
+>
+> Two further behaviour changes worth checking: `stages[].depends_on` now
+> **reorders execution** (a file already in a valid order is unaffected; one
+> declared out of order will be reordered, and a dangling, self- or circular
+> reference now fails validation), and `deploy show --stage` now selects stages
+> instead of being silently ignored.
+
 ### Added
 
 - **`strata deploy run --ai` / `--strict-ai-review` now exist** — the AI plan gate that reviews a stage's plan between `plan` and `apply` was fully implemented and documented, but the two CLI flags that switch it on were never declared, so it could not be reached and was inert on every deployment. `--ai` prompts on high risk (blocks when non-interactive; `--force` overrides); `--strict-ai-review THRESHOLD` blocks outright and is **not** overridable by `--force`. Neither runs under `--dry-run`. See [commands.md](../docs/platform/commands.md#deploy-run).
@@ -30,8 +56,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Fixed
 
-- **An environment key a Terraform root does not declare is now a warning, not a build error (ADR-0084)** — composing an externally-authored root into a shared environment was impossible: every key the root did not consume failed the build. Terraform itself treats these as `Value for undeclared variable` warnings and plans normally (verified on 1.12.2). Severity now depends on *who asked*: a key named by a component's `spec.references` **or** by a stage's `secrets:` allowlist is still an **error** when the root cannot accept it — that is a real mismatch — while a key merely present in the environment is a **warning**. The "did you mean?" suggestion is kept on both, because a near-miss like `daily_quota_gb` against `log_workspace_daily_quota_gb` is exactly the signal worth surfacing. This changes severity only: the root still receives every value, as before.
-- **`build plan` now reports whether each stage would actually change anything** — plan rows carry `has_changes` (terraform's own `-detailed-exitcode` verdict; `null` when the stage failed to plan). The `build-plan` GitHub Action previously derived its `has_changes` output from row *presence*, so it was `true` on every run where terraform executed — including runs that found nothing to do, making the documented `if: has_changes == 'true'` recipe fire unconditionally.- **`strata build plan` now fails when the plan could not run** — a stage whose `terraform init`/`validate`/`plan` errored produced a row with `error` set, but the command still exited **0**. Worse, the `build-plan` GitHub Action's `has_changes` check counts plan *rows*, not successful ones, so a wholly broken plan was reported to CI as "plan shows changes". It now exits `1`. **Finding changes remains exit `0`** — that is what the `has_changes` output is for, and PR-preview pipelines that branch on it are unaffected.
+- **`build plan` now reports whether each stage would actually change anything** — plan rows carry `has_changes` (terraform's own `-detailed-exitcode` verdict; `null` when the stage failed to plan). The `build-plan` GitHub Action previously derived its `has_changes` output from row *presence*, so it was `true` on every run where terraform executed — including runs that found nothing to do, making the documented `if: has_changes == 'true'` recipe fire unconditionally.
+- **`strata build plan` now fails when the plan could not run** — a stage whose `terraform init`/`validate`/`plan` errored produced a row with `error` set, but the command still exited **0**. Worse, the `build-plan` GitHub Action's `has_changes` check counts plan *rows*, not successful ones, so a wholly broken plan was reported to CI as "plan shows changes". It now exits `1`. **Finding changes remains exit `0`** — that is what the `has_changes` output is for, and PR-preview pipelines that branch on it are unaffected.
 - **`strata build plan --strict-ai-review` now actually fails, with exit `3`** — it printed "Plan blocked" and exited **0**, so a CI pipeline using it as a gate reported green on exactly the change it was asked to stop. Exit `3` matches the flag's own help text and keeps a gate rejection (block the PR, never retry) distinguishable from a broken plan (exit `1`, alert). `deploy run`'s equivalent gate was unaffected.
 - **`strata build plan` now reports a stage whose `enabled` expression cannot be resolved** — previously the error was discarded and the stage appeared in the plan as ordinary and unmarked, even though `deploy run` would abort on it. It is now reported as a failed row naming the unresolvable reference.
 - **`CheckovPolicy` artifact path resolution (ADR-0051)** — no longer silently passes a `deny`-enforcement policy without scanning anything; now resolves each terraform provisioner's build directory via the canonical `get_provisioner_path()`, adds a `scope` config (`staged` default | `all` | `<stage-name>`) for multi-provisioner workspaces, and surfaces every skip as a warning instead of a silent pass. See ADR-0051 / HISTORY.md.
