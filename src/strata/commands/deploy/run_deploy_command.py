@@ -129,6 +129,9 @@ class RunDeployCommand(BaseDeployCommand):
         unreachable, a lifecycle hook returned non-zero. That last one stays at 1
         deliberately: a hook that exits non-zero is indistinguishable from a hook that
         crashed, so calling it a denial would assert something strata cannot know.
+        Deliberate enforcement has its own mechanism — a `type: script` policy runs the
+        same command at the same phase and *is* reported as a refusal (docs/platform/
+        lifecycles.md, "Blocking a deploy on purpose").
 
         Exit 5 (``has_hand_off_required``) remains separate and takes priority: a gate
         that *paused* pending approval is resumable, which a denial is not.

@@ -209,6 +209,28 @@ Some phases block the next step when they fail:
 - `deploy_apply_before` — non-zero exit **blocks** the apply step
 - All other before/after hooks — non-zero exit **aborts** the command
 
+### Blocking a deploy on purpose? Use a policy, not a hook
+
+A hook that blocks the apply makes `deploy run` exit **1** — "system error, alert".
+That is not a limitation to work around; it is the honest answer. A script that
+exits non-zero because it *decided* to stop the deploy is indistinguishable, from
+strata's side, from one that crashed, hit a network timeout, or was killed. strata
+will not claim a verdict it cannot observe.
+
+If the intent is enforcement, declare a [policy](policies.md) instead. A
+`type: script` policy runs the same arbitrary command at the same `plan` or
+`deploy` phase, but:
+
+|                | Blocking hook                        | `type: script` policy                  |
+| -------------- | ------------------------------------ | -------------------------------------- |
+| Exit code      | `1` — indistinguishable from a crash | `3` — refused; CI must not retry       |
+| Enforcement    | Always fatal                         | `deny`, `warn`, or `audit`             |
+| Testable alone | No                                   | Yes — `strata policies check`          |
+| Recorded       | As a failed stage                    | As a policy result, with the violation |
+
+Keep hooks for *doing* things — take a backup, rotate a secret, send a
+notification — where a non-zero exit genuinely does mean the work failed.
+
 ## Examples
 
 **Pre-apply backup:**
@@ -251,6 +273,6 @@ print(f"Stage {stage} completed ({phase})")
 
 - **Order matters:** Scripts within a phase execute in the order listed in YAML
 - **Idempotency:** Design scripts to be safe to run multiple times
-- **Exit codes:** Exit non-zero on failure — strata treats any non-zero as an error
+- **Exit codes:** Exit non-zero on failure — strata treats any non-zero as an error, and reports it as a system failure (exit `1`). To *refuse* a deployment rather than report a failure, use a [policy](policies.md) — see [Gate Behaviour](#gate-behaviour)
 - **Logging:** Write to stdout/stderr; strata captures and logs both
 - **Timeout:** 5 minutes default per script; design accordingly
