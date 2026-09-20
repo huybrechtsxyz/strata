@@ -8,6 +8,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [1.11.2] - 2026-09-20
+
 ### Fixed
 
 - **1.11.1's variable/secret severity fix was itself only partial** — an unscoped workspace still reported every undeclared *variable* and *secret* as an error; only features correctly warned. Root cause: the "who asked" set was read from `variable_refs`/`secret_refs`, which are dual-purpose (they also feed the requirements inventory) and are populated with **every** environment variable/secret regardless of whether anything referenced them — there is no equivalent unconditional collector for features, which is why that path looked correct. Now backed by a dedicated set populated only where `spec.references` is actually declared.
