@@ -72,12 +72,45 @@ layers are designed:
    stage/kind reads from it. This replaces `output_key` (DNS),
    `HealthCheckModel.output_key`, and `ip_output_key` (Ansible topology) with
    one mechanism instead of three independent ones.
-2. **Context absorbs `${output:KEY}`** as the token kind that resolves
-   against it (alongside `${var:}`/`${secret:}`/`${feature:}`, which resolve
-   against the declared `Environment` instead) — once Context exists to
-   resolve it against. Not added to `VALUE_TOKEN_KINDS` yet (see Remaining
-   Work) — adding it today, with no Context to back it, would misrepresent it
-   as having the same validation guarantee as `var`/`secret`/`feature`.
+2. **Two token kinds resolve against Context, not one `${output:KEY}`.**
+   `output` was rejected as the token name — it bakes in the *producer's*
+   point of view ("this step's output") into what's really a consumer-side
+   read, and is asymmetric (an output to the step that made it, an input to
+   whatever reads it). Instead:
+   - **`${step:step_name.output_key}`** — raw, always-available, scoped
+     reference to one `ProvisioningStepModel`'s output. Dot-nests the output
+     key inside the step name (consistent with the single-colon-for-kind,
+     single-dot-for-nesting rule below); no extra declaration needed beyond
+     the step producing that key. Couples the consumer to that exact step's
+     name — mirrors GitHub Actions' `steps.<id>.outputs.<name>`.
+   - **`${context:key}`** — flat, opt-in reference to a value a step has
+     explicitly *promoted* into the shared, step-agnostic Context namespace
+     under a chosen name (raw-key → context-key mapping declared on the
+     producing step; exact shape TBD alongside Context itself — see
+     Remaining Work). No scoping needed — promotion already resolved any
+     naming/collision question. Decouples consumers from producers (a DNS
+     record can say `${context:public_ip}` without knowing which step made
+     it) — mirrors a GitHub Actions composite action's own `outputs:` block,
+     which promotes one step's output as the action's public output. Also
+     generalizes v1's `ProvisionerInputMappingModel` (`mapping`/`prefix`/
+     `select` on `inputs_from`) — that was the *consumer*-side half of this
+     same idea (a provisioner remapping an upstream provisioner's outputs
+     into its own inputs); `context:`/promotion is the *producer*-side half,
+     generalized to any schema field, not just provisioner-to-provisioner.
+
+   Neither token kind has the same validation guarantee as `var`/`secret`/
+   `feature` (which resolve against a declared `Environment` instead) — see
+   point 4. Not added to `VALUE_TOKEN_KINDS` yet (see Remaining Work) —
+   adding either today, with no Context to back it, would misrepresent it as
+   having that guarantee.
+
+   (Checked `sterling`'s own "context" concept —
+   `app-int-agentic-workflow/src/sterling/domain/context.py` — as a possible
+   naming precedent before settling on this. It's an unrelated concept: a
+   rendered markdown prompt snapshot for an LLM agent run, not a key/value
+   resolution store, and no literal `STERLING_CONTEXT` exists in that repo.
+   Not a precedent for this token design, beyond the general idea of "one
+   shared object, assembled once, read downstream.")
 3. **Context is a runtime object, not a user-authored YAML kind.** Like
    `ResolvedValues`, it's assembled during a deploy run, not hand-written —
    no `ContextModel(PlatformBaseModel)` YAML schema is implied by this
@@ -89,7 +122,9 @@ layers are designed:
    exist (that would require an "Outputs" declaration, symmetric to
    Interface's declared *inputs*, itself still undesigned). v1 never solved
    this either — `stage_outputs.get(key)` silently returns `None`/missing on
-   a bad key today, and Context doesn't change that by itself.
+   a bad key today, and Context doesn't change that by itself. Applies to
+   both `step:` and `context:` equally — promotion resolves naming, not
+   existence.
 5. **Grant is confirmed, unchanged from ADR-0002.** `for_stage(allowed_secrets)`
    is Context's Grant-scoping method — secrets-only, stage-scoped, derived
    from `stage.kind` by default with an explicit allow/deny override. No new
@@ -114,10 +149,14 @@ layers are designed:
   `ResolvedValues`: variables/secrets/features/stage_outputs(+sensitive)/
   provenance) when the provisioner/build and deploy/stage layers are
   designed — not before.
-- Add `"output"` to `VALUE_TOKEN_KINDS`/`VALUE_TOKEN_PATTERN` (`common_models.py`)
-  at the same time, and re-add an output-sourced binding to `DnsRecordModel`
-  (and any other kind that needs it, e.g. a future `HealthCheckModel`).
-- The "Outputs declaration" problem (a real ground truth to validate
-  `${output:KEY}`'s key against, symmetric to Interface) remains open and
-  unscheduled — do not build it speculatively; wait for a concrete need once
-  Context exists.
+- Design how promotion is declared on the producing step (e.g. a
+  `ProvisioningStepModel.promote: dict[str, str] | None` raw-key →
+  context-key mapping, or similar) — alongside Context itself, not before.
+- Add `"step"` and `"context"` to `VALUE_TOKEN_KINDS`/`VALUE_TOKEN_PATTERN`
+  (`common_models.py`) at the same time, and re-add an output-sourced
+  binding to `DnsRecordModel` (and any other kind that needs it, e.g. a
+  future `HealthCheckModel`) using both new token kinds.
+- The "Outputs declaration" problem (a real ground truth to validate either
+  `${step:...}` or `${context:...}`'s key against, symmetric to Interface)
+  remains open and unscheduled — do not build it speculatively; wait for a
+  concrete need once Context exists.
