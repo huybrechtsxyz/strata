@@ -3,59 +3,72 @@
 
 import re
 
-from strata.models.config_provider_model import ConfigurationProviderModel
 from strata.models.configuration_model import ConfigurationModel
+from strata.models.provider_config_model import ProviderConfigModel, ProviderConfigSpecModel
 from strata.models.resource_model import ResourceModel
 from strata.services.base_service import BaseService
 
 
 class ResourceService(BaseService[ResourceModel]):
-    """Service for handling resource configurations."""
+    """Service for handling resource configurations.
+
+    Phase 2 here only checks that `spec.properties.provider_type` is a
+    *registered* provider type name (a pointer existing in
+    `configuration_model.spec.providers`) — same reasoning as
+    `ProviderService` (ADR-0014): `configuration_model.spec.providers`
+    entries are `{name, file}` pointers now, so the deep resource-type/
+    configuration-schema check needs an actually-loaded `ProviderConfigModel`,
+    which `_validate_dynamic()`'s fixed signature has no slot for. That check
+    is `validate_against_provider_config()` below.
+    """
 
     def _get_model_class(self) -> type[ResourceModel]:
         """Return the ResourceModel class for validation."""
         return ResourceModel
 
     def _validate_dynamic(self, configuration_model: ConfigurationModel | None = None) -> tuple[bool, list[str]]:
-        """
-        Phase 2: Dynamic validation against configuration.
-
-        Validates cross-references when configuration is provided:
-        - Provider type exists in configuration.spec.providers
-        - Resource type exists for provider (when additional_resources=False)
-        - Configuration fields match schema patterns defined in provider resource
-        """
+        """Phase 2: check that `spec.properties.provider_type` is a registered provider type name."""
         if configuration_model is None or self.model is None:
             return True, []
 
-        errors: list[str] = []
+        provider_type = self.model.spec.properties.provider_type
+        registered_names = {p.name for p in configuration_model.spec.providers} if configuration_model.spec.providers else set()
 
+        if provider_type not in registered_names:
+            available = sorted(registered_names)
+            return False, [f"Provider type '{provider_type}' not found in configuration. Available providers: {available}"]
+
+        return True, []
+
+    def validate_against_provider_config(self, provider_config: ProviderConfigModel) -> tuple[bool, list[str]]:
+        """Cross-check the resource type and its configuration fields against a
+        loaded ProviderConfig document.
+
+        Validates:
+        - Resource type exists for the provider (when `additional_resources=False`)
+        - Configuration fields match schema patterns declared in the provider's resource entry
+
+        Args:
+            provider_config: The already-loaded `ProviderConfigModel` document
+                that `configuration_model.spec.providers[].file` pointed at.
+        """
+        if self.model is None:
+            return False, ["Resource model is not initialized"]
+
+        errors: list[str] = []
         provider_type = self.model.spec.properties.provider_type
         resource_type = self.model.spec.properties.resource_type
+        spec = provider_config.spec
 
-        config_provider = None
-        if configuration_model.spec.providers:
-            for provider in configuration_model.spec.providers:
-                if provider.name == provider_type:
-                    config_provider = provider
-                    break
-
-        if config_provider is None:
-            available = (
-                [p.name for p in configuration_model.spec.providers] if configuration_model.spec.providers else []
-            )
-            errors.append(f"Provider type '{provider_type}' not found in configuration. Available providers: {available}")
-            return False, errors
-
-        if not config_provider.additional_resources:
-            if not config_provider.resources:
+        if not spec.additional_resources:
+            if not spec.resources:
                 errors.append(
-                    f"Provider '{provider_type}' has no resources defined in configuration, "
+                    f"Provider '{provider_type}' has no resources defined in its provider config, "
                     f"but additional_resources is False"
                 )
                 return False, errors
 
-            valid_resource_types = [res.name for res in config_provider.resources]
+            valid_resource_types = [res.name for res in spec.resources]
             if resource_type not in valid_resource_types:
                 errors.append(
                     f"Resource type '{resource_type}' is not valid for provider '{provider_type}'. "
@@ -64,15 +77,13 @@ class ResourceService(BaseService[ResourceModel]):
                 return False, errors
 
         if self.model.spec.configuration:
-            errors.extend(
-                self._validate_configuration_schema(config_provider, resource_type, self.model.spec.configuration)
-            )
+            errors.extend(self._validate_configuration_schema(spec, resource_type, self.model.spec.configuration))
 
         return len(errors) == 0, errors
 
     def _validate_configuration_schema(
         self,
-        config_provider: ConfigurationProviderModel,
+        provider_config_spec: ProviderConfigSpecModel,
         resource_type: str,
         configuration: dict[str, object],
     ) -> list[str]:
@@ -83,8 +94,8 @@ class ResourceService(BaseService[ResourceModel]):
         """
         errors: list[str] = []
         config_resource = None
-        if config_provider.resources:
-            for res in config_provider.resources:
+        if provider_config_spec.resources:
+            for res in provider_config_spec.resources:
                 if res.name == resource_type:
                     config_resource = res
                     break

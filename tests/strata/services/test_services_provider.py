@@ -4,6 +4,7 @@
 import pytest
 
 from strata.models.configuration_model import ConfigurationModel
+from strata.models.provider_config_model import ProviderConfigModel
 from strata.services.provider_service import ProviderService
 
 
@@ -19,19 +20,23 @@ def _minimal_provider_data() -> dict:
     }
 
 
-def _configuration_with_kamatera() -> ConfigurationModel:
+def _configuration_with_kamatera_pointer() -> ConfigurationModel:
     return ConfigurationModel.model_validate(
         {
             "meta": {"name": "solution-config"},
+            "spec": {"providers": [{"name": "kamatera", "file": "providers/kamatera.yaml"}]},
+        }
+    )
+
+
+def _kamatera_provider_config() -> ProviderConfigModel:
+    return ProviderConfigModel.model_validate(
+        {
+            "meta": {"name": "kamatera"},
             "spec": {
-                "providers": [
-                    {
-                        "name": "kamatera",
-                        "description": "Kamatera cloud provider",
-                        "regions": ["eu-west", "eu-fr"],
-                        "resources": [{"name": "vm"}],
-                    }
-                ]
+                "description": "Kamatera cloud provider",
+                "regions": ["eu-west", "eu-fr"],
+                "resources": [{"name": "vm"}],
             },
         }
     )
@@ -90,9 +95,9 @@ def test_provider_service_accessors_raise_before_valid():
 
 
 def test_provider_service_accepts_valid_against_configuration():
-    """Phase 2: a provider type/region present in the configuration registry validates."""
+    """Phase 2: a provider type present in the configuration registry (as a pointer) validates."""
     service = ProviderService(data=_minimal_provider_data())
-    is_valid, errors = service.validate(configuration_model=_configuration_with_kamatera())
+    is_valid, errors = service.validate(configuration_model=_configuration_with_kamatera_pointer())
     assert is_valid
     assert errors == []
 
@@ -102,17 +107,27 @@ def test_provider_service_rejects_unknown_type_against_configuration():
     data = _minimal_provider_data()
     data["spec"]["properties"]["type"] = "unknown-cloud"
     service = ProviderService(data=data)
-    is_valid, errors = service.validate(configuration_model=_configuration_with_kamatera())
+    is_valid, errors = service.validate(configuration_model=_configuration_with_kamatera_pointer())
     assert not is_valid
     assert any("not found in configuration" in e for e in errors)
 
 
-def test_provider_service_rejects_unknown_region_against_configuration():
-    """Phase 2: a region absent from the provider's configured region list fails validation."""
+def test_provider_service_accepts_valid_against_provider_config():
+    """A region present in the loaded ProviderConfig document's regions validates."""
+    service = ProviderService(data=_minimal_provider_data())
+    service.validate()
+    is_valid, errors = service.validate_against_provider_config(_kamatera_provider_config())
+    assert is_valid
+    assert errors == []
+
+
+def test_provider_service_rejects_unknown_region_against_provider_config():
+    """A region absent from the loaded ProviderConfig document's regions fails validation."""
     data = _minimal_provider_data()
     data["spec"]["properties"]["region"] = "us-east"
     service = ProviderService(data=data)
-    is_valid, errors = service.validate(configuration_model=_configuration_with_kamatera())
+    service.validate()
+    is_valid, errors = service.validate_against_provider_config(_kamatera_provider_config())
     assert not is_valid
     assert any("is not valid for provider" in e for e in errors)
 

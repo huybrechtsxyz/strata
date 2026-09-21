@@ -17,14 +17,12 @@ from typing import Any
 from pydantic import Field, model_validator
 
 from strata.models.common_models import (
-    SYNC_PROVISIONER_TYPES,
-    TERRAFORM_COMPATIBLE_TYPES,
     PlatformBaseModel,
     PlatformName,
-    ProvisionerType,
     SourceModel,
-    check_unique_names,
 )
+from strata.utils.builtin_types import SYNC_PROVISIONER_TYPES, TERRAFORM_COMPATIBLE_TYPES, ProvisionerType
+from strata.utils.names import check_unique_names
 
 
 class ProvisionerBackendModel(PlatformBaseModel):

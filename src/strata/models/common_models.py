@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Common models, enums, and reusable types for Strata v2."""
 
-import ipaddress
-import re
 import warnings
 from enum import Enum
 from pathlib import Path
 from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, StringConstraints, field_validator, model_validator
+
+from strata.utils.path_safety import validate_file_ref_no_traversal, validate_relative_path
 
 # Allowed script file extensions for lifecycle phase scripts.
 SCRIPT_EXTENSIONS = {".sh", ".bash", ".py", ".ps1", ".js", ".mjs", ".go"}
@@ -47,6 +47,8 @@ class PlatformKind(str, Enum):
     """Enumeration of supported platform kinds."""
 
     CONFIGURATION = "configuration"
+    PROVIDERCONFIG = "providerconfig"
+    TOPOLOGYCONFIG = "topologyconfig"
     PROVIDER = "provider"
     RESOURCE = "resource"
     DNS = "dns"
@@ -56,55 +58,7 @@ class PlatformKind(str, Enum):
     NAMESPACE = "namespace"
     TOPOLOGY = "topology"
     WORKSPACE = "workspace"
-
-
-# Enumeration of the *known* built-in provisioner/deployer tools — a reference
-# set for internal classification only, NOT used directly as any schema
-# field's type. v1's real `DeployerFactory` supports user-registered
-# provisioner plugins beyond these built-ins (`.strata/provisioners/*.py`),
-# so fields like `Module.spec.type` are open `PlatformName` strings, checked
-# against this enum only to classify *recognized* values (see
-# `validate_type_is_workload_deployer()` in module_model.py) — an
-# unrecognized value is a possible custom plugin, not a hard error. Subsets
-# of this vocabulary that mean something different in different contexts are
-# expressed as named, documented constants below — never as a second,
-# overlapping enum (ADR-0011).
-class ProvisionerType(str, Enum):
-    """Reference enumeration of known built-in provisioner/deployer tools.
-
-    Not used as a schema field's type — see module docstring above.
-    """
-
-    TERRAFORM = "terraform"
-    OPENTOFU = "opentofu"
-    ANSIBLE = "ansible"
-    BICEP = "bicep"
-    SCRIPT = "script"
-    HELM = "helm"
-    COMPOSE = "compose"
-    ARGOCD = "argocd"
-    FLUX = "flux"
-
-
-# Sync/GitOps tools: render from the platform artifact and commit to a git
-# remote at deploy time — no IaC source directory needed, unlike the other
-# ProvisionerType members.
-SYNC_PROVISIONER_TYPES = frozenset({ProvisionerType.ARGOCD, ProvisionerType.FLUX})
-
-# OpenTofu is a drop-in, backend-compatible fork of Terraform (same IaC
-# semantics, same state-backend config shape) — treated identically to
-# TERRAFORM wherever terraform-specific validation applies (e.g.
-# `validate_backend_only_for_terraform` in provisioning_model.py).
-TERRAFORM_COMPATIBLE_TYPES = frozenset({ProvisionerType.TERRAFORM, ProvisionerType.OPENTOFU})
-
-# Tools that can deploy a Module's services (containers/sub-charts). Used to
-# classify a *recognized* `ModuleSpecModel.type` value — terraform/ansible/bicep
-# manage infrastructure state, not container workloads, so a known value in
-# this category is rejected there; an unrecognized value (custom plugin)
-# isn't checked against this at all.
-WORKLOAD_DEPLOYER_TYPES = frozenset(
-    {ProvisionerType.HELM, ProvisionerType.COMPOSE, ProvisionerType.ARGOCD, ProvisionerType.SCRIPT}
-)
+    INTEGRATION = "integration"
 
 
 # Enumeration of supported workspace versions
@@ -119,114 +73,11 @@ class PlatformVersion(str, Enum):
 CANONICAL_API_VERSION = PlatformVersion.v2
 
 
-# Value binding token syntax (ADR-0002): a field may be a plain literal, or
-# contain one or more embedded `${var:KEY}`/`${secret:KEY}`/`${feature:KEY}`
-# tokens (e.g. a composite/concatenated string like a connection string).
-# Reused verbatim from v1 (ADR-0075) rather than `{{ }}`-style templating,
-# since `{{` collides with strata's existing Jinja/Helm templating elsewhere.
-VALUE_TOKEN_KINDS = ("var", "secret", "feature")
-
-VALUE_TOKEN_PATTERN = re.compile(r"\$\{(?P<kind>var|secret|feature):(?P<key>[A-Za-z0-9_.-]+)\}")
-
-_VALUE_TOKEN_CANDIDATE_PATTERN = re.compile(r"\$\{[^}]*\}")
-
-
-def validate_value_tokens(value: str) -> None:
-    """Raise ``ValueError`` if `value` contains a malformed ``${...}`` token.
-
-    Catches typos at schema time (Phase 1) — e.g. an unknown kind
-    (``${vars:x}``), a missing key (``${var:}``), or a missing colon
-    (``${var}``) — without needing an Environment to check keys against.
-    Well-formed tokens (``${var:region}``, ``${secret:db_password}``,
-    ``${feature:enable_x}``) and plain literals with no tokens are accepted.
-    Whether the *key itself* is real (e.g. `region` is actually declared) is a
-    Phase 2 check against a real Environment, not this function's job.
-    """
-    for candidate in _VALUE_TOKEN_CANDIDATE_PATTERN.findall(value):
-        if not VALUE_TOKEN_PATTERN.fullmatch(candidate):
-            kinds = "|".join(VALUE_TOKEN_KINDS)
-            raise ValueError(f"Malformed Value token {candidate!r}. Expected '${{{kinds}:KEY}}', e.g. '${{var:region}}'.")
-
-
-def has_value_tokens(value: str) -> bool:
-    """Return True if `value` contains at least one ``${...}`` Value token.
-
-    Used to decide whether a field's literal-only validation (e.g. CIDR format
-    checking) should run at all — a token-bearing string can't be format-checked
-    until it's resolved (build/deploy time), so callers should skip that
-    validation when this returns True.
-    """
-    return bool(_VALUE_TOKEN_CANDIDATE_PATTERN.search(value))
-
-
-def validate_cidr_or_token(value: str) -> None:
-    """Validate a CIDR/IP-or-Value-binding string.
-
-    Always checks Value-token syntax via `validate_value_tokens()`. If `value`
-    has no tokens (a plain literal), also validates it's a well-formed IP
-    network/address via `ipaddress.ip_network()` — a token-bearing value can't
-    be format-checked until it's resolved (build/deploy time). Shared by
-    `network_model.py` (subnet/address-space CIDRs) and `firewall_model.py`
-    (rule source/destination IP or CIDR).
-    """
-    validate_value_tokens(value)
-    if not has_value_tokens(value):
-        try:
-            ipaddress.ip_network(value, strict=False)
-        except ValueError as e:
-            raise ValueError(f"Invalid CIDR/IP: {value}") from e
-
-
-def validate_no_path_traversal(value: str) -> None:
-    """Raise ``ValueError`` if `value` is an absolute path or contains '..'.
-
-    Guards against path traversal escaping a build/deploy output directory.
-    Validation only — does not normalize/mutate `value` (callers that also
-    want normalization, e.g. stripping slashes, should use
-    `validate_relative_path` instead; callers where a trailing '/' is
-    semantically meaningful, e.g. `ModuleFileModel.target`, should use this
-    directly so that marker isn't stripped).
-    """
-    path_str = str(value)
-
-    if path_str.startswith("/") or path_str.startswith("\\"):
-        raise ValueError(f"Path must be relative, not absolute. Got: {path_str}")
-
-    if len(path_str) >= 2 and path_str[1] == ":":
-        raise ValueError(f"Path must be relative, not absolute. Got: {path_str}")
-
-    if ".." in path_str:
-        raise ValueError(f"Path cannot contain parent directory references (..). Got: {path_str}")
-
-
-def validate_relative_path(value: str) -> str:
-    """Validate that a path is relative and secure, and normalize it.
-
-    Runs `validate_no_path_traversal()`, then normalizes backslashes to
-    forward slashes and strips leading/trailing slashes. Used by `SourceModel`
-    (`source_path`/`target_path`), where no trailing-slash convention applies.
-    """
-    validate_no_path_traversal(value)
-    return str(value).replace("\\", "/").strip("/")
-
-
-def validate_file_ref_no_traversal(value: str) -> None:
-    """Raise ``ValueError`` if a file-reference string escapes its base directory.
-
-    Handles the ``@reponame/...`` cross-repo reference convention: the
-    ``@reponame`` segment itself isn't a filesystem path, so only the part
-    after it is checked (e.g. ``@infra/../../etc/passwd`` is still rejected).
-    A bare relative reference with no ``@`` prefix is checked as-is. Shared by
-    `module_model.py`'s `ModuleFileModel` (`source`/`target`) and
-    `namespace_model.py`'s `NamespaceModuleModel` (`file`) — any field naming
-    a file/module reference that will be resolved relative to a repo or
-    build/work directory should use this.
-    """
-    path_to_check = value
-    if path_to_check.startswith("@"):
-        _, _, path_to_check = path_to_check.partition("/")
-    if path_to_check:
-        validate_no_path_traversal(path_to_check)
+# Value binding token syntax (ADR-0002), CIDR/path-safety validation helpers,
+# and `check_unique_names` all moved to `strata.utils` (`value_tokens.py`,
+# `path_safety.py`, `names.py`) — pure functions with no Pydantic dependency,
+# reused across many model files. See those modules for the full history/
+# reasoning previously carried in this file's comments.
 
 
 class SourceModel(PlatformBaseModel):
@@ -469,19 +320,3 @@ class CommonLifecycleModel(RootModel[dict[str, CommonLifecyclePhaseModel]]):
     """
 
     root: dict[str, CommonLifecyclePhaseModel] = Field(default_factory=dict)
-
-
-def check_unique_names(items: list[str], label: str) -> None:
-    """Raise ``ValueError`` if `items` contains duplicate values.
-
-    Uses O(n) set-based detection instead of the O(n^2) `.count()` pattern.
-    The error message lists duplicates in sorted order for deterministic output.
-    """
-    seen: set[str] = set()
-    dupes: set[str] = set()
-    for item in items:
-        if item in seen:
-            dupes.add(item)
-        seen.add(item)
-    if dupes:
-        raise ValueError(f"Duplicate {label}: {', '.join(sorted(dupes))}")

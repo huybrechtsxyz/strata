@@ -12,8 +12,8 @@ from strata.models.common_models import (
     PlatformKind,
     PlatformName,
     PlatformVersion,
-    validate_cidr_or_token,
 )
+from strata.utils.value_tokens import validate_cidr_or_token
 
 
 class FirewallPermission(str, Enum):

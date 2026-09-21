@@ -58,6 +58,7 @@ type = "layers"
 layers = [
     "strata.services",
     "strata.models",
+    "strata.utils",
 ]
 # v1's full layering (for reference, extend as these packages are built):
 # strata.server > strata.commands > strata.controllers >

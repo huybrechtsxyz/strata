@@ -18,8 +18,8 @@ from strata.models.common_models import (
     PlatformKind,
     PlatformName,
     PlatformVersion,
-    check_unique_names,
 )
+from strata.utils.names import check_unique_names
 
 
 class ResourceDependencyModel(PlatformBaseModel):

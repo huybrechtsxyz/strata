@@ -11,9 +11,9 @@ from strata.models.common_models import (
     PlatformKind,
     PlatformName,
     PlatformVersion,
-    check_unique_names,
-    validate_value_tokens,
 )
+from strata.utils.names import check_unique_names
+from strata.utils.value_tokens import validate_value_tokens
 
 
 class DnsRecordType(str, Enum):

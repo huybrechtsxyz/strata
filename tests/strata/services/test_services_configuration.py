@@ -9,14 +9,7 @@ def test_configuration_service_validates_from_data():
     data = {
         "meta": {"name": "solution-config"},
         "spec": {
-            "providers": [
-                {
-                    "name": "kamatera",
-                    "description": "Kamatera cloud provider",
-                    "regions": ["eu-west"],
-                    "resources": [{"name": "vm"}],
-                }
-            ]
+            "providers": [{"name": "kamatera", "file": "providers/kamatera.yaml"}],
         },
     }
     service = ConfigurationService(data=data)

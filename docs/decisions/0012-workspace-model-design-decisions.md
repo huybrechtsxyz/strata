@@ -137,12 +137,20 @@ real versus decorative:
 
 ## Remaining Work
 
-- `WorkspaceService._validate_dynamic()`: load each referenced `Topology`
-  document and cross-check its `components[].resource`/`namespaces[].namespace`
-  against this workspace's own `resources`/`namespaces` — the Phase 2 check
-  ADR-0011 already anticipated. Same for each referenced `Network` document:
-  cross-check `resource.subnet.subnet` against that network's real
-  `NetworkDefinitionModel.subnets[]` (Decision 7).
+- ~~`WorkspaceService`: cross-check each referenced `Topology` document's
+  `components[].resource`/`namespaces[].namespace` against this workspace's
+  own `resources`/`namespaces`, and its components' resolved
+  `WorkspaceResourceModel.role` against the configuration's topology type
+  registry~~ — done as `validate_topology_references()`/
+  `validate_topology_components()`, both self-contained public methods a
+  future solution-loading layer calls once it has resolved
+  `spec.topology[].file` into real `TopologyModel` instances (not wired into
+  `_validate_dynamic()` itself — that hook's fixed signature only threads a
+  `configuration_model`, not the extra loaded `TopologyModel`s these checks
+  also need). See [ADR-0013](0013-configuration-topology-registry.md).
+- Same for each referenced `Network` document: cross-check
+  `resource.subnet.subnet` against that network's real
+  `NetworkDefinitionModel.subnets[]` (Decision 7) — still not ported.
 - Extend `ConfigurationModel` with `topologies`/`ConfigurationTopologyModel`
   so a referenced Topology's `spec.type` can be checked against a registry
   (mirrors Provider's `type`/`region` check) — still not built.

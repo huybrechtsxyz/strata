@@ -329,10 +329,14 @@ have a `depends_on` edge (direct **or transitive**) between them.
   and testable in isolation (24 tests) before Workspace itself exists to
   wire them together — same incremental pattern as every other sub-model.
 - Neutral: `Topology.spec.components[].resource`/`namespaces[].namespace`
-  cannot be validated against real `Resource`/`Namespace` documents yet — no
-  solution-wide loading machinery exists (same deferral already accepted for
-  `Namespace.spec.modules[].file`, ADR-0010). Existence-checking is Workspace's
-  Phase 2 job (see above), not something `Topology` will ever do alone.
+  cannot be *automatically* validated against real `Resource`/`Namespace`
+  documents yet — no solution-wide loading machinery exists (same deferral
+  already accepted for `Namespace.spec.modules[].file`, ADR-0010). The
+  validation logic itself is built and tested
+  (`WorkspaceService.validate_topology_references()`/
+  `validate_topology_components()`, ADR-0012/ADR-0013) — only the automatic
+  wiring (resolving `spec.topology[].file` into a real loaded `TopologyModel`)
+  is missing.
 - Neutral: four real v1 concepts (`output` profile, `inputs_from` data-mapping,
   `integration`, provisioner `needs`) are deliberately absent from
   `ProvisionerModel` for now — each requires a layer that doesn't exist yet
@@ -342,12 +346,21 @@ have a `depends_on` edge (direct **or transitive**) between them.
 
 - ~~Build the actual `Workspace` root/glue model~~ — done, see
   [ADR-0012](0012-workspace-model-design-decisions.md).
-- Extend `ConfigurationModel` with `topologies`/`ConfigurationTopologyModel`
-  (mirrors the existing `providers` registry pattern) so `Topology.spec.type`
-  can be cross-checked in Phase 2, same pattern as Provider's `type`/`region`.
+- ~~Extend `ConfigurationModel` with `topologies`/`ConfigurationTopologyModel`~~
+  — registry schema done, see [ADR-0013](0013-configuration-topology-registry.md);
+  the actual Phase 2 cross-validation against a workspace's `Topology`
+  documents is still unbuilt (tracked there).
 - `TopologyService._validate_dynamic()` (checking `components`/`namespaces`
   references against real documents) deferred until solution-wide loading
   exists.
+- ~~`ProvisionerType`/`SYNC_PROVISIONER_TYPES`/`TERRAFORM_COMPATIBLE_TYPES`/
+  `WORKLOAD_DEPLOYER_TYPES` lived in `common_models.py`~~ — relocated to
+  `strata/utils/builtin_types.py`: these are pure code-classification facts
+  (which built-in deployer classes exist), not schema/model concerns, even
+  though `module_model.py`/`provisioning_model.py` consume them. `strata.utils`
+  sits below `strata.models` in the layered architecture (ADR-0003's own
+  import-linter contract already anticipated this layer) — models may import
+  utils, never the reverse.
 - The `Deployment` kind (the "container instance") — references a Workspace
   + an Environment, executes the baked-in `ProvisioningStep` recipe via thin
   `DeploymentStage` entries (approval gates, secrets scope/Grant) — not

@@ -20,9 +20,9 @@ from strata.models.common_models import (
     PlatformKind,
     PlatformName,
     PlatformVersion,
-    check_unique_names,
 )
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel, validate_provisioning_steps
+from strata.utils.names import check_unique_names
 
 
 class WorkspaceProviderModel(PlatformBaseModel):
@@ -38,6 +38,7 @@ class WorkspaceNamespaceModel(PlatformBaseModel):
 
     name: PlatformName = Field(description="Unique namespace name")
     file: str = Field(description="File reference for the namespace configuration")
+    description: str | None = Field(None, description="Optional description for documentation purposes")
 
 
 class WorkspaceFirewallModel(PlatformBaseModel):
@@ -45,6 +46,7 @@ class WorkspaceFirewallModel(PlatformBaseModel):
 
     name: PlatformName = Field(description="Unique firewall name")
     file: str = Field(description="File reference for the firewall configuration")
+    description: str | None = Field(None, description="Optional description for documentation purposes")
 
 
 class WorkspaceDnsModel(PlatformBaseModel):
@@ -52,6 +54,7 @@ class WorkspaceDnsModel(PlatformBaseModel):
 
     name: PlatformName = Field(description="Unique DNS zone configuration name")
     file: str = Field(description="File reference for the DNS zone configuration")
+    description: str | None = Field(None, description="Optional description for documentation purposes")
 
 
 class WorkspaceNetworkModel(PlatformBaseModel):
@@ -59,6 +62,7 @@ class WorkspaceNetworkModel(PlatformBaseModel):
 
     name: PlatformName = Field(description="Unique network configuration name")
     file: str = Field(description="File reference for the network topology configuration")
+    description: str | None = Field(None, description="Optional description for documentation purposes")
 
 
 class WorkspaceTopologyModel(PlatformBaseModel):
@@ -74,6 +78,7 @@ class WorkspaceTopologyModel(PlatformBaseModel):
 
     name: PlatformName = Field(description="Unique topology name")
     file: str = Field(description="File reference for the topology configuration")
+    description: str | None = Field(None, description="Optional description for documentation purposes")
 
 
 class WorkspaceResourceSubnetModel(PlatformBaseModel):
