@@ -5,7 +5,7 @@ import warnings
 from enum import Enum
 from typing import Any
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from strata.models.common_models import (
     CommonLifecycleModel,
@@ -14,6 +14,7 @@ from strata.models.common_models import (
     PlatformKind,
     PlatformName,
     PlatformVersion,
+    validate_kind_matches,
 )
 from strata.utils.names import check_unique_names
 
@@ -96,3 +97,9 @@ class NamespaceModel(PlatformBaseModel):
     )
     meta: NamespaceMetaModel = Field(description="Namespace metadata (name, annotations, labels, tags)")
     spec: NamespaceSpecModel = Field(description="Namespace specification (type, lifecycle, modules)")
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.NAMESPACE)

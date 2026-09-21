@@ -12,6 +12,7 @@ from strata.models.common_models import (
     PlatformName,
     PlatformVersion,
     SourceModel,
+    validate_kind_matches,
 )
 from strata.utils.builtin_types import WORKLOAD_DEPLOYER_TYPES, ProvisionerType
 from strata.utils.names import check_unique_names
@@ -409,3 +410,9 @@ class ModuleModel(PlatformBaseModel):
     )
     meta: ModuleMetaModel = Field(description="Module metadata (name, annotations, labels, tags)")
     spec: ModuleSpecModel = Field(description="Module specification (source, lifecycle, services, configuration)")
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.MODULE)

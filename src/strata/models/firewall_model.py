@@ -12,6 +12,7 @@ from strata.models.common_models import (
     PlatformKind,
     PlatformName,
     PlatformVersion,
+    validate_kind_matches,
 )
 from strata.utils.value_tokens import validate_cidr_or_token
 
@@ -210,3 +211,9 @@ class FirewallModel(PlatformBaseModel):
     )
     meta: FirewallMetaModel = Field(description="Firewall metadata (name, annotations, labels, tags)")
     spec: FirewallSpecModel = Field(description="Firewall specification (defaults, allow, deny rules)")
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.FIREWALL)

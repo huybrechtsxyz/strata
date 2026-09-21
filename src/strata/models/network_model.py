@@ -11,6 +11,7 @@ from strata.models.common_models import (
     PlatformKind,
     PlatformName,
     PlatformVersion,
+    validate_kind_matches,
 )
 from strata.utils.names import check_unique_names
 from strata.utils.value_tokens import has_value_tokens, validate_cidr_or_token
@@ -241,3 +242,9 @@ class NetworkModel(PlatformBaseModel):
     )
     meta: NetworkMetaModel = Field(description="Network metadata (name, annotations, labels, tags)")
     spec: NetworkSpecModel = Field(description="Network specification (network definitions)")
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.NETWORK)

@@ -16,6 +16,7 @@ from strata.models.common_models import (
     PlatformKind,
     PlatformName,
     PlatformVersion,
+    validate_kind_matches,
 )
 
 
@@ -129,3 +130,9 @@ class ProviderModel(PlatformBaseModel):
     )
     meta: ProviderMetaModel = Field(description="Provider metadata (name, annotations, labels, tags)")
     spec: ProviderSpecModel = Field(description="Provider specification (properties, authentication, lifecycle)")
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.PROVIDER)

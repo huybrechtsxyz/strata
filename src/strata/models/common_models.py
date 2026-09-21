@@ -61,6 +61,21 @@ class PlatformKind(str, Enum):
     INTEGRATION = "integration"
 
 
+def validate_kind_matches(value: "PlatformKind", expected: "PlatformKind") -> "PlatformKind":
+    """Reject a document whose `kind:` doesn't match the model it's being validated as.
+
+    `kind` fields are declared `frozen=True` with a fixed `default=`, but that
+    only blocks *reassignment after construction* — Pydantic still accepts any
+    valid `PlatformKind` value supplied at parse time (e.g. a YAML file with
+    `kind: firewall` validates fine against `NetworkModel`, silently taking on
+    the wrong kind). Every root model's `kind` field must call this from a
+    `field_validator` with its own expected kind.
+    """
+    if value != expected:
+        raise ValueError(f"Expected kind '{expected.value}', got '{value.value}'")
+    return value
+
+
 # Enumeration of supported workspace versions
 class PlatformVersion(str, Enum):
     """Enumeration of supported platform versions."""

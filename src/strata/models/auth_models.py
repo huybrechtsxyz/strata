@@ -3,6 +3,20 @@
 
 All fields are key references resolved at runtime from centralized
 environment variable, secret, and feature declarations.
+
+Two differences from v1's real `auth_models.py`, found by comparison and not
+carried over here:
+
+- `AuthenticationModel.env_vars`/`.env_var` (declared, never consumed
+  anywhere in v1's codebase) are dropped — dead fields, same vestigial-field
+  pattern as `is_control` (ADR-0013).
+- `AuthenticationModel` gains `validate_method_matches_populated_config()`
+  (below), which v1 never had: v1's `method` and its method-specific blocks
+  (`oauth2`, `aws`, ...) had no cross-field check at all, so `method: oauth2`
+  with `oauth2` unset (or `aws` populated instead) validated successfully and
+  would silently resolve wrong/empty credentials at runtime — the same
+  "validates fine, silently wrong" bug class real ADR-0071 already found
+  elsewhere (Provisioner `backend`/`properties`).
 """
 
 from typing import Literal

@@ -18,6 +18,7 @@ from strata.models.common_models import (
     PlatformKind,
     PlatformName,
     PlatformVersion,
+    validate_kind_matches,
 )
 from strata.utils.names import check_unique_names
 
@@ -247,7 +248,8 @@ class ResourceSpecModel(PlatformBaseModel):
     configuration: dict[str, Any] | None = Field(
         None,
         description="Raw provisioner/resource-specific passthrough configuration, cross-checked in Phase 2 "
-        "against the schema declared in configuration.spec.providers[type].resources[resource_type].configuration",
+        "against the schema declared in the referenced ProviderConfig document's "
+        "spec.resources[resource_type].configuration (see provider_config_model.py, ADR-0014).",
     )
     custom: dict[str, Any] | None = Field(None, description="Custom user-defined data for scripts or extensions")
 
@@ -284,3 +286,9 @@ class ResourceModel(PlatformBaseModel):
     )
     meta: ResourceMetaModel = Field(description="Resource metadata (name, annotations, labels, tags)")
     spec: ResourceSpecModel = Field(description="Resource specification (properties, lifecycle, ...)")
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.RESOURCE)

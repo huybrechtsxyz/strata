@@ -20,6 +20,7 @@ from strata.models.common_models import (
     PlatformKind,
     PlatformName,
     PlatformVersion,
+    validate_kind_matches,
 )
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel, validate_provisioning_steps
 from strata.utils.names import check_unique_names
@@ -306,3 +307,9 @@ class WorkspaceModel(PlatformBaseModel):
     spec: WorkspaceSpecModel = Field(
         description="Workspace specification (providers, provisioners, provisioning, topology, resources, ...)"
     )
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.WORKSPACE)

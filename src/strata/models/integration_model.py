@@ -33,7 +33,13 @@ from typing import Any
 from pydantic import Field, field_validator
 
 from strata.models.auth_models import AuthenticationModel
-from strata.models.common_models import PlatformBaseModel, PlatformKind, PlatformName, PlatformVersion
+from strata.models.common_models import (
+    PlatformBaseModel,
+    PlatformKind,
+    PlatformName,
+    PlatformVersion,
+    validate_kind_matches,
+)
 
 #: Capability vocabulary v2 currently has real consumers for. v1's real set
 #: has ~16 entries (azure/aws/gcloud CLI, identity, siem audit, cve scanner,
@@ -120,3 +126,9 @@ class IntegrationModel(PlatformBaseModel):
     spec: IntegrationSpecModel = Field(
         description="Integration specification (type, capabilities, authentication, ...)"
     )
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.INTEGRATION)

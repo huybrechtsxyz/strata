@@ -11,6 +11,7 @@ from strata.models.common_models import (
     PlatformKind,
     PlatformName,
     PlatformVersion,
+    validate_kind_matches,
 )
 from strata.utils.names import check_unique_names
 from strata.utils.value_tokens import validate_value_tokens
@@ -135,3 +136,9 @@ class DnsModel(PlatformBaseModel):
     )
     meta: DnsMetaModel = Field(description="DNS metadata (name, annotations, labels, tags)")
     spec: DnsSpecModel = Field(description="DNS specification (provider, zones)")
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.DNS)

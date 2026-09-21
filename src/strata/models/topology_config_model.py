@@ -11,13 +11,14 @@ shouldn't have to grow one shared file for every new type. Referenced from
 
 from typing import Any
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from strata.models.common_models import (
     PlatformBaseModel,
     PlatformKind,
     PlatformName,
     PlatformVersion,
+    validate_kind_matches,
 )
 from strata.utils.names import check_unique_names
 
@@ -93,3 +94,9 @@ class TopologyConfigModel(PlatformBaseModel):
     )
     meta: TopologyConfigMetaModel = Field(description="Topology config metadata (name, annotations, labels, tags)")
     spec: TopologyConfigSpecModel = Field(description="Topology config specification (expected component roles)")
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.TOPOLOGYCONFIG)

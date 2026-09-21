@@ -3,7 +3,7 @@
 
 from typing import Any
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from strata.models.common_models import (
     ModuleReferenceModel,
@@ -11,6 +11,7 @@ from strata.models.common_models import (
     PlatformKind,
     PlatformName,
     PlatformVersion,
+    validate_kind_matches,
 )
 from strata.utils.names import check_unique_names
 
@@ -160,3 +161,9 @@ class TopologyModel(PlatformBaseModel):
     )
     meta: TopologyMetaModel = Field(description="Topology metadata (name, annotations, labels, tags)")
     spec: TopologySpecModel = Field(description="Topology specification (type, components, namespaces, volumes)")
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, v: PlatformKind) -> PlatformKind:
+        """Reject a document whose `kind:` doesn't match this model (see `validate_kind_matches`)."""
+        return validate_kind_matches(v, PlatformKind.TOPOLOGY)
