@@ -30,15 +30,11 @@ def test_provider_minimal_is_valid():
 
 
 def test_provider_full_is_valid():
-    """A provider with authentication, references, and lifecycle validates successfully."""
+    """A provider with authentication, configuration, and lifecycle validates successfully."""
     data = _minimal_provider()
     data["spec"]["authentication"] = {
         "method": "cli",
         "cli": {"use_cli": True},
-    }
-    data["spec"]["references"] = {
-        "variables": ["internal_network_cidr"],
-        "secrets": ["api_token"],
     }
     data["spec"]["lifecycle"] = {
         "deploy_plan_before": {"scripts": ["scripts/validate.sh"]},
@@ -48,10 +44,17 @@ def test_provider_full_is_valid():
     data["spec"]["custom"] = {"costcenter": "strata"}
     model = ProviderModel.model_validate(data)
     assert model.spec.authentication.method == "cli"
-    assert model.spec.references.variables == ["internal_network_cidr"]
     assert model.spec.lifecycle.root["deploy_plan_before"].scripts == ["scripts/validate.sh"]
     assert model.spec.configuration == {"skip_provider_registration": True}
     assert model.spec.custom == {"costcenter": "strata"}
+
+
+def test_provider_rejects_references_field():
+    """spec.references is rejected (Requirement was removed as a schema concept — ADR-0002)."""
+    data = _minimal_provider()
+    data["spec"]["references"] = {"variables": ["internal_network_cidr"]}
+    with pytest.raises(ValidationError):
+        ProviderModel.model_validate(data)
 
 
 def test_provider_missing_required_field_is_invalid():

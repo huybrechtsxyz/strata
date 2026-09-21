@@ -14,13 +14,10 @@ from pydantic import (
 
 from strata.models.common_models import (
     CommonLifecycleModel,
-    FeatureRefs,
     PlatformBaseModel,
     PlatformKind,
     PlatformName,
     PlatformVersion,
-    SecretRefs,
-    VariableRefs,
     check_unique_names,
 )
 
@@ -235,33 +232,13 @@ class ResourcePropertiesModel(PlatformBaseModel):
         return v
 
 
-class ResourceReferencesModel(PlatformBaseModel):
-    """
-    References to variables, secrets, and features required by this resource.
-
-    Lists the keys that must be defined in the environment configuration.
-    Actual values and store backends are defined at environment/workspace level.
-    """
-
-    variables: VariableRefs = Field(
-        None,
-        description="List of variable keys this resource requires from environment",
-    )
-    secrets: SecretRefs = Field(None, description="List of secret keys this resource requires from environment")
-    features: FeatureRefs = Field(
-        None,
-        description="List of feature flag keys this resource requires from environment",
-    )
-
-
 class ResourceSpecModel(PlatformBaseModel):
-    """Resource specification containing properties, references, and lifecycle configuration."""
+    """Resource specification containing properties and lifecycle configuration."""
 
     lifecycle: CommonLifecycleModel | None = Field(
         None,
         description="IaC workflow lifecycle phases, keyed by phase name",
     )
-    references: ResourceReferencesModel | None = Field(None, description="Variable and secret references")
     properties: ResourcePropertiesModel = Field(
         description="Configuration properties (provider, resource type, category, cost)"
     )

@@ -2,6 +2,11 @@
 
 - Status: implemented
 - Date: 2026-09-20
+- Revised: 2026-09-21 — removed `ProviderReferencesModel`/`spec.references`
+  per [ADR-0002](0002-requirement-interface-injection-grant-lessons-from-v1.md)'s
+  conclusion that Requirement should not exist as a schema field (scoping is
+  derivable via `Interface ∩ Environment`; typo-catching is a direct Phase 2
+  check against `Environment`). See Decision 6 below, updated accordingly.
 - Related: [ADR-0001](0001-v1-schema-analysis-findings-for-v2.md) (v1 schema
   analysis), [ADR-0002](0002-requirement-interface-injection-grant-lessons-from-v1.md)
   (references/injection lessons)
@@ -105,6 +110,19 @@ purpose, distinct from the other two:
 warns that it is inert until a builder/service layer explicitly consumes it —
 learning from v1 where this was never done despite the field looking functional.
 
+### 6. `ProviderReferencesModel`/`spec.references` removed (2026-09-21)
+
+Initially ported verbatim from v1 (`variables`/`secrets`/`features` key-name
+lists). Revisited in [ADR-0002](0002-requirement-interface-injection-grant-lessons-from-v1.md)
+after working through the "Requirement" concept in isolation: both of its v1
+jobs turned out to be better solved without a schema field at all — scoping
+is derivable (`Injection = Interface ∩ Environment`, once the provisioner/
+build layer exists), and typo-catching for Value bindings is a direct Phase 2
+cross-check against `Environment`, not an internal-consistency check against
+a hand-authored list. Removed `ProviderReferencesModel` entirely and the
+`references` field from `ProviderSpecModel`. See ADR-0002 for the full
+reasoning; not re-derived here.
+
 ## Consequences
 
 - Good: `AuthenticationModel` can no longer represent an internally
@@ -116,6 +134,9 @@ learning from v1 where this was never done despite the field looking functional.
 - Bad / risk: `configuration` and `custom` are both inert until v2 has a
   builder/service layer — must remember to actually wire them through when that
   layer is built, or `custom` will repeat its v1 fate.
+- Good: `spec.references` is gone — one less field to keep in sync with the
+  environment/Terraform interface by hand, and one less place a
+  Value-binding typo could go undetected against the wrong source of truth.
 
 ## Remaining Work
 

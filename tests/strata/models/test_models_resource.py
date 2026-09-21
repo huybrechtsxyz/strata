@@ -99,3 +99,11 @@ def test_resource_rejects_unknown_fields():
     data["spec"]["properties"]["unknown_field"] = "oops"
     with pytest.raises(ValidationError):
         ResourceModel.model_validate(data)
+
+
+def test_resource_rejects_references_field():
+    """spec.references is rejected (Requirement was removed as a schema concept — ADR-0002)."""
+    data = _minimal_resource()
+    data["spec"]["references"] = {"variables": ["internal_network_cidr"]}
+    with pytest.raises(ValidationError):
+        ResourceModel.model_validate(data)

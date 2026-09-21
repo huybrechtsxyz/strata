@@ -12,33 +12,11 @@ from pydantic import (
 from strata.models.auth_models import AuthenticationModel
 from strata.models.common_models import (
     CommonLifecycleModel,
-    FeatureRefs,
     PlatformBaseModel,
     PlatformKind,
     PlatformName,
     PlatformVersion,
-    SecretRefs,
-    VariableRefs,
 )
-
-
-class ProviderReferencesModel(PlatformBaseModel):
-    """
-    References to variables, secrets, and features required by this provider.
-
-    Lists the keys that must be defined in the environment configuration.
-    Actual values and store backends are defined at environment/workspace level.
-    """
-
-    variables: VariableRefs = Field(
-        None,
-        description="List of variable keys this provider requires from environment",
-    )
-    secrets: SecretRefs = Field(None, description="List of secret keys this provider requires from environment")
-    features: FeatureRefs = Field(
-        None,
-        description="List of feature flag keys this provider requires from environment",
-    )
 
 
 class ProviderPropertiesModel(PlatformBaseModel):
@@ -88,7 +66,7 @@ class ProviderPropertiesModel(PlatformBaseModel):
 
 class ProviderSpecModel(PlatformBaseModel):
     """
-    Provider specification containing properties, references, and lifecycle configuration.
+    Provider specification containing properties and lifecycle configuration.
     """
     lifecycle: CommonLifecycleModel | None = Field(
         None,
@@ -100,10 +78,6 @@ class ProviderSpecModel(PlatformBaseModel):
     )
     authentication: AuthenticationModel | None = Field(
         None, description="Authentication configuration for cloud provider access"
-    )
-    references: ProviderReferencesModel | None = Field(
-        None,
-        description="Variable and secret mappings for runtime configuration injection",
     )
     configuration: dict[str, Any] | None = Field(
         None,
@@ -154,4 +128,4 @@ class ProviderModel(PlatformBaseModel):
         description="Resource kind (always 'Provider')",
     )
     meta: ProviderMetaModel = Field(description="Provider metadata (name, annotations, labels, tags)")
-    spec: ProviderSpecModel = Field(description="Provider specification (properties, references, lifecycle)")
+    spec: ProviderSpecModel = Field(description="Provider specification (properties, authentication, lifecycle)")

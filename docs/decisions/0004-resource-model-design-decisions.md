@@ -3,8 +3,13 @@
 - Status: partially-implemented — model and service ported; ADR-0001's
   `subcategory` discrepancy intentionally left unresolved (see Remaining Work)
 - Date: 2026-09-20
+- Revised: 2026-09-21 — removed `ResourceReferencesModel`/`spec.references`
+  per [ADR-0002](0002-requirement-interface-injection-grant-lessons-from-v1.md)'s
+  conclusion that Requirement should not exist as a schema field (same
+  removal already applied to `ProviderModel` — see ADR-0003 Decision 6).
 - Related: [ADR-0001](0001-v1-schema-analysis-findings-for-v2.md) (v1 schema
-  analysis — flags `subcategory` as Resource-only), [ADR-0003](0003-provider-model-design-decisions.md)
+  analysis — flags `subcategory` as Resource-only), [ADR-0002](0002-requirement-interface-injection-grant-lessons-from-v1.md)
+  (references/injection lessons), [ADR-0003](0003-provider-model-design-decisions.md)
   (Provider model decisions — same `properties`/`configuration`/`custom` pattern)
 
 ## Context and Problem Statement
@@ -65,6 +70,18 @@ kind that pattern was modeled on.
 This is the same registry (`ConfigurationProviderModel`) `ProviderService`
 already cross-checks against — no new configuration concept was needed.
 
+### 5. `ResourceReferencesModel`/`spec.references` removed (2026-09-21)
+
+Initially ported verbatim from v1, identical shape to `ProviderReferencesModel`
+(`variables`/`secrets`/`features` key-name lists) — confirmed as the exact
+DRY duplication flagged when the same field was first questioned on
+`ProviderModel`. Removed for the same reason recorded in
+[ADR-0002](0002-requirement-interface-injection-grant-lessons-from-v1.md)
+and [ADR-0003](0003-provider-model-design-decisions.md) Decision 6: scoping
+is derivable (`Injection = Interface ∩ Environment`, once the provisioner/
+build layer exists), and typo-catching for Value bindings is a direct Phase 2
+check against `Environment`, not a hand-authored list.
+
 ## Consequences
 
 - Good: Resource's real, working `configuration` field validates the
@@ -73,6 +90,8 @@ already cross-checks against — no new configuration concept was needed.
   with no changes needed to that model.
 - Good: Resource has zero coupling to any other kind (not even by deferred
   reference) — it is fully standalone, matching v1's own module boundaries.
+- Good: `spec.references` is gone — same benefit recorded for Provider
+  (ADR-0003): one less hand-maintained field to drift out of sync.
 
 ## Remaining Work
 
