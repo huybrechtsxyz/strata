@@ -16,6 +16,7 @@ def _minimal_network() -> dict:
                     "name": "vpc-main",
                     "address_space": ["10.0.0.0/16"],
                     "subnets": [{"name": "web", "cidr": "10.0.1.0/24"}],
+                    "default_tags": {"environment": "test"},
                 }
             ]
         },
@@ -106,6 +107,7 @@ def test_network_accepts_valid_peering():
             "name": "vpc-other",
             "address_space": ["10.1.0.0/16"],
             "subnets": [{"name": "web", "cidr": "10.1.1.0/24"}],
+            "default_tags": {"environment": "test"},
         }
     )
     model = NetworkModel.model_validate(data)
@@ -121,6 +123,7 @@ def test_network_rejects_overlapping_peered_networks():
             "name": "vpc-other",
             "address_space": ["10.0.0.0/16"],
             "subnets": [{"name": "web", "cidr": "10.0.2.0/24"}],
+            "default_tags": {"environment": "test"},
         }
     )
     with pytest.raises(ValidationError):

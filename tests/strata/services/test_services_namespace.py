@@ -10,6 +10,7 @@ def test_namespace_service_validates_from_data():
         "meta": {"name": "myapp"},
         "spec": {
             "modules": [{"name": "template_module", "file": "config/myapp/modules/template-module.yaml"}],
+            "default_labels": {"environment": "test"},
         },
     }
     service = NamespaceService(data=data)

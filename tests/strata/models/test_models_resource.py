@@ -14,7 +14,8 @@ def _minimal_resource() -> dict:
             "properties": {
                 "provider_type": "kamatera",
                 "resource_type": "virtual_machine",
-            }
+            },
+            "default_tags": {"environment": "test"},
         },
     }
 
@@ -91,6 +92,23 @@ def test_resource_missing_required_field_is_invalid():
     del data["spec"]["properties"]["resource_type"]
     with pytest.raises(ValidationError):
         ResourceModel.model_validate(data)
+
+
+def test_resource_missing_default_tags_is_invalid():
+    """default_tags is required — omitting it raises a ValidationError."""
+    data = _minimal_resource()
+    del data["spec"]["default_tags"]
+    with pytest.raises(ValidationError):
+        ResourceModel.model_validate(data)
+
+
+def test_resource_custom_tags_is_valid():
+    """Optional custom_tags alongside required default_tags validates successfully."""
+    data = _minimal_resource()
+    data["spec"]["custom_tags"] = {"project": "migration"}
+    model = ResourceModel.model_validate(data)
+    assert model.spec.default_tags == {"environment": "test"}
+    assert model.spec.custom_tags == {"project": "migration"}
 
 
 def test_resource_rejects_unknown_fields():

@@ -13,6 +13,7 @@ def test_dns_service_validates_from_data():
                 {
                     "name": "example.com",
                     "records": [{"name": "@", "type": "A", "value": "1.2.3.4"}],
+                    "default_tags": {"environment": "test"},
                 }
             ]
         },

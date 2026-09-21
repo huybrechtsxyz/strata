@@ -258,6 +258,22 @@ class ModuleSpecModel(PlatformBaseModel):
     lifecycle: CommonLifecycleModel | None = Field(None, description="Module-specific lifecycle hooks")
     properties: ModulePropertiesModel | None = Field(None, description="Module-specific properties and configurations")
     configuration: dict[str, Any] | None = Field(None, description="Module-specific configuration data")
+    custom: dict[str, Any] | None = Field(
+        None, description="Custom user-defined data for scripts or extensions (e.g. becomes env vars)"
+    )
+    # No default_tags/custom_tags: a Module deploys onto a Resource (e.g. code on a Function
+    # App) — it has no cloud identity of its own to tag; the underlying Resource is what's tagged.
+    # Instead it gets default_labels/custom_labels — Kubernetes/Compose labels, not cloud tags,
+    # since what Module actually produces (Pods/Deployments, or Compose services) speaks
+    # labels, not ARM/AWS tags.
+    default_labels: dict[str, str] = Field(
+        description="Required baseline labels applied to this module's workload (e.g. Kubernetes "
+        "metadata.labels on generated Pods/Deployments, or Docker Compose service labels) — e.g. "
+        "app.kubernetes.io/name, environment. Strata does not enforce a maximum label count."
+    )
+    custom_labels: dict[str, str] | None = Field(
+        None, description="Optional additional workload labels beyond default_labels."
+    )
 
     # Multi-container service definitions
     services: list[ModuleServiceModel] | None = Field(

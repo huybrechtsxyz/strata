@@ -12,6 +12,7 @@ def _minimal_namespace() -> dict:
         "meta": {"name": "myapp"},
         "spec": {
             "modules": [{"name": "template_module", "file": "config/myapp/modules/template-module.yaml"}],
+            "default_labels": {"environment": "test"},
         },
     }
 
@@ -52,7 +53,10 @@ def test_namespace_accepts_lifecycle_only():
     """A namespace with only lifecycle (no modules) is accepted, with a warning."""
     data = {
         "meta": {"name": "infra-hooks"},
-        "spec": {"lifecycle": {"deploy_check": {"scripts": ["scripts/check.sh"]}}},
+        "spec": {
+            "lifecycle": {"deploy_check": {"scripts": ["scripts/check.sh"]}},
+            "default_labels": {"environment": "test"},
+        },
     }
     with pytest.warns(UserWarning):
         model = NamespaceModel.model_validate(data)

@@ -252,6 +252,19 @@ class ResourceSpecModel(PlatformBaseModel):
         "spec.resources[resource_type].configuration (see provider_config_model.py, ADR-0014).",
     )
     custom: dict[str, Any] | None = Field(None, description="Custom user-defined data for scripts or extensions")
+    default_tags: dict[str, str] = Field(
+        description="Required baseline cloud provider tags for this resource (e.g. cost-center, environment, "
+        "owner — key-value, applied to the actual provisioned infrastructure). Deliberately distinct from "
+        "meta.tags (a free-form list used for strata-internal categorization/documentation, not cloud tags). "
+        "Strata does not enforce a maximum tag count — cloud provider/resource-type tag limits vary too much "
+        "to bake into the schema; keeping default_tags + custom_tags within your target provider's limit is "
+        "the resource author's responsibility."
+    )
+    custom_tags: dict[str, str] | None = Field(
+        None,
+        description="Optional additional cloud provider tags beyond default_tags, for ad-hoc/one-off tagging "
+        "needs that don't belong in the required baseline set.",
+    )
 
 
 class ResourceMetaModel(PlatformBaseModel):

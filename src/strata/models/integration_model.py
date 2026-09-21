@@ -82,6 +82,16 @@ class IntegrationSpecModel(PlatformBaseModel):
     authentication: AuthenticationModel | None = Field(
         None, description="Authentication configuration for accessing the integration"
     )
+    configuration: dict[str, Any] | None = Field(
+        None,
+        description="Raw passthrough configuration for this integration (e.g. SDK-specific setup not otherwise "
+        "modeled). Not validated by strata, passed through as-is.",
+    )
+    custom: dict[str, Any] | None = Field(
+        None, description="Custom user-defined data for scripts or extensions (e.g. becomes env vars)"
+    )
+    # No default_tags/custom_tags: an Integration describes a connection to an external
+    # system, not a deployed/tagged cloud resource of its own.
 
     @field_validator("capabilities")
     @classmethod

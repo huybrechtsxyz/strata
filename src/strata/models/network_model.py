@@ -50,7 +50,12 @@ class PeeringReferenceModel(PlatformBaseModel):
 
 
 class NetworkDefinitionModel(PlatformBaseModel):
-    """Model for a single network definition with subnets and peerings."""
+    """Model for a single network definition with subnets and peerings.
+
+    Each network is a real, independently-tagged cloud resource (e.g. an
+    Azure VNet) — configuration/custom/tags live here, not on
+    `NetworkSpecModel`, since a single file can declare multiple networks.
+    """
 
     name: PlatformName = Field(..., description="Unique network name within the spec")
     description: str | None = Field(None, description="Optional description of the network")
@@ -63,6 +68,21 @@ class NetworkDefinitionModel(PlatformBaseModel):
     subnets: list[SubnetModel] = Field(..., min_length=1, description="At least one subnet required per network")
     peerings: list[PeeringReferenceModel] | None = Field(
         None, description="Optional peering references to other networks"
+    )
+    configuration: dict[str, Any] | None = Field(
+        None,
+        description="Raw provisioner-specific passthrough configuration for this network. Not validated by "
+        "strata, passed through as-is to the provisioner.",
+    )
+    custom: dict[str, Any] | None = Field(
+        None, description="Custom user-defined data for scripts or extensions (e.g. becomes env vars)"
+    )
+    default_tags: dict[str, str] = Field(
+        description="Required baseline cloud provider tags for this network (e.g. cost-center, environment, "
+        "owner). Strata does not enforce a maximum tag count."
+    )
+    custom_tags: dict[str, str] | None = Field(
+        None, description="Optional additional cloud provider tags beyond default_tags."
     )
 
     @field_validator("address_space")

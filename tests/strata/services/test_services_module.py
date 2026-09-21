@@ -10,6 +10,7 @@ def test_module_service_validates_from_data():
         "meta": {"name": "authentik"},
         "spec": {
             "source": {"chart_name": "authentik", "chart_repository": "https://charts.goauthentik.io"},
+            "default_labels": {"app.kubernetes.io/name": "authentik"},
         },
     }
     service = ModuleService(data=data)

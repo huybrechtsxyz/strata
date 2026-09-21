@@ -11,7 +11,8 @@ def test_firewall_service_validates_from_data():
         "spec": {
             "allow": [
                 {"direction": "in", "proto": "tcp", "port": 443, "from": "0.0.0.0/0"},
-            ]
+            ],
+            "default_tags": {"environment": "test"},
         },
     }
     service = FirewallService(data=data)

@@ -54,6 +54,16 @@ class ConfigurationSpecModel(PlatformBaseModel):
     for what v1 has that v2 is deliberately deferring.
     """
 
+    properties: dict[str, Any] | None = Field(
+        None, description="Optional additional properties for the configuration."
+    )
+    configuration: dict[str, Any] | None = Field(
+        None, description="Optional configuration-specific properties."
+    )
+    custom: dict[str, Any] | None = Field(
+        None, description="Optional custom properties for the configuration."
+    )
+
     providers: list[ConfigurationProviderModel] | None = Field(
         None, description="Provider type registry references (name+file pointers to ProviderConfig documents)"
     )

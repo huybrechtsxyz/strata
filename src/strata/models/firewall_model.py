@@ -159,6 +159,21 @@ class FirewallSpecModel(PlatformBaseModel):
     )
     deny: list[FirewallRuleModel] | None = Field(None, description="List of explicit deny rules.")
     allow: list[FirewallRuleModel] | None = Field(None, description="List of explicit allow rules.")
+    configuration: dict[str, Any] | None = Field(
+        None,
+        description="Raw provisioner-specific passthrough configuration (e.g. Terraform NSG arguments not "
+        "otherwise modeled). Not validated by strata, passed through as-is to the provisioner.",
+    )
+    custom: dict[str, Any] | None = Field(
+        None, description="Custom user-defined data for scripts or extensions (e.g. becomes env vars)"
+    )
+    default_tags: dict[str, str] = Field(
+        description="Required baseline cloud provider tags for this firewall/NSG (e.g. cost-center, "
+        "environment, owner). Strata does not enforce a maximum tag count."
+    )
+    custom_tags: dict[str, str] | None = Field(
+        None, description="Optional additional cloud provider tags beyond default_tags."
+    )
 
     @model_validator(mode="after")
     def validate_unique_directions(self) -> "FirewallSpecModel":

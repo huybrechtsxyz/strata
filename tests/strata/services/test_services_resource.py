@@ -13,7 +13,8 @@ def _minimal_resource_data() -> dict:
             "properties": {
                 "provider_type": "kamatera",
                 "resource_type": "virtual_machine",
-            }
+            },
+            "default_tags": {"environment": "test"},
         },
     }
 

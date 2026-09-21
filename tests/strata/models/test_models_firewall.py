@@ -13,7 +13,8 @@ def _minimal_firewall() -> dict:
         "spec": {
             "allow": [
                 {"direction": "in", "proto": "tcp", "port": 443, "from": "0.0.0.0/0"},
-            ]
+            ],
+            "default_tags": {"environment": "test"},
         },
     }
 

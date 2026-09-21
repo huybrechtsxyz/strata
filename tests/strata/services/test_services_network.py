@@ -14,6 +14,7 @@ def test_network_service_validates_from_data():
                     "name": "vpc-main",
                     "address_space": ["10.0.0.0/16"],
                     "subnets": [{"name": "web", "cidr": "10.0.1.0/24"}],
+                    "default_tags": {"environment": "test"},
                 }
             ]
         },

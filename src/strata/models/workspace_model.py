@@ -123,8 +123,11 @@ class WorkspaceResourceModel(PlatformBaseModel):
     description: str | None = Field(None, description="Optional description for documentation purposes")
     enabled: bool = Field(
         default=True,
-        description="Whether this resource is deployed in this workspace. Set false to exclude it from the "
-        "built platform artifact, and therefore from every provisioner that consumes it.",
+        description="Whether this resource is deployed in this workspace (ADR-0083, v1). Set false to "
+        "exclude it from the built platform artifact, and therefore from every provisioner that consumes "
+        "it. Intended to be overridable per-environment via environment.spec.resources[].enabled once "
+        "Environment is built. 'enabled' is strata's consistent cross-schema keyword for conditional "
+        "inclusion — 'condition'/'when'/'if' are not accepted.",
     )
     role: PlatformName | None = Field(None, description="Role of the resource (e.g., networking, database, api)")
     count: int = Field(default=1, ge=1, le=100, description="Number of resource instances")
@@ -143,6 +146,17 @@ class WorkspaceResourceModel(PlatformBaseModel):
     custom: dict[str, Any] | None = Field(None, description="Optional additional properties for the resource")
     labels: dict[str, Any] | None = Field(None, description="Optional labels (key-value pairs for classification)")
     tags: list[Any] | None = Field(None, description="Optional tags (list of values for categorization)")
+    default_tags: dict[str, str] | None = Field(
+        None,
+        description="Workspace-specific override for this resource's default_tags (see "
+        "ResourceSpecModel.default_tags). Deliberately distinct from the `tags` field above (a free-form "
+        "list for strata-internal categorization, not cloud tags).",
+    )
+    custom_tags: dict[str, str] | None = Field(
+        None,
+        description="Workspace-specific additions to this resource's custom_tags (see "
+        "ResourceSpecModel.custom_tags).",
+    )
 
     @field_validator("depends_on", mode="before")
     @classmethod
@@ -192,6 +206,13 @@ class WorkspaceSpecModel(PlatformBaseModel):
     properties: dict[str, Any] | None = Field(None, description="Workspace properties")
     configuration: dict[str, Any] | None = Field(None, description="Workspace-level configuration passthrough")
     custom: dict[str, Any] | None = Field(None, description="Optional additional properties (key-value pairs)")
+    default_tags: dict[str, str] | None = Field(
+        None,
+        description="Solution-wide baseline cloud provider tags (e.g. 'managed-by: strata'), applied on top "
+        "of/underneath each Provider's own default_tags — useful when a workspace spans multiple providers. "
+        "Optional (unlike ResourceSpecModel.default_tags): not every workspace needs an organization-wide "
+        "tagging policy.",
+    )
 
     providers: list[WorkspaceProviderModel] = Field(..., min_length=1, description="Provider references")
     provisioners: list[ProvisionerModel] = Field(..., min_length=1, description="Provisioner (tool) definitions")

@@ -43,6 +43,27 @@ class NamespaceSpecModel(PlatformBaseModel):
     )
     lifecycle: CommonLifecycleModel | None = Field(None, description="Namespace lifecycle phases")
     modules: list[ModuleReferenceModel] | None = Field(None, description="List of modules in the namespace")
+    configuration: dict[str, Any] | None = Field(
+        None,
+        description="Raw passthrough configuration for this namespace (e.g. k8s namespace annotations/quotas "
+        "not otherwise modeled). Not validated by strata, passed through as-is to the builder.",
+    )
+    custom: dict[str, Any] | None = Field(
+        None, description="Custom user-defined data for scripts or extensions (e.g. becomes env vars)"
+    )
+    # No default_tags/custom_tags: a Namespace is a Kubernetes-native grouping concept, not an
+    # individually cloud-tagged ARM/AWS resource. Instead it gets default_labels/custom_labels —
+    # a real Kubernetes Namespace object supports metadata.labels directly on itself (e.g. for
+    # namespace selectors, network policies, istio-injection), distinct from the labels applied
+    # to the individual Modules/workloads placed inside it.
+    default_labels: dict[str, str] = Field(
+        description="Required baseline labels applied to this namespace itself (Kubernetes "
+        "metadata.labels on the generated Namespace object) — e.g. environment, team, "
+        "istio-injection. Strata does not enforce a maximum label count."
+    )
+    custom_labels: dict[str, str] | None = Field(
+        None, description="Optional additional namespace labels beyond default_labels."
+    )
 
     @model_validator(mode="after")
     def validate_namespace_spec(self) -> "NamespaceSpecModel":

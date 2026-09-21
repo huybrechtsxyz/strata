@@ -12,6 +12,7 @@ def _minimal_module() -> dict:
         "meta": {"name": "authentik"},
         "spec": {
             "source": {"chart_name": "authentik", "chart_repository": "https://charts.goauthentik.io"},
+            "default_labels": {"app.kubernetes.io/name": "authentik"},
         },
     }
 

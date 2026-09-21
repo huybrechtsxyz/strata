@@ -82,11 +82,31 @@ class DnsRecordModel(PlatformBaseModel):
 
 
 class DnsZoneModel(PlatformBaseModel):
-    """Model for a DNS zone containing one or more records."""
+    """Model for a DNS zone containing one or more records.
+
+    Each zone is a real, independently-tagged cloud resource (e.g. an Azure
+    DNS Zone or Route53 Hosted Zone) — configuration/custom/tags live here,
+    not on `DnsSpecModel`, since a single file can declare multiple zones.
+    """
 
     name: str = Field(..., min_length=1, description="Domain name for this zone, e.g. 'huybrechts.xyz'")
     ttl: int | None = Field(3600, ge=1, description="Default TTL in seconds for all records in this zone")
     records: list[DnsRecordModel] | None = Field(None, description="List of DNS records in this zone")
+    configuration: dict[str, Any] | None = Field(
+        None,
+        description="Raw provisioner-specific passthrough configuration for this zone. Not validated by "
+        "strata, passed through as-is to the provisioner.",
+    )
+    custom: dict[str, Any] | None = Field(
+        None, description="Custom user-defined data for scripts or extensions (e.g. becomes env vars)"
+    )
+    default_tags: dict[str, str] = Field(
+        description="Required baseline cloud provider tags for this zone (e.g. cost-center, environment, "
+        "owner). Strata does not enforce a maximum tag count."
+    )
+    custom_tags: dict[str, str] | None = Field(
+        None, description="Optional additional cloud provider tags beyond default_tags."
+    )
 
 
 class DnsSpecModel(PlatformBaseModel):

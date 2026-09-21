@@ -17,6 +17,7 @@ def _minimal_dns() -> dict:
                     "records": [
                         {"name": "@", "type": "A", "value": "1.2.3.4"},
                     ],
+                    "default_tags": {"environment": "test"},
                 }
             ]
         },
