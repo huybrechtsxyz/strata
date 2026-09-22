@@ -3,6 +3,10 @@ kind: workspace
 meta:
   name: main
 spec:
+  # Three sibling keys, three different questions:
+  #   providers    - where: which platform/account
+  #   provisioners - with what: tool definitions
+  #   execution    - what runs, in what order
   providers:
     - azure-main
   provisioners:
@@ -25,6 +29,14 @@ spec:
       resource: linux-vm
       role: worker
       count: 2
+  # The ordered recipe. Deployments supply runtime parameters per step via
+  # `stages[].step`, but never redefine the recipe itself (ADR-0011).
+  execution:
+    - name: provision-infra
+      provisioner: terraform-main
+      targets:
+        - web-storage
+        - web-vm
   topology:
     - main-topology
   default_tags:

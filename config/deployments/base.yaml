@@ -1,0 +1,27 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: deployment
+meta:
+  name: deploy-base
+  annotations:
+    description: "Reusable base — extended per instance, not deployable alone"
+  tags: ["base", "partial"]
+spec:
+  # Not deployable on its own: workspace/environments may be absent and
+  # Phase 2 is skipped. A leaf picks it up via `extends`.
+  partial: true
+
+  workspace: main
+
+  locking:
+    enabled: true
+    strategy: delegate
+
+  # Runtime parameters for steps in the workspace's provisioning recipe.
+  # The recipe itself (what runs, in what order, against what) lives on the
+  # Workspace — a stage only says how it should behave (ADR-0011).
+  stages:
+    - step: provision-infra
+      description: "Terraform apply for the core infrastructure"
+      on_failure: stop
+      timeouts:
+        apply: 1800

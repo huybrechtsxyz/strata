@@ -62,6 +62,7 @@ class PlatformKind(str, Enum):
     INTEGRATION = "integration"
     TENANT = "tenant"
     ENVIRONMENT = "environment"
+    DEPLOYMENT = "deployment"
 
 
 def validate_kind_matches(value: "PlatformKind", expected: "PlatformKind") -> "PlatformKind":

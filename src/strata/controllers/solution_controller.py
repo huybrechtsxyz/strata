@@ -43,6 +43,7 @@ from strata.models.common_models import PlatformBaseModel, PlatformKind
 from strata.models.solution_model import SolutionModel
 from strata.services.base_service import BaseService
 from strata.services.configuration_service import ConfigurationService
+from strata.services.deployment_service import DeploymentService
 from strata.services.dns_service import DnsService
 from strata.services.environment_service import EnvironmentService
 from strata.services.firewall_service import FirewallService
@@ -115,6 +116,7 @@ SERVICE_BY_KIND: dict[PlatformKind, type[BaseService[Any]]] = {
     PlatformKind.INTEGRATION: IntegrationService,
     PlatformKind.TENANT: TenantService,
     PlatformKind.ENVIRONMENT: EnvironmentService,
+    PlatformKind.DEPLOYMENT: DeploymentService,
 }
 
 

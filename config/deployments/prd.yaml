@@ -1,0 +1,28 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: deployment
+meta:
+  name: prd-deployment
+  annotations:
+    description: "Production instance — inherits structure from deploy-base"
+  tags: ["production"]
+spec:
+  # Structural inheritance: deploy-base's spec is merged in before validation
+  # (child wins; stages merge by step; environments append base-first).
+  # Distinct from `environments` below, which composes *values*.
+  extends: deploy-base
+
+  # Value composition: merged in order, later entries win.
+  environments:
+    - prd
+
+  tenant: c0062
+
+  # Overrides the base's stage parameters for this step, field-by-field —
+  # the base's timeouts.apply survives.
+  stages:
+    - step: provision-infra
+      health_checks:
+        - name: api
+          type: http
+          url: https://example.com/health
+          expect_status: 200

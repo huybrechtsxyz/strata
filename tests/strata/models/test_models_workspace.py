@@ -167,52 +167,63 @@ def test_workspace_resource_subnet_network_valid():
 
 
 # ---------------------------------------------------------------------------
-# Provisioning recipe cross-references
+# Execution recipe cross-references
 # ---------------------------------------------------------------------------
 
 
-def _workspace_with_provisioning(**step_overrides) -> dict:
+def _workspace_with_execution(**step_overrides) -> dict:
     data = _minimal_workspace()
     data["spec"]["resources"] = [{"name": "aks_cluster", "resource": "aks-class"}]
     step = {"name": "provision-infra", "provisioner": "terraform-main", "targets": ["aks_cluster"]}
     step.update(step_overrides)
-    data["spec"]["provisioning"] = [step]
+    data["spec"]["execution"] = [step]
     return data
 
 
-def test_workspace_provisioning_step_accepted_with_valid_references():
-    """A provisioning step referencing a real provisioner and target is accepted."""
-    model = WorkspaceModel.model_validate(_workspace_with_provisioning())
-    assert model.spec.provisioning[0].name == "provision-infra"
+def test_workspace_execution_step_accepted_with_valid_references():
+    """An execution step referencing a real provisioner and target is accepted."""
+    model = WorkspaceModel.model_validate(_workspace_with_execution())
+    assert model.spec.execution[0].name == "provision-infra"
 
 
-def test_workspace_provisioning_step_rejects_unknown_provisioner():
-    """A provisioning step referencing an undefined provisioner is rejected."""
-    data = _workspace_with_provisioning(provisioner="nonexistent")
+def test_workspace_execution_step_rejects_unknown_provisioner():
+    """An execution step referencing an undefined provisioner is rejected."""
+    data = _workspace_with_execution(provisioner="nonexistent")
     with pytest.raises(ValidationError):
         WorkspaceModel.model_validate(data)
 
 
-def test_workspace_provisioning_step_rejects_unknown_target():
-    """A provisioning step targeting an undefined resource/namespace is rejected."""
-    data = _workspace_with_provisioning(targets=["nonexistent"])
+def test_workspace_execution_step_rejects_unknown_target():
+    """An execution step targeting an undefined resource/namespace is rejected."""
+    data = _workspace_with_execution(targets=["nonexistent"])
     with pytest.raises(ValidationError):
         WorkspaceModel.model_validate(data)
 
 
-def test_workspace_provisioning_step_can_target_a_namespace():
-    """A provisioning step may target a namespace, not just a resource."""
+def test_workspace_rejects_legacy_provisioning_key():
+    """The recipe key is 'execution'; the old 'provisioning' name is not accepted."""
+    data = _minimal_workspace()
+    data["spec"]["resources"] = [{"name": "aks_cluster", "resource": "aks-class"}]
+    data["spec"]["provisioning"] = [
+        {"name": "provision-infra", "provisioner": "terraform-main", "targets": ["aks_cluster"]}
+    ]
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_execution_step_can_target_a_namespace():
+    """An execution step may target a namespace, not just a resource."""
     data = _minimal_workspace()
     data["spec"]["namespaces"] = ["myapp"]
-    data["spec"]["provisioning"] = [
+    data["spec"]["execution"] = [
         {"name": "deploy-app", "provisioner": "terraform-main", "targets": ["myapp"]}
     ]
     model = WorkspaceModel.model_validate(data)
-    assert model.spec.provisioning[0].targets == ["myapp"]
+    assert model.spec.execution[0].targets == ["myapp"]
 
 
-def test_workspace_rejects_ambiguous_provisioning_order():
-    """Two provisioning steps sharing a target with no depends_on ordering are rejected."""
+def test_workspace_rejects_ambiguous_execution_order():
+    """Two execution steps sharing a target with no depends_on ordering are rejected."""
     data = _minimal_workspace()
     data["spec"]["provisioners"].append(
         {
@@ -222,7 +233,7 @@ def test_workspace_rejects_ambiguous_provisioning_order():
         }
     )
     data["spec"]["resources"] = [{"name": "aks_cluster", "resource": "aks-class"}]
-    data["spec"]["provisioning"] = [
+    data["spec"]["execution"] = [
         {"name": "a", "provisioner": "terraform-main", "targets": ["aks_cluster"]},
         {"name": "b", "provisioner": "ansible-init", "targets": ["aks_cluster"]},
     ]
@@ -230,8 +241,8 @@ def test_workspace_rejects_ambiguous_provisioning_order():
         WorkspaceModel.model_validate(data)
 
 
-def test_workspace_accepts_ordered_provisioning_steps():
-    """Two provisioning steps sharing a target with an explicit depends_on are accepted."""
+def test_workspace_accepts_ordered_execution_steps():
+    """Two execution steps sharing a target with an explicit depends_on are accepted."""
     data = _minimal_workspace()
     data["spec"]["provisioners"].append(
         {
@@ -241,12 +252,12 @@ def test_workspace_accepts_ordered_provisioning_steps():
         }
     )
     data["spec"]["resources"] = [{"name": "aks_cluster", "resource": "aks-class"}]
-    data["spec"]["provisioning"] = [
+    data["spec"]["execution"] = [
         {"name": "a", "provisioner": "terraform-main", "targets": ["aks_cluster"]},
         {"name": "b", "provisioner": "ansible-init", "targets": ["aks_cluster"], "depends_on": ["a"]},
     ]
     model = WorkspaceModel.model_validate(data)
-    assert model.spec.provisioning[1].depends_on == ["a"]
+    assert model.spec.execution[1].depends_on == ["a"]
 
 
 def test_workspace_rejects_unknown_fields():

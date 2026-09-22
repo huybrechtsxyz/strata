@@ -159,8 +159,13 @@ class WorkspaceSpecModel(PlatformBaseModel):
     provisioner-topology binding (ADR-0011) — `topology` is a list of plain
     Topology names (unlike v1, deliberately **optional**, since a workspace
     may have resources with no grouping concept at all), and the actual
-    build/deploy recipe is `provisioning: list[ProvisioningStepModel]`,
+    build/deploy recipe is `execution: list[ProvisioningStepModel]`,
     fully decoupled from `topology`.
+
+    The three sibling keys are deliberately distinct words, since they answer
+    different questions: `providers` (**where** — target platform/account),
+    `provisioners` (**with what** — tool definitions), `execution` (**what
+    runs, in what order**).
 
     Every reference below is a document **name**, resolved by discovery
     against the `(kind, meta.name)` index — not a file path (see the note
@@ -181,8 +186,11 @@ class WorkspaceSpecModel(PlatformBaseModel):
 
     providers: list[PlatformName] = Field(..., min_length=1, description="Provider document names")
     provisioners: list[ProvisionerModel] = Field(..., min_length=1, description="Provisioner (tool) definitions")
-    provisioning: list[ProvisioningStepModel] | None = Field(
-        None, description="The provisioning recipe: ordered steps binding a Provisioner to a set of targets"
+    execution: list[ProvisioningStepModel] | None = Field(
+        None,
+        description="The ordered recipe: steps binding a Provisioner to a set of targets. Named 'execution' "
+        "rather than 'provisioning' so it cannot be confused with the sibling 'provisioners' (tool "
+        "definitions) or with the 'deployment' kind.",
     )
     topology: list[PlatformName] | None = Field(
         None, description="Topology document names (pure grouping)"
@@ -250,29 +258,25 @@ class WorkspaceSpecModel(PlatformBaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_provisioning(self) -> "WorkspaceSpecModel":
-        """Validate the provisioning recipe: internal step consistency plus
+    def validate_execution(self) -> "WorkspaceSpecModel":
+        """Validate the execution recipe: internal step consistency plus
         cross-references against this workspace's own provisioners/resources/namespaces.
         """
-        if not self.provisioning:
+        if not self.execution:
             return self
 
-        validate_provisioning_steps(self.provisioning)
+        validate_provisioning_steps(self.execution)
 
         provisioner_names = {p.name for p in self.provisioners}
         target_names = {r.name for r in (self.resources or [])} | set(self.namespaces or [])
 
         errors = []
-        for step in self.provisioning:
+        for step in self.execution:
             if step.provisioner not in provisioner_names:
-                errors.append(
-                    f"Provisioning step '{step.name}' references undefined provisioner '{step.provisioner}'"
-                )
+                errors.append(f"Execution step '{step.name}' references undefined provisioner '{step.provisioner}'")
             for target in step.targets:
                 if target not in target_names:
-                    errors.append(
-                        f"Provisioning step '{step.name}' targets undefined resource/namespace '{target}'"
-                    )
+                    errors.append(f"Execution step '{step.name}' targets undefined resource/namespace '{target}'")
         if errors:
             raise ValueError("; ".join(errors))
         return self
