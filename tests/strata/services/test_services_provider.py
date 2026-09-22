@@ -24,7 +24,7 @@ def _configuration_with_kamatera_pointer() -> ConfigurationModel:
     return ConfigurationModel.model_validate(
         {
             "meta": {"name": "solution-config"},
-            "spec": {"providers": [{"name": "kamatera", "file": "providers/kamatera.yaml"}]},
+            "spec": {"providers": ["kamatera"]},
         }
     )
 
@@ -35,7 +35,7 @@ def _kamatera_provider_config() -> ProviderConfigModel:
             "meta": {"name": "kamatera"},
             "spec": {
                 "description": "Kamatera cloud provider",
-                "regions": ["eu-west", "eu-fr"],
+                "regions": [{"name": "eu-west"}, {"name": "eu-fr"}],
                 "resources": [{"name": "vm"}],
             },
         }
@@ -130,6 +130,26 @@ def test_provider_service_rejects_unknown_region_against_provider_config():
     is_valid, errors = service.validate_against_provider_config(_kamatera_provider_config())
     assert not is_valid
     assert any("is not valid for provider" in e for e in errors)
+
+
+def test_provider_service_accepts_valid_against_provider_config_with_geography_tag():
+    """A region declared with a 'geography' tag still validates against a Provider's plain region string."""
+    data = _minimal_provider_data()
+    service = ProviderService(data=data)
+    service.validate()
+    provider_config = ProviderConfigModel.model_validate(
+        {
+            "meta": {"name": "kamatera"},
+            "spec": {
+                "description": "Kamatera cloud provider",
+                "regions": [{"name": "eu-west", "geography": "europe"}, {"name": "eu-fr"}],
+                "resources": [{"name": "vm"}],
+            },
+        }
+    )
+    is_valid, errors = service.validate_against_provider_config(provider_config)
+    assert is_valid
+    assert errors == []
 
 
 def test_provider_service_skips_phase_2_without_configuration():

@@ -7,12 +7,18 @@ store" gate on any integration-only field) plus their own extras: `Variable`
 adds `type` (declared HCL type + value-consistency check), `Secret` adds
 `generate`/`rotate`. Ported from v1's real `store_models.py`.
 
-`store` values map to integration types in v1 (`IntegrationFactory`) — that
-mapping is not modeled here, since v2 doesn't have an `Integration` kind yet.
-`constant`/`environment` (+ `github` for secrets) are the only *built-in*
-resolvers (need no integration); every other store type is a placeholder
-reference until `Integration` exists to give it real meaning (same
-discipline as `Provisioner.tool`/`.integration`, ADR-0011).
+`store` values map to integration types in v1 (`IntegrationFactory`). The
+`Integration` **kind** now exists in v2 (`integration_model.py`) and can
+declare a `variables`/`secrets`/`features` capability, so a non-built-in
+`store` is expected to name one. What does NOT exist is the *runtime*
+resolution layer — v1's `IntegrationFactory` registry that turns a store
+type into a live backend client is execution-layer code, out of scope here.
+So `constant`/`environment` (+ `github` for secrets) are the only stores
+that resolve to anything today; the rest validate as recognized values but
+have no resolver behind them yet (same discipline as
+`Provisioner.tool`, ADR-0011). Cross-checking a store against a real
+Integration document is a Phase 2 check, deferred with the others until the
+solution loading layer lands.
 """
 
 from enum import Enum
@@ -53,9 +59,10 @@ class FeatureStoreType(str, Enum):
     """Feature flag store backend type.
 
     `CONSTANT`/`ENVIRONMENT` are built-in resolvers (no integration needed).
-    `AZURE_APPCONFIG`/`FLAGSMITH` are integration-backed placeholders — kept
-    as recognized values (matching v1's real vocabulary) but not yet
-    resolvable to anything, since no `Integration` kind exists in v2 yet.
+    `AZURE_APPCONFIG`/`FLAGSMITH` name integration-backed stores — recognized
+    values (matching v1's real vocabulary) that an `Integration` with the
+    `features` capability is expected to back, but with no runtime resolver
+    behind them yet (see module docstring).
     """
 
     CONSTANT = "constant"

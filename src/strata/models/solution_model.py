@@ -27,6 +27,17 @@ never "what rules govern it". Platform policy — provider/topology
 registries, path conventions, stores — stays in `Configuration`. Same split
 as `go.mod` (module identity and deps) versus build configuration. Resist
 adding policy fields here.
+
+**Known constraint (ADR-0015).** Remotes supply *artifacts* (Terraform
+modules, charts, copied files), not *documents*. Strata documents are
+discovered from the solution repo only, so a Module/ProviderConfig document
+cannot currently live in a shared repository the way v1's
+`ModuleReferenceModel.file: "@repo/..."` allowed. The painful case is
+org-wide governance registries owned by a platform team. The planned
+mitigation is remote-qualified identity (`providers: ["@platform/azure"]`,
+Bazel's `@repo//pkg:target` precedent) — deferred until something needs it,
+but the loader's index must be keyed `(remote, kind, name)` with
+`remote=None` for local so it stays an additive change.
 """
 
 from enum import Enum

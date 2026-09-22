@@ -10,7 +10,7 @@ def test_provider_config_service_validates_from_data():
         "meta": {"name": "kamatera"},
         "spec": {
             "description": "Kamatera cloud provider",
-            "regions": ["eu-west"],
+            "regions": [{"name": "eu-west"}],
             "resources": [{"name": "vm"}],
         },
     }

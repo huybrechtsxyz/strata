@@ -29,19 +29,18 @@ class ProviderPropertiesModel(PlatformBaseModel):
         description="Cloud or infrastructure provider (e.g., kamatera, local). Must match a provider type in configuration.yaml."
     )
     region: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
-        description="Region of the datacenter used by the provider API to select the datacenter"
+        description="Primary region/datacenter for this provider account, cross-checked in Phase 2 against "
+        "ProviderConfig.spec.regions. This is strata's own governance identifier, not necessarily a literal "
+        "provider-block argument for every provisioner (e.g. azurerm has none at that level) — each region "
+        "entry in ProviderConfig.spec.regions may optionally carry a 'geography' tag (a compliance/deployment "
+        "boundary grouping several regions, e.g. Azure's 'geography' concept); geography is derived from that "
+        "registry, not duplicated here."
     )
-    location: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] | None = Field(
+    display_name: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] | None = Field(
         None,
-        description="Optional location of the datacenter (e.g., 'West US', 'eu-west-1'). Used for documentation and may be used by some providers for resource naming or tagging, but is not required for provider validation.",
-    )
-    organization: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] | None = Field(
-        None,
-        description="Optional organization or subscription name/ID for this provider. Used for documentation and may be used by some providers for resource naming or tagging, but is not required for provider validation.",
-    )
-    version: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] | None = Field(
-        None,
-        description="Version constraint for the provider (e.g., '~>3.0')",
+        description="Optional human-readable label for the region (e.g., 'West US', 'eu-west-1'). Purely "
+        "cosmetic/documentation — not a distinct geographic concept from `region` and not required for "
+        "provider validation.",
     )
 
     @field_validator("type")

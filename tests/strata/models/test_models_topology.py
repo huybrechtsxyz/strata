@@ -49,7 +49,7 @@ def test_topology_component_accepts_attached_module():
     """A resource may have a module attached directly (e.g. Function App code)."""
     data = _minimal_topology()
     data["spec"]["components"][0]["modules"] = [
-        {"name": "deployinfo", "file": "modules/deployinfo.yaml"},
+        {"name": "deployinfo", "module": "deployinfo"},
     ]
     model = TopologyModel.model_validate(data)
     assert model.spec.components[0].modules[0].name == "deployinfo"
@@ -60,8 +60,8 @@ def test_topology_component_rejects_duplicate_module_names():
     """Duplicate module names attached to the same resource are rejected."""
     data = _minimal_topology()
     data["spec"]["components"][0]["modules"] = [
-        {"name": "deployinfo", "file": "modules/a.yaml"},
-        {"name": "deployinfo", "file": "modules/b.yaml"},
+        {"name": "deployinfo", "module": "mod-a"},
+        {"name": "deployinfo", "module": "mod-b"},
     ]
     with pytest.raises(ValidationError):
         TopologyModel.model_validate(data)
@@ -71,8 +71,8 @@ def test_topology_component_requires_one_main_slot_among_multiple_enabled_module
     """Multiple enabled modules on one resource with no 'main' slot are rejected."""
     data = _minimal_topology()
     data["spec"]["components"][0]["modules"] = [
-        {"name": "a", "file": "modules/a.yaml", "slot_type": "canary"},
-        {"name": "b", "file": "modules/b.yaml", "slot_type": "canary"},
+        {"name": "a", "module": "mod-a", "slot_type": "canary"},
+        {"name": "b", "module": "mod-b", "slot_type": "canary"},
     ]
     with pytest.raises(ValidationError):
         TopologyModel.model_validate(data)
@@ -82,8 +82,8 @@ def test_topology_component_rejects_multiple_main_slots():
     """Multiple enabled modules both marked 'main' on the same resource are rejected."""
     data = _minimal_topology()
     data["spec"]["components"][0]["modules"] = [
-        {"name": "a", "file": "modules/a.yaml", "slot_type": "main"},
-        {"name": "b", "file": "modules/b.yaml", "slot_type": "main"},
+        {"name": "a", "module": "mod-a", "slot_type": "main"},
+        {"name": "b", "module": "mod-b", "slot_type": "main"},
     ]
     with pytest.raises(ValidationError):
         TopologyModel.model_validate(data)
@@ -93,8 +93,8 @@ def test_topology_component_allows_multiple_modules_when_one_is_main():
     """Multiple enabled modules are fine as long as exactly one is 'main'."""
     data = _minimal_topology()
     data["spec"]["components"][0]["modules"] = [
-        {"name": "a", "file": "modules/a.yaml", "slot_type": "main"},
-        {"name": "b", "file": "modules/b.yaml", "slot_type": "canary"},
+        {"name": "a", "module": "mod-a", "slot_type": "main"},
+        {"name": "b", "module": "mod-b", "slot_type": "canary"},
     ]
     model = TopologyModel.model_validate(data)
     assert len(model.spec.components[0].modules) == 2
@@ -104,17 +104,17 @@ def test_topology_component_ignores_disabled_modules_for_main_slot_rule():
     """A disabled module doesn't count toward the 'must have exactly one main' rule."""
     data = _minimal_topology()
     data["spec"]["components"][0]["modules"] = [
-        {"name": "a", "file": "modules/a.yaml", "slot_type": "canary", "enabled": False},
-        {"name": "b", "file": "modules/b.yaml", "slot_type": "main"},
+        {"name": "a", "module": "mod-a", "slot_type": "canary", "enabled": False},
+        {"name": "b", "module": "mod-b", "slot_type": "main"},
     ]
     model = TopologyModel.model_validate(data)
     assert model.spec.components[0].modules[0].enabled is False
 
 
-def test_topology_component_module_rejects_path_traversal():
-    """A module file reference escaping via '..' is rejected."""
+def test_topology_component_module_rejects_path_like_name():
+    """A module reference names a document, not a path — '../' shapes fail PlatformName."""
     data = _minimal_topology()
-    data["spec"]["components"][0]["modules"] = [{"name": "a", "file": "../../etc/passwd"}]
+    data["spec"]["components"][0]["modules"] = [{"name": "a", "module": "../../etc/passwd"}]
     with pytest.raises(ValidationError):
         TopologyModel.model_validate(data)
 

@@ -11,7 +11,7 @@ def _minimal_namespace() -> dict:
     return {
         "meta": {"name": "myapp"},
         "spec": {
-            "modules": [{"name": "template_module", "file": "config/myapp/modules/template-module.yaml"}],
+            "modules": [{"name": "template_module", "module": "template-module"}],
             "default_labels": {"environment": "test"},
         },
     }
@@ -78,36 +78,42 @@ def test_namespace_rejects_duplicate_module_names():
         NamespaceModel.model_validate(data)
 
 
-def test_namespace_module_rejects_path_traversal():
-    """A module file reference escaping via '..' is rejected."""
+def test_namespace_module_rejects_path_like_name():
+    """A module reference names a document, not a path — '../' shapes fail PlatformName."""
     data = _minimal_namespace()
-    data["spec"]["modules"][0]["file"] = "../../etc/passwd"
+    data["spec"]["modules"][0]["module"] = "../../etc/passwd"
     with pytest.raises(ValidationError):
         NamespaceModel.model_validate(data)
 
 
-def test_namespace_module_rejects_absolute_path():
-    """A module file reference that is absolute is rejected."""
+def test_namespace_module_rejects_absolute_path_like_name():
+    """An absolute-path-shaped module name is rejected by PlatformName."""
     data = _minimal_namespace()
-    data["spec"]["modules"][0]["file"] = "/etc/passwd"
+    data["spec"]["modules"][0]["module"] = "/etc/passwd"
     with pytest.raises(ValidationError):
         NamespaceModel.model_validate(data)
 
 
-def test_namespace_module_rejects_path_traversal_in_cross_repo_reference():
-    """A '@repo/' module file reference escaping the repo root via '..' is rejected."""
+def test_namespace_module_rejects_remote_prefixed_name():
+    """'@repo/...' module references are no longer supported.
+
+    v1 allowed a module *document* to live in a remote
+    (`file: "@infra/modules/x.yaml"`). Documents are now solution-local and
+    found by discovery; remotes supply artifacts, not documents. The remote
+    is named on the Module's own `spec.source.remote` instead.
+    """
     data = _minimal_namespace()
-    data["spec"]["modules"][0]["file"] = "@infra/../../../etc/passwd"
+    data["spec"]["modules"][0]["module"] = "@infra/modules/template-module.yaml"
     with pytest.raises(ValidationError):
         NamespaceModel.model_validate(data)
 
 
-def test_namespace_module_accepts_cross_repo_reference():
-    """A well-formed '@repo/' module file reference is accepted."""
+def test_namespace_module_accepts_module_name():
+    """A plain Module document name is accepted."""
     data = _minimal_namespace()
-    data["spec"]["modules"][0]["file"] = "@infra/modules/template-module.yaml"
+    data["spec"]["modules"][0]["module"] = "traefik"
     model = NamespaceModel.model_validate(data)
-    assert model.spec.modules[0].file == "@infra/modules/template-module.yaml"
+    assert model.spec.modules[0].module == "traefik"
 
 
 def test_namespace_rejects_references_field():

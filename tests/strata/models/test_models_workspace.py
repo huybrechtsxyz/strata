@@ -11,7 +11,7 @@ def _minimal_workspace() -> dict:
     return {
         "meta": {"name": "myapp-workspace"},
         "spec": {
-            "providers": [{"name": "azure-main", "file": "providers/azure.yaml"}],
+            "providers": ["azure-main"],
             "provisioners": [
                 {
                     "name": "terraform-main",
@@ -27,7 +27,7 @@ def test_workspace_minimal_is_valid():
     """A minimal workspace document (only required fields) validates successfully."""
     model = WorkspaceModel.model_validate(_minimal_workspace())
     assert model.meta.name == "myapp-workspace"
-    assert model.spec.providers[0].name == "azure-main"
+    assert model.spec.providers[0] == "azure-main"
     assert model.spec.provisioners[0].tool == "terraform"
     assert model.apiVersion.value == "strata.huybrechts.xyz/v2"
     assert model.kind.value == "workspace"
@@ -56,17 +56,17 @@ def test_workspace_topology_is_optional():
 
 
 def test_workspace_accepts_topology_reference():
-    """spec.topology accepts a simple name+file pointer to a standalone Topology document."""
+    """spec.topology accepts a plain Topology document name, resolved by discovery."""
     data = _minimal_workspace()
-    data["spec"]["topology"] = [{"name": "aks-platform", "file": "topologies/aks-platform.yaml"}]
+    data["spec"]["topology"] = ["aks-platform"]
     model = WorkspaceModel.model_validate(data)
-    assert model.spec.topology[0].name == "aks-platform"
+    assert model.spec.topology[0] == "aks-platform"
 
 
 def test_workspace_rejects_duplicate_provider_names():
     """Duplicate provider names are rejected."""
     data = _minimal_workspace()
-    data["spec"]["providers"].append(dict(data["spec"]["providers"][0]))
+    data["spec"]["providers"].append(data["spec"]["providers"][0])
     with pytest.raises(ValidationError):
         WorkspaceModel.model_validate(data)
 
@@ -84,18 +84,18 @@ def test_workspace_rejects_duplicate_provisioner_names():
 # ---------------------------------------------------------------------------
 
 
-def test_workspace_resource_requires_file_or_managed_by():
-    """A resource must have either file or managed_by."""
+def test_workspace_resource_requires_resource_or_managed_by():
+    """A resource must name either a Resource document or managed_by."""
     data = _minimal_workspace()
     data["spec"]["resources"] = [{"name": "web-vm"}]
     with pytest.raises(ValidationError):
         WorkspaceModel.model_validate(data)
 
 
-def test_workspace_resource_rejects_file_and_managed_by_together():
-    """A resource cannot have both file and managed_by."""
+def test_workspace_resource_rejects_resource_and_managed_by_together():
+    """A resource cannot have both a resource reference and managed_by."""
     data = _minimal_workspace()
-    data["spec"]["resources"] = [{"name": "web-vm", "file": "resources/web-vm.yaml", "managed_by": "provisioner"}]
+    data["spec"]["resources"] = [{"name": "web-vm", "resource": "web-vm-class", "managed_by": "provisioner"}]
     with pytest.raises(ValidationError):
         WorkspaceModel.model_validate(data)
 
@@ -112,8 +112,8 @@ def test_workspace_resource_coerces_single_depends_on_string():
     """depends_on accepts a single string as shorthand for a one-element list."""
     data = _minimal_workspace()
     data["spec"]["resources"] = [
-        {"name": "db", "file": "resources/db.yaml"},
-        {"name": "web-vm", "file": "resources/web-vm.yaml", "depends_on": "db"},
+        {"name": "db", "resource": "db-class"},
+        {"name": "web-vm", "resource": "web-vm-class", "depends_on": "db"},
     ]
     model = WorkspaceModel.model_validate(data)
     assert model.spec.resources[1].depends_on == ["db"]
@@ -122,7 +122,7 @@ def test_workspace_resource_coerces_single_depends_on_string():
 def test_workspace_resource_firewall_reference_must_exist():
     """A resource's firewall reference must exist in spec.firewalls."""
     data = _minimal_workspace()
-    data["spec"]["resources"] = [{"name": "web-vm", "file": "resources/web-vm.yaml", "firewalls": ["web-fw"]}]
+    data["spec"]["resources"] = [{"name": "web-vm", "resource": "web-vm-class", "firewalls": ["web-fw"]}]
     with pytest.raises(ValidationError):
         WorkspaceModel.model_validate(data)
 
@@ -130,8 +130,8 @@ def test_workspace_resource_firewall_reference_must_exist():
 def test_workspace_resource_firewall_reference_valid():
     """A resource's firewall reference resolving to a real firewall is accepted."""
     data = _minimal_workspace()
-    data["spec"]["firewalls"] = [{"name": "web-fw", "file": "firewalls/web-fw.yaml"}]
-    data["spec"]["resources"] = [{"name": "web-vm", "file": "resources/web-vm.yaml", "firewalls": ["web-fw"]}]
+    data["spec"]["firewalls"] = ["web-fw"]
+    data["spec"]["resources"] = [{"name": "web-vm", "resource": "web-vm-class", "firewalls": ["web-fw"]}]
     model = WorkspaceModel.model_validate(data)
     assert model.spec.resources[0].firewalls == ["web-fw"]
 
@@ -142,7 +142,7 @@ def test_workspace_resource_subnet_network_must_exist():
     data["spec"]["resources"] = [
         {
             "name": "web-vm",
-            "file": "resources/web-vm.yaml",
+            "resource": "web-vm-class",
             "subnet": {"network": "vnet-main", "subnet": "web-subnet"},
         }
     ]
@@ -153,11 +153,11 @@ def test_workspace_resource_subnet_network_must_exist():
 def test_workspace_resource_subnet_network_valid():
     """A resource's subnet.network resolving to a real workspace network is accepted."""
     data = _minimal_workspace()
-    data["spec"]["networks"] = [{"name": "vnet-main", "file": "networks/vnet-main.yaml"}]
+    data["spec"]["networks"] = ["vnet-main"]
     data["spec"]["resources"] = [
         {
             "name": "web-vm",
-            "file": "resources/web-vm.yaml",
+            "resource": "web-vm-class",
             "subnet": {"network": "vnet-main", "subnet": "web-subnet"},
         }
     ]
@@ -173,7 +173,7 @@ def test_workspace_resource_subnet_network_valid():
 
 def _workspace_with_provisioning(**step_overrides) -> dict:
     data = _minimal_workspace()
-    data["spec"]["resources"] = [{"name": "aks_cluster", "file": "resources/aks.yaml"}]
+    data["spec"]["resources"] = [{"name": "aks_cluster", "resource": "aks-class"}]
     step = {"name": "provision-infra", "provisioner": "terraform-main", "targets": ["aks_cluster"]}
     step.update(step_overrides)
     data["spec"]["provisioning"] = [step]
@@ -203,7 +203,7 @@ def test_workspace_provisioning_step_rejects_unknown_target():
 def test_workspace_provisioning_step_can_target_a_namespace():
     """A provisioning step may target a namespace, not just a resource."""
     data = _minimal_workspace()
-    data["spec"]["namespaces"] = [{"name": "myapp", "file": "namespaces/myapp.yaml"}]
+    data["spec"]["namespaces"] = ["myapp"]
     data["spec"]["provisioning"] = [
         {"name": "deploy-app", "provisioner": "terraform-main", "targets": ["myapp"]}
     ]
@@ -221,7 +221,7 @@ def test_workspace_rejects_ambiguous_provisioning_order():
             "source": {"remote": "infra-repo", "source_path": "ansible/init"},
         }
     )
-    data["spec"]["resources"] = [{"name": "aks_cluster", "file": "resources/aks.yaml"}]
+    data["spec"]["resources"] = [{"name": "aks_cluster", "resource": "aks-class"}]
     data["spec"]["provisioning"] = [
         {"name": "a", "provisioner": "terraform-main", "targets": ["aks_cluster"]},
         {"name": "b", "provisioner": "ansible-init", "targets": ["aks_cluster"]},
@@ -240,7 +240,7 @@ def test_workspace_accepts_ordered_provisioning_steps():
             "source": {"remote": "infra-repo", "source_path": "ansible/init"},
         }
     )
-    data["spec"]["resources"] = [{"name": "aks_cluster", "file": "resources/aks.yaml"}]
+    data["spec"]["resources"] = [{"name": "aks_cluster", "resource": "aks-class"}]
     data["spec"]["provisioning"] = [
         {"name": "a", "provisioner": "terraform-main", "targets": ["aks_cluster"]},
         {"name": "b", "provisioner": "ansible-init", "targets": ["aks_cluster"], "depends_on": ["a"]},

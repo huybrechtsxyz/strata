@@ -9,7 +9,7 @@ def test_namespace_service_validates_from_data():
     data = {
         "meta": {"name": "myapp"},
         "spec": {
-            "modules": [{"name": "template_module", "file": "config/myapp/modules/template-module.yaml"}],
+            "modules": [{"name": "template_module", "module": "template-module"}],
             "default_labels": {"environment": "test"},
         },
     }

@@ -9,7 +9,7 @@ def test_configuration_service_validates_from_data():
     data = {
         "meta": {"name": "solution-config"},
         "spec": {
-            "providers": [{"name": "kamatera", "file": "providers/kamatera.yaml"}],
+            "providers": ["kamatera"],
         },
     }
     service = ConfigurationService(data=data)
@@ -17,4 +17,4 @@ def test_configuration_service_validates_from_data():
     assert is_valid
     assert errors == []
     assert service.model is not None
-    assert service.model.spec.providers[0].name == "kamatera"
+    assert service.model.spec.providers[0] == "kamatera"

@@ -36,7 +36,7 @@ class ProviderService(BaseService[ProviderModel]):
             return False, ["Provider model is not initialized"]
 
         provider_type = self.model.spec.properties.type
-        registered_names = {p.name for p in configuration_model.spec.providers} if configuration_model.spec.providers else set()
+        registered_names = set(configuration_model.spec.providers or [])
 
         if provider_type not in registered_names:
             available = sorted(registered_names)
@@ -49,7 +49,7 @@ class ProviderService(BaseService[ProviderModel]):
 
         Args:
             provider_config: The already-loaded `ProviderConfigModel` document
-                that `configuration_model.spec.providers[].file` pointed at.
+                named by `configuration_model.spec.providers[]`.
         """
         if self.model is None:
             return False, ["Provider model is not initialized"]
@@ -65,7 +65,7 @@ class ProviderService(BaseService[ProviderModel]):
                     f"and additional_regions is False"
                 ]
 
-            valid_regions = [r if isinstance(r, str) else str(r.get("name", str(r))) for r in spec.regions]
+            valid_regions = [r.name for r in spec.regions]
 
             if provider_region not in valid_regions:
                 return False, [

@@ -32,7 +32,7 @@ class ResourceService(BaseService[ResourceModel]):
             return True, []
 
         provider_type = self.model.spec.properties.provider_type
-        registered_names = {p.name for p in configuration_model.spec.providers} if configuration_model.spec.providers else set()
+        registered_names = set(configuration_model.spec.providers or [])
 
         if provider_type not in registered_names:
             available = sorted(registered_names)
@@ -50,7 +50,7 @@ class ResourceService(BaseService[ResourceModel]):
 
         Args:
             provider_config: The already-loaded `ProviderConfigModel` document
-                that `configuration_model.spec.providers[].file` pointed at.
+                named by `configuration_model.spec.providers[]`.
         """
         if self.model is None:
             return False, ["Resource model is not initialized"]

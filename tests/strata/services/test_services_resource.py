@@ -23,7 +23,7 @@ def _configuration_with_kamatera_pointer() -> ConfigurationModel:
     return ConfigurationModel.model_validate(
         {
             "meta": {"name": "solution-config"},
-            "spec": {"providers": [{"name": "kamatera", "file": "providers/kamatera.yaml"}]},
+            "spec": {"providers": ["kamatera"]},
         }
     )
 
@@ -39,7 +39,7 @@ def _kamatera_provider_config(configuration_schema: dict | None = None) -> Provi
             "meta": {"name": "kamatera"},
             "spec": {
                 "description": "Kamatera cloud provider",
-                "regions": ["eu-west"],
+                "regions": [{"name": "eu-west"}],
                 "resources": [resource_entry],
             },
         }

@@ -55,6 +55,10 @@ VALID_INTEGRATION_CAPABILITIES = frozenset(
         "secrets",  # SecretStoreModel-backed stores
         "features",  # FeatureStoreModel-backed stores
         "infrastructure",  # Provisioner.tool-backed IaC/CM tools
+        # Named `sources`, not v1's `repository` (which maps to its
+        # `IRepositoryTool` Protocol): a v2 remote covers git, OCI registries
+        # and Helm chart indexes alike, so the narrower "repository" would be
+        # as misleading here as `CONTAINER`/`GITOPS` were on `RemoteType`.
         "sources",  # SolutionRemoteModel-backed artifact sources (git/oci/helm auth)
     }
 )

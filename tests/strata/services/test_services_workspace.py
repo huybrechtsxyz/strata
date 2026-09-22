@@ -12,7 +12,7 @@ def test_workspace_service_validates_from_data():
     data = {
         "meta": {"name": "myapp-workspace"},
         "spec": {
-            "providers": [{"name": "azure-main", "file": "providers/azure.yaml"}],
+            "providers": ["azure-main"],
             "provisioners": [
                 {
                     "name": "terraform-main",
@@ -27,14 +27,14 @@ def test_workspace_service_validates_from_data():
     assert is_valid
     assert errors == []
     assert service.model is not None
-    assert service.model.spec.providers[0].name == "azure-main"
+    assert service.model.spec.providers[0] == "azure-main"
 
 
 def _workspace_with_topology() -> dict:
     return {
         "meta": {"name": "myapp-workspace"},
         "spec": {
-            "providers": [{"name": "azure-main", "file": "providers/azure.yaml"}],
+            "providers": ["azure-main"],
             "provisioners": [
                 {
                     "name": "terraform-main",
@@ -43,10 +43,10 @@ def _workspace_with_topology() -> dict:
                 }
             ],
             "resources": [
-                {"name": "control-vm", "file": "resources/control-vm.yaml", "role": "control-plane"},
-                {"name": "worker-vm", "file": "resources/worker-vm.yaml", "role": "worker"},
+                {"name": "control-vm", "resource": "control-vm-class", "role": "control-plane"},
+                {"name": "worker-vm", "resource": "worker-vm-class", "role": "worker"},
             ],
-            "topology": [{"name": "main-topology", "file": "topologies/main.yaml"}],
+            "topology": ["main-topology"],
         },
     }
 
@@ -143,7 +143,7 @@ def test_validate_topology_components_rejects_max_count_exceeded():
     """Exceeding a component role's registered max_count is rejected."""
     data = _workspace_with_topology()
     data["spec"]["resources"].append(
-        {"name": "control-vm-2", "file": "resources/control-vm-2.yaml", "role": "control-plane"}
+        {"name": "control-vm-2", "resource": "control-vm-class", "role": "control-plane"}
     )
     service = WorkspaceService(data=data)
     service.validate()
@@ -196,7 +196,7 @@ def test_validate_topology_components_rejects_unregistered_role_without_addition
     """A component role not in the topology type's registry entry is rejected when additional_components is False."""
     data = _workspace_with_topology()
     data["spec"]["resources"].append(
-        {"name": "cache-vm", "file": "resources/cache-vm.yaml", "role": "cache"}
+        {"name": "cache-vm", "resource": "cache-vm-class", "role": "cache"}
     )
     service = WorkspaceService(data=data)
     service.validate()

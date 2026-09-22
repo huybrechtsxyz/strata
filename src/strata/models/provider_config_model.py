@@ -46,6 +46,24 @@ class ProviderConfigSchemaField(PlatformBaseModel):
     description: str | None = Field(None, description="Description of what this field represents")
 
 
+class ProviderConfigRegionModel(PlatformBaseModel):
+    """A provider type's supported region, with an optional geography tag."""
+
+    name: PlatformName = Field(description="Region identifier (e.g. eu-west-1, westeurope)")
+    geography: str | None = Field(
+        None,
+        description="Optional compliance/deployment boundary group this region belongs to (e.g. 'europe', "
+        "'us') — mirrors Azure's 'geography' concept (a market grouping several regions). Declared once here, "
+        "per region, rather than duplicated on individual Provider documents; a future boundary check (e.g. "
+        "'don't span >1 geography') derives a Provider's geography by looking its region up here.",
+    )
+    description: str | None = Field(None, description="Optional description of the region")
+    custom: dict[str, str] | None = Field(
+        None,
+        description="Optional key-value configuration for the region",
+    )
+
+
 class ProviderConfigResourceModel(PlatformBaseModel):
     """A provider type's supported resource type configuration."""
 
@@ -75,8 +93,12 @@ class ProviderConfigSpecModel(PlatformBaseModel):
         False,
         description="Allow regions not listed in the configuration for this provider",
     )
-    regions: list[Union[str, dict[str, Any]]] | None = Field(
-        None, description="List of supported regions for this provider"
+    regions: list[ProviderConfigRegionModel] | None = Field(
+        None,
+        description="List of supported regions for this provider, each a {name, geography, description, custom} "
+        "entry. 'geography' is an optional tag grouping several regions under a shared compliance/deployment "
+        "boundary (e.g. Azure's 'geography' concept: {name: eu-west-1, geography: europe}). Geography "
+        "membership is declared once here, per region, not duplicated on individual Provider documents.",
     )
     additional_resources: bool = Field(
         False,
@@ -95,12 +117,7 @@ class ProviderConfigSpecModel(PlatformBaseModel):
             raise ValueError("If additional_resources is False, resources must be provided and non-empty")
 
         if self.regions:
-            region_names = []
-            for region in self.regions:
-                if isinstance(region, dict) and "name" in region:
-                    region_names.append(region["name"])
-                elif isinstance(region, str):
-                    region_names.append(region)
+            region_names = [region.name for region in self.regions]
             check_unique_names(region_names, "regions in provider config")
 
         if self.resources:

@@ -17,7 +17,7 @@ def _minimal_configuration() -> dict:
     return {
         "meta": {"name": "solution-config"},
         "spec": {
-            "providers": [{"name": "kamatera", "file": "providers/kamatera.yaml"}],
+            "providers": ["kamatera"],
         },
     }
 
@@ -26,14 +26,13 @@ def test_configuration_minimal_is_valid():
     """A minimal configuration with one provider registry pointer validates successfully."""
     model = ConfigurationModel.model_validate(_minimal_configuration())
     assert model.meta.name == "solution-config"
-    assert model.spec.providers[0].name == "kamatera"
-    assert model.spec.providers[0].file == "providers/kamatera.yaml"
+    assert model.spec.providers[0] == "kamatera"
 
 
 def test_configuration_rejects_duplicate_provider_names():
     """Duplicate provider names across the registry raise a ValidationError."""
     data = _minimal_configuration()
-    data["spec"]["providers"].append(dict(data["spec"]["providers"][0]))
+    data["spec"]["providers"].append(data["spec"]["providers"][0])
     with pytest.raises(ValidationError, match="Duplicate"):
         ConfigurationModel.model_validate(data)
 
@@ -46,20 +45,17 @@ def test_configuration_topologies_is_optional():
 
 
 def test_configuration_accepts_topology_registry_pointer():
-    """spec.topologies accepts a simple name+file pointer to a standalone TopologyConfig document."""
+    """spec.topologies accepts a plain TopologyConfig document name."""
     data = _minimal_configuration()
-    data["spec"]["topologies"] = [{"name": "kubernetes", "file": "topologies/kubernetes.yaml"}]
+    data["spec"]["topologies"] = ["kubernetes"]
     model = ConfigurationModel.model_validate(data)
-    assert model.spec.topologies[0].name == "kubernetes"
+    assert model.spec.topologies[0] == "kubernetes"
 
 
 def test_configuration_rejects_duplicate_topology_names():
     """Duplicate topology type names across the registry raise a ValidationError."""
     data = _minimal_configuration()
-    data["spec"]["topologies"] = [
-        {"name": "kubernetes", "file": "topologies/kubernetes.yaml"},
-        {"name": "kubernetes", "file": "topologies/kubernetes-2.yaml"},
-    ]
+    data["spec"]["topologies"] = ["kubernetes", "kubernetes"]
     with pytest.raises(ValidationError, match="Duplicate"):
         ConfigurationModel.model_validate(data)
 

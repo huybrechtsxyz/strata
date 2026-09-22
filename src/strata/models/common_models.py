@@ -8,7 +8,7 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, StringConstraints, field_validator, model_validator
 
-from strata.utils.path_safety import validate_file_ref_no_traversal, validate_relative_path
+from strata.utils.path_safety import validate_relative_path
 
 # Allowed script file extensions for lifecycle phase scripts.
 SCRIPT_EXTENSIONS = {".sh", ".bash", ".py", ".ps1", ".js", ".mjs", ".go"}
@@ -242,10 +242,17 @@ class ModuleReferenceModel(PlatformBaseModel):
     no orchestration namespace involved). Both are ultimately "a pointer to a
     Module document plus placement metadata" — one shared shape rather than
     two independently-drifting near-duplicates.
+
+    `name` is the reference's own name within its parent; `module` names the
+    Module document it points at (resolved by discovery). Same instance/class
+    split as `WorkspaceResourceModel.name`/`.resource` — one Module can be
+    attached several times under different reference names.
     """
 
     name: PlatformName = Field(description="Unique module reference name within its parent")
-    file: str = Field(description="File reference to the module configuration (module YAML file)")
+    module: PlatformName = Field(
+        description="Name of the Module document this reference points at (its meta.name, resolved by discovery)"
+    )
     description: str | None = Field(None, description="Optional description of what this module provides")
     slot_type: str | None = Field(
         "main",
@@ -256,13 +263,6 @@ class ModuleReferenceModel(PlatformBaseModel):
     configuration: dict[str, Any] | None = Field(
         None, description="Module-specific configuration overrides in this context"
     )
-
-    @field_validator("file")
-    @classmethod
-    def validate_file_no_traversal(cls, v: str) -> str:
-        """Reject absolute paths / '..' in `file` (see `validate_file_ref_no_traversal`)."""
-        validate_file_ref_no_traversal(v)
-        return v
 
     @field_validator("slot_type")
     @classmethod

@@ -7,14 +7,20 @@ logging, manifest/output shaping, cost and drift tracking, and change
 tracking. Those are ported only when the corresponding v2 kind/feature that
 needs them is built (see ADR-0003).
 
-`spec.providers`/`spec.topologies` are thin `{name, file}` pointers to
-standalone `ProviderConfigModel`/`TopologyConfigModel` documents — v1 (and
-this codebase's own earlier pass) embedded the full registry entries
-directly on `ConfigurationSpecModel`, which doesn't scale: a platform with
-many provider/topology types would need one shared, ever-growing file with
-no per-type ownership or reviewable diffs. Promoted to standalone kinds for
-the same reason `Integration`/`Topology` were (see their own docstrings/
-ADR-0011) — each provider/topology type gets its own file.
+`spec.providers`/`spec.topologies` are plain lists of ProviderConfig/
+TopologyConfig document **names**, resolved by discovery against the
+`(kind, meta.name)` index. v1 (and this codebase's own earlier pass)
+embedded the full registry entries directly on `ConfigurationSpecModel`,
+which doesn't scale: a platform with many provider/topology types would need
+one shared, ever-growing file with no per-type ownership or reviewable
+diffs. Promoted to standalone kinds for the same reason `Integration`/
+`Topology` were (see their own docstrings/ADR-0011) — each provider/topology
+type gets its own file.
+
+They were briefly `{name, file}` pointers; the `file` half is gone because
+it conflated identity with location and forced `name` to duplicate the
+target's own `meta.name` (see `workspace_model.py`'s module docstring for
+the full reasoning).
 
 `spec.remotes` is NOT here — it lives on the solution manifest
 (`solution_model.py`, `strata.yaml`). Bootstrap ordering forces it: v1's own
@@ -38,22 +44,6 @@ from strata.models.common_models import (
 from strata.utils.names import check_unique_names
 
 
-class ConfigurationProviderModel(PlatformBaseModel):
-    """Name+file reference to a standalone ProviderConfig document."""
-
-    name: PlatformName = Field(description="Provider type name (must match the referenced document's meta.name)")
-    file: str = Field(description="Path to the provider config document")
-    description: str | None = Field(None, description="Optional description for documentation purposes")
-
-
-class ConfigurationTopologyModel(PlatformBaseModel):
-    """Name+file reference to a standalone TopologyConfig document."""
-
-    name: PlatformName = Field(description="Topology type name (must match the referenced document's meta.name)")
-    file: str = Field(description="Path to the topology config document")
-    description: str | None = Field(None, description="Optional description for documentation purposes")
-
-
 class ConfigurationSpecModel(PlatformBaseModel):
     """Configuration specification.
 
@@ -71,28 +61,28 @@ class ConfigurationSpecModel(PlatformBaseModel):
         None, description="Optional custom properties for the configuration."
     )
 
-    providers: list[ConfigurationProviderModel] | None = Field(
-        None, description="Provider type registry references (name+file pointers to ProviderConfig documents)"
+    providers: list[PlatformName] | None = Field(
+        None, description="Provider type registry: names of ProviderConfig documents"
     )
     additional_topologies: bool = Field(
         False, description="Allow topology types not listed in spec.topologies"
     )
-    topologies: list[ConfigurationTopologyModel] | None = Field(
-        None, description="Topology type registry references (name+file pointers to TopologyConfig documents)"
+    topologies: list[PlatformName] | None = Field(
+        None, description="Topology type registry: names of TopologyConfig documents"
     )
 
     @model_validator(mode="after")
     def validate_unique_provider_names(self) -> "ConfigurationSpecModel":
         """Validate that all provider names are unique."""
         if self.providers:
-            check_unique_names([p.name for p in self.providers], "provider names in configuration")
+            check_unique_names(self.providers, "provider names in configuration")
         return self
 
     @model_validator(mode="after")
     def validate_unique_topology_names(self) -> "ConfigurationSpecModel":
         """Validate that all topology type names are unique."""
         if self.topologies:
-            check_unique_names([t.name for t in self.topologies], "topology type names in configuration")
+            check_unique_names(self.topologies, "topology type names in configuration")
         return self
 
 

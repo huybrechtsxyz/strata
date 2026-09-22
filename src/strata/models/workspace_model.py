@@ -8,6 +8,19 @@ recipe (`ProvisionerModel`/`ProvisioningStepModel`) that builds/deploys them.
 A `Deployment` (not yet built, the "container instance") executes that
 recipe against a specific `Environment` — it does not invent new tool
 bindings, only supplies runtime parameters.
+
+**References are names, not paths.** `spec.providers`/`namespaces`/
+`firewalls`/`dns_zones`/`networks`/`topology` are plain document names, and
+`WorkspaceResourceModel.resource` names the Resource document an instance is
+built from. These were `{name, file}` wrappers, which conflated *identity*
+("which Provider do I mean") with *location* ("where its YAML sits") and
+carried a `name` that had to duplicate the target's own `meta.name` — the
+same fact in two places, with nothing defining which wins if they disagreed.
+Documents are found by discovery and indexed by `(kind, meta.name)`, so the
+name alone resolves; Kubernetes settled this long ago, where references are
+identity (`sourceRef: {kind, name}`) and never paths. Each wrapper also
+carried a `description`, which belongs on the target document's own `meta`
+rather than being restated at every reference site.
 """
 
 from typing import Any, Literal
@@ -24,62 +37,6 @@ from strata.models.common_models import (
 )
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel, validate_provisioning_steps
 from strata.utils.names import check_unique_names
-
-
-class WorkspaceProviderModel(PlatformBaseModel):
-    """Name+file reference to a standalone Provider document."""
-
-    name: PlatformName = Field(description="Unique provider name")
-    file: str = Field(description="Path to the provider configuration file")
-    description: str | None = Field(None, description="Optional description for documentation purposes")
-
-
-class WorkspaceNamespaceModel(PlatformBaseModel):
-    """Name+file reference to a standalone Namespace document."""
-
-    name: PlatformName = Field(description="Unique namespace name")
-    file: str = Field(description="File reference for the namespace configuration")
-    description: str | None = Field(None, description="Optional description for documentation purposes")
-
-
-class WorkspaceFirewallModel(PlatformBaseModel):
-    """Name+file reference to a standalone Firewall document."""
-
-    name: PlatformName = Field(description="Unique firewall name")
-    file: str = Field(description="File reference for the firewall configuration")
-    description: str | None = Field(None, description="Optional description for documentation purposes")
-
-
-class WorkspaceDnsModel(PlatformBaseModel):
-    """Name+file reference to a standalone DNS document."""
-
-    name: PlatformName = Field(description="Unique DNS zone configuration name")
-    file: str = Field(description="File reference for the DNS zone configuration")
-    description: str | None = Field(None, description="Optional description for documentation purposes")
-
-
-class WorkspaceNetworkModel(PlatformBaseModel):
-    """Name+file reference to a standalone Network document."""
-
-    name: PlatformName = Field(description="Unique network configuration name")
-    file: str = Field(description="File reference for the network topology configuration")
-    description: str | None = Field(None, description="Optional description for documentation purposes")
-
-
-class WorkspaceTopologyModel(PlatformBaseModel):
-    """Name+file reference to a standalone Topology document (ADR-0011).
-
-    Deliberately just a pointer — Topology's own internal references
-    (`components[].resource`, `namespaces[].namespace`) are cross-checked
-    against this workspace's `resources`/`namespaces` in Phase 2
-    (`WorkspaceService._validate_dynamic()`), once that file is actually
-    loaded. Unlike `resources`/`namespaces`/`firewalls`/etc. below, no
-    Phase 1 check can reach into Topology's contents from here.
-    """
-
-    name: PlatformName = Field(description="Unique topology name")
-    file: str = Field(description="File reference for the topology configuration")
-    description: str | None = Field(None, description="Optional description for documentation purposes")
 
 
 class WorkspaceResourceSubnetModel(PlatformBaseModel):
@@ -112,12 +69,15 @@ class WorkspaceResourceModel(PlatformBaseModel):
     """
 
     name: PlatformName = Field(description="Unique resource name")
-    file: str | None = Field(
-        None, description="Path to the resource configuration file. Required unless managed_by is set."
+    resource: PlatformName | None = Field(
+        None,
+        description="Name of the Resource document this instance is built from (its meta.name, resolved by "
+        "discovery). Required unless managed_by is set. `name` above is the workspace-local *instance* "
+        "name and may differ — one Resource class can be instantiated several times under different names.",
     )
     managed_by: Literal["provisioner"] | None = Field(
         None,
-        description="Indicates the resource is fully managed externally and no resource file is needed "
+        description="Indicates the resource is fully managed externally and no Resource document is needed "
         "(e.g. resource details defined entirely in Terraform/Ansible).",
     )
     description: str | None = Field(None, description="Optional description for documentation purposes")
@@ -167,14 +127,15 @@ class WorkspaceResourceModel(PlatformBaseModel):
         return v
 
     @model_validator(mode="after")
-    def validate_file_or_managed_by(self) -> "WorkspaceResourceModel":
-        """A resource must have either a file reference or a managed_by declaration."""
-        if not self.file and not self.managed_by:
+    def validate_resource_or_managed_by(self) -> "WorkspaceResourceModel":
+        """A resource must name either a Resource document or a managed_by declaration."""
+        if not self.resource and not self.managed_by:
             raise ValueError(
-                f"Resource '{self.name}' must either specify a 'file' path or set 'managed_by: provisioner'."
+                f"Resource '{self.name}' must either specify a 'resource' (Resource document name) "
+                "or set 'managed_by: provisioner'."
             )
-        if self.file and self.managed_by:
-            raise ValueError(f"Resource '{self.name}' cannot both specify a 'file' and 'managed_by'.")
+        if self.resource and self.managed_by:
+            raise ValueError(f"Resource '{self.name}' cannot both specify a 'resource' and 'managed_by'.")
         return self
 
 
@@ -195,11 +156,15 @@ class WorkspaceSpecModel(PlatformBaseModel):
     """Workspace specification: the static declaration of everything a solution needs.
 
     No `references` field (ADR-0002). No `WorkspaceIacModel`-style embedded
-    provisioner-topology binding (ADR-0011) — `topology` is a list of pure
-    name+file pointers (unlike v1, deliberately **optional**, since a
-    workspace may have resources with no grouping concept at all), and the
-    actual build/deploy recipe is `provisioning: list[ProvisioningStepModel]`,
+    provisioner-topology binding (ADR-0011) — `topology` is a list of plain
+    Topology names (unlike v1, deliberately **optional**, since a workspace
+    may have resources with no grouping concept at all), and the actual
+    build/deploy recipe is `provisioning: list[ProvisioningStepModel]`,
     fully decoupled from `topology`.
+
+    Every reference below is a document **name**, resolved by discovery
+    against the `(kind, meta.name)` index — not a file path (see the note
+    above `WorkspaceResourceSubnetModel`).
     """
 
     lifecycle: CommonLifecycleModel | None = Field(None, description="Workspace lifecycle phases")
@@ -214,35 +179,37 @@ class WorkspaceSpecModel(PlatformBaseModel):
         "tagging policy.",
     )
 
-    providers: list[WorkspaceProviderModel] = Field(..., min_length=1, description="Provider references")
+    providers: list[PlatformName] = Field(..., min_length=1, description="Provider document names")
     provisioners: list[ProvisionerModel] = Field(..., min_length=1, description="Provisioner (tool) definitions")
     provisioning: list[ProvisioningStepModel] | None = Field(
         None, description="The provisioning recipe: ordered steps binding a Provisioner to a set of targets"
     )
-    topology: list[WorkspaceTopologyModel] | None = Field(None, description="Topology references (pure grouping)")
+    topology: list[PlatformName] | None = Field(
+        None, description="Topology document names (pure grouping)"
+    )
     resources: list[WorkspaceResourceModel] | None = Field(None, description="Workspace resource definitions")
-    namespaces: list[WorkspaceNamespaceModel] | None = Field(None, description="Namespace references")
-    firewalls: list[WorkspaceFirewallModel] | None = Field(None, description="Firewall references")
-    dns_zones: list[WorkspaceDnsModel] | None = Field(None, description="DNS zone references")
-    networks: list[WorkspaceNetworkModel] | None = Field(None, description="Network topology references")
+    namespaces: list[PlatformName] | None = Field(None, description="Namespace document names")
+    firewalls: list[PlatformName] | None = Field(None, description="Firewall document names")
+    dns_zones: list[PlatformName] | None = Field(None, description="DNS document names")
+    networks: list[PlatformName] | None = Field(None, description="Network document names")
 
     @model_validator(mode="after")
     def validate_unique_names(self) -> "WorkspaceSpecModel":
         """Validate that names are unique within each list."""
-        check_unique_names([p.name for p in self.providers], "provider names")
+        check_unique_names(self.providers, "provider names")
         check_unique_names([p.name for p in self.provisioners], "provisioner names")
         if self.topology:
-            check_unique_names([t.name for t in self.topology], "topology names")
+            check_unique_names(self.topology, "topology names")
         if self.resources:
             check_unique_names([r.name for r in self.resources], "resource names")
         if self.namespaces:
-            check_unique_names([n.name for n in self.namespaces], "namespace names")
+            check_unique_names(self.namespaces, "namespace names")
         if self.firewalls:
-            check_unique_names([f.name for f in self.firewalls], "firewall names")
+            check_unique_names(self.firewalls, "firewall names")
         if self.dns_zones:
-            check_unique_names([d.name for d in self.dns_zones], "DNS zone names")
+            check_unique_names(self.dns_zones, "DNS zone names")
         if self.networks:
-            check_unique_names([n.name for n in self.networks], "network names")
+            check_unique_names(self.networks, "network names")
         return self
 
     @model_validator(mode="after")
@@ -250,7 +217,7 @@ class WorkspaceSpecModel(PlatformBaseModel):
         """Validate that resource firewall references exist in this workspace's firewalls."""
         if not self.resources:
             return self
-        firewall_names = {f.name for f in self.firewalls} if self.firewalls else set()
+        firewall_names = set(self.firewalls) if self.firewalls else set()
         errors = []
         for resource in self.resources:
             for firewall in resource.firewalls or []:
@@ -271,7 +238,7 @@ class WorkspaceSpecModel(PlatformBaseModel):
         """
         if not self.resources:
             return self
-        network_names = {n.name for n in self.networks} if self.networks else set()
+        network_names = set(self.networks) if self.networks else set()
         errors = []
         for resource in self.resources:
             if resource.subnet and resource.subnet.network not in network_names:
@@ -293,7 +260,7 @@ class WorkspaceSpecModel(PlatformBaseModel):
         validate_provisioning_steps(self.provisioning)
 
         provisioner_names = {p.name for p in self.provisioners}
-        target_names = {r.name for r in (self.resources or [])} | {n.name for n in (self.namespaces or [])}
+        target_names = {r.name for r in (self.resources or [])} | set(self.namespaces or [])
 
         errors = []
         for step in self.provisioning:
