@@ -68,6 +68,7 @@ exclude_type_checking_imports = "True"
 name = "Layered architecture (ADR-0003, ported from v1)"
 type = "layers"
 layers = [
+    "strata.controllers",
     "strata.services",
     "strata.models",
     "strata.utils",

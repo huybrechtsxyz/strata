@@ -1,0 +1,11 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: provider
+meta:
+  name: azure-main
+spec:
+  properties:
+    type: azure
+    region: westeurope
+    display_name: "West Europe"
+  default_tags:
+    managed-by: strata

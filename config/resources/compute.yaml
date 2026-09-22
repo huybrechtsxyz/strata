@@ -1,0 +1,29 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: resource
+meta:
+  name: storage-account
+spec:
+  properties:
+    provider_type: azure
+    resource_type: storage_account
+    category: storage
+  configuration:
+    account_tier: Standard
+  default_tags:
+    environment: example
+    cost-center: "cc-1234"
+---
+apiVersion: strata.huybrechts.xyz/v2
+kind: resource
+meta:
+  name: linux-vm
+spec:
+  properties:
+    provider_type: azure
+    resource_type: virtual_machine
+    category: compute
+  default_tags:
+    environment: example
+    cost-center: "cc-1234"
+  custom_tags:
+    owner: platform-team

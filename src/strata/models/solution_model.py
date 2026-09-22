@@ -215,6 +215,40 @@ class SolutionRemoteModel(PlatformBaseModel):
         return self
 
 
+class SolutionDiscoveryModel(PlatformBaseModel):
+    """Tuning for the document discovery scan (ADR-0015).
+
+    Only `exclude` — deliberately no `include`. An include list overlaps with
+    "where the solution root is", and include/exclude precedence is a
+    well-known source of confusion (VS Code's own `files.exclude` vs
+    `search.exclude` vs `.gitignore` interaction being the obvious example).
+    One mechanism.
+
+    Patterns are **additive** to the loader's built-in ignores (`.git`,
+    `.venv`, `build`, `.strata`, tool caches, ...), never a replacement —
+    otherwise writing `exclude: ["foo"]` would silently re-enable scanning
+    `.git`. The built-ins are the floor; this raises it.
+
+    Kept in the manifest rather than a sibling `.strataignore` file: the
+    manifest is already the single bootstrap document, and a second
+    must-find-first file would undermine that. (Flux uses `.sourceignore`
+    because its source is a remote repo it does not own; a solution owns its
+    own root.)
+
+    The common real case is scaffolding — a `templates/` or `examples/`
+    directory holding strata-shaped YAML with placeholders, which would
+    otherwise fail to parse or index as bogus documents.
+    """
+
+    exclude: list[str] | None = Field(
+        None,
+        description="Glob patterns matched against each path relative to the solution root, POSIX-style "
+        "(e.g. 'templates/**', 'examples', '*.generated.yaml'). A matching directory is not descended into. "
+        "Added to the loader's built-in ignores, never replacing them. Note: these are fnmatch-style globs, "
+        "not full gitignore syntax \u2014 there is no negation ('!') and no leading-slash anchoring.",
+    )
+
+
 class SolutionSpecModel(PlatformBaseModel):
     """Solution specification: where Configuration lives, and what this solution is composed of."""
 
@@ -223,6 +257,9 @@ class SolutionSpecModel(PlatformBaseModel):
         description="Solution-relative path to the Configuration document(s) — either a single file or a "
         "directory whose 'kind: configuration' documents are all merged. Defaults to 'config', which is "
         "what real solutions use. Overridden by the CLI's --config-file/--config-path.",
+    )
+    discovery: SolutionDiscoveryModel | None = Field(
+        None, description="Optional discovery tuning (extra exclude patterns)"
     )
     remotes: list[SolutionRemoteModel] | None = Field(
         None,

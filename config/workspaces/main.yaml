@@ -1,0 +1,31 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: workspace
+meta:
+  name: main
+spec:
+  providers:
+    - azure-main
+  provisioners:
+    - name: terraform-main
+      tool: terraform
+      source:
+        remote: infra
+        source_path: terraform/main
+      backend:
+        type: azurerm
+        configuration:
+          resource_group_name: tfstate-rg
+  resources:
+    # `name` is the workspace-local instance; `resource` names the Resource
+    # document it is built from (ADR-0015).
+    - name: web-storage
+      resource: storage-account
+      role: control-plane
+    - name: web-vm
+      resource: linux-vm
+      role: worker
+      count: 2
+  topology:
+    - main-topology
+  default_tags:
+    managed-by: strata

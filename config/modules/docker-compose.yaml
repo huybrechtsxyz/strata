@@ -1,0 +1,9 @@
+# NOT a strata document — a plain Docker Compose file that happens to live in
+# the solution tree. Real repos are full of these (Helm values, CI pipelines,
+# k8s manifests). Discovery must skip anything without a strata apiVersion
+# silently, not error on it.
+services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "8080:80"

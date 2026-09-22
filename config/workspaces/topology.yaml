@@ -1,0 +1,9 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: topology
+meta:
+  name: main-topology
+spec:
+  type: kubernetes
+  components:
+    - resource: web-storage
+    - resource: web-vm

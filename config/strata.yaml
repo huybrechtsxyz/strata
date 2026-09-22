@@ -1,0 +1,27 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: solution
+meta:
+  name: example
+  annotations:
+    description: "Example solution used to exercise the discovery loader"
+spec:
+  # This example's root IS config/, so Configuration sits beside this file.
+  configuration: configuration.yaml
+  discovery:
+    exclude:
+      # Scaffolding: strata-shaped YAML with placeholders that would
+      # otherwise index as bogus documents. Additive to the loader's
+      # built-in ignores (.git, build, .strata, tool caches).
+      - "templates/**"
+  remotes:
+    - name: infra
+      type: git
+      url: https://github.com/example/infra.git
+      reference: v1.0.0
+      description: "Terraform modules — artifacts, not documents"
+    - name: charts
+      type: helm
+      url: https://charts.example.io
+    - name: bundled
+      type: local
+      url: modules

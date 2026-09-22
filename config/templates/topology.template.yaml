@@ -1,0 +1,8 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: topology
+meta:
+  name: PLACEHOLDER-topology
+spec:
+  type: kubernetes
+  components:
+    - resource: PLACEHOLDER
