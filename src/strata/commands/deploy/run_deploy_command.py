@@ -1,6 +1,6 @@
 from datetime import datetime as _dt
 from datetime import timezone as _tz
-from typing import Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import click
 
@@ -12,6 +12,7 @@ from strata.deployers.base_deployer import (
     STEP_DESTROY,
     STEP_PLAN,
     STEP_SETUP,
+    BaseDeployer,
 )
 from strata.integrations.lock.base_lock_backend import (
     BaseLockBackend,
@@ -575,6 +576,91 @@ class RunDeployCommand(BaseDeployCommand):
         except Exception as exc:
             # Cost history recording is always non-fatal
             self.logger.debug("cost_history_final_snapshot_error", error=str(exc))
+
+    def _inject_upstream_outputs(self, stage: "DeploymentStageModel", deployer: "BaseDeployer") -> bool:
+        """Resolve upstream provisioner outputs and inject into downstream provisioner's variables.
+
+        When a provisioner declares inputs_from to consume outputs from upstream
+        provisioners in the same deployment run, this method:
+        1. Checks if the deployer is Terraform (only provisioner supporting inputs_from)
+        2. Resolves each inputs_from mapping against collected stage outputs
+        3. Writes the resolved values to inputs_from.auto.tfvars.json
+
+        Returns True on success (or if inputs_from is not declared), False on error.
+        Errors are appended to self._errors.
+        """
+        from strata.deployers.terraform_deployer import TerraformDeployer
+        from strata.utils.resolved_values import resolve_inputs_from_values
+
+        # inputs_from is only meaningful for Terraform provisioners
+        if not isinstance(deployer, TerraformDeployer):
+            return True
+
+        # Get the IaC model for this stage (set during validate_workspace)
+        iac_model = deployer._iac_model
+        if iac_model is None or not iac_model.inputs_from:
+            return True
+
+        # Get working directory where tfvars files are written
+        working_dir = deployer._working_dir
+        if working_dir is None:
+            self._errors.append(f"Stage '{stage.name}': terraform working directory not set.")
+            return False
+
+        if not working_dir.exists():
+            self._errors.append(f"Stage '{stage.name}': terraform working directory does not exist: {working_dir}")
+            return False
+
+        # Resolve outputs for each upstream provisioner
+        stage_outputs = self._resolved_values.stage_outputs if self._resolved_values else {}
+        all_resolved: Dict[str, Any] = {}
+        has_errors = False
+
+        for inputs_from_entry in iac_model.inputs_from:
+            upstream_prov = inputs_from_entry.provisioner
+
+            resolved_values, errors = resolve_inputs_from_values(
+                inputs_from_list=iac_model.inputs_from,
+                upstream_provisioner_name=upstream_prov,
+                stage_outputs=stage_outputs,
+            )
+
+            if errors:
+                for error_msg in errors:
+                    self._errors.append(f"Stage '{stage.name}': {error_msg}")
+                has_errors = True
+
+            # Merge resolved values (later entries override earlier ones if there's overlap)
+            all_resolved.update(resolved_values)
+
+        if has_errors:
+            return False
+
+        # Only write the tfvars file if there are values to inject
+        if all_resolved:
+            try:
+                import json
+
+                inputs_from_file = working_dir / "inputs_from.auto.tfvars.json"
+                with open(inputs_from_file, "w", encoding="utf-8") as f:
+                    json.dump(all_resolved, f, indent=2, default=str)
+
+                if self._is_verbose() and self._is_console_output():
+                    click.echo(f"    Injected {len(all_resolved)} upstream output(s) into {inputs_from_file.name}")
+                    for key in sorted(all_resolved.keys()):
+                        click.echo(f"      {key}")
+
+                self.logger.debug(
+                    "inputs_from_injected",
+                    stage=stage.name,
+                    file=str(inputs_from_file),
+                    count=len(all_resolved),
+                )
+            except (OSError, IOError) as exc:
+                self._errors.append(f"Stage '{stage.name}': failed to write inputs_from.auto.tfvars.json: {exc}")
+                return False
+
+        return True
 
     # -------------------------------------------------------------------------
     # AI advisory helpers
@@ -1476,6 +1562,23 @@ class RunDeployCommand(BaseDeployCommand):
                 started_at=stage_started,
                 completed_at=_dt.now(_tz.utc).isoformat(),
                 error="deploy_stage_before hook failed",
+            )
+            return False
+
+        # --- inject inputs_from upstream provisioner outputs (ADR-0074) ---
+        # Before running any steps, resolve outputs from upstream provisioners
+        # (collected in prior stages) and inject them into this provisioner's
+        # variables if inputs_from is declared. This connects stage_outputs to
+        # the downstream provisioner's tfvars file.
+        if not self._inject_upstream_outputs(stage, deployer):
+            self._record_stage_result(
+                stage_name=str(stage.name),
+                provisioner=stage.provisioner,
+                topology=stage.topology,
+                status="failed",
+                started_at=stage_started,
+                completed_at=_dt.now(_tz.utc).isoformat(),
+                error="Failed to inject upstream provisioner outputs",
             )
             return False
 
