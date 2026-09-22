@@ -44,6 +44,7 @@ from strata.models.solution_model import SolutionModel
 from strata.services.base_service import BaseService
 from strata.services.configuration_service import ConfigurationService
 from strata.services.dns_service import DnsService
+from strata.services.environment_service import EnvironmentService
 from strata.services.firewall_service import FirewallService
 from strata.services.integration_service import IntegrationService
 from strata.services.module_service import ModuleService
@@ -113,6 +114,7 @@ SERVICE_BY_KIND: dict[PlatformKind, type[BaseService[Any]]] = {
     PlatformKind.WORKSPACE: WorkspaceService,
     PlatformKind.INTEGRATION: IntegrationService,
     PlatformKind.TENANT: TenantService,
+    PlatformKind.ENVIRONMENT: EnvironmentService,
 }
 
 

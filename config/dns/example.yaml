@@ -1,0 +1,22 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: dns
+meta:
+  name: example-dns
+spec:
+  provider: cloudflare
+  zones:
+    - name: example.com
+      ttl: 3600
+      records:
+        # A literal value.
+        - name: "@"
+          type: A
+          value: "203.0.113.1"
+        # A Value token (ADR-0002) — resolved against the 'prd' environment,
+        # which declares PUBLIC_IP. Phase 1 checks the token's shape; the
+        # environment check confirms the key exists.
+        - name: www
+          type: A
+          value: "${var:PUBLIC_IP}"
+      default_tags:
+        environment: example

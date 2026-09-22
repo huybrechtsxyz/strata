@@ -51,6 +51,24 @@ def has_value_tokens(value: str) -> bool:
     return bool(_VALUE_TOKEN_CANDIDATE_PATTERN.search(value))
 
 
+def extract_value_tokens(value: str) -> list[tuple[str, str]]:
+    """Return every well-formed ``(kind, key)`` pair in `value`.
+
+    The Phase 2 counterpart to `validate_value_tokens()`: that function checks
+    a token is *shaped* correctly without needing an Environment, this one
+    pulls the keys out so they can be checked against a real one (ADR-0002).
+
+    Malformed candidates are ignored here rather than raised — they are
+    already rejected at Phase 1 by `validate_value_tokens()`, so anything
+    reaching this point is either well-formed or belongs to a document that
+    never validated.
+
+        >>> extract_value_tokens("postgres://${var:HOST}/${secret:DB_PASS}")
+        [('var', 'HOST'), ('secret', 'DB_PASS')]
+    """
+    return [(m.group("kind"), m.group("key")) for m in VALUE_TOKEN_PATTERN.finditer(value)]
+
+
 def validate_cidr_or_token(value: str) -> None:
     """Validate a CIDR/IP-or-Value-binding string.
 

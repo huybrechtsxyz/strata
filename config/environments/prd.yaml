@@ -1,0 +1,34 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: environment
+meta:
+  name: prd
+  annotations:
+    description: "Example production environment"
+  tags: ["example", "production"]
+spec:
+  properties:
+    tier: production
+
+  # What '${var:KEY}' tokens resolve against.
+  variables:
+    - key: PUBLIC_IP
+      store: constant
+      value: "203.0.113.10"
+      description: "Public IP fronting the example service"
+    - key: REGION
+      store: constant
+      value: westeurope
+
+  # '${secret:KEY}'. Built-in stores (constant/environment/github) resolve
+  # directly; anything else names an integration-backed store.
+  secrets:
+    - key: DB_PASSWORD
+      store: environment
+      value: EXAMPLE_DB_PASSWORD
+      description: "Read from the EXAMPLE_DB_PASSWORD environment variable"
+
+  # '${feature:KEY}'.
+  features:
+    - key: ENABLE_TRACING
+      store: constant
+      value: "true"
