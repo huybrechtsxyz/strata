@@ -422,3 +422,59 @@ def collect_inputs_from_keys(inputs_from_list) -> set:
             else:
                 keys.update(inp.select)
     return keys
+
+
+def resolve_inputs_from_values(
+    inputs_from_list: List,
+    upstream_provisioner_name: str,
+    stage_outputs: Dict[str, Any],
+) -> Tuple[Dict[str, Any], List[str]]:
+    """Resolve actual output values from upstream provisioner for injection.
+
+    Takes each ProvisionerInputMappingModel and applies its mapping/prefix/select
+    rules to the collected upstream stage outputs, returning the resolved dict
+    ready to inject into the downstream provisioner's tfvars.
+
+    Args:
+        inputs_from_list: List of ProvisionerInputMappingModel instances
+            (typically from stage.iac_model.inputs_from).
+        upstream_provisioner_name: Name of the upstream provisioner being consumed
+            (used to find the matching entry in inputs_from_list).
+        stage_outputs: Dict of collected outputs from all prior stages
+            (typically self._resolved_values.stage_outputs).
+
+    Returns:
+        Tuple of (resolved_values_dict, error_messages_list).
+        resolved_values_dict: Flattened {downstream_key: value} ready for tfvars.
+        error_messages_list: Warnings if an upstream output is missing, etc.
+    """
+    resolved: Dict[str, Any] = {}
+    errors: List[str] = []
+
+    if not inputs_from_list:
+        return resolved, errors
+
+    # Find the inputs_from entry for this upstream provisioner
+    matching_entry = None
+    for inp in inputs_from_list:
+        if inp.provisioner == upstream_provisioner_name:
+            matching_entry = inp
+            break
+
+    if not matching_entry:
+        # No inputs_from entry for this upstream provisioner — nothing to inject
+        return resolved, errors
+
+    # Apply the mapping/prefix/select transformation using existing helper
+    outputs_to_include = stage_outputs or {}
+    try:
+        resolved = apply_input_mapping(
+            upstream_outputs=outputs_to_include,
+            mapping=matching_entry.mapping,
+            prefix=matching_entry.prefix,
+            select=matching_entry.select,
+        )
+    except ValueError as exc:
+        errors.append(str(exc))
+
+    return resolved, errors

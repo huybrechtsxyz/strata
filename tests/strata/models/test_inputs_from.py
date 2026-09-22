@@ -326,3 +326,109 @@ class TestCollectInputsFromKeys:
         )
         keys = collect_inputs_from_keys([inp1, inp2])
         assert keys == {"ax", "y"}
+
+
+# ---------------------------------------------------------------------------
+
+
+class TestResolveInputsFromValues:
+    """Test resolve_inputs_from_values — deploy-time resolution of outputs."""
+
+    def test_mapping_resolves_upstream_outputs(self):
+        """Mapping transforms upstream output names to downstream variable names."""
+        from strata.utils.resolved_values import resolve_inputs_from_values
+
+        inp = ProvisionerInputMappingModel(
+            provisioner="core",
+            mapping={"vnet_id": "platform_vnet_id", "rg_name": "resource_group"},
+        )
+        upstream_outputs = {
+            "vnet_id": "vnet-123",
+            "rg_name": "rg-456",
+            "unrelated": "ignored",
+        }
+        resolved, errors = resolve_inputs_from_values([inp], "core", upstream_outputs)
+        assert resolved == {"platform_vnet_id": "vnet-123", "resource_group": "rg-456"}
+        assert errors == []
+
+    def test_select_filters_outputs(self):
+        """Select allowlist restricts which outputs are included."""
+        from strata.utils.resolved_values import resolve_inputs_from_values
+
+        inp = ProvisionerInputMappingModel(
+            provisioner="core",
+            select=["vnet_id"],  # Only vnet_id, not missing outputs
+        )
+        upstream_outputs = {
+            "vnet_id": "vnet-123",
+            "rg_name": "rg-456",
+            "unrelated": "ignored",
+        }
+        resolved, errors = resolve_inputs_from_values([inp], "core", upstream_outputs)
+        assert resolved == {"vnet_id": "vnet-123"}
+        assert errors == []
+
+    def test_select_missing_key_returns_error(self):
+        """When select includes keys not in upstream outputs, error is returned."""
+        from strata.utils.resolved_values import resolve_inputs_from_values
+
+        inp = ProvisionerInputMappingModel(
+            provisioner="core",
+            select=["vnet_id", "missing_key"],
+        )
+        upstream_outputs = {"vnet_id": "vnet-123"}
+        resolved, errors = resolve_inputs_from_values([inp], "core", upstream_outputs)
+        # apply_input_mapping raises ValueError when select includes missing keys
+        assert len(errors) > 0
+        assert "missing_key" in errors[0]
+        assert resolved == {}
+
+    def test_prefix_adds_namespace(self):
+        """Prefix prepends to all output names."""
+        from strata.utils.resolved_values import resolve_inputs_from_values
+
+        inp = ProvisionerInputMappingModel(
+            provisioner="core",
+            prefix="baseline_",
+        )
+        upstream_outputs = {"vnet_id": "vnet-123", "cluster_id": "aks-456"}
+        resolved, errors = resolve_inputs_from_values([inp], "core", upstream_outputs)
+        assert resolved == {"baseline_vnet_id": "vnet-123", "baseline_cluster_id": "aks-456"}
+        assert errors == []
+
+    def test_no_matching_provisioner_returns_empty(self):
+        """When no inputs_from entry matches the upstream provisioner, return empty."""
+        from strata.utils.resolved_values import resolve_inputs_from_values
+
+        inp = ProvisionerInputMappingModel(
+            provisioner="other",
+            mapping={"x": "y"},
+        )
+        upstream_outputs = {"x": "value"}
+        resolved, errors = resolve_inputs_from_values([inp], "core", upstream_outputs)
+        assert resolved == {}
+        assert errors == []
+
+    def test_missing_mapped_key_returns_error(self):
+        """When a mapped output key is missing, it's silently omitted (not an error)."""
+        from strata.utils.resolved_values import resolve_inputs_from_values
+
+        inp = ProvisionerInputMappingModel(
+            provisioner="core",
+            mapping={"missing_key": "downstream_var", "vnet_id": "platform_vnet"},
+        )
+        upstream_outputs = {"vnet_id": "vnet-123"}
+        resolved, errors = resolve_inputs_from_values([inp], "core", upstream_outputs)
+        # apply_input_mapping silently omits missing upstream keys
+        assert resolved == {"platform_vnet": "vnet-123"}
+        assert errors == []
+
+    def test_passthrough_no_mapping_no_prefix(self):
+        """Without mapping or prefix, outputs pass through unchanged."""
+        from strata.utils.resolved_values import resolve_inputs_from_values
+
+        inp = ProvisionerInputMappingModel(provisioner="core")
+        upstream_outputs = {"vnet_id": "vnet-123", "rg_name": "rg-456"}
+        resolved, errors = resolve_inputs_from_values([inp], "core", upstream_outputs)
+        assert resolved == upstream_outputs
+        assert errors == []
