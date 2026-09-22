@@ -1,0 +1,33 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: tenant
+meta:
+  name: c0062
+  annotations:
+    description: "Example customer tenant"
+  labels:
+    customer: example-corp
+  tags: ["tenant", "customer"]
+spec:
+  # meta.name above IS the tenant code — v1's spec.code duplicated it.
+  display_name: "Example Corporation"
+
+  # Data residency boundaries. Each must appear as a `geography` on some
+  # region in a ProviderConfig (see registries/azure.yaml) — the same concept
+  # v1 called "zones", under the name the provider side settled on.
+  geographies:
+    - europe
+
+  onboarded: 2026-03-15
+
+  # Environment document *names*, not file paths (ADR-0015). Merged before
+  # a deployment's own environments, so deployment values win.
+  # NOTE: the 'environment' kind is not built yet, so this name currently
+  # resolves to nothing — it is here to show the intended shape.
+  # environments:
+  #   - c0062-env
+
+  properties:
+    tier: standard
+
+  configuration:
+    crm_id: "42"

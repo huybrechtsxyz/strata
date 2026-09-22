@@ -53,6 +53,7 @@ from strata.services.provider_config_service import ProviderConfigService
 from strata.services.provider_service import ProviderService
 from strata.services.resource_service import ResourceService
 from strata.services.solution_service import SolutionService
+from strata.services.tenant_service import TenantService
 from strata.services.topology_config_service import TopologyConfigService
 from strata.services.topology_service import TopologyService
 from strata.services.workspace_service import WorkspaceService
@@ -111,6 +112,7 @@ SERVICE_BY_KIND: dict[PlatformKind, type[BaseService[Any]]] = {
     PlatformKind.TOPOLOGY: TopologyService,
     PlatformKind.WORKSPACE: WorkspaceService,
     PlatformKind.INTEGRATION: IntegrationService,
+    PlatformKind.TENANT: TenantService,
 }
 
 
