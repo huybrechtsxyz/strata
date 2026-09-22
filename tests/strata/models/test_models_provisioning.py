@@ -15,7 +15,7 @@ def _minimal_provisioner() -> dict:
     return {
         "name": "terraform-main",
         "tool": "terraform",
-        "source": {"repository": "infra-repo", "source_path": "terraform/main"},
+        "source": {"remote": "infra-repo", "source_path": "terraform/main"},
     }
 
 
@@ -24,7 +24,7 @@ def test_provisioner_minimal_is_valid():
     model = ProvisionerModel.model_validate(_minimal_provisioner())
     assert model.name == "terraform-main"
     assert model.tool == "terraform"
-    assert model.source.repository == "infra-repo"
+    assert model.source.remote == "infra-repo"
 
 
 def test_provisioner_terraform_requires_source():
@@ -64,7 +64,7 @@ def test_provisioner_backend_rejected_for_non_terraform():
     data = {
         "name": "ansible-init",
         "tool": "ansible",
-        "source": {"repository": "infra-repo", "source_path": "ansible/init"},
+        "source": {"remote": "infra-repo", "source_path": "ansible/init"},
         "backend": {"type": "azurerm", "configuration": {}},
     }
     with pytest.raises(ValidationError):
@@ -80,7 +80,7 @@ def test_provisioner_backend_allowed_for_unknown_tool():
     data = {
         "name": "custom-main",
         "tool": "pulumi",
-        "source": {"repository": "infra-repo", "source_path": "pulumi/main"},
+        "source": {"remote": "infra-repo", "source_path": "pulumi/main"},
         "backend": {"type": "s3", "configuration": {}},
     }
     model = ProvisionerModel.model_validate(data)
@@ -92,7 +92,7 @@ def test_provisioner_backend_accepted_for_opentofu():
     data = {
         "name": "opentofu-main",
         "tool": "opentofu",
-        "source": {"repository": "infra-repo", "source_path": "terraform/main"},
+        "source": {"remote": "infra-repo", "source_path": "terraform/main"},
         "backend": {"type": "azurerm", "configuration": {"resource_group_name": "tfstate-rg"}},
     }
     model = ProvisionerModel.model_validate(data)
@@ -110,7 +110,7 @@ def test_provisioner_properties_accepted_for_ansible():
     data = {
         "name": "ansible-init",
         "tool": "ansible",
-        "source": {"repository": "infra-repo", "source_path": "ansible/init"},
+        "source": {"remote": "infra-repo", "source_path": "ansible/init"},
         "properties": {"playbook": "site.yml"},
     }
     model = ProvisionerModel.model_validate(data)
@@ -130,7 +130,7 @@ def test_provisioner_properties_allowed_for_unknown_tool():
     data = {
         "name": "custom-main",
         "tool": "pulumi",
-        "source": {"repository": "infra-repo", "source_path": "pulumi/main"},
+        "source": {"remote": "infra-repo", "source_path": "pulumi/main"},
         "properties": {"playbook": "site.yml"},
     }
     model = ProvisionerModel.model_validate(data)

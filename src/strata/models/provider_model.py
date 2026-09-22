@@ -97,7 +97,12 @@ class ProviderSpecModel(PlatformBaseModel):
     )
     default_tags: dict[str, str] | None = Field(
         None,
-        description="Default tags to apply to all resources created by this provider (ignored if provider doesn't support tagging)",
+        description="Default tags to apply to all resources created by this provider (ignored if provider "
+        "doesn't support tagging). Deliberately distinct from meta.tags (a free-form list used for "
+        "strata-internal categorization/documentation, not cloud tags). Optional (unlike "
+        "ResourceSpecModel.default_tags) — not every provider account needs an organization-wide tagging "
+        "policy; no custom_tags sibling either, since this is a broad provider-scope default, not an "
+        "individually-tagged resource.",
     )
 
 

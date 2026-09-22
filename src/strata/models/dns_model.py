@@ -102,7 +102,8 @@ class DnsZoneModel(PlatformBaseModel):
     )
     default_tags: dict[str, str] = Field(
         description="Required baseline cloud provider tags for this zone (e.g. cost-center, environment, "
-        "owner). Strata does not enforce a maximum tag count."
+        "owner). Deliberately distinct from meta.tags (a free-form list used for strata-internal "
+        "categorization/documentation, not cloud tags). Strata does not enforce a maximum tag count."
     )
     custom_tags: dict[str, str] | None = Field(
         None, description="Optional additional cloud provider tags beyond default_tags."

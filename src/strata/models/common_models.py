@@ -46,6 +46,7 @@ VariableKey = Annotated[str, StringConstraints(min_length=1, strip_whitespace=Tr
 class PlatformKind(str, Enum):
     """Enumeration of supported platform kinds."""
 
+    SOLUTION = "solution"
     CONFIGURATION = "configuration"
     PROVIDERCONFIG = "providerconfig"
     TOPOLOGYCONFIG = "topologyconfig"
@@ -98,27 +99,44 @@ CANONICAL_API_VERSION = PlatformVersion.v2
 class SourceModel(PlatformBaseModel):
     """Reusable model for source configuration.
 
-    Two modes (mutually exclusive, validated):
-      1. Git-based: repository + source_path — used for Terraform modules, local charts, etc.
-      2. Chart-based: chart_repository + chart_name — used for Helm/ArgoCD chart registry pulls.
+    One field names *which remote* (`remote`); the selection field that
+    accompanies it decides the mode:
+
+      1. Git-based: ``remote`` + ``source_path`` — Terraform modules, local charts, etc.
+         ``remote`` may be omitted to mean "this solution's own repository".
+      2. Chart-based: ``remote`` + ``chart_name`` — Helm/ArgoCD chart registry pulls.
+         ``remote`` is required; a chart always comes from a registry.
+
+    v1 (and v2's own earlier pass) had two fields that both answered "which
+    remote" — `repository` for git and `chart_repository` for charts —
+    differing only in what you selected afterwards. Collapsed for the same
+    reason `ModuleReferenceModel` was: one shape, not two near-duplicates.
+    `chart_repository` additionally held a raw URL, so chart sources were the
+    last place in the schema that could not be redirected to an internal
+    mirror by editing one declaration. Mirrors Flux's single `sourceRef`,
+    which spans Git/OCI/Helm repositories alike.
 
     Example — git-based::
 
         source:
-          repository: my-infra-repo
+          remote: my-infra-repo
           source_path: terraform/modules/vpc
           target_path: build/vpc
 
     Example — Helm chart registry::
 
         source:
+          remote: goauthentik
           chart_name: authentik
           chart_version: "2024.12.0"
-          chart_repository: https://charts.goauthentik.io
     """
 
-    repository: PlatformName | None = Field(
-        None, description="Name of the repository from solution registered repositories (via strata repo add)"
+    remote: PlatformName | None = Field(
+        None,
+        description="Name of a remote declared in the solution manifest's spec.remotes (strata.yaml). The "
+        "remote owns the URL, the git/OCI ref and the credentials; this only selects which one to take "
+        "from. Required for chart-based sources; optional for git-based ones, where omitting it means "
+        "this solution's own repository.",
     )
     source_path: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] | None = Field(
         None,
@@ -130,56 +148,55 @@ class SourceModel(PlatformBaseModel):
     )
     description: str | None = Field(None, description="Optional description for documentation purposes")
 
-    # Git ref pinning (overrides the workspace-level remote default)
-    reference: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] | None = Field(
-        None,
-        description=(
-            "Git ref override (branch, tag, or commit SHA) for this specific source. "
-            "Takes precedence over the remote's default reference and any environment "
-            "remote override. Only valid for git-based sources (repository + source_path)."
-        ),
-    )
+    # No `reference` field: a git/OCI ref is declared once, on the remote
+    # (`SolutionRemoteModel.reference`), and never overridden per use
+    # site. Allowing an override here would let two modules silently pull
+    # different trees of the same repository, and makes "what version is
+    # deployed?" answerable only by scanning every source in the solution.
+    # Same call Flux/Bazel/Nix make (ref lives on the source declaration);
+    # Helm's per-chart `chart_version` below is NOT an exception — a chart
+    # repo index legitimately serves many versions, so picking one is
+    # selection, not remote identity.
 
     # Helm / ArgoCD chart registry fields
     chart_name: str | None = Field(
         None,
-        description="Helm chart name (e.g. 'authentik'). Required when using chart_repository.",
+        description="Helm chart name (e.g. 'authentik'). Selects chart-based mode; requires `remote`.",
     )
     chart_version: str | None = Field(
         None,
-        description="Helm chart version (e.g. '2024.12.0'). Omit to use latest.",
-    )
-    chart_repository: str | None = Field(
-        None,
-        description="Helm chart repository URL or OCI reference (e.g. 'https://charts.goauthentik.io' "
-        "or 'oci://ghcr.io/org/charts').",
+        description="Helm chart version (e.g. '2024.12.0'). Omit to use latest. Only valid in chart-based "
+        "mode. Unlike a git ref, this is NOT remote identity — a chart index legitimately serves many "
+        "versions, so picking one is selection and belongs here rather than on the remote.",
     )
 
     @model_validator(mode="after")
     def validate_source_mode(self) -> "SourceModel":
-        """Ensure exactly one source mode is specified: git-based or chart-based."""
-        has_git = self.repository is not None or self.source_path is not None
-        has_chart = self.chart_repository is not None or self.chart_name is not None
+        """Ensure exactly one source mode is selected, with the fields that mode needs.
+
+        The mode comes from the *selection* field (`source_path` vs
+        `chart_name`), not from `remote` — `remote` is mode-agnostic, so one
+        OCI registry can serve charts in one source and plain artifacts in
+        another. Whether the named remote's `type` actually matches the mode
+        needs the loaded solution manifest, so it is a Phase 2 check (ADR-0003).
+        """
+        has_git = self.source_path is not None
+        has_chart = self.chart_name is not None
 
         if not has_git and not has_chart:
             raise ValueError(
-                "SourceModel requires either a git-based source (repository + source_path) "
-                "or a chart-based source (chart_repository + chart_name)."
+                "SourceModel requires either a git-based source (source_path) "
+                "or a chart-based source (chart_name)."
             )
         if has_git and has_chart:
             raise ValueError(
-                "SourceModel cannot mix git-based (repository/source_path) and "
-                "chart-based (chart_repository/chart_name) fields. Use one mode only."
+                "SourceModel cannot mix git-based (source_path) and chart-based (chart_name) "
+                "selection. Use one mode only."
             )
-        if has_git and self.source_path is None:
-            raise ValueError("source_path is required when repository is specified.")
-        if has_chart and self.chart_name is None:
-            raise ValueError("chart_name is required when chart_repository is specified.")
-        if self.reference is not None and has_chart:
-            raise ValueError(
-                "SourceModel.reference is only valid for git-based sources, not chart-based sources "
-                "(use chart_version instead)."
-            )
+        if has_chart and self.remote is None:
+            raise ValueError("remote is required for chart-based sources (a chart comes from a registry).")
+        if has_git and self.chart_version is not None:
+            raise ValueError("chart_version is only valid for chart-based sources.")
         return self
 
     @field_validator("source_path", "target_path")

@@ -9,7 +9,7 @@ def test_module_service_validates_from_data():
     data = {
         "meta": {"name": "authentik"},
         "spec": {
-            "source": {"chart_name": "authentik", "chart_repository": "https://charts.goauthentik.io"},
+            "source": {"chart_name": "authentik", "remote": "goauthentik"},
             "default_labels": {"app.kubernetes.io/name": "authentik"},
         },
     }

@@ -17,7 +17,7 @@ def test_workspace_service_validates_from_data():
                 {
                     "name": "terraform-main",
                     "tool": "terraform",
-                    "source": {"repository": "infra-repo", "source_path": "terraform/main"},
+                    "source": {"remote": "infra-repo", "source_path": "terraform/main"},
                 }
             ],
         },
@@ -39,7 +39,7 @@ def _workspace_with_topology() -> dict:
                 {
                     "name": "terraform-main",
                     "tool": "terraform",
-                    "source": {"repository": "infra-repo", "source_path": "terraform/main"},
+                    "source": {"remote": "infra-repo", "source_path": "terraform/main"},
                 }
             ],
             "resources": [

@@ -55,6 +55,7 @@ VALID_INTEGRATION_CAPABILITIES = frozenset(
         "secrets",  # SecretStoreModel-backed stores
         "features",  # FeatureStoreModel-backed stores
         "infrastructure",  # Provisioner.tool-backed IaC/CM tools
+        "sources",  # SolutionRemoteModel-backed artifact sources (git/oci/helm auth)
     }
 )
 

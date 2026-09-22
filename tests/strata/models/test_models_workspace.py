@@ -16,7 +16,7 @@ def _minimal_workspace() -> dict:
                 {
                     "name": "terraform-main",
                     "tool": "terraform",
-                    "source": {"repository": "infra-repo", "source_path": "terraform/main"},
+                    "source": {"remote": "infra-repo", "source_path": "terraform/main"},
                 }
             ],
         },
@@ -218,7 +218,7 @@ def test_workspace_rejects_ambiguous_provisioning_order():
         {
             "name": "ansible-init",
             "tool": "ansible",
-            "source": {"repository": "infra-repo", "source_path": "ansible/init"},
+            "source": {"remote": "infra-repo", "source_path": "ansible/init"},
         }
     )
     data["spec"]["resources"] = [{"name": "aks_cluster", "file": "resources/aks.yaml"}]
@@ -237,7 +237,7 @@ def test_workspace_accepts_ordered_provisioning_steps():
         {
             "name": "ansible-init",
             "tool": "ansible",
-            "source": {"repository": "infra-repo", "source_path": "ansible/init"},
+            "source": {"remote": "infra-repo", "source_path": "ansible/init"},
         }
     )
     data["spec"]["resources"] = [{"name": "aks_cluster", "file": "resources/aks.yaml"}]

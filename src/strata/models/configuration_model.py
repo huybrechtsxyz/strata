@@ -15,6 +15,13 @@ many provider/topology types would need one shared, ever-growing file with
 no per-type ownership or reviewable diffs. Promoted to standalone kinds for
 the same reason `Integration`/`Topology` were (see their own docstrings/
 ADR-0011) — each provider/topology type gets its own file.
+
+`spec.remotes` is NOT here — it lives on the solution manifest
+(`solution_model.py`, `strata.yaml`). Bootstrap ordering forces it: v1's own
+`solution.json` registers a `config` repository, i.e. Configuration itself
+can live in a remote, so remotes must resolve before Configuration loads.
+Configuration holds platform *policy*; the solution manifest holds
+*composition*.
 """
 
 from typing import Any

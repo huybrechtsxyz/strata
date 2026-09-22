@@ -62,3 +62,4 @@ def test_configuration_rejects_duplicate_topology_names():
     ]
     with pytest.raises(ValidationError, match="Duplicate"):
         ConfigurationModel.model_validate(data)
+

@@ -11,7 +11,7 @@ def _minimal_module() -> dict:
     return {
         "meta": {"name": "authentik"},
         "spec": {
-            "source": {"chart_name": "authentik", "chart_repository": "https://charts.goauthentik.io"},
+            "source": {"chart_name": "authentik", "remote": "goauthentik"},
             "default_labels": {"app.kubernetes.io/name": "authentik"},
         },
     }
@@ -65,25 +65,29 @@ def test_module_accepts_unknown_custom_provisioner_type():
 
 
 def test_module_source_rejects_mixed_git_and_chart():
-    """A source mixing git-based and chart-based fields is rejected."""
+    """A source mixing git-based and chart-based selection is rejected.
+
+    `remote` is shared by both modes, so the mix is detected via the
+    selection fields: source_path (git) alongside chart_name (chart).
+    """
     data = _minimal_module()
-    data["spec"]["source"]["repository"] = "my-infra-repo"
+    data["spec"]["source"]["source_path"] = "helm/authentik"
     with pytest.raises(ValidationError):
         ModuleModel.model_validate(data)
 
 
 def test_module_source_git_based_is_valid():
-    """A git-based source (repository + source_path) validates successfully."""
+    """A git-based source (remote + source_path) validates successfully."""
     data = _minimal_module()
-    data["spec"]["source"] = {"repository": "my-infra-repo", "source_path": "helm/authentik"}
+    data["spec"]["source"] = {"remote": "my-infra-repo", "source_path": "helm/authentik"}
     model = ModuleModel.model_validate(data)
-    assert model.spec.source.repository == "my-infra-repo"
+    assert model.spec.source.remote == "my-infra-repo"
 
 
 def test_module_source_rejects_path_traversal():
     """A source_path containing '..' is rejected."""
     data = _minimal_module()
-    data["spec"]["source"] = {"repository": "my-infra-repo", "source_path": "../etc/passwd"}
+    data["spec"]["source"] = {"remote": "my-infra-repo", "source_path": "../etc/passwd"}
     with pytest.raises(ValidationError):
         ModuleModel.model_validate(data)
 
@@ -91,8 +95,33 @@ def test_module_source_rejects_path_traversal():
 def test_module_source_rejects_absolute_path():
     """A source_path that is absolute is rejected."""
     data = _minimal_module()
-    data["spec"]["source"] = {"repository": "my-infra-repo", "source_path": "/etc/passwd"}
+    data["spec"]["source"] = {"remote": "my-infra-repo", "source_path": "/etc/passwd"}
     with pytest.raises(ValidationError):
+        ModuleModel.model_validate(data)
+
+
+def test_module_source_chart_requires_remote():
+    """A chart-based source must name a remote — a chart always comes from a registry."""
+    data = _minimal_module()
+    data["spec"]["source"] = {"chart_name": "authentik"}
+    with pytest.raises(ValidationError, match="remote is required for chart-based"):
+        ModuleModel.model_validate(data)
+
+
+def test_module_source_git_may_omit_remote():
+    """A git-based source may omit remote, meaning this solution's own repository."""
+    data = _minimal_module()
+    data["spec"]["source"] = {"source_path": "helm/authentik"}
+    model = ModuleModel.model_validate(data)
+    assert model.spec.source.remote is None
+    assert model.spec.source.source_path == "helm/authentik"
+
+
+def test_module_source_rejects_chart_version_on_git_source():
+    """chart_version is meaningless for a git-based source."""
+    data = _minimal_module()
+    data["spec"]["source"] = {"source_path": "helm/authentik", "chart_version": "1.0.0"}
+    with pytest.raises(ValidationError, match="chart_version is only valid"):
         ModuleModel.model_validate(data)
 
 

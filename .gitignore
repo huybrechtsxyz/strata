@@ -7,3 +7,6 @@ __pycache__/
 .ruff_cache/
 .coverage
 docs/_build/
+
+# Temporary until uv.lock is cleaned of internal ProGet URLs (dev-machine only)
+uv.lock

@@ -1,0 +1,28 @@
+{
+  "template": "https://omhqazdevops/OMP/Data%20Science/_git/python-templates",
+  "commit": "f0edfceb60fde874ec1ef93a973066d0376131e3",
+  "checkout": null,
+  "context": {
+    "cookiecutter": {
+      "type": "package",
+      "project_name": "xyz_platform",
+      "short_description": "platform",
+      "python_version": "3.13",
+      "with_executable_script": true,
+      "with_docs_website": true,
+      "with_azure_pipelines": false,
+      "with_examples": false,
+      "__author_name": "OMP",
+      "__author_email": "support@omp.com",
+      "__version": "0.0.1",
+      "__package_name_kebab_case": "xyz-platform",
+      "__folder_name_snake_case": "xyz_platform",
+      "_copy_without_render": [
+        "*.js"
+      ],
+      "_template": "https://omhqazdevops/OMP/Data%20Science/_git/python-templates",
+      "_commit": "f0edfceb60fde874ec1ef93a973066d0376131e3"
+    }
+  },
+  "directory": null
+}
