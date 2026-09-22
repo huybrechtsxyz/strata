@@ -243,6 +243,12 @@ class DeploymentSpecModel(PlatformBaseModel):
     configurations: list[PlatformName] | None = Field(
         None, description="Names of additional Configuration documents that apply to this deployment"
     )
+    version: PlatformName | None = Field(
+        None,
+        description="Name of the Version document supplying pins for this deployment. When a pinned target "
+        "(image, chart, remote ref, tool) is declared elsewhere, the pin wins. Omit to use each document's "
+        "own declared versions.",
+    )
     layers: DeploymentLayersModel | None = Field(
         None, description="Hierarchy position (inert in v2 — see DeploymentLayersModel)"
     )

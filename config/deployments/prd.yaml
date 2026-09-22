@@ -17,6 +17,10 @@ spec:
 
   tenant: c0062
 
+  # Pins for this rollout. Where a pinned target is declared elsewhere
+  # (module image, chart version, remote ref, tool version), the pin wins.
+  version: prd
+
   # Overrides the base's stage parameters for this step, field-by-field —
   # the base's timeouts.apply survives.
   stages:

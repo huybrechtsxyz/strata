@@ -58,6 +58,7 @@ from strata.services.solution_service import SolutionService
 from strata.services.tenant_service import TenantService
 from strata.services.topology_config_service import TopologyConfigService
 from strata.services.topology_service import TopologyService
+from strata.services.version_service import VersionService
 from strata.services.workspace_service import WorkspaceService
 
 #: The solution manifest filename — both the root marker and the recursion
@@ -117,6 +118,7 @@ SERVICE_BY_KIND: dict[PlatformKind, type[BaseService[Any]]] = {
     PlatformKind.TENANT: TenantService,
     PlatformKind.ENVIRONMENT: EnvironmentService,
     PlatformKind.DEPLOYMENT: DeploymentService,
+    PlatformKind.VERSION: VersionService,
 }
 
 

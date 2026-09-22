@@ -86,7 +86,13 @@ class ProvisionerModel(PlatformBaseModel):
     configuration: dict[str, Any] | None = Field(
         None, description="Tool-specific passthrough configuration, not validated by strata."
     )
-    version: str | None = Field(None, description="Pinned tool version for this provisioner (e.g. '1.7.0').")
+    version: str | None = Field(
+        None,
+        description="Tool version this provisioner expects (e.g. '1.7.0'). An assertion, not an install "
+        "instruction: strata never installs software — CI does (setup-terraform/setup-helm) — so preflight "
+        "verifies what is present and fails on a mismatch. Not pinnable from a Version document for the "
+        "same reason.",
+    )
 
     @model_validator(mode="after")
     def validate_source_required_unless_sync(self) -> "ProvisionerModel":
