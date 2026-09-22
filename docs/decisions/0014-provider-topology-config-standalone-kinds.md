@@ -6,7 +6,11 @@
   promotion out of Workspace — same reasoning applied here one level up),
   [ADR-0013](0013-configuration-topology-registry.md) (introduced the topology
   registry this ADR promotes out of `Configuration`), the `Integration` kind
-  (`integration_model.py`, promoted the same session, for the same reason)
+  (`integration_model.py`, promoted the same session, for the same reason),
+  [ADR-0015](0015-solution-manifest-and-document-discovery.md)
+  (**supersedes decision 4 below**: the `{name, file, description}` pointers
+  became plain `list[PlatformName]` once documents are found by discovery —
+  the promotion to standalone kinds itself stands unchanged)
 
 ## Context and Problem Statement
 

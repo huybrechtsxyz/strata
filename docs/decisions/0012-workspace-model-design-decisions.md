@@ -6,7 +6,12 @@
 - Date: 2026-09-21
 - Related: [ADR-0011](0011-topology-and-provisioning-decoupling.md) (the
   whole conceptual design this model implements — image/container framing,
-  Topology/Provisioning decoupling, `ProvisionerModel`/`ProvisioningStepModel`)
+  Topology/Provisioning decoupling, `ProvisionerModel`/`ProvisioningStepModel`),
+  [ADR-0015](0015-solution-manifest-and-document-discovery.md) (**supersedes
+  the reference shape below**: the `{name, file}` wrapper models are deleted
+  and `spec.providers`/`namespaces`/`firewalls`/`dns_zones`/`networks`/
+  `topology` are now plain name lists; `WorkspaceResourceModel.file` became
+  `.resource`, naming the Resource document an instance is built from)
 
 ## Context and Problem Statement
 
