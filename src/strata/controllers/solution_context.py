@@ -26,6 +26,7 @@ from strata.controllers.deployment_resolution import resolve_deployment_chains
 from strata.controllers.references import validate_references
 from strata.controllers.semantic_checks import run_semantic_checks
 from strata.controllers.solution_controller import SolutionController, find_solution_root
+from strata.controllers.version_pins import check_version_pins
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError, ValidationError
 from strata.utils.layout import MANIFEST_FILENAME
@@ -73,7 +74,7 @@ class SolutionContext:
     def resolve(self) -> Diagnostics:
         """Run cross-document checks and merge the findings in.
 
-        Three passes, in order:
+        Four passes, in order:
 
         1. Reference *existence* (`validate_references`) — does the name
            point at something real?
@@ -87,6 +88,9 @@ class SolutionContext:
            resolved deployments from (2) so a deployment that only gets
            `workspace`/`environments` through `extends` is checked against
            its complete form, not the raw partial one sitting in the index.
+        4. Version pin checks (`check_version_pins`) — independent of (2)/(3):
+           a pin is a fact about the Version document itself, checked once
+           regardless of which (or how many) deployments reference it.
 
         Only meaningful once every document loaded: a document that failed
         schema validation never entered the index, so reference checks would
@@ -106,6 +110,7 @@ class SolutionContext:
         resolved_deployments, resolution_diagnostics = resolve_deployment_chains(self.controller.index)
         found.extend(resolution_diagnostics)
         found.extend(run_semantic_checks(self.controller.index, resolved_deployments))
+        found.extend(check_version_pins(self.controller.index, self.controller.solution))
         self.diagnostics.extend(found)
         return found
 
