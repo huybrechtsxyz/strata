@@ -5,6 +5,7 @@ from typing import Any
 
 from strata.models.common_models import PlatformBaseModel
 from strata.models.environment_model import EnvironmentModel
+from strata.models.store_model import FeatureStoreModel, SecretStoreModel, VariableStoreModel
 from strata.services.base_service import BaseService
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.value_tokens import extract_value_tokens
@@ -115,3 +116,32 @@ def _iter_strings(value: Any, path: str = "") -> list[tuple[str, str]]:
         for position, child in enumerate(value):
             found.extend(_iter_strings(child, f"{path}[{position}]"))
     return found
+
+
+def merge_environment_models(
+    environments: list[EnvironmentModel],
+) -> tuple[dict[str, VariableStoreModel], dict[str, SecretStoreModel], dict[str, FeatureStoreModel]]:
+    """Merge several Environments into one set of store definitions, by key.
+
+    Later entries in `environments` override earlier ones on a key collision
+    — the actual store definition (not just its presence), since a real
+    resolution needs to know *which* store backs a key, not only that one
+    does. Callers merge a Tenant's `spec.environments` before a Deployment's
+    own (`TenantSpecModel.environments`'s own description: "merged in BEFORE
+    a deployment's own"), so pass them in that order.
+
+    Args:
+        environments: Already-validated Environment models, in merge order.
+
+    Returns:
+        Three dicts (variables, secrets, features), each keyed by `key`.
+    """
+    variables: dict[str, VariableStoreModel] = {}
+    secrets: dict[str, SecretStoreModel] = {}
+    features: dict[str, FeatureStoreModel] = {}
+    for environment in environments:
+        spec = environment.spec
+        variables.update({v.key: v for v in spec.variables or []})
+        secrets.update({s.key: s for s in spec.secrets or []})
+        features.update({f.key: f for f in spec.features or []})
+    return variables, secrets, features

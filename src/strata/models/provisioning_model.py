@@ -10,17 +10,25 @@ Neither model here is a standalone kind (no `PlatformKind`/`apiVersion`
 wrapper, no dedicated service) — both are sub-models used as fields within
 the future `Workspace` kind, the same way `SourceModel`/`AuthenticationModel`
 are reusable sub-models, not documents of their own.
+
+`ProvisionerModel.version` (this ADR's original field) is **removed** by
+ADR-0021 D4 and replaced by `.integration`, naming an `Integration` document
+that owns the expected version instead. Three places modelled the same fact
+in v1 with nothing arbitrating between them; see that ADR for the evidence
+and the reasoning for which one won.
 """
 
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import Field, model_validator
 
 from strata.models.common_models import (
     PlatformBaseModel,
+    PlatformKind,
     PlatformName,
     SourceModel,
 )
+from strata.models.reference_fields import References
 from strata.utils.builtin_types import SYNC_PROVISIONER_TYPES, TERRAFORM_COMPATIBLE_TYPES, ProvisionerType
 from strata.utils.names import check_unique_names
 
@@ -86,12 +94,13 @@ class ProvisionerModel(PlatformBaseModel):
     configuration: dict[str, Any] | None = Field(
         None, description="Tool-specific passthrough configuration, not validated by strata."
     )
-    version: str | None = Field(
+    integration: Annotated[PlatformName, References(PlatformKind.INTEGRATION)] | None = Field(
         None,
-        description="Tool version this provisioner expects (e.g. '1.7.0'). An assertion, not an install "
-        "instruction: strata never installs software — CI does (setup-terraform/setup-helm) — so preflight "
-        "verifies what is present and fails on a mismatch. Not pinnable from a Version document for the "
-        "same reason.",
+        description="Name of an Integration document this provisioner binds to, for the tool's expected "
+        "version, transport and authentication (ADR-0021 D4). If unset, resolution auto-binds to the sole "
+        "compatible registered Integration and errors — rather than guessing — when more than one candidate "
+        "exists. Valid for any 'tool' (unlike v1, which only allowed this for terraform/ansible/bicep): every "
+        "tool eventually needs a binding, not just the ones v1 happened to build CLI checks for.",
     )
 
     @model_validator(mode="after")

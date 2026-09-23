@@ -140,7 +140,8 @@ def test_all_categories_are_supported():
 def test_version_rejects_tools_pins():
     """CI installs tool binaries, so a tools pin could never take effect.
 
-    The expected version stays on ProvisionerModel.version as an assertion.
+    The expected version lives on an Integration document instead
+    (ProvisionerModel.integration -> IntegrationModel.version, ADR-0021 D4).
     """
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         VersionModel.model_validate(_version({"tools": {"terraform-main": "1.7.0"}}))

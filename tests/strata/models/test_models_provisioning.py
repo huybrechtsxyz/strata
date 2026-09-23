@@ -154,6 +154,43 @@ def test_provisioner_rejects_unknown_fields():
 
 
 # ---------------------------------------------------------------------------
+# integration (ADR-0021 D4) — names an Integration document; the sole owner
+# of the expected tool version. `.version` was removed from this model.
+# ---------------------------------------------------------------------------
+
+
+def test_provisioner_has_no_version_field():
+    """Removed by ADR-0021 D4 — the Integration document owns this fact now."""
+    assert "version" not in ProvisionerModel.model_fields
+
+
+def test_provisioner_accepts_integration_reference():
+    data = _minimal_provisioner()
+    data["integration"] = "terraform-main"
+    model = ProvisionerModel.model_validate(data)
+    assert model.integration == "terraform-main"
+
+
+def test_provisioner_integration_is_optional():
+    model = ProvisionerModel.model_validate(_minimal_provisioner())
+    assert model.integration is None
+
+
+def test_provisioner_integration_valid_for_any_tool():
+    """Unlike v1 (terraform/ansible/bicep only) — every tool eventually needs
+    a binding, not just the ones v1 built CLI checks for."""
+    data = {
+        "name": "forge-apps",
+        "tool": "helm",
+        "source": {"remote": "charts-repo", "source_path": "charts/forge"},
+        "integration": "helm-main",
+    }
+    model = ProvisionerModel.model_validate(data)
+    assert model.tool == "helm"
+    assert model.integration == "helm-main"
+
+
+# ---------------------------------------------------------------------------
 # ProvisioningStepModel
 # ---------------------------------------------------------------------------
 

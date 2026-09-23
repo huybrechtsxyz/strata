@@ -117,3 +117,48 @@ def test_multiple_tokens_in_one_string_are_each_checked():
     )
     assert not result.ok
     assert len(result.errors) == 2
+
+
+# ---------------------------------------------------------------------------
+# merge_environment_models
+# ---------------------------------------------------------------------------
+
+
+def _model(**overrides):
+    from strata.models.environment_model import EnvironmentModel
+
+    spec = {
+        "variables": [{"key": "REGION", "store": "constant", "value": "westeurope"}],
+        "secrets": [{"key": "DB_PASSWORD", "store": "constant", "value": "base"}],
+        "features": [{"key": "NEW_UI", "store": "constant", "value": "true"}],
+    }
+    spec.update(overrides)
+    return EnvironmentModel.model_validate({"meta": {"name": "e"}, "spec": spec})
+
+
+def test_merge_of_one_environment_returns_its_own_stores():
+    from strata.services.environment_service import merge_environment_models
+
+    variables, secrets, features = merge_environment_models([_model()])
+    assert variables["REGION"].value == "westeurope"
+    assert secrets["DB_PASSWORD"].value == "base"
+    assert features["NEW_UI"].value == "true"
+
+
+def test_later_environment_overrides_earlier_on_key_collision():
+    from strata.services.environment_service import merge_environment_models
+
+    base = _model()
+    override = _model(secrets=[{"key": "DB_PASSWORD", "store": "constant", "value": "override"}])
+    _, secrets, _ = merge_environment_models([base, override])
+    assert secrets["DB_PASSWORD"].value == "override"
+
+
+def test_keys_unique_to_either_environment_both_survive_the_merge():
+    from strata.services.environment_service import merge_environment_models
+
+    base = _model()
+    extra = _model(variables=[{"key": "EXTRA", "store": "constant", "value": "1"}])
+    variables, _, _ = merge_environment_models([base, extra])
+    assert set(variables) == {"REGION", "EXTRA"}
+

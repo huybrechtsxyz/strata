@@ -276,7 +276,7 @@ class ModuleReferenceModel(PlatformBaseModel):
         return validate_slot_type(v)
 
 
-def validate_script_file(value: str) -> str:
+def validate_script_file(value: str, *, allowed: frozenset[str] = frozenset(SCRIPT_EXTENSIONS)) -> str:
     """Validate one script path: solution-relative, with a runnable extension.
 
     The single place both `ScriptPathModel.file` and bare `ScriptsModel.scripts`
@@ -292,19 +292,24 @@ def validate_script_file(value: str) -> str:
 
     Args:
         value: The declared script path.
+        allowed: Extensions accepted for this call site. Defaults to every
+            script extension strata recognises (`SCRIPT_EXTENSIONS`); a
+            caller with no interpreter dispatch for some of those yet (e.g.
+            `IntegrationLifecyclePhaseModel`, ADR-0021 D11 — only `.py` has
+            an executor) passes a narrower set so an unrunnable hook fails at
+            authoring time instead of at run time.
 
     Returns:
         The validated path unchanged.
 
     Raises:
-        ValueError: If the path escapes the solution or has no script extension.
+        ValueError: If the path escapes the solution or has no allowed
+            extension.
     """
     validate_relative_path(value)
     suffix = Path(value).suffix
-    if suffix not in SCRIPT_EXTENSIONS:
-        raise ValueError(
-            f"Script must have a valid extension ({', '.join(sorted(SCRIPT_EXTENSIONS))}), got: {suffix}"
-        )
+    if suffix not in allowed:
+        raise ValueError(f"Script must have a valid extension ({', '.join(sorted(allowed))}), got: {suffix}")
     return value
 
 

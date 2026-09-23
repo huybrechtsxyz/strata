@@ -1,0 +1,11 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: integration
+meta:
+  name: terraform
+spec:
+  type: terraform
+  capabilities: [infrastructure]
+  description: "Terraform CLI — provisions the terraform-tool workspaces in this solution"
+  required: true
+  enabled: true
+  version: ">= 1.7"

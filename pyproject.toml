@@ -11,7 +11,12 @@ dependencies = [
     "click>=8.0",
     "pydantic>=2.0",
     "pyyaml>=6.0",
+    "requests>=2.31",
     "structlog>=24.1",
+    "packaging>=23.0",
+    "azure-identity>=1.15",
+    "azure-keyvault-secrets>=4.7",
+    "azure-appconfiguration>=1.6",
 ]
 
 [project.optional-dependencies]
@@ -22,6 +27,7 @@ dev = [
     "ruff>=0.1.0",
     "import-linter>=2.0",
     "types-PyYAML",
+    "types-requests",
 ]
 otel = [
     "opentelemetry-sdk>=1.24",
@@ -90,6 +96,7 @@ layers = [
     "strata.commands",
     "strata.controllers",
     "strata.services",
+    "strata.integrations",
     "strata.models",
     "strata.utils",
     "strata.logging",

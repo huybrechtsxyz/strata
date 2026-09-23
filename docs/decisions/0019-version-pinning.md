@@ -133,6 +133,35 @@ Ring/promotion is a planned follow-up for rollout automation. It attaches
 *around* this model (which version document a ring selects), so nothing here
 has to change when it lands.
 
+**Not yet justified by evidence (2026-09-23 review): full Ring/Progression/
+Wave/Strategy/PromotionRecord machinery.** v1 built all of it (`ProgressionRingModel`
+with `require: any_one|all` quorum gates, `PromotionStrategyModel` waves,
+`PromotionRecordModel` git-commit-per-wave audit trail with rollback) — the
+same census pattern this ADR already applied elsewhere: **zero** real
+`kind: version` documents beyond the one, so zero real second rings, so
+zero real promotions ever exercised. Sanity-checked the "attaches around,
+nothing here changes" claim rather than trusting it: the minimal ring
+design is just one `version` document per ring, with different deployments
+already able to point at different ones via the `spec.version` binding
+above — no schema change needed for that part. Gating/quorum ordering and
+an audit trail would be new, additive kinds if they're ever built, not
+modifications to `version`/`deployment`. Real trigger to revisit: a second
+`kind: version` document actually appearing in a real repo.
+
+**Recommended starting shape, when a real per-run override is needed:** a
+plain CLI flag on the future `build run`/`deploy run` (Phase 7, not yet
+built) — `strata deploy run app --pin prd` — resolving a name against
+`kind: version` and overriding `Deployment.spec.version` for that
+invocation only. Deliberately not named `--version`: `strata --version` and
+`strata version` (`commands/cli.py`) already both mean "print the CLI's own
+version and exit," the near-universal CLI convention; reusing the word for
+"which pinned version document" would make "version" mean three different
+things in one CLI. `--pin` reads naturally against `spec.pins` and avoids
+the collision. This needs no new model — it is sugar over the
+`Deployment.spec.version` binding already built above — and is trivially
+deprecatable (a bare CLI flag, no schema, nothing committed to 250
+customers' YAML to migrate) if a real Ring/Promotion need ever displaces it.
+
 **7. Overlay, not tokens.** When a pinned target is declared elsewhere, the
 pin wins. Value tokens (`${version:db}`, reusing ADR-0002 machinery) were
 considered and rejected: they would require rewriting every module to be
@@ -184,11 +213,9 @@ used only to parse `@name/path` strings), so discovery never needs a fetch:
 - Neutral: solution-repo provenance ("deployed from commit abc64fe", which
   haven records as `pins.remotes.haven`) has no home here. It is an output,
   not configuration, and belongs in a build record.
-- Neutral: ADR-0015's Decision 3 justifies putting remotes on the manifest
+- Neutral: ~~ADR-0015's Decision 3 justifies putting remotes on the manifest
   with *"Configuration itself can live in a remote"*, which contradicts that
-  same ADR's Consequences. The placement is still right; the stated reason
-  needs correcting before someone "restores" remote-hosted config and creates
-  the cycle for real.
+  same ADR's Consequences.~~ Corrected 2026-09-23 — see ADR-0015 decision 3.
 
 ## Remaining Work
 
@@ -202,5 +229,4 @@ used only to parse `@name/path` strings), so discovery never needs a fetch:
   nothing computes or checks it yet.
 - `ProvisionerModel.version` preflight assertion (exe presence / env var /
   endpoint reachability); currently declarative only.
-- Correct ADR-0015's Decision 3 rationale.
 - Ring/promotion for rollout automation, layered around this model.

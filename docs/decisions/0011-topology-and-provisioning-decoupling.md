@@ -223,6 +223,15 @@ Both are Workspace **sub-models**, not standalone kinds — no
 (`ProvisionerBackendModel`), `properties` (`ProvisionerAnsiblePropertiesModel`),
 `configuration` (freeform passthrough), `version`.
 
+**Superseded (2026-09-23, ADR-0021 D4): `version` is removed.** v1 modelled
+the same "expected tool version" fact in three places
+(`IntegrationModel.validation`, `WorkspaceIacModel.version` — this field's
+ancestor — and `WorkspaceIacModel.integration`) with nothing arbitrating
+between them. ADR-0021 settles ownership on an `Integration` document
+instead: `ProvisionerModel.integration` (a `References(PlatformKind
+.INTEGRATION)` field) names it, and `IntegrationModel.version` is the single
+place the constraint is asserted. See that ADR for the full evidence.
+
 **Correction #1 (2026-09-21, after reviewing v1's real behavior in detail)**:
 initially gave `source`/`backend`/`properties` a `Module.spec.type`-style
 "unrecognized tool → don't reject" exception. Re-checking v1's actual

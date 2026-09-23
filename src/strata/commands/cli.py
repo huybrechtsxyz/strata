@@ -3,6 +3,7 @@
 
 Commands:
     validate : Check every document in the solution.
+    values   : Resolve deployment values (variables, secrets, feature flags).
     version  : Show the strata version.
 
 Exit codes are declared once in `strata.commands.exit_codes` — see there for
@@ -13,6 +14,7 @@ import click
 
 from strata.commands.exit_codes import EXIT_SUCCESS, EXIT_USAGE  # noqa: F401  (re-exported for callers)
 from strata.commands.validate_command import validate_command
+from strata.commands.values_command import values_command
 from strata.utils.version import get_version
 
 
@@ -23,6 +25,7 @@ def cli() -> None:
 
 
 cli.add_command(validate_command)
+cli.add_command(values_command)
 
 
 @cli.command("version")

@@ -67,11 +67,23 @@ declared facts — which is precisely what produced v1's drift. v1 built only
 the lock half of the manifest/lock pattern (`package.json`+`package-lock.json`,
 `Chart.yaml`+`Chart.lock`, `go.mod`+`go.sum`); v2 builds only the manifest.
 
-**3. Remotes live on the manifest, not `Configuration`.** Bootstrap ordering
-forces it: v1's own `solution.json` registers a `config` repository, i.e.
-Configuration itself can live in a remote, so remotes must resolve before
-Configuration loads. Configuration holds *policy*; the manifest holds
-*composition*.
+**3. Remotes live on the manifest, not `Configuration`.** Not because
+Configuration needs a remote resolved first — it doesn't: discovery loads
+every document, Configuration included, entirely locally (ADR-0019 decision
+8's resolution order runs discovery in step 3 and materialises remotes only
+in step 6, after deployment/version selection). The real reason is the same
+one that puts solution identity here rather than in Configuration
+(decision 1): composition (*what external things does this solution pull
+in*) is a bootstrap fact, fixed and minimal, read before anything else is
+known. Policy (*what rules govern this solution*) is not bootstrap-critical
+and can grow arbitrarily — that's what `Configuration` is for. Putting
+remotes there would make Configuration load-bearing at bootstrap time too,
+collapsing the identity/policy split decision 1 exists to keep. (An earlier
+draft of this decision argued Configuration itself could live in a remote,
+which both contradicts this ADR's own Consequences —
+*"strata documents must live in the solution repo"* — and the actual
+resolution order above; corrected 2026-09-23, flagged as outstanding since
+ADR-0019.)
 
 **4. `type` and `fetch` are separate fields on a remote.** v1 conflated
 "what kind of source is this" with "who materialises it", and production
