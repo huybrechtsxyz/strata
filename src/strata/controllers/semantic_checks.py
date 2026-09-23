@@ -50,19 +50,32 @@ from strata.services.workspace_service import WorkspaceService
 from strata.utils.diagnostics import Diagnostics
 
 
-def run_semantic_checks(index: DocumentIndex) -> Diagnostics:
+def run_semantic_checks(
+    index: DocumentIndex, resolved_deployments: dict[str, DeploymentModel] | None = None
+) -> Diagnostics:
     """Run every cross-document semantic check over an already-loaded index.
+
+    Args:
+        index: The loaded `DocumentIndex`.
+        resolved_deployments: Deployments with their `extends` chain already
+            folded in (`deployment_resolution.resolve_deployment_chains`).
+            When a deployment's name is present here, its resolved (complete)
+            spec is checked instead of the raw indexed one — otherwise a
+            deployment that gets `workspace`/`environments` only through
+            `extends` would silently skip these checks, since the raw model
+            never has them.
 
     Returns:
         Every finding, from all seven checks combined.
     """
+    resolved = resolved_deployments or {}
     diagnostics = Diagnostics()
-    diagnostics.extend(_check_deployments(index))
+    diagnostics.extend(_check_deployments(index, resolved))
     diagnostics.extend(_check_tenants(index))
     diagnostics.extend(_check_providers(index))
     diagnostics.extend(_check_resources(index))
     diagnostics.extend(_check_workspaces(index))
-    diagnostics.extend(_check_deployment_value_tokens(index))
+    diagnostics.extend(_check_deployment_value_tokens(index, resolved))
     return diagnostics
 
 
@@ -71,10 +84,10 @@ def run_semantic_checks(index: DocumentIndex) -> Diagnostics:
 # ---------------------------------------------------------------------------
 
 
-def _check_deployments(index: DocumentIndex) -> Diagnostics:
+def _check_deployments(index: DocumentIndex, resolved: dict[str, DeploymentModel]) -> Diagnostics:
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
-        deployment = cast(DeploymentModel, entry.model)
+        deployment = resolved.get(entry.ref.name, cast(DeploymentModel, entry.model))
         if not deployment.spec.workspace:
             continue
         workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
@@ -195,7 +208,7 @@ def _check_workspace_topology_components(
 # ---------------------------------------------------------------------------
 
 
-def _check_deployment_value_tokens(index: DocumentIndex) -> Diagnostics:
+def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, DeploymentModel]) -> Diagnostics:
     """Every token in a document reachable from a deployment resolves.
 
     Scoped per deployment because that is the only place declared keys and
@@ -212,7 +225,7 @@ def _check_deployment_value_tokens(index: DocumentIndex) -> Diagnostics:
     """
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
-        deployment = cast(DeploymentModel, entry.model)
+        deployment = resolved.get(entry.ref.name, cast(DeploymentModel, entry.model))
         declared = _merged_declared_keys(index, deployment)
         if declared is None:
             continue  # no resolvable environment — nothing to check tokens against

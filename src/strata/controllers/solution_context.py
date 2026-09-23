@@ -22,6 +22,7 @@ Callers differ in one way:
 from dataclasses import dataclass
 from pathlib import Path
 
+from strata.controllers.deployment_resolution import resolve_deployment_chains
 from strata.controllers.references import validate_references
 from strata.controllers.semantic_checks import run_semantic_checks
 from strata.controllers.solution_controller import SolutionController, find_solution_root
@@ -72,12 +73,20 @@ class SolutionContext:
     def resolve(self) -> Diagnostics:
         """Run cross-document checks and merge the findings in.
 
-        Two passes, in order: reference *existence* first
-        (`validate_references` — does the name point at something real?),
-        then *semantic* checks (`run_semantic_checks` — given that it does,
-        is the pair of documents actually consistent?). The second pass
-        assumes references already resolve, so running it first would let a
-        dangling name reach a service method expecting a real document.
+        Three passes, in order:
+
+        1. Reference *existence* (`validate_references`) — does the name
+           point at something real?
+        2. `extends` chain resolution (`resolve_deployment_chains`) — fold
+           each deployment's ancestry into one complete document. Needs (1)
+           to have already confirmed `extends` targets exist, though it
+           degrades gracefully (returns None, reported separately) if one
+           does not.
+        3. Semantic checks (`run_semantic_checks`) — given that references
+           resolve, is the pair of documents actually consistent? Takes the
+           resolved deployments from (2) so a deployment that only gets
+           `workspace`/`environments` through `extends` is checked against
+           its complete form, not the raw partial one sitting in the index.
 
         Only meaningful once every document loaded: a document that failed
         schema validation never entered the index, so reference checks would
@@ -94,7 +103,9 @@ class SolutionContext:
             return found
 
         found.extend(validate_references(self.controller.index, self.controller.solution))
-        found.extend(run_semantic_checks(self.controller.index))
+        resolved_deployments, resolution_diagnostics = resolve_deployment_chains(self.controller.index)
+        found.extend(resolution_diagnostics)
+        found.extend(run_semantic_checks(self.controller.index, resolved_deployments))
         self.diagnostics.extend(found)
         return found
 
