@@ -22,6 +22,7 @@ Callers differ in one way:
 from dataclasses import dataclass
 from pathlib import Path
 
+from strata.controllers.references import validate_references
 from strata.controllers.solution_controller import SolutionController, find_solution_root
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError, ValidationError
@@ -46,20 +47,47 @@ class SolutionContext:
         return self.diagnostics.ok
 
     def require_valid(self) -> "SolutionContext":
-        """Return self, or raise if any document failed to load.
+        """Return self, or raise if the solution is not fully valid.
 
-        For callers that act on configuration. A document that fails schema
-        validation never enters the index, so everything referencing it then
-        reports as missing — one real error becomes a screenful of derived
-        ones. The first error is the actionable one.
+        Runs `resolve()` first, so a caller that acts on configuration cannot
+        skip cross-document checks: deploying a workspace that names a
+        provider which does not exist fails later and less clearly.
+
+        A document that fails schema validation never enters the index, so
+        everything referencing it then reports as missing — one real error
+        becomes a screenful of derived ones. `resolve()` short-circuits for
+        that reason, and the first error stays the actionable one.
 
         Raises:
             ValidationError: Carrying the findings, so the caller can render
                 them before deciding what to do.
         """
+        self.resolve()
         if not self.ok:
             raise ValidationError(self.diagnostics)
         return self
+
+
+    def resolve(self) -> Diagnostics:
+        """Run cross-document checks and merge the findings in.
+
+        Only meaningful once every document loaded: a document that failed
+        schema validation never entered the index, so reference checks would
+        report "unknown workspace 'main'" when the truth is that `main` did
+        not parse. One real error would become a screenful of derived ones, so
+        this returns immediately when loading already failed.
+
+        Returns:
+            The findings from this pass. They are also merged into
+            `self.diagnostics`, so `ok` accounts for them.
+        """
+        found = Diagnostics()
+        if not self.ok:
+            return found
+
+        found.extend(validate_references(self.controller.index, self.controller.solution))
+        self.diagnostics.extend(found)
+        return found
 
 
 def open_solution(path: Path | None = None) -> SolutionContext:

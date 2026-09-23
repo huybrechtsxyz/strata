@@ -145,6 +145,15 @@ class DocumentIndex:
         """Every indexed document of one kind, sorted by name."""
         return sorted((e for e in self._entries.values() if e.ref.kind is kind), key=lambda e: e.ref.name)
 
+    def all(self) -> list[IndexEntry]:
+        """Every indexed document, in discovery order.
+
+        Discovery order rather than sorted, so findings about one file stay
+        together in the order a reader encountered them — the same reason
+        `Diagnostics` does not sort by severity.
+        """
+        return list(self._entries.values())
+
     def names_of(self, kind: PlatformKind) -> set[str]:
         """Every indexed name for one kind."""
         return {e.ref.name for e in self._entries.values() if e.ref.kind is kind}

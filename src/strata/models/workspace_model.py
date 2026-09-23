@@ -23,7 +23,7 @@ carried a `description`, which belongs on the target document's own `meta`
 rather than being restated at every reference site.
 """
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 
@@ -36,6 +36,7 @@ from strata.models.common_models import (
     validate_kind_matches,
 )
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel, validate_provisioning_steps
+from strata.models.reference_fields import References
 from strata.utils.names import check_unique_names
 
 
@@ -69,7 +70,7 @@ class WorkspaceResourceModel(PlatformBaseModel):
     """
 
     name: PlatformName = Field(description="Unique resource name")
-    resource: PlatformName | None = Field(
+    resource: Annotated[PlatformName, References(PlatformKind.RESOURCE)] | None = Field(
         None,
         description="Name of the Resource document this instance is built from (its meta.name, resolved by "
         "discovery). Required unless managed_by is set. `name` above is the workspace-local *instance* "
@@ -184,7 +185,9 @@ class WorkspaceSpecModel(PlatformBaseModel):
         "tagging policy.",
     )
 
-    providers: list[PlatformName] = Field(..., min_length=1, description="Provider document names")
+    providers: list[Annotated[PlatformName, References(PlatformKind.PROVIDER)]] = Field(
+        ..., min_length=1, description="Provider document names"
+    )
     provisioners: list[ProvisionerModel] = Field(..., min_length=1, description="Provisioner (tool) definitions")
     execution: list[ProvisioningStepModel] | None = Field(
         None,
@@ -192,14 +195,22 @@ class WorkspaceSpecModel(PlatformBaseModel):
         "rather than 'provisioning' so it cannot be confused with the sibling 'provisioners' (tool "
         "definitions) or with the 'deployment' kind.",
     )
-    topology: list[PlatformName] | None = Field(
+    topology: list[Annotated[PlatformName, References(PlatformKind.TOPOLOGY)]] | None = Field(
         None, description="Topology document names (pure grouping)"
     )
     resources: list[WorkspaceResourceModel] | None = Field(None, description="Workspace resource definitions")
-    namespaces: list[PlatformName] | None = Field(None, description="Namespace document names")
-    firewalls: list[PlatformName] | None = Field(None, description="Firewall document names")
-    dns_zones: list[PlatformName] | None = Field(None, description="DNS document names")
-    networks: list[PlatformName] | None = Field(None, description="Network document names")
+    namespaces: list[Annotated[PlatformName, References(PlatformKind.NAMESPACE)]] | None = Field(
+        None, description="Namespace document names"
+    )
+    firewalls: list[Annotated[PlatformName, References(PlatformKind.FIREWALL)]] | None = Field(
+        None, description="Firewall document names"
+    )
+    dns_zones: list[Annotated[PlatformName, References(PlatformKind.DNS)]] | None = Field(
+        None, description="DNS document names"
+    )
+    networks: list[Annotated[PlatformName, References(PlatformKind.NETWORK)]] | None = Field(
+        None, description="Network document names"
+    )
 
     @model_validator(mode="after")
     def validate_unique_names(self) -> "WorkspaceSpecModel":

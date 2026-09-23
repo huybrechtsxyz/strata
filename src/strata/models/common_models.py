@@ -8,6 +8,7 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, StringConstraints, field_validator, model_validator
 
+from strata.models.reference_fields import References, RemoteReference
 from strata.utils.path_safety import validate_relative_path
 
 # Allowed script file extensions for lifecycle phase scripts.
@@ -135,7 +136,7 @@ class SourceModel(PlatformBaseModel):
           chart_version: "2024.12.0"
     """
 
-    remote: PlatformName | None = Field(
+    remote: Annotated[PlatformName, RemoteReference()] | None = Field(
         None,
         description="Name of a remote declared in the solution manifest's spec.remotes (strata.yaml). The "
         "remote owns the URL, the git/OCI ref and the credentials; this only selects which one to take "
@@ -254,7 +255,7 @@ class ModuleReferenceModel(PlatformBaseModel):
     """
 
     name: PlatformName = Field(description="Unique module reference name within its parent")
-    module: PlatformName = Field(
+    module: Annotated[PlatformName, References(PlatformKind.MODULE)] = Field(
         description="Name of the Module document this reference points at (its meta.name, resolved by discovery)"
     )
     description: str | None = Field(None, description="Optional description of what this module provides")

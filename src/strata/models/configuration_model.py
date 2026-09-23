@@ -30,7 +30,7 @@ Configuration holds platform *policy*; the solution manifest holds
 *composition*.
 """
 
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import Field, field_validator, model_validator
 
@@ -41,6 +41,7 @@ from strata.models.common_models import (
     PlatformVersion,
     validate_kind_matches,
 )
+from strata.models.reference_fields import References
 from strata.utils.names import check_unique_names
 
 
@@ -61,13 +62,13 @@ class ConfigurationSpecModel(PlatformBaseModel):
         None, description="Optional custom properties for the configuration."
     )
 
-    providers: list[PlatformName] | None = Field(
+    providers: list[Annotated[PlatformName, References(PlatformKind.PROVIDERCONFIG)]] | None = Field(
         None, description="Provider type registry: names of ProviderConfig documents"
     )
     additional_topologies: bool = Field(
         False, description="Allow topology types not listed in spec.topologies"
     )
-    topologies: list[PlatformName] | None = Field(
+    topologies: list[Annotated[PlatformName, References(PlatformKind.TOPOLOGYCONFIG)]] | None = Field(
         None, description="Topology type registry: names of TopologyConfig documents"
     )
 

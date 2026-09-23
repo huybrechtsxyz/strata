@@ -2,7 +2,8 @@
 """Command-line interface for strata.
 
 Commands:
-    version : Show the strata version.
+    validate : Check every document in the solution.
+    version  : Show the strata version.
 
 Exit codes are declared once in `strata.commands.exit_codes` — see there for
 what each means.
@@ -11,6 +12,7 @@ what each means.
 import click
 
 from strata.commands.exit_codes import EXIT_SUCCESS, EXIT_USAGE  # noqa: F401  (re-exported for callers)
+from strata.commands.validate_command import validate_command
 from strata.utils.version import get_version
 
 
@@ -18,6 +20,9 @@ from strata.utils.version import get_version
 @click.version_option(version=get_version(), prog_name="strata")
 def cli() -> None:
     """strata — infrastructure as code platform."""
+
+
+cli.add_command(validate_command)
 
 
 @cli.command("version")

@@ -37,7 +37,7 @@ provisioned resource.
 """
 
 from datetime import date
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import Field, field_validator, model_validator
 
@@ -48,6 +48,7 @@ from strata.models.common_models import (
     PlatformVersion,
     validate_kind_matches,
 )
+from strata.models.reference_fields import References
 from strata.utils.names import check_unique_names
 
 
@@ -69,7 +70,7 @@ class TenantSpecModel(PlatformBaseModel):
     onboarded: date | None = Field(
         None, description="ISO date the tenant was onboarded (e.g. 2026-03-15). Informational only."
     )
-    environments: list[PlatformName] | None = Field(
+    environments: list[Annotated[PlatformName, References(PlatformKind.ENVIRONMENT)]] | None = Field(
         None,
         description="Names of Environment documents merged in BEFORE a deployment's own environments, so "
         "deployment values win. Use for tenant-wide defaults (shared variables, feature flags) without "

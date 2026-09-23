@@ -44,7 +44,7 @@ class/instance split as `WorkspaceResourceModel.resource` and
 `ModuleReferenceModel.module`.
 """
 
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import Field, field_validator, model_validator
 
@@ -57,6 +57,7 @@ from strata.models.common_models import (
     ScriptsModel,
     validate_kind_matches,
 )
+from strata.models.reference_fields import References
 from strata.utils.names import check_unique_names
 
 
@@ -220,30 +221,30 @@ class DeploymentSpecModel(PlatformBaseModel):
         description="When True this is a reusable base, not deployable on its own: required fields may be "
         "absent and Phase 2 validation is skipped. Referenced by another deployment's `extends`.",
     )
-    extends: PlatformName | None = Field(
+    extends: Annotated[PlatformName, References(PlatformKind.DEPLOYMENT)] | None = Field(
         None,
         description="Name of a base Deployment document whose spec is merged into this one before "
         "validation. Child always wins: top-level fields are replaced, `stages` merge by `step`, "
         "`environments` append after the base's. Circular chains are rejected. Distinct from "
         "`environments` layering, which composes *values*; this composes *structure*.",
     )
-    workspace: PlatformName | None = Field(
+    workspace: Annotated[PlatformName, References(PlatformKind.WORKSPACE)] | None = Field(
         None, description="Name of the Workspace document whose provisioning recipe this deployment runs"
     )
-    environments: list[PlatformName] | None = Field(
+    environments: list[Annotated[PlatformName, References(PlatformKind.ENVIRONMENT)]] | None = Field(
         None,
         description="Names of Environment documents supplying values, merged in order — later entries win. "
         "A tenant's own `environments` merge in before these.",
     )
-    tenant: PlatformName | None = Field(
+    tenant: Annotated[PlatformName, References(PlatformKind.TENANT)] | None = Field(
         None,
         description="Name of the Tenant this deployment belongs to. Omit for shared/platform deployments "
         "that serve all tenants.",
     )
-    configurations: list[PlatformName] | None = Field(
+    configurations: list[Annotated[PlatformName, References(PlatformKind.CONFIGURATION)]] | None = Field(
         None, description="Names of additional Configuration documents that apply to this deployment"
     )
-    version: PlatformName | None = Field(
+    version: Annotated[PlatformName, References(PlatformKind.VERSION)] | None = Field(
         None,
         description="Name of the Version document supplying pins for this deployment. When a pinned target "
         "(image, chart, remote ref, tool) is declared elsewhere, the pin wins. Omit to use each document's "
