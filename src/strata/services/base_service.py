@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from strata.models.configuration_model import ConfigurationModel
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
+ServiceT = TypeVar("ServiceT", bound="BaseService")  # type: ignore[type-arg]
 
 
 def diagnostics_from_validation_error(exc: ValidationError) -> Diagnostics:
@@ -74,6 +75,29 @@ class BaseService(ABC, Generic[ModelT]):
         self.model: ModelT | None = None
         self._validated = False
         self.diagnostics = Diagnostics()
+
+    @classmethod
+    def from_model(cls: type[ServiceT], model: ModelT) -> ServiceT:
+        """Wrap an already-validated model, skipping re-validation.
+
+        Returns the concrete subclass (`DeploymentService.from_model(...)`
+        gives back a `DeploymentService`, not a bare `BaseService`) via the
+        standard bound-`TypeVar` idiom — the project targets Python 3.10,
+        which predates `typing.Self`.
+
+        For cross-document checks: the controller runs these only after
+        every document has already gone through Phase 1, so the model is
+        already known-good. Calling `validate()` again would just repeat
+        that work — and risks a second copy silently diverging from the one
+        already sitting in the solution index.
+        """
+        service = cls.__new__(cls)
+        service.path = None
+        service.data = None
+        service.model = model
+        service._validated = True
+        service.diagnostics = Diagnostics()
+        return service
 
     @abstractmethod
     def _get_model_class(self) -> type[ModelT]:

@@ -58,22 +58,45 @@ class EnvironmentService(BaseService[EnvironmentModel]):
             One error per unresolved token, each located at the field path
             where the token was written.
         """
-        declared = self.declared_keys()
-        diagnostics = Diagnostics()
+        self._ensure_validated()
+        assert self.model is not None
+        return unresolved_value_tokens(model, self.declared_keys(), self.model.meta.name)
 
-        for path, text in _iter_strings(model.model_dump(by_alias=True, mode="json")):
-            for kind, key in extract_value_tokens(text):
-                if key not in declared[kind]:
-                    store = _STORE_BY_TOKEN_KIND[kind]
-                    known = sorted(declared[kind])
-                    diagnostics.error(
-                        f"'${{{kind}:{key}}}' is not declared in environment "
-                        f"'{self.model.meta.name}' spec.{store}. Declared: {known}",  # type: ignore[union-attr]
-                        location=path,
-                        code="undeclared_value_token",
-                    )
 
-        return diagnostics
+def unresolved_value_tokens(model: PlatformBaseModel, declared: dict[str, set[str]], owner_name: str) -> Diagnostics:
+    """Check every Value token in `model` against an already-computed declared-keys set.
+
+    The free-function form `EnvironmentService.validate_document_tokens` wraps
+    for the single-environment case. Exists separately because cross-document
+    resolution needs the *merged* version: a Deployment's declared keys are
+    the union of its Tenant's environments and its own (ADR: tenant merges in
+    before deployment), and no single `EnvironmentModel` holds that union.
+    Building a synthetic merged model would be a bigger change than lifting
+    the walk itself out.
+
+    Args:
+        model: Any already-validated strata document.
+        declared: Keys already declared, by token kind (`var`/`secret`/`feature`).
+        owner_name: What to call the source of `declared` in an error message
+            (an environment's name, or a description of several merged).
+
+    Returns:
+        One error per unresolved token, each located at the field path where
+        the token was written.
+    """
+    diagnostics = Diagnostics()
+    for path, text in _iter_strings(model.model_dump(by_alias=True, mode="json")):
+        for kind, key in extract_value_tokens(text):
+            if key not in declared[kind]:
+                store = _STORE_BY_TOKEN_KIND[kind]
+                known = sorted(declared[kind])
+                diagnostics.error(
+                    f"'${{{kind}:{key}}}' is not declared in environment "
+                    f"'{owner_name}' spec.{store}. Declared: {known}",
+                    location=path,
+                    code="undeclared_value_token",
+                )
+    return diagnostics
 
 
 def _iter_strings(value: Any, path: str = "") -> list[tuple[str, str]]:
