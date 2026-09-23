@@ -11,8 +11,8 @@ def test_topology_config_service_validates_from_data():
         "spec": {"components": [{"role": "control-plane"}]},
     }
     service = TopologyConfigService(data=data)
-    is_valid, errors = service.validate()
-    assert is_valid
-    assert errors == []
+    result = service.validate()
+    assert result.ok
+    assert result.messages() == []
     assert service.model is not None
     assert service.model.meta.name == "kubernetes"

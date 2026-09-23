@@ -81,8 +81,8 @@ def test_from_directory_returns_none_outside_a_solution(tmp_path):
 def test_load_indexes_documents_regardless_of_folder_layout(tmp_path):
     """Kind comes from the document's own field — folders carry no meaning."""
     controller = SolutionController(_solution(tmp_path))
-    is_valid, errors = controller.load()
-    assert is_valid, errors
+    result = controller.load()
+    assert result.ok, result.messages()
     assert controller.solution is not None
     assert controller.solution.meta.name == "test-solution"
     assert controller.index.names_of(PlatformKind.CONFIGURATION) == {"test-config"}
@@ -91,9 +91,9 @@ def test_load_indexes_documents_regardless_of_folder_layout(tmp_path):
 
 def test_load_reports_missing_manifest(tmp_path):
     """A root without strata.yaml is an error, not a crash."""
-    is_valid, errors = SolutionController(tmp_path).load()
-    assert not is_valid
-    assert any("strata.yaml" in e for e in errors)
+    result = SolutionController(tmp_path).load()
+    assert not result.ok
+    assert any("strata.yaml" in m for m in result.messages())
 
 
 def test_load_skips_non_strata_yaml_silently(tmp_path):
@@ -102,8 +102,8 @@ def test_load_skips_non_strata_yaml_silently(tmp_path):
     (root / "docker-compose.yaml").write_text("services:\n  web:\n    image: nginx\n", encoding="utf-8")
     (root / "ci.yml").write_text("stages:\n  - build\n", encoding="utf-8")
 
-    is_valid, errors = SolutionController(root).load()
-    assert is_valid, errors
+    result = SolutionController(root).load()
+    assert result.ok, result.messages()
 
 
 def test_load_errors_on_strata_document_with_unknown_kind(tmp_path):
@@ -113,9 +113,9 @@ def test_load_errors_on_strata_document_with_unknown_kind(tmp_path):
         "apiVersion: strata.huybrechts.xyz/v2\nkind: frobnicator\nmeta:\n  name: x\n", encoding="utf-8"
     )
 
-    is_valid, errors = SolutionController(root).load()
-    assert not is_valid
-    assert any("unknown kind 'frobnicator'" in e for e in errors)
+    result = SolutionController(root).load()
+    assert not result.ok
+    assert any("unknown kind 'frobnicator'" in m for m in result.messages())
 
 
 def test_load_indexes_multi_document_files(tmp_path):
@@ -125,8 +125,8 @@ def test_load_indexes_multi_document_files(tmp_path):
     (root / "both.yaml").write_text(TOPOLOGY.replace("main-topology", "a-topology") + "---\n" + second, encoding="utf-8")
 
     controller = SolutionController(root)
-    is_valid, errors = controller.load()
-    assert is_valid, errors
+    result = controller.load()
+    assert result.ok, result.messages()
     assert controller.index.names_of(PlatformKind.TOPOLOGY) == {"a-topology", "other-topology", "main-topology"}
 
 
@@ -135,9 +135,9 @@ def test_load_rejects_duplicate_identity_naming_both_files(tmp_path):
     root = _solution(tmp_path)
     (root / "copy.yaml").write_text(TOPOLOGY, encoding="utf-8")
 
-    is_valid, errors = SolutionController(root).load()
-    assert not is_valid
-    duplicate = [e for e in errors if "Duplicate" in e]
+    result = SolutionController(root).load()
+    assert not result.ok
+    duplicate = [m for m in result.messages() if "Duplicate" in m]
     assert duplicate
     assert "copy.yaml" in duplicate[0]
     assert "topology.yaml" in duplicate[0]
@@ -152,8 +152,8 @@ def test_load_stops_at_a_nested_solution_boundary(tmp_path):
     (vendor / "leak.yaml").write_text(TOPOLOGY.replace("main-topology", "should-not-appear"), encoding="utf-8")
 
     controller = SolutionController(root)
-    is_valid, errors = controller.load()
-    assert is_valid, errors
+    result = controller.load()
+    assert result.ok, result.messages()
     assert "should-not-appear" not in controller.index.names_of(PlatformKind.TOPOLOGY)
 
 
@@ -194,8 +194,8 @@ def test_exclude_skips_a_matching_directory(tmp_path):
     (templates / "scaffold.yaml").write_text(TOPOLOGY.replace("main-topology", "scaffolded"), encoding="utf-8")
 
     controller = SolutionController(root)
-    is_valid, errors = controller.load()
-    assert is_valid, errors
+    result = controller.load()
+    assert result.ok, result.messages()
     assert controller.index.names_of(PlatformKind.TOPOLOGY) == {"main-topology"}
 
 
@@ -250,9 +250,9 @@ def test_load_rejects_nested_solution_document_in_the_tree(tmp_path):
     root = _solution(tmp_path)
     (root / "second-solution.yaml").write_text(MANIFEST.replace("test-solution", "extra"), encoding="utf-8")
 
-    is_valid, errors = SolutionController(root).load()
-    assert not is_valid
-    assert any("nested 'solution' document" in e for e in errors)
+    result = SolutionController(root).load()
+    assert not result.ok
+    assert any("nested 'solution' document" in m for m in result.messages())
 
 
 def test_load_reports_invalid_document_with_its_path(tmp_path):
@@ -263,9 +263,9 @@ def test_load_reports_invalid_document_with_its_path(tmp_path):
         encoding="utf-8",
     )
 
-    is_valid, errors = SolutionController(root).load()
-    assert not is_valid
-    assert any("bad.yaml" in e for e in errors)
+    result = SolutionController(root).load()
+    assert not result.ok
+    assert any("bad.yaml" in m for m in result.messages())
 
 
 # ---------------------------------------------------------------------------
@@ -309,7 +309,7 @@ def _repo_config_dir() -> Path:
 def test_shipped_example_solution_loads_cleanly():
     """The example solution under config/ must stay valid as models evolve."""
     controller = SolutionController(_repo_config_dir())
-    is_valid, errors = controller.load()
-    assert is_valid, errors
+    result = controller.load()
+    assert result.ok, result.messages()
     assert controller.index.names_of(PlatformKind.WORKSPACE) == {"main"}
     assert controller.index.names_of(PlatformKind.RESOURCE) == {"storage-account", "linux-vm"}

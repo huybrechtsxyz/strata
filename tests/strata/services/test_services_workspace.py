@@ -23,9 +23,9 @@ def test_workspace_service_validates_from_data():
         },
     }
     service = WorkspaceService(data=data)
-    is_valid, errors = service.validate()
-    assert is_valid
-    assert errors == []
+    result = service.validate()
+    assert result.ok
+    assert result.messages() == []
     assert service.model is not None
     assert service.model.spec.providers[0] == "azure-main"
 
@@ -67,12 +67,11 @@ def _topology_model(**component_overrides) -> TopologyModel:
 def test_validate_topology_references_accepts_valid_component_refs():
     """A loaded Topology whose components/namespaces all resolve to real workspace entries passes."""
     service = WorkspaceService(data=_workspace_with_topology())
-    is_valid, errors = service.validate()
-    assert is_valid
+    assert service.validate().ok
 
-    is_valid, errors = service.validate_topology_references({"main-topology": _topology_model()})
-    assert is_valid
-    assert errors == []
+    result = service.validate_topology_references({"main-topology": _topology_model()})
+    assert result.ok
+    assert result.messages() == []
 
 
 def test_validate_topology_references_rejects_undefined_resource():
@@ -81,9 +80,9 @@ def test_validate_topology_references_rejects_undefined_resource():
     service.validate()
 
     topology = _topology_model(components=[{"resource": "control-vm"}, {"resource": "ghost-vm"}])
-    is_valid, errors = service.validate_topology_references({"main-topology": topology})
-    assert not is_valid
-    assert any("ghost-vm" in e for e in errors)
+    result = service.validate_topology_references({"main-topology": topology})
+    assert not result.ok
+    assert any("ghost-vm" in m for m in result.messages())
 
 
 def test_validate_topology_references_rejects_missing_loaded_topology():
@@ -91,9 +90,9 @@ def test_validate_topology_references_rejects_missing_loaded_topology():
     service = WorkspaceService(data=_workspace_with_topology())
     service.validate()
 
-    is_valid, errors = service.validate_topology_references({})
-    assert not is_valid
-    assert any("main-topology" in e for e in errors)
+    result = service.validate_topology_references({})
+    assert not result.ok
+    assert any("main-topology" in m for m in result.messages())
 
 
 def _topology_config_models(**overrides) -> dict:
@@ -119,11 +118,11 @@ def test_validate_topology_components_accepts_matching_registry():
     service = WorkspaceService(data=_workspace_with_topology())
     service.validate()
 
-    is_valid, errors = service.validate_topology_components(
+    result = service.validate_topology_components(
         _configuration(), _topology_config_models(), {"main-topology": _topology_model()}
     )
-    assert is_valid
-    assert errors == []
+    assert result.ok
+    assert result.messages() == []
 
 
 def test_validate_topology_components_rejects_missing_required_role():
@@ -132,11 +131,11 @@ def test_validate_topology_components_rejects_missing_required_role():
     service.validate()
 
     topology = _topology_model(components=[{"resource": "worker-vm"}])
-    is_valid, errors = service.validate_topology_components(
+    result = service.validate_topology_components(
         _configuration(), _topology_config_models(), {"main-topology": topology}
     )
-    assert not is_valid
-    assert any("control-plane" in e for e in errors)
+    assert not result.ok
+    assert any("control-plane" in m for m in result.messages())
 
 
 def test_validate_topology_components_rejects_max_count_exceeded():
@@ -149,11 +148,11 @@ def test_validate_topology_components_rejects_max_count_exceeded():
     service.validate()
 
     topology = _topology_model(components=[{"resource": "control-vm"}, {"resource": "control-vm-2"}])
-    is_valid, errors = service.validate_topology_components(
+    result = service.validate_topology_components(
         _configuration(), _topology_config_models(), {"main-topology": topology}
     )
-    assert not is_valid
-    assert any("max" in e.lower() for e in errors)
+    assert not result.ok
+    assert any("max" in m.lower() for m in result.messages())
 
 
 def test_validate_topology_components_rejects_unregistered_type():
@@ -167,11 +166,11 @@ def test_validate_topology_components_rejects_unregistered_type():
             "spec": {"type": "dockerswarm", "components": [{"resource": "control-vm"}]},
         }
     )
-    is_valid, errors = service.validate_topology_components(
+    result = service.validate_topology_components(
         _configuration(), _topology_config_models(), {"main-topology": topology}
     )
-    assert not is_valid
-    assert any("dockerswarm" in e for e in errors)
+    assert not result.ok
+    assert any("dockerswarm" in m for m in result.messages())
 
 
 def test_validate_topology_components_allows_unregistered_type_when_additional_topologies_true():
@@ -185,11 +184,11 @@ def test_validate_topology_components_allows_unregistered_type_when_additional_t
             "spec": {"type": "dockerswarm", "components": [{"resource": "control-vm"}]},
         }
     )
-    is_valid, errors = service.validate_topology_components(
+    result = service.validate_topology_components(
         _configuration(additional_topologies=True), _topology_config_models(), {"main-topology": topology}
     )
-    assert is_valid
-    assert errors == []
+    assert result.ok
+    assert result.messages() == []
 
 
 def test_validate_topology_components_rejects_unregistered_role_without_additional_components():
@@ -204,8 +203,8 @@ def test_validate_topology_components_rejects_unregistered_role_without_addition
     topology = _topology_model(
         components=[{"resource": "control-vm"}, {"resource": "worker-vm"}, {"resource": "cache-vm"}]
     )
-    is_valid, errors = service.validate_topology_components(
+    result = service.validate_topology_components(
         _configuration(), _topology_config_models(), {"main-topology": topology}
     )
-    assert not is_valid
-    assert any("cache" in e for e in errors)
+    assert not result.ok
+    assert any("cache" in m for m in result.messages())

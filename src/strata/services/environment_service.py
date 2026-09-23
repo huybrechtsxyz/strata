@@ -6,6 +6,7 @@ from typing import Any
 from strata.models.common_models import PlatformBaseModel
 from strata.models.environment_model import EnvironmentModel
 from strata.services.base_service import BaseService
+from strata.utils.diagnostics import Diagnostics
 from strata.utils.value_tokens import extract_value_tokens
 
 #: Maps a Value token's kind to the environment store that declares it.
@@ -42,7 +43,7 @@ class EnvironmentService(BaseService[EnvironmentModel]):
             "feature": {f.key for f in spec.features or []},
         }
 
-    def validate_document_tokens(self, model: PlatformBaseModel) -> tuple[bool, list[str]]:
+    def validate_document_tokens(self, model: PlatformBaseModel) -> Diagnostics:
         """Check every Value token in `model` resolves to a key this environment declares.
 
         Walks the document's serialized form for strings containing tokens,
@@ -54,22 +55,25 @@ class EnvironmentService(BaseService[EnvironmentModel]):
             model: Any already-validated strata document.
 
         Returns:
-            `(is_valid, errors)`, one error per unresolved token.
+            One error per unresolved token, each located at the field path
+            where the token was written.
         """
         declared = self.declared_keys()
-        errors: list[str] = []
+        diagnostics = Diagnostics()
 
         for path, text in _iter_strings(model.model_dump(by_alias=True, mode="json")):
             for kind, key in extract_value_tokens(text):
                 if key not in declared[kind]:
                     store = _STORE_BY_TOKEN_KIND[kind]
                     known = sorted(declared[kind])
-                    errors.append(
-                        f"{path}: '${{{kind}:{key}}}' is not declared in environment "
-                        f"'{self.model.meta.name}' spec.{store}. Declared: {known}"  # type: ignore[union-attr]
+                    diagnostics.error(
+                        f"'${{{kind}:{key}}}' is not declared in environment "
+                        f"'{self.model.meta.name}' spec.{store}. Declared: {known}",  # type: ignore[union-attr]
+                        location=path,
+                        code="undeclared_value_token",
                     )
 
-        return (not errors), errors
+        return diagnostics
 
 
 def _iter_strings(value: Any, path: str = "") -> list[tuple[str, str]]:

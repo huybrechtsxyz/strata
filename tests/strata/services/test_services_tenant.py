@@ -32,9 +32,9 @@ def _provider_config(*regions) -> ProviderConfigModel:
 def test_tenant_service_validates_from_data():
     """A TenantService constructed from an in-memory dict validates successfully."""
     service = TenantService(data=_tenant())
-    is_valid, errors = service.validate()
-    assert is_valid
-    assert errors == []
+    result = service.validate()
+    assert result.ok
+    assert result.messages() == []
     assert service.model is not None
     assert service.model.spec.display_name == "GSK"
 
@@ -45,9 +45,9 @@ def test_geographies_accepted_when_declared_by_a_provider_region():
     service.validate()
 
     configs = {"azure": _provider_config({"name": "westeurope", "geography": "europe"})}
-    is_valid, errors = service.validate_geographies_against_provider_configs(configs)
-    assert is_valid
-    assert errors == []
+    result = service.validate_geographies_against_provider_configs(configs)
+    assert result.ok
+    assert result.messages() == []
 
 
 def test_geographies_rejected_when_no_provider_region_declares_them():
@@ -56,9 +56,9 @@ def test_geographies_rejected_when_no_provider_region_declares_them():
     service.validate()
 
     configs = {"azure": _provider_config({"name": "westeurope", "geography": "europe"})}
-    is_valid, errors = service.validate_geographies_against_provider_configs(configs)
-    assert not is_valid
-    assert any("europ" in e and "europe" in e for e in errors)
+    result = service.validate_geographies_against_provider_configs(configs)
+    assert not result.ok
+    assert any("europ" in m and "europe" in m for m in result.messages())
 
 
 def test_geographies_skipped_when_no_provider_declares_any():
@@ -67,7 +67,7 @@ def test_geographies_skipped_when_no_provider_declares_any():
     service.validate()
 
     configs = {"azure": _provider_config({"name": "westeurope"})}
-    is_valid, errors = service.validate_geographies_against_provider_configs(configs)
-    assert is_valid
-    assert errors == []
+    result = service.validate_geographies_against_provider_configs(configs)
+    assert result.ok
+    assert result.messages() == []
 

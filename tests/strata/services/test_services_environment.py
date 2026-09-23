@@ -56,33 +56,34 @@ def test_declared_keys_are_grouped_by_token_kind():
 
 def test_document_with_resolvable_token_passes():
     """A token whose key the environment declares is accepted."""
-    is_valid, errors = _environment().validate_document_tokens(_dns("${var:PUBLIC_IP}"))
-    assert is_valid
-    assert errors == []
+    result = _environment().validate_document_tokens(_dns("${var:PUBLIC_IP}"))
+    assert result.ok
+    assert result.messages() == []
 
 
 def test_document_with_unknown_key_is_rejected_with_path_and_suggestions():
     """An undeclared key is reported with where it was found and what exists."""
-    is_valid, errors = _environment().validate_document_tokens(_dns("${var:GHOST_IP}"))
-    assert not is_valid
-    assert len(errors) == 1
-    assert "GHOST_IP" in errors[0]
-    assert "PUBLIC_IP" in errors[0]
-    assert "records" in errors[0]
+    result = _environment().validate_document_tokens(_dns("${var:GHOST_IP}"))
+    assert not result.ok
+    assert len(result.errors) == 1
+    message = result.messages()[0]
+    assert "GHOST_IP" in message
+    assert "PUBLIC_IP" in message
+    assert "records" in message
 
 
 def test_token_kind_is_checked_against_the_right_store():
     """A key declared as a variable does not satisfy a '${secret:}' token."""
-    is_valid, errors = _environment().validate_document_tokens(_dns("${secret:PUBLIC_IP}"))
-    assert not is_valid
-    assert "spec.secrets" in errors[0]
+    result = _environment().validate_document_tokens(_dns("${secret:PUBLIC_IP}"))
+    assert not result.ok
+    assert "spec.secrets" in result.messages()[0]
 
 
 def test_literal_document_without_tokens_passes():
     """A document with no tokens has nothing to resolve."""
-    is_valid, errors = _environment().validate_document_tokens(_dns("1.2.3.4"))
-    assert is_valid
-    assert errors == []
+    result = _environment().validate_document_tokens(_dns("1.2.3.4"))
+    assert result.ok
+    assert result.messages() == []
 
 
 def test_tokens_are_found_in_deeply_nested_documents():
@@ -102,16 +103,17 @@ def test_tokens_are_found_in_deeply_nested_documents():
             },
         }
     )
-    is_valid, errors = _environment().validate_document_tokens(network)
-    assert not is_valid
-    assert "MISSING_CIDR" in errors[0]
-    assert "subnets" in errors[0]
+    result = _environment().validate_document_tokens(network)
+    assert not result.ok
+    message = result.messages()[0]
+    assert "MISSING_CIDR" in message
+    assert "subnets" in message
 
 
 def test_multiple_tokens_in_one_string_are_each_checked():
     """A composite string reports one error per unresolved token."""
-    is_valid, errors = _environment().validate_document_tokens(
+    result = _environment().validate_document_tokens(
         _dns("${var:PUBLIC_IP}-${var:NOPE}-${secret:ALSO_NOPE}")
     )
-    assert not is_valid
-    assert len(errors) == 2
+    assert not result.ok
+    assert len(result.errors) == 2

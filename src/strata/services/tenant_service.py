@@ -4,6 +4,7 @@
 from strata.models.provider_config_model import ProviderConfigModel
 from strata.models.tenant_model import TenantModel
 from strata.services.base_service import BaseService
+from strata.utils.diagnostics import Diagnostics
 
 
 class TenantService(BaseService[TenantModel]):
@@ -20,7 +21,7 @@ class TenantService(BaseService[TenantModel]):
 
     def validate_geographies_against_provider_configs(
         self, provider_configs: dict[str, ProviderConfigModel]
-    ) -> tuple[bool, list[str]]:
+    ) -> Diagnostics:
         """Check every declared geography is one some provider region actually has.
 
         v1 validated a tenant's `zones` against a `configuration.spec.zones`
@@ -43,10 +44,12 @@ class TenantService(BaseService[TenantModel]):
                 the solution index.
 
         Returns:
-            `(is_valid, errors)`.
+            One error per geography no provider region declares.
         """
+        diagnostics = Diagnostics()
         if self.model is None:
-            return False, ["Tenant model is not initialized"]
+            diagnostics.error("Tenant model is not initialized")
+            return diagnostics
 
         known: set[str] = set()
         for config in provider_configs.values():
@@ -55,12 +58,14 @@ class TenantService(BaseService[TenantModel]):
                     known.add(region.geography)
 
         if not known:
-            return True, []  # no provider declares any geography — nothing to check against
+            return diagnostics  # no provider declares any geography — nothing to check against
 
-        errors = [
-            f"Tenant '{self.model.meta.name}': geography '{geography}' is not declared by any provider "
-            f"region. Known geographies: {sorted(known)}"
-            for geography in self.model.spec.geographies
-            if geography not in known
-        ]
-        return (not errors), errors
+        for index, geography in enumerate(self.model.spec.geographies):
+            if geography not in known:
+                diagnostics.error(
+                    f"Tenant '{self.model.meta.name}': geography '{geography}' is not declared by any "
+                    f"provider region. Known geographies: {sorted(known)}",
+                    location=f"spec.geographies.{index}",
+                    code="unknown_geography",
+                )
+        return diagnostics

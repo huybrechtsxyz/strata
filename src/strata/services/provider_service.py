@@ -5,6 +5,7 @@ from strata.models.configuration_model import ConfigurationModel
 from strata.models.provider_config_model import ProviderConfigModel
 from strata.models.provider_model import ProviderModel
 from strata.services.base_service import BaseService
+from strata.utils.diagnostics import Diagnostics
 
 
 class ProviderService(BaseService[ProviderModel]):
@@ -25,34 +26,42 @@ class ProviderService(BaseService[ProviderModel]):
         """Return the ProviderModel class for validation."""
         return ProviderModel
 
-    def _validate_dynamic(self, configuration_model: ConfigurationModel | None = None) -> tuple[bool, list[str]]:
+    def _validate_dynamic(self, configuration_model: ConfigurationModel | None = None) -> Diagnostics:
         """Phase 2: check that `spec.properties.type` is a registered provider type name.
 
-        Skipped (returns valid) when no `configuration_model` is supplied.
+        Skipped (no findings) when no `configuration_model` is supplied.
         """
+        diagnostics = Diagnostics()
         if configuration_model is None:
-            return True, []
+            return diagnostics
         if self.model is None:
-            return False, ["Provider model is not initialized"]
+            diagnostics.error("Provider model is not initialized")
+            return diagnostics
 
         provider_type = self.model.spec.properties.type
         registered_names = set(configuration_model.spec.providers or [])
 
         if provider_type not in registered_names:
             available = sorted(registered_names)
-            return False, [f"Provider type '{provider_type}' not found in configuration. Available: {available}"]
+            diagnostics.error(
+                f"Provider type '{provider_type}' not found in configuration. Available: {available}",
+                location="spec.properties.type",
+                code="unregistered_provider_type",
+            )
 
-        return True, []
+        return diagnostics
 
-    def validate_against_provider_config(self, provider_config: ProviderConfigModel) -> tuple[bool, list[str]]:
+    def validate_against_provider_config(self, provider_config: ProviderConfigModel) -> Diagnostics:
         """Cross-check `spec.properties.region` against a loaded ProviderConfig document's regions.
 
         Args:
             provider_config: The already-loaded `ProviderConfigModel` document
                 named by `configuration_model.spec.providers[]`.
         """
+        diagnostics = Diagnostics()
         if self.model is None:
-            return False, ["Provider model is not initialized"]
+            diagnostics.error("Provider model is not initialized")
+            return diagnostics
 
         provider_type = self.model.spec.properties.type
         provider_region = self.model.spec.properties.region
@@ -60,20 +69,26 @@ class ProviderService(BaseService[ProviderModel]):
 
         if not spec.additional_regions:
             if not spec.regions:
-                return False, [
+                diagnostics.error(
                     f"Provider '{provider_type}' has no regions defined in its provider config "
-                    f"and additional_regions is False"
-                ]
+                    f"and additional_regions is False",
+                    location="spec.properties.region",
+                    code="no_regions_defined",
+                )
+                return diagnostics
 
             valid_regions = [r.name for r in spec.regions]
 
             if provider_region not in valid_regions:
-                return False, [
+                diagnostics.error(
                     f"Region '{provider_region}' is not valid for provider '{provider_type}'. "
-                    f"Valid regions: {valid_regions}"
-                ]
+                    f"Valid regions: {valid_regions}",
+                    location="spec.properties.region",
+                    code="invalid_region",
+                )
+                return diagnostics
 
-        return True, []
+        return diagnostics
 
     def get_provider_type(self) -> str:
         """Return the provider's cloud/infrastructure type."""

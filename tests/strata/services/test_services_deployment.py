@@ -50,25 +50,26 @@ def test_deployment_service_validates_from_data():
 def test_stages_matching_workspace_steps_pass():
     """A stage naming a real provisioning step is accepted."""
     service = _deployment(stages=[{"step": "control_infra"}])
-    is_valid, errors = service.validate_stages_against_workspace(_workspace("control_infra"))
-    assert is_valid
-    assert errors == []
+    result = service.validate_stages_against_workspace(_workspace("control_infra"))
+    assert result.ok
+    assert result.messages() == []
 
 
 def test_stage_naming_unknown_step_is_rejected():
     """Parameters for a nonexistent step would silently apply to nothing."""
     service = _deployment(stages=[{"step": "ghost_step"}])
-    is_valid, errors = service.validate_stages_against_workspace(_workspace("control_infra"))
-    assert not is_valid
-    assert "ghost_step" in errors[0]
-    assert "control_infra" in errors[0]
+    result = service.validate_stages_against_workspace(_workspace("control_infra"))
+    assert not result.ok
+    message = result.messages()[0]
+    assert "ghost_step" in message
+    assert "control_infra" in message
 
 
 def test_deployment_without_stages_passes_the_cross_check():
     """Stages are optional — a deployment may just run the recipe as declared."""
-    is_valid, errors = _deployment().validate_stages_against_workspace(_workspace("control_infra"))
-    assert is_valid
-    assert errors == []
+    result = _deployment().validate_stages_against_workspace(_workspace("control_infra"))
+    assert result.ok
+    assert result.messages() == []
 
 
 # ---------------------------------------------------------------------------
@@ -110,8 +111,8 @@ def test_merge_nested_blocks_survive_validation():
         {"extends": "base", "environments": ["prd"], "locking": {"wait_timeout": "15m"}},
     )
     service = DeploymentService(data={"meta": {"name": "leaf"}, "spec": merged})
-    is_valid, errors = service.validate()
-    assert is_valid, errors
+    result = service.validate()
+    assert result.ok, result.messages()
     assert service.model.spec.locking.strategy == "wrap"
     assert service.model.spec.locking.wait_timeout == "15m"
 
@@ -172,8 +173,8 @@ def test_merged_result_validates_as_a_real_deployment():
         {"extends": "deploy-base", "environments": ["core-env"]},
     )
     service = DeploymentService(data={"meta": {"name": "leaf"}, "spec": merged})
-    is_valid, errors = service.validate()
-    assert is_valid, errors
+    result = service.validate()
+    assert result.ok, result.messages()
     assert service.model.spec.workspace == "control-workspace"
     assert service.model.spec.stages[0].step == "infra"
 

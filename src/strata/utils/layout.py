@@ -102,3 +102,32 @@ def remote_checkout_path(root: Path, remote: str, reference: str | None) -> Path
         The checkout directory. Not created — this function is pure.
     """
     return remotes_dir(root) / remote / (reference or "_unpinned")
+
+
+def display_path(value: str | None, root: Path | None) -> str:
+    """Return `value` relative to `root`, for showing to a human or a log.
+
+    Absolute paths dominate a line of output and differ between a laptop and
+    CI, which makes reports hard to scan and hard to diff. Every renderer
+    wants the same shortening, so the rule lives here with the rest of the
+    path handling rather than in one output format.
+
+    Falls back to the original string for anything outside the solution, or
+    when no root is known — a long path is better than a crash.
+
+    Args:
+        value: The path to render, or None.
+        root: Solution root to make it relative to, if known.
+
+    Returns:
+        A POSIX-style relative path, the original string, or `""` for None.
+    """
+    if value is None:
+        return ""
+    if root is None:
+        return value
+    try:
+        return Path(value).resolve().relative_to(root.resolve()).as_posix()
+    except (ValueError, OSError):
+        return value
+

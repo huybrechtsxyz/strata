@@ -60,6 +60,7 @@ from strata.services.topology_config_service import TopologyConfigService
 from strata.services.topology_service import TopologyService
 from strata.services.version_service import VersionService
 from strata.services.workspace_service import WorkspaceService
+from strata.utils.diagnostics import Diagnostics
 from strata.utils.layout import (
     DEFAULT_IGNORED_DIRS,
     MANIFEST_FILENAME,
@@ -182,7 +183,7 @@ class SolutionController:
         self.root = root.resolve()
         self.solution: SolutionModel | None = None
         self.index = DocumentIndex()
-        self.errors: list[str] = []
+        self.diagnostics = Diagnostics()
 
     @property
     def _exclude_patterns(self) -> tuple[str, ...]:
@@ -213,32 +214,36 @@ class SolutionController:
         root = find_solution_root(start)
         return cls(root) if root is not None else None
 
-    def load(self) -> tuple[bool, list[str]]:
+    def load(self) -> Diagnostics:
         """Load the manifest, then discover and index every document.
 
-        Returns `(is_valid, errors)`. Errors accumulate — a bad document does
-        not stop the scan, so one run reports everything wrong.
+        Findings accumulate — a bad document does not stop the scan, so one run
+        reports everything wrong. `.ok` is False when any error was recorded.
         """
-        self.errors = []
+        self.diagnostics = Diagnostics()
         self.index = DocumentIndex()
 
         self._load_manifest()
         for path in self._walk():
             self._load_file(path)
 
-        return (not self.errors), self.errors
+        return self.diagnostics
 
     def _load_manifest(self) -> None:
         """Validate `strata.yaml` itself. Its own kind is not indexed."""
         manifest = manifest_path(self.root)
         if not manifest.is_file():
-            self.errors.append(f"No {MANIFEST_FILENAME} found at solution root '{self.root}'")
+            self.diagnostics.error(
+                f"No {MANIFEST_FILENAME} found at solution root '{self.root}'",
+                source=str(self.root),
+                code="manifest_missing",
+            )
             return
 
         service = SolutionService(path=str(manifest))
-        is_valid, errors = service.validate()
-        if not is_valid:
-            self.errors.extend(f"{manifest}: {e}" for e in errors)
+        result = service.validate()
+        if not result.ok:
+            self.diagnostics.extend(result, source=str(manifest))
             return
         self.solution = service.model
 
@@ -256,7 +261,9 @@ class SolutionController:
             try:
                 children = sorted(current.iterdir())
             except OSError as exc:  # unreadable directory — report, keep going
-                self.errors.append(f"Cannot read directory '{current}': {exc}")
+                self.diagnostics.error(
+                    f"cannot read directory: {exc}", source=str(current), code="unreadable_directory"
+                )
                 continue
 
             for child in children:
@@ -278,7 +285,7 @@ class SolutionController:
         try:
             documents = list(yaml.safe_load_all(path.read_text(encoding="utf-8")))
         except (OSError, yaml.YAMLError) as exc:
-            self.errors.append(f"{path}: cannot parse YAML: {exc}")
+            self.diagnostics.error(f"cannot parse YAML: {exc}", source=str(path), code="unparseable")
             return
 
         for position, raw in enumerate(documents):
@@ -297,21 +304,28 @@ class SolutionController:
             kind = PlatformKind(kind_value)
         except ValueError:
             known = ", ".join(sorted(k.value for k in PlatformKind))
-            self.errors.append(f"{where}: unknown kind '{kind_value}'. Known kinds: {known}")
+            self.diagnostics.error(
+                f"unknown kind '{kind_value}'. Known kinds: {known}",
+                source=where,
+                location="kind",
+                code="unknown_kind",
+            )
             return
 
         if kind is PlatformKind.SOLUTION:
-            self.errors.append(
-                f"{where}: a nested 'solution' document is not allowed — "
-                f"the manifest at the root is the only one."
+            self.diagnostics.error(
+                "a nested 'solution' document is not allowed — the manifest at the root is the only one.",
+                source=where,
+                location="kind",
+                code="nested_solution",
             )
             return
 
         service_class = SERVICE_BY_KIND[kind]
         service = service_class(data=raw)
-        is_valid, errors = service.validate()
-        if not is_valid or service.model is None:
-            self.errors.extend(f"{where}: {e}" for e in errors)
+        result = service.validate()
+        if not result.ok or service.model is None:
+            self.diagnostics.extend(result, source=where)
             return
 
         name = str(service.model.meta.name)
@@ -319,4 +333,4 @@ class SolutionController:
         try:
             self.index.add(entry)
         except ValueError as exc:
-            self.errors.append(str(exc))
+            self.diagnostics.error(str(exc), source=where, code="duplicate_document")

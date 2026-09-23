@@ -14,8 +14,8 @@ def test_namespace_service_validates_from_data():
         },
     }
     service = NamespaceService(data=data)
-    is_valid, errors = service.validate()
-    assert is_valid
-    assert errors == []
+    result = service.validate()
+    assert result.ok
+    assert result.messages() == []
     assert service.model is not None
     assert service.model.spec.modules[0].name == "template_module"

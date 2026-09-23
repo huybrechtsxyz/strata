@@ -45,9 +45,9 @@ def _kamatera_provider_config() -> ProviderConfigModel:
 def test_provider_service_validates_from_data():
     """A ProviderService constructed from an in-memory dict validates successfully."""
     service = ProviderService(data=_minimal_provider_data())
-    is_valid, errors = service.validate()
-    assert is_valid
-    assert errors == []
+    result = service.validate()
+    assert result.ok
+    assert result.messages() == []
     assert service.get_provider_type() == "kamatera"
     assert service.get_provider_region() == "eu-west"
 
@@ -66,9 +66,9 @@ spec:
     yaml_file.write_text(yaml_content, encoding="utf-8")
 
     service = ProviderService(path=str(yaml_file))
-    is_valid, errors = service.validate()
-    assert is_valid
-    assert errors == []
+    result = service.validate()
+    assert result.ok
+    assert result.messages() == []
     assert service.get_provider_type() == "kamatera"
 
 
@@ -78,9 +78,9 @@ def test_provider_service_invalid_data_reports_errors():
     del data["spec"]["properties"]["region"]
 
     service = ProviderService(data=data)
-    is_valid, errors = service.validate()
-    assert not is_valid
-    assert len(errors) > 0
+    result = service.validate()
+    assert not result.ok
+    assert len(result.errors) > 0
     assert service.model is None
 
 
@@ -97,9 +97,9 @@ def test_provider_service_accessors_raise_before_valid():
 def test_provider_service_accepts_valid_against_configuration():
     """Phase 2: a provider type present in the configuration registry (as a pointer) validates."""
     service = ProviderService(data=_minimal_provider_data())
-    is_valid, errors = service.validate(configuration_model=_configuration_with_kamatera_pointer())
-    assert is_valid
-    assert errors == []
+    result = service.validate(configuration_model=_configuration_with_kamatera_pointer())
+    assert result.ok
+    assert result.messages() == []
 
 
 def test_provider_service_rejects_unknown_type_against_configuration():
@@ -107,18 +107,18 @@ def test_provider_service_rejects_unknown_type_against_configuration():
     data = _minimal_provider_data()
     data["spec"]["properties"]["type"] = "unknown-cloud"
     service = ProviderService(data=data)
-    is_valid, errors = service.validate(configuration_model=_configuration_with_kamatera_pointer())
-    assert not is_valid
-    assert any("not found in configuration" in e for e in errors)
+    result = service.validate(configuration_model=_configuration_with_kamatera_pointer())
+    assert not result.ok
+    assert any("not found in configuration" in m for m in result.messages())
 
 
 def test_provider_service_accepts_valid_against_provider_config():
     """A region present in the loaded ProviderConfig document's regions validates."""
     service = ProviderService(data=_minimal_provider_data())
     service.validate()
-    is_valid, errors = service.validate_against_provider_config(_kamatera_provider_config())
-    assert is_valid
-    assert errors == []
+    result = service.validate_against_provider_config(_kamatera_provider_config())
+    assert result.ok
+    assert result.messages() == []
 
 
 def test_provider_service_rejects_unknown_region_against_provider_config():
@@ -127,9 +127,9 @@ def test_provider_service_rejects_unknown_region_against_provider_config():
     data["spec"]["properties"]["region"] = "us-east"
     service = ProviderService(data=data)
     service.validate()
-    is_valid, errors = service.validate_against_provider_config(_kamatera_provider_config())
-    assert not is_valid
-    assert any("is not valid for provider" in e for e in errors)
+    result = service.validate_against_provider_config(_kamatera_provider_config())
+    assert not result.ok
+    assert any("is not valid for provider" in m for m in result.messages())
 
 
 def test_provider_service_accepts_valid_against_provider_config_with_geography_tag():
@@ -147,9 +147,9 @@ def test_provider_service_accepts_valid_against_provider_config_with_geography_t
             },
         }
     )
-    is_valid, errors = service.validate_against_provider_config(provider_config)
-    assert is_valid
-    assert errors == []
+    result = service.validate_against_provider_config(provider_config)
+    assert result.ok
+    assert result.messages() == []
 
 
 def test_provider_service_skips_phase_2_without_configuration():
@@ -157,9 +157,9 @@ def test_provider_service_skips_phase_2_without_configuration():
     data = _minimal_provider_data()
     data["spec"]["properties"]["type"] = "anything-goes"
     service = ProviderService(data=data)
-    is_valid, errors = service.validate()
-    assert is_valid
-    assert errors == []
+    result = service.validate()
+    assert result.ok
+    assert result.messages() == []
 
 
 def test_provider_service_requires_path_or_data():

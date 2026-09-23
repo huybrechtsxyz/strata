@@ -4,22 +4,14 @@
 Commands:
     version : Show the strata version.
 
-Exit codes (v1-compatible, so existing pipelines keep working):
-    0 : Success
-    1 : System/execution failure
-    2 : Usage error — invalid CLI arguments (click's standard)
-    3 : Validation failure — input processed but invalid
+Exit codes are declared once in `strata.commands.exit_codes` — see there for
+what each means.
 """
 
 import click
 
+from strata.commands.exit_codes import EXIT_SUCCESS, EXIT_USAGE  # noqa: F401  (re-exported for callers)
 from strata.utils.version import get_version
-
-#: Process exit codes. Declared once so commands cannot invent their own.
-EXIT_SUCCESS = 0
-EXIT_FAILURE = 1
-EXIT_USAGE = 2
-EXIT_VALIDATION = 3
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})

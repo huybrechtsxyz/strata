@@ -13,8 +13,8 @@ def test_configuration_service_validates_from_data():
         },
     }
     service = ConfigurationService(data=data)
-    is_valid, errors = service.validate()
-    assert is_valid
-    assert errors == []
+    result = service.validate()
+    assert result.ok
+    assert result.messages() == []
     assert service.model is not None
     assert service.model.spec.providers[0] == "kamatera"

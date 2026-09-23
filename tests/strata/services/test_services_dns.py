@@ -19,8 +19,8 @@ def test_dns_service_validates_from_data():
         },
     }
     service = DnsService(data=data)
-    is_valid, errors = service.validate()
-    assert is_valid
-    assert errors == []
+    result = service.validate()
+    assert result.ok
+    assert result.messages() == []
     assert service.model is not None
     assert service.model.spec.zones[0].name == "example.com"

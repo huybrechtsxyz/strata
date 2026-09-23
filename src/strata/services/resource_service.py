@@ -7,6 +7,7 @@ from strata.models.configuration_model import ConfigurationModel
 from strata.models.provider_config_model import ProviderConfigModel, ProviderConfigSpecModel
 from strata.models.resource_model import ResourceModel
 from strata.services.base_service import BaseService
+from strata.utils.diagnostics import Diagnostics
 
 
 class ResourceService(BaseService[ResourceModel]):
@@ -26,21 +27,26 @@ class ResourceService(BaseService[ResourceModel]):
         """Return the ResourceModel class for validation."""
         return ResourceModel
 
-    def _validate_dynamic(self, configuration_model: ConfigurationModel | None = None) -> tuple[bool, list[str]]:
+    def _validate_dynamic(self, configuration_model: ConfigurationModel | None = None) -> Diagnostics:
         """Phase 2: check that `spec.properties.provider_type` is a registered provider type name."""
+        diagnostics = Diagnostics()
         if configuration_model is None or self.model is None:
-            return True, []
+            return diagnostics
 
         provider_type = self.model.spec.properties.provider_type
         registered_names = set(configuration_model.spec.providers or [])
 
         if provider_type not in registered_names:
             available = sorted(registered_names)
-            return False, [f"Provider type '{provider_type}' not found in configuration. Available providers: {available}"]
+            diagnostics.error(
+                f"Provider type '{provider_type}' not found in configuration. Available providers: {available}",
+                location="spec.properties.provider_type",
+                code="unregistered_provider_type",
+            )
 
-        return True, []
+        return diagnostics
 
-    def validate_against_provider_config(self, provider_config: ProviderConfigModel) -> tuple[bool, list[str]]:
+    def validate_against_provider_config(self, provider_config: ProviderConfigModel) -> Diagnostics:
         """Cross-check the resource type and its configuration fields against a
         loaded ProviderConfig document.
 
@@ -52,47 +58,54 @@ class ResourceService(BaseService[ResourceModel]):
             provider_config: The already-loaded `ProviderConfigModel` document
                 named by `configuration_model.spec.providers[]`.
         """
+        diagnostics = Diagnostics()
         if self.model is None:
-            return False, ["Resource model is not initialized"]
+            diagnostics.error("Resource model is not initialized")
+            return diagnostics
 
-        errors: list[str] = []
         provider_type = self.model.spec.properties.provider_type
         resource_type = self.model.spec.properties.resource_type
         spec = provider_config.spec
 
         if not spec.additional_resources:
             if not spec.resources:
-                errors.append(
+                diagnostics.error(
                     f"Provider '{provider_type}' has no resources defined in its provider config, "
-                    f"but additional_resources is False"
+                    f"but additional_resources is False",
+                    location="spec.properties.resource_type",
+                    code="no_resources_defined",
                 )
-                return False, errors
+                return diagnostics
 
             valid_resource_types = [res.name for res in spec.resources]
             if resource_type not in valid_resource_types:
-                errors.append(
+                diagnostics.error(
                     f"Resource type '{resource_type}' is not valid for provider '{provider_type}'. "
-                    f"Valid resource types: {valid_resource_types}"
+                    f"Valid resource types: {valid_resource_types}",
+                    location="spec.properties.resource_type",
+                    code="invalid_resource_type",
                 )
-                return False, errors
+                return diagnostics
 
         if self.model.spec.configuration:
-            errors.extend(self._validate_configuration_schema(spec, resource_type, self.model.spec.configuration))
+            diagnostics.extend(
+                self._validate_configuration_schema(spec, resource_type, self.model.spec.configuration)
+            )
 
-        return len(errors) == 0, errors
+        return diagnostics
 
     def _validate_configuration_schema(
         self,
         provider_config_spec: ProviderConfigSpecModel,
         resource_type: str,
         configuration: dict[str, object],
-    ) -> list[str]:
+    ) -> Diagnostics:
         """Validate configuration fields against schema patterns declared in the provider registry.
 
         When `additional_configurations=False`, only fields in the schema are allowed.
         Required schema fields absent from `configuration` are reported as errors.
         """
-        errors: list[str] = []
+        diagnostics = Diagnostics()
         config_resource = None
         if provider_config_spec.resources:
             for res in provider_config_spec.resources:
@@ -101,7 +114,7 @@ class ResourceService(BaseService[ResourceModel]):
                     break
 
         if config_resource is None or config_resource.configuration is None:
-            return errors
+            return diagnostics
 
         schema = config_resource.configuration
         additional_allowed = config_resource.additional_configurations
@@ -109,9 +122,11 @@ class ResourceService(BaseService[ResourceModel]):
         for field_name, field_value in configuration.items():
             if field_name not in schema:
                 if not additional_allowed:
-                    errors.append(
+                    diagnostics.error(
                         f"Configuration field '{field_name}' is not allowed for resource type '{resource_type}'. "
-                        f"additional_configurations is False. Valid fields: {list(schema.keys())}"
+                        f"additional_configurations is False. Valid fields: {list(schema.keys())}",
+                        location=f"spec.configuration.{field_name}",
+                        code="configuration_field_not_allowed",
                     )
                 continue
 
@@ -121,13 +136,17 @@ class ResourceService(BaseService[ResourceModel]):
 
             try:
                 if not re.match(pattern, value_str):
-                    errors.append(
+                    diagnostics.error(
                         f"Configuration field '{field_name}' value '{value_str}' does not match "
-                        f"required pattern '{pattern}' for resource type '{resource_type}'"
+                        f"required pattern '{pattern}' for resource type '{resource_type}'",
+                        location=f"spec.configuration.{field_name}",
+                        code="configuration_pattern_mismatch",
                     )
             except re.error as e:
-                errors.append(
-                    f"Invalid regex pattern '{pattern}' for field '{field_name}' in configuration schema: {e}"
+                diagnostics.error(
+                    f"Invalid regex pattern '{pattern}' for field '{field_name}' in configuration schema: {e}",
+                    location=f"spec.configuration.{field_name}",
+                    code="invalid_schema_pattern",
                 )
 
         for schema_field, schema_def in schema.items():
@@ -137,12 +156,14 @@ class ResourceService(BaseService[ResourceModel]):
             is_required = schema_def.required if not isinstance(schema_def, str) else True
             if is_required:
                 pattern = schema_def if isinstance(schema_def, str) else schema_def.pattern
-                errors.append(
+                diagnostics.error(
                     f"Required configuration field '{schema_field}' is missing "
-                    f"for resource type '{resource_type}'. Pattern: {pattern}"
+                    f"for resource type '{resource_type}'. Pattern: {pattern}",
+                    location=f"spec.configuration.{schema_field}",
+                    code="configuration_field_missing",
                 )
 
-        return errors
+        return diagnostics
 
     def get_provider_type(self) -> str:
         """Return the resource's provider type."""

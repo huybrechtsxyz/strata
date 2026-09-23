@@ -13,10 +13,44 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 import yaml
 from pydantic import BaseModel, ValidationError
 
+from strata.utils.diagnostics import Diagnostics
+
 if TYPE_CHECKING:
     from strata.models.configuration_model import ConfigurationModel
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
+
+
+def diagnostics_from_validation_error(exc: ValidationError) -> Diagnostics:
+    """Convert a Pydantic `ValidationError` into structured diagnostics.
+
+    Pydantic already reports `loc`, `msg` and `type` separately. The previous
+    implementation collapsed each entry with `str(err)`, which produced a
+    Python dict repr inside a string — unreadable and unparseable. This keeps
+    the parts it already had:
+
+    - `type` -> `code` (stable classifier, e.g. `missing`)
+    - `loc`  -> `location` (`spec.execution.0.provisioner`)
+    - `msg`  -> `message`
+
+    `input` is deliberately dropped: it is the entire offending value, which
+    for a document-level error is the whole document.
+
+    Args:
+        exc: The validation error raised by `model_validate`.
+
+    Returns:
+        One error diagnostic per reported problem.
+    """
+    diagnostics = Diagnostics()
+    for error in exc.errors():
+        location = ".".join(str(part) for part in error.get("loc", ()))
+        diagnostics.error(
+            str(error.get("msg", "Invalid value")),
+            location=location or None,
+            code=str(error.get("type")) if error.get("type") else None,
+        )
+    return diagnostics
 
 
 class BaseService(ABC, Generic[ModelT]):
@@ -39,21 +73,21 @@ class BaseService(ABC, Generic[ModelT]):
         self.data = data
         self.model: ModelT | None = None
         self._validated = False
-        self._errors: list[str] = []
+        self.diagnostics = Diagnostics()
 
     @abstractmethod
     def _get_model_class(self) -> type[ModelT]:
         """Return the Pydantic model class used for validation."""
         raise NotImplementedError
 
-    def _validate_dynamic(self, configuration_model: "ConfigurationModel | None" = None) -> tuple[bool, list[str]]:
+    def _validate_dynamic(self, configuration_model: "ConfigurationModel | None" = None) -> Diagnostics:
         """Phase 2: validation requiring external/dynamic context.
 
         Default: no-op (nothing to check yet). Subclasses override when they
         have dynamic checks to perform (e.g. against `configuration_model`, a
         configuration registry).
         """
-        return True, []
+        return Diagnostics()
 
     def _load_data(self) -> dict[str, object]:
         """Load raw data from `self.data`, or from the YAML file at `self.path`."""
@@ -64,7 +98,7 @@ class BaseService(ABC, Generic[ModelT]):
         loaded = yaml.safe_load(content)
         return loaded or {}
 
-    def validate(self, configuration_model: "ConfigurationModel | None" = None) -> tuple[bool, list[str]]:
+    def validate(self, configuration_model: "ConfigurationModel | None" = None) -> Diagnostics:
         """Run Phase 1 (schema) then Phase 2 (dynamic) validation.
 
         Args:
@@ -73,9 +107,10 @@ class BaseService(ABC, Generic[ModelT]):
                 the known provider registry). Omitted means Phase 2 is skipped.
 
         Returns:
-            (is_valid, error_messages)
+            Findings for this document. `.ok` is False when any error was
+            recorded; warnings and info never fail validation.
         """
-        self._errors = []
+        self.diagnostics = Diagnostics()
         raw = self._load_data()
         model_class = self._get_model_class()
 
@@ -83,23 +118,19 @@ class BaseService(ABC, Generic[ModelT]):
             self.model = model_class.model_validate(raw)
         except ValidationError as exc:
             self.model = None
-            self._errors = [str(err) for err in exc.errors()]
+            self.diagnostics.extend(diagnostics_from_validation_error(exc))
             self._validated = True
-            return False, self._errors
+            return self.diagnostics
 
-        dynamic_ok, dynamic_errors = self._validate_dynamic(configuration_model)
-        if not dynamic_ok:
+        self.diagnostics.extend(self._validate_dynamic(configuration_model))
+        if not self.diagnostics.ok:
             self.model = None
-            self._errors = dynamic_errors
-            self._validated = True
-            return False, self._errors
-
         self._validated = True
-        return True, []
+        return self.diagnostics
 
     def _ensure_validated(self) -> None:
         """Validate on first access if not already done; raise if invalid."""
         if not self._validated:
             self.validate()
         if self.model is None:
-            raise ValueError(f"{self.__class__.__name__} is not valid: {self._errors}")
+            raise ValueError(f"{self.__class__.__name__} is not valid: {self.diagnostics.messages()}")

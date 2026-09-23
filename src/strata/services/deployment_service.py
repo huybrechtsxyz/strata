@@ -6,6 +6,7 @@ from typing import Any
 from strata.models.deployment_model import DeploymentModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.base_service import BaseService
+from strata.utils.diagnostics import Diagnostics
 from strata.utils.dict_merge import deep_merge
 
 #: Spec fields consumed by `extends` resolution and stripped from the result,
@@ -88,7 +89,7 @@ class DeploymentService(BaseService[DeploymentModel]):
         """Return the DeploymentModel class for validation."""
         return DeploymentModel
 
-    def validate_stages_against_workspace(self, workspace: WorkspaceModel) -> tuple[bool, list[str]]:
+    def validate_stages_against_workspace(self, workspace: WorkspaceModel) -> Diagnostics:
         """Check every stage names a real execution step in the workspace.
 
         A stage supplies runtime parameters for a step in the workspace's
@@ -100,18 +101,22 @@ class DeploymentService(BaseService[DeploymentModel]):
                 names in `spec.workspace`.
 
         Returns:
-            `(is_valid, errors)`.
+            One error per stage naming an unknown step.
         """
+        diagnostics = Diagnostics()
         if self.model is None:
-            return False, ["Deployment model is not initialized"]
+            diagnostics.error("Deployment model is not initialized")
+            return diagnostics
         if not self.model.spec.stages:
-            return True, []
+            return diagnostics
 
         known = {step.name for step in (workspace.spec.execution or [])}
-        errors = [
-            f"Deployment '{self.model.meta.name}': stage references unknown execution step "
-            f"'{stage.step}'. Workspace '{workspace.meta.name}' defines: {sorted(known)}"
-            for stage in self.model.spec.stages
-            if stage.step not in known
-        ]
-        return (not errors), errors
+        for index, stage in enumerate(self.model.spec.stages):
+            if stage.step not in known:
+                diagnostics.error(
+                    f"Deployment '{self.model.meta.name}': stage references unknown execution step "
+                    f"'{stage.step}'. Workspace '{workspace.meta.name}' defines: {sorted(known)}",
+                    location=f"spec.stages.{index}.step",
+                    code="unknown_execution_step",
+                )
+        return diagnostics

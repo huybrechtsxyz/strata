@@ -16,8 +16,8 @@ def test_solution_service_validates_from_data():
         },
     }
     service = SolutionService(data=data)
-    is_valid, errors = service.validate()
-    assert is_valid
-    assert errors == []
+    result = service.validate()
+    assert result.ok
+    assert result.messages() == []
     assert service.model is not None
     assert service.model.spec.remotes[0].name == "infra"

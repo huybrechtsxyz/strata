@@ -6,6 +6,7 @@ from strata.models.topology_config_model import TopologyConfigModel
 from strata.models.topology_model import TopologyModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.base_service import BaseService
+from strata.utils.diagnostics import Diagnostics
 
 
 class WorkspaceService(BaseService[WorkspaceModel]):
@@ -34,7 +35,7 @@ class WorkspaceService(BaseService[WorkspaceModel]):
         """Return the WorkspaceModel class for validation."""
         return WorkspaceModel
 
-    def validate_topology_references(self, topology_models: dict[str, TopologyModel]) -> tuple[bool, list[str]]:
+    def validate_topology_references(self, topology_models: dict[str, TopologyModel]) -> Diagnostics:
         """Cross-check each referenced Topology's internal references
         (`components[].resource`, `namespaces[].namespace`) against this
         workspace's own `resources`/`namespaces` (ADR-0011/ADR-0012).
@@ -44,36 +45,47 @@ class WorkspaceService(BaseService[WorkspaceModel]):
                 by `WorkspaceTopologyModel.name`. A missing entry for a
                 declared `spec.topology[]` reference is itself an error.
         """
+        diagnostics = Diagnostics()
         if self.model is None or not self.model.spec.topology:
-            return True, []
+            return diagnostics
 
-        errors: list[str] = []
         resource_names = {r.name for r in (self.model.spec.resources or [])}
         namespace_names = set(self.model.spec.namespaces or [])
 
         for topo_name in self.model.spec.topology:
             topology_model = topology_models.get(topo_name)
             if topology_model is None:
-                errors.append(f"Topology '{topo_name}': no loaded TopologyModel provided for validation")
+                diagnostics.error(
+                    f"Topology '{topo_name}': no loaded TopologyModel provided for validation",
+                    location="spec.topology",
+                    code="topology_not_loaded",
+                )
                 continue
 
             for component in topology_model.spec.components:
                 if component.resource not in resource_names:
-                    errors.append(
-                        f"Topology '{topo_name}': component references undefined resource '{component.resource}'"
+                    diagnostics.error(
+                        f"Topology '{topo_name}': component references undefined resource "
+                        f"'{component.resource}'",
+                        location="spec.resources",
+                        code="undefined_resource",
                     )
             for ns_ref in topology_model.spec.namespaces or []:
                 if ns_ref.namespace not in namespace_names:
-                    errors.append(f"Topology '{topo_name}': references undefined namespace '{ns_ref.namespace}'")
+                    diagnostics.error(
+                        f"Topology '{topo_name}': references undefined namespace '{ns_ref.namespace}'",
+                        location="spec.namespaces",
+                        code="undefined_namespace",
+                    )
 
-        return (len(errors) == 0), errors
+        return diagnostics
 
     def validate_topology_components(
         self,
         configuration_model: ConfigurationModel,
         topology_config_models: dict[str, TopologyConfigModel],
         topology_models: dict[str, TopologyModel],
-    ) -> tuple[bool, list[str]]:
+    ) -> Diagnostics:
         """Cross-check each referenced Topology's component roles against the
         configuration's topology type registry (ADR-0013/ADR-0014).
 
@@ -96,15 +108,19 @@ class WorkspaceService(BaseService[WorkspaceModel]):
                 by the Topology document name listed in `spec.topology[]`.
         """
         if self.model is None or not self.model.spec.topology:
-            return True, []
+            return Diagnostics()
 
-        errors: list[str] = []
+        diagnostics = Diagnostics()
         resource_roles = {r.name: r.role for r in (self.model.spec.resources or [])}
 
         for topo_name in self.model.spec.topology:
             topology_model = topology_models.get(topo_name)
             if topology_model is None:
-                errors.append(f"Topology '{topo_name}': no loaded TopologyModel provided for validation")
+                diagnostics.error(
+                    f"Topology '{topo_name}': no loaded TopologyModel provided for validation",
+                    location="spec.topology",
+                    code="topology_not_loaded",
+                )
                 continue
 
             topo_type = topology_model.spec.type
@@ -112,9 +128,11 @@ class WorkspaceService(BaseService[WorkspaceModel]):
 
             if matching_config is None:
                 if not configuration_model.spec.additional_topologies:
-                    errors.append(
+                    diagnostics.error(
                         f"Topology '{topo_name}': type '{topo_type}' is not registered in "
-                        "configuration.spec.topologies and additional_topologies is False"
+                        "configuration.spec.topologies and additional_topologies is False",
+                        location="spec.topology",
+                        code="unregistered_topology_type",
                     )
                 continue
 
@@ -132,37 +150,47 @@ class WorkspaceService(BaseService[WorkspaceModel]):
             if not matching_config.spec.additional_components:
                 for role in role_counts:
                     if role not in valid_roles:
-                        errors.append(
+                        diagnostics.error(
                             f"Topology '{topo_name}': component role '{role}' is not registered "
-                            f"for topology type '{topo_type}' and additional_components is False"
+                            f"for topology type '{topo_type}' and additional_components is False",
+                            location="spec.resources",
+                            code="unregistered_component_role",
                         )
 
             for comp_config in matching_config.spec.components or []:
                 actual_count = role_counts.get(comp_config.role, 0)
 
                 if comp_config.required and actual_count == 0:
-                    errors.append(
-                        f"Topology '{topo_name}': required component role '{comp_config.role}' is missing"
+                    diagnostics.error(
+                        f"Topology '{topo_name}': required component role '{comp_config.role}' is missing",
+                        location="spec.resources",
+                        code="missing_required_role",
                     )
                     continue
                 if actual_count == 0:
                     continue
 
                 if comp_config.min_count and actual_count < comp_config.min_count:
-                    errors.append(
+                    diagnostics.error(
                         f"Topology '{topo_name}': component role '{comp_config.role}' has "
-                        f"{actual_count} instance(s), needs at least {comp_config.min_count}"
+                        f"{actual_count} instance(s), needs at least {comp_config.min_count}",
+                        location="spec.resources",
+                        code="role_count_below_minimum",
                     )
                 if comp_config.max_count and actual_count > comp_config.max_count:
-                    errors.append(
+                    diagnostics.error(
                         f"Topology '{topo_name}': component role '{comp_config.role}' has "
-                        f"{actual_count} instance(s), exceeds max {comp_config.max_count}"
+                        f"{actual_count} instance(s), exceeds max {comp_config.max_count}",
+                        location="spec.resources",
+                        code="role_count_above_maximum",
                     )
                 if comp_config.uses_module and not role_has_module.get(comp_config.role, False):
-                    errors.append(
+                    diagnostics.error(
                         f"Topology '{topo_name}': component role '{comp_config.role}' requires a "
-                        "module attached but none of its resources have one"
+                        "module attached but none of its resources have one",
+                        location="spec.resources",
+                        code="role_missing_module",
                     )
 
-        return (len(errors) == 0), errors
+        return diagnostics
 

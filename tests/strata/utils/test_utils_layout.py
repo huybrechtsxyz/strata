@@ -12,6 +12,7 @@ from strata.utils.layout import (
     REMOTES_DIRNAME,
     STRATA_DIR,
     YAML_SUFFIXES,
+    display_path,
     manifest_path,
     remote_checkout_path,
     remotes_dir,
@@ -78,6 +79,32 @@ def test_layout_functions_do_not_touch_the_filesystem(tmp_path):
     """Paths are computed for things that do not exist yet."""
     result = remote_checkout_path(tmp_path, "infra", "v1.0.0")
     assert not result.exists()
+
+
+# ---------------------------------------------------------------------------
+# Display paths
+# ---------------------------------------------------------------------------
+
+
+def test_display_path_is_relative_to_the_root(tmp_path):
+    """Absolute paths dominate the line and differ between laptop and CI."""
+    source = tmp_path / "config" / "workspaces" / "main.yaml"
+    assert display_path(str(source), tmp_path) == "config/workspaces/main.yaml"
+
+
+def test_display_path_outside_the_root_is_left_alone(tmp_path):
+    """A path that cannot be made relative is shown as-is, not crashed on."""
+    assert display_path("/elsewhere/a.yaml", tmp_path) == "/elsewhere/a.yaml"
+
+
+def test_display_path_without_a_root_is_unchanged():
+    """Rendering works even when no solution root is known."""
+    assert display_path("a.yaml", None) == "a.yaml"
+
+
+def test_display_path_of_none_is_empty():
+    """A finding about the run, not a document."""
+    assert display_path(None, None) == ""
 
 
 # ---------------------------------------------------------------------------

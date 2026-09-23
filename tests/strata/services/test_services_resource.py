@@ -49,9 +49,9 @@ def _kamatera_provider_config(configuration_schema: dict | None = None) -> Provi
 def test_resource_service_validates_from_data():
     """A ResourceService constructed from an in-memory dict validates successfully."""
     service = ResourceService(data=_minimal_resource_data())
-    is_valid, errors = service.validate()
-    assert is_valid
-    assert errors == []
+    result = service.validate()
+    assert result.ok
+    assert result.messages() == []
     assert service.get_provider_type() == "kamatera"
     assert service.get_resource_type() == "virtual_machine"
 
@@ -59,9 +59,9 @@ def test_resource_service_validates_from_data():
 def test_resource_service_accepts_valid_against_configuration():
     """Phase 2: a provider type present in the configuration registry (as a pointer) validates."""
     service = ResourceService(data=_minimal_resource_data())
-    is_valid, errors = service.validate(configuration_model=_configuration_with_kamatera_pointer())
-    assert is_valid
-    assert errors == []
+    result = service.validate(configuration_model=_configuration_with_kamatera_pointer())
+    assert result.ok
+    assert result.messages() == []
 
 
 def test_resource_service_rejects_unknown_resource_type():
@@ -70,9 +70,9 @@ def test_resource_service_rejects_unknown_resource_type():
     data["spec"]["properties"]["resource_type"] = "unknown_type"
     service = ResourceService(data=data)
     service.validate()
-    is_valid, errors = service.validate_against_provider_config(_kamatera_provider_config())
-    assert not is_valid
-    assert any("is not valid for provider" in e for e in errors)
+    result = service.validate_against_provider_config(_kamatera_provider_config())
+    assert not result.ok
+    assert any("is not valid for provider" in m for m in result.messages())
 
 
 def test_resource_service_validates_configuration_schema():
@@ -83,9 +83,9 @@ def test_resource_service_validates_configuration_schema():
 
     service = ResourceService(data=data)
     service.validate()
-    is_valid, errors = service.validate_against_provider_config(provider_config)
-    assert not is_valid
-    assert any("does not match required pattern" in e for e in errors)
+    result = service.validate_against_provider_config(provider_config)
+    assert not result.ok
+    assert any("does not match required pattern" in m for m in result.messages())
 
 
 def test_resource_service_rejects_disallowed_configuration_field():
@@ -96,6 +96,6 @@ def test_resource_service_rejects_disallowed_configuration_field():
 
     service = ResourceService(data=data)
     service.validate()
-    is_valid, errors = service.validate_against_provider_config(provider_config)
-    assert not is_valid
-    assert any("is not allowed for resource type" in e for e in errors)
+    result = service.validate_against_provider_config(provider_config)
+    assert not result.ok
+    assert any("is not allowed for resource type" in m for m in result.messages())
