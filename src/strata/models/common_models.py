@@ -275,6 +275,38 @@ class ModuleReferenceModel(PlatformBaseModel):
         return validate_slot_type(v)
 
 
+def validate_script_file(value: str) -> str:
+    """Validate one script path: solution-relative, with a runnable extension.
+
+    The single place both `ScriptPathModel.file` and bare `ScriptsModel.scripts`
+    entries are checked, so the two cannot drift apart.
+
+    Scripts are *executed*, so they get the same containment rule as every
+    other declared path (`validate_relative_path`) rather than a weaker one.
+    An absolute path or a `..` escape here would run code from outside the
+    solution.
+
+    Filesystem existence is deferred to a later service-layer phase: the file
+    may live in a remote not yet materialised on disk.
+
+    Args:
+        value: The declared script path.
+
+    Returns:
+        The validated path unchanged.
+
+    Raises:
+        ValueError: If the path escapes the solution or has no script extension.
+    """
+    validate_relative_path(value)
+    suffix = Path(value).suffix
+    if suffix not in SCRIPT_EXTENSIONS:
+        raise ValueError(
+            f"Script must have a valid extension ({', '.join(sorted(SCRIPT_EXTENSIONS))}), got: {suffix}"
+        )
+    return value
+
+
 class ScriptPathModel(PlatformBaseModel):
     """Individual script with scope and execution metadata."""
 
@@ -298,17 +330,8 @@ class ScriptPathModel(PlatformBaseModel):
     @field_validator("file")
     @classmethod
     def validate_script_path(cls, v: str) -> str:
-        """Validate script file has a valid extension.
-
-        Filesystem existence checks are deferred to a later service-layer phase
-        because the file may live in a remote repo not yet synced to disk.
-        """
-        path = Path(v)
-        if path.suffix not in SCRIPT_EXTENSIONS:
-            raise ValueError(
-                f"Script must have a valid extension (.sh, .bash, .py, .ps1, .js, .mjs, .go), got: {path.suffix}"
-            )
-        return v
+        """Validate the script path (see `validate_script_file`)."""
+        return validate_script_file(v)
 
 
 class ScriptsModel(PlatformBaseModel):
@@ -322,21 +345,15 @@ class ScriptsModel(PlatformBaseModel):
     def validate_and_normalize_scripts(
         cls, v: list[str | ScriptPathModel] | None
     ) -> list[str | ScriptPathModel] | None:
-        """Validate scripts have valid extensions.
+        """Validate bare script paths (see `validate_script_file`).
 
-        Filesystem existence checks are deferred to a later service-layer phase
-        because files may live in remote repos not yet synced to disk.
+        `ScriptPathModel` entries already validated their own `file` field.
         """
         if v is None:
             return v
         for item in v:
             if isinstance(item, str):
-                path = Path(item)
-                if path.suffix not in SCRIPT_EXTENSIONS:
-                    raise ValueError(
-                        f"Script must have a valid extension (.sh, .bash, .py, .ps1, .js, .mjs, .go), got: {path.suffix}"
-                    )
-            # ScriptPathModel entries already validated their own `file` field.
+                validate_script_file(item)
         return v
 
 

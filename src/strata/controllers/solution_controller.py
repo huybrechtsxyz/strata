@@ -60,43 +60,16 @@ from strata.services.topology_config_service import TopologyConfigService
 from strata.services.topology_service import TopologyService
 from strata.services.version_service import VersionService
 from strata.services.workspace_service import WorkspaceService
-
-#: The solution manifest filename — both the root marker and the recursion
-#: boundary (a nested one means a different solution).
-MANIFEST_FILENAME = "strata.yaml"
+from strata.utils.layout import (
+    DEFAULT_IGNORED_DIRS,
+    MANIFEST_FILENAME,
+    YAML_SUFFIXES,
+    manifest_path,
+)
 
 #: Every `apiVersion` value that marks a document as ours. Anything else (or
 #: nothing) means "not a strata document" and is skipped without complaint.
 _STRATA_API_PREFIXES = ("strata.",)
-
-#: Directories never descended into, regardless of configuration. Tool
-#: caches, virtualenvs, build output, and `.strata/` (runtime state — v2
-#: declares it runtime-only, ADR-0015). This is the floor;
-#: `spec.discovery.exclude` adds to it and cannot remove from it, so a
-#: user-supplied pattern can never re-enable scanning `.git`.
-#:
-#: Deliberately NOT here: `.archive/`, `repos/` and similar. Those are local
-#: conventions observed in particular repositories, not universals — a
-#: solution that wants them skipped declares them in `spec.discovery.exclude`.
-#: `repos/` in particular is already handled structurally: a checked-out
-#: remote carries its own `strata.yaml`, which stops recursion.
-DEFAULT_IGNORED_DIRS = frozenset(
-    {
-        ".git",
-        ".venv",
-        "venv",
-        ".mypy_cache",
-        ".pytest_cache",
-        ".ruff_cache",
-        "__pycache__",
-        "node_modules",
-        ".strata",
-        "build",
-        "dist",
-    }
-)
-
-_YAML_SUFFIXES = (".yaml", ".yml")
 
 #: Which service validates which kind. The service already knows its model
 #: and owns Phase 1/Phase 2, so the controller does not duplicate either.
@@ -189,7 +162,7 @@ def find_solution_root(start: Path) -> Path | None:
     """
     current = start.resolve()
     for candidate in (current, *current.parents):
-        if (candidate / MANIFEST_FILENAME).is_file():
+        if manifest_path(candidate).is_file():
             return candidate
     return None
 
@@ -257,7 +230,7 @@ class SolutionController:
 
     def _load_manifest(self) -> None:
         """Validate `strata.yaml` itself. Its own kind is not indexed."""
-        manifest = self.root / MANIFEST_FILENAME
+        manifest = manifest_path(self.root)
         if not manifest.is_file():
             self.errors.append(f"No {MANIFEST_FILENAME} found at solution root '{self.root}'")
             return
@@ -290,12 +263,12 @@ class SolutionController:
                 if child.is_dir():
                     if child.name in DEFAULT_IGNORED_DIRS:
                         continue
-                    if (child / MANIFEST_FILENAME).is_file():
+                    if manifest_path(child).is_file():
                         continue  # nested solution — boundary
                     if self._is_excluded(child):
                         continue
                     stack.append(child)
-                elif child.suffix in _YAML_SUFFIXES and child.name != MANIFEST_FILENAME:
+                elif child.suffix in YAML_SUFFIXES and child.name != MANIFEST_FILENAME:
                     if self._is_excluded(child):
                         continue
                     yield child

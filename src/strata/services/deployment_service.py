@@ -6,6 +6,7 @@ from typing import Any
 from strata.models.deployment_model import DeploymentModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.base_service import BaseService
+from strata.utils.dict_merge import deep_merge
 
 #: Spec fields consumed by `extends` resolution and stripped from the result,
 #: so a merged payload looks like a plain, fully-resolved deployment.
@@ -20,13 +21,20 @@ def merge_deployment_specs(base: dict[str, Any], child: dict[str, Any]) -> dict[
     `partial: true` base is missing required fields by design, so it cannot be
     validated on its own first. Only the merged result is a valid document.
 
-    Rules (v1-compatible):
+    Rules:
 
-    - **Top-level fields** — the child's value replaces the base's.
+    - **Nested blocks** — deep-merged per leaf key, so a child setting one
+      field of `locking` keeps the base's other fields. This diverges from
+      v1, which replaced whole top-level values: there, a child overriding
+      `locking.wait_timeout` silently dropped `locking.strategy`, which then
+      fell back to its schema default — a real change to a value nobody
+      wrote, reported as nothing. Helm values and Kustomize merge per leaf
+      key for the same reason.
     - **`stages`** — merged by `step`. A child stage with the same step
       overrides the base's field-by-field; new steps are appended.
     - **`environments`** — base list first, then the child's. Later entries
       win at value-resolution time, so the child still takes precedence.
+    - **Other lists** — replaced wholesale by the child's.
     - **`partial`/`extends`** — consumed and stripped from the result.
 
     Args:
@@ -36,7 +44,7 @@ def merge_deployment_specs(base: dict[str, Any], child: dict[str, Any]) -> dict[
     Returns:
         A new merged `spec` dict. Neither input is mutated.
     """
-    merged: dict[str, Any] = {**base, **child}
+    merged: dict[str, Any] = deep_merge(base, child)
 
     base_stages = base.get("stages") or []
     child_stages = child.get("stages") or []
@@ -46,7 +54,7 @@ def merge_deployment_specs(base: dict[str, Any], child: dict[str, Any]) -> dict[
         for stage in [*base_stages, *child_stages]:
             step = stage.get("step")
             if step in by_step:
-                by_step[step] = {**by_step[step], **stage}
+                by_step[step] = deep_merge(by_step[step], stage)
             else:
                 by_step[step] = dict(stage)
                 order.append(step)

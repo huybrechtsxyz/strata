@@ -86,6 +86,45 @@ def test_merge_child_top_level_fields_replace_base():
     assert merged["locking"] == {"enabled": True, "strategy": "wrap"}
 
 
+def test_merge_nested_blocks_per_leaf_key():
+    """Overriding one field of a block keeps the base's other fields.
+
+    A shallow merge dropped 'strategy' here, letting it fall back to its
+    schema default ('delegate') — a silent change to a value nobody wrote.
+    """
+    merged = merge_deployment_specs(
+        {"workspace": "main", "locking": {"enabled": True, "strategy": "wrap", "wait_timeout": "10m"}},
+        {"locking": {"wait_timeout": "15m"}},
+    )
+    assert merged["locking"] == {"enabled": True, "strategy": "wrap", "wait_timeout": "15m"}
+
+
+def test_merge_nested_blocks_survive_validation():
+    """The deep-merged result validates with the base's settings intact."""
+    merged = merge_deployment_specs(
+        {
+            "partial": True,
+            "workspace": "main",
+            "locking": {"enabled": True, "strategy": "wrap", "wait_timeout": "10m"},
+        },
+        {"extends": "base", "environments": ["prd"], "locking": {"wait_timeout": "15m"}},
+    )
+    service = DeploymentService(data={"meta": {"name": "leaf"}, "spec": merged})
+    is_valid, errors = service.validate()
+    assert is_valid, errors
+    assert service.model.spec.locking.strategy == "wrap"
+    assert service.model.spec.locking.wait_timeout == "15m"
+
+
+def test_merge_stage_timeouts_merge_per_leaf():
+    """A stage's nested timeouts block merges rather than being replaced."""
+    merged = merge_deployment_specs(
+        {"stages": [{"step": "infra", "timeouts": {"apply": 1800, "plan": 600}}]},
+        {"stages": [{"step": "infra", "timeouts": {"plan": 900}}]},
+    )
+    assert merged["stages"][0]["timeouts"] == {"apply": 1800, "plan": 900}
+
+
 def test_merge_stages_are_merged_by_step():
     """A child stage overrides the base's field-by-field; new steps append."""
     merged = merge_deployment_specs(

@@ -3,13 +3,19 @@
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
+from pathlib import Path
+
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = "strata-v2"
+# Read straight from VERSION.txt rather than importing strata: docs must build
+# without the package installed, and a literal here would be a second source
+# of truth that silently disagrees with the real version.
+release = (Path(__file__).resolve().parent.parent / "VERSION.txt").read_text(encoding="utf-8").strip()
+
+project = "strata"
 copyright = "2026, Huybrechts XYZ"
 author = "Vincent Huybrechts"
-release = "2.0.0"
 
 # Project URLs
 project_urls = {

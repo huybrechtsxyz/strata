@@ -4,10 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "strata-v2"
-version = "2.0.0"
+dynamic = ["version"]
 description = "Strata v2 - Infrastructure as Code Platform"
 requires-python = ">=3.10"
 dependencies = [
+    "click>=8.0",
     "pydantic>=2.0",
     "pyyaml>=6.0",
     "structlog>=24.1",
@@ -37,9 +38,26 @@ docs = [
     "myst_parser",
 ]
 
+[project.scripts]
+strata = "strata.commands.cli:main"
+
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["strata"]
+
+# VERSION.txt is the single source of the version. Any tool in any language
+# reads it with one line — no TOML parser, no Python import — which is what
+# lets one release script bump Python, Node and CI together.
+[tool.setuptools.dynamic]
+version = { file = "VERSION.txt" }
+
+# Discovery rather than an explicit list: `packages = ["strata"]` shipped a
+# wheel containing only the top-level package — every subpackage
+# (models/services/controllers/utils/logging) was silently omitted, so an
+# installed strata could not import itself. Editable installs hid it because
+# they resolve to src/.
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["strata*"]
 
 [tool.setuptools.package-data]
 strata = ["py.typed"]
@@ -68,6 +86,7 @@ exclude_type_checking_imports = "True"
 name = "Layered architecture (ADR-0003, ported from v1)"
 type = "layers"
 layers = [
+    "strata.commands",
     "strata.controllers",
     "strata.services",
     "strata.models",
