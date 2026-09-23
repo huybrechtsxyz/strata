@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from strata.controllers.references import validate_references
+from strata.controllers.semantic_checks import run_semantic_checks
 from strata.controllers.solution_controller import SolutionController, find_solution_root
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError, ValidationError
@@ -71,6 +72,13 @@ class SolutionContext:
     def resolve(self) -> Diagnostics:
         """Run cross-document checks and merge the findings in.
 
+        Two passes, in order: reference *existence* first
+        (`validate_references` — does the name point at something real?),
+        then *semantic* checks (`run_semantic_checks` — given that it does,
+        is the pair of documents actually consistent?). The second pass
+        assumes references already resolve, so running it first would let a
+        dangling name reach a service method expecting a real document.
+
         Only meaningful once every document loaded: a document that failed
         schema validation never entered the index, so reference checks would
         report "unknown workspace 'main'" when the truth is that `main` did
@@ -86,6 +94,7 @@ class SolutionContext:
             return found
 
         found.extend(validate_references(self.controller.index, self.controller.solution))
+        found.extend(run_semantic_checks(self.controller.index))
         self.diagnostics.extend(found)
         return found
 

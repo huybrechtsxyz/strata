@@ -73,7 +73,7 @@ def validate_command(
         if context.ok:
             run.step("schema validated")
             context.resolve()
-            run.step("cross-document references checked")
+            run.step("cross-document references and semantics checked")
         else:
             # Cross-document checks run over the index, and a document that
             # failed schema validation never entered it. Running them anyway
