@@ -96,10 +96,8 @@ here either.
 
 ## Remaining Work
 
-- `NetworkService._validate_dynamic()` (checking token keys against a real
-  `Environment`) is deferred until the `environment` kind is built.
+- Environment cross-check and the token resolver are tracked centrally in
+  [docs/design/value-token-resolution.md](../design/value-token-resolution.md),
+  not duplicated here.
 - Multi-file network merging is not ported — revisit once a v2 workspace/
   environment overlay concept exists to actually consume it.
-- `validate_value_tokens()`/`has_value_tokens()` currently only check
-  *syntax*/*presence*; a full resolver is still deferred until the
-  build/deploy layer is designed (ADR-0002 Decision 5).

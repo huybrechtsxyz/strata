@@ -1,6 +1,9 @@
 # Requirement, Interface, Injection, Grant, Value, and Translation — Lessons from v1's References Model
 
-- Status: proposed
+- Status: partially-implemented — Requirement rejection and the Value token
+  syntax are implemented (see [docs/design/value-token-resolution.md](../design/value-token-resolution.md));
+  Interface/Injection/Grant/Translation/Context are fully designed but not
+  implemented (see [docs/design/provisioning-injection-model.md](../design/provisioning-injection-model.md))
 - Date: 2026-09-20
 - Revised: 2026-09-21 — added **Value** as a fifth, distinct concept (the
   document-local `value`/`var`/`secret`/`feature` binding site), after
@@ -891,40 +894,15 @@ is built:
 
 ## Remaining Work
 
-- **Remove `ProviderReferencesModel`/`ResourceReferencesModel` and the
-  `references` field from `ProviderModel`/`ResourceModel`** (a follow-up code
-  change, not done as part of writing this ADR) — both are now dead fields per
-  the decision above, the same class of problem as v1's dead `custom`/
-  `env_vars`. Update ADR-0003/0004 accordingly once removed.
-- When designing `resource`, `network`, `module`, or `dns` kinds: do **not**
-  add a `references`-style field. Value bindings validate directly against
-  `Environment` (Phase 2); provisioner scoping is derived from Interface, not
-  declared.
-- When designing the first kind with a Value binding (most likely `dns`):
-  port v1's `${var:KEY}`/`${secret:KEY}`/`${feature:KEY}` resolver (partial
-  regex substitution + secret-shaped-leaf routing, ADR-0075) into
-  `common_models.py`/the service layer, instead of `ValueSourceModel`'s
-  discriminated union (superseded) and instead of copying v1's per-kind
-  hand-written validators. Decide the shared resolver's exact home
-  (`common_models.py` helper vs. a service-layer utility) at that point.
-  `output_key` generalization to `${output:KEY}` remains deferred until a
-  second kind needs it (deliberately, not by oversight).
-- When designing the provisioner/build layer: implement Interface parsing as
-  one code path shared by both the validation check and the actual
-  tfvars/env-emission step (not two separate passes, per the v1 bug found
-  above). Build the provisioner capability lookup (`always`/`conditional`/
-  `never` per `ProvisionerType`; `conditional` types like `helm` check
-  per-instance at build time for a schema file) and the `needs:` opt-in
-  fallback before defining Injection and Grant as their own
-  restriction-composed mechanisms.
-- When designing the deploy/stage layer: implement Grant as a
-  derived-by-default mechanism keyed on `stage.kind` (`plan` → deny secrets,
-  `apply`/`destroy` → allow secrets), with a narrow allow/deny override for
-  exceptions — not a mandatory per-stage allowlist, and not extended to
-  variables/features (confirmed secrets-only). Exact schema (field names,
-  where the override attaches) still needs to be designed.
-- When designing the provisioner/topology-wiring layer: design Translation
-  (per-provisioner canonical-key -> local-name alias table) as a first-class
-  mechanism from the start — this is the one concept v1 never modeled at all,
-  confirmed as a real gap by the `region`/`location` (`dispatcher_api`-style)
-  case, not a hypothetical one.
+Detail is tracked centrally, not here:
+
+- Value token resolver/router, and per-kind Environment cross-check
+  rollout: [docs/design/value-token-resolution.md](../design/value-token-resolution.md)
+- Interface, Injection, Grant, and Translation implementation (all wait on
+  the provisioner/build layer, which doesn't exist yet):
+  [docs/design/provisioning-injection-model.md](../design/provisioning-injection-model.md)
+
+(The `ProviderReferencesModel`/`ResourceReferencesModel` removal this
+section originally called for is done — see ADR-0003/ADR-0004 Decision 6.
+"Do not add a `references`-style field to new kinds" is now standing
+practice, confirmed by every kind ADR since — ADR-0004 through ADR-0010.)

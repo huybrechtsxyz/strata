@@ -1,11 +1,14 @@
 # Build Output Rendering — Default Projection and a Jinja2 Escape Hatch
 
-- Status: proposed - design written, not implemented
+- Status: proposed - Phase 1, 2a, and 2c's dns/networks implemented;
+  2b (modules) skipped, 2c's tenant / Phases 3/4/5 not yet
 - Date: 2026-09-24
 - Related: [ADR-0022](0022-strata-build-run.md) (`strata build run` - the
   consumer: `InfraIntegration.prepare()`/`prepare_namespace()` call into this
   design to produce whatever they write to disk), [ADR-0021](0021-integration-layer.md)
   (the `InfraIntegration` ABC this document's rendering logic sits behind)
+- See also: [docs/design/build-pipeline-status.md](../design/build-pipeline-status.md)
+  for cross-ADR status across ADR-0021/0022/0023
 
 ## Context and Problem Statement
 
@@ -180,7 +183,7 @@ once, concretely, on the base class:
 ```python
 class InfraIntegration(Integration):
     def prepare(
-        self, path: Path, *, resolved: ResolvedValues, provisioner: ProvisionerModel,
+        self, path: Path, *, resolved: ValueResolution, provisioner: ProvisionerModel,
         graph: ResolvedWorkspaceGraph, **kwargs: Any,
     ) -> Path:
         if provisioner.output and provisioner.output.template:
@@ -196,13 +199,16 @@ class InfraIntegration(Integration):
         return path
 
     def default_output(
-        self, resolved: ResolvedValues, provisioner: ProvisionerModel, graph: ResolvedWorkspaceGraph,
+        self, resolved: ValueResolution, provisioner: ProvisionerModel, graph: ResolvedWorkspaceGraph,
     ) -> dict[str, str]:
         """Filename -> content pairs to write when no output.template is set.
         Base default: nothing generated - Bicep's real behaviour (see below)."""
         return {}
 ```
 
+`resolved: ValueResolution` (corrected - not `ResolvedValues`, which does not
+exist in the codebase; see ADR-0022 D1a's safety note on why its one flat
+`.values` dict needs care about which keys `build_run()` ever requests).
 `ResolvedWorkspaceGraph` is defined in ADR-0022 (D1a) as a plain bundle of
 already-resolved documents (`workspace`/`providers`/`topologies`/`resources`)
 - not introduced here, just consumed here as the input D1's projection needs.
@@ -239,7 +245,7 @@ package and a real workspace, not assumed:
 D3 should ship the same two tiers for `output.template`: at least one
 example template under `strata/templates/examples/output/` in the package
 itself (e.g. `variables.json.j2` - a small, single-purpose example showing
-just variable substitution via `{{ resolved.variables | tojson }}`, not the
+just variable substitution via `{{ resolved.values | tojson }}`, not the
 full D1 projection), and the same file materialised into a real workspace's
 `.strata/templates/` the way `module.yaml`/`workspace.yaml`/etc. already
 are - so `output.template:` has a concrete, copyable starting point instead
@@ -254,7 +260,7 @@ base `prepare()` handles the D3/D2 plumbing around it:
 ```python
 class TerraformIntegration(InfraIntegration):
     def default_output(
-        self, resolved: ResolvedValues, provisioner: ProvisionerModel, graph: ResolvedWorkspaceGraph,
+        self, resolved: ValueResolution, provisioner: ProvisionerModel, graph: ResolvedWorkspaceGraph,
     ) -> dict[str, str]:
         payload = build_platform_projection(graph, provisioner)  # D1 - workspace/providers/.../tenant
         return {
@@ -278,7 +284,7 @@ With D5 in place, neither of these needs its own `prepare()` at all -
 only a `default_output()` override (or none):
 
 - **Ansible**: overrides `default_output()` -> writes
-  `provisioner.properties.extra_vars` + `resolved.variables` merged into an
+  `provisioner.properties.extra_vars` + `resolved.values` merged into an
   `extra-vars.json`. `plan()` would be a no-op or `--check` mode; `deploy()`
   runs `ansible-playbook`.
 - **Bicep**: does **not** override `default_output()` at all - inherits the
@@ -313,8 +319,8 @@ assumed:
 | Helm `values.yaml` | typed `${var:KEY}`/`${secret:KEY}`/`${feature:KEY}` (v1 ADR-0075) | deploy time - secrets via `--set-string` (never on disk), vars/features via a rewritten file |
 
 None of this typed-expression resolution is designed here (see Remaining
-Work) - the walkthrough above only covers writing `resolved.variables`/
-`resolved.features` directly (Terraform's case); Compose/Helm's own token
+Work) - the walkthrough above only covers writing `resolved.values`
+directly (Terraform's case); Compose/Helm's own token
 emission and deploy-time substitution still need their own design pass.
 
 ## Consequences
@@ -324,6 +330,18 @@ emission and deploy-time substitution still need their own design pass.
   `format`/`emits`/`files`/`script` in any of them. An earlier draft of this
   section assumed the opposite ("no evidence it's over-built") without
   actually checking - corrected once real usage was checked.
+- **Correction (found while grounding Phase 2, not at D2's original
+  writing):** the "zero usage" check above was incomplete - it only
+  covered `spoke`/`instance`, not `cfg-int-deployment`'s `control/workspace.yaml`,
+  which has a real, load-bearing `output: {format: custom, emits: [features,
+  variables, properties]}` block, complete with a real strata bug it hit and
+  the fix that shipped for it (PR #309, "track written files by provisioner
+  path"). D2's "don't port it" conclusion can no longer rest on "zero usage" -
+  revisit this decision before Phase 2's namespaces/firewalls default
+  emission ships unconditionally, in case a real `.tf` root needs the same
+  emit-suppression `control/workspace.yaml` needed (an undeclared-variable
+  warning on every `plan`/`apply`). Not redesigned here - flagged for its own
+  pass, not folded silently into Phase 2.
 - Good: the Jinja2 escape hatch (D3) reuses `strata/utils/templater.py`
   unchanged (its `_STRICT_ENV`) rather than introducing a second Jinja2
   setup - the codebase keeps exactly one hardened template engine, shared by
@@ -461,7 +479,7 @@ Built:
   no index access per ADR-0021 D2) is not allowed to touch directly;
   `default_output()` calls it with the `graph: ResolvedWorkspaceGraph`
   (ADR-0022 D1a) handed down from the orchestrator, the same way
-  `resolved: ResolvedValues` already is.
+  `resolved: ValueResolution` already is.
 - `ResolvedWorkspaceGraph` (ADR-0022 D1a) - built and defined there, not
   here, since it changes `prepare()`'s own signature; this phase is simply
   its first real consumer.
@@ -479,26 +497,225 @@ Built:
   workspace-level override-wins-over-resource-level merge for
   `resources_by_category`.
 
+**Concrete function-by-function design** (field names checked directly
+against the real v2 models, not v1's):
+
+```python
+# strata/integrations/terraform_projection.py
+
+def _build_workspace_payload(workspace: WorkspaceModel) -> dict[str, Any]:
+    """WorkspaceMetaModel/WorkspaceSpecModel -> name/labels/tags/annotations."""
+
+def _build_providers_payload(providers: dict[str, ProviderModel]) -> dict[str, Any]:
+    """name -> {type, region, display_name} per ProviderPropertiesModel."""
+
+def _build_topologies_payload(
+    topology_names: list[str] | None, topologies: dict[str, TopologyModel],
+) -> dict[str, Any]:
+    """name -> {type, components: [{resource, modules}], volumes: [...]}.
+    workspace.spec.topology is optional (a workspace may have no grouping
+    concept at all) - empty dict, not an error, when it is None."""
+
+def _build_resources_payload(
+    workspace_resources: list[WorkspaceResourceModel], resources: dict[str, ResourceModel],
+) -> dict[str, Any]:
+    """Grouped by ResourceSpecModel.properties.category. Each entry:
+    ResourceSpecModel fields (provider_type/resource_type/subcategory/
+    unit_cost) with the matching WorkspaceResourceModel's configuration/
+    labels/tags/default_tags/custom_tags/firewalls/subnet merged on top -
+    "workspace wins" (dict.update semantics, workspace's dict spread last).
+    `custom` deliberately never read here (see the merge-fields bullet
+    above) - only `configuration`."""
+
+def build_platform_projection(
+    graph: ResolvedWorkspaceGraph, provisioner: ProvisionerModel,
+) -> dict[str, Any]:
+    """The four-category dict (D1). `provisioner` is currently unused by
+    Phase 1's four categories - accepted now so Phase 2/3's per-provisioner
+    filtering (if any turns out to be needed) doesn't change this
+    function's call sites again."""
+    return {
+        "workspace": _build_workspace_payload(graph.workspace),
+        "providers": _build_providers_payload(graph.providers),
+        "topologies": _build_topologies_payload(graph.workspace.spec.topology, graph.topologies),
+        "resources_by_category": _build_resources_payload(graph.workspace.spec.resources or [], graph.resources),
+    }
+
+def planned_files(payload: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    """(filename, data) per non-empty top-level key - workspace.auto.tfvars.json,
+    providers.auto.tfvars.json, topologies.auto.tfvars.json,
+    resx_by_category.auto.tfvars.json. Naming matches Terraform's
+    *.auto.tfvars.json auto-load convention (D1) - exact per-category
+    filenames are implementation detail, not re-litigated here."""
+```
+
+`ResolvedWorkspaceGraph.providers`/`.topologies`/`.resources` are
+`dict[str, Model]` (name -> model), not `list[Model]` - the orchestrator
+(ADR-0022 `build_run()`) builds them by resolving each name in
+`workspace.spec.providers`/`.topology`/`.resources[].resource` against
+`index.get(...)`, so a dict keyed by that same name avoids every category
+function re-doing its own name lookup/`next(r for r in resources if ...)`
+search.
+
 **Done when:** `build_platform_projection()`/`planned_files()` produce
 correct output for a fixture shaped like haven's real `stack/workspace.yaml`
 (the simplest real case: no modules/namespaces/networks feeding Terraform),
 and `TerraformIntegration.prepare()` writes those files to `path`.
 
-### Phase 2 - Remaining default categories: modules, namespaces, firewalls, dns, networks, tenant
+**Implemented.** One real gap found only during implementation, not
+predicted at design time: `ValueResolution` (the real name for what this
+document and ADR-0022 called `ResolvedValues` before that correction) is
+defined in `strata.controllers.value_controller` — but `InfraIntegration.
+prepare()`/`default_output()` (in `strata.integrations`) need to reference
+it as a parameter type, and `strata.integrations` sits *below*
+`strata.controllers` in the layering contract, so it cannot import from
+there. Fixed the same way `ResolvedWorkspaceGraph` already was: moved
+`ValueResolution`'s definition into `strata/integrations/resolved_context.py`
+(alongside `ResolvedWorkspaceGraph`), and `value_controller.py` now imports
+it from there instead of defining it — a controller importing a
+lower-layer type is the direction the contract allows. Confirmed safe
+before moving it: nothing else in the codebase imported `ValueResolution`
+directly. `strata/integrations/resolved_context.py` docstring records this
+reasoning so it isn't rediscovered from scratch next time a controller-layer
+type needs to cross into `strata.integrations`.
+
+Built exactly as designed above, plus this one addition:
+`strata/integrations/resolved_context.py` (`ValueResolution`,
+`ResolvedWorkspaceGraph`), `strata/integrations/terraform_projection.py`
+(`build_platform_projection()`, `planned_files()`, and the four
+`_build_*_payload()` helpers), `InfraIntegration.prepare()`/
+`default_output()` (`strata/integrations/capabilities.py`),
+`TerraformIntegration.default_output()` (`strata/integrations/terraform.py`).
+Tests: `test_integrations_terraform_projection.py` (9 cases — the four
+categories, empty-topology, workspace-override-wins merge, `enabled=False`
+exclusion, `managed_by="provisioner"` exclusion, `planned_files()` naming/
+skip behaviour), plus `prepare()`/`default_output()` coverage added to
+`test_integrations_capabilities.py` and `test_integrations_terraform.py`.
+Full check suite green: mypy clean, ruff clean, import-linter contract
+kept, 866/866 tests passing (851 baseline + 15 new).
+
+**Post-implementation correction, found while grounding Phase 2 in v1's
+real `terraform_builder.py`:** `resources_by_category` was grouped by
+`ResourceSpecModel.properties.category` and written as one combined file.
+v1's real `_build_resources_by_category()` groups by `resource_type.lower()`
+instead, wraps each group as `{"resources": {name: entry}}`, and
+`_planned_files()` writes **one file per resource type**
+(`resx_<type>.auto.tfvars.json`) — matching this ADR's own D1 text, which
+the original implementation had not actually followed. Fixed: grouping key,
+wrapper, and per-type file-splitting all now match v1's confirmed real
+behaviour. 867/867 tests passing after the fix.
+
+### Phase 2 - Remaining default categories: namespaces, firewalls, modules (dns/networks/tenant deferred further)
 
 *Depends on: Phase 1 (same shape, more categories).*
 
-Added incrementally, one category at a time, **only when a real deployment
-needs the one being added** - not built speculatively as a batch just
-because v1 had all six. `cfg-deployment`'s `spoke/network.yaml` is
-already a concrete, partial counter-example worth checking first: its own
-header says networks validate CIDR syntax/uniqueness but explicitly do
-**not** currently feed the Terraform root (`spoke_resx` stays one opaque
-`managed_by: provisioner` resource) - so `networks` may earn its slot later
-than the others, or need a different shape than v1's when it does.
+Graded by real evidence, not built as one even batch of six — checked v1's
+real `terraform_builder.py` directly (`_build_namespace_vars()`/
+`_build_firewall_vars()`/`_build_module_vars()`/`_build_dns_vars()`/
+`_build_network_vars()`/`_build_tenant_vars()`) for the true shape of each,
+then graded each against real usage in haven/`cfg-int-deployment` before
+scheduling it.
 
-**Done when:** each added category has the same fixture-based test coverage
-as Phase 1's four, added one PR/commit at a time rather than in bulk.
+**2a - `namespaces`, `firewalls` - proven real usage, build these first.**
+Both are used by haven in production: 6 real namespaces
+(`hearth`/`system`/`immich`/`media`/`documents`/`finance`), 2 real firewalls
+(`haven_fw_hetzner_hearth`/`haven_fw_hetzner_forge`), each referenced from a
+`WorkspaceResourceModel.firewalls` list. v1's real shapes:
+
+- `namespaces` <- `{name: {description, labels, tags, modules: [module
+  names]}}`. v2 equivalent: `NamespaceModel.meta` (`annotations`/`labels`/
+  `tags`) + `NamespaceModel.spec.modules: list[ModuleReferenceModel]`
+  (already confirmed field on the real model) mapped to `[m.module for m in
+  spec.modules]` (field name to confirm against v2's real
+  `ModuleReferenceModel` before implementing - not assumed identical to
+  v1's `m.module`).
+- `firewalls` <- `{name: {description, labels, tags, rules: {reset,
+  defaults, deny, allow}}}`. v2 equivalent: `FirewallModel.meta` +
+  `FirewallModel.spec.{reset, defaults, deny, allow}` (already confirmed
+  fields on the real model from Phase 1's own reading of
+  `platform_artifact_model.py`'s `PlatformFirewallModel` mirror).
+
+Both need a `graph.namespaces: dict[str, NamespaceModel]`/
+`graph.firewalls: dict[str, FirewallModel]` addition to
+`ResolvedWorkspaceGraph` (ADR-0022 D1a) - resolved from
+`workspace.spec.namespaces`/`.firewalls` the same way `providers`/
+`topologies`/`resources` already are, plus the orchestrator resolving
+every `WorkspaceResourceModel.firewalls` reference (a resource points at
+firewalls by name; the graph must hold the referenced `FirewallModel`
+documents, not just the names, the same "already-resolved" contract the
+other three categories already follow).
+
+**Done when:** both have the same fixture-based test coverage as Phase 1's
+four, built and merged in one PR/commit each (not together) - and a fixture
+shaped like haven's real `stack/workspace.yaml` (now including its real
+namespaces/firewalls) produces the correct two additional files.
+
+**Implemented.** `ResolvedWorkspaceGraph` (ADR-0022 D1a) gained
+`namespaces: dict[str, NamespaceModel]`/`firewalls: dict[str, FirewallModel]`;
+`terraform_projection.py` gained `_build_namespaces_payload()`/
+`_build_firewalls_payload()`, wired into `build_platform_projection()`.
+`FirewallRuleModel`'s `from_`/`from` alias needed `by_alias=True` on the
+`allow`/`deny` rule dumps (confirmed against v1's own
+`model_dump(..., by_alias=True)`) - without it the field would have
+serialised as `from_`, which no real `.tf` module declares. 5 new tests
+added (14 total in `test_integrations_terraform_projection.py`). Full
+check suite green: 871/871 tests passing.
+
+**2b - `modules` - checked, zero evidence, skipped.** haven attaches 5+
+real modules (`vaultwarden`, `caddy`, `authentik`, `portainer`, `wud`, plus
+Forge's Helm-deployed set), but exclusively via `Namespace.spec.modules` -
+never `TopologyComponentModel.modules`. Checked all six real workspaces
+available for this ADR (haven, and `cfg-int-deployment`'s `control`/
+`customer`/`ring`/`spoke`/`instance`): every single real topology component
+is bare `{resource: <name>}` - zero use of `TopologyComponentModel.modules`
+anywhere. Since ADR-0022 D5-D7 already established Compose/Helm modules
+never reach `TerraformIntegration.prepare()` at all (they go through the
+entirely separate `prepare_namespace()` pipeline, keyed off
+`Namespace.spec.modules`), a `modules` category in Terraform's default
+projection would have **zero real consumers** in any workspace checked -
+same "don't build it until real evidence shows up" discipline as
+`OutputProfileModel` (D2). **Skipped, not built** - v1's real shape
+(`{name: {repository, source_path, target_path, description, labels, tags,
+properties}}`) is recorded above only as a reference for if/when a real
+`TopologyComponentModel.modules` attachment shows up.
+
+**Done when:** N/A - explicitly marked "no evidence, skipped" per this
+sub-phase's own stated exit condition. Revisit only if a real workspace is
+found attaching a module directly to a `TopologyComponentModel`.
+
+**2c - `dns`, `networks` - built despite no proven Terraform-consuming
+usage yet, on explicit request; `tenant` still deferred (no fixture data
+to ground it against at all).** No `dns_zones`/`tenant` in any workspace
+checked (haven or any of `cfg-int-deployment`'s five stacks).
+`cfg-int-deployment`'s own `spoke/network.yaml` header is explicit that
+networks validate CIDR syntax/uniqueness but do **not** currently feed the
+Terraform root (`spoke_resx` stays one opaque `managed_by: provisioner`
+resource, no per-subnet `subnet:` reference attached to anything) - built
+anyway since a real `NetworkModel`/`DnsModel` schema exists to ground the
+shape against, even without a real consumer yet. Adapted from v1's real
+shapes, not copied verbatim - v2's schema differs in one load-bearing way:
+`DnsRecordModel.value` is a single Value-binding string (may itself
+contain `${var:}`/`${secret:}`/`${feature:}` tokens, ADR-0002), not v1's
+separate `value`/`var`/`secret`/`output_key` fields - v2 never ported
+`output_key` at all (ADR-0006, no shared runtime Context store yet), so
+there is no `dns_secret_records`/`dns_output_records` bucketing to
+reproduce; `record.value` (and `SubnetModel.cidr`/
+`NetworkDefinitionModel.address_space`) are written as-is, tokens
+unresolved - a known, tracked gap (see Remaining Work), not silently
+dropped. `tenant` remains unbuilt: zero real workspaces reference a
+`TenantModel` at all, so there is no fixture to ground even its v1-derived
+shape (`{strata_tenant: {code, name, zones, onboarded?, configuration?}}`)
+against - revisit once one does.
+
+**Implemented (dns/networks).** `ResolvedWorkspaceGraph` gained `dns: dict[str,
+DnsModel]`/`networks: dict[str, NetworkModel]`; `terraform_projection.py`
+gained `_build_dns_payload()`/`_build_networks_payload()`, wired into
+`build_platform_projection()`. 4 new tests (18 total in
+`test_integrations_terraform_projection.py`). Full check suite green:
+875/875 tests passing.
+
+**Done when:** dns/networks - done, see above. `tenant` - N/A until a real
+workspace links a `TenantModel`; intentionally has no target date.
 
 ### Phase 3 - `${var:}`/`${secret:}`/`${feature:}` substitution in provisioner config (D2)
 
@@ -507,7 +724,7 @@ as Phase 1's four, added one PR/commit at a time rather than in bulk.
 - `resolve_expr_tokens()` - walks `provisioner.backend.configuration`/
   `.configuration`/`.properties` (whichever are set) and resolves
   `${var:KEY}`/`${secret:KEY}`/`${feature:KEY}` tokens against `resolved:
-  ResolvedValues`, leaving any non-token string untouched. v1 ADR-0075 is
+  ValueResolution`, leaving any non-token string untouched. v1 ADR-0075 is
   the starting reference for the token grammar - not assumed identical
   without checking its exact regex/parsing rules first.
 - Wired into `TerraformIntegration.prepare()`'s backend-writing branch
@@ -515,7 +732,7 @@ as Phase 1's four, added one PR/commit at a time rather than in bulk.
 
 **Done when:** `cfg-deployment`'s real `backend.configuration` block
 (the concrete example already quoted in this ADR) round-trips correctly
-against a fixture `ResolvedValues`, including the secret-shaped
+against a fixture `ValueResolution`, including the secret-shaped
 `tf_state_storage_account`-style keys.
 
 ### Phase 4 - The Jinja2 template escape hatch (D3)
@@ -540,7 +757,7 @@ instead of string-token substitution).*
   escape hatch for free via the shared base `prepare()`.
 
 **Done when:** a hand-written `strata.tfvars.json.j2` fixture (using
-`{{ resolved.variables | tojson }}`) renders correctly and a missing
+`{{ resolved.values | tojson }}`) renders correctly and a missing
 variable raises instead of silently rendering `{{ var }}` into the output
 file.
 
@@ -568,4 +785,29 @@ the same "copy this and customize" comment convention.
   contract for tools not built yet" above); real implementation waits for
   those `Integration` classes to exist at all (no evidence of demand yet -
   Ansible is Tier 2 per `/memories/repo/v1-consumer-usage.md`).
+- **D2 (`OutputProfileModel`) needs a real revisit** - real, load-bearing
+  usage found in `cfg-int-deployment`'s `control/workspace.yaml`
+  (`output: {format: custom, emits: [...]}`), contradicting the "zero
+  usage" evidence D2 was decided on. Not redesigned yet - flagged here so
+  it isn't silently reintroduced piecemeal while building Phase 2's
+  additional default categories.
+- **Build-time `features`/`variables` resolved-value emission** (v1's
+  `flags.auto.tfvars.json`/`variables.auto.tfvars.json`, confirmed real via
+  `terraform_builder.py`'s `_build_feature_flags_vars()`/
+  `_build_flat_variables()`) - a genuinely separate mechanism from D1's
+  four structural categories, D2's backend-token substitution, and D3's
+  Jinja2 escape hatch: resolves *constant/environment*-store
+  variables/features directly into flat `{key: value}` build-time tfvars,
+  while integration-backed stores (Infisical/Vault/...) are deliberately
+  skipped and deferred to deploy-time via `ValueResolution` instead. Not
+  designed here - found while investigating D2's real usage, not yet
+  scoped into a phase.
+- **`dns`/`networks`'s `${var:}`/`${secret:}`/`${feature:}` tokens are
+  written unresolved** - `DnsRecordModel.value`/`SubnetModel.cidr`/
+  `NetworkDefinitionModel.address_space` may contain these tokens
+  (ADR-0002), but Phase 2c's `_build_dns_payload()`/
+  `_build_networks_payload()` write them as-is. Phase 3's
+  `resolve_expr_tokens()` only wires into `provisioner.backend`/
+  `.configuration`/`.properties` today - extending it to these two
+  categories' token-bearing fields is real, tracked work, not done yet.
 

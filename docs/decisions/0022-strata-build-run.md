@@ -1,6 +1,8 @@
 # `strata build run` — Rendering Artifacts from Integrations
 
-- Status: proposed - design written, not implemented
+- Status: proposed - design written; `prepare()`'s signature/D1a types are
+  implemented (as ADR-0023 Phase 1), the `build_run()` orchestrator itself
+  is not
 - Date: 2026-09-23
 - Related: [ADR-0021](0021-integration-layer.md) (Phases 1-6, all done - the
   integration layer this consumes: registry, `Integration`/`InfraIntegration`,
@@ -10,6 +12,8 @@
   [ADR-0023](0023-build-output-rendering.md) (split out of this document -
   what `prepare()`/`prepare_namespace()` actually write, and how a user can
   customise it)
+- See also: [docs/design/build-pipeline-status.md](../design/build-pipeline-status.md)
+  for cross-ADR status across ADR-0021/0022/0023
 
 ## Context and Problem Statement
 
@@ -65,7 +69,7 @@ passing the string to `registry.get()`:
 ```python
 def build_run(context: SolutionContext, deployment_name: str, build_path: Path) -> Diagnostics:
     deployment = resolve_deployment(...)                          # existing (Phase 2-era controller)
-    resolved = resolve_values(context, deployment_name, keys=...)  # existing (ADR-0021 Phase 4)
+    resolved = resolve_values(context, deployment_name, keys=build_time_keys)  # existing (ADR-0021 Phase 4)
     workspace = ...                                               # deployment -> workspace, existing
     graph = build_resolved_workspace_graph(context.controller.index, workspace)  # D1a, below
 
@@ -88,7 +92,7 @@ Rendering follows the same rule, one level earlier:
 class InfraIntegration(Integration):
     @abstractmethod
     def prepare(
-        self, path: Path, *, resolved: ResolvedValues, provisioner: ProvisionerModel,
+        self, path: Path, *, resolved: ValueResolution, provisioner: ProvisionerModel,
         graph: ResolvedWorkspaceGraph, **kwargs: Any,
     ) -> Path:
         """Render whatever this tool needs into `path` from already-resolved
@@ -102,8 +106,12 @@ class InfraIntegration(Integration):
 ```
 
 **D1a: `ResolvedWorkspaceGraph` - a plain bundle of already-resolved
-documents, not a Terraform-specific type.** `resolved: ResolvedValues`
-carries variables/secrets/features; it does not carry the workspace's own
+documents, not a Terraform-specific type.** `resolved: ValueResolution`
+(corrected here after checking `value_controller.py` directly - an earlier
+draft called this `ResolvedValues`, a type that does not exist anywhere in
+the codebase; the real type is `ValueResolution`, one flat `values: dict[str,
+str]`, not separate `.variables`/`.secrets`/`.features` attributes) carries
+resolved key/value pairs; it does not carry the workspace's own
 document graph (`WorkspaceModel` plus the `ProviderModel`/`TopologyModel`/
 `ResourceModel` documents it references by name). ADR-0023's default
 projection needs that graph, but `InfraIntegration` subclasses are not
@@ -135,13 +143,27 @@ same type rather than a second `ResolvedManifestGraph` holding an identical
 shape under a different name - see ADR-0023's Consequences for the concrete
 reasoning once that feature is designed.
 
-`resolved: ResolvedValues` is exactly what `value_controller.resolve_values()`
+`resolved: ValueResolution` is exactly what `value_controller.resolve_values()`
 already produces (Phase 4) - no new resolution logic. `provisioner:
 ProvisionerModel` is handed down **whole**, never picked apart by the
 orchestrator: `TerraformIntegration.prepare()` reads `provisioner.backend`
 itself; a future `AnsibleIntegration.prepare()` would read
 `provisioner.properties` itself. The orchestrator does not know or care
 which tool it is holding.
+
+**Safety note - `values: dict[str, str]` is one flat dict; nothing at the
+type level stops a secret from ending up in it.** Read `resolve_values()`'s
+real body directly: it merges variables/secrets/features into a single
+`ValueResolution.values` dict keyed by whatever `keys` the caller requested
+- the store a value came from is not preserved on the result. "Terraform's
+tfvars are non-secret only at build time" (ADR-0023's own value-substitution
+table) is therefore enforced entirely by **which keys `build_run()` asks
+for**, not by anything `ValueResolution` guarantees structurally -
+`build_time_keys` above must be assembled from variable/feature
+declarations only, never secret-backed ones, or a secret resolves into
+plaintext in a `.tfvars.json`/D3-rendered file on disk. Worth a real,
+named function (`build_time_keys(workspace)` or similar) once this phase is
+implemented, not an inline filter easy to get wrong at a call site.
 
 **D2: `resolve_integration()` (D4's auto-bind-or-error) reads only strings,
 never a tool identity.**
@@ -225,7 +247,7 @@ same way D2 does for provisioners - not designed here, no evidence for it yet.
 real per-tool variation the orchestrator must still not encode.**
 
 ```python
-def build_workload_modules(namespace: NamespaceModel, resolved: ResolvedValues, build_path: Path) -> None:
+def build_workload_modules(namespace: NamespaceModel, resolved: ValueResolution, build_path: Path) -> None:
     modules = [resolve_module(ref) for ref in namespace.spec.modules or []]
     by_type: dict[str, list[ModuleModel]] = group_by(modules, key=lambda m: m.spec.type)
     for module_type, group in by_type.items():
@@ -258,7 +280,7 @@ around one Provisioner producing one output tree. The workload path needs
 whole reason for existing is the *merge*). Rather than force-fitting one
 signature over both, `ComposeIntegration`/`HelmIntegration` gain a second
 method - `prepare_namespace(namespace: NamespaceModel, modules: list[ModuleModel],
-*, resolved: ResolvedValues, build_path: Path) -> None` - alongside
+*, resolved: ValueResolution, build_path: Path) -> None` - alongside
 `prepare()`, not replacing it: `TerraformIntegration` never implements
 `prepare_namespace()` (nothing to group), `ComposeIntegration`/
 `HelmIntegration` implement both (`prepare()` stays available for a lone

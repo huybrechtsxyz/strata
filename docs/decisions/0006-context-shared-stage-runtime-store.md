@@ -158,17 +158,7 @@ layers are designed:
 
 ## Remaining Work
 
-- Design Context's concrete shape (likely a Pydantic model mirroring
-  `ResolvedValues`: variables/secrets/features/stage_outputs(+sensitive)/
-  provenance) when the provisioner/build and deploy/stage layers are
-  designed — not before.
-- Add `"step"` to `VALUE_TOKEN_KINDS`/`VALUE_TOKEN_PATTERN`
-  (`common_models.py`) at the same time, and re-add an output-sourced
-  binding to `DnsRecordModel` (and any other kind that needs it, e.g. a
-  future `HealthCheckModel`) using it.
-- The "Outputs declaration" problem (a real ground truth to validate
-  `${step:...}`'s key against, symmetric to Interface) remains open and
-  unscheduled — do not build it speculatively; wait for a concrete need once
-  Context exists.
-  remains open and unscheduled — do not build it speculatively; wait for a
-  concrete need once Context exists.
+Tracked centrally in
+[docs/design/provisioning-injection-model.md](../design/provisioning-injection-model.md)
+(Context's concrete shape, the `step` token, and the open "Outputs
+declaration" problem), not duplicated here.

@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Any
 
 from strata.integrations.base import Integration
+from strata.integrations.resolved_context import ResolvedWorkspaceGraph, ValueResolution
+from strata.models.provisioning_model import ProvisionerModel
 from strata.utils.transport import CommandResult
 
 
@@ -40,6 +42,44 @@ class InfraIntegration(Integration):
     *kind* of thing is provisioned (Terraform/Ansible/Bicep vs. Compose/
     Helm) for a human reading the document; the contract is identical.
     """
+
+    def prepare(
+        self,
+        path: Path,
+        *,
+        resolved: ValueResolution,
+        provisioner: ProvisionerModel,
+        graph: ResolvedWorkspaceGraph,
+        **kwargs: Any,
+    ) -> Path:
+        """Render whatever this tool needs into `path` from already-resolved
+        values/documents and this provisioner's own typed config. Returns
+        the path `plan`/`deploy`/`destroy` should be called against.
+
+        Base-implemented, not abstract (ADR-0023 D5) — every subclass gets
+        the same dispatch for free; only `default_output()` varies per
+        tool. The `provisioner.output.template` escape hatch (D3) and the
+        `provisioner.backend` token-substitution step (D2) are later
+        phases (ADR-0023 Phase 3/4) and are not implemented here yet — this
+        phase only wires the `default_output()` branch.
+        """
+        for filename, content in self.default_output(resolved, provisioner, graph).items():
+            (path / filename).write_text(content)
+        return path
+
+    def default_output(
+        self,
+        resolved: ValueResolution,
+        provisioner: ProvisionerModel,
+        graph: ResolvedWorkspaceGraph,
+    ) -> dict[str, str]:
+        """Filename -> content pairs to write when no `output.template` is
+        set (D3 does not exist yet — Phase 4). Base default: nothing
+        generated — Bicep's real behaviour (v1's `bicep_builder.py`: copy
+        the source, generate nothing); subclasses override only this hook.
+        """
+        del resolved, provisioner, graph
+        return {}
 
     @abstractmethod
     def plan(self, path: Path, **kwargs: Any) -> CommandResult:

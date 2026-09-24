@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+"""Plain resolved-data bundles handed into `InfraIntegration.prepare()`
+(ADR-0022 D1/D1a, ADR-0023 D5) — no index/`SolutionContext` access, just
+already-resolved models, assembled once by the `build run` orchestrator
+and passed down unchanged.
+
+Both types live here rather than in `strata.controllers`, deliberately:
+`Integration` subclasses are not allowed to touch `DocumentIndex`/
+`SolutionContext` directly (ADR-0021 D2), and `strata.integrations` sits
+below `strata.controllers` in the import-linter layering (ADR-0003/
+`pyproject.toml`'s `[tool.importlinter]`), so a type an `Integration`
+method needs to reference cannot live in a higher layer — the same
+argument that put `ResolvedWorkspaceGraph` here also applies to
+`ValueResolution`, previously defined inside
+`strata.controllers.value_controller` (moved here; that module now
+imports it from here instead, since a controller importing a lower-layer
+type is the direction the contract allows).
+"""
+
+from dataclasses import dataclass, field
+
+from strata.models.dns_model import DnsModel
+from strata.models.firewall_model import FirewallModel
+from strata.models.namespace_model import NamespaceModel
+from strata.models.network_model import NetworkModel
+from strata.models.provider_model import ProviderModel
+from strata.models.resource_model import ResourceModel
+from strata.models.topology_model import TopologyModel
+from strata.models.workspace_model import WorkspaceModel
+from strata.utils.diagnostics import Diagnostics
+
+
+@dataclass
+class ValueResolution:
+    """The outcome of resolving a set of requested keys.
+
+    One flat `values: dict[str, str]` — the store a value came from
+    (variable/secret/feature) is not preserved on the result. Callers that
+    must keep secrets out of a build-time artifact (ADR-0022 D1a's safety
+    note) enforce that by which `keys` they request, not by anything this
+    type guarantees structurally.
+    """
+
+    deployment: str
+    values: dict[str, str] = field(default_factory=dict)
+    diagnostics: Diagnostics = field(default_factory=Diagnostics)
+
+
+@dataclass(frozen=True)
+class ResolvedWorkspaceGraph:
+    """Already-resolved documents a workspace references.
+
+    Named for what it *is* — the resolved workspace's own document graph —
+    not for Terraform's default projection (ADR-0023) being its first
+    consumer; a future deploy-manifest feature is expected to reuse this
+    same type rather than a parallel one (ADR-0023 Consequences).
+
+    `providers`/`topologies`/`resources`/`namespaces`/`firewalls`/`dns`/
+    `networks` are keyed by document name (the same names
+    `WorkspaceSpecModel.providers`/`.topology`/`.resources[].resource`/
+    `.namespaces`/`.firewalls`/`.dns_zones`/`.networks` reference), so a
+    consumer never re-does its own name lookup.
+    """
+
+    workspace: WorkspaceModel
+    providers: dict[str, ProviderModel] = field(default_factory=dict)
+    topologies: dict[str, TopologyModel] = field(default_factory=dict)
+    resources: dict[str, ResourceModel] = field(default_factory=dict)
+    namespaces: dict[str, NamespaceModel] = field(default_factory=dict)
+    firewalls: dict[str, FirewallModel] = field(default_factory=dict)
+    dns: dict[str, DnsModel] = field(default_factory=dict)
+    networks: dict[str, NetworkModel] = field(default_factory=dict)

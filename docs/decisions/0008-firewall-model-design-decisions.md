@@ -94,8 +94,9 @@ a Python keyword, same reason v1 needed the alias.
 
 ## Remaining Work
 
-- `FirewallService._validate_dynamic()` (checking token keys against a real
-  `Environment`) is deferred until the `environment` kind is built.
+- Environment cross-check is tracked centrally in
+  [docs/design/value-token-resolution.md](../design/value-token-resolution.md),
+  not duplicated here.
 - Multi-file firewall merging (`merge_firewalls`) is not ported — revisit
   once a v2 workspace/environment overlay concept exists (same as Network,
   ADR-0007).

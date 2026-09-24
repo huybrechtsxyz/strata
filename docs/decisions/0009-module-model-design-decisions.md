@@ -187,9 +187,9 @@ defer, don't reject" philosophy as Configuration's `additional_topologies`/
 
 ## Remaining Work
 
-- `ModuleService._validate_dynamic()` (checking token keys against a real
-  `Environment`) is deferred until the `environment` kind is built — v1's own
-  `_validate_dynamic()` was already a no-op for the same reason.
+- Environment cross-check is tracked centrally in
+  [docs/design/value-token-resolution.md](../design/value-token-resolution.md),
+  not duplicated here.
 - Cross-module `@module/service` dependency resolution requires the
   workspace/namespace layer (which modules are grouped under which
   namespace) — not built in v2 yet.

@@ -179,7 +179,7 @@ rule the surveyed tools follow.
   discovered path and every error must print it — otherwise debugging is
   materially worse than before. This is the main thing `file:` was buying.
 
-## Status of implementation
+## Remaining Work
 
 Implemented: the `solution` kind (`solution_model.py`, `solution_service.py`),
 `SolutionRemoteModel` with `RemoteType`/`RemoteFetch`, and the full removal
@@ -187,5 +187,8 @@ of `file:` from all ten internal reference sites with their models, services
 and tests updated.
 
 Not implemented: the discovery loader / solution controller itself (planned
-for `strata.controllers`, the layer v1 places above `services`), remote
-materialisation, and the wiring of the five parked Phase 2 validators.
+for `strata.controllers`, the layer v1 places above `services`), and remote
+materialisation. The five parked Phase 2 validators this loader will
+eventually feed are tracked in
+[docs/design/solution-loading-and-phase2-validation.md](../design/solution-loading-and-phase2-validation.md),
+not duplicated here.

@@ -108,6 +108,6 @@ Promote both registries to standalone kinds, same shape as everything else
 
 ## Remaining Work
 
-- No file-loading layer exists yet to actually call
-  `validate_against_provider_config()`/`validate_topology_components()`
-  automatically — same deferred item as everywhere else this session.
+Tracked centrally in
+[docs/design/solution-loading-and-phase2-validation.md](../design/solution-loading-and-phase2-validation.md),
+not duplicated here.

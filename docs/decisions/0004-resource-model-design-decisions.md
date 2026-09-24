@@ -95,8 +95,7 @@ check against `Environment`, not a hand-authored list.
 
 ## Remaining Work
 
-- ADR-0001's discrepancy #5 (`subcategory` as a Resource-only field, not
-  present on other kinds) is **not resolved** here — `ResourcePropertiesModel.subcategory`
-  is ported as-is. Revisit once a second kind needs subcategory-like
-  classification, to decide whether it belongs in `properties` (kind-specific)
-  or should move to a shared `labels`-based convention.
+- `ResourcePropertiesModel.subcategory` remains unresolved (ADR-0001
+  discrepancy 5) — tracked centrally in
+  [docs/design/v1-schema-parity-tracking.md](../design/v1-schema-parity-tracking.md),
+  not duplicated here.

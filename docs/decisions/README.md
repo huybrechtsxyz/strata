@@ -3,8 +3,40 @@
 This directory contains the Architectural Decision Records (ADRs) for strata-v2,
 using the [MADR](https://adr.github.io/madr/) format.
 
-An ADR captures a significant design choice — what was decided, what alternatives
-were considered, and why. They exist so the rationale survives beyond the author.
+An ADR captures **one** significant, point-in-time decision — the problem that
+forced it, the alternatives considered, and why one was chosen. It exists so
+the rationale survives beyond the author. An ADR is a historical record, not a
+progress tracker: once written, its Context/Decision/Consequences don't
+change. If reality later diverges (implementation status, follow-on work,
+"how this currently works day to day"), that lives in
+[`docs/design/`](../design/README.md), not by editing the ADR.
+
+**Existing files `0001`–`0023` predate this tightened convention** and mix
+several decisions, phase trackers, and in-place `- Revised:` notes into single
+files. They are grandfathered as-is — don't rewrite them retroactively. Follow
+the rules below for new ADRs; if you're touching an old one substantially,
+prefer splitting new decisions out into their own ADR rather than adding to it.
+
+## One decision per ADR
+
+If you catch yourself writing "Decision 1", "Decision 2", ... "Decision 6" in
+a single file, or the file describes multiple independently-arguable choices,
+split it into multiple ADRs and cross-link them with `Related:`. A reader
+should be able to link to one ADR number and know exactly which decision that
+refers to.
+
+## Decisions don't get revised in place
+
+An accepted ADR's content is immutable. If a later change alters or replaces
+an earlier decision:
+
+1. Write a **new** ADR (`NNNN-title.md`) describing the new decision, with a
+   `Related:` line pointing back to the old one.
+2. Update the old ADR's `- Status:` line to `superseded — see ADR-NNNN` (a
+   one-line status edit is fine; do not rewrite its body).
+
+Don't add `- Revised:` lines that patch an old decision's narrative — that's
+what a new ADR is for.
 
 ## Index
 
@@ -23,6 +55,11 @@ the index:
    `NNNN` is the next unused number (check the directory listing).
 2. Fill in the sections. Remove optional sections you don't need.
 3. That's it — no index table to update.
+4. If the decision involves ongoing build-out, phases, or a component whose
+   design will keep evolving after this decision, also create/update a
+   matching doc in `docs/design/` (see [docs/design/README.md](../design/README.md))
+   and link it from this ADR's `Related:` line. Keep the ADR itself focused on
+   the decision, not the build progress.
 
 ## Status values
 
@@ -46,6 +83,12 @@ A short clarifying note may follow after an em-dash, e.g.
 **Any ADR whose status is `proposed`, `in-progress`, or `partially-implemented` must
 have a `## Remaining Work` section** listing what's left. `implemented`, `deferred`,
 `superseded`, and `rejected` ADRs don't need one.
+
+Keep `## Remaining Work` short (a handful of bullets). If the remaining work
+is substantial enough to need phases, a checklist that gets updated over
+several sessions, or its own status narrative, that's a sign it belongs in a
+`docs/design/` doc instead — link to it here rather than growing this section
+into a tracker.
 
 ### Minimal template
 

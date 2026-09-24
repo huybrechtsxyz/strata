@@ -20,7 +20,6 @@ needs all three distinguished, since "not declared" and "failed" call for
 different fixes.
 """
 
-from dataclasses import dataclass, field
 from typing import cast
 
 from strata.controllers.deployment_resolution import resolve_deployment_chains
@@ -29,6 +28,7 @@ from strata.integrations.capabilities import StoreIntegration
 from strata.integrations.errors import ValueResolutionError
 from strata.integrations.registry import IntegrationNotFoundError
 from strata.integrations.registry import get as get_integration
+from strata.integrations.resolved_context import ValueResolution
 from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import DeploymentModel
 from strata.models.environment_model import EnvironmentModel
@@ -40,23 +40,12 @@ from strata.models.store_model import (
     VariableStoreModel,
     VariableStoreType,
 )
-from strata.models.tenant_model import TenantModel
 from strata.services.environment_service import merge_environment_models
-from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError
 
 #: Store types resolved without any integration — read directly.
 _CONSTANT_TYPES = {VariableStoreType.CONSTANT, SecretStoreType.CONSTANT, FeatureStoreType.CONSTANT}
 _ENVIRONMENT_TYPES = {VariableStoreType.ENVIRONMENT, SecretStoreType.ENVIRONMENT, FeatureStoreType.ENVIRONMENT}
-
-
-@dataclass
-class ValueResolution:
-    """The outcome of resolving a set of requested keys."""
-
-    deployment: str
-    values: dict[str, str] = field(default_factory=dict)
-    diagnostics: Diagnostics = field(default_factory=Diagnostics)
 
 
 class _Resolvers:
@@ -124,13 +113,10 @@ def resolve_values(context: SolutionContext, deployment_name: str, keys: list[st
     resolved_deployments, _ = resolve_deployment_chains(index)
     deployment = resolved_deployments.get(deployment_name, cast(DeploymentModel, entry.model))
 
-    environment_names: list[str] = []
-    if deployment.spec.tenant:
-        tenant_entry = index.get(PlatformKind.TENANT, deployment.spec.tenant)
-        if tenant_entry is not None:
-            tenant = cast(TenantModel, tenant_entry.model)
-            environment_names.extend(tenant.spec.environments or [])
-    environment_names.extend(deployment.spec.environments or [])
+    # Tenant environments are already folded in ahead of the deployment's own
+    # (ADR-0024's _merge_tenant_defaults(), inside resolve_deployment_chains()) -
+    # no separate tenant lookup needed here.
+    environment_names: list[str] = list(deployment.spec.environments or [])
 
     environments: list[EnvironmentModel] = []
     for name in environment_names:

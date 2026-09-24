@@ -107,8 +107,11 @@ no way to express `metadata.labels` at all.
 - Neutral: all of these fields are inert until a builder consumes them. That
   is the same state ADR-0003 documented for `custom`, and the field
   descriptions say so rather than implying they work.
-- **Open**: `WorkspaceResourceModel.configuration`/`.custom`/`.labels`/
-  `.tags` are still present but were found to be dead in v1 — tracing
+
+## Remaining Work
+
+- `WorkspaceResourceModel.configuration`/`.custom`/`.labels`/`.tags` are
+  still present but were found to be dead in v1 — tracing
   `platform_builder.py` shows only `firewalls`, `role` and `count` are
   threaded from the workspace glue layer into
   `PlatformResourceModel.from_resource_model()`; the artifact's

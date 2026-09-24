@@ -109,14 +109,9 @@ either, to avoid inventing a concept v1 never needed for this kind.
 
 ## Remaining Work
 
-- `output_key`-shaped record bindings are **not currently expressible** in
-  v2's `DnsRecordModel` at all. Re-add once ADR-0006's Context store is
-  designed — either as `${output:KEY}` folded into the same token syntax, or
-  a dedicated mechanism, once there's a real Context object to resolve
-  against.
-- `DnsService._validate_dynamic()` (checking token keys against a real
-  `Environment`) is deferred until the `environment` kind is built.
-- `validate_value_tokens()` currently only checks *syntax*; a full
-  resolver/router (partial regex substitution, secret-shaped-leaf routing to
-  a deploy-time-only channel) is deferred until the build/deploy layer is
-  designed (ADR-0002 Decision 5).
+- `output_key`-shaped record bindings, the Environment cross-check, and the
+  token resolver/router are tracked centrally, not duplicated here:
+  [docs/design/value-token-resolution.md](../design/value-token-resolution.md)
+  (resolver, Environment check) and
+  [docs/design/provisioning-injection-model.md](../design/provisioning-injection-model.md)
+  (Context/`${step:}`, for `output_key`'s eventual replacement).

@@ -1,8 +1,15 @@
 # Strata v1 Schema Analysis — Key Findings for v2
 
-- Status: proposed
+- Status: accepted — this is an audit/findings report, not itself a decision;
+  it required no implementation of its own. Every finding below has since
+  been resolved, deliberately deferred, or left open by a follow-up ADR — see
+  [docs/design/v1-schema-parity-tracking.md](../design/v1-schema-parity-tracking.md)
+  for the live status of each item, rather than re-reading every ADR below.
 - Date: 2026-09-20
-- Related: none yet — this ADR is the seed for follow-up ADRs as each item below is decided
+- Related: [ADR-0002](0002-requirement-interface-injection-grant-lessons-from-v1.md)
+  through [ADR-0021](0021-integration-layer.md) each resolve one or more
+  items below — see the tracking doc for the per-item mapping instead of a
+  flat list here.
 
 ## Context and Problem Statement
 
@@ -251,17 +258,18 @@ Module declares `references: {secrets: [db_password]}`, but workspace.variables/
 
 ## Decision Outcome
 
-Pending — this ADR captures findings only. Each discrepancy and architectural
-issue above needs a decision (keep, fix, or drop for v2) before or as its
-corresponding model is implemented. Track decisions either as updates to this
-ADR or as new ADRs that supersede individual sections.
+This ADR captures findings only — no decision was made here. Each of the 6
+discrepancies and 8 architectural issues above was later reviewed and
+resolved (or deliberately deferred) by its own follow-up ADR, rather than by
+editing this one. See
+[docs/design/v1-schema-parity-tracking.md](../design/v1-schema-parity-tracking.md)
+for the current status and resolving ADR for every item.
 
 ## Remaining Work
 
-- Review and decide on the 6 discrepancies (firewall references, DNS `output_key`,
-  DNS/Network CidrSource inconsistency, network peerings, resource `subcategory`,
-  DNS TTL/priority).
-- Review and decide on the 8 major architectural issues (module complexity,
-  workspace scope, Terraform-first bias, firewall parametrization, lifecycle
-  hierarchy, cross-kind validation, source path consistency, reference wiring).
-- Prioritize and schedule the "Top 3 V2 Priorities" against the v2 model build order.
+See [docs/design/v1-schema-parity-tracking.md](../design/v1-schema-parity-tracking.md)
+for the full, currently-open item list (updated there, not here, as items
+resolve). As of this update, still genuinely open: lifecycle hierarchy
+precedence (Issue 5), the `SourceModel.repository` vs. `@reponame/path`
+convention split (Issue 7), and verifying whether Network peerings was ever
+ported (Discrepancy 4).

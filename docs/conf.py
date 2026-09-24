@@ -52,7 +52,7 @@ master_doc = "index"
 # These patterns also effect html_static_path and html_extra_path
 # Convention: prefix scratch/temp docs with _ (e.g. _draft-notes.md) to
 # auto-exclude them from both the Sphinx build and the index-coverage check.
-exclude_patterns = ["_build", "_*", "Thumbs.db", ".DS_Store", "decisions"]
+exclude_patterns = ["_build", "_*", "Thumbs.db", ".DS_Store", "decisions", "design"]
 
 # Generate Sphinx-compatible anchors for headings (h1-h3) so that
 # Markdown ToC links like [Key Features](#key-features) resolve correctly.

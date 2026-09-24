@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `extends` chain resolution."""
+"""Tests for `extends` chain resolution and tenant defaults merging (ADR-0024)."""
 
 from pathlib import Path
 
@@ -9,17 +9,25 @@ from strata.controllers.deployment_resolution import resolve_deployment_chains
 from strata.controllers.solution_controller import DocumentIndex, DocumentRef, IndexEntry
 from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import DeploymentModel
+from strata.models.tenant_model import TenantModel
 
 
 def _deployment(name: str, spec: dict) -> DeploymentModel:
     return DeploymentModel.model_validate({"meta": {"name": name}, "spec": spec})
 
 
-def _index(*deployments: DeploymentModel) -> DocumentIndex:
+def _tenant(name: str, spec: dict) -> TenantModel:
+    return TenantModel.model_validate({"meta": {"name": name}, "spec": spec})
+
+
+def _index(*deployments: DeploymentModel, tenants: tuple[TenantModel, ...] = ()) -> DocumentIndex:
     index = DocumentIndex()
     for model in deployments:
         ref = DocumentRef(kind=PlatformKind.DEPLOYMENT, name=model.meta.name)
         index.add(IndexEntry(ref=ref, model=model, source=Path(f"{model.meta.name}.yaml")))
+    for tenant in tenants:
+        ref = DocumentRef(kind=PlatformKind.TENANT, name=tenant.meta.name)
+        index.add(IndexEntry(ref=ref, model=tenant, source=Path(f"{tenant.meta.name}.tenant.yaml")))
     return index
 
 
@@ -194,3 +202,78 @@ def test_trivial_self_extend_is_rejected_before_it_can_reach_the_index():
     """The one cycle shape the model itself catches (ADR: validate_not_self_extending)."""
     with pytest.raises(Exception, match="cannot extend itself"):
         _deployment("x", {"extends": "x"})
+
+
+# ---------------------------------------------------------------------------
+# Tenant defaults merge (ADR-0024)
+# ---------------------------------------------------------------------------
+
+
+def test_tenant_properties_and_custom_merge_in_as_a_base_layer():
+    index = _index(
+        _deployment(
+            "leaf",
+            {
+                "workspace": "main",
+                "environments": ["prd"],
+                "tenant": "acme",
+                "properties": {"region": "we"},
+                "custom": {"cost_center": "leaf-cc"},
+            },
+        ),
+        tenants=(
+            _tenant(
+                "acme",
+                {
+                    "display_name": "Acme Corp",
+                    "geographies": ["europe"],
+                    "properties": {"region": "we", "billing_tier": "gold"},
+                    "custom": {"cost_center": "acme-cc", "org_unit": "platform"},
+                },
+            ),
+        ),
+    )
+    resolved, diagnostics = resolve_deployment_chains(index)
+    assert diagnostics.ok
+    leaf = resolved["leaf"]
+    # deployment wins on a shared key ("region"/"cost_center"); tenant's other
+    # keys still come through untouched.
+    assert leaf.spec.properties == {"region": "we", "billing_tier": "gold"}
+    assert leaf.spec.custom == {"cost_center": "leaf-cc", "org_unit": "platform"}
+
+
+def test_tenant_environments_are_prepended_before_the_deployments_own():
+    index = _index(
+        _deployment("leaf", {"workspace": "main", "environments": ["prd"], "tenant": "acme"}),
+        tenants=(_tenant("acme", {"display_name": "Acme Corp", "geographies": ["europe"], "environments": ["shared"]}),),
+    )
+    resolved, _ = resolve_deployment_chains(index)
+    assert resolved["leaf"].spec.environments == ["shared", "prd"]
+
+
+def test_deployment_with_no_tenant_reference_is_unaffected():
+    index = _index(_deployment("leaf", {"workspace": "main", "environments": ["prd"]}))
+    resolved, diagnostics = resolve_deployment_chains(index)
+    assert diagnostics.ok
+    assert resolved["leaf"].spec.environments == ["prd"]
+
+
+def test_deployment_referencing_an_unresolvable_tenant_is_unaffected():
+    """Not re-reported here — validate_references already owns a bad spec.tenant."""
+    index = _index(_deployment("leaf", {"workspace": "main", "environments": ["prd"], "tenant": "ghost"}))
+    resolved, diagnostics = resolve_deployment_chains(index)
+    assert diagnostics.ok
+    assert resolved["leaf"].spec.environments == ["prd"]
+
+
+def test_tenant_merge_applies_after_extends_resolution():
+    """A deployment that only gets its `tenant` reference via an `extends`
+    base still has tenant defaults folded in correctly."""
+    index = _index(
+        _deployment("base", {"partial": True, "workspace": "main", "tenant": "acme"}),
+        _deployment("leaf", {"extends": "base", "environments": ["prd"]}),
+        tenants=(_tenant("acme", {"display_name": "Acme Corp", "geographies": ["europe"], "environments": ["shared"]}),),
+    )
+    resolved, diagnostics = resolve_deployment_chains(index)
+    assert diagnostics.ok
+    assert resolved["leaf"].spec.environments == ["shared", "prd"]

@@ -346,10 +346,12 @@ have a `depends_on` edge (direct **or transitive**) between them.
   `validate_topology_components()`, ADR-0012/ADR-0013) — only the automatic
   wiring (resolving `spec.topology[].file` into a real loaded `TopologyModel`)
   is missing.
-- Neutral: four real v1 concepts (`output` profile, `inputs_from` data-mapping,
-  `integration`, provisioner `needs`) are deliberately absent from
+- Neutral: three real v1 concepts (`output` profile, `inputs_from`
+  data-mapping, provisioner `needs`) are deliberately absent from
   `ProvisionerModel` for now — each requires a layer that doesn't exist yet
-  (build/output, Context, Integration, Environment/Interface respectively).
+  (build/output, Context, Environment/Interface respectively). A fourth,
+  `integration`, was deferred here for the same reason but has since been
+  added — see [ADR-0021](0021-integration-layer.md).
 
 ## Remaining Work
 
@@ -359,9 +361,9 @@ have a `depends_on` edge (direct **or transitive**) between them.
   — registry schema done, see [ADR-0013](0013-configuration-topology-registry.md);
   the actual Phase 2 cross-validation against a workspace's `Topology`
   documents is still unbuilt (tracked there).
-- `TopologyService._validate_dynamic()` (checking `components`/`namespaces`
-  references against real documents) deferred until solution-wide loading
-  exists.
+- `TopologyService._validate_dynamic()` and every other deferred
+  cross-document check are tracked centrally, not here:
+  [docs/design/solution-loading-and-phase2-validation.md](../design/solution-loading-and-phase2-validation.md).
 - ~~`ProvisionerType`/`SYNC_PROVISIONER_TYPES`/`TERRAFORM_COMPATIBLE_TYPES`/
   `WORKLOAD_DEPLOYER_TYPES` lived in `common_models.py`~~ — relocated to
   `strata/utils/builtin_types.py`: these are pure code-classification facts
@@ -375,8 +377,7 @@ have a `depends_on` edge (direct **or transitive**) between them.
   `DeploymentStage` entries (approval gates, secrets scope/Grant) — not
   started. `DeploymentStageModel.provisioner`/`.topology` must NOT be ported
   from v1; that responsibility belongs entirely to Workspace's recipe.
-- Cross-repo reference convention inconsistency noted but not resolved: v2
-  currently has two syntaxes for "this lives in another repo" —
-  `SourceModel.repository` (name field + separate path fields) vs. `@reponame/path`
-  (embedded in a string, used by `ModuleFileModel`/`NamespaceModuleModel`).
-  Revisit when building `Provisioner.source` (which will need one of these).
+- Cross-repo reference convention inconsistency (`SourceModel.repository`
+  vs. `@reponame/path`) is tracked in
+  [docs/design/v1-schema-parity-tracking.md](../design/v1-schema-parity-tracking.md)
+  (Architectural Issue 7), not duplicated here.

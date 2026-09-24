@@ -27,12 +27,16 @@ inspect `result.returncode` directly, not `.is_successful` (which stays
 `returncode == 0` — unchanged, no special-casing added to `CommandResult`).
 """
 
+import json
 import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 from strata.integrations.capabilities import InfraIntegration
+from strata.integrations.resolved_context import ResolvedWorkspaceGraph, ValueResolution
+from strata.integrations.terraform_projection import build_platform_projection, planned_files
+from strata.models.provisioning_model import ProvisionerModel
 from strata.utils.transport import CommandResult
 
 
@@ -215,3 +219,24 @@ class TerraformIntegration(InfraIntegration):
         for resource in target or []:
             args.extend(["-target", resource])
         return self.run(*args, cwd=path, env=env, timeout=timeout)
+
+    # ------------------------------------------------------------------
+    # InfraIntegration.default_output (ADR-0023 D1/D5, Phase 1)
+    # ------------------------------------------------------------------
+
+    def default_output(
+        self,
+        resolved: ValueResolution,
+        provisioner: ProvisionerModel,
+        graph: ResolvedWorkspaceGraph,
+    ) -> dict[str, str]:
+        """The default tfvars projection (ADR-0023 D1) - one
+        `*.auto.tfvars.json` file per non-empty category, Terraform's own
+        auto-load convention (no `-var-file` flag needed). `resolved` is
+        unused by Phase 1's four structural categories - accepted now so
+        `InfraIntegration.prepare()`'s uniform dispatch (D5) does not need
+        a different call shape once a later phase does use it.
+        """
+        del resolved
+        payload = build_platform_projection(graph, provisioner)
+        return {filename: json.dumps(data) for filename, data in planned_files(payload)}

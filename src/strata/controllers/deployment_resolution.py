@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""`extends` chain resolution — folding a deployment's ancestry into one document.
+"""`extends` chain resolution, plus tenant defaults (ADR-0024) — folding a
+deployment's ancestry, and its tenant's base layer, into one document.
 
 `merge_deployment_specs()` (`deployment_service.py`) already merges one base
 into one child, on raw dicts, and is fully tested. Nothing called it: this
@@ -35,7 +36,19 @@ Detected via a `visiting` list threaded through the recursive resolve, and
 reported against the deployment whose `extends` field closes the loop,
 naming the full cycle; every other node on the same cycle gets a shorter
 "reported elsewhere" pointer rather than a second full trace.
+
+**Tenant defaults (ADR-0024) are a second, deliberately separate merge
+axis, applied last.** `extends` folds deployment-to-deployment ancestry;
+`_merge_tenant_defaults()` folds tenant-to-deployment defaults
+(`properties`/`custom`/`environments`) — conceptually different relations,
+reusing the same tested `merge_deployment_specs()` mechanics rather than
+inventing a second one. Kept in this module rather than given its own
+call site per consumer: every current and planned reader of this
+function's output wants the same fully-resolved deployment, and a second
+call site is one more place to forget to call it.
 """
+
+from typing import Any, cast
 
 from pydantic import ValidationError
 
@@ -43,6 +56,7 @@ from strata.controllers.solution_controller import DocumentIndex
 from strata.logging.config import get_logger
 from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import DeploymentModel
+from strata.models.tenant_model import TenantModel
 from strata.services.base_service import diagnostics_from_validation_error
 from strata.services.deployment_service import merge_deployment_specs
 from strata.utils.diagnostics import Diagnostics
@@ -113,6 +127,8 @@ def resolve_deployment_chains(index: DocumentIndex) -> tuple[dict[str, Deploymen
             log.debug("deployment base has no consumers", name=name, source=str(entry.source))
             continue
 
+        merged_dict = _merge_tenant_defaults(merged_dict, index)
+
         try:
             merged_model = DeploymentModel.model_validate({"meta": deployment.meta.model_dump(), "spec": merged_dict})
         except ValidationError as exc:
@@ -122,6 +138,39 @@ def resolve_deployment_chains(index: DocumentIndex) -> tuple[dict[str, Deploymen
         resolved[name] = merged_model
 
     return resolved, diagnostics
+
+
+def _merge_tenant_defaults(spec_dict: dict[str, Any], index: DocumentIndex) -> dict[str, Any]:
+    """Fold a tenant's `properties`/`custom`/`environments` in as a base
+    layer under the deployment's own (ADR-0024) — deployment always wins on
+    a key conflict, same `merge_deployment_specs()` semantics `extends`
+    already uses. Applied *after* `extends` resolution, not before:
+    `spec_dict["tenant"]` is already the deployment's own final value by
+    this point, however many `extends` links deep it came from — tenant is
+    one further outer layer, underneath the already-fully-resolved dict.
+
+    Only `environments`/`properties`/`custom` travel from the tenant, not
+    its whole spec — `display_name`/`geographies`/`onboarded` are
+    tenant-identity fields with no `DeploymentSpecModel` equivalent to
+    merge into.
+
+    A missing/unresolvable `tenant` reference silently no-ops — the same
+    treatment `_resolve_dict()` gives a missing `extends` ancestor;
+    `validate_references` is the layer that reports a bad `spec.tenant`.
+    """
+    tenant_name = spec_dict.get("tenant")
+    if not tenant_name:
+        return spec_dict
+    tenant_entry = index.get(PlatformKind.TENANT, tenant_name)
+    if tenant_entry is None:
+        return spec_dict
+    tenant = cast(TenantModel, tenant_entry.model)
+    tenant_base = {
+        "environments": tenant.spec.environments or [],
+        "properties": tenant.spec.properties or {},
+        "custom": tenant.spec.custom or {},
+    }
+    return merge_deployment_specs(tenant_base, spec_dict)
 
 
 def _resolve_dict(

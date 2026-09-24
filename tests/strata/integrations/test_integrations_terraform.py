@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 """Tests for `TerraformIntegration` (ADR-0021 Phase 5)."""
 
+import json
 from pathlib import Path
 
 import pytest
 
 from strata.integrations.registry import get
+from strata.integrations.resolved_context import ResolvedWorkspaceGraph, ValueResolution
 from strata.integrations.terraform import TerraformIntegration
+from strata.integrations.terraform_projection import build_platform_projection
+from strata.models.common_models import SourceModel
+from strata.models.provider_model import ProviderMetaModel, ProviderModel, ProviderPropertiesModel, ProviderSpecModel
+from strata.models.provisioning_model import ProvisionerModel
+from strata.models.workspace_model import WorkspaceMetaModel, WorkspaceModel, WorkspaceSpecModel
 from strata.utils.transport import CommandResult
 
 
@@ -150,3 +157,51 @@ def test_env_is_forwarded_not_injected_as_var_flags(monkeypatch):
     assert "hunter2" not in captured["args"]
     assert "-var" not in captured["args"]
     assert captured["env"] == {"TF_VAR_db_password": "hunter2"}
+
+
+# ---------------------------------------------------------------------------
+# default_output()/prepare() — ADR-0023 D1/D5, Phase 1
+# ---------------------------------------------------------------------------
+
+
+def _graph():
+    workspace = WorkspaceModel(
+        meta=WorkspaceMetaModel(name="ws"),
+        spec=WorkspaceSpecModel(
+            providers=["p"],
+            provisioners=[ProvisionerModel(name="prov", tool="terraform", source=SourceModel(source_path="infra"))],
+        ),
+    )
+    provider = ProviderModel(
+        meta=ProviderMetaModel(name="p"),
+        spec=ProviderSpecModel(properties=ProviderPropertiesModel(type="local", region="local")),
+    )
+    return ResolvedWorkspaceGraph(workspace=workspace, providers={"p": provider})
+
+
+def _provisioner():
+    return ProvisionerModel(name="prov", tool="terraform", source=SourceModel(source_path="infra"))
+
+
+def test_default_output_writes_workspace_and_providers_only_when_no_topology_or_resources():
+    result = TerraformIntegration().default_output(ValueResolution(deployment="d"), _provisioner(), _graph())
+    assert set(result) == {"workspace.auto.tfvars.json", "providers.auto.tfvars.json"}
+
+
+def test_default_output_is_valid_json_matching_the_projection():
+    resolved = ValueResolution(deployment="d")
+    graph = _graph()
+    provisioner = _provisioner()
+    result = TerraformIntegration().default_output(resolved, provisioner, graph)
+    expected = build_platform_projection(graph, provisioner)
+    assert json.loads(result["workspace.auto.tfvars.json"]) == expected["workspace"]
+
+
+def test_prepare_writes_default_output_files_to_disk(tmp_path: Path):
+    TerraformIntegration().prepare(
+        tmp_path, resolved=ValueResolution(deployment="d"), provisioner=_provisioner(), graph=_graph()
+    )
+    assert (tmp_path / "workspace.auto.tfvars.json").exists()
+    assert (tmp_path / "providers.auto.tfvars.json").exists()
+    assert not (tmp_path / "topologies.auto.tfvars.json").exists()
+    assert not (tmp_path / "resx_virtualmachine.auto.tfvars.json").exists()

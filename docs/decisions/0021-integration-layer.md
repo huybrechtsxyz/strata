@@ -5,6 +5,9 @@
   Helm). The first consumer (`strata build run`) moved to its own document,
   [ADR-0022](0022-strata-build-run.md), rather than being a Phase 7 here.
 - Date: 2026-09-23
+- See also: [docs/design/build-pipeline-status.md](../design/build-pipeline-status.md)
+  for cross-ADR status across the Integration layer / build run / output
+  rendering trio (ADR-0021/0022/0023).
 - Related: [ADR-0011](0011-topology-and-provisioning-decoupling.md)
   (`ProvisionerModel.tool`'s open-string vocabulary is reused here; this ADR
   **removes** that model's `.version` field and adds `.integration` - see
