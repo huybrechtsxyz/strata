@@ -12,6 +12,7 @@ from strata.utils.layout import (
     REMOTES_DIRNAME,
     STRATA_DIR,
     YAML_SUFFIXES,
+    build_dir,
     display_path,
     manifest_path,
     remote_checkout_path,
@@ -59,6 +60,26 @@ def test_remote_checkouts_are_separated_by_name():
     a = remote_checkout_path(Path("/s"), "infra", "v1.0.0")
     b = remote_checkout_path(Path("/s"), "charts", "v1.0.0")
     assert a != b
+
+
+def test_build_dir_is_directly_under_the_root():
+    """Rendered output is meant to be inspected, unlike `.strata/`'s runtime state."""
+    result = build_dir(Path("/solution"), "app")
+    assert result == Path("/solution") / "build" / "app"
+
+
+def test_build_dir_is_keyed_by_deployment():
+    """Two deployments building the same workspace must not share a directory."""
+    a = build_dir(Path("/solution"), "app-prd")
+    b = build_dir(Path("/solution"), "app-dev")
+    assert a != b
+
+
+def test_build_dir_top_level_name_is_already_excluded_from_discovery():
+    """`DEFAULT_IGNORED_DIRS` must keep floor-excluding the directory this returns."""
+    result = build_dir(Path("/solution"), "app")
+    top_level = result.relative_to(Path("/solution")).parts[0]
+    assert top_level in DEFAULT_IGNORED_DIRS
 
 
 def test_unpinned_remote_gets_its_own_segment():

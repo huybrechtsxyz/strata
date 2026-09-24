@@ -159,10 +159,10 @@ In dependency order — each step only needs the ones before it:
    given zero confirmed real usage of either in any checked workspace so
    far (same "don't build ahead of evidence" discipline as ADR-0023's
    deferred categories) — revisit once a real remote declares one.
-6. **Wire into `sync_source()`** (`build-command.md`'s D3) once that
-   function itself exists.
+6. ~~Wire into `sync_source()`~~ — done (`strata/controllers/source_sync.py`,
+   see [build-command.md](build-command.md)).
 
-No done-when target dates for items 4-6 — this doc tracks a prerequisite,
+No done-when target dates for items 4-5 — this doc tracks a prerequisite,
 not a scheduled phase; update it as each numbered item above lands.
 
 ## Changelog
@@ -181,3 +181,9 @@ not a scheduled phase; update it as each numbered item above lands.
   `RemoteFetch`'s own docstring already cites the exact real
   `cfg-int-deployment` evidence this doc separately found, and the v2
   design is the deliberately-corrected version of it.
+- 2026-09-24: `sync_source()` (ADR-0022 D3) built on top of `resolve_remote()`
+  — see [build-command.md](build-command.md). Item 4 (`SourceIntegration`
+  credentials) deliberately skipped for now: real evidence shows the one
+  production pattern that needs private-repo auth (`cfg-int-deployment`'s
+  GHE remotes) already avoids strata-managed credentials entirely via
+  `fetch: external`, so there is no real consumer for this yet.

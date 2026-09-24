@@ -104,6 +104,29 @@ def remote_checkout_path(root: Path, remote: str, reference: str | None) -> Path
     return remotes_dir(root) / remote / (reference or "_unpinned")
 
 
+def build_dir(root: Path, deployment: str) -> Path:
+    """Return where `build run` renders `deployment`'s artifacts.
+
+    Directly under `root` — not `STRATA_DIR` — because rendered output is
+    something a user is meant to look at (`.tf`/`.tfvars.json` files to
+    review before `deploy`), unlike `.strata/`'s runtime-only state
+    (ADR-0015). `DEFAULT_IGNORED_DIRS` already floors out a top-level
+    `build/` from discovery, so this does not need its own exclusion entry.
+
+    Keyed by deployment: a solution can build more than one deployment
+    against the same workspace, and their resolved variable values differ,
+    so a single shared directory would have one overwrite the other.
+
+    Args:
+        root: Solution root.
+        deployment: The deployment's `meta.name`.
+
+    Returns:
+        `root/build/deployment`. Not created — this function is pure.
+    """
+    return root / "build" / deployment
+
+
 def display_path(value: str | None, root: Path | None) -> str:
     """Return `value` relative to `root`, for showing to a human or a log.
 

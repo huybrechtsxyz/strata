@@ -88,6 +88,68 @@ class _Resolvers:
         return self._instances[integration_type]
 
 
+def resolve_deployment(context: SolutionContext, deployment_name: str) -> DeploymentModel:
+    """Find `deployment_name` and fold in its `extends`/tenant-defaults chain.
+
+    Shared by `resolve_values()`/`build_time_keys()` (this module) and
+    `build_controller.build_run()` (which needs the same resolved
+    `spec.workspace` - a workspace can itself be inherited via `extends`,
+    so a caller doing its own raw `index.get(DEPLOYMENT, ...)` lookup could
+    silently disagree with what `resolve_values()` used).
+
+    Raises:
+        UsageError: `deployment_name` does not name a real deployment.
+    """
+    index = context.controller.index
+    entry = index.get(PlatformKind.DEPLOYMENT, deployment_name)
+    if entry is None:
+        raise UsageError(
+            f"No deployment named '{deployment_name}'. Available: {sorted(index.names_of(PlatformKind.DEPLOYMENT))}"
+        )
+    resolved_deployments, _ = resolve_deployment_chains(index)
+    return resolved_deployments.get(deployment_name, cast(DeploymentModel, entry.model))
+
+
+
+def _reachable_environments(context: SolutionContext, deployment: DeploymentModel) -> list[EnvironmentModel]:
+    """Every `EnvironmentModel` `deployment.spec.environments` names.
+
+    Tenant environments are already folded in ahead of the deployment's own
+    (ADR-0024's `_merge_tenant_defaults()`, inside `resolve_deployment_chains()`)
+    - no separate tenant lookup needed here.
+    """
+    index = context.controller.index
+    environments: list[EnvironmentModel] = []
+    for name in deployment.spec.environments or []:
+        environment_entry = index.get(PlatformKind.ENVIRONMENT, name)
+        if environment_entry is not None:
+            environments.append(cast(EnvironmentModel, environment_entry.model))
+    return environments
+
+
+def build_time_keys(context: SolutionContext, deployment_name: str) -> list[str]:
+    """Every variable/feature key declared in environments reachable from
+    `deployment_name` - deliberately **never** secrets.
+
+    This is the function ADR-0022 D1a's own safety note calls for:
+    "'Terraform's tfvars are non-secret only at build time' is enforced
+    entirely by which keys `build_run()` ever requests, not by anything
+    `ValueResolution` guarantees structurally" - `resolve_values()`'s
+    `values: dict[str, str]` is one flat dict with no type-level distinction
+    between a variable's value and a secret's, so the exclusion has to
+    happen here, at the key-list-building step, not downstream.
+
+    Reuses `resolve_values()`'s own deployment/environment-reachability
+    walk (`resolve_deployment()`/`_reachable_environments()`) rather than
+    re-deriving it, so the two can never disagree about which environments
+    are in scope.
+    """
+    deployment = resolve_deployment(context, deployment_name)
+    environments = _reachable_environments(context, deployment)
+    variables, _secrets, features = merge_environment_models(environments)
+    return sorted({**variables, **features})
+
+
 def resolve_values(context: SolutionContext, deployment_name: str, keys: list[str]) -> ValueResolution:
     """Resolve `keys` against `deployment_name`'s merged environment(s).
 
@@ -103,26 +165,8 @@ def resolve_values(context: SolutionContext, deployment_name: str, keys: list[st
     Raises:
         UsageError: `deployment_name` does not name a real deployment.
     """
-    index = context.controller.index
-    entry = index.get(PlatformKind.DEPLOYMENT, deployment_name)
-    if entry is None:
-        raise UsageError(
-            f"No deployment named '{deployment_name}'. Available: {sorted(index.names_of(PlatformKind.DEPLOYMENT))}"
-        )
-
-    resolved_deployments, _ = resolve_deployment_chains(index)
-    deployment = resolved_deployments.get(deployment_name, cast(DeploymentModel, entry.model))
-
-    # Tenant environments are already folded in ahead of the deployment's own
-    # (ADR-0024's _merge_tenant_defaults(), inside resolve_deployment_chains()) -
-    # no separate tenant lookup needed here.
-    environment_names: list[str] = list(deployment.spec.environments or [])
-
-    environments: list[EnvironmentModel] = []
-    for name in environment_names:
-        environment_entry = index.get(PlatformKind.ENVIRONMENT, name)
-        if environment_entry is not None:
-            environments.append(cast(EnvironmentModel, environment_entry.model))
+    deployment = resolve_deployment(context, deployment_name)
+    environments = _reachable_environments(context, deployment)
 
     variables, secrets, features = merge_environment_models(environments)
     resolvers = _Resolvers()

@@ -17,6 +17,7 @@ silently go stale.
 """
 
 from strata.controllers.remote_resolution import RemoteResolutionError
+from strata.controllers.source_sync import SourceSyncError
 from strata.utils.errors import StrataError, SystemError, UsageError, ValidationError
 
 #: Everything succeeded.
@@ -42,6 +43,7 @@ EXIT_CODE_BY_ERROR: dict[type[StrataError], int] = {
     ValidationError: EXIT_VALIDATION,
     SystemError: EXIT_FAILURE,
     RemoteResolutionError: EXIT_FAILURE,
+    SourceSyncError: EXIT_FAILURE,
     StrataError: EXIT_FAILURE,
 }
 
