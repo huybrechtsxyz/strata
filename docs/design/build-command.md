@@ -86,8 +86,8 @@ Everything in the "not built" rows above. In build order (per ADR-0022's
 own dependency chain):
 
 1. `build_resolved_workspace_graph()` — assemble a real `ResolvedWorkspaceGraph` from a loaded `SolutionContext`/`DocumentIndex`.
-2. Remote resolution ([remotes.md](remotes.md) — its own prerequisite chain, `sync_source()`'s real blocker) and `resolve_integration()` (D2).
-3. `sync_source()` (D3) itself, once (2)'s remote resolution exists for the types actually in use.
+2. ~~Remote resolution~~ ([remotes.md](remotes.md) — done for `local`/`git`; `oci`/`helm` and credentialed private-repo fetches still open) and `resolve_integration()` (D2, still not built).
+3. `sync_source()` (D3) itself, using `remote_resolution.resolve_remote()` for the remote-name half of `SourceModel`.
 4. The `build_controller.py` orchestrator loop itself (D1's pseudocode above).
 5. `strata build run` CLI command (`commands/build_command.py`), matching `validate_command.py`'s thin-glue-over-controller shape.
 6. `ComposeIntegration`/`HelmIntegration.default_output()`, `build_workload_modules()`, and `prepare_namespace()` (D5-D7) — the entire workload pipeline.
@@ -101,3 +101,6 @@ own dependency chain):
   `capabilities.py`) rather than purely reconstructed from ADR text, since
   meaningful implementation work has happened since ADR-0022/0023 were
   written but the command itself still does not exist.
+- 2026-09-24: `sync_source()`'s own prerequisite (remote-to-filesystem-path
+  resolution) implemented for `local`/`git` remotes — see
+  [remotes.md](remotes.md). `sync_source()` itself still does not exist.

@@ -16,6 +16,7 @@ errors. A test asserts every error type is mapped, so the table cannot
 silently go stale.
 """
 
+from strata.controllers.remote_resolution import RemoteResolutionError
 from strata.utils.errors import StrataError, SystemError, UsageError, ValidationError
 
 #: Everything succeeded.
@@ -40,6 +41,7 @@ EXIT_CODE_BY_ERROR: dict[type[StrataError], int] = {
     UsageError: EXIT_USAGE,
     ValidationError: EXIT_VALIDATION,
     SystemError: EXIT_FAILURE,
+    RemoteResolutionError: EXIT_FAILURE,
     StrataError: EXIT_FAILURE,
 }
 
