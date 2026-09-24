@@ -6,7 +6,10 @@
   integration layer this consumes: registry, `Integration`/`InfraIntegration`,
   `TerraformIntegration`/`ComposeIntegration`/`HelmIntegration`),
   [ADR-0018](0018-source-model-unified-remote-reference.md) (`SourceModel`,
-  reused unchanged for materialising `provisioner.source`)
+  reused unchanged for materialising `provisioner.source`),
+  [ADR-0023](0023-build-output-rendering.md) (split out of this document -
+  what `prepare()`/`prepare_namespace()` actually write, and how a user can
+  customise it)
 
 ## Context and Problem Statement
 
@@ -86,7 +89,12 @@ class InfraIntegration(Integration):
     def prepare(self, path: Path, *, resolved: ResolvedValues, provisioner: ProvisionerModel, **kwargs: Any) -> Path:
         """Render whatever this tool needs into `path` from already-resolved
         values and this provisioner's own typed config. Returns the path
-        `plan`/`deploy`/`destroy` should be called against."""
+        `plan`/`deploy`/`destroy` should be called against.
+
+        What gets written, and how a user can override it, is ADR-0023 -
+        not specified here; this ADR only fixes the method's existence and
+        signature, which is what the orchestrator loop above depends on.
+        """
 ```
 
 `resolved: ResolvedValues` is exactly what `value_controller.resolve_values()`
@@ -140,116 +148,17 @@ materialised if another provisioner's `.tf` composes it by relative path.
 exactly (`build run` produces files; `deploy run` runs `plan`/`apply`). This
 design calls only `prepare()` - never `plan`/`deploy`/`destroy`.
 
-**D8: what actually goes into the tfvars is a full structural projection of
-the resolved platform graph, not just environment-declared variables -
-corrected here after reading v1's real `TerraformBuilder`, which is much
-bigger than an earlier sketch in this document assumed.** v1's `.tf` code
-consumes typed variables like `var.resources_by_category`/`var.networks`/
-`var.namespaces` - every Resource/Network/Firewall/DNS zone/Topology/Module/
-Tenant document in the resolved workspace graph gets flattened into one
-matching payload:
-
-```python
-{
-    "workspace": ..., "providers": ..., "topologies": ...,
-    "resources_by_category": ..., "modules": ..., "namespaces": ...,
-    "firewalls": ..., "dns": ..., "networks": ..., "tenant": ...,
-    "required_variables": ..., "required_features": ..., "required_secrets": ...,
-}
-```
-
-This is the real mechanism binding strata's declarative documents to
-Terraform's variable declarations - not a side detail `prepare()` can skip.
-Each payload maps to its own `*.auto.tfvars.json` file (Terraform's
-auto-loading convention - no `-var-file` flag needed): `workspace.auto.tfvars.json`,
-`providers.auto.tfvars.json`, `resx_<type>.auto.tfvars.json` per resource
-category, etc. `required_variables`/`required_features`/`required_secrets`
-are a separate **requirements manifest** (which keys were referenced, by
-what, not their values) - documentation, not data a `.tf` file consumes.
-
-**D9: output shaping is default-only for now - `OutputProfileModel` is not
-ported. Corrected after actually checking usage, not assumed either way.**
-Initially proposed to port `OutputProfileModel` unchanged ("no evidence it's
-over-built") - that conclusion was wrong, made without checking. Checked
-against all three real workspaces available (haven's single-repo terraform
-provisioner, and `cfg-int-deployment`'s two workspaces referencing a
-genuinely separate dedicated Terraform repo, `iac-int-deployment` -
-deliberately the strongest test of "a foreign repo might need a very
-specific tfvars shape"): **zero** use of `format`/`emits`/`files`/`script` in
-any of them. The concern behind the question is real in general, but
-answered by a mechanism that already exists, not by porting
-`OutputProfileModel`:
-
-- **Terraform tolerates undeclared `.tfvars` keys as a warning, not an
-  error.** A foreign `.tf` repo that only declares `variable
-  "resources_by_category" {}` and nothing else simply ignores every other
-  emitted category file - D8's projection is naturally safe to over-emit
-  without a suppression mechanism.
-- **Cross-repo variation in arbitrary config is real and already partially
-  designed - `${var:KEY}`/`${secret:KEY}`/`${feature:KEY}` typed-expression
-  substitution (v1 ADR-0075) inside a provisioner's own `configuration`
-  dicts.** Confirmed directly in `cfg-int-deployment`'s real
-  `ProvisionerBackendModel.configuration`:
-  ```yaml
-  backend:
-    type: azurerm
-    configuration:
-      resource_group_name: ${var:tf_state_resource_group}
-      key: int-${var:spoke}-${var:customer_code}-${var:environment}.tfstate
-  ```
-  This is the real answer to "different repos need different specific
-  inputs" - substitution *within* whatever config a provisioner already
-  declares, not a separate emit-suppression layer. `prepare()` (D1) must
-  resolve these tokens against `resolved` wherever they appear in
-  `provisioner.backend`/`.configuration`/`.properties` - not designed in
-  full here (see Remaining Work), but confirmed necessary, unlike
-  `OutputProfileModel`.
-
-**"Same concept for all", corrected to what the evidence actually
-supports**: every Integration's `prepare()`/`prepare_namespace()` renders
-its own intrinsic default shape and resolves `${var:}`-style tokens
-wherever they appear in that tool's own config fields; nothing suppresses
-or customises *which* files get emitted, because nothing has ever needed
-that. Revisit `OutputProfileModel` only if a real `.tf` repo shows up
-needing a variable name/shape D8's projection genuinely cannot produce -
-not "might produce a warning", an actual blocker.
-
-### Concrete walkthrough: Terraform (corrected)
-
-```python
-def prepare(self, path: Path, *, resolved: ResolvedValues, provisioner: ProvisionerModel, **kwargs) -> Path:
-    # path already holds the synced .tf source (sync_source() ran first)
-    payload = build_platform_projection(resolved, provisioner, ...)  # D8 - workspace/providers/.../tenant
-    for filename, data in planned_files(payload):  # D8 only - skips empty payloads, no profile gating
-        (path / filename).write_text(json.dumps(data))
-    if provisioner.backend:
-        backend_config = resolve_expr_tokens(provisioner.backend.configuration, resolved)  # D9's real mechanism
-        ...  # write backend config
-    return path
-```
-
-`build_platform_projection()`/`planned_files()`/`resolve_expr_tokens()` are
-real, sizeable pieces of design in their own right (v1's equivalents are
-hundreds of lines across a dozen `_build_*_vars()` methods, plus ADR-0075's
-own expression-resolution logic) - sketched here as named calls, not
-expanded, since the shape (D8) and what's real vs. speculative in shaping it
-(D9) are the things worth deciding now; the field-by-field mapping is
-implementation, not architecture.
-
-### The same contract for tools not built yet (description only - not built here)
-
-- **Ansible** `prepare()`: copies the playbook, writes
-  `provisioner.properties.extra_vars` + `resolved.variables` to an
-  `extra-vars.json`, returns the playbook directory. `plan()` would be a
-  no-op or `--check` mode; `deploy()` runs `ansible-playbook`.
-- **Bicep** `prepare()`: copies `.bicep` templates, writes a
-  `parameters.json` from `resolved.variables`, returns the template
-  directory.
-
-Neither needs a single line changed in the orchestrator loop above - only a
-new file (`strata/integrations/ansible.py`/`bicep.py`) and one `_KNOWN`
-entry, the exact pattern Phase 5/6 already proved out for Terraform/Compose/
-Helm.
+**What `prepare()` actually writes, and how a user can override it, is
+[ADR-0023](0023-build-output-rendering.md), not here.** That document
+covers: the real structural shape of a rendered artifact (a full projection
+of the resolved platform graph, not just declared variables), why
+`OutputProfileModel` is not ported (checked against real usage and found
+unused), the Jinja2 template escape hatch that *is* kept (and why usage
+evidence alone couldn't settle that question - it answers strata's
+reversibility promise, not a feature-usage count), and the worked Terraform/
+Ansible/Bicep walkthroughs. This ADR's orchestrator loop only needs
+`prepare()` to exist with the signature above - it never needs to know what
+ends up inside `path`.
 
 ## D5-D7: a second, independent pipeline - the workload path (Compose/Helm)
 
@@ -322,21 +231,12 @@ separate mixin ABC only Compose/Helm opt into is an open call for whoever
 implements this - not resolved here, since nothing forces the choice yet
 (only two classes need it, both container-capability).
 
-**Value substitution also differs in *kind*, not just timing, per output -
-confirmed by reading the actual token shapes each builder emits, not
-assumed:**
-
-| output | token shape | resolved when |
-| --- | --- | --- |
-| Terraform `.tfvars.json` | none - real values written directly | build time (non-secret only) |
-| Compose `docker-compose.yml` | bare `${KEY}` | deploy time, via a `.env` file |
-| Helm `values.yaml` | typed `${var:KEY}`/`${secret:KEY}`/`${feature:KEY}` (v1 ADR-0075) | deploy time - secrets via `--set-string` (never on disk), vars/features via a rewritten file |
-
-None of this typed-expression resolution is designed here (see Remaining
-Work) - `prepare()`/`prepare_namespace()` as sketched above only cover
-writing `resolved.variables`/`resolved.features` directly (Terraform's
-case); Compose/Helm's own token emission and deploy-time substitution still
-need their own design pass.
+**What `prepare_namespace()` actually writes per tool (the merge/no-merge
+behaviour above, value-substitution token shapes, deploy-time resolution)
+is also [ADR-0023](0023-build-output-rendering.md)'s scope, not this
+document's** - covered there alongside the equivalent Terraform detail, for
+the same reason: this ADR fixes the method's existence and grouping
+behaviour; what ends up in the rendered file is a separate design.
 
 ## Consequences
 
@@ -365,55 +265,36 @@ need their own design pass.
   `ComposeIntegration`/`HelmIntegration` never go through
   `resolve_integration()`'s D2 auto-bind. Neither loop branches on tool
   identity internally, which is the property that actually mattered.
-- Bad: D8's real tfvars shape (a full structural projection of the resolved
-  platform graph - resources/networks/firewalls/DNS/topologies/modules/
-  tenant, each its own typed payload) is a real, sizeable design surface this
-  document only sketches (`build_platform_projection()` named, not
-  expanded). An earlier draft of this ADR assumed tfvars were just
-  environment-declared variables - wrong, caught only by reading v1's real
-  `TerraformBuilder` directly rather than trusting the simpler mental model.
-- Good: `OutputProfileModel`/`OutputFileModel` (D9) is **not** ported -
-  checked against all three real workspaces available (haven, and
-  `cfg-int-deployment`'s two, the latter deliberately chosen as the
-  strongest test since it references a genuinely separate third-party-style
-  Terraform repo) and found zero use of `format`/`emits`/`files`/`script` in
-  any of them. An earlier draft of this ADR assumed the opposite ("no
-  evidence it's over-built") without actually checking - corrected. The real
-  cross-repo-variation mechanism is `${var:}` substitution inside a
-  provisioner's own `configuration`/`backend` dicts (confirmed in
-  `cfg-int-deployment`'s real `backend.configuration`), which this ADR keeps,
-  not the emit-suppression layer, which it drops.
+- Neutral: what `prepare()`/`prepare_namespace()` write, and whether/how a
+  user can override it, is [ADR-0023](0023-build-output-rendering.md) - not
+  a small design surface, but this ADR only needs the two methods to exist
+  with the signatures above; it does not need to resolve what ends up
+  inside `path`.
 
 ## Remaining Work
 
 - Implementation: `strata/controllers/build_controller.py` (the orchestrator
   loop), `resolve_integration()` (D2), `sync_source()` (D3, including the
-  sibling-provisioner relative-path composition gap), `prepare()` on
-  `InfraIntegration` (D1) and each of `TerraformIntegration`/
-  `ComposeIntegration`/`HelmIntegration`.
+  sibling-provisioner relative-path composition gap), `prepare()`/
+  `prepare_namespace()` existing on `InfraIntegration` (D1/D7) and each of
+  `TerraformIntegration`/`ComposeIntegration`/`HelmIntegration` (their
+  bodies are ADR-0023's scope, not this one's).
 - The workload pipeline (D5-D7): `build_workload_modules()`, the
   namespace/module grouping-by-type logic (D6), and deciding where
   `prepare_namespace()` formally lives (D7's open call - `InfraIntegration`
   itself vs. a separate mixin ABC).
-- `build_platform_projection()`/`planned_files()` (D8): the field-by-field
-  mapping from each document kind (Resource/Network/Firewall/DNS/Topology/
-  Module/Tenant) to its tfvars payload shape. `OutputProfileModel` (D9) is
-  explicitly **not** on this list - dropped, not deferred, unless real
-  evidence appears.
-- `resolve_expr_tokens()` (D9): resolving `${var:}`/`${secret:}`/`${feature:}`
-  tokens wherever they appear inside a provisioner's own `backend`/
-  `configuration`/`properties` dicts - confirmed necessary by real usage,
-  design not yet written (v1 ADR-0075 is the starting reference, not a
-  finished v2 design).
 - `strata build run` CLI command wiring (`strata/commands/build_command.py`),
   matching `validate_command.py`'s established thin-glue-over-controller shape.
-- Value substitution into rendered artifacts (`${var:}/${secret:}/${feature:}`
-  typed-expression resolution, v1 ADR-0075) for Helm specifically - `resolved`
-  as passed to `prepare()` today is a flat `ResolvedValues`, not yet a
-  tree-substitution mechanism for an arbitrary `values.yaml` template.
+- Everything about what gets rendered/how it can be customised -
+  `build_platform_projection()`/`planned_files()`, `resolve_expr_tokens()`,
+  `OutputModel`/`output.template`, shipped example templates, Compose/Helm's
+  own deploy-time value substitution - is tracked in
+  [ADR-0023](0023-build-output-rendering.md)'s own Remaining Work, not
+  duplicated here.
 - Helm's OCI `chart_repository` support and the "must not Jinja-render a
   local chart's own `templates/` dir" rule - both real v1 1.8.2 bug fixes
   (ADR-0020), requirements not discoveries to make again.
 - `TF_VAR_`/compose env injection at *deploy* time (v1's
   `resolved_values.as_tf_vars()`/`as_compose_env()`) - out of scope for
   `build run` (D4); belongs to `deploy run`'s own design.
+
