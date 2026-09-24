@@ -179,12 +179,15 @@ once, concretely, on the base class:
 
 ```python
 class InfraIntegration(Integration):
-    def prepare(self, path: Path, *, resolved: ResolvedValues, provisioner: ProvisionerModel, **kwargs: Any) -> Path:
+    def prepare(
+        self, path: Path, *, resolved: ResolvedValues, provisioner: ProvisionerModel,
+        graph: ResolvedWorkspaceGraph, **kwargs: Any,
+    ) -> Path:
         if provisioner.output and provisioner.output.template:
             rendered = render_output_template(provisioner.output.template, resolved=resolved, provisioner=provisioner)  # D3
             (path / strip_j2_suffix(provisioner.output.template)).write_text(rendered)
         else:
-            for filename, content in self.default_output(resolved, provisioner).items():  # virtual dispatch, not a branch
+            for filename, content in self.default_output(resolved, provisioner, graph).items():  # virtual dispatch, not a branch
                 (path / filename).write_text(content)
 
         if provisioner.backend:
@@ -192,11 +195,17 @@ class InfraIntegration(Integration):
 
         return path
 
-    def default_output(self, resolved: ResolvedValues, provisioner: ProvisionerModel) -> dict[str, str]:
+    def default_output(
+        self, resolved: ResolvedValues, provisioner: ProvisionerModel, graph: ResolvedWorkspaceGraph,
+    ) -> dict[str, str]:
         """Filename -> content pairs to write when no output.template is set.
         Base default: nothing generated - Bicep's real behaviour (see below)."""
         return {}
 ```
+
+`ResolvedWorkspaceGraph` is defined in ADR-0022 (D1a) as a plain bundle of
+already-resolved documents (`workspace`/`providers`/`topologies`/`resources`)
+- not introduced here, just consumed here as the input D1's projection needs.
 
 Each integration overrides only the one hook it needs a different answer
 for - nothing else about `prepare()` is theirs to touch:
@@ -244,8 +253,10 @@ base `prepare()` handles the D3/D2 plumbing around it:
 
 ```python
 class TerraformIntegration(InfraIntegration):
-    def default_output(self, resolved: ResolvedValues, provisioner: ProvisionerModel) -> dict[str, str]:
-        payload = build_platform_projection(resolved, provisioner)  # D1 - workspace/providers/.../tenant
+    def default_output(
+        self, resolved: ResolvedValues, provisioner: ProvisionerModel, graph: ResolvedWorkspaceGraph,
+    ) -> dict[str, str]:
+        payload = build_platform_projection(graph, provisioner)  # D1 - workspace/providers/.../tenant
         return {
             filename: json.dumps(data)
             for filename, data in planned_files(payload)  # skips empty categories
@@ -337,6 +348,19 @@ emission and deploy-time substitution still need their own design pass.
   - that would be `ModuleFileModel`'s existing STRATA_* substitution
   mechanism's problem to extend, a separate, already-real mechanism this ADR
   does not touch.
+- Neutral: `ResolvedWorkspaceGraph` (ADR-0022 D1a) is very likely the same
+  bundle a future deploy-manifest feature will need, not a separate
+  `ResolvedManifestGraph` - it is just "the resolved workspace's documents",
+  named for what it is rather than for Terraform's projection being its
+  first consumer. That future feature can plausibly go further and reuse
+  `build_platform_projection()`'s *output* too: v1's real deployment
+  manifest embeds `artifacts.platform.content` - "the complete deployed
+  configuration" - which is structurally the same shape D1 already
+  produces. Combined with ADR-0022's own recorded resolution ("hash the
+  rendered output directly, cheaper than reinventing a snapshot format"),
+  this suggests the manifest feature may need **zero new graph-walking
+  code** when it is eventually designed - only confirmed once that feature
+  is actually scoped, not assumed here.
 
 ## Implementation Plan
 
@@ -360,8 +384,12 @@ from v1):
 - `providers` <- `ProviderPropertiesModel` (`type`, `region`, `display_name`)
   per declared `spec.providers` entry.
 - `topologies` <- `TopologySpecModel.components: list[TopologyComponentModel]`
-  (`resource` reference, optional `role`/`count`) and
-  `.volumes: list[TopologyVolumeModel]`.
+  (`resource` reference, optional `modules`) and `.volumes:
+  list[TopologyVolumeModel]`. Corrected after reading `topology_model.py`
+  directly - an earlier draft placed `role`/`count` here, but those fields
+  are on `WorkspaceResourceModel` instead (they describe the *resource
+  instance*, not its topology placement) and are already covered by the
+  `resources_by_category` bullet below.
 - `resources_by_category` <- grouped by `ResourceSpecModel.category`, each
   entry carrying `provider_type`/`resource_type`/`subcategory`/`unit_cost`
   plus the workspace-level `WorkspaceResourceModel` override fields
@@ -382,10 +410,19 @@ from v1):
   context if they need it there instead. One rule, not a new mechanism:
   **if it needs to reach Terraform's tfvars, it goes in `configuration`,
   never in `custom`.**
-- `required_variables`/`required_features`/`required_secrets` - the
-  requirements manifest (which keys were referenced, by what), built
-  alongside the four category payloads above since it walks the same
-  `references`-declaring documents.
+- `required_variables`/`required_features`/`required_secrets` - **deferred
+  out of Phase 1**, corrected after checking: no v2 model has a
+  `references` field to walk for this. v1's structured `references:` block
+  (real example: haven's `vaultwarden.yaml` `spec.references.secrets`) was
+  authored against v1's schema; `module_model.py`'s own docstring confirms
+  v2 deliberately did not port an equivalent ("checked against a real
+  Environment in Phase 2, not an internal declared-keys list", ADR-0002).
+  Building this manifest in v2 means regex-scanning resolved `configuration`/
+  `backend`/`custom` values for `${var:}`/`${secret:}`/`${feature:}` tokens -
+  a real, separate piece of design (shared with D2/Phase 3's token
+  substitution, which needs the same token grammar), not a free side-effect
+  of the four structural categories. Moved to Phase 2/3, whichever needs it
+  first.
 
 **One function per category, not a method on the model - this isn't a style
 preference, the layering contract forces it.** ADR-0003's import-linter
@@ -419,11 +456,15 @@ Built:
   (the four categories + manifest above) and `planned_files()` (skips any
   empty payload, matches Terraform's `*.auto.tfvars.json` naming
   convention). Deliberately a sibling module to `terraform.py`, not a method
-  on `TerraformIntegration` itself - the projection walks the whole
-  `SolutionContext`/index, which `TerraformIntegration` (an `Integration`
-  subclass, no index access per ADR-0021 D2) is not allowed to touch;
-  `default_output()` calls it, passed in from the controller layer the same
-  way `resolved: ResolvedValues` already is.
+  on `TerraformIntegration` itself - the projection needs the resolved
+  document graph, which `TerraformIntegration` (an `Integration` subclass,
+  no index access per ADR-0021 D2) is not allowed to touch directly;
+  `default_output()` calls it with the `graph: ResolvedWorkspaceGraph`
+  (ADR-0022 D1a) handed down from the orchestrator, the same way
+  `resolved: ResolvedValues` already is.
+- `ResolvedWorkspaceGraph` (ADR-0022 D1a) - built and defined there, not
+  here, since it changes `prepare()`'s own signature; this phase is simply
+  its first real consumer.
 - `InfraIntegration.prepare()` - the shared, base-implemented method (D5)
   that checks `provisioner.output.template` and otherwise calls
   `self.default_output(...)`; this phase implements the base method itself
@@ -431,11 +472,12 @@ Built:
 - `TerraformIntegration.default_output()` - the one hook Terraform overrides,
   wrapping `build_platform_projection()`/`planned_files()` into the
   `dict[str, str]` shape D5's base `prepare()` expects.
-- Tests: argv/file-content assertions per category (stubbing a resolved
-  `SolutionContext` fixture shaped like haven's real workspace - workspace +
-  providers + topology + resources, no namespaces/networks/firewalls/dns),
-  empty-category skip behaviour, and workspace-level override-wins-over-
-  resource-level merge for `resources_by_category`.
+- Tests: argv/file-content assertions per category (stubbing a
+  `ResolvedWorkspaceGraph` fixture shaped like haven's real workspace -
+  workspace + providers + topology + resources, no
+  namespaces/networks/firewalls/dns), empty-category skip behaviour, and
+  workspace-level override-wins-over-resource-level merge for
+  `resources_by_category`.
 
 **Done when:** `build_platform_projection()`/`planned_files()` produce
 correct output for a fixture shaped like haven's real `stack/workspace.yaml`

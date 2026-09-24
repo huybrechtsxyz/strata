@@ -67,12 +67,13 @@ def build_run(context: SolutionContext, deployment_name: str, build_path: Path) 
     deployment = resolve_deployment(...)                          # existing (Phase 2-era controller)
     resolved = resolve_values(context, deployment_name, keys=...)  # existing (ADR-0021 Phase 4)
     workspace = ...                                               # deployment -> workspace, existing
+    graph = build_resolved_workspace_graph(context.controller.index, workspace)  # D1a, below
 
     for step in ordered_by_depends_on(workspace.spec.execution):   # existing model, topological sort
         provisioner = find_provisioner(workspace, step.provisioner)
         integration = resolve_integration(context.controller.index, provisioner)  # D4, below
         source_path = sync_source(provisioner.source, build_path / step.name)     # ADR-0018, below
-        integration.prepare(source_path, resolved=resolved, provisioner=provisioner)
+        integration.prepare(source_path, resolved=resolved, provisioner=provisioner, graph=graph)
     return diagnostics
 ```
 
@@ -86,7 +87,10 @@ Rendering follows the same rule, one level earlier:
 ```python
 class InfraIntegration(Integration):
     @abstractmethod
-    def prepare(self, path: Path, *, resolved: ResolvedValues, provisioner: ProvisionerModel, **kwargs: Any) -> Path:
+    def prepare(
+        self, path: Path, *, resolved: ResolvedValues, provisioner: ProvisionerModel,
+        graph: ResolvedWorkspaceGraph, **kwargs: Any,
+    ) -> Path:
         """Render whatever this tool needs into `path` from already-resolved
         values and this provisioner's own typed config. Returns the path
         `plan`/`deploy`/`destroy` should be called against.
@@ -96,6 +100,40 @@ class InfraIntegration(Integration):
         signature, which is what the orchestrator loop above depends on.
         """
 ```
+
+**D1a: `ResolvedWorkspaceGraph` - a plain bundle of already-resolved
+documents, not a Terraform-specific type.** `resolved: ResolvedValues`
+carries variables/secrets/features; it does not carry the workspace's own
+document graph (`WorkspaceModel` plus the `ProviderModel`/`TopologyModel`/
+`ResourceModel` documents it references by name). ADR-0023's default
+projection needs that graph, but `InfraIntegration` subclasses are not
+allowed to touch `DocumentIndex`/`SolutionContext` directly (ADR-0021 D2) -
+and `strata.integrations` sits below `strata.controllers` in the
+import-linter layering, so it cannot even import `DocumentIndex` as a type.
+The orchestrator (which does have index access) resolves the graph once per
+`build run` and threads it through as a plain argument, the same way
+`resolved` already is:
+
+```python
+@dataclass(frozen=True)
+class ResolvedWorkspaceGraph:
+    """Already-resolved documents a workspace references - no index/context
+    access, just plain models, assembled once by build_run() and handed
+    down unchanged."""
+    workspace: WorkspaceModel
+    providers: dict[str, ProviderModel]
+    topologies: dict[str, TopologyModel]
+    resources: dict[str, ResourceModel]
+```
+
+Named for what it *is* (the resolved workspace's document graph), not what
+Terraform's projection happens to do with it first - deliberately, since
+it is not Terraform-specific data. A future deploy-manifest feature (see
+this ADR's own deferred `platform.json`/provenance discussion above) needs
+the same resolved documents to describe *what was deployed*; it reuses this
+same type rather than a second `ResolvedManifestGraph` holding an identical
+shape under a different name - see ADR-0023's Consequences for the concrete
+reasoning once that feature is designed.
 
 `resolved: ResolvedValues` is exactly what `value_controller.resolve_values()`
 already produces (Phase 4) - no new resolution logic. `provisioner:
