@@ -33,6 +33,8 @@ from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.source_sync import sync_source
 from strata.controllers.value_controller import build_time_keys, resolve_deployment, resolve_values
+from strata.controllers.workload_controller import build_workload_modules
+from strata.integrations.errors import IntegrationError
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph
 from strata.models.common_models import PlatformKind
 from strata.models.dns_model import DnsModel
@@ -174,6 +176,21 @@ def build_run(context: SolutionContext, deployment_name: str, build_path: Path) 
             source_path = build_path / step.name
         else:
             source_path = sync_source(context.root, build_path, provisioner.source, remotes)
-        integration.prepare(source_path, resolved=resolved, provisioner=provisioner, graph=graph)
+        try:
+            integration.prepare(source_path, resolved=resolved, provisioner=provisioner, graph=graph)
+        except IntegrationError as exc:
+            # See workload_controller.build_workload_modules()'s identical
+            # guard: IntegrationError is a plain Exception, not a
+            # StrataError, and would otherwise escape command_run()'s
+            # `except StrataError` as a raw traceback.
+            raise UsageError(f"Provisioner '{provisioner.name}': {exc}") from exc
+
+    # Workload pipeline (ADR-0022 D5-D7) — a second, disconnected input shape
+    # (Namespace.spec.modules, never ProvisionerModel/ProvisioningStepModel),
+    # so it is not part of the ordered provisioner loop above; every
+    # namespace the workspace references is already resolved onto `graph`
+    # (build_resolved_workspace_graph()), so no extra index walk is needed.
+    for namespace in graph.namespaces.values():
+        build_workload_modules(index, context.root, remotes, namespace, resolved, build_path)
 
     return resolved.diagnostics

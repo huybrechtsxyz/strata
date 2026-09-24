@@ -5,8 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from strata.controllers.integration_resolution import resolve_integration
+from strata.controllers.integration_resolution import resolve_integration, resolve_module_integration
 from strata.controllers.solution_controller import DocumentIndex, DocumentRef, IndexEntry
+from strata.integrations.helm import HelmIntegration
 from strata.integrations.terraform import TerraformIntegration
 from strata.models.common_models import PlatformKind, SourceModel
 from strata.models.integration_model import IntegrationMetaModel, IntegrationModel, IntegrationSpecModel
@@ -113,3 +114,56 @@ def test_store_integration_tool_raises_a_clear_error():
 
     with pytest.raises(UsageError, match="not an infrastructure/container integration"):
         resolve_integration(index, provisioner)
+
+
+def test_unregistered_tool_type_raises_usage_error_not_a_bare_integration_error():
+    """registry.get() raises IntegrationNotFoundError (a plain Exception, not
+    a StrataError) for a real, documented-but-not-yet-ported v1 type - left
+    unguarded this would escape command_run()'s `except StrataError` as a
+    raw traceback instead of a clean exit code."""
+    provisioner = _provisioner(tool="ansible")
+    index = _index()
+
+    with pytest.raises(UsageError, match="ansible"):
+        resolve_integration(index, provisioner)
+
+
+# ---------------------------------------------------------------------------
+# resolve_module_integration() — ADR-0022 D5 (bare type, no named binding)
+# ---------------------------------------------------------------------------
+
+
+def test_module_integration_auto_binds_with_zero_candidates():
+    integration = resolve_module_integration(_index(), "helm")
+
+    assert isinstance(integration, HelmIntegration)
+    assert integration.config is None
+
+
+def test_module_integration_auto_binds_with_one_enabled_candidate():
+    index = _index(_integration_doc("helm_main", type="helm"))
+
+    integration = resolve_module_integration(index, "helm")
+
+    assert integration.config is not None
+    assert integration.config.meta.name == "helm_main"
+
+
+def test_module_integration_multiple_candidates_names_every_one():
+    index = _index(
+        _integration_doc("helm_a", type="helm"),
+        _integration_doc("helm_b", type="helm"),
+    )
+
+    with pytest.raises(UsageError, match="helm_a.*helm_b|helm_b.*helm_a"):
+        resolve_module_integration(index, "helm")
+
+
+def test_module_integration_store_type_raises_a_clear_error():
+    with pytest.raises(UsageError, match="not an infrastructure/container integration"):
+        resolve_module_integration(_index(), "infisical")
+
+
+def test_module_integration_unregistered_type_raises_usage_error():
+    with pytest.raises(UsageError, match="ansible"):
+        resolve_module_integration(_index(), "ansible")

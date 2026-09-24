@@ -18,9 +18,12 @@ type is the direction the contract allows).
 """
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
+from strata.models.common_models import ModuleReferenceModel
 from strata.models.dns_model import DnsModel
 from strata.models.firewall_model import FirewallModel
+from strata.models.module_model import ModuleModel
 from strata.models.namespace_model import NamespaceModel
 from strata.models.network_model import NetworkModel
 from strata.models.provider_model import ProviderModel
@@ -70,3 +73,33 @@ class ResolvedWorkspaceGraph:
     firewalls: dict[str, FirewallModel] = field(default_factory=dict)
     dns: dict[str, DnsModel] = field(default_factory=dict)
     networks: dict[str, NetworkModel] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ResolvedModule:
+    """One namespace module, resolved and materialised — the workload
+    pipeline's (ADR-0022 D5-D7) equivalent of a provisioner's already-synced
+    source directory.
+
+    Carries `reference` alongside `module` (not just a bare `ModuleModel`,
+    which is all D6's original pseudocode passed) because `module` alone
+    cannot answer "where does this one render to": `ModuleReferenceModel`'s
+    own docstring notes one Module document can be attached more than once
+    under different reference names within a namespace, so only the
+    reference's `name` (unique within its namespace,
+    `NamespaceSpecModel.validate_namespace_spec()`) is safe to key a build
+    directory on — `module.meta.name` is not.
+
+    `source_path` is already-materialised (or, for a chart-based `source`,
+    simply an empty directory reserved for `values.yaml`/`meta.yaml` — a
+    registry chart is pulled by the deployer, not copied) by the
+    orchestrator before `InfraIntegration.prepare_namespace()` is called,
+    the same "controller resolves paths and remotes, the integration never
+    touches `DocumentIndex`/remotes directly" split `sync_source()`/
+    `prepare()` already establish for the provisioner path (ADR-0021 D2).
+    """
+
+    reference: ModuleReferenceModel
+    module: ModuleModel
+    source_path: Path
+

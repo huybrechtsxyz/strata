@@ -6,6 +6,7 @@
 from pathlib import Path
 
 import pytest
+import yaml
 
 from strata.controllers.build_controller import (
     build_resolved_workspace_graph,
@@ -188,6 +189,75 @@ def test_build_run_raises_for_unknown_deployment(tmp_path: Path):
     root = _solution(tmp_path)
     with pytest.raises(UsageError, match="ghost"):
         build_run(_context(root), "ghost", tmp_path / "build")
+
+
+def test_build_run_renders_helm_workload_modules(tmp_path: Path):
+    """End to end for the workload pipeline (ADR-0022 D5-D7): a namespace's
+    helm module is materialised and rendered alongside the provisioner loop,
+    with zero namespace/module-specific code in build_run() itself — every
+    namespace the workspace references already arrives resolved on `graph`."""
+    root = _solution(tmp_path)
+    _write(root, "infra/main.tf", "# root module\n")
+    _write(root, "charts/authentik/Chart.yaml", "name: authentik\n")
+    _write(
+        root,
+        "provider.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
+        "  properties:\n    type: local\n    region: local\n",
+    )
+    _write(
+        root,
+        "resource.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
+        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  default_tags:\n    managed-by: strata\n",
+    )
+    _write(
+        root,
+        "module.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: module\nmeta:\n  name: authentik\nspec:\n"
+        "  source:\n    source_path: charts/authentik\n  type: helm\n"
+        "  default_labels:\n    app: authentik\n"
+        "  services:\n    - name: server\n",
+    )
+    _write(
+        root,
+        "namespace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: namespace\nmeta:\n  name: apps\nspec:\n"
+        "  default_labels:\n    app: apps\n"
+        "  modules:\n    - name: auth\n      module: authentik\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  namespaces:\n    - apps\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec: {}\n",
+    )
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        "  workspace: main\n  environments:\n    - prd\n",
+    )
+
+    build_path = tmp_path / "build"
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok
+    module_dir = build_path / "apps" / "auth"
+    assert (module_dir / "Chart.yaml").exists()
+    assert (module_dir / "values.yaml").exists()
+    meta = yaml.safe_load((module_dir / "meta.yaml").read_text())
+    assert meta == {"releaseName": "auth", "namespace": "apps"}
 
 
 

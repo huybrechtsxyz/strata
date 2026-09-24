@@ -97,3 +97,74 @@ def sync_source(
         raise SourceSyncError(f"Failed to copy '{origin}' to '{destination}': {exc}") from exc
 
     return destination
+
+
+def sync_module_source(
+    root: Path,
+    module_dir: Path,
+    source: SourceModel,
+    remotes: dict[str, SolutionRemoteModel],
+) -> None:
+    """Materialise a workload module's chart source into `module_dir`
+    (ADR-0022 D6/D7), if it has one to copy.
+
+    Unlike `sync_source()` (provisioner sources, ADR-0022 D3), a
+    chart-based `source` here is a normal, expected mode — a registry chart
+    pull (e.g. `authentik` from a Helm repo) is Helm's real primary use
+    case, per `SourceModel`'s own docstring example — so it is not an
+    error: `HelmIntegration._render_meta()` writes the chart coordinates
+    into `meta.yaml` instead, for the deployer to pull directly. `module_dir`
+    is still created in this case (nothing else does, and `values.yaml`/
+    `meta.yaml` must land somewhere) — only the copy itself is skipped.
+
+    Destination is always `module_dir` itself — never derived from
+    `source.source_path`/`.target_path` the way `sync_source()` computes a
+    provisioner's destination. That convention exists to preserve sibling
+    provisioners' relative layout (D3); a Helm chart has no such
+    cross-module relative composition to preserve, and `module_dir` must
+    stay collision-free even when the *same* Module document is attached to
+    a namespace twice under different reference names
+    (`ModuleReferenceModel`'s own docstring) — `source.source_path` would
+    be identical for both attachments, `module_dir` (keyed by the unique
+    reference name) is not.
+
+    Args:
+        root: The solution root (where `strata.yaml` lives).
+        module_dir: Where this module's files should land — already keyed
+            by its unique reference name, computed by the caller
+            (`workload_controller.build_workload_modules()`). Created here
+            unconditionally, even for a chart-based `source` with nothing
+            to copy.
+        source: The module's `spec.source`.
+        remotes: Every declared remote, keyed by name.
+
+    Raises:
+        SourceSyncError: `source` names a remote that is not declared, its
+            `source_path` does not exist under the resolved remote, or the
+            copy itself failed.
+    """
+    if source.chart_name is not None:
+        module_dir.mkdir(parents=True, exist_ok=True)
+        return
+
+    remote = None
+    if source.remote is not None:
+        remote = remotes.get(source.remote)
+        if remote is None:
+            raise SourceSyncError(f"Source names remote '{source.remote}', which is not declared in this solution.")
+
+    repo_root = resolve_remote(root, remote)
+    assert source.source_path is not None  # guaranteed by SourceModel.validate_source_mode for git-based sources
+    origin = repo_root / source.source_path
+
+    if not origin.exists():
+        raise SourceSyncError(f"Source path '{source.source_path}' does not exist under '{repo_root}'.")
+
+    module_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        if origin.is_dir():
+            shutil.copytree(origin, module_dir, dirs_exist_ok=True)
+        else:
+            shutil.copy2(origin, module_dir / origin.name)
+    except OSError as exc:
+        raise SourceSyncError(f"Failed to copy '{origin}' to '{module_dir}': {exc}") from exc

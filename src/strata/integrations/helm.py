@@ -18,6 +18,12 @@ tree-walking, ADR-0075) are deployer/build-layer concerns (ADR-0021 Phase 7)
 — this class receives an already-resolved `chart` reference and an
 already-resolved values file, same split Phase 5 drew for `TF_VAR_`
 injection.
+
+`prepare_namespace()` (ADR-0022 D6/D7) is the *build*-time half of that
+split: it writes `values.yaml`/`meta.yaml` with `${var:}`/`${secret:}`/
+`${feature:}` tokens still in place, verbatim — resolving them is `deploy
+run`'s job, not `build run`'s (ADR-0023's value-substitution table), and no
+`deploy run` exists yet.
 """
 
 import re
@@ -25,8 +31,13 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from strata.integrations.capabilities import InfraIntegration
 from strata.integrations.errors import IntegrationError
+from strata.integrations.resolved_context import ResolvedModule, ValueResolution
+from strata.models.module_model import ModuleModel
+from strata.models.namespace_model import NamespaceModel
 from strata.utils.transport import CommandResult
 
 
@@ -43,6 +54,44 @@ class HelmIntegration(InfraIntegration):
         """Extract `X.Y.Z` from `'version.BuildInfo{Version:"v3.14.0",...}'`."""
         match = re.search(r"v?(\d+\.\d+\.\d+)", raw)
         return match.group(1) if match else raw.strip()
+
+    def prepare_namespace(
+        self,
+        namespace: NamespaceModel,
+        modules: list[ResolvedModule],
+        *,
+        resolved: ValueResolution,
+    ) -> None:
+        """Write one `values.yaml` + one `meta.yaml` per module (ADR-0022
+        D6/D7) — Helm never merges, unlike Compose.
+
+        `${var:KEY}`/`${secret:KEY}`/`${feature:KEY}` tokens inside a
+        service's `environment[].value` are written verbatim, unresolved.
+        Helm's own value substitution happens at *deploy* time — secrets
+        via `--set-string` (never written to disk), variables/features via
+        a rewritten values file (ADR-0023's value-substitution table) —
+        never during `build run` (`resolved` is accepted for signature
+        symmetry with every other `InfraIntegration` rendering method, but
+        genuinely unused here for that reason).
+
+        Each module's own `values.yaml`/`meta.yaml` land directly in its
+        `ResolvedModule.source_path` — already computed and, for a
+        git-based `source`, already populated with the module's chart
+        directory by the orchestrator (`workload_controller.py`) before
+        this is called.
+        """
+        del resolved
+        for item in modules:
+            values = _render_values(item.module)
+            if values:
+                (item.source_path / "values.yaml").write_text(
+                    yaml.safe_dump(values, sort_keys=False, default_flow_style=False)
+                )
+
+            meta = _render_meta(namespace, item)
+            (item.source_path / "meta.yaml").write_text(
+                yaml.safe_dump(meta, sort_keys=False, default_flow_style=False)
+            )
 
     def plan(
         self,
@@ -159,3 +208,101 @@ class HelmIntegration(InfraIntegration):
                    env: Mapping[str, str] | None = None) -> CommandResult:
         """`helm get values --namespace ns release`. v1's `output` step."""
         return self.run("get", "values", "--namespace", namespace, release, env=env, timeout=timeout)
+
+
+# ----------------------------------------------------------------------
+# prepare_namespace() rendering — pure, so it's testable without touching
+# disk (same split `default_output()`/`prepare()` already draw).
+# ----------------------------------------------------------------------
+
+
+def _render_values(module: ModuleModel) -> dict[str, Any]:
+    """Build the `values.yaml` payload for one Helm module.
+
+    Adapted from v1's real `HelmBuilder._render_module_artifacts()`, ported
+    to v2's schema: v1 spread a Value binding across four optional
+    `value`/`var`/`secret`/`feature` fields on each environment entry; v2
+    collapsed that into `ModuleServiceEnvironmentModel.value`, one string
+    that may itself contain a `${var:}`/`${secret:}`/`${feature:}` token
+    (ADR-0002) — so this only ever copies `.value` verbatim, never branches
+    on which kind of reference it is.
+
+    Returns `{}` when the module has neither `spec.services` nor
+    `spec.configuration` — `prepare_namespace()` then skips writing the
+    file entirely, so a local chart's own shipped `values.yaml` (copied in
+    by `workload_controller.sync_module_source()`) is left untouched
+    rather than overwritten with an empty document (matches v1's own
+    "omit when there is nothing to render" rule).
+    """
+    module_name = str(module.meta.name)
+    values: dict[str, Any] = {}
+
+    for service in module.spec.services or []:
+        service_name = str(service.name)
+        entry_name = service_name if service_name == module_name else f"{module_name}-{service_name}"
+        entry: dict[str, Any] = {}
+
+        if service.environment:
+            entry["env"] = {env.key: env.value for env in service.environment}
+
+        if service.mounts:
+            persistence: dict[str, Any] = {}
+            for mount in service.mounts:
+                if mount.storage_class is None:
+                    continue
+                pvc_key = str(mount.name) if mount.name is not None else "data"
+                pvc_entry: dict[str, Any] = {
+                    "storageClass": mount.storage_class,
+                    "accessMode": mount.access_mode or "ReadWriteOnce",
+                }
+                if mount.storage_size:
+                    pvc_entry["size"] = mount.storage_size
+                persistence[pvc_key] = pvc_entry
+            if persistence:
+                entry["persistence"] = persistence
+
+        if service.configuration:
+            entry.update(service.configuration)
+
+        values[entry_name] = entry
+
+    if module.spec.configuration:
+        values.update(module.spec.configuration)
+
+    return values
+
+
+def _render_meta(namespace: NamespaceModel, item: ResolvedModule) -> dict[str, Any]:
+    """Build the `meta.yaml` payload for one Helm module.
+
+    `releaseName` defaults to `item.reference.name`, not `module.meta.name`
+    (v1's real default) — the same Module document can be attached to a
+    namespace more than once under different reference names
+    (`ModuleReferenceModel`'s own docstring), and two live Helm releases
+    can never share a name, so the one identifier guaranteed unique per
+    attachment (the reference name) is the only safe default; `module.meta.name`
+    is not, and would silently collide if that ever happens.
+
+    Chart coordinates (`chartName`/`chartVersion`/`chartRemote`) are
+    included only for a chart-based `source` (`chart_name` set) — a
+    registry chart has no local copy for a deploy-time `helm upgrade` to
+    reference by path, so `meta.yaml` must carry enough for the deployer to
+    pull it directly instead (mirrors v1's real "self-contained build
+    artifact" reasoning). Omitted for a git-based (local chart) `source`,
+    where `item.source_path` itself is the chart to deploy.
+    """
+    module = item.module
+    meta: dict[str, Any] = {
+        "releaseName": module.spec.release_name or item.reference.name,
+        "namespace": module.spec.kubernetes_namespace or str(namespace.meta.name),
+    }
+
+    source = module.spec.source
+    if source.chart_name is not None:
+        meta["chartName"] = source.chart_name
+        if source.chart_version is not None:
+            meta["chartVersion"] = source.chart_version
+        if source.remote is not None:
+            meta["chartRemote"] = source.remote
+
+    return meta

@@ -1,8 +1,9 @@
 # `strata build run` Command — Design
 
 - Status: `strata build run` exists and is end-to-end tested
-  (`build_command.py` → `build_controller.build_run()`); only the
-  Compose/Helm workload pipeline (ADR-0022 D5-D7) remains.
+  (`build_command.py` → `build_controller.build_run()`), including the
+  Helm half of the workload pipeline (ADR-0022 D5-D7 — see
+  [workload-pipeline.md](workload-pipeline.md)); only Compose remains there.
 - Last updated: 2026-09-24
 
 ## Overview
@@ -46,9 +47,11 @@ Every line above is real, built code today — not a sketch.
 
 Plus a second, independent workload pipeline (ADR-0022 D5-D7,
 Compose/Helm, driven by `Namespace.spec.modules` rather than
-`ProvisionerModel`) — **entirely not built**, including
-`prepare_namespace()` itself (neither `ComposeIntegration` nor
-`HelmIntegration` implement it yet).
+`ProvisionerModel`) — **Helm built and wired into `build_run()`'s loop,
+Compose not yet** — see [workload-pipeline.md](workload-pipeline.md) for
+that pipeline's own design/status, tracked separately from this doc since
+ADR-0022 D5 itself found it to be a disconnected input shape, not a
+variant of the provisioner loop above.
 
 ### What already exists (usable once the orchestrator calls it)
 
@@ -65,9 +68,9 @@ Compose/Helm, driven by `Namespace.spec.modules` rather than
 | `ordered_by_depends_on()` | `strata/controllers/build_controller.py` | Built — Kahn's-algorithm topological sort, same shape `provisioning_model.validate_provisioning_steps()` already uses to *detect* a cycle, but returning the order instead of discarding it. Assumes already-validated input (acyclic) — `WorkspaceSpecModel.validate_execution()` guarantees this for real workspaces. |
 | `find_provisioner()` | `strata/controllers/build_controller.py` | Built — trivial lookup; `WorkspaceSpecModel.validate_execution()` already guarantees the name exists. |
 | `build_time_keys()` (ADR-0022 D1a's safety note) | `strata/controllers/value_controller.py` | Built — reuses `resolve_values()`'s own deployment/environment-reachability walk (factored into `resolve_deployment()`/`_reachable_environments()`) so the two can never disagree about which environments are in scope; returns variable/feature keys only, never secrets. |
-| Build orchestrator (`build_controller.build_run()`, the loop itself) | `strata/controllers/build_controller.py` | Built and end-to-end tested — a real workspace/provider/resource/deployment fixture materialises its Terraform source and writes real `.auto.tfvars.json` output (`tests/strata/controllers/test_build_controller.py`). |
+| Build orchestrator (`build_controller.build_run()`, the loop itself) | `strata/controllers/build_controller.py` | Built and end-to-end tested — a real workspace/provider/resource/deployment fixture materialises its Terraform source and writes real `.auto.tfvars.json` output (`tests/strata/controllers/test_build_controller.py`). Also calls the workload pipeline (below) for every namespace on the resolved graph. |
 | `strata build run` CLI command | `strata/commands/build_command.py` | Built and end-to-end tested — thin glue over `build_run()`, matching `validate_command.py`/`values_command.py`'s shape. `--build-path` overrides the default `layout.build_dir(root, deployment)` (`<root>/build/<deployment>`, already excluded from discovery by `DEFAULT_IGNORED_DIRS`'s `build` entry). |
-| `build_workload_modules()` (D6, Compose/Helm grouping-by-type) | — | Not built |
+| Workload pipeline (`prepare_namespace()`, Helm) | `strata/controllers/workload_controller.py`, `strata/integrations/helm.py` | Built and end-to-end tested for Helm — see [workload-pipeline.md](workload-pipeline.md). Compose not built. |
 
 ### `TerraformIntegration.default_output()` — the one real projection built so far
 
@@ -105,7 +108,7 @@ own dependency chain):
 3. ~~`sync_source()`~~ (D3) — done, using `remote_resolution.resolve_remote()`.
 4. ~~The `build_controller.py` orchestrator loop itself~~ — done and end-to-end tested.
 5. ~~`strata build run` CLI command~~ (`commands/build_command.py`) — done, matching `validate_command.py`'s thin-glue-over-controller shape.
-6. `ComposeIntegration`/`HelmIntegration.default_output()`, `build_workload_modules()`, and `prepare_namespace()` (D5-D7) — the entire workload pipeline. The only remaining gap for a working `strata build run`.
+6. `ComposeIntegration.prepare_namespace()`/`build_workload_modules()`'s Compose half (D5-D7) — the entire remaining gap in the workload pipeline; see [workload-pipeline.md](workload-pipeline.md). Helm's half is done.
 7. Phase 3/4 of ADR-0023: token substitution (`resolve_expr_tokens()`, wired into `dns`/`networks` too), the `output.template` escape hatch, `required_variables`/`.../`secrets` manifest.
 8. `tenant`/`modules` projection categories, once real fixture data exists.
 
@@ -151,3 +154,10 @@ own dependency chain):
   intact, and reuses the `build`/`dist` entries `DEFAULT_IGNORED_DIRS`
   already floors out of discovery. Only remaining gap for a working
   `strata build run`: the Compose/Helm workload pipeline (D5-D7).
+- 2026-09-24: Helm's half of the workload pipeline (D5-D7) implemented and
+  wired into `build_run()`'s loop — see [workload-pipeline.md](workload-pipeline.md)
+  for the full design, including two real corrections found while grounding
+  it against v1's actual `HelmBuilder` (module build directories/`releaseName`
+  keyed by the reference name, not `module.meta.name`; chart materialisation
+  split into a new controller-layer `sync_module_source()`, never touched by
+  `HelmIntegration` itself). Compose still not built.

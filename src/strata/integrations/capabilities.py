@@ -17,7 +17,9 @@ from pathlib import Path
 from typing import Any
 
 from strata.integrations.base import Integration
-from strata.integrations.resolved_context import ResolvedWorkspaceGraph, ValueResolution
+from strata.integrations.errors import IntegrationError
+from strata.integrations.resolved_context import ResolvedModule, ResolvedWorkspaceGraph, ValueResolution
+from strata.models.namespace_model import NamespaceModel
 from strata.models.provisioning_model import ProvisionerModel
 from strata.utils.transport import CommandResult
 
@@ -80,6 +82,38 @@ class InfraIntegration(Integration):
         """
         del resolved, provisioner, graph
         return {}
+
+    def prepare_namespace(
+        self,
+        namespace: NamespaceModel,
+        modules: list[ResolvedModule],
+        *,
+        resolved: ValueResolution,
+    ) -> None:
+        """Render every module in `modules` — all attached to `namespace`,
+        all sharing one `module.spec.type` (ADR-0022 D6/D7).
+
+        A second, independent rendering path alongside `prepare()`: the
+        workload pipeline (`Namespace.spec.modules`) is a disconnected
+        input shape from the provisioner pipeline (`ProvisionerModel`/
+        `ProvisioningStepModel`) that `prepare()` serves — found while
+        checking how v1 shaped this input (ADR-0022 D5). Not abstract:
+        most `InfraIntegration` subclasses have nothing to group here
+        (`TerraformIntegration` never implements it — D7) so the base
+        default raises rather than forcing every subclass to stub it out.
+
+        Unlike `prepare()`, there is no shared base rendering to provide —
+        Compose merges every module in `modules` into **one** output file;
+        Helm never merges, writing one per module (D6). That real
+        per-tool difference is why this method has no `default_output()`-
+        style hook: there is no common shape to factor out.
+
+        Raises:
+            IntegrationError: This integration does not support
+                namespace-scoped module rendering.
+        """
+        del namespace, modules, resolved
+        raise IntegrationError(f"{self.name} does not support namespace-scoped module rendering (prepare_namespace).")
 
     @abstractmethod
     def plan(self, path: Path, **kwargs: Any) -> CommandResult:
