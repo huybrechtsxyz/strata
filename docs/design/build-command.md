@@ -94,6 +94,7 @@ convention:
 | `required_variables`/`required_features`/`required_secrets` | Not built (Phase 3) — no v2 model has a `references` field to walk; needs a token-scan of resolved `configuration`/`backend`/`custom` |
 | `output.template` (Jinja2 escape hatch, D3) | Not built (Phase 4) |
 | `provisioner.backend`/`.configuration` token substitution (D2) | Not built (Phase 3) |
+| `features`/`variables`/`properties`/`custom` (v1's other two default categories) | **Not built at all — `resolved.values` is silently discarded.** `TerraformIntegration.default_output()` does `del resolved` and never writes it to any file; found while investigating the `OutputProfileModel` revisit (below). Design in progress: see [build-time-value-categories.md](build-time-value-categories.md) for v1's real four-category evidence, v2's current-state gaps, and the open questions blocking implementation. |
 
 ## Related Decisions
 
@@ -101,6 +102,7 @@ convention:
 - [ADR-0023](../decisions/0023-build-output-rendering.md) — rendering design (D1-D5, Implementation Plan phases)
 - [ADR-0021](../decisions/0021-integration-layer.md) / [integration-layer.md](integration-layer.md) — the `Integration`/`InfraIntegration` classes this command will call
 - [ADR-0025](../decisions/0025-strata-supplies-input-not-source-rewriting.md) — why `sync_source()` copies verbatim and never rewrites a materialised source
+- [build-time-value-categories.md](build-time-value-categories.md) — design in progress for the `features`/`variables`/`properties`/`custom` gap in `default_output()` table above
 - [remotes.md](remotes.md) — `sync_source()`'s own prerequisite (remote-to-filesystem-path resolution, done for `local`/`git`)
 - [build-pipeline-status.md](build-pipeline-status.md) — the cross-ADR phase dashboard this doc's "what's built" table refines with real code references
 
@@ -257,7 +259,18 @@ is a missed conversion, but neither has been revisited:
   `cfg-int-deployment`'s `control/workspace.yaml`
   (`output: {format: custom, emits: [...]}`), contradicting the "zero
   usage" evidence D2 was decided on. Still the biggest known correctness
-  risk against a real consumer, and still unresolved.
+  risk against a real consumer. **Investigated 2026-09-25, found to be
+  blocked on a bigger prerequisite, not yet resolved.** The real example's
+  need is `emits: [features, variables, properties]` — but v2 doesn't emit
+  `features`/`variables`/`properties` categories *at all* yet (see the
+  `default_output()` table above), so there is nothing for `emits` to
+  gate. Emit-suppression only starts to matter once those categories
+  exist. Full v1 schema confirmed
+  (`OutputProfileModel`/`OutputFileModel`/`EmitCategory`,
+  `workspace_model.py`) — `format: strata|custom|script|none`, `emits: [...]`,
+  `files: [...]` (single/multi-source/script-generated custom files). No
+  real evidence found yet for the `script` format or custom `files[]` —
+  the one real example uses only `format: custom` + `emits`.
 
 ## Changelog
 
@@ -400,3 +413,18 @@ is a missed conversion, but neither has been revisited:
   gained `--dry-run`, wired to `run.step` for live console progress on
   every invocation, dry or not. 18 new tests. Full check suite green:
   990/990 tests passing.
+- 2026-09-25: Investigated the `OutputProfileModel` revisit (priority
+  item). Confirmed v1's full real schema
+  (`OutputProfileModel`/`OutputFileModel`/`EmitCategory`) and the exact
+  real need (`emits: [features, variables, properties]`, documented in
+  `cfg-int-deployment` alongside a real strata bug/fix, PR #309) — but
+  found it's blocked on a bigger, previously-unnoticed prerequisite:
+  `TerraformIntegration.default_output()` discards `resolved.values`
+  entirely (`del resolved`), so the `features`/`variables`/`properties`
+  categories `emits` would gate don't exist in v2 at all yet. Traced this
+  into [provisioning-injection-model.md](provisioning-injection-model.md)
+  (Context) while checking whether it was a missing-Context problem — it
+  isn't; `ValueResolution` already flows through the whole build pipeline,
+  this is a narrower, one-method gap. No code changed; both this doc and
+  provisioning-injection-model.md updated with the findings and split into
+  separately-actionable items.
