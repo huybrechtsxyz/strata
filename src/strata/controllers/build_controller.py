@@ -25,6 +25,7 @@ Three small, independent helpers plus the loop itself:
 """
 
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
@@ -32,7 +33,7 @@ from strata.controllers.integration_resolution import resolve_integration
 from strata.controllers.remote_resolution import resolve_remote  # noqa: F401  (re-exported for callers)
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
-from strata.controllers.source_sync import sync_source
+from strata.controllers.source_sync import describe_source, sync_source
 from strata.controllers.value_controller import build_time_keys, resolve_deployment, resolve_values
 from strata.controllers.workload_controller import build_workload_modules
 from strata.integrations.errors import IntegrationError
@@ -131,7 +132,15 @@ def find_provisioner(workspace: WorkspaceModel, name: str) -> ProvisionerModel:
     raise UsageError(f"Provisioner '{name}' is not declared in workspace '{workspace.meta.name}'.")
 
 
-def build_run(context: SolutionContext, deployment_name: str, build_path: Path, *, clean: bool = True) -> Diagnostics:
+def build_run(
+    context: SolutionContext,
+    deployment_name: str,
+    build_path: Path,
+    *,
+    clean: bool = True,
+    dry_run: bool = False,
+    on_step: Callable[[str], None] | None = None,
+) -> Diagnostics:
     """Render `deployment_name`'s workspace provisioners into `build_path`.
 
     Renders only — never calls `plan`/`deploy`/`destroy` (ADR-0022 D4).
@@ -151,6 +160,22 @@ def build_run(context: SolutionContext, deployment_name: str, build_path: Path, 
             explicitly — the safe default assumes `build_path` is
             exclusively this build's own directory
             (`layout.build_dir()`'s own convention).
+        dry_run: Report what would happen instead of doing it — skips the
+            `clean` wipe, materialising any source, and every render.
+            Deliberately not a second, parallel code path: every step below
+            still runs (deployment/workspace resolution, value resolution,
+            integration resolution), so a dry run still catches a bad
+            deployment name, an unresolvable integration, or a value that
+            fails to resolve — only filesystem mutation is skipped. There is
+            no way to "fake" a render in memory here (unlike `deploy run`'s
+            real `plan`/`apply` split) — this reports intent, not a
+            simulated result.
+        on_step: Called with a one-line progress message at each meaningful
+            point (clean, per-provisioner materialise/render, per-namespace
+            workload materialise/render) — the same call sites `dry_run`
+            reports through, just describing real work instead of planned
+            work. Optional: a caller that doesn't want streaming progress
+            (e.g. a test) can omit it.
 
     Returns:
         Diagnostics accumulated while resolving build-time values (a
@@ -161,9 +186,14 @@ def build_run(context: SolutionContext, deployment_name: str, build_path: Path, 
         UsageError: `deployment_name` does not exist, its `workspace` is
             unset or does not resolve, or a provisioning step names an
             integration/provisioner that cannot be resolved.
-        BuildCleanError: `clean` is `True` and `build_path` could not be
-            removed (permissions, a file in use).
+        BuildCleanError: `clean` is `True`, `dry_run` is `False`, and
+            `build_path` could not be removed (permissions, a file in use).
     """
+
+    def _step(message: str) -> None:
+        if on_step is not None:
+            on_step(message)
+
     index = context.controller.index
 
     keys = build_time_keys(context, deployment_name)
@@ -181,10 +211,14 @@ def build_run(context: SolutionContext, deployment_name: str, build_path: Path, 
     workspace = cast(WorkspaceModel, workspace_entry.model)
 
     if clean and build_path.exists():
-        try:
-            shutil.rmtree(build_path)
-        except OSError as exc:
-            raise BuildCleanError(f"Could not clean build_path '{build_path}': {exc}") from exc
+        if dry_run:
+            _step(f"would clean {build_path}")
+        else:
+            try:
+                shutil.rmtree(build_path)
+            except OSError as exc:
+                raise BuildCleanError(f"Could not clean build_path '{build_path}': {exc}") from exc
+            _step(f"cleaned {build_path}")
 
     graph = build_resolved_workspace_graph(index, workspace)
     remotes: dict[str, SolutionRemoteModel] = {
@@ -194,12 +228,23 @@ def build_run(context: SolutionContext, deployment_name: str, build_path: Path, 
     for step in ordered_by_depends_on(workspace.spec.execution or []):
         provisioner = find_provisioner(workspace, step.provisioner)
         integration = resolve_integration(index, provisioner)
+        integration_type = type(integration).__name__
+
+        if dry_run:
+            if provisioner.source is None:
+                _step(f"provisioner '{step.name}': no source to materialise (sync/GitOps)")
+            else:
+                _step(f"would materialise provisioner '{step.name}' source ({describe_source(provisioner.source)})")
+            _step(f"would render provisioner '{step.name}' via {integration_type}")
+            continue
+
         if provisioner.source is None:
             # Sync/GitOps provisioner (argocd/flux) — renders from the
             # resolved graph directly, nothing to materialise first.
             source_path = build_path / step.name
         else:
             source_path = sync_source(context.root, build_path, provisioner.source, remotes)
+            _step(f"materialised provisioner '{step.name}' source at {source_path}")
         try:
             integration.prepare(source_path, resolved=resolved, provisioner=provisioner, graph=graph)
         except IntegrationError as exc:
@@ -208,6 +253,7 @@ def build_run(context: SolutionContext, deployment_name: str, build_path: Path, 
             # StrataError, and would otherwise escape command_run()'s
             # `except StrataError` as a raw traceback.
             raise UsageError(f"Provisioner '{provisioner.name}': {exc}") from exc
+        _step(f"rendered provisioner '{step.name}' via {integration_type}")
 
     # Workload pipeline (ADR-0022 D5-D7) — a second, disconnected input shape
     # (Namespace.spec.modules, never ProvisionerModel/ProvisioningStepModel),
@@ -215,6 +261,8 @@ def build_run(context: SolutionContext, deployment_name: str, build_path: Path, 
     # namespace the workspace references is already resolved onto `graph`
     # (build_resolved_workspace_graph()), so no extra index walk is needed.
     for namespace in graph.namespaces.values():
-        build_workload_modules(index, context.root, remotes, namespace, resolved, build_path)
+        build_workload_modules(
+            index, context.root, remotes, namespace, resolved, build_path, dry_run=dry_run, on_step=on_step
+        )
 
     return resolved.diagnostics

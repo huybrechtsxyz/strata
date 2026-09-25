@@ -19,12 +19,13 @@ handing an `InfraIntegration` a `ResolvedModule` list — `HelmIntegration`/
 remote directly.
 """
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
 from strata.controllers.integration_resolution import resolve_module_integration
 from strata.controllers.solution_controller import DocumentIndex
-from strata.controllers.source_sync import sync_module_source
+from strata.controllers.source_sync import describe_source, sync_module_source
 from strata.integrations.errors import IntegrationError
 from strata.integrations.resolved_context import ResolvedModule, ValueResolution
 from strata.models.common_models import ModuleReferenceModel, PlatformKind
@@ -59,6 +60,9 @@ def build_workload_modules(
     namespace: NamespaceModel,
     resolved: ValueResolution,
     build_path: Path,
+    *,
+    dry_run: bool = False,
+    on_step: Callable[[str], None] | None = None,
 ) -> None:
     """Render every module `namespace` declares (ADR-0022 D6).
 
@@ -98,12 +102,25 @@ def build_workload_modules(
             signature symmetry and for a future Compose value-substitution
             phase that may need it (ADR-0023 Remaining Work).
         build_path: The build output root for this `build run` invocation.
+        dry_run: Report what would happen instead of doing it — skips
+            materialising a module's source and skips `prepare_namespace()`.
+            `resolve_module()`/`resolve_module_integration()` still run, so
+            a dry run still catches an unresolvable module reference or an
+            unsupported module type.
+        on_step: Called with a one-line progress message per module
+            materialised and per type-group rendered — real work when
+            `dry_run` is `False`, planned work when it's `True`.
 
     Raises:
         UsageError: a module reference does not resolve, `module.spec.type`
             is unset, or its resolved integration is not infra/container-capable.
         SourceSyncError: a module's source could not be materialised.
     """
+
+    def _step(message: str) -> None:
+        if on_step is not None:
+            on_step(message)
+
     by_type: dict[str, list[ResolvedModule]] = {}
 
     for reference in namespace.spec.modules or []:
@@ -118,7 +135,14 @@ def build_workload_modules(
             )
 
         module_dir = build_path / namespace.meta.name / reference.name
-        sync_module_source(root, module_dir, module.spec.source, remotes)
+        if dry_run:
+            _step(
+                f"would materialise module '{reference.name}' ({describe_source(module.spec.source)}) "
+                f"for namespace '{namespace.meta.name}'"
+            )
+        else:
+            sync_module_source(root, module_dir, module.spec.source, remotes)
+            _step(f"materialised module '{reference.name}' for namespace '{namespace.meta.name}' at {module_dir}")
 
         by_type.setdefault(module.spec.type, []).append(
             ResolvedModule(reference=reference, module=module, source_path=module_dir)
@@ -126,6 +150,10 @@ def build_workload_modules(
 
     for module_type, group in by_type.items():
         integration = resolve_module_integration(index, module_type)
+        if dry_run:
+            names = ", ".join(item.reference.name for item in group)
+            _step(f"would render {module_type} workload for namespace '{namespace.meta.name}' ({names})")
+            continue
         try:
             integration.prepare_namespace(namespace, group, resolved=resolved)
         except IntegrationError as exc:
@@ -135,3 +163,4 @@ def build_workload_modules(
             # Reachable today: module_type 'compose' is a real, registered
             # integration that has not implemented prepare_namespace() yet.
             raise UsageError(f"Namespace '{namespace.meta.name}', module type '{module_type}': {exc}") from exc
+        _step(f"rendered {module_type} workload for namespace '{namespace.meta.name}'")

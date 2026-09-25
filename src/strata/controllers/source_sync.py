@@ -51,6 +51,20 @@ class SourceSyncError(SystemError):
     """A `SourceModel` could not be materialised into the build directory."""
 
 
+def describe_source(source: SourceModel) -> str:
+    """One-line human-readable summary of `source`, for `--dry-run` reporting.
+
+    Never touches disk or a remote — string formatting only, so it's safe to
+    call in place of the real `sync_source()`/`sync_module_source()` when a
+    caller wants to report what *would* be materialised without doing it.
+    """
+    if source.chart_name is not None:
+        version = f" {source.chart_version}" if source.chart_version else ""
+        return f"chart '{source.chart_name}'{version} from remote '{source.remote}'"
+    remote = f"remote '{source.remote}', " if source.remote else ""
+    return f"{remote}source_path '{source.source_path}'"
+
+
 def sync_source(
     root: Path,
     build_path: Path,

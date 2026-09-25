@@ -3,9 +3,9 @@
 - Status: `strata build run` exists and is end-to-end tested
   (`build_command.py` → `build_controller.build_run()`), including both
   halves of the workload pipeline (ADR-0022 D5-D7 — see
-  [workload-pipeline.md](workload-pipeline.md)). Stale-output cleaning
-  (parity gap 1 below) is now fixed; the rest of the parity-gap list is
-  still open.
+  [workload-pipeline.md](workload-pipeline.md)), stale-output cleaning
+  (`--clean`/`--no-clean`), and `--dry-run` with shared step-by-step
+  progress reporting on every run. Remaining parity-gap items: see below.
 - Last updated: 2026-09-25
 
 ## Overview
@@ -26,21 +26,24 @@ no business logic in the command body, `command_run()` for lifecycle,
 ## Current Design
 
 ```
-strata build run DEPLOYMENT [--path PATH] [--build-path PATH]
+strata build run DEPLOYMENT [--path PATH] [--build-path PATH] [--clean/--no-clean] [--dry-run]
   └─ build_command.py: build_run_command()
        ├─ context = open_solution(path).require_valid()
        ├─ target = build_path or layout.build_dir(context.root, deployment)  # '<root>/build/<deployment>' by default
-       └─ diagnostics = build_run(context, deployment, target)          # build_controller.py — the orchestrator
+       ├─ should_clean = clean if clean is not None else build_path is None  # default path always cleaned; custom path only if --clean given
+       └─ diagnostics = build_run(context, deployment, target, clean=should_clean, dry_run=dry_run, on_step=run.step)
 
-build_run(context, deployment_name, build_path)
+build_run(context, deployment_name, build_path, *, clean=True, dry_run=False, on_step=None)
   ├─ resolve_deployment(context, deployment_name)        # value_controller.py — shared with resolve_values()/build_time_keys()
   ├─ keys = build_time_keys(context, deployment_name)    # value_controller.py — variables/features only, never secrets
   ├─ resolved = resolve_values(context, deployment_name, keys)
   ├─ workspace = index.get(WORKSPACE, deployment.spec.workspace)
+  ├─ if clean and build_path.exists(): rmtree(build_path) or on_step("would clean ...") if dry_run
   ├─ graph = build_resolved_workspace_graph(index, workspace)   # build_controller.py, D1a's assembly step
   └─ for step in ordered_by_depends_on(workspace.spec.execution):  # build_controller.py, Kahn's-algorithm order
        ├─ provisioner = find_provisioner(workspace, step.provisioner)
-       ├─ integration = resolve_integration(index, provisioner)
+       ├─ integration = resolve_integration(index, provisioner)   # always resolved for real, even under --dry-run
+       ├─ if dry_run: on_step("would materialise/render ..."); continue
        ├─ source_path = sync_source(context.root, build_path, provisioner.source, remotes)  # skipped for sync/GitOps provisioners (no .source)
        └─ integration.prepare(source_path, resolved=resolved, provisioner=provisioner, graph=graph)
 ```
@@ -218,10 +221,21 @@ its own document — except where noted.
 
 Minor, same origin:
 
-- **`build run --dry-run`** — v1 has it for CI preview (renders in memory,
-  logs planned paths, writes nothing). v2's implicit position is "build is
-  already dry", which conflates *does not execute* with *does not write*.
-  Unstated either way.
+- **~~`build run --dry-run`~~ — implemented, but not as v1's parallel
+  "render in memory" code path.** `build_run()`/`build_workload_modules()`
+  gained `dry_run: bool = False` and `on_step: Callable[[str], None] | None`
+  parameters. `dry_run` doesn't fake a render (there's no way to "render in
+  memory" here the way `deploy run`'s real `plan` differs from `apply`) —
+  it skips exactly three real side effects (the `clean` wipe, materialising
+  a source, and the actual `prepare()`/`prepare_namespace()` write) while
+  every validating step still runs for real (deployment/workspace/value/
+  integration resolution), so a dry run still catches a bad deployment name
+  or an unresolvable tool type. `on_step` reports a one-line message at each
+  of those same points — "would materialise .../would render ..." under
+  `--dry-run`, "materialised .../rendered ..." on a real run — one reporting
+  path shared by both, not a second parallel one. `strata build run` gained
+  `--dry-run`, wired to `run.step` for live console output. Full check suite
+  green: 990/990 tests passing.
 - **Terraform input validation against `variables.tf`** — v1 fails the
   build on a declared-input/schema mismatch before `apply` would.
   [provisioning-injection-model.md](provisioning-injection-model.md)
@@ -372,3 +386,17 @@ is a missed conversion, but neither has been revisited:
   Issue 5. The policies half needed no new record: ADR-0020 already defers
   `Configuration.spec.policies` explicitly, with a porting convention and a
   Remaining Work entry. No code changed.
+- 2026-09-25: `--dry-run` implemented for `build run` — deliberately not a
+  port of v1's parallel "render in memory" builder path (there's no
+  meaningful "fake" build the way `deploy run`'s `plan` differs from
+  `apply`). Instead, `build_run()`/`build_workload_modules()` gained a
+  shared `on_step` progress-reporting callback used by both a real run and
+  a dry run alike (real work described when it happens; planned work
+  described instead when `dry_run=True` skips the three actual side
+  effects — the `clean` wipe, materialising a source, and the render
+  itself). Every validating step still runs for real under `--dry-run`
+  (deployment/workspace/value/integration resolution), so a bad deployment
+  name or an unresolvable tool type is still caught. `strata build run`
+  gained `--dry-run`, wired to `run.step` for live console progress on
+  every invocation, dry or not. 18 new tests. Full check suite green:
+  990/990 tests passing.

@@ -231,6 +231,61 @@ def test_build_run_clean_wraps_a_failed_wipe_as_build_clean_error(tmp_path: Path
         build_run(_context(root), "app", build_path)
 
 
+def test_build_run_dry_run_writes_nothing(tmp_path: Path):
+    root = _terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+
+    diagnostics = build_run(_context(root), "app", build_path, dry_run=True)
+
+    assert diagnostics.ok
+    assert not build_path.exists()
+
+
+def test_build_run_dry_run_does_not_clean_existing_output(tmp_path: Path):
+    root = _terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+    stale = build_path / "stale.txt"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("stale")
+
+    build_run(_context(root), "app", build_path, dry_run=True)
+
+    assert stale.exists()
+
+
+def test_build_run_dry_run_still_validates_via_real_resolution(tmp_path: Path):
+    """No filesystem-mutation branch skips deployment/workspace/integration
+    resolution - a dry run still catches a bad deployment name."""
+    root = _terraform_solution(tmp_path)
+    with pytest.raises(UsageError, match="ghost"):
+        build_run(_context(root), "ghost", tmp_path / "build", dry_run=True)
+
+
+def test_build_run_dry_run_reports_planned_steps(tmp_path: Path):
+    root = _terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+    steps: list[str] = []
+
+    build_run(_context(root), "app", build_path, dry_run=True, on_step=steps.append)
+
+    assert any("would materialise provisioner 'apply_infra'" in s for s in steps)
+    assert any("would render provisioner 'apply_infra' via TerraformIntegration" in s for s in steps)
+    assert not any(s.startswith("materialised") or s.startswith("rendered") for s in steps)
+
+
+def test_build_run_real_run_reports_steps_too(tmp_path: Path):
+    """The same on_step callback improves a real build's progress output,
+    not just --dry-run's - the two share one reporting path."""
+    root = _terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+    steps: list[str] = []
+
+    build_run(_context(root), "app", build_path, on_step=steps.append)
+
+    assert any(s.startswith("materialised provisioner 'apply_infra' source at") for s in steps)
+    assert any(s == "rendered provisioner 'apply_infra' via TerraformIntegration" for s in steps)
+
+
 def test_build_run_raises_for_unknown_deployment(tmp_path: Path):
     root = _solution(tmp_path)
     with pytest.raises(UsageError, match="ghost"):

@@ -209,6 +209,37 @@ def test_no_clean_flag_disables_cleaning_even_for_the_default_path(runner, solut
 
 
 # ---------------------------------------------------------------------------
+# --dry-run
+# ---------------------------------------------------------------------------
+
+
+def test_dry_run_writes_nothing(runner, solution):
+    result = _run(runner, "app", "--path", solution, "--dry-run")
+
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert not (solution / "build").exists()
+
+
+def test_dry_run_reports_planned_steps_in_console_output(runner, solution):
+    result = _run(runner, "app", "--path", solution, "--dry-run")
+
+    assert "would materialise provisioner" in result.output
+    assert "would render provisioner" in result.output
+
+
+def test_real_run_reports_steps_in_console_output_too(runner, solution):
+    result = _run(runner, "app", "--path", solution)
+
+    assert "materialised provisioner" in result.output
+    assert "rendered provisioner" in result.output
+
+
+def test_dry_run_still_exits_two_for_an_unknown_deployment(runner, solution):
+    result = _run(runner, "ghost-deployment", "--path", solution, "--dry-run")
+    assert result.exit_code == EXIT_USAGE
+
+
+# ---------------------------------------------------------------------------
 # JSON
 # ---------------------------------------------------------------------------
 

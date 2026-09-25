@@ -92,6 +92,66 @@ def test_build_workload_modules_materialises_source_and_writes_helm_output(tmp_p
     assert meta["releaseName"] == "auth"
 
 
+def test_build_workload_modules_dry_run_writes_nothing(tmp_path: Path):
+    root = tmp_path / "sln"
+    _write(root / "charts" / "authentik" / "Chart.yaml", "name: authentik")
+    module = _module("authentik")
+    index = _index(module)
+    namespace = _namespace(ModuleReferenceModel(name="auth", module="authentik"))
+    build_path = tmp_path / "build"
+
+    build_workload_modules(
+        index, root, remotes={}, namespace=namespace, resolved=ValueResolution(deployment="app"),
+        build_path=build_path, dry_run=True,
+    )
+
+    assert not build_path.exists()
+
+
+def test_build_workload_modules_dry_run_still_validates_module_resolution(tmp_path: Path):
+    namespace = _namespace(ModuleReferenceModel(name="auth", module="ghost"))
+
+    with pytest.raises(UsageError, match="ghost"):
+        build_workload_modules(
+            _index(), tmp_path, remotes={}, namespace=namespace,
+            resolved=ValueResolution(deployment="app"), build_path=tmp_path / "build", dry_run=True,
+        )
+
+
+def test_build_workload_modules_dry_run_reports_planned_steps(tmp_path: Path):
+    root = tmp_path / "sln"
+    module = _module("authentik")
+    index = _index(module)
+    namespace = _namespace(ModuleReferenceModel(name="auth", module="authentik"))
+    steps: list[str] = []
+
+    build_workload_modules(
+        index, root, remotes={}, namespace=namespace, resolved=ValueResolution(deployment="app"),
+        build_path=tmp_path / "build", dry_run=True, on_step=steps.append,
+    )
+
+    assert any("would materialise module 'auth'" in s for s in steps)
+    assert any("would render helm workload for namespace 'apps' (auth)" in s for s in steps)
+    assert not any(s.startswith("materialised") or s.startswith("rendered") for s in steps)
+
+
+def test_build_workload_modules_real_run_reports_steps_too(tmp_path: Path):
+    root = tmp_path / "sln"
+    _write(root / "charts" / "authentik" / "Chart.yaml", "name: authentik")
+    module = _module("authentik")
+    index = _index(module)
+    namespace = _namespace(ModuleReferenceModel(name="auth", module="authentik"))
+    steps: list[str] = []
+
+    build_workload_modules(
+        index, root, remotes={}, namespace=namespace, resolved=ValueResolution(deployment="app"),
+        build_path=tmp_path / "build", on_step=steps.append,
+    )
+
+    assert any(s.startswith("materialised module 'auth' for namespace 'apps' at") for s in steps)
+    assert any(s == "rendered helm workload for namespace 'apps'" for s in steps)
+
+
 def test_build_workload_modules_writes_helm_output_for_a_registry_chart_module(tmp_path: Path):
     """Regression: a chart-based (registry) source has nothing to copy, so
     module_dir was never created before sync_module_source()'s fix - this

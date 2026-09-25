@@ -48,6 +48,15 @@ def build_command() -> None:
     "(exclusively this build's own directory, always safe to wipe) and off for a custom "
     "--build-path (which may be pointing somewhere not exclusively owned by this build).",
 )
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Report what would be cleaned, materialised and rendered without doing any of it. "
+    "Every other step (deployment/workspace resolution, value resolution, integration "
+    "resolution) still runs for real, so a dry run still catches a bad deployment name or "
+    "an unresolvable integration.",
+)
 @output_option
 @quiet_option
 @verbose_option
@@ -56,6 +65,7 @@ def build_run_command(
     path: Path | None,
     build_path: Path | None,
     clean: bool | None,
+    dry_run: bool,
     output: str,
     quiet: bool,
     verbose: bool,
@@ -85,8 +95,9 @@ def build_run_command(
             build_path=target,
         )
 
-        diagnostics = build_run(context, deployment, target, clean=should_clean)
-        run.step(f"rendered to {target}")
+        diagnostics = build_run(context, deployment, target, clean=should_clean, dry_run=dry_run, on_step=run.step)
+        if not dry_run:
+            run.step(f"rendered to {target}")
 
         run.report(diagnostics, root=context.root)
         run.ok = diagnostics.ok
