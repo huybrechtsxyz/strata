@@ -155,10 +155,23 @@ its own document — except where noted.
    exist in the index at all) — mirrors
    `_build_resources_payload()`'s identical `if not
    workspace_resource.enabled: continue` exactly.
-3. **No `.gitignore` emission into the build output.** v1 wrote
-   `*.tfstate`, `.terraform/`, `.terraform.lock.hcl` into each provisioner
-   directory. v2 writes none. Relevant because a real consumer (haven)
-   round-trips `build/` through `upload-artifact`/`download-artifact`.
+3. **~~No `.gitignore` emission into the build output.~~ Retracted —
+   mis-attributed to `build_run()` on first pass, no real code ever
+   located to confirm it.** Re-checked directly against v1's actual
+   builders (`terraform_builder.py`, `base_builder.py`,
+   `platform_builder.py`, `compose_builder.py`, `helm_builder.py`) —
+   **none of them write a `.gitignore`, or any `*.tfstate`/`.terraform/`
+   pattern, anywhere.** What actually exists is
+   `strata/templates/solution/dot.gitignore`, a **solution-root scaffold
+   file written once by `strata init`** (not `build run`), which excludes
+   the entire `build/` directory with one blanket top-level rule (plus
+   defense-in-depth `**/.terraform/`/`*.tfstate` lines for the rarer case
+   of running Terraform outside `build/`). This was never a `build_run()`
+   concern — it belongs to `strata init`/solution scaffolding, which v2
+   does not have at all yet (no `commands/init_command.py`, confirmed).
+   Not a `build run` gap; not actionable here. If/when a `strata init`
+   equivalent is built, its own scaffold template is the right place for
+   an equivalent `.gitignore`, not this command.
 4. **No token/template substitution inside *synced source files*.** v1's
    `BaseBuilder` Jinja2-renders every copied `.tf`/`.tfvars`/`.bicep`/
    playbook with a `STRATA_*` + `variables` + `features` context (secrets
@@ -286,3 +299,14 @@ is a missed conversion, but neither has been revisited:
   `terraform_projection._build_resources_payload()`'s identical
   `enabled=False` skip on the resource-attachment side of the same shared
   field. 4 new tests. Full check suite green: 976/976 tests passing.
+- 2026-09-25: Parity gap 3 (`.gitignore` emission) retracted, not fixed.
+  Re-grounding it against v1's real builders before implementing (this
+  session's own established discipline) found no code anywhere that
+  writes a `.gitignore`/`*.tfstate`/`.terraform/` pattern into build
+  output — the original note's claim had never actually been located in
+  source, only inferred. The real behaviour it was describing
+  (`strata/templates/solution/dot.gitignore`, excluding the whole `build/`
+  directory with one blanket rule) belongs to `strata init`'s
+  solution-scaffold template, a command v2 does not have at all yet — not
+  `build_run()`. No code changed; the parity-gap entry itself was
+  corrected instead.
