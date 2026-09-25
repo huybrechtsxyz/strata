@@ -493,6 +493,124 @@ def test_build_run_env_file_never_overrides_a_real_env_var(tmp_path: Path, monke
     assert manifest["variables"]["GREETING"]["value"] == "real-shell-value"
 
 
+# ---------------------------------------------------------------------------
+# output.template (ADR-0023 D3, docs/design/value-token-resolution.md option C)
+# ---------------------------------------------------------------------------
+
+
+def test_build_run_output_template_valid_writes_nothing_but_succeeds(tmp_path: Path):
+    root = _solution_with_values(
+        tmp_path, extra_environment_spec="  variables:\n    - key: REGION\n      store: constant\n      value: westeurope\n"
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "      output:\n        template: variables.json.j2\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    _write(root, "variables.json.j2", '{"region": "{{ variables.REGION }}"}')
+    build_path = tmp_path / "build"
+
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok
+    assert not (build_path / "infra" / "workspace.auto.tfvars.json").exists()
+    assert (build_path / "infra" / "main.tf").exists()  # source is still synced
+
+
+def test_build_run_output_template_with_bad_reference_fails(tmp_path: Path):
+    root = _solution_with_values(
+        tmp_path, extra_environment_spec="  variables:\n    - key: REGION\n      store: constant\n      value: westeurope\n"
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "      output:\n        template: variables.json.j2\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    _write(root, "variables.json.j2", '{"region": "{{ variables.REGOIN }}"}')
+    build_path = tmp_path / "build"
+
+    with pytest.raises(UsageError, match="variables.REGOIN"):
+        build_run(_context(root), "app", build_path)
+
+
+def test_build_run_output_template_missing_file_fails(tmp_path: Path):
+    root = _terraform_solution(tmp_path)
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "      output:\n        template: ghost.json.j2\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    build_path = tmp_path / "build"
+
+    with pytest.raises(UsageError, match="ghost.json.j2"):
+        build_run(_context(root), "app", build_path)
+
+
+def test_build_run_dry_run_still_catches_a_bad_output_template_reference(tmp_path: Path):
+    """Cheap and local — dry run should catch this too, matching --resolve's
+    own "dry run still catches a bad value" rule (build_run()'s own docstring)."""
+    root = _solution_with_values(
+        tmp_path, extra_environment_spec="  variables:\n    - key: REGION\n      store: constant\n      value: westeurope\n"
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "      output:\n        template: variables.json.j2\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    _write(root, "variables.json.j2", '{"region": "{{ variables.REGOIN }}"}')
+    build_path = tmp_path / "build"
+
+    with pytest.raises(UsageError, match="variables.REGOIN"):
+        build_run(_context(root), "app", build_path, dry_run=True)
+
+    assert not build_path.exists()  # still no filesystem mutation
+
+
+def test_build_run_dry_run_reports_output_template_would_validate(tmp_path: Path):
+    root = _solution_with_values(
+        tmp_path, extra_environment_spec="  variables:\n    - key: REGION\n      store: constant\n      value: westeurope\n"
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "      output:\n        template: variables.json.j2\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    _write(root, "variables.json.j2", '{"region": "{{ variables.REGION }}"}')
+    build_path = tmp_path / "build"
+    steps: list[str] = []
+
+    build_run(_context(root), "app", build_path, dry_run=True, on_step=steps.append)
+
+    assert any("would validate output.template" in s for s in steps)
+    assert not build_path.exists()
+
+
+
 
 # NOTE: "deployment has no workspace" is not separately testable through a
 # real, loadable solution — `DeploymentSpecModel.validate_complete_unless_partial()`

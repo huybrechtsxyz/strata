@@ -21,6 +21,7 @@ from strata.integrations.errors import IntegrationError
 from strata.integrations.resolved_context import ResolvedModule, ResolvedWorkspaceGraph, ValueResolution
 from strata.models.namespace_model import NamespaceModel
 from strata.models.provisioning_model import ProvisionerModel
+from strata.utils.templater import validate_template_references
 from strata.utils.transport import CommandResult
 
 
@@ -52,6 +53,7 @@ class InfraIntegration(Integration):
         resolved: ValueResolution,
         provisioner: ProvisionerModel,
         graph: ResolvedWorkspaceGraph,
+        template_path: Path | None = None,
         **kwargs: Any,
     ) -> Path:
         """Render whatever this tool needs into `path` from already-resolved
@@ -60,11 +62,45 @@ class InfraIntegration(Integration):
 
         Base-implemented, not abstract (ADR-0023 D5) — every subclass gets
         the same dispatch for free; only `default_output()` varies per
-        tool. The `provisioner.output.template` escape hatch (D3) and the
-        `provisioner.backend` token-substitution step (D2) are later
-        phases (ADR-0023 Phase 3/4) and are not implemented here yet — this
-        phase only wires the `default_output()` branch.
+        tool. The `provisioner.backend` token-substitution step (D2) is a
+        later phase and not implemented here yet.
+
+        `provisioner.output.template` (D3, docs/design/
+        value-token-resolution.md's Value Supply Mechanisms option C) is
+        **validated only, never rendered** — build never has every value
+        resolved (secrets, integration-backed variables/features are
+        deploy-only), so a "final" render would be dishonest here. When set,
+        `default_output()` is skipped entirely and nothing is written for
+        this provisioner — the actual render is deploy-time work, not yet
+        built. `template_path` is the already-resolved absolute path
+        (`build_controller.py`'s job, matching `sync_source()`'s own
+        "controller resolves paths, integration consumes already-resolved
+        ones" split, ADR-0021 D2) — required whenever
+        `provisioner.output.template` is set.
+
+        Raises:
+            IntegrationError: `provisioner.output.template` is set but its
+                template references a name that doesn't exist anywhere in
+                the declared schema.
         """
+        if provisioner.output and provisioner.output.template:
+            assert template_path is not None, "template_path is required when provisioner.output.template is set"
+            known_names: dict[str, set[str] | None] = {
+                "graph": None,
+                "variables": {ref.key for ref in graph.variable_refs},
+                "flags": {ref.key for ref in graph.feature_refs},
+                "secrets": {ref.key for ref in graph.secret_refs},
+                "properties": None,
+                "custom": None,
+                "provisioner": None,
+            }
+            errors = validate_template_references(template_path.read_text(), known_names)
+            if errors:
+                raise IntegrationError(
+                    f"output.template '{provisioner.output.template}': " + "; ".join(errors)
+                )
+            return path
+
         for filename, content in self.default_output(resolved, provisioner, graph).items():
             (path / filename).write_text(content)
         return path
@@ -75,8 +111,8 @@ class InfraIntegration(Integration):
         provisioner: ProvisionerModel,
         graph: ResolvedWorkspaceGraph,
     ) -> dict[str, str]:
-        """Filename -> content pairs to write when no `output.template` is
-        set (D3 does not exist yet — Phase 4). Base default: nothing
+        """Filename -> content pairs to write when `provisioner.output.template`
+        is unset. Base default: nothing
         generated — Bicep's real behaviour (v1's `bicep_builder.py`: copy
         the source, generate nothing); subclasses override only this hook.
         """

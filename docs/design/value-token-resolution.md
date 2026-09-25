@@ -12,6 +12,57 @@ to replace v1's per-kind `value`/`var`/`secret` discriminated unions
 state across kinds so the same "Environment cross-check deferred" note
 doesn't need repeating in every kind's ADR.
 
+## Value Supply Mechanisms — three distinct ways, not one (2026-09-25)
+
+Found while investigating `output.template` (ADR-0023 D3) as a candidate
+`build run` feature: strata has **three** genuinely different mechanisms
+for getting a value into generated output, easy to conflate since all
+three ultimately draw from the same resolved variables/secrets/features.
+Keeping them distinct, not merging them, is the point of this section.
+
+**A. Structured input files/env vars** — `.auto.tfvars.json`, Helm
+`values.yaml`, Compose environment vars; `TF_VAR_*`/`--set-string` for
+secrets. The **preferred** mechanism (ADR-0025's own reasoning for why
+strata never rewrites a synced source file in place): tool-native, the
+consuming tool (Terraform/Helm/Compose) interprets it itself, zero custom
+resolution code needed. Build-time-safe half (`constant`/`environment`
+values) is built (docs/design/build-time-value-categories.md); the
+deploy-time half (secrets/integration-backed) is not, blocked on
+`deploy run`.
+
+**B. Embedded string tokens** — `${var:KEY}`/`${secret:KEY}`/`${feature:KEY}`,
+this doc's own subject. Use this **inside a field strata's own schema
+defines** (`DnsRecordModel.value`, `SubnetModel.cidr`,
+`FirewallRuleModel.from_`/`.to`, `ModuleServiceEnvironmentModel.value`,
+`ProvisionerBackendModel.configuration`) — a partial substitution within
+one field's own string value, for values that need to live inside a
+document *strata itself owns*, not a third-party tool's native config
+(that's what (A) is for). Always deploy-time (confirmed directly in v1:
+`resolve_expr_string()`/`EXPR_PATTERN` is used exclusively by
+`TerraformDeployer`/`HelmDeployer`, never any build-time builder).
+
+**C. Jinja2 full-file templates** — `output.template` (ADR-0023 D3). Use
+this when **generating/templating an entire file** strata's own default
+projection doesn't produce — a different problem from (B): whole-file
+generation, not one field's value. Build-time can only validate such a
+template (statically check its referenced names exist somewhere in the
+declared schema, via `jinja2.meta.find_undeclared_variables()` — no
+rendering); the actual render is deploy-time only, same reason as (B) —
+full values (including secret-shaped-leaf awareness: never write a secret
+to disk) aren't available until then.
+
+**The guiding rule, going forward: strata's own document fields use
+embedded tokens (B); generating or templating a whole file uses Jinja2
+(C).** Don't reach for Jinja2 to fill in one field of an existing
+strata-owned document, and don't reach for embedded tokens to generate an
+entire new file from scratch. (B) and (C) are not redundant with each
+other and should not be merged into one mechanism — but they share the
+same underlying need (fully-resolved values, secret-shaped-leaf safety),
+so when the deploy layer is designed, both should be built on top of one
+shared resolution primitive (matching v1's real `ResolvedValues`), not as
+two independent re-implementations of "resolve a value, refuse to write a
+secret."
+
 ## Current Design
 
 - **Syntax**: `${kind:KEY}` where `kind` is `var`, `secret`, or `feature`
@@ -133,3 +184,43 @@ already names for Context/deploy-time work generally.
   rule. Decided against a `build run`-scoped, `dns`/`network`-only fix;
   recorded the one-shared-resolver-at-deploy-time decision above. Also
   corrected the stale "`environment` kind not built" claim.
+- 2026-09-25: Investigated `output.template` (ADR-0023 D3) as a candidate
+  `build run` feature. Found the same flaw as the dns/networks finding
+  above: ADR-0023's Phase 4 sketch assumed full build-time rendering, but
+  `variables`/`flags` only carry `constant`/`environment`-backed values at
+  build time — any real template referencing a Vault/AppConfig-backed key
+  would raise unconditionally, every build. Split into build-time
+  validation (genuinely buildable, not yet implemented) and deploy-time
+  rendering (blocked on `deploy run`, same as (B) above). This led to
+  naming and documenting all three of strata's value-supply mechanisms
+  (A/B/C above) explicitly, since (B) and (C) were at risk of being
+  conflated or merged — they solve different problems and should stay
+  separate, but share one resolution primitive once deploy exists.
+- 2026-09-25: **Implemented the build-time-validation half of `output.template`.**
+  Added `jinja2` as a dependency; `OutputModel`/`ProvisionerModel.output`
+  (valid for any tool, unlike `backend`/`properties`); `strata/utils/templater.py`'s
+  `validate_template_references()` — static-only, no rendering, two tiers
+  (unknown root name via `jinja2.meta.find_undeclared_variables()`; unknown
+  `variables.KEY`/`flags.KEY`/`secrets.KEY` via an AST walk for `Getattr`/
+  `Getitem` nodes; `properties`/`custom` skipped, arbitrary shape). Wired
+  into `InfraIntegration.prepare()`: when `provisioner.output.template` is
+  set, `default_output()` is skipped entirely and nothing is written for
+  that provisioner — validated only, deploy renders later. `template_path`
+  is resolved by `build_controller.py` (workspace-relative, no `@repo/`
+  yet — no evidenced need) and passed through explicitly, matching
+  `sync_source()`'s "controller resolves paths, integration consumes
+  already-resolved ones" split (ADR-0021 D2) — `templater.py` itself has no
+  dependency on `ResolvedWorkspaceGraph`/`strata.integrations` (layering,
+  ADR-0003), callers build the `known_names` schema and pass plain
+  `dict`/`set` data in. 24 new tests (9 unit, 3 `prepare()`-level, 3
+  end-to-end through `build_run()`, plus model tests). Full check suite
+  green (1036 tests, mypy 103 files, 0 broken import-linter contracts).
+- 2026-09-25: **Review pass found a real gap**: `--dry-run` skipped
+  `output.template` validation entirely (it lived inside `sync_source()`'s
+  branch, past the `if dry_run: ...; continue` early exit) — contradicting
+  `build_run()`'s own documented rule that a dry run still catches what it
+  cheaply can (already true for `--resolve`'s validation). Fixed:
+  `template_path` resolution and the validation call now happen before the
+  `dry_run` branch, so a bad reference or a missing template file is
+  caught under `--dry-run` too, with zero filesystem mutation. 2 new tests
+  confirm this. Full check suite green (1038 tests).

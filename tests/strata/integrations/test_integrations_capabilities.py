@@ -204,6 +204,85 @@ def test_prepare_writes_default_output_files(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
+# InfraIntegration.prepare() with output.template (ADR-0023 D3, docs/design/
+# value-token-resolution.md option C) — validated only, never rendered.
+# ---------------------------------------------------------------------------
+
+
+def _graph_with_refs() -> ResolvedWorkspaceGraph:
+    from strata.integrations.resolved_context import ValueReference
+
+    workspace = _resolved_workspace_graph().workspace
+    return ResolvedWorkspaceGraph(
+        workspace=workspace,
+        variable_refs=[ValueReference(key="REGION", store="constant", value="westeurope")],
+    )
+
+
+def _provisioner_with_template(template: str) -> ProvisionerModel:
+    from strata.models.provisioning_model import OutputModel
+
+    return ProvisionerModel(
+        name="prov", tool="terraform", source=SourceModel(source_path="infra"), output=OutputModel(template=template)
+    )
+
+
+def test_prepare_writes_nothing_when_output_template_is_set_and_valid(tmp_path: Path):
+    template_path = tmp_path / "variables.json.j2"
+    template_path.write_text('{"region": "{{ variables.REGION }}"}')
+
+    integration = _Bare()
+    result_path = integration.prepare(
+        tmp_path / "out",
+        resolved=ValueResolution(deployment="d"),
+        provisioner=_provisioner_with_template("variables.json.j2"),
+        graph=_graph_with_refs(),
+        template_path=template_path,
+    )
+    assert result_path == tmp_path / "out"
+
+
+def test_prepare_raises_integration_error_for_an_unknown_reference(tmp_path: Path):
+    import pytest
+
+    from strata.integrations.errors import IntegrationError
+
+    template_path = tmp_path / "variables.json.j2"
+    template_path.write_text('{"region": "{{ variables.REGOIN }}"}')
+
+    integration = _Bare()
+    with pytest.raises(IntegrationError, match="variables.REGOIN"):
+        integration.prepare(
+            tmp_path / "out",
+            resolved=ValueResolution(deployment="d"),
+            provisioner=_provisioner_with_template("variables.json.j2"),
+            graph=_graph_with_refs(),
+            template_path=template_path,
+        )
+
+
+def test_prepare_output_template_skips_default_output_entirely(tmp_path: Path):
+    """When output.template is set, default_output() is never even called —
+    the two are mutually exclusive, not layered."""
+
+    class _WithOutput(_Bare):
+        def default_output(self, resolved, provisioner, graph):
+            raise AssertionError("default_output() should not be called when output.template is set")
+
+    template_path = tmp_path / "variables.json.j2"
+    template_path.write_text('{"region": "{{ variables.REGION }}"}')
+
+    integration = _WithOutput()
+    integration.prepare(
+        tmp_path / "out",
+        resolved=ValueResolution(deployment="d"),
+        provisioner=_provisioner_with_template("variables.json.j2"),
+        graph=_graph_with_refs(),
+        template_path=template_path,
+    )
+
+
+# ---------------------------------------------------------------------------
 # InfraIntegration.prepare_namespace() (ADR-0022 D6/D7)
 # ---------------------------------------------------------------------------
 

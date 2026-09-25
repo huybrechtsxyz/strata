@@ -59,6 +59,28 @@ class ProvisionerAnsiblePropertiesModel(PlatformBaseModel):
     )
 
 
+class OutputModel(PlatformBaseModel):
+    """The Jinja2 full-file-template escape hatch (ADR-0023 D3;
+    docs/design/value-token-resolution.md's "Value Supply Mechanisms", option
+    C) - generating an entire custom file `default_output()`'s built-in
+    projection doesn't produce. Valid for any `tool` - unlike `backend`/
+    `properties`, nothing about this field is tool-specific (same mechanism
+    on the workload pipeline's `ModuleModel.spec.output` too, once that's
+    wired up).
+
+    `build run` can only **validate** `template` (its referenced names exist
+    somewhere in the declared schema - no rendering, since build never has
+    every value resolved). The actual render is deploy-time only, blocked on
+    `deploy run` not existing yet - see docs/design/value-token-resolution.md.
+    """
+
+    template: str | None = Field(
+        None,
+        description="Workspace-relative path to a Jinja2 template rendered in place of the default output "
+        "projection. '@repo/' cross-repo templates not supported yet - no evidenced need for it.",
+    )
+
+
 class ProvisionerModel(PlatformBaseModel):
     """A tool, its source location, and tool-specific config.
 
@@ -101,6 +123,11 @@ class ProvisionerModel(PlatformBaseModel):
         "compatible registered Integration and errors — rather than guessing — when more than one candidate "
         "exists. Valid for any 'tool' (unlike v1, which only allowed this for terraform/ansible/bicep): every "
         "tool eventually needs a binding, not just the ones v1 happened to build CLI checks for.",
+    )
+    output: OutputModel | None = Field(
+        None,
+        description="Jinja2 full-file-template escape hatch, replacing the default output projection. "
+        "Valid for any 'tool' (ADR-0023 D3) — build run only validates it, see OutputModel.",
     )
 
     @model_validator(mode="after")

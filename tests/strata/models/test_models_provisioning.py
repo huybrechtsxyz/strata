@@ -99,6 +99,31 @@ def test_provisioner_backend_accepted_for_opentofu():
     assert model.backend.type == "azurerm"
 
 
+def test_provisioner_output_template_accepted_for_terraform():
+    data = _minimal_provisioner()
+    data["output"] = {"template": "variables.json.j2"}
+    model = ProvisionerModel.model_validate(data)
+    assert model.output.template == "variables.json.j2"
+
+
+def test_provisioner_output_template_accepted_for_ansible():
+    """Unlike `backend`/`properties`, `output` is valid for any tool — ADR-0023 D3's
+    "same field, same mechanism on both pipelines" (tool-agnostic escape hatch)."""
+    data = {
+        "name": "ansible-init",
+        "tool": "ansible",
+        "source": {"remote": "infra-repo", "source_path": "ansible/init"},
+        "output": {"template": "extra-vars.json.j2"},
+    }
+    model = ProvisionerModel.model_validate(data)
+    assert model.output.template == "extra-vars.json.j2"
+
+
+def test_provisioner_output_is_optional():
+    model = ProvisionerModel.model_validate(_minimal_provisioner())
+    assert model.output is None
+
+
 def test_provisioner_opentofu_requires_source():
     """opentofu (a recognized, non-sync tool) requires a source, same as terraform."""
     with pytest.raises(ValidationError):

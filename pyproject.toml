@@ -14,6 +14,7 @@ dependencies = [
     "requests>=2.31",
     "structlog>=24.1",
     "packaging>=23.0",
+    "jinja2>=3.1",
     "azure-identity>=1.15",
     "azure-keyvault-secrets>=4.7",
     "azure-appconfiguration>=1.6",

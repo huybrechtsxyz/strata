@@ -350,12 +350,36 @@ def build_run(
         integration = resolve_integration(index, provisioner)
         integration_type = type(integration).__name__
 
+        template_path: Path | None = None
+        if provisioner.output and provisioner.output.template:
+            template_path = context.root / provisioner.output.template
+            if not template_path.is_file():
+                raise UsageError(
+                    f"Provisioner '{provisioner.name}': output.template '{provisioner.output.template}' "
+                    f"does not exist at {template_path}."
+                )
+
         if dry_run:
             if provisioner.source is None:
                 _step(f"provisioner '{step.name}': no source to materialise (sync/GitOps)")
             else:
                 _step(f"would materialise provisioner '{step.name}' source ({describe_source(provisioner.source)})")
-            _step(f"would render provisioner '{step.name}' via {integration_type}")
+            if template_path is not None:
+                # Cheap and local — validate now rather than only on a real run,
+                # matching --resolve's own "dry run still catches a bad value" rule.
+                try:
+                    integration.prepare(
+                        build_path / step.name,
+                        resolved=resolved,
+                        provisioner=provisioner,
+                        graph=graph,
+                        template_path=template_path,
+                    )
+                except IntegrationError as exc:
+                    raise UsageError(f"Provisioner '{provisioner.name}': {exc}") from exc
+                _step(f"would validate output.template for provisioner '{step.name}' (render deferred to deploy)")
+            else:
+                _step(f"would render provisioner '{step.name}' via {integration_type}")
             continue
 
         if provisioner.source is None:
@@ -365,15 +389,21 @@ def build_run(
         else:
             source_path = sync_source(context.root, build_path, provisioner.source, remotes)
             _step(f"materialised provisioner '{step.name}' source at {source_path}")
+
         try:
-            integration.prepare(source_path, resolved=resolved, provisioner=provisioner, graph=graph)
+            integration.prepare(
+                source_path, resolved=resolved, provisioner=provisioner, graph=graph, template_path=template_path
+            )
         except IntegrationError as exc:
             # See workload_controller.build_workload_modules()'s identical
             # guard: IntegrationError is a plain Exception, not a
             # StrataError, and would otherwise escape command_run()'s
             # `except StrataError` as a raw traceback.
             raise UsageError(f"Provisioner '{provisioner.name}': {exc}") from exc
-        _step(f"rendered provisioner '{step.name}' via {integration_type}")
+        if template_path is not None:
+            _step(f"validated output.template for provisioner '{step.name}' — render deferred to deploy")
+        else:
+            _step(f"rendered provisioner '{step.name}' via {integration_type}")
 
     # Workload pipeline (ADR-0022 D5-D7) — a second, disconnected input shape
     # (Namespace.spec.modules, never ProvisionerModel/ProvisioningStepModel),
