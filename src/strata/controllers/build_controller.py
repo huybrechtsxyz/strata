@@ -24,6 +24,7 @@ Three small, independent helpers plus the loop itself:
 (ADR-0022 D4: build renders, deploy executes).
 """
 
+import shutil
 from pathlib import Path
 from typing import Any, cast
 
@@ -48,7 +49,11 @@ from strata.models.solution_model import SolutionRemoteModel
 from strata.models.topology_model import TopologyModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.utils.diagnostics import Diagnostics
-from strata.utils.errors import UsageError
+from strata.utils.errors import SystemError, UsageError
+
+
+class BuildCleanError(SystemError):
+    """`build_path` could not be wiped before rendering (`clean=True`)."""
 
 
 def _lookup_all(index: DocumentIndex, kind: PlatformKind, names: list[str] | None) -> dict[str, Any]:
@@ -126,7 +131,7 @@ def find_provisioner(workspace: WorkspaceModel, name: str) -> ProvisionerModel:
     raise UsageError(f"Provisioner '{name}' is not declared in workspace '{workspace.meta.name}'.")
 
 
-def build_run(context: SolutionContext, deployment_name: str, build_path: Path) -> Diagnostics:
+def build_run(context: SolutionContext, deployment_name: str, build_path: Path, *, clean: bool = True) -> Diagnostics:
     """Render `deployment_name`'s workspace provisioners into `build_path`.
 
     Renders only — never calls `plan`/`deploy`/`destroy` (ADR-0022 D4).
@@ -135,6 +140,17 @@ def build_run(context: SolutionContext, deployment_name: str, build_path: Path) 
         context: An already-`require_valid()`-ed solution.
         deployment_name: `meta.name` of the deployment to build.
         build_path: Where rendered artifacts land.
+        clean: Wipe `build_path` before rendering (default `True`, matching
+            v1's `PlatformBuilder`). A build only ever adds/overwrites
+            files otherwise (`sync_source()`'s `copytree(dirs_exist_ok=True)`,
+            each `.auto.tfvars.json` written per-category) — a document
+            removed from the solution (the last `dns_zones` entry, say)
+            would leave its old, still-auto-loaded output behind with no
+            error. Callers pointing `build_path` somewhere they don't fully
+            own (e.g. a user-supplied `--build-path`) should pass `False`
+            explicitly — the safe default assumes `build_path` is
+            exclusively this build's own directory
+            (`layout.build_dir()`'s own convention).
 
     Returns:
         Diagnostics accumulated while resolving build-time values (a
@@ -145,6 +161,8 @@ def build_run(context: SolutionContext, deployment_name: str, build_path: Path) 
         UsageError: `deployment_name` does not exist, its `workspace` is
             unset or does not resolve, or a provisioning step names an
             integration/provisioner that cannot be resolved.
+        BuildCleanError: `clean` is `True` and `build_path` could not be
+            removed (permissions, a file in use).
     """
     index = context.controller.index
 
@@ -161,6 +179,12 @@ def build_run(context: SolutionContext, deployment_name: str, build_path: Path) 
             "which is not in the index."
         )
     workspace = cast(WorkspaceModel, workspace_entry.model)
+
+    if clean and build_path.exists():
+        try:
+            shutil.rmtree(build_path)
+        except OSError as exc:
+            raise BuildCleanError(f"Could not clean build_path '{build_path}': {exc}") from exc
 
     graph = build_resolved_workspace_graph(index, workspace)
     remotes: dict[str, SolutionRemoteModel] = {

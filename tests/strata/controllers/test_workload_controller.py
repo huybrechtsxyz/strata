@@ -202,6 +202,81 @@ def test_build_workload_modules_raises_usage_error_for_an_unregistered_type(tmp_
         )
 
 
+def test_build_workload_modules_skips_a_disabled_reference_entirely(tmp_path: Path):
+    """v1 parity: a disabled module reference must not be resolved,
+    materialised, or rendered - matches
+    terraform_projection._build_resources_payload()'s identical treatment
+    of WorkspaceResourceModel.enabled=False (the same shared `enabled`
+    field, on the resource-attachment side)."""
+    root = tmp_path / "sln"
+    _write(root / "charts" / "authentik" / "Chart.yaml", "name: authentik")
+    module = _module("authentik")
+    index = _index(module)
+    namespace = _namespace(ModuleReferenceModel(name="auth", module="authentik", enabled=False))
+    build_path = tmp_path / "build"
+
+    build_workload_modules(
+        index, root, remotes={}, namespace=namespace, resolved=ValueResolution(deployment="app"), build_path=build_path
+    )
+
+    assert not (build_path / "apps" / "auth").exists()
+
+
+def test_build_workload_modules_renders_enabled_references_alongside_a_disabled_one(tmp_path: Path):
+    root = tmp_path / "sln"
+    _write(root / "charts" / "authentik" / "Chart.yaml", "name: authentik")
+    _write(root / "charts" / "caddy" / "Chart.yaml", "name: caddy")
+    authentik = _module("authentik")
+    caddy = _module("caddy")
+    index = _index(authentik, caddy)
+    namespace = _namespace(
+        ModuleReferenceModel(name="auth", module="authentik", enabled=False),
+        ModuleReferenceModel(name="proxy", module="caddy"),
+    )
+    build_path = tmp_path / "build"
+
+    build_workload_modules(
+        index, root, remotes={}, namespace=namespace, resolved=ValueResolution(deployment="app"), build_path=build_path
+    )
+
+    assert not (build_path / "apps" / "auth").exists()
+    assert (build_path / "apps" / "proxy" / "values.yaml").exists()
+
+
+def test_build_workload_modules_disabled_reference_does_not_need_to_resolve(tmp_path: Path):
+    """A disabled reference is skipped before resolve_module() is ever
+    called - it can name a module that does not even exist in the index."""
+    namespace = _namespace(ModuleReferenceModel(name="ghost", module="does-not-exist", enabled=False))
+
+    build_workload_modules(
+        _index(), tmp_path, remotes={}, namespace=namespace,
+        resolved=ValueResolution(deployment="app"), build_path=tmp_path / "build",
+    )
+
+
+def test_build_workload_modules_namespace_with_no_enabled_modules_is_a_graceful_no_op(tmp_path: Path):
+    """Every reference disabled (even across different module types) - the
+    by_type dict never gains an entry, so the second loop never runs at
+    all: no resolve_module_integration() call, no prepare_namespace() call,
+    nothing written, no error. Same outcome as a namespace with zero
+    modules attached, just reached a different way."""
+    authentik = _module("authentik", type="helm")
+    portainer = _module("portainer", type="compose", source=SourceModel(source_path="services/portainer"))
+    index = _index(authentik, portainer)
+    namespace = _namespace(
+        ModuleReferenceModel(name="auth", module="authentik", enabled=False),
+        ModuleReferenceModel(name="proxy", module="portainer", enabled=False),
+    )
+    build_path = tmp_path / "build"
+
+    build_workload_modules(
+        index, tmp_path, remotes={}, namespace=namespace,
+        resolved=ValueResolution(deployment="app"), build_path=build_path,
+    )
+
+    assert not build_path.exists()
+
+
 # NOTE: "namespace with no modules" is not separately testable through a
 # real NamespaceModel - NamespaceSpecModel.validate_namespace_spec() already
 # requires lifecycle and/or modules (empty namespaces are rejected at

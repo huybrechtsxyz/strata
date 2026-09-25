@@ -69,6 +69,14 @@ def build_workload_modules(
     entirely that class's own concern via `prepare_namespace()`, never
     encoded here.
 
+    Skips a `ModuleReferenceModel` with `enabled=False` entirely — neither
+    resolved, materialised, nor rendered. Matches
+    `terraform_projection._build_resources_payload()`'s identical treatment
+    of `WorkspaceResourceModel.enabled=False` (that field's own docstring:
+    "excludes it from the built platform artifact, and therefore from every
+    provisioner that consumes it") — the same v1 parity gap, on the
+    module-reference side of the same `enabled` field shared by both models.
+
     Each module's build directory is `build_path/namespace.meta.name/
     reference.name` — keyed by the *reference's* name, not
     `module.meta.name`, so the same Module document attached twice under
@@ -99,6 +107,9 @@ def build_workload_modules(
     by_type: dict[str, list[ResolvedModule]] = {}
 
     for reference in namespace.spec.modules or []:
+        if not reference.enabled:
+            continue
+
         module = resolve_module(index, reference)
         if module.spec.type is None:
             raise UsageError(

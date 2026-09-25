@@ -1,9 +1,11 @@
 # `strata build run` Command — Design
 
 - Status: `strata build run` exists and is end-to-end tested
-  (`build_command.py` → `build_controller.build_run()`), including the
-  Helm half of the workload pipeline (ADR-0022 D5-D7 — see
-  [workload-pipeline.md](workload-pipeline.md)); only Compose remains there.
+  (`build_command.py` → `build_controller.build_run()`), including both
+  halves of the workload pipeline (ADR-0022 D5-D7 — see
+  [workload-pipeline.md](workload-pipeline.md)). Stale-output cleaning
+  (parity gap 1 below) is now fixed; the rest of the parity-gap list is
+  still open.
 - Last updated: 2026-09-25
 
 ## Overview
@@ -126,23 +128,33 @@ no decision recorded anywhere. Listed here rather than in an ADR because
 each is small enough to be ordinary remaining work, not a decision needing
 its own document — except where noted.
 
-1. **No stale-output cleaning before a build (correctness).** v1's
+1. **~~No stale-output cleaning before a build (correctness).~~ Fixed.** v1's
    `PlatformBuilder` wipes `build/<deployment>/` on pre-build precisely so
    a removed resource type's `resx_*.auto.tfvars.json` cannot survive into
-   the next `terraform apply`. `build_run()` only ever writes —
-   `sync_source()` uses `copytree(..., dirs_exist_ok=True)` and the
-   projection overwrites per file — so renaming or deleting a document
-   leaves an orphaned, still-auto-loaded `.auto.tfvars.json` behind. This
-   is *not* the Tier-2-deferred `build clean` command; it is `build run`'s
-   own idempotency, and it is the highest-risk item in this list.
-2. **`ModuleReferenceModel.enabled` is ignored by the workload pipeline.**
-   The field exists (`common_models.py`, "Whether this module is
+   the next `terraform apply`. `build_run()` gained a `clean: bool = True`
+   parameter (default matches v1 — wipe `build_path` before rendering) —
+   safe by default because the *default* `build_path`
+   (`layout.build_dir()`) is exclusively strata's own directory. A custom
+   `--build-path` is a different trust boundary (it may point somewhere
+   the caller doesn't exclusively own), so the CLI passes `clean=False`
+   for it unless `--clean` is also given — see `build_command.py`'s
+   `--clean/--no-clean` flag. This was also the answer to "should
+   `--build-path` even exist, given the wipe risk": yes — real reason to
+   redirect output (CI artifact staging directories, e.g. haven's
+   `upload-artifact` step per item 3 below) — the fix scopes the *risk*
+   correctly instead of removing the *option*.
+2. **~~`ModuleReferenceModel.enabled` is ignored by the workload pipeline.~~
+   Fixed.** The field exists (`common_models.py`, "Whether this module is
    enabled/deployed") and its resource-side twin *is* honoured
    (`terraform_projection.py` skips `WorkspaceResourceModel.enabled=False`),
-   but `build_workload_modules()` never checks `reference.enabled` — a
-   disabled module still gets its source materialised and its
-   `values.yaml`/`meta.yaml` written. v1 filtered both at the platform
-   level. Asymmetric, and a modelled field with zero consumers.
+   but `build_workload_modules()` never checked `reference.enabled` — a
+   disabled module still got its source materialised and its
+   `values.yaml`/`meta.yaml` written. `build_workload_modules()` now skips
+   a disabled reference before it is even resolved (`resolve_module()` is
+   never called, so a disabled reference can name a module that doesn't
+   exist in the index at all) — mirrors
+   `_build_resources_payload()`'s identical `if not
+   workspace_resource.enabled: continue` exactly.
 3. **No `.gitignore` emission into the build output.** v1 wrote
    `*.tfstate`, `.terraform/`, `.terraform.lock.hcl` into each provisioner
    directory. v2 writes none. Relevant because a real consumer (haven)
@@ -254,3 +266,23 @@ is a missed conversion, but neither has been revisited:
   D2's `OutputProfileModel` revisit). Everything else absent from v2 was
   confirmed to be an explicit, reasoned cut in ADR-0020/0022/0023 — this
   list is only the residue that was never written down anywhere.
+- 2026-09-25: Parity gap 1 (stale-output cleaning) fixed. `build_run()`
+  gained `clean: bool = True` — wipes `build_path` before rendering,
+  matching v1's `PlatformBuilder` exactly, with a new `BuildCleanError`
+  (`SystemError`) if the wipe itself fails. `build_command.py` gained
+  `--clean/--no-clean` (tri-state, `default=None`): the default build path
+  is always cleaned regardless of the flag (it's exclusively this build's
+  own directory — always safe); a custom `--build-path` is only cleaned
+  when `--clean` is explicitly passed, since it may point somewhere the
+  caller doesn't exclusively own. This also settled a real design question
+  raised alongside it — whether `--build-path` should exist at all, given
+  the wipe risk it introduces — by scoping the risk to the flag rather
+  than removing the option (a custom build path has a real use, e.g.
+  redirecting into a CI artifact-staging directory, per parity gap 3).
+  9 new tests. Full check suite green: 973/973 tests passing.
+- 2026-09-25: Parity gap 2 (`ModuleReferenceModel.enabled` ignored)
+  fixed. `workload_controller.build_workload_modules()` now skips a
+  disabled reference before `resolve_module()` is even called — mirrors
+  `terraform_projection._build_resources_payload()`'s identical
+  `enabled=False` skip on the resource-attachment side of the same shared
+  field. 4 new tests. Full check suite green: 976/976 tests passing.

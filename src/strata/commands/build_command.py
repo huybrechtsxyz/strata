@@ -41,6 +41,13 @@ def build_command() -> None:
     default=None,
     help="Where rendered artifacts land. Defaults to '<solution root>/build/<deployment>'.",
 )
+@click.option(
+    "--clean/--no-clean",
+    default=None,
+    help="Wipe --build-path before rendering. Defaults to on for the default build path "
+    "(exclusively this build's own directory, always safe to wipe) and off for a custom "
+    "--build-path (which may be pointing somewhere not exclusively owned by this build).",
+)
 @output_option
 @quiet_option
 @verbose_option
@@ -48,6 +55,7 @@ def build_run_command(
     deployment: str,
     path: Path | None,
     build_path: Path | None,
+    clean: bool | None,
     output: str,
     quiet: bool,
     verbose: bool,
@@ -61,13 +69,14 @@ def build_run_command(
       0  every step rendered, every build-time value resolved
       2  bad arguments, DEPLOYMENT does not exist, or not inside a solution
       3  the solution is invalid, or a build-time value failed to resolve
-      1  system failure — a remote could not be fetched, or a source could
-         not be materialised
+      1  system failure — a remote could not be fetched, a source could
+         not be materialised, or --build-path could not be cleaned
     """
     with command_run("build run", output=output, quiet=quiet, verbose=verbose) as run:
         context = open_solution(path).require_valid()
         solution = context.controller.solution
         target = build_path or build_dir(context.root, deployment)
+        should_clean = clean if clean is not None else build_path is None
 
         run.describe(
             solution=solution.meta.name if solution else "(unnamed)",
@@ -76,7 +85,7 @@ def build_run_command(
             build_path=target,
         )
 
-        diagnostics = build_run(context, deployment, target)
+        diagnostics = build_run(context, deployment, target, clean=should_clean)
         run.step(f"rendered to {target}")
 
         run.report(diagnostics, root=context.root)

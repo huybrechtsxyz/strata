@@ -158,6 +158,57 @@ def test_build_path_option_overrides_the_default(runner, solution, tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# --clean / --no-clean
+# ---------------------------------------------------------------------------
+
+
+def test_default_build_path_is_always_cleaned(runner, solution):
+    """The default path is exclusively this build's own directory - always
+    safe to wipe, no flag needed."""
+    stale = solution / "build" / "app" / "stale.txt"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("stale")
+
+    result = _run(runner, "app", "--path", solution)
+
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert not stale.exists()
+
+
+def test_custom_build_path_is_not_cleaned_unless_requested(runner, solution, tmp_path):
+    custom = tmp_path / "out"
+    custom.mkdir()
+    (custom / "leftover.txt").write_text("still here")
+
+    result = _run(runner, "app", "--path", solution, "--build-path", custom)
+
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert (custom / "leftover.txt").read_text() == "still here"
+
+
+def test_custom_build_path_is_cleaned_when_clean_flag_given(runner, solution, tmp_path):
+    custom = tmp_path / "out"
+    custom.mkdir()
+    (custom / "leftover.txt").write_text("still here")
+
+    result = _run(runner, "app", "--path", solution, "--build-path", custom, "--clean")
+
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert not (custom / "leftover.txt").exists()
+
+
+def test_no_clean_flag_disables_cleaning_even_for_the_default_path(runner, solution):
+    stale = solution / "build" / "app" / "stale.txt"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("stale")
+
+    result = _run(runner, "app", "--path", solution, "--no-clean")
+
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert stale.exists()
+
+
+# ---------------------------------------------------------------------------
 # JSON
 # ---------------------------------------------------------------------------
 

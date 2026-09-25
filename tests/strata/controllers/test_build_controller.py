@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from strata.controllers.build_controller import (
+    BuildCleanError,
     build_resolved_workspace_graph,
     build_run,
     find_provisioner,
@@ -135,7 +136,9 @@ def test_build_resolved_workspace_graph_walks_providers():
 # ---------------------------------------------------------------------------
 
 
-def test_build_run_materialises_source_and_writes_terraform_output(tmp_path: Path):
+def _terraform_solution(tmp_path: Path) -> Path:
+    """A minimal real solution: one provider, one resource, one workspace
+    with a single Terraform provisioner, one environment, one deployment."""
     root = _solution(tmp_path)
     _write(root, "infra/main.tf", "# root module\n")
     _write(
@@ -171,6 +174,11 @@ def test_build_run_materialises_source_and_writes_terraform_output(tmp_path: Pat
         "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
         "  workspace: main\n  environments:\n    - prd\n",
     )
+    return root
+
+
+def test_build_run_materialises_source_and_writes_terraform_output(tmp_path: Path):
+    root = _terraform_solution(tmp_path)
 
     build_path = tmp_path / "build"
     diagnostics = build_run(_context(root), "app", build_path)
@@ -183,6 +191,44 @@ def test_build_run_materialises_source_and_writes_terraform_output(tmp_path: Pat
     assert (materialised / "workspace.auto.tfvars.json").exists()
     assert (materialised / "providers.auto.tfvars.json").exists()
     assert (materialised / "resx_server.auto.tfvars.json").exists()
+
+
+def test_build_run_cleans_stale_output_by_default(tmp_path: Path):
+    """v1 parity: a document removed from the solution (the resource here)
+    must not leave its old, still-auto-loaded .auto.tfvars.json behind."""
+    root = _terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+    _write(build_path, "stale/resx_ghost_type.auto.tfvars.json", '{"stale": true}')
+
+    build_run(_context(root), "app", build_path)
+
+    assert not (build_path / "stale" / "resx_ghost_type.auto.tfvars.json").exists()
+    assert (build_path / "infra" / "workspace.auto.tfvars.json").exists()
+
+
+def test_build_run_clean_false_preserves_existing_output(tmp_path: Path):
+    root = _terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+    _write(build_path, "stale/leftover.txt", "still here")
+
+    build_run(_context(root), "app", build_path, clean=False)
+
+    assert (build_path / "stale" / "leftover.txt").read_text() == "still here"
+    assert (build_path / "infra" / "workspace.auto.tfvars.json").exists()
+
+
+def test_build_run_clean_wraps_a_failed_wipe_as_build_clean_error(tmp_path: Path, monkeypatch):
+    root = _terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_path.mkdir()
+
+    def _boom(path):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr("strata.controllers.build_controller.shutil.rmtree", _boom)
+
+    with pytest.raises(BuildCleanError, match="permission denied"):
+        build_run(_context(root), "app", build_path)
 
 
 def test_build_run_raises_for_unknown_deployment(tmp_path: Path):
