@@ -105,6 +105,8 @@ Every line above is real, built code today — not a sketch.
 - [ADR-0021](../decisions/0021-integration-layer.md) /
   [integration-layer.md](integration-layer.md) — `InfraIntegration`,
   `prepare_namespace()`'s home on the ABC
+- [ADR-0025](../decisions/0025-strata-supplies-input-not-source-rewriting.md)
+  — why `sync_module_source()` copies a chart verbatim and never rewrites it
 - [build-command.md](build-command.md) — the provisioner pipeline this one
   runs alongside, inside the same `build_run()` call
 
@@ -122,10 +124,13 @@ Every line above is real, built code today — not a sketch.
   `build_workload_modules()` yet, for either Compose or Helm — v1's real
   builders copy these alongside the chart/compose file; v2's equivalent
   pass has not been built.
-- STRATA_* template substitution on copied module files (v1's
-  `_apply_templates_to_dir()`, skipping a chart's own `templates/`
-  subtree — that's Helm's Go-template syntax, not strata's Jinja2) is not
-  built.
+- ~~STRATA_* template substitution on copied module files~~ (v1's
+  `_apply_templates_to_dir()`) — **decided against, not a gap**; now
+  [ADR-0025](../decisions/0025-strata-supplies-input-not-source-rewriting.md).
+  A synced module source (a fetched chart, a vendored compose service) is
+  third-party content the deployment doesn't own, and Helm/Compose already
+  have their own native parameter path (`values.yaml`/`${KEY}`) — strata
+  supplies input to IaC, it does not rewrite IaC source.
 - Build-time validation that every `${var:}`/`${secret:}`/`${feature:}`
   reference inside a rendered `values.yaml` is actually declared somewhere
   reachable (v1's `_validate_expr_refs()`, ADR-0075) is not built — v2 has

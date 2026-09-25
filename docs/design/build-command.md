@@ -97,6 +97,7 @@ convention:
 - [ADR-0022](../decisions/0022-strata-build-run.md) — orchestration design (D1-D7)
 - [ADR-0023](../decisions/0023-build-output-rendering.md) — rendering design (D1-D5, Implementation Plan phases)
 - [ADR-0021](../decisions/0021-integration-layer.md) / [integration-layer.md](integration-layer.md) — the `Integration`/`InfraIntegration` classes this command will call
+- [ADR-0025](../decisions/0025-strata-supplies-input-not-source-rewriting.md) — why `sync_source()` copies verbatim and never rewrites a materialised source
 - [remotes.md](remotes.md) — `sync_source()`'s own prerequisite (remote-to-filesystem-path resolution, done for `local`/`git`)
 - [build-pipeline-status.md](build-pipeline-status.md) — the cross-ADR phase dashboard this doc's "what's built" table refines with real code references
 
@@ -172,15 +173,21 @@ its own document — except where noted.
    Not a `build run` gap; not actionable here. If/when a `strata init`
    equivalent is built, its own scaffold template is the right place for
    an equivalent `.gitignore`, not this command.
-4. **No token/template substitution inside *synced source files*.** v1's
-   `BaseBuilder` Jinja2-renders every copied `.tf`/`.tfvars`/`.bicep`/
+4. **~~No token/template substitution inside *synced source files*.~~
+   Decided against — now [ADR-0025](../decisions/0025-strata-supplies-input-not-source-rewriting.md).**
+   v1's `BaseBuilder` Jinja2-renders every copied `.tf`/`.tfvars`/`.bicep`/
    playbook with a `STRATA_*` + `variables` + `features` context (secrets
-   deliberately excluded). `sync_source()` is a byte-for-byte copy.
-   Adjacent to ADR-0023 Phase 3 but not covered by it: Phase 3 scopes token
-   resolution to `provisioner.backend`/`.configuration`/`.properties`, and
-   the copied-file surface is never named. Decide explicitly whether v2
-   wants this at all — if the answer is "no, sources are opaque", that is
-   worth writing down rather than leaving implicit.
+   deliberately excluded) — confirmed real, unlike gap 3 above
+   (`terraform_builder.py` calls
+   `self._apply_templates_to_dir(dest_dir, template_context)` right after
+   every `copytree`/git-ref extraction). v2 will not port it: **strata
+   supplies input to IaC, it does not rewrite IaC source.** Full reasoning,
+   scope boundary and consequences in the ADR; the short version is that
+   every tool already has a native input mechanism strata writes *alongside*
+   the source (`.auto.tfvars.json`, `values.yaml`, `STRATA_*`), and
+   mutating fetched/vendored source in place is both redundant with that and
+   strictly worse. `sync_source()`/`sync_module_source()` staying
+   byte-for-byte copies is now a recorded decision, not an open gap.
 5. **Build lifecycle hooks and `phase: build` policies.** v1 fires
    `build_run_before`/`build_validate`/`build_generate`/`build_run_after`
    and evaluates build-phase policies with deny/warn/audit enforcement.
@@ -310,3 +317,25 @@ is a missed conversion, but neither has been revisited:
   solution-scaffold template, a command v2 does not have at all yet — not
   `build_run()`. No code changed; the parity-gap entry itself was
   corrected instead.
+- 2026-09-25: Parity gap 4 (token/template substitution inside synced
+  source files) re-verified as real (unlike gap 3) — confirmed directly in
+  `terraform_builder.py`, which calls
+  `self._apply_templates_to_dir(dest_dir, template_context)` after every
+  copy/extract. Decided against porting it: the tool-native input
+  mechanism (`.tfvars`/`TF_VAR_*`, `STRATA_*`/`.env`, `values.yaml`) is
+  strictly better and already built for Terraform
+  (`terraform_projection.py`'s typed, auto-loaded `.auto.tfvars.json`);
+  rewriting fetched/vendored source in place after copying it is the wrong
+  layer, and v1's own implementation already needed a permanent
+  skip-non-Jinja2-files escape hatch as a symptom of that. Also updated
+  [workload-pipeline.md](workload-pipeline.md)'s matching remaining-work
+  line (same decision, module/Compose/Helm side). No code changed —
+  `sync_source()`/`sync_module_source()` staying byte-for-byte copies is
+  now a recorded decision, not an open gap.
+- 2026-09-25: That decision promoted out of this doc into
+  [ADR-0025](../decisions/0025-strata-supplies-input-not-source-rewriting.md)
+  ("strata supplies input to IaC; it does not rewrite IaC source"), since
+  it is a point-in-time architectural decision with a scope boundary worth
+  stating once — not build-out status. Per `docs/decisions/README.md`'s
+  own convention, the reasoning now lives in the ADR and this doc's parity
+  gap 4 entry is a short pointer to it.

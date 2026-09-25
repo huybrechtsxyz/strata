@@ -25,6 +25,17 @@ own `source_path`.
 Chart-based sources (`SourceModel.chart_name` set) are explicitly out of
 scope here — a chart pull (Helm's own registry mechanism) is not a file
 copy, and no real provisioner example uses chart-based sourcing.
+
+**A copy here is byte-for-byte, always — never a template render
+(ADR-0025).** v1 Jinja2-rendered every copied file in place with a
+`STRATA_*`/`variables`/`features` context
+(`base_builder._apply_templates_to_dir()`); v2 deliberately does not.
+Strata supplies *input to* IaC (`.auto.tfvars.json`, `values.yaml`,
+`STRATA_*` env vars — written alongside the source) and never rewrites the
+source itself, which is frequently vendored third-party content the
+deployment does not own. Do not add a substitution pass to this module;
+ADR-0023's `output.template` (generate a *new* file) is the intended
+escape hatch if a real need for rendering appears.
 """
 
 import shutil
