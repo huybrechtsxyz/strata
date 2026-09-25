@@ -156,16 +156,46 @@ def test_build_workload_modules_raises_when_module_type_is_unset(tmp_path: Path)
         )
 
 
-def test_build_workload_modules_raises_usage_error_for_a_type_without_prepare_namespace(tmp_path: Path):
-    """`compose` is a real, registered integration that has not implemented
-    `prepare_namespace()` yet (inherits the base method's raise) - this must
-    surface as a clean UsageError, not the bare IntegrationError
-    `command_run()` cannot catch."""
-    module = _module("web", type="compose", source=SourceModel(remote="reg", chart_name="web"))
-    index = _index(module)
-    namespace = _namespace(ModuleReferenceModel(name="web", module="web"))
+def test_build_workload_modules_renders_a_merged_compose_namespace(tmp_path: Path):
+    """Compose merges every same-type module in the namespace into one
+    docker-compose.yml (D6) - unlike Helm's one-pair-per-module."""
+    root = tmp_path / "sln"
+    _write(root / "services" / "caddy" / "docker-compose.yml", "# stand-in\n")
+    _write(root / "services" / "portainer" / "docker-compose.yml", "# stand-in\n")
+    caddy = _module(
+        "caddy", type="compose", source=SourceModel(source_path="services/caddy"),
+    )
+    portainer = _module(
+        "portainer", type="compose", source=SourceModel(source_path="services/portainer"),
+    )
+    index = _index(caddy, portainer)
+    namespace = _namespace(
+        ModuleReferenceModel(name="caddy", module="caddy"),
+        ModuleReferenceModel(name="portainer", module="portainer"),
+    )
+    build_path = tmp_path / "build"
 
-    with pytest.raises(UsageError, match="does not support namespace-scoped module rendering"):
+    build_workload_modules(
+        index, root, remotes={}, namespace=namespace, resolved=ValueResolution(deployment="app"), build_path=build_path
+    )
+
+    # Each module's own source is still materialised into its own directory...
+    assert (build_path / "apps" / "caddy" / "docker-compose.yml").read_text() == "# stand-in\n"
+    assert (build_path / "apps" / "portainer" / "docker-compose.yml").read_text() == "# stand-in\n"
+    # ...but the RENDERED compose file is the one shared, merged namespace file.
+    merged = yaml.safe_load((build_path / "apps" / "docker-compose.yml").read_text())
+    assert set(merged["services"]) == {"caddy", "portainer"}
+
+
+def test_build_workload_modules_raises_usage_error_for_an_unregistered_type(tmp_path: Path):
+    """A workload module type with no registered integration at all (built-in
+    or plugin) must surface as a clean UsageError, not the bare
+    IntegrationNotFoundError `command_run()` cannot catch."""
+    module = _module("legacy-app", type="argocd", source=SourceModel(remote="reg", chart_name="legacy-app"))
+    index = _index(module)
+    namespace = _namespace(ModuleReferenceModel(name="legacy-app", module="legacy-app"))
+
+    with pytest.raises(UsageError, match="argocd"):
         build_workload_modules(
             index, tmp_path, remotes={}, namespace=namespace,
             resolved=ValueResolution(deployment="app"), build_path=tmp_path / "build",

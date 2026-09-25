@@ -1,0 +1,14 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: namespace
+meta:
+  name: hearth
+  annotations:
+    description: "Modeled on haven's real hearth namespace (config/hearth/namespace.yaml) — Caddy, Authentik, Vaultwarden, Portainer, WUD on Docker Compose. Only authentik/portainer are translated here; enough to exercise both halves of the workload pipeline (built Helm, not-yet-built Compose)."
+spec:
+  default_labels:
+    app: hearth
+  modules:
+    - name: authentik
+      module: authentik
+    - name: portainer
+      module: portainer

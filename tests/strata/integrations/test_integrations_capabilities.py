@@ -203,6 +203,32 @@ def test_prepare_writes_default_output_files(tmp_path: Path):
     assert written.read_text() == '{"name": "ws"}'
 
 
+# ---------------------------------------------------------------------------
+# InfraIntegration.prepare_namespace() (ADR-0022 D6/D7)
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_namespace_base_default_raises_for_a_class_that_does_not_override_it():
+    """`_Bare` never overrides prepare_namespace() (only Helm/Compose do) -
+    this is the contract every other InfraIntegration subclass gets for
+    free, including a hypothetical future one that also never implements
+    it. Guards the ABC's own default behaviour, independent of which
+    concrete registered types currently happen to lack an override."""
+    import pytest
+
+    from strata.integrations.errors import IntegrationError
+    from strata.models.common_models import ModuleReferenceModel
+    from strata.models.namespace_model import NamespaceMetaModel, NamespaceModel, NamespaceSpecModel
+
+    namespace = NamespaceModel(
+        meta=NamespaceMetaModel(name="apps"),
+        spec=NamespaceSpecModel(default_labels={}, modules=[ModuleReferenceModel(name="x", module="x")]),
+    )
+
+    with pytest.raises(IntegrationError, match="does not support namespace-scoped module rendering"):
+        _Bare().prepare_namespace(namespace, [], resolved=ValueResolution(deployment="d"))
+
+
 def test_every_registered_class_is_compliant():
     """The first real exercise of this checker (Phase 3 could only test it against
     fakes — `_KNOWN` didn't exist yet). Every class Phase 4 registers must comply."""

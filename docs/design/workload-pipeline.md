@@ -1,9 +1,11 @@
 # Workload Pipeline (Compose/Helm modules) — Design
 
-- Status: current — Helm implemented and end-to-end tested
-  (`HelmIntegration.prepare_namespace()`, `workload_controller.py`, wired
-  into `build_controller.build_run()`); Compose still not built.
-- Last updated: 2026-09-24
+- Status: current — both halves implemented and end-to-end tested
+  (`HelmIntegration.prepare_namespace()`, `ComposeIntegration.prepare_namespace()`,
+  `workload_controller.py`, wired into `build_controller.build_run()`).
+  `config/`'s example solution builds both a Helm module (authentik) and a
+  merged Compose namespace (portainer) end to end.
+- Last updated: 2026-09-25
 
 ## Overview
 
@@ -38,6 +40,10 @@ HelmIntegration.prepare_namespace(namespace, modules, *, resolved)        # helm
        values = _render_values(item.module)     # env/persistence per service, module.spec.configuration merged in
        if values: write item.source_path/values.yaml
        write item.source_path/meta.yaml          # releaseName/namespace, chart coordinates if registry-based
+
+ComposeIntegration.prepare_namespace(namespace, modules, *, resolved)     # compose.py
+  ├─ services, volumes = _render_namespace_services(namespace.meta.name, modules)  # merges the WHOLE group
+  └─ if services: write modules[0].source_path.parent/docker-compose.yml    # ONE shared file, unlike Helm
 ```
 
 Every line above is real, built code today — not a sketch.
@@ -104,18 +110,18 @@ Every line above is real, built code today — not a sketch.
 
 ## Remaining Work / Open Questions
 
-- **Compose** — `ComposeIntegration.prepare_namespace()` does not exist
-  yet. Real per-tool difference from Helm (D6): Compose *merges* every
-  module in a same-type group into **one**
-  `{build_path}/{namespace}/docker-compose.yml` (services prefixed
-  `{module}-{service}`), never one file per module. `module.spec.compose_file`
-  (opt out of generation, copy a file verbatim instead) is Compose-only and
-  also not designed here yet.
+- `module.spec.compose_file` (pass-through: copy an external compose file
+  verbatim instead of generating one from `spec.services`, at most one per
+  namespace, mutually exclusive with any generative module in the same
+  group) — not implemented; `ComposeIntegration.prepare_namespace()` raises
+  a clear `IntegrationError` (→ `UsageError`) if a module sets it, rather
+  than silently ignoring it. No real example uses it yet.
 - `module.spec.files` (`ModuleFileModel` — extra files copied verbatim into
   the module's build output directory, with `@repo/` cross-repo references
   and glob support) is not wired into `sync_module_source()`/
-  `build_workload_modules()` yet — v1's `HelmBuilder` copies these
-  alongside the chart; v2's equivalent pass has not been built.
+  `build_workload_modules()` yet, for either Compose or Helm — v1's real
+  builders copy these alongside the chart/compose file; v2's equivalent
+  pass has not been built.
 - STRATA_* template substitution on copied module files (v1's
   `_apply_templates_to_dir()`, skipping a chart's own `templates/`
   subtree — that's Helm's Go-template syntax, not strata's Jinja2) is not
@@ -166,3 +172,25 @@ Every line above is real, built code today — not a sketch.
   `workload_controller.py`) to translate `IntegrationError` into
   `UsageError`. 8 new regression tests added. Full check suite green:
   952/952 tests passing.
+- 2026-09-25: `ComposeIntegration.prepare_namespace()` implemented
+  (`compose.py`: `_render_namespace_services()`, `_render_mounts()`,
+  `_resolve_depends_on()`, `_render_healthcheck()`), ported from v1's real
+  `ComposeBuilder._render_module_services()` — same merge-into-one-file
+  behaviour, same `{module}-{service}` prefixing, same `@module/service`
+  cross-module `depends_on` resolution, adapted to v2's collapsed
+  `ModuleServiceEnvironmentModel.value` schema. `compose_file` pass-through
+  deliberately not ported (no real example uses it) — raises a clear
+  `IntegrationError` instead of silently doing nothing. The stale
+  `test_build_workload_modules_raises_usage_error_for_a_type_without_prepare_namespace`
+  test (written when `compose` was the only reachable example of "a
+  registered type without `prepare_namespace()`") was replaced: a real
+  end-to-end Compose test, plus a new `test_integrations_capabilities.py`
+  test that guards the ABC's own base-raise behaviour directly instead of
+  depending on which concrete type currently happens to lack an override.
+  `config/`'s example solution now builds a real, merged
+  `hearth/docker-compose.yml` (portainer) alongside the Helm-rendered
+  `hearth/authentik/` output and the Terraform provisioner's output, fully
+  end to end with `strata build run prd-deployment --path config` — no
+  scratch copy needed (the `infra` remote was also switched from a
+  placeholder GitHub URL to a real local stand-in, `config/vendor/infra/`).
+  29 new tests. Full check suite green: 966/966 tests passing.

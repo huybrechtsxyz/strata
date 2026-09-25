@@ -3,7 +3,7 @@ kind: solution
 meta:
   name: example
   annotations:
-    description: "Example solution used to exercise the discovery loader"
+    description: "Example solution used to exercise the discovery loader and the full strata build run pipeline end to end"
 spec:
   # This example's root IS config/, so Configuration sits beside this file.
   configuration: configuration.yaml
@@ -15,10 +15,9 @@ spec:
       - "templates/**"
   remotes:
     - name: infra
-      type: git
-      url: https://github.com/example/infra.git
-      reference: v1.0.0
-      description: "Terraform modules — artifacts, not documents"
+      type: local
+      url: vendor/infra
+      description: "Local stand-in for a real Terraform module registry — a `git`-type remote works identically for `resolve_remote()`/`sync_source()`, but would need a real reachable repository for `strata build run` to actually succeed here; kept local so the example builds end to end with no network access."
     - name: charts
       type: helm
       url: https://charts.example.io

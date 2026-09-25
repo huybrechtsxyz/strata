@@ -42,9 +42,18 @@ not duplicated here:
   "zero usage" rejection (D2) needs revisiting once a real foreign `.tf`
   root needing emit-suppression is found — not resolved, deliberately
   deferred.
+- v1 parity gaps found by the 2026-09-25 v1-vs-v2 build comparison that are
+  in *no* ADR — stale-output cleaning, `ModuleReferenceModel.enabled`,
+  `.gitignore` emission, substitution inside synced sources, build lifecycle
+  hooks/policies, plus the two conditionally-deferred items whose trigger
+  has now fired (overlap detection, ADR-0023 D2) — are listed in
+  [build-command.md](build-command.md)'s Remaining Work.
 
 ## Changelog
 
+- 2026-09-25: Added a pointer to [build-command.md](build-command.md)'s new
+  "v1 parity gaps found 2026-09-25" section, so the items no ADR covers are
+  reachable from this dashboard too.
 - 2026-09-24: Created, as a single status dashboard across ADR-0021/0022/0023
   so a reader doesn't have to read the full ~2000 lines across all three to
   answer "what's built so far".

@@ -1,0 +1,110 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: module
+meta:
+  name: authentik
+  annotations:
+    description: "Translated from haven's real Compose module (config/hearth/modules/authentik.yaml) into v2's Helm module shape, to exercise the built prepare_namespace() pipeline end to end."
+  tags: ["identity", "sso", "oidc"]
+spec:
+  # haven's real authentik runs as a Compose stack (type: compose) — this
+  # module is deliberately re-typed to `helm` instead, since that half of
+  # the workload pipeline is the one actually built end-to-end today
+  # (ComposeIntegration.prepare_namespace() isn't implemented yet — see
+  # modules/portainer.yaml for that half, kept as type: compose on purpose).
+  source:
+    remote: charts
+    chart_name: authentik
+    chart_version: "2026.5.2"
+  type: helm
+  default_labels:
+    app: authentik
+  services:
+    - name: db
+      image: docker.io/library/postgres:16-alpine
+      restart: unless-stopped
+      environment:
+        - key: POSTGRES_DB
+          value: authentik
+        - key: POSTGRES_USER
+          value: authentik
+        - key: POSTGRES_PASSWORD
+          value: "${secret:AUTHENTIK_POSTGRESQL__PASSWORD}"
+      mounts:
+        - name: data
+          storage_class: standard
+          storage_size: 10Gi
+      healthcheck:
+        name: pg-ready
+        type: command
+        command: ["pg_isready", "-d", "authentik", "-U", "authentik"]
+        interval: 30s
+        timeout: 5s
+        retries: 5
+
+    - name: redis
+      image: docker.io/library/redis:7-alpine
+      restart: unless-stopped
+      healthcheck:
+        name: redis-ping
+        type: command
+        command: ["redis-cli", "ping"]
+        interval: 30s
+        timeout: 3s
+        retries: 5
+
+    - name: server
+      image: ghcr.io/goauthentik/server:2026.5.2
+      restart: unless-stopped
+      command: ["server"]
+      depends_on: ["db", "redis"]
+      healthcheck:
+        name: authentik-ready
+        type: command
+        command: ["ak", "healthcheck"]
+        interval: 30s
+        timeout: 5s
+        retries: 5
+      environment:
+        - key: AUTHENTIK_HOST
+          value: https://auth.huybrechts.xyz
+        - key: AUTHENTIK_REDIS__HOST
+          value: authentik-redis
+        - key: AUTHENTIK_POSTGRESQL__HOST
+          value: authentik-db
+        - key: AUTHENTIK_POSTGRESQL__USER
+          value: authentik
+        - key: AUTHENTIK_POSTGRESQL__NAME
+          value: authentik
+        - key: AUTHENTIK_POSTGRESQL__PASSWORD
+          value: "${secret:AUTHENTIK_POSTGRESQL__PASSWORD}"
+        - key: AUTHENTIK_SECRET_KEY
+          value: "${secret:AUTHENTIK_SECRET_KEY}"
+      mounts:
+        - name: media
+          storage_class: standard
+          storage_size: 5Gi
+
+    - name: worker
+      image: ghcr.io/goauthentik/server:2026.5.2
+      restart: unless-stopped
+      command: ["worker"]
+      depends_on: ["db", "redis"]
+      environment:
+        - key: AUTHENTIK_HOST
+          value: https://auth.huybrechts.xyz
+        - key: AUTHENTIK_REDIS__HOST
+          value: authentik-redis
+        - key: AUTHENTIK_POSTGRESQL__HOST
+          value: authentik-db
+        - key: AUTHENTIK_POSTGRESQL__USER
+          value: authentik
+        - key: AUTHENTIK_POSTGRESQL__NAME
+          value: authentik
+        - key: AUTHENTIK_POSTGRESQL__PASSWORD
+          value: "${secret:AUTHENTIK_POSTGRESQL__PASSWORD}"
+        - key: AUTHENTIK_SECRET_KEY
+          value: "${secret:AUTHENTIK_SECRET_KEY}"
+      mounts:
+        - name: media
+          storage_class: standard
+          storage_size: 5Gi

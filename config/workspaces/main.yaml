@@ -9,6 +9,8 @@ spec:
   #   execution    - what runs, in what order
   providers:
     - azure-main
+  namespaces:
+    - hearth
   provisioners:
     - name: terraform-main
       tool: terraform

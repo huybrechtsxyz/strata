@@ -4,7 +4,7 @@
   (`build_command.py` → `build_controller.build_run()`), including the
   Helm half of the workload pipeline (ADR-0022 D5-D7 — see
   [workload-pipeline.md](workload-pipeline.md)); only Compose remains there.
-- Last updated: 2026-09-24
+- Last updated: 2026-09-25
 
 ## Overview
 
@@ -112,6 +112,88 @@ own dependency chain):
 7. Phase 3/4 of ADR-0023: token substitution (`resolve_expr_tokens()`, wired into `dns`/`networks` too), the `output.template` escape hatch, `required_variables`/`.../`secrets` manifest.
 8. `tenant`/`modules` projection categories, once real fixture data exists.
 
+### v1 parity gaps found 2026-09-25 — not recorded in any ADR
+
+A v1-vs-v2 build comparison (v1's `RunBuildCommand` + its 7 builders against
+today's `build_run()`) confirmed that nearly every large v1 feature absent
+from v2 is an *explicit, reasoned* cut — ADR-0022 (lines 34-62) cuts SBOM,
+CVE audit, `--ai`, lock-mode, cache warming, Ansible and `PlatformBuilder`/
+`platform.json`; ADR-0020 Tier 2 cuts `build plan`/`build clean`;
+ADR-0023 cuts `OutputProfileModel` and defers token substitution,
+`output.template`, Compose, `modules`/`tenant`. The items below are the
+ones that fell through: real v1 build behaviour with no v2 equivalent and
+no decision recorded anywhere. Listed here rather than in an ADR because
+each is small enough to be ordinary remaining work, not a decision needing
+its own document — except where noted.
+
+1. **No stale-output cleaning before a build (correctness).** v1's
+   `PlatformBuilder` wipes `build/<deployment>/` on pre-build precisely so
+   a removed resource type's `resx_*.auto.tfvars.json` cannot survive into
+   the next `terraform apply`. `build_run()` only ever writes —
+   `sync_source()` uses `copytree(..., dirs_exist_ok=True)` and the
+   projection overwrites per file — so renaming or deleting a document
+   leaves an orphaned, still-auto-loaded `.auto.tfvars.json` behind. This
+   is *not* the Tier-2-deferred `build clean` command; it is `build run`'s
+   own idempotency, and it is the highest-risk item in this list.
+2. **`ModuleReferenceModel.enabled` is ignored by the workload pipeline.**
+   The field exists (`common_models.py`, "Whether this module is
+   enabled/deployed") and its resource-side twin *is* honoured
+   (`terraform_projection.py` skips `WorkspaceResourceModel.enabled=False`),
+   but `build_workload_modules()` never checks `reference.enabled` — a
+   disabled module still gets its source materialised and its
+   `values.yaml`/`meta.yaml` written. v1 filtered both at the platform
+   level. Asymmetric, and a modelled field with zero consumers.
+3. **No `.gitignore` emission into the build output.** v1 wrote
+   `*.tfstate`, `.terraform/`, `.terraform.lock.hcl` into each provisioner
+   directory. v2 writes none. Relevant because a real consumer (haven)
+   round-trips `build/` through `upload-artifact`/`download-artifact`.
+4. **No token/template substitution inside *synced source files*.** v1's
+   `BaseBuilder` Jinja2-renders every copied `.tf`/`.tfvars`/`.bicep`/
+   playbook with a `STRATA_*` + `variables` + `features` context (secrets
+   deliberately excluded). `sync_source()` is a byte-for-byte copy.
+   Adjacent to ADR-0023 Phase 3 but not covered by it: Phase 3 scopes token
+   resolution to `provisioner.backend`/`.configuration`/`.properties`, and
+   the copied-file surface is never named. Decide explicitly whether v2
+   wants this at all — if the answer is "no, sources are opaque", that is
+   worth writing down rather than leaving implicit.
+5. **Build lifecycle hooks and `phase: build` policies.** v1 fires
+   `build_run_before`/`build_validate`/`build_generate`/`build_run_after`
+   and evaluates build-phase policies with deny/warn/audit enforcement.
+   v2 mentions lifecycle only as unresolved schema-parity Issue 5
+   ([v1-schema-parity-tracking.md](v1-schema-parity-tracking.md)) and as a
+   deferred Environment subtree, never as `build run` behaviour. Probably
+   correct to skip given `ConfigurationSpecModel` defers `policies`
+   wholesale — but it was never stated as a decision.
+
+Minor, same origin:
+
+- **`build run --dry-run`** — v1 has it for CI preview (renders in memory,
+  logs planned paths, writes nothing). v2's implicit position is "build is
+  already dry", which conflates *does not execute* with *does not write*.
+  Unstated either way.
+- **Terraform input validation against `variables.tf`** — v1 fails the
+  build on a declared-input/schema mismatch before `apply` would.
+  [provisioning-injection-model.md](provisioning-injection-model.md)
+  mentions parsing `variables.tf` as a capability lookup, but not as a
+  build-time gate.
+
+### Two recorded deferrals whose trigger condition has now fired
+
+Both were deferred *conditionally*, and the condition is now met — neither
+is a missed conversion, but neither has been revisited:
+
+- **Cross-manifest overlap detection** (v1's `overlap_controller.py`: same
+  Terraform state backend or namespace claimed by two deployments). The
+  recorded reason to defer was "until `strata build` exists — it needs the
+  build layer's artifact/state-identity concept to key on". `build run`
+  now exists and writes real artifacts.
+- **`OutputProfileModel` (ADR-0023 D2).** ADR-0023's own Remaining Work
+  already records that real load-bearing usage was found in
+  `cfg-int-deployment`'s `control/workspace.yaml`
+  (`output: {format: custom, emits: [...]}`), contradicting the "zero
+  usage" evidence D2 was decided on. Still the biggest known correctness
+  risk against a real consumer, and still unresolved.
+
 ## Changelog
 
 - 2026-09-24: Created. Grounded in the real (uncommitted) building-block
@@ -161,3 +243,14 @@ own dependency chain):
   keyed by the reference name, not `module.meta.name`; chart materialisation
   split into a new controller-layer `sync_module_source()`, never touched by
   `HelmIntegration` itself). Compose still not built.
+- 2026-09-25: Recorded the v1-vs-v2 build comparison's findings under
+  Remaining Work — five v1 build behaviours with no v2 equivalent and no
+  decision recorded in any ADR (stale-output cleaning, `ModuleReferenceModel.enabled`
+  ignored by the workload pipeline, `.gitignore` emission, substitution
+  inside synced source files, build lifecycle hooks/`phase: build`
+  policies), two minor ones (`--dry-run`, `variables.tf` input validation),
+  and the two conditionally-deferred items whose trigger has now fired
+  (overlap detection — it was waiting for `build run` to exist; ADR-0023
+  D2's `OutputProfileModel` revisit). Everything else absent from v2 was
+  confirmed to be an explicit, reasoned cut in ADR-0020/0022/0023 — this
+  list is only the residue that was never written down anywhere.

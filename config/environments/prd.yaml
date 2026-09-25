@@ -26,6 +26,14 @@ spec:
       store: environment
       value: EXAMPLE_DB_PASSWORD
       description: "Read from the EXAMPLE_DB_PASSWORD environment variable"
+    - key: AUTHENTIK_POSTGRESQL__PASSWORD
+      store: constant
+      value: "example-not-a-real-secret"
+      description: "Placeholder — the authentik module's real secret would come from an integration-backed store"
+    - key: AUTHENTIK_SECRET_KEY
+      store: constant
+      value: "example-not-a-real-secret"
+      description: "Placeholder — the authentik module's real secret would come from an integration-backed store"
 
   # '${feature:KEY}'.
   features:
