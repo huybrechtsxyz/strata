@@ -101,10 +101,10 @@ convention:
 | --- | --- |
 | `workspace`, `providers`, `topologies`, `resources_by_category` | Built (Phase 1) |
 | `namespaces`, `firewalls` | Built (Phase 2a) |
-| `dns`, `networks` | Built (Phase 2c) — **known gap**: `${var:}`/`${secret:}`/`${feature:}` tokens inside `DnsRecordModel.value`/`SubnetModel.cidr`/`NetworkDefinitionModel.address_space` are written as-is, unresolved (token resolution is Phase 3, not wired into these two categories yet) |
+| `dns`, `networks` | Built (Phase 2c) — `${var:}`/`${secret:}`/`${feature:}` tokens inside `DnsRecordModel.value`/`SubnetModel.cidr`/`NetworkDefinitionModel.address_space` are written as-is, unresolved. **Not a `build run`-scope fix** — decided 2026-09-25, see [value-token-resolution.md](value-token-resolution.md): v1 itself never resolves these at build time either (confirmed directly in `terraform_builder.py`), only at deploy with fully-resolved values; a `dns`/`networks`-only build-time resolver would be inconsistent with `firewall`/`module` (same token mechanism, same gap). One shared resolver, applied uniformly to every kind, belongs at deploy time. |
 | `modules` (Phase 2b) | Deliberately skipped — checked all real workspaces available, zero use of `TopologyComponentModel.modules`; Compose/Helm modules go through the separate workload pipeline instead |
 | `tenant` (Phase 2c remainder) | Not built — no fixture data to ground its shape against yet |
-| `required_variables`/`required_features`/`required_secrets` | Not built (Phase 3) — no v2 model has a `references` field to walk; needs a token-scan of resolved `configuration`/`backend`/`custom` |
+| `required_variables`/`required_features`/`required_secrets` | **Superseded by `resolved.yaml`** (docs/design/build-time-value-categories.md, Q8) — this row's old description was wrong: v1's real `required_variables`/`required_features`/`required_secrets` is a **declaration-based** inventory (`_collect_environment_variables()`, walking every declared key regardless of whether anything references it), not a token-scan of resolved `configuration`/`backend`/`custom` as previously stated here. `resolved.yaml` already is that inventory (`variable_refs`/`feature_refs`/`secret_refs`), just as plain YAML instead of `*.auto.tfvars.json` (deliberately, to avoid requiring matching `variable {}` blocks in the user's `.tf` files — see Q8). Nothing further to build for this specific row. |
 | `output.template` (Jinja2 escape hatch, D3) | Not built (Phase 4) |
 | `provisioner.backend`/`.configuration` token substitution (D2) | Not built (Phase 3) |
 | `flags`/`variables`/`properties`/`custom` (v1's other four default categories) | **Built.** `TerraformIntegration.default_output()` reads `graph.variable_refs`/`.feature_refs`/`.properties`/`.custom` directly — no merge/reachability logic inside the integration itself, all five values are computed once by `build_controller.py` before the provisioner loop. See [build-time-value-categories.md](build-time-value-categories.md) for the full design and all 5 implementation phases (status: done). |
@@ -130,7 +130,7 @@ own dependency chain):
 4. ~~The `build_controller.py` orchestrator loop itself~~ — done and end-to-end tested.
 5. ~~`strata build run` CLI command~~ (`commands/build_command.py`) — done, matching `validate_command.py`'s thin-glue-over-controller shape.
 6. `ComposeIntegration.prepare_namespace()`/`build_workload_modules()`'s Compose half (D5-D7) — the entire remaining gap in the workload pipeline; see [workload-pipeline.md](workload-pipeline.md). Helm's half is done.
-7. Phase 3/4 of ADR-0023: token substitution (`resolve_expr_tokens()`, wired into `dns`/`networks` too), the `output.template` escape hatch, `required_variables`/`.../`secrets` manifest.
+7. Phase 3/4 of ADR-0023: `provisioner.backend`/`.configuration` token substitution, the `output.template` escape hatch. `dns`/`networks` token substitution is **not** part of this — moved to [value-token-resolution.md](value-token-resolution.md) (deploy-time, one shared resolver for every kind, not `build run`-scoped).
 8. `tenant`/`modules` projection categories, once real fixture data exists.
 
 ### v1 parity gaps found 2026-09-25 — not recorded in any ADR
@@ -269,7 +269,7 @@ is a missed conversion, but neither has been revisited:
   now exists and writes real artifacts.
 - **`OutputProfileModel` (ADR-0023 D2).** ADR-0023's own Remaining Work
   already records that real load-bearing usage was found in
-  `cfg-int-deployment`'s `control/workspace.yaml`
+  `cfg-deployment`'s `control/workspace.yaml`
   (`output: {format: custom, emits: [...]}`), contradicting the "zero
   usage" evidence D2 was decided on. Still the biggest known correctness
   risk against a real consumer. **Investigated 2026-09-25, found to be
@@ -430,7 +430,7 @@ is a missed conversion, but neither has been revisited:
   item). Confirmed v1's full real schema
   (`OutputProfileModel`/`OutputFileModel`/`EmitCategory`) and the exact
   real need (`emits: [features, variables, properties]`, documented in
-  `cfg-int-deployment` alongside a real strata bug/fix, PR #309) — but
+  `cfg-deployment` alongside a real strata bug/fix, PR #309) — but
   found it's blocked on a bigger, previously-unnoticed prerequisite:
   `TerraformIntegration.default_output()` discards `resolved.values`
   entirely (`del resolved`), so the `features`/`variables`/`properties`
