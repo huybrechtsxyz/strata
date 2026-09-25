@@ -188,14 +188,33 @@ its own document — except where noted.
    mutating fetched/vendored source in place is both redundant with that and
    strictly worse. `sync_source()`/`sync_module_source()` staying
    byte-for-byte copies is now a recorded decision, not an open gap.
-5. **Build lifecycle hooks and `phase: build` policies.** v1 fires
-   `build_run_before`/`build_validate`/`build_generate`/`build_run_after`
-   and evaluates build-phase policies with deny/warn/audit enforcement.
-   v2 mentions lifecycle only as unresolved schema-parity Issue 5
-   ([v1-schema-parity-tracking.md](v1-schema-parity-tracking.md)) and as a
-   deferred Environment subtree, never as `build run` behaviour. Probably
-   correct to skip given `ConfigurationSpecModel` defers `policies`
-   wholesale — but it was never stated as a decision.
+5. **Build lifecycle hooks and `phase: build` policies — real, but not a
+   `build run` gap; split and re-homed to
+   [lifecycle.md](lifecycle.md).** Both halves verified in v1:
+   `run_build_command.py` fires `build_run_before`/`build_validate`/
+   `build_generate`/`build_run_after` via
+   `LifecycleController.execute_configuration_phase()`, and
+   `_evaluate_build_policies()` evaluates `Configuration.spec.policies`
+   filtered to `phase == "build"` with deny/warn/audit enforcement. What the
+   original note got wrong is the *scope*:
+   - **Hooks are not build-specific and there is nothing for `build_run()`
+     to call.** v1 fires lifecycle hooks from ~30 sites across ~12 commands
+     (build/deploy/solution), and v2 executes lifecycle **nowhere, for any
+     command** — zero references outside `models/`. v2's
+     `ConfigurationSpecModel` doesn't even have a `lifecycle` field, which
+     is exactly where v1's build hooks come from. Adding a call in
+     `build_run()` would have nothing to read and no executor to call.
+     Tracked in [lifecycle.md](lifecycle.md), blocked on schema-parity
+     Issue 5 (hierarchy precedence).
+   - **Policies are already a recorded decision.**
+     [ADR-0020](../decisions/0020-v1-consumer-feature-priority.md) lists
+     `policies` among the deferred `ConfigurationSpecModel` fields, with a
+     stated convention ("port incrementally alongside the command that
+     needs each") and a matching Remaining Work entry. Not an undocumented
+     gap. Worth noting a v2 build-phase policy engine would also have a
+     much emptier context than v1's, whose `PolicyContext` carries
+     `platform_artifact`/`sbom_components`/`cve_audit_result` — all three
+     cut by ADR-0022.
 
 Minor, same origin:
 
@@ -339,3 +358,17 @@ is a missed conversion, but neither has been revisited:
   stating once — not build-out status. Per `docs/decisions/README.md`'s
   own convention, the reasoning now lives in the ADR and this doc's parity
   gap 4 entry is a short pointer to it.
+- 2026-09-25: Parity gap 5 (build lifecycle hooks / `phase: build` policies)
+  verified real in v1 but found **mis-scoped**, and split. The hooks half is
+  not a `build run` concern at all: v1 fires lifecycle from ~30 sites across
+  ~12 commands, v2 executes lifecycle *nowhere for any command* (zero
+  references outside `models/`), and v2's `ConfigurationSpecModel` lacks the
+  `lifecycle` field v1's build hooks actually read from — so there is
+  nothing for `build_run()` to call and nothing to call it with. Re-homed to
+  a new [lifecycle.md](lifecycle.md), which records v2's inert schema (seven
+  kinds), v1's real `LifecycleController` mechanism, a correction to
+  ADR-0021 D11's characterisation of v1's interpreter dispatch, and nine
+  open questions gating implementation — gated in turn on schema-parity
+  Issue 5. The policies half needed no new record: ADR-0020 already defers
+  `Configuration.spec.policies` explicitly, with a porting convention and a
+  Remaining Work entry. No code changed.
