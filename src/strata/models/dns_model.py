@@ -60,6 +60,8 @@ class DnsRecordModel(PlatformBaseModel):
     )
     ttl: int | None = Field(None, ge=1, description="Record-level TTL override in seconds (>=1 if set)")
     priority: int | None = Field(None, ge=1, le=65535, description="Priority for MX/SRV records (1-65535 if set)")
+    description: str | None = Field(None, min_length=1, description="Description of the DNS record, optionally for provider")
+    notes: str | None = Field(None, min_length=1, description="Additional notes for the DNS record, not for provider")
 
     @field_validator("value")
     @classmethod
