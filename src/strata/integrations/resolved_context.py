@@ -19,6 +19,7 @@ type is the direction the contract allows).
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from strata.models.common_models import ModuleReferenceModel
 from strata.models.dns_model import DnsModel
@@ -28,6 +29,7 @@ from strata.models.namespace_model import NamespaceModel
 from strata.models.network_model import NetworkModel
 from strata.models.provider_model import ProviderModel
 from strata.models.resource_model import ResourceModel
+from strata.models.store_model import VariableValueType
 from strata.models.topology_model import TopologyModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.utils.diagnostics import Diagnostics
@@ -50,6 +52,27 @@ class ValueResolution:
 
 
 @dataclass(frozen=True)
+class ValueReference:
+    """One declared variable/feature/secret — never a resolved
+    integration-backed value (docs/design/build-time-value-categories.md,
+    Q4).
+
+    `value` is populated **only** for `constant`/`environment` stores —
+    exactly the values `build run` is already allowed to know and already
+    writes to `.auto.tfvars.json` output. For a secret, or any
+    integration-backed store, `value` stays `None` — structurally, not by a
+    filter applied later — so this type (and any collection of it) is safe
+    to dump wholesale for debugging/audit.
+    """
+
+    key: str
+    store: str
+    description: str | None = None
+    value_type: VariableValueType | None = None
+    value: Any = None
+
+
+@dataclass(frozen=True)
 class ResolvedWorkspaceGraph:
     """Already-resolved documents a workspace references.
 
@@ -63,6 +86,11 @@ class ResolvedWorkspaceGraph:
     `WorkspaceSpecModel.providers`/`.topology`/`.resources[].resource`/
     `.namespaces`/`.firewalls`/`.dns_zones`/`.networks` reference), so a
     consumer never re-does its own name lookup.
+
+    `variable_refs`/`feature_refs`/`secret_refs`/`properties`/`custom`
+    (docs/design/build-time-value-categories.md, Q3/Q4) are computed once
+    by `build_controller.py`, before the per-provisioner loop — derived,
+    minimal data, not raw `DeploymentModel`/`EnvironmentModel` instances.
     """
 
     workspace: WorkspaceModel
@@ -73,6 +101,11 @@ class ResolvedWorkspaceGraph:
     firewalls: dict[str, FirewallModel] = field(default_factory=dict)
     dns: dict[str, DnsModel] = field(default_factory=dict)
     networks: dict[str, NetworkModel] = field(default_factory=dict)
+    variable_refs: list[ValueReference] = field(default_factory=list)
+    feature_refs: list[ValueReference] = field(default_factory=list)
+    secret_refs: list[ValueReference] = field(default_factory=list)
+    properties: dict[str, Any] = field(default_factory=dict)
+    custom: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

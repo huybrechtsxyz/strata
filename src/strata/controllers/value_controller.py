@@ -20,7 +20,7 @@ needs all three distinguished, since "not declared" and "failed" call for
 different fixes.
 """
 
-from typing import cast
+from typing import Any, cast
 
 from strata.controllers.deployment_resolution import resolve_deployment_chains
 from strata.controllers.solution_context import SolutionContext
@@ -28,7 +28,7 @@ from strata.integrations.capabilities import StoreIntegration
 from strata.integrations.errors import ValueResolutionError
 from strata.integrations.registry import IntegrationNotFoundError
 from strata.integrations.registry import get as get_integration
-from strata.integrations.resolved_context import ValueResolution
+from strata.integrations.resolved_context import ValueReference, ValueResolution
 from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import DeploymentModel
 from strata.models.environment_model import EnvironmentModel
@@ -40,7 +40,9 @@ from strata.models.store_model import (
     VariableStoreModel,
     VariableStoreType,
 )
+from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
+from strata.utils.dict_merge import deep_merge
 from strata.utils.errors import UsageError
 
 #: Store types resolved without any integration — read directly.
@@ -91,11 +93,11 @@ class _Resolvers:
 def resolve_deployment(context: SolutionContext, deployment_name: str) -> DeploymentModel:
     """Find `deployment_name` and fold in its `extends`/tenant-defaults chain.
 
-    Shared by `resolve_values()`/`build_time_keys()` (this module) and
-    `build_controller.build_run()` (which needs the same resolved
-    `spec.workspace` - a workspace can itself be inherited via `extends`,
-    so a caller doing its own raw `index.get(DEPLOYMENT, ...)` lookup could
-    silently disagree with what `resolve_values()` used).
+    Shared by `resolve_values()` (this module) and `build_controller.build_run()`
+    (which needs the same resolved `spec.workspace` - a workspace can itself
+    be inherited via `extends`, so a caller doing its own raw
+    `index.get(DEPLOYMENT, ...)` lookup could silently disagree with what
+    `resolve_values()` used).
 
     Raises:
         UsageError: `deployment_name` does not name a real deployment.
@@ -111,12 +113,18 @@ def resolve_deployment(context: SolutionContext, deployment_name: str) -> Deploy
 
 
 
-def _reachable_environments(context: SolutionContext, deployment: DeploymentModel) -> list[EnvironmentModel]:
+def reachable_environments(context: SolutionContext, deployment: DeploymentModel) -> list[EnvironmentModel]:
     """Every `EnvironmentModel` `deployment.spec.environments` names.
 
     Tenant environments are already folded in ahead of the deployment's own
     (ADR-0024's `_merge_tenant_defaults()`, inside `resolve_deployment_chains()`)
     - no separate tenant lookup needed here.
+
+    Public (not `_`-prefixed): `build_controller.py` calls this directly
+    (docs/design/build-time-value-categories.md, Q4) to build
+    `ResolvedWorkspaceGraph`'s `variable_refs`/`feature_refs`/`secret_refs`/
+    `properties`/`custom` fields, alongside `resolve_values()`'s own use of
+    it - both must agree on which environments are in scope.
     """
     index = context.controller.index
     environments: list[EnvironmentModel] = []
@@ -127,27 +135,98 @@ def _reachable_environments(context: SolutionContext, deployment: DeploymentMode
     return environments
 
 
-def build_time_keys(context: SolutionContext, deployment_name: str) -> list[str]:
-    """Every variable/feature key declared in environments reachable from
-    `deployment_name` - deliberately **never** secrets.
-
-    This is the function ADR-0022 D1a's own safety note calls for:
-    "'Terraform's tfvars are non-secret only at build time' is enforced
-    entirely by which keys `build_run()` ever requests, not by anything
-    `ValueResolution` guarantees structurally" - `resolve_values()`'s
-    `values: dict[str, str]` is one flat dict with no type-level distinction
-    between a variable's value and a secret's, so the exclusion has to
-    happen here, at the key-list-building step, not downstream.
-
-    Reuses `resolve_values()`'s own deployment/environment-reachability
-    walk (`resolve_deployment()`/`_reachable_environments()`) rather than
-    re-deriving it, so the two can never disagree about which environments
-    are in scope.
+def _coerce_feature_value(raw: Any) -> bool:
+    """v1 precedent (`_build_feature_flags_vars`): bool passthrough; a string
+    is checked against a falsy set case-insensitively; anything else via
+    `bool()`.
     """
-    deployment = resolve_deployment(context, deployment_name)
-    environments = _reachable_environments(context, deployment)
-    variables, _secrets, features = merge_environment_models(environments)
-    return sorted({**variables, **features})
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str):
+        return raw.lower() not in ("false", "0", "no", "")
+    return bool(raw)
+
+
+def build_value_references(
+    environments: list[EnvironmentModel],
+) -> tuple[list[ValueReference], list[ValueReference], list[ValueReference]]:
+    """Build `(variable_refs, feature_refs, secret_refs)` for
+    `ResolvedWorkspaceGraph` (docs/design/build-time-value-categories.md, Q1/Q4).
+
+    Bypasses `ValueResolution` entirely, mirroring v1's real
+    `_build_feature_flags_vars()`/`_build_flat_variables()`: reads store
+    definitions directly rather than resolving through `resolve_values()`.
+    `value` is populated **only** for `constant` (literal passthrough - no
+    casting, `VariableStoreModel.value`/`FeatureStoreModel.value` are not
+    cross-validated against `type` in v2 either) and `environment` (a local
+    `os.environ` read - not network I/O) stores. Every other store type,
+    and every secret regardless of store type, gets `value=None` -
+    structurally, never resolved here (Q5: integration-backed resolution is
+    deploy's job, not build's).
+    """
+    from os import environ
+
+    variables, secrets, features = merge_environment_models(environments)
+
+    def _value_for(store_type: VariableStoreType | FeatureStoreType | SecretStoreType, raw: Any, *, is_feature: bool) -> Any:
+        if store_type in _CONSTANT_TYPES:
+            return _coerce_feature_value(raw) if is_feature else raw
+        if store_type in _ENVIRONMENT_TYPES:
+            env_val = environ.get(str(raw))
+            if env_val is None:
+                return None
+            return _coerce_feature_value(env_val) if is_feature else env_val
+        return None
+
+    variable_refs = [
+        ValueReference(
+            key=key,
+            store=store.store.value,
+            description=store.description,
+            value_type=store.type,
+            value=_value_for(store.store, store.value, is_feature=False),
+        )
+        for key, store in variables.items()
+    ]
+    feature_refs = [
+        ValueReference(
+            key=key,
+            store=store.store.value,
+            description=store.description,
+            value=_value_for(store.store, store.value, is_feature=True),
+        )
+        for key, store in features.items()
+    ]
+    secret_refs = [
+        ValueReference(key=key, store=store.store.value, description=store.description)
+        for key, store in secrets.items()
+    ]
+    return variable_refs, feature_refs, secret_refs
+
+
+def merge_workspace_environment_deployment_properties(
+    workspace: WorkspaceModel,
+    environments: list[EnvironmentModel],
+    deployment: DeploymentModel,
+    source: str,
+) -> dict[str, Any]:
+    """Deep-merge `{source}` (`"properties"` or `"custom"`):
+    `workspace.spec.{source}` -> each reachable `environment.spec.{source}`
+    in order -> `deployment.spec.{source}` (docs/design/
+    build-time-value-categories.md, Q3 - a deliberate improvement over v1's
+    real, docstring-contradicting behaviour, which never merges the
+    deployment's own value at all).
+
+    No `overrides.{source}` step, unlike v1: `EnvironmentSpecModel` has no
+    `overrides` field in v2 at all - confirmed via its own module docstring,
+    deliberately not ported (0 of 26 real environment documents used it,
+    ADR-0003's minimal-slice policy).
+    """
+    result: dict[str, Any] = dict(getattr(workspace.spec, source, None) or {})
+    for environment in environments:
+        result = deep_merge(result, getattr(environment.spec, source, None) or {})
+    result = deep_merge(result, getattr(deployment.spec, source, None) or {})
+    return result
 
 
 def resolve_values(context: SolutionContext, deployment_name: str, keys: list[str]) -> ValueResolution:
@@ -166,7 +245,7 @@ def resolve_values(context: SolutionContext, deployment_name: str, keys: list[st
         UsageError: `deployment_name` does not name a real deployment.
     """
     deployment = resolve_deployment(context, deployment_name)
-    environments = _reachable_environments(context, deployment)
+    environments = reachable_environments(context, deployment)
 
     variables, secrets, features = merge_environment_models(environments)
     resolvers = _Resolvers()

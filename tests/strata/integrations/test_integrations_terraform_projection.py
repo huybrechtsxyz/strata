@@ -6,7 +6,7 @@ Fixture shaped like haven's real `stack/workspace.yaml`: one provider, one
 topology, one resource, one namespace, one firewall.
 """
 
-from strata.integrations.resolved_context import ResolvedWorkspaceGraph
+from strata.integrations.resolved_context import ResolvedWorkspaceGraph, ValueReference
 from strata.integrations.terraform_projection import (
     build_platform_projection,
     planned_files,
@@ -171,7 +171,16 @@ def _workspace(
 
 
 def _graph(
-    *, namespace_names=None, firewall_names=None, dns_names=None, network_names=None, **workspace_kwargs
+    *,
+    namespace_names=None,
+    firewall_names=None,
+    dns_names=None,
+    network_names=None,
+    variable_refs=None,
+    feature_refs=None,
+    properties=None,
+    custom=None,
+    **workspace_kwargs,
 ) -> ResolvedWorkspaceGraph:
     workspace = _workspace(
         namespace_names=namespace_names,
@@ -189,6 +198,10 @@ def _graph(
         firewalls={name: _firewall(name) for name in (firewall_names or [])},
         dns={name: _dns(name) for name in (dns_names or [])},
         networks={name: _network(name) for name in (network_names or [])},
+        variable_refs=variable_refs or [],
+        feature_refs=feature_refs or [],
+        properties=properties or {},
+        custom=custom or {},
     )
 
 
@@ -328,6 +341,59 @@ def test_planned_files_skips_empty_categories():
     files = dict(planned_files(payload))
     assert "topologies.auto.tfvars.json" not in files
     assert "resx_virtualmachine.auto.tfvars.json" not in files
+
+
+# ---------------------------------------------------------------------------
+# flags / variables / properties / custom (docs/design/build-time-value-categories.md)
+# ---------------------------------------------------------------------------
+
+
+def test_flags_category_only_includes_resolved_entries():
+    refs = [
+        ValueReference(key="NEW_UI", store="constant", value=True),
+        ValueReference(key="BETA", store="vault", value=None),  # integration-backed - excluded
+    ]
+    payload = build_platform_projection(_graph(feature_refs=refs), _provisioner())
+    assert payload["flags"] == {"NEW_UI": True}
+
+
+def test_variables_category_only_includes_resolved_entries():
+    refs = [
+        ValueReference(key="REGION", store="constant", value="westeurope"),
+        ValueReference(key="DB_HOST", store="vault", value=None),
+    ]
+    payload = build_platform_projection(_graph(variable_refs=refs), _provisioner())
+    assert payload["variables"] == {"REGION": "westeurope"}
+
+
+def test_properties_and_custom_categories_pass_through_graph_dicts_directly():
+    payload = build_platform_projection(
+        _graph(properties={"tier": "premium"}, custom={"team": "platform"}), _provisioner()
+    )
+    assert payload["properties"] == {"tier": "premium"}
+    assert payload["custom"] == {"team": "platform"}
+
+
+def test_flags_writes_to_flags_auto_tfvars_json_not_features():
+    """Matches v1's real filename (`_build_feature_flags_vars()`) - the
+    payload key is `flags`, not `features`/`feature_refs`."""
+    payload = build_platform_projection(
+        _graph(feature_refs=[ValueReference(key="NEW_UI", store="constant", value=True)]), _provisioner()
+    )
+    files = dict(planned_files(payload))
+    assert "flags.auto.tfvars.json" in files
+    assert "features.auto.tfvars.json" not in files
+
+
+def test_flags_and_variables_categories_empty_when_nothing_resolved():
+    payload = build_platform_projection(_graph(), _provisioner())
+    assert payload["flags"] == {}
+    assert payload["variables"] == {}
+    files = dict(planned_files(payload))
+    assert "flags.auto.tfvars.json" not in files
+    assert "variables.auto.tfvars.json" not in files
+    assert "properties.auto.tfvars.json" not in files
+    assert "custom.auto.tfvars.json" not in files
     assert "namespaces.auto.tfvars.json" not in files
     assert "firewalls.auto.tfvars.json" not in files
     assert "dns.auto.tfvars.json" not in files

@@ -26,20 +26,27 @@ no business logic in the command body, `command_run()` for lifecycle,
 ## Current Design
 
 ```
-strata build run DEPLOYMENT [--path PATH] [--build-path PATH] [--clean/--no-clean] [--dry-run]
+strata build run DEPLOYMENT [--path PATH] [--build-path PATH] [--clean/--no-clean] [--dry-run] [--resolve] [--env-file PATH]...
   └─ build_command.py: build_run_command()
        ├─ context = open_solution(path).require_valid()
        ├─ target = build_path or layout.build_dir(context.root, deployment)  # '<root>/build/<deployment>' by default
        ├─ should_clean = clean if clean is not None else build_path is None  # default path always cleaned; custom path only if --clean given
-       └─ diagnostics = build_run(context, deployment, target, clean=should_clean, dry_run=dry_run, on_step=run.step)
+       └─ diagnostics = build_run(context, deployment, target, clean=should_clean, dry_run=dry_run,
+                                   on_step=run.step, resolve=resolve, env_files=list(env_files))
 
-build_run(context, deployment_name, build_path, *, clean=True, dry_run=False, on_step=None)
-  ├─ resolve_deployment(context, deployment_name)        # value_controller.py — shared with resolve_values()/build_time_keys()
-  ├─ keys = build_time_keys(context, deployment_name)    # value_controller.py — variables/features only, never secrets
-  ├─ resolved = resolve_values(context, deployment_name, keys)
+build_run(context, deployment_name, build_path, *, clean=True, dry_run=False, on_step=None, resolve=False, env_files=None)
+  ├─ for f in env_files: os.environ.setdefault(key, value) per load_env_file(f)   # docs/design/build-time-value-categories.md, Q9
+  ├─ deployment = resolve_deployment(context, deployment_name)   # value_controller.py — shared with resolve_values()
   ├─ workspace = index.get(WORKSPACE, deployment.spec.workspace)
+  ├─ environments = reachable_environments(context, deployment)   # value_controller.py
+  ├─ variable_refs, feature_refs, secret_refs = build_value_references(environments)   # Q1/Q2/Q4/Q5 — CONSTANT/ENVIRONMENT only, no network
+  ├─ properties = merge_workspace_environment_deployment_properties(workspace, environments, deployment, "properties")  # Q3
+  ├─ custom = merge_workspace_environment_deployment_properties(workspace, environments, deployment, "custom")
+  ├─ resolved = ValueResolution(deployment=deployment_name)   # empty placeholder unless --resolve
+  ├─ if resolve: validation = resolve_values(context, deployment_name, all_declared_keys); diagnostics.extend(validation.diagnostics)  # Q7 — never writes values
   ├─ if clean and build_path.exists(): rmtree(build_path) or on_step("would clean ...") if dry_run
-  ├─ graph = build_resolved_workspace_graph(index, workspace)   # build_controller.py, D1a's assembly step
+  ├─ graph = build_resolved_workspace_graph(index, workspace, variable_refs=..., feature_refs=..., secret_refs=..., properties=..., custom=...)
+  ├─ write_resolved_manifest(build_path, graph)   # Q8 — build_path/resolved.yaml, skipped under --dry-run
   └─ for step in ordered_by_depends_on(workspace.spec.execution):  # build_controller.py, Kahn's-algorithm order
        ├─ provisioner = find_provisioner(workspace, step.provisioner)
        ├─ integration = resolve_integration(index, provisioner)   # always resolved for real, even under --dry-run
@@ -48,7 +55,13 @@ build_run(context, deployment_name, build_path, *, clean=True, dry_run=False, on
        └─ integration.prepare(source_path, resolved=resolved, provisioner=provisioner, graph=graph)
 ```
 
-Every line above is real, built code today — not a sketch.
+Every line above is real, built code today — not a sketch. `build_time_keys()`
+(the old `keys = build_time_keys(...); resolved = resolve_values(...)`
+unconditional call this pseudocode used to show) was deleted — fully
+superseded by `build_value_references()`, which does the equivalent
+reachability walk without ever touching the network or `ValueResolution`.
+See [build-time-value-categories.md](build-time-value-categories.md) for
+the full design and phase-by-phase implementation history.
 
 Plus a second, independent workload pipeline (ADR-0022 D5-D7,
 Compose/Helm, driven by `Namespace.spec.modules` rather than
@@ -72,7 +85,7 @@ variant of the provisioner loop above.
 | `build_resolved_workspace_graph()` (D1a's assembly step) | `strata/controllers/build_controller.py` | Built — walks all seven of a workspace's name-lists (providers/topology/resources/namespaces/firewalls/dns_zones/networks) via the index, skipping a name that does not resolve (defensive; Phase 1's `validate_references` already guarantees these exist). |
 | `ordered_by_depends_on()` | `strata/controllers/build_controller.py` | Built — Kahn's-algorithm topological sort, same shape `provisioning_model.validate_provisioning_steps()` already uses to *detect* a cycle, but returning the order instead of discarding it. Assumes already-validated input (acyclic) — `WorkspaceSpecModel.validate_execution()` guarantees this for real workspaces. |
 | `find_provisioner()` | `strata/controllers/build_controller.py` | Built — trivial lookup; `WorkspaceSpecModel.validate_execution()` already guarantees the name exists. |
-| `build_time_keys()` (ADR-0022 D1a's safety note) | `strata/controllers/value_controller.py` | Built — reuses `resolve_values()`'s own deployment/environment-reachability walk (factored into `resolve_deployment()`/`_reachable_environments()`) so the two can never disagree about which environments are in scope; returns variable/feature keys only, never secrets. |
+| `build_value_references()`/`merge_workspace_environment_deployment_properties()` (replaces the old `build_time_keys()`) | `strata/controllers/value_controller.py` | Built — see [build-time-value-categories.md](build-time-value-categories.md) Q1/Q3/Q4/Q6 for the full design; reuses `resolve_deployment()`/`reachable_environments()` (now public) so it can never disagree with `resolve_values()` about which environments are in scope. |
 | Build orchestrator (`build_controller.build_run()`, the loop itself) | `strata/controllers/build_controller.py` | Built and end-to-end tested — a real workspace/provider/resource/deployment fixture materialises its Terraform source and writes real `.auto.tfvars.json` output (`tests/strata/controllers/test_build_controller.py`). Also calls the workload pipeline (below) for every namespace on the resolved graph. |
 | `strata build run` CLI command | `strata/commands/build_command.py` | Built and end-to-end tested — thin glue over `build_run()`, matching `validate_command.py`/`values_command.py`'s shape. `--build-path` overrides the default `layout.build_dir(root, deployment)` (`<root>/build/<deployment>`, already excluded from discovery by `DEFAULT_IGNORED_DIRS`'s `build` entry). |
 | Workload pipeline (`prepare_namespace()`, Helm) | `strata/controllers/workload_controller.py`, `strata/integrations/helm.py` | Built and end-to-end tested for Helm — see [workload-pipeline.md](workload-pipeline.md). Compose not built. |
@@ -94,7 +107,7 @@ convention:
 | `required_variables`/`required_features`/`required_secrets` | Not built (Phase 3) — no v2 model has a `references` field to walk; needs a token-scan of resolved `configuration`/`backend`/`custom` |
 | `output.template` (Jinja2 escape hatch, D3) | Not built (Phase 4) |
 | `provisioner.backend`/`.configuration` token substitution (D2) | Not built (Phase 3) |
-| `features`/`variables`/`properties`/`custom` (v1's other two default categories) | **Not built at all — `resolved.values` is silently discarded.** `TerraformIntegration.default_output()` does `del resolved` and never writes it to any file; found while investigating the `OutputProfileModel` revisit (below). Design in progress: see [build-time-value-categories.md](build-time-value-categories.md) for v1's real four-category evidence, v2's current-state gaps, and the open questions blocking implementation. |
+| `flags`/`variables`/`properties`/`custom` (v1's other four default categories) | **Built.** `TerraformIntegration.default_output()` reads `graph.variable_refs`/`.feature_refs`/`.properties`/`.custom` directly — no merge/reachability logic inside the integration itself, all five values are computed once by `build_controller.py` before the provisioner loop. See [build-time-value-categories.md](build-time-value-categories.md) for the full design and all 5 implementation phases (status: done). |
 
 ## Related Decisions
 

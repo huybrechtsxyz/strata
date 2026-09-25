@@ -247,3 +247,54 @@ def test_dry_run_still_exits_two_for_an_unknown_deployment(runner, solution):
 def test_json_reports_success(runner, solution):
     payload = json.loads(_run(runner, "app", "--path", solution, "--output", "json").output)
     assert payload["ok"] is True
+
+
+# ---------------------------------------------------------------------------
+# --resolve
+# ---------------------------------------------------------------------------
+
+
+def test_without_resolve_an_integration_backed_secret_is_never_touched(runner, solution):
+    _write(
+        solution,
+        "environment.yaml",
+        ENVIRONMENT.replace("spec: {}", "spec:\n  secrets:\n    - key: VAULT_SECRET\n      store: vault\n      value: kv/x\n"),
+    )
+    result = _run(runner, "app", "--path", solution)
+    assert result.exit_code == EXIT_SUCCESS, result.output
+
+
+def test_resolve_flag_reports_a_failed_integration_backed_secret(runner, solution):
+    _write(
+        solution,
+        "environment.yaml",
+        ENVIRONMENT.replace("spec: {}", "spec:\n  secrets:\n    - key: VAULT_SECRET\n      store: vault\n      value: kv/x\n"),
+    )
+    result = _run(runner, "app", "--path", solution, "--resolve")
+    assert result.exit_code == EXIT_VALIDATION
+    assert "no resolver implemented yet" in result.output
+
+
+# ---------------------------------------------------------------------------
+# --env-file
+# ---------------------------------------------------------------------------
+
+
+def test_env_file_supplies_an_environment_store_variable(runner, solution, monkeypatch):
+    monkeypatch.delenv("BUILD_CLI_PROBE_VAR", raising=False)
+    _write(
+        solution,
+        "environment.yaml",
+        ENVIRONMENT.replace(
+            "spec: {}", "spec:\n  variables:\n    - key: GREETING\n      store: environment\n      value: BUILD_CLI_PROBE_VAR\n"
+        ),
+    )
+    env_file = solution / ".env"
+    env_file.write_text("BUILD_CLI_PROBE_VAR=hello-from-cli-test\n")
+
+    result = _run(runner, "app", "--path", solution, "--env-file", env_file)
+
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    manifest = (solution / "build" / "app" / "resolved.yaml").read_text()
+    assert "hello-from-cli-test" in manifest
+

@@ -361,6 +361,138 @@ def test_build_run_renders_helm_workload_modules(tmp_path: Path):
     assert meta == {"releaseName": "auth", "namespace": "apps"}
 
 
+# ---------------------------------------------------------------------------
+# resolved.yaml / --resolve / --env-file (docs/design/build-time-value-categories.md)
+# ---------------------------------------------------------------------------
+
+
+def _solution_with_values(tmp_path: Path, *, extra_environment_spec: str = "") -> Path:
+    """Same minimal Terraform solution as `_terraform_solution()`, but the
+    environment declares real variable/feature/secret stores instead of
+    `spec: {}`."""
+    root = _terraform_solution(tmp_path)
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n" + extra_environment_spec,
+    )
+    return root
+
+
+def test_build_run_writes_resolved_yaml_with_constant_and_secret_split(tmp_path: Path):
+    root = _solution_with_values(
+        tmp_path,
+        extra_environment_spec=(
+            "  variables:\n    - key: REGION\n      store: constant\n      value: westeurope\n"
+            "  secrets:\n    - key: DB_PASSWORD\n      store: constant\n      value: hunter2\n"
+        ),
+    )
+    build_path = tmp_path / "build"
+
+    build_run(_context(root), "app", build_path)
+
+    manifest = yaml.safe_load((build_path / "resolved.yaml").read_text())
+    assert manifest["variables"]["REGION"] == {"store": "constant", "value": "westeurope"}
+    # A secret's value is never written, even for a constant store.
+    assert "value" not in manifest["secrets"]["DB_PASSWORD"]
+    assert manifest["secrets"]["DB_PASSWORD"]["store"] == "constant"
+
+
+def test_build_run_writes_flags_and_variables_terraform_output(tmp_path: Path):
+    """End to end: a constant-store variable/feature reaches the real
+    Terraform provisioner's build_path, not just the graph/manifest."""
+    root = _solution_with_values(
+        tmp_path,
+        extra_environment_spec=(
+            "  variables:\n    - key: REGION\n      store: constant\n      value: westeurope\n"
+            "  features:\n    - key: NEW_UI\n      store: constant\n      value: true\n"
+        ),
+    )
+    build_path = tmp_path / "build"
+
+    build_run(_context(root), "app", build_path)
+
+    variables = yaml.safe_load((build_path / "infra" / "variables.auto.tfvars.json").read_text())
+    assert variables == {"REGION": "westeurope"}
+    flags = yaml.safe_load((build_path / "infra" / "flags.auto.tfvars.json").read_text())
+    assert flags == {"NEW_UI": True}
+
+
+def test_build_run_dry_run_does_not_write_resolved_yaml(tmp_path: Path):
+    root = _terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+
+    build_run(_context(root), "app", build_path, dry_run=True)
+
+    assert not build_path.exists()
+
+
+def test_build_run_without_resolve_never_attempts_integration_backed_values(tmp_path: Path):
+    """Without `--resolve`, an integration-backed secret is never touched at
+    all — no diagnostics finding, not even an attempt."""
+    root = _solution_with_values(
+        tmp_path, extra_environment_spec="  secrets:\n    - key: VAULT_SECRET\n      store: vault\n      value: kv/x\n"
+    )
+    build_path = tmp_path / "build"
+
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok
+
+
+def test_build_run_resolve_flag_validates_every_declared_value(tmp_path: Path):
+    """With `--resolve`, the same integration-backed secret IS attempted,
+    and its failure is reported — but never written anywhere."""
+    root = _solution_with_values(
+        tmp_path, extra_environment_spec="  secrets:\n    - key: VAULT_SECRET\n      store: vault\n      value: kv/x\n"
+    )
+    build_path = tmp_path / "build"
+
+    diagnostics = build_run(_context(root), "app", build_path, resolve=True)
+
+    assert not diagnostics.ok
+    assert "no resolver implemented yet" in diagnostics.messages()[0]
+    # Still never written to resolved.yaml or anywhere else.
+    manifest = yaml.safe_load((build_path / "resolved.yaml").read_text())
+    assert "value" not in manifest["secrets"]["VAULT_SECRET"]
+
+
+def test_build_run_env_file_supplies_a_missing_environment_store_variable(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("PHASE3_PROBE_VAR", raising=False)
+    root = _solution_with_values(
+        tmp_path,
+        extra_environment_spec=(
+            "  variables:\n    - key: GREETING\n      store: environment\n      value: PHASE3_PROBE_VAR\n"
+        ),
+    )
+    env_file = tmp_path / ".env"
+    env_file.write_text("PHASE3_PROBE_VAR=hello-from-file\n")
+    build_path = tmp_path / "build"
+
+    build_run(_context(root), "app", build_path, env_files=[env_file])
+
+    manifest = yaml.safe_load((build_path / "resolved.yaml").read_text())
+    assert manifest["variables"]["GREETING"] == {"store": "environment", "value": "hello-from-file"}
+
+
+def test_build_run_env_file_never_overrides_a_real_env_var(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("PHASE3_PROBE_VAR2", "real-shell-value")
+    root = _solution_with_values(
+        tmp_path,
+        extra_environment_spec=(
+            "  variables:\n    - key: GREETING\n      store: environment\n      value: PHASE3_PROBE_VAR2\n"
+        ),
+    )
+    env_file = tmp_path / ".env"
+    env_file.write_text("PHASE3_PROBE_VAR2=from-file-should-lose\n")
+    build_path = tmp_path / "build"
+
+    build_run(_context(root), "app", build_path, env_files=[env_file])
+
+    manifest = yaml.safe_load((build_path / "resolved.yaml").read_text())
+    assert manifest["variables"]["GREETING"]["value"] == "real-shell-value"
+
+
 
 # NOTE: "deployment has no workspace" is not separately testable through a
 # real, loadable solution — `DeploymentSpecModel.validate_complete_unless_partial()`

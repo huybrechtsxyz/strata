@@ -233,9 +233,13 @@ class TerraformIntegration(InfraIntegration):
         """The default tfvars projection (ADR-0023 D1) - one
         `*.auto.tfvars.json` file per non-empty category, Terraform's own
         auto-load convention (no `-var-file` flag needed). `resolved` is
-        unused by Phase 1's four structural categories - accepted now so
+        unused - `flags`/`variables`/`properties`/`custom` (docs/design/
+        build-time-value-categories.md) are fed entirely by `graph`'s own
+        `variable_refs`/`feature_refs`/`properties`/`custom` fields, not by
+        `resolved`/`ValueResolution` - accepted here so
         `InfraIntegration.prepare()`'s uniform dispatch (D5) does not need
-        a different call shape once a later phase does use it.
+        a different call shape once a later phase (Phase 3 token
+        substitution) does use it.
         """
         del resolved
         payload = build_platform_projection(graph, provisioner)

@@ -284,9 +284,46 @@ def _build_networks_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     return payload
 
 
+def _build_flags_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """`{key: bool}` for `flags.auto.tfvars.json` (docs/design/
+    build-time-value-categories.md, Q1/Q2) - matches v1's real filename
+    (`_build_feature_flags_vars()`), not the `feature_refs` field name.
+
+    Only entries `build_value_references()` already resolved (`constant`/
+    `environment` stores) carry a `value` - everything else (integration-
+    backed stores) is filtered out here, never emitted.
+    """
+    return {ref.key: ref.value for ref in graph.feature_refs if ref.value is not None}
+
+
+def _build_variables_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """`{key: value}` for `variables.auto.tfvars.json`, native-typed where
+    `build_value_references()` could tell (docs/design/
+    build-time-value-categories.md, Q1/Q2). Same `constant`/`environment`-
+    only filter as `_build_flags_payload()`.
+    """
+    return {ref.key: ref.value for ref in graph.variable_refs if ref.value is not None}
+
+
+def _build_properties_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """`properties.auto.tfvars.json` - already the final merged dict
+    (workspace -> environment(s) -> deployment's own), computed once by
+    `build_controller.py` (docs/design/build-time-value-categories.md, Q3).
+    """
+    return graph.properties
+
+
+def _build_custom_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """`custom.auto.tfvars.json` - same merge as `_build_properties_payload()`,
+    `custom` source instead of `properties` (Q3)."""
+    return graph.custom
+
+
 def build_platform_projection(graph: ResolvedWorkspaceGraph, provisioner: ProvisionerModel) -> dict[str, Any]:
     """The default projection (D1: Phase 1's four structural categories,
-    Phase 2a's namespaces/firewalls, Phase 2c's dns/networks).
+    Phase 2a's namespaces/firewalls, Phase 2c's dns/networks, and
+    docs/design/build-time-value-categories.md's `flags`/`variables`/
+    `properties`/`custom`).
 
     `provisioner` is currently unused by any category built so far -
     accepted now so a later phase's per-provisioner filtering (if any turns
@@ -302,6 +339,10 @@ def build_platform_projection(graph: ResolvedWorkspaceGraph, provisioner: Provis
         "firewalls": _build_firewalls_payload(graph),
         "dns": _build_dns_payload(graph),
         "networks": _build_networks_payload(graph),
+        "flags": _build_flags_payload(graph),
+        "variables": _build_variables_payload(graph),
+        "properties": _build_properties_payload(graph),
+        "custom": _build_custom_payload(graph),
     }
 
 

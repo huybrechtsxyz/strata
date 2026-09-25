@@ -53,9 +53,28 @@ def build_command() -> None:
     is_flag=True,
     default=False,
     help="Report what would be cleaned, materialised and rendered without doing any of it. "
-    "Every other step (deployment/workspace resolution, value resolution, integration "
+    "Every other step (deployment/workspace resolution, value-reference derivation, integration "
     "resolution) still runs for real, so a dry run still catches a bad deployment name or "
     "an unresolvable integration.",
+)
+@click.option(
+    "--resolve",
+    is_flag=True,
+    default=False,
+    help="Additionally validate every declared variable/feature/secret, including "
+    "integration-backed stores (real network calls, real auth) - a full pre-deploy smoke "
+    "test. Findings are reported; the resolved values themselves are never written anywhere, "
+    "with or without this flag. Off by default: no network call beyond fetching sources.",
+)
+@click.option(
+    "--env-file",
+    "env_files",
+    multiple=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="A .env-style file (KEY=VALUE per line) merged into the process environment before "
+    "anything else runs - supplies 'environment'-store values a local shell doesn't already "
+    "have, the way a CI pipeline's own exported env vars would. Repeatable; a real, "
+    "already-exported env var always wins over a file's value. Applied in the order given.",
 )
 @output_option
 @quiet_option
@@ -66,6 +85,8 @@ def build_run_command(
     build_path: Path | None,
     clean: bool | None,
     dry_run: bool,
+    resolve: bool,
+    env_files: tuple[Path, ...],
     output: str,
     quiet: bool,
     verbose: bool,
@@ -76,11 +97,16 @@ def build_run_command(
 
     \b
     Exit codes:
-      0  every step rendered, every build-time value resolved
+      0  every step rendered; every value --resolve was asked to validate resolved
       2  bad arguments, DEPLOYMENT does not exist, or not inside a solution
-      3  the solution is invalid, or a build-time value failed to resolve
+      3  the solution is invalid, or (only with --resolve) a declared value failed to resolve
       1  system failure — a remote could not be fetched, a source could
          not be materialised, or --build-path could not be cleaned
+
+    Without --resolve, only 'constant'/'environment'-backed values are ever read (no network
+    beyond fetching sources) — an unset 'environment'-store variable is simply omitted from
+    output, not a failure. --resolve additionally attempts every declared value, including
+    secrets and integration-backed stores, and reports any that fail.
     """
     with command_run("build run", output=output, quiet=quiet, verbose=verbose) as run:
         context = open_solution(path).require_valid()
@@ -95,7 +121,16 @@ def build_run_command(
             build_path=target,
         )
 
-        diagnostics = build_run(context, deployment, target, clean=should_clean, dry_run=dry_run, on_step=run.step)
+        diagnostics = build_run(
+            context,
+            deployment,
+            target,
+            clean=should_clean,
+            dry_run=dry_run,
+            on_step=run.step,
+            resolve=resolve,
+            env_files=list(env_files),
+        )
         if not dry_run:
             run.step(f"rendered to {target}")
 
