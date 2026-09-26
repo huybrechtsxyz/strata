@@ -103,7 +103,7 @@ convention:
 | `namespaces`, `firewalls` | Built (Phase 2a) |
 | `dns`, `networks` | Built (Phase 2c) — `${var:}`/`${secret:}`/`${feature:}` tokens inside `DnsRecordModel.value`/`SubnetModel.cidr`/`NetworkDefinitionModel.address_space` are written as-is, unresolved. **Not a `build run`-scope fix** — decided 2026-09-25, see [value-token-resolution.md](value-token-resolution.md): v1 itself never resolves these at build time either (confirmed directly in `terraform_builder.py`), only at deploy with fully-resolved values; a `dns`/`networks`-only build-time resolver would be inconsistent with `firewall`/`module` (same token mechanism, same gap). One shared resolver, applied uniformly to every kind, belongs at deploy time. |
 | `modules` (Phase 2b) | Deliberately skipped — checked all real workspaces available, zero use of `TopologyComponentModel.modules`; Compose/Helm modules go through the separate workload pipeline instead |
-| `tenant` (Phase 2c remainder) | Not built — no fixture data to ground its shape against yet |
+| `tenant` (Phase 2c remainder) | **Built 2026-09-25.** `value_controller.resolve_tenant()` resolves the deployment's own `spec.tenant` reference (surviving `resolve_deployment()`'s `extends`/tenant-defaults-merge chain unchanged — `merge_deployment_specs()` only consumes `partial`/`extends`, never `tenant`); exposed via `ResolvedWorkspaceGraph.tenant`; `terraform_projection._build_tenant_payload()` writes `tenant.auto.tfvars.json` (flat top-level keys — `code`/`name`/`zones`/`onboarded`/`configuration`, mapped from `TenantModel.meta.name`/`spec.display_name`/`spec.geographies`/`spec.onboarded`/`spec.configuration` — matching every other category's convention here, since no real fixture confirms v1's exact wrapper-key shape for this one category). Empty/no file when the deployment references no tenant. |
 | `required_variables`/`required_features`/`required_secrets` | **Superseded by `resolved.yaml`** (docs/design/build-time-value-categories.md, Q8) — this row's old description was wrong: v1's real `required_variables`/`required_features`/`required_secrets` is a **declaration-based** inventory (`_collect_environment_variables()`, walking every declared key regardless of whether anything references it), not a token-scan of resolved `configuration`/`backend`/`custom` as previously stated here. `resolved.yaml` already is that inventory (`variable_refs`/`feature_refs`/`secret_refs`), just as plain YAML instead of `*.auto.tfvars.json` (deliberately, to avoid requiring matching `variable {}` blocks in the user's `.tf` files — see Q8). Nothing further to build for this specific row. |
 | `output.template` (Jinja2 escape hatch, D3) | **Split, see [value-token-resolution.md](value-token-resolution.md).** ADR-0023's Phase 4 sketch assumed full build-time rendering — found to be the same flaw as the `dns`/`networks`/`backend` rows: `variables`/`flags` only carry `constant`/`environment`-backed values at build time, so a real template referencing a Vault/AppConfig-backed key would raise unconditionally, every build. (a) **Build-time validation — Built.** `strata/utils/templater.py`'s `validate_template_references()` (static-only, `jinja2.meta.find_undeclared_variables()` + an AST walk for `variables.KEY`/`flags.KEY`/`secrets.KEY` access), wired into `InfraIntegration.prepare()` — when `provisioner.output.template` is set, `default_output()` is skipped entirely and nothing is written; validation failures raise `IntegrationError`→`UsageError`, same as any other build failure. (b) **Actual rendering** — still deploy-time only, blocked on `deploy run`, same backlog as the row below. |
 | `provisioner.backend`/`.configuration` token substitution (D2) | **Re-scoped 2026-09-25, see [value-token-resolution.md](value-token-resolution.md).** Same root cause as the row above and the `dns`/`networks` row — needs fully-resolved values (including secret-shaped leaves, which must never be written to disk), only available at deploy time. Confirmed directly in v1: `resolve_expr_string()`/`EXPR_PATTERN` is used exclusively by `TerraformDeployer`/`HelmDeployer` (deploy-time), never by any build-time builder. Not `build_run`-scope. |
@@ -121,17 +121,27 @@ convention:
 
 ## Remaining Work / Open Questions
 
-Everything in the "not built" rows above. In build order (per ADR-0022's
-own dependency chain):
+Reviewed fresh 2026-09-25 — several items below were stale (marked "not
+built" when actually done). In build order (per ADR-0022's own dependency
+chain):
 
 1. ~~`build_resolved_workspace_graph()`~~ — done.
 2. ~~Remote resolution~~ ([remotes.md](remotes.md) — done for `local`/`git`; `oci`/`helm` and credentialed private-repo fetches still open) and ~~`resolve_integration()`~~ (D2, done).
 3. ~~`sync_source()`~~ (D3) — done, using `remote_resolution.resolve_remote()`.
 4. ~~The `build_controller.py` orchestrator loop itself~~ — done and end-to-end tested.
 5. ~~`strata build run` CLI command~~ (`commands/build_command.py`) — done, matching `validate_command.py`'s thin-glue-over-controller shape.
-6. `ComposeIntegration.prepare_namespace()`/`build_workload_modules()`'s Compose half (D5-D7) — the entire remaining gap in the workload pipeline; see [workload-pipeline.md](workload-pipeline.md). Helm's half is done.
-7. Phase 3/4 of ADR-0023: `provisioner.backend`/`.configuration` token substitution, the `output.template` escape hatch. `dns`/`networks` token substitution is **not** part of this — moved to [value-token-resolution.md](value-token-resolution.md) (deploy-time, one shared resolver for every kind, not `build run`-scoped).
-8. `tenant`/`modules` projection categories, once real fixture data exists.
+6. ~~`ComposeIntegration.prepare_namespace()`/`build_workload_modules()`'s Compose half (D5-D7)~~ — **done, this row was stale**: `compose.py`'s `prepare_namespace()` is implemented, and [workload-pipeline.md](workload-pipeline.md)'s own status line confirms "both halves implemented and end-to-end tested." Nothing left in the workload pipeline.
+7. ~~`output.template`'s build-time validation half~~ — done, see [value-token-resolution.md](value-token-resolution.md). Its actual-render half, and `provisioner.backend`/`.configuration`/`dns`/`networks` token substitution, are all deploy-time-only — not `build_run`-scope, blocked on `deploy run` not existing.
+8. ~~`tenant` projection category~~ — **done 2026-09-25.** Re-checked at the *deployment* level (not workspace, where Phase 2c originally looked) after finding real evidence: `cfg-int-deployment`'s real `deploy/hubs/z00/s01/c0224/deployment.yaml` has `tenant: c0224`, and `deployment_resolution._merge_tenant_defaults()` already resolved the `TenantModel` internally, just discarded it after extracting `environments`/`properties`/`custom`. `modules`: still genuinely blocked — zero real use of `TopologyComponentModel.modules` in any workspace checked, no fixture to ground it against.
+9. **`flags`/`variables`/`properties`/`custom`** — done, see [build-time-value-categories.md](build-time-value-categories.md).
+
+**Net effect: `build run`'s own remaining work is exhausted for now.**
+Everything left on this table is either blocked on `deploy run` (not yet
+started, a separate, larger effort) or blocked on real fixture data that
+doesn't exist in either reference repo (`modules` category — `tenant` is
+now built). Don't force `modules` just to have something to build — wait
+for either `deploy run` to start, or real evidence of workspace-level
+`TopologyComponentModel.modules` usage to appear.
 
 ### v1 parity gaps found 2026-09-25 — not recorded in any ADR
 

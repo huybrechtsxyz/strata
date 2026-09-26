@@ -24,8 +24,6 @@ assumed):
   zero use of `TopologyComponentModel.modules` in any of them (Compose/Helm
   modules go through the entirely separate `prepare_namespace()` pipeline,
   ADR-0022 D5-D7, never this projection). Skipped, not built.
-- `tenant` (Phase 2c's remaining item — no `tenant` in any workspace
-  checked, so no fixture to ground its shape against yet).
 - `dns`/`networks` are built, but with a known gap: `DnsRecordModel.value`/
   `SubnetModel.cidr`/`NetworkDefinitionModel.address_space` may themselves
   contain `${var:}`/`${secret:}`/`${feature:}` tokens (ADR-0002) - written
@@ -319,6 +317,32 @@ def _build_custom_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     return graph.custom
 
 
+def _build_tenant_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """`tenant.auto.tfvars.json` - the deployment's own `spec.tenant`
+    reference (docs/design/build-command.md's `tenant` category), resolved
+    once by `value_controller.resolve_tenant()`.
+
+    Flat top-level keys, matching every other category here - no fixture
+    data exists yet to confirm v1's exact real shape for this one
+    (unlike every other category), so this follows v2's own established,
+    consistent convention instead of guessing at a wrapper key.
+
+    Empty dict when the deployment references no tenant - `planned_files()`
+    already skips empty categories, so no `tenant.auto.tfvars.json` is
+    written at all in that case, same treatment as an unset `dns_zones`.
+    """
+    if graph.tenant is None:
+        return {}
+    spec = graph.tenant.spec
+    return {
+        "code": graph.tenant.meta.name,
+        "name": spec.display_name,
+        "zones": spec.geographies,
+        "onboarded": spec.onboarded.isoformat() if spec.onboarded else None,
+        "configuration": spec.configuration or {},
+    }
+
+
 def build_platform_projection(graph: ResolvedWorkspaceGraph, provisioner: ProvisionerModel) -> dict[str, Any]:
     """The default projection (D1: Phase 1's four structural categories,
     Phase 2a's namespaces/firewalls, Phase 2c's dns/networks, and
@@ -343,6 +367,7 @@ def build_platform_projection(graph: ResolvedWorkspaceGraph, provisioner: Provis
         "variables": _build_variables_payload(graph),
         "properties": _build_properties_payload(graph),
         "custom": _build_custom_payload(graph),
+        "tenant": _build_tenant_payload(graph),
     }
 
 

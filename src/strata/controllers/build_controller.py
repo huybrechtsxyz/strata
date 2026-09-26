@@ -42,6 +42,7 @@ from strata.controllers.value_controller import (
     merge_workspace_environment_deployment_properties,
     reachable_environments,
     resolve_deployment,
+    resolve_tenant,
     resolve_values,
 )
 from strata.controllers.workload_controller import build_workload_modules
@@ -56,6 +57,7 @@ from strata.models.provider_model import ProviderModel
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel
 from strata.models.resource_model import ResourceModel
 from strata.models.solution_model import SolutionRemoteModel
+from strata.models.tenant_model import TenantModel
 from strata.models.topology_model import TopologyModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
@@ -93,6 +95,7 @@ def build_resolved_workspace_graph(
     secret_refs: list[ValueReference] | None = None,
     properties: dict[str, Any] | None = None,
     custom: dict[str, Any] | None = None,
+    tenant: TenantModel | None = None,
 ) -> ResolvedWorkspaceGraph:
     """Assemble a `ResolvedWorkspaceGraph` by walking every name `workspace`
     references (ADR-0022 D1a).
@@ -122,6 +125,7 @@ def build_resolved_workspace_graph(
         secret_refs=secret_refs or [],
         properties=properties or {},
         custom=custom or {},
+        tenant=tenant,
     )
 
 
@@ -308,6 +312,7 @@ def build_run(
     variable_refs, feature_refs, secret_refs = build_value_references(environments)
     properties = merge_workspace_environment_deployment_properties(workspace, environments, deployment, "properties")
     custom = merge_workspace_environment_deployment_properties(workspace, environments, deployment, "custom")
+    tenant = resolve_tenant(context, deployment)
 
     diagnostics = Diagnostics()
     resolved = ValueResolution(deployment=deployment_name)
@@ -335,6 +340,7 @@ def build_run(
         secret_refs=secret_refs,
         properties=properties,
         custom=custom,
+        tenant=tenant,
     )
     if dry_run:
         _step(f"would write {build_path / 'resolved.yaml'}")

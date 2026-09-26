@@ -40,6 +40,7 @@ from strata.models.store_model import (
     VariableStoreModel,
     VariableStoreType,
 )
+from strata.models.tenant_model import TenantModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
 from strata.utils.dict_merge import deep_merge
@@ -110,6 +111,31 @@ def resolve_deployment(context: SolutionContext, deployment_name: str) -> Deploy
         )
     resolved_deployments, _ = resolve_deployment_chains(index)
     return resolved_deployments.get(deployment_name, cast(DeploymentModel, entry.model))
+
+
+def resolve_tenant(context: SolutionContext, deployment: DeploymentModel) -> TenantModel | None:
+    """The `TenantModel` `deployment.spec.tenant` names, or `None` if unset
+    or unresolvable (docs/design/build-command.md's `tenant` Terraform
+    category).
+
+    `deployment.spec.tenant` survives `resolve_deployment()`'s `extends`/
+    tenant-defaults-merge chain unchanged - `merge_deployment_specs()` only
+    consumes `partial`/`extends`, never `tenant` - so reading it directly
+    off an already-`resolve_deployment()`-resolved model is safe and needs
+    no re-derivation. Mirrors `deployment_resolution._merge_tenant_defaults()`'s
+    own lookup exactly, just exposed as a public, reusable result instead of
+    being folded into a merged dict and discarded.
+
+    A missing/unresolvable `tenant` reference silently returns `None`, same
+    treatment `_merge_tenant_defaults()` gives it - `validate_references` is
+    the layer that reports a bad `spec.tenant`, not this function.
+    """
+    if not deployment.spec.tenant:
+        return None
+    entry = context.controller.index.get(PlatformKind.TENANT, deployment.spec.tenant)
+    if entry is None:
+        return None
+    return cast(TenantModel, entry.model)
 
 
 

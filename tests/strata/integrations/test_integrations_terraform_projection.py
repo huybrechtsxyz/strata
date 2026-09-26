@@ -41,6 +41,7 @@ from strata.models.resource_model import (
     ResourcePropertiesModel,
     ResourceSpecModel,
 )
+from strata.models.tenant_model import TenantMetaModel, TenantModel, TenantSpecModel
 from strata.models.topology_model import (
     TopologyComponentModel,
     TopologyMetaModel,
@@ -180,6 +181,7 @@ def _graph(
     feature_refs=None,
     properties=None,
     custom=None,
+    tenant=None,
     **workspace_kwargs,
 ) -> ResolvedWorkspaceGraph:
     workspace = _workspace(
@@ -202,6 +204,7 @@ def _graph(
         feature_refs=feature_refs or [],
         properties=properties or {},
         custom=custom or {},
+        tenant=tenant,
     )
 
 
@@ -434,3 +437,43 @@ def test_planned_files_resx_content_is_wrapped_under_resources_key():
     resx = files["resx_virtualmachine.auto.tfvars.json"]
     assert set(resx) == {"resources"}
     assert "haven_vm_hetzner_hearth" in resx["resources"]
+
+
+# ---------------------------------------------------------------------------
+# tenant (docs/design/build-command.md's `tenant` Terraform category)
+# ---------------------------------------------------------------------------
+
+
+def _tenant(name: str = "acme") -> TenantModel:
+    return TenantModel(
+        meta=TenantMetaModel(name=name),
+        spec=TenantSpecModel(
+            display_name="Acme",
+            geographies=["europe"],
+            configuration={"tier": "sandbox"},
+        ),
+    )
+
+
+def test_tenant_category_present_when_deployment_references_one():
+    payload = build_platform_projection(_graph(tenant=_tenant()), _provisioner())
+    assert payload["tenant"] == {
+        "code": "acme",
+        "name": "Acme",
+        "zones": ["europe"],
+        "onboarded": None,
+        "configuration": {"tier": "sandbox"},
+    }
+
+
+def test_tenant_category_empty_when_no_tenant_referenced():
+    payload = build_platform_projection(_graph(), _provisioner())
+    assert payload["tenant"] == {}
+    files = dict(planned_files(payload))
+    assert "tenant.auto.tfvars.json" not in files
+
+
+def test_tenant_writes_to_tenant_auto_tfvars_json():
+    payload = build_platform_projection(_graph(tenant=_tenant()), _provisioner())
+    files = dict(planned_files(payload))
+    assert files["tenant.auto.tfvars.json"] == payload["tenant"]

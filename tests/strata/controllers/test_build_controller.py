@@ -193,6 +193,46 @@ def test_build_run_materialises_source_and_writes_terraform_output(tmp_path: Pat
     assert (materialised / "resx_server.auto.tfvars.json").exists()
 
 
+def test_build_run_writes_tenant_output_when_deployment_references_one(tmp_path: Path):
+    root = _terraform_solution(tmp_path)
+    _write(
+        root,
+        "tenant.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: tenant\nmeta:\n  name: acme\nspec:\n"
+        "  display_name: Acme\n  geographies: [europe]\n",
+    )
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        "  workspace: main\n  tenant: acme\n  environments:\n    - prd\n",
+    )
+
+    build_path = tmp_path / "build"
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok
+    tenant_path = build_path / "infra" / "tenant.auto.tfvars.json"
+    assert tenant_path.exists()
+    assert yaml.safe_load(tenant_path.read_text(encoding="utf-8")) == {
+        "code": "acme",
+        "name": "Acme",
+        "zones": ["europe"],
+        "onboarded": None,
+        "configuration": {},
+    }
+
+
+def test_build_run_writes_no_tenant_output_when_deployment_has_no_tenant(tmp_path: Path):
+    root = _terraform_solution(tmp_path)
+
+    build_path = tmp_path / "build"
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok
+    assert not (build_path / "infra" / "tenant.auto.tfvars.json").exists()
+
+
 def test_build_run_cleans_stale_output_by_default(tmp_path: Path):
     """v1 parity: a document removed from the solution (the resource here)
     must not leave its old, still-auto-loaded .auto.tfvars.json behind."""

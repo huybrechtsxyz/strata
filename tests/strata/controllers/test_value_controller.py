@@ -9,6 +9,8 @@ from strata.controllers.solution_context import open_solution
 from strata.controllers.value_controller import (
     build_value_references,
     merge_workspace_environment_deployment_properties,
+    resolve_deployment,
+    resolve_tenant,
     resolve_values,
 )
 from strata.integrations.resolved_context import ValueReference
@@ -166,6 +168,38 @@ def test_deployment_environment_overrides_tenant_environment(tmp_path):
 
     result = resolve_values(_context(root), "app", ["REGION"])
     assert result.values == {"REGION": "from-deployment"}
+
+
+def test_resolve_tenant_returns_tenant_model_when_deployment_references_one(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _write(
+        root,
+        "tenant.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: tenant\nmeta:\n  name: acme\nspec:\n"
+        "  display_name: Acme\n  geographies: [europe]\n",
+    )
+    _deployment(root, "app", tenant="acme", environments=["prd"])
+
+    context = _context(root)
+    deployment = resolve_deployment(context, "app")
+    tenant = resolve_tenant(context, deployment)
+
+    assert tenant is not None
+    assert tenant.meta.name == "acme"
+    assert tenant.spec.display_name == "Acme"
+    assert tenant.spec.geographies == ["europe"]
+
+
+def test_resolve_tenant_returns_none_when_deployment_has_no_tenant(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", environments=["prd"])
+
+    context = _context(root)
+    deployment = resolve_deployment(context, "app")
+
+    assert resolve_tenant(context, deployment) is None
 
 
 def test_unimplemented_store_type_produces_a_clear_error(tmp_path):

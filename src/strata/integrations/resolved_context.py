@@ -30,6 +30,7 @@ from strata.models.network_model import NetworkModel
 from strata.models.provider_model import ProviderModel
 from strata.models.resource_model import ResourceModel
 from strata.models.store_model import VariableValueType
+from strata.models.tenant_model import TenantModel
 from strata.models.topology_model import TopologyModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.utils.diagnostics import Diagnostics
@@ -91,6 +92,11 @@ class ResolvedWorkspaceGraph:
     (docs/design/build-time-value-categories.md, Q3/Q4) are computed once
     by `build_controller.py`, before the per-provisioner loop — derived,
     minimal data, not raw `DeploymentModel`/`EnvironmentModel` instances.
+
+    `tenant` (docs/design/build-command.md's `tenant` Terraform category) is
+    the deployment's own `spec.tenant` reference, resolved once by
+    `value_controller.resolve_tenant()` — `None` when the deployment
+    references no tenant, or the reference doesn't resolve.
     """
 
     workspace: WorkspaceModel
@@ -106,6 +112,7 @@ class ResolvedWorkspaceGraph:
     secret_refs: list[ValueReference] = field(default_factory=list)
     properties: dict[str, Any] = field(default_factory=dict)
     custom: dict[str, Any] = field(default_factory=dict)
+    tenant: TenantModel | None = None
 
 
 @dataclass(frozen=True)
