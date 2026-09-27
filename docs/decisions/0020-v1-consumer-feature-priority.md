@@ -1,8 +1,10 @@
 # v1 Feature Priority — What haven and cfg-int-deployment Actually Depend On
 
-- Status: partially-implemented — `values get`/`validate`/`build run`/
-  `deploy run`/`STRATA_OUTPUT`/`STRATA_WORK_PATH` all done; `.strata/`
-  auto-discovery/Tier 2 commands remain (see Remaining Work)
+- Status: partially-implemented — every Tier 1 item is done (`values
+  get`/`validate`/`build run`/`deploy run`/`STRATA_OUTPUT`/
+  `STRATA_WORK_PATH`; `.strata/` auto-discovery investigated and found
+  not to be a real gap); only deferred `ConfigurationSpecModel` fields
+  and Tier 2 commands remain (see Remaining Work)
 - Date: 2026-09-23
 - Related: [ADR-0001](0001-v1-schema-analysis-findings-for-v2.md) (v1 schema
   analysis — this ADR is the runtime/CLI-usage counterpart: what v1 *code
@@ -180,11 +182,23 @@ as each consuming feature is built, per that model's own existing convention
   already-decided path and carries no defaulting logic of its own —
   it doesn't know or care whether `path` came from `--path`,
   `STRATA_WORK_PATH`, or a cwd fallback three layers up.
-- **`.strata/` auto-discovery** (`cli.yaml`/`configuration.yaml`/
-  `solution.json`/`audit.log`/`cache/`/`logs/`/`integrations/`/`schemas/`/
-  `templates/`) — still open, larger scope than the two env vars above;
-  `repo_refs.py`'s own docstring already flags this as deliberately not
-  ported yet.
+- ~~`.strata/` auto-discovery~~ — **investigated 2026-09-27, found NOT to
+  be a real gap.** `.strata/`'s own `.gitignore` in both repos (and
+  `git ls-files` ground truth) shows most of it is local-only runtime
+  state, never committed: `cli.yaml`, `audit.log`, `cache/`, `logs/`
+  are ignored everywhere; cfg-int-deployment ignores `configuration.
+  yaml`/`solution.json` too, with its own gitignore comment giving away
+  why: *"Generated merge of the hand-written `config/*.yaml` sources —
+  rewritten by the CLI on every run... derived output."*
+  `.strata/configuration.yaml` is v1's own internal cache, not a source
+  document — confirmed directly: haven's real, hand-authored `kind:
+  configuration` document lives at `config/configuration.yaml` (top
+  level, not under `.strata/`). v2's document discovery already finds
+  it there; `.strata/` is deliberately in `DEFAULT_IGNORED_DIRS`
+  (`layout.py`, ADR-0015: "runtime-only and never committed... always
+  excluded from discovery") — an already-correct decision, not a gap.
+  Genuinely Tier 2 (`cli.yaml`-persisted CLI defaults, `solution.json`
+  repo-discovery) as originally classified — no code change needed.
 - `ConfigurationSpecModel` extensions (`integrations`, `security`, `zones`,
   `remotes`, `audit`, `deployment.manifest`/`outputs`, `policies`, `paths`) —
   not started; port incrementally alongside the command that needs each.
