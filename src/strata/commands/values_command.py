@@ -16,7 +16,7 @@ from pathlib import Path
 import click
 
 from strata.commands.json_output import JsonReporter
-from strata.commands.options import output_option, quiet_option, verbose_option
+from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
 from strata.controllers.solution_context import open_solution
 from strata.controllers.value_controller import resolve_values
@@ -73,7 +73,7 @@ def values_get(
         if value_format == "raw" and len(keys) != 1:
             raise UsageError("--format raw requires exactly one KEY.")
 
-        context = open_solution(path).require_valid()
+        context = open_solution(resolve_work_path(path)).require_valid()
         solution = context.controller.solution
         run.describe(
             solution=solution.meta.name if solution else "(unnamed)",

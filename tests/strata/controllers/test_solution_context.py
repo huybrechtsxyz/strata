@@ -78,11 +78,14 @@ def test_nonexistent_path_is_a_usage_error(tmp_path):
         open_solution(tmp_path / "nope")
 
 
-def test_defaults_to_the_current_directory(tmp_path, monkeypatch):
-    """Omitting the path means 'the solution I am standing in'."""
+def test_finds_the_solution_when_started_from_the_current_directory(tmp_path, monkeypatch):
+    """`open_solution()` carries no defaulting logic of its own — deciding
+    'where do we start' (env var, cwd, ...) is `resolve_work_path()`'s job
+    (commands.options); this only confirms starting exactly at `Path.cwd()`
+    still finds the solution standing in it."""
     root = _solution(tmp_path)
     monkeypatch.chdir(root)
-    assert open_solution().root == root.resolve()
+    assert open_solution(Path.cwd()).root == root.resolve()
 
 
 # ---------------------------------------------------------------------------

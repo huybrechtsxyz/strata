@@ -115,12 +115,18 @@ class SolutionContext:
         return found
 
 
-def open_solution(path: Path | None = None) -> SolutionContext:
+def open_solution(path: Path) -> SolutionContext:
     """Find the solution containing `path`, load it, and return the result.
 
+    Takes a concrete, already-decided starting path — deciding *what* that
+    path should be (an explicit flag, an env var, or falling back to the
+    current directory) is a separate concern, resolved once by the caller
+    before this is ever called. This function only walks upward from
+    wherever it is told to start; it carries no defaulting logic itself.
+
     Args:
-        path: Where to start looking. Defaults to the current directory.
-            The search walks upwards, so any subdirectory of a solution works.
+        path: Where to start looking. The search walks upwards, so any
+            subdirectory of a solution works.
 
     Returns:
         The loaded solution and its findings. Findings are *not* fatal here —
@@ -130,7 +136,7 @@ def open_solution(path: Path | None = None) -> SolutionContext:
     Raises:
         UsageError: If `path` is not inside a solution at all.
     """
-    start = (path or Path.cwd()).resolve()
+    start = path.resolve()
 
     if not start.exists():
         raise UsageError(f"Path does not exist: {start}")

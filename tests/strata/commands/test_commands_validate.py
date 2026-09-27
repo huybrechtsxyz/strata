@@ -173,6 +173,41 @@ def test_json_is_parseable_on_validation_failure(runner, solution):
     assert payload["diagnostics"][0]["location"] == "spec.provisioners"
 
 
+def test_strata_output_env_var_defaults_the_output_format(runner, solution):
+    """Real CI sets STRATA_OUTPUT: json once in the job's env: block rather
+    than passing --output json on every invocation (ADR-0020's Tier 1
+    finding) — no --output flag here at all."""
+    result = runner.invoke(cli, ["validate", str(solution)], env={"STRATA_OUTPUT": "json"})
+    payload = json.loads(result.output)
+    assert payload["ok"] is True
+    assert payload["command"] == "validate"
+
+
+def test_explicit_output_flag_overrides_strata_output_env_var(runner, solution):
+    result = runner.invoke(cli, ["validate", str(solution), "--output", "console"], env={"STRATA_OUTPUT": "json"})
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(result.output)
+
+
+def test_strata_work_path_env_var_locates_the_solution_without_a_path_argument(runner, solution):
+    """Real CI sets STRATA_WORK_PATH once, in the job's env: block, rather
+    than passing a path argument to every single invocation (ADR-0020's
+    Tier 1 finding) — no positional path here at all."""
+    result = runner.invoke(cli, ["validate", "--output", "json"], env={"STRATA_WORK_PATH": str(solution)})
+    payload = json.loads(result.output)
+    assert payload["ok"] is True
+
+
+def test_explicit_path_argument_overrides_strata_work_path_env_var(runner, solution, tmp_path):
+    other = tmp_path / "elsewhere"
+    other.mkdir()
+    result = runner.invoke(
+        cli, ["validate", str(solution), "--output", "json"], env={"STRATA_WORK_PATH": str(other)}
+    )
+    payload = json.loads(result.output)
+    assert payload["ok"] is True
+
+
 def test_json_is_parseable_on_usage_error(runner, tmp_path):
     """The path v1 could not manage, which forced a jq fallback in workflows."""
     result = _run(runner, tmp_path, "--output", "json")

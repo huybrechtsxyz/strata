@@ -1,6 +1,8 @@
 # v1 Feature Priority — What haven and cfg-int-deployment Actually Depend On
 
-- Status: partially-implemented — findings final; rebuild order not started
+- Status: partially-implemented — `values get`/`validate`/`build run`/
+  `deploy run`/`STRATA_OUTPUT`/`STRATA_WORK_PATH` all done; `.strata/`
+  auto-discovery/Tier 2 commands remain (see Remaining Work)
 - Date: 2026-09-23
 - Related: [ADR-0001](0001-v1-schema-analysis-findings-for-v2.md) (v1 schema
   analysis — this ADR is the runtime/CLI-usage counterpart: what v1 *code
@@ -143,14 +145,49 @@ as each consuming feature is built, per that model's own existing convention
 
 ## Remaining Work
 
-- Nothing in Tier 1 is implemented yet beyond `validate` (Phase 1 only,
-  `--deep`/Phase 2 not wired).
-- `values get` — not started.
-- `build run` (Terraform, then Helm) — not started.
-- `deploy run` (Terraform, then Helm) — not started.
+- ~~`values get`~~ — done.
+- ~~`validate --deep`~~ — done (shipped as unconditional `validate`, no flag).
+- ~~`build run` (Terraform, then Helm)~~ — done.
+- ~~`deploy run` (Terraform, then Helm)~~ — done (ADR-0027).
+- ~~`STRATA_OUTPUT` env var~~ — done 2026-09-27, **with a caveat found
+  during a later review (2026-09-27)**: searching v1's real installed
+  source (`xyz-strata` v1.11.2 — newer than haven's pinned `1.9.3`)
+  directly turned up **no** actual read of `STRATA_OUTPUT` anywhere —
+  `click_output_format()` has no `envvar=`, there is no
+  `auto_envvar_prefix`/`default_map`, and `BaseCommand.__init__` just
+  does `self._output_format = output or "console"`. Real workflows do
+  set `STRATA_OUTPUT: json`, but every `strata values get` call also
+  passes `--output json` explicitly (redundant either way), and
+  `validate`/`build run`/`deploy run` calls never pass `--output` at
+  all — so either the env var is a no-op in v1 today, or its support
+  was added/removed somewhere between 1.9.3 and 1.11.2 (version drift,
+  not re-checked against the exact pinned version). v2's `envvar=`
+  addition is kept regardless — safe, forward-compatible, matches what
+  the workflows clearly intend — just not to be cited as "confirmed v1
+  behavior" without this caveat.
+- ~~`STRATA_WORK_PATH` env var~~ — done 2026-09-27, confirmed directly
+  in v1's real `strata/utils/system.py`'s `resolve_work_path()`
+  docstring ("`--work-path` or `STRATA_WORK_PATH` env var"), unlike
+  `STRATA_OUTPUT` above. **Refactored same-day** after tracing v1's own
+  real `cli.py` (`_resolve_work_path_early()`/`_load_workspace_defaults()`)
+  further: v1 resolves "where do we start" (explicit flag > env var >
+  cwd fallback) in one function, once, at the command layer, then passes
+  a concrete path down — it never scatters `os.environ.get()` calls
+  through deeper layers. v2 now mirrors this: `commands.options.
+  resolve_work_path(explicit)` is the *one* place that decision gets
+  made (always returns a concrete `Path`, folding in the cwd fallback
+  too); `solution_context.open_solution(path: Path)` takes a required,
+  already-decided path and carries no defaulting logic of its own —
+  it doesn't know or care whether `path` came from `--path`,
+  `STRATA_WORK_PATH`, or a cwd fallback three layers up.
+- **`.strata/` auto-discovery** (`cli.yaml`/`configuration.yaml`/
+  `solution.json`/`audit.log`/`cache/`/`logs/`/`integrations/`/`schemas/`/
+  `templates/`) — still open, larger scope than the two env vars above;
+  `repo_refs.py`'s own docstring already flags this as deliberately not
+  ported yet.
 - `ConfigurationSpecModel` extensions (`integrations`, `security`, `zones`,
   `remotes`, `audit`, `deployment.manifest`/`outputs`, `policies`, `paths`) —
   not started; port incrementally alongside the command that needs each.
-- Resolve the `build/` vs `.strata/build/` output-path discrepancy when
-  designing `build run`.
+- Resolve the `build/` vs `.strata/build/` output-path discrepancy —
+  v2 picked `build/` at the solution root (`layout.py`'s `build_dir()`).
 - Tier 2 commands — not started, intentionally deferred.

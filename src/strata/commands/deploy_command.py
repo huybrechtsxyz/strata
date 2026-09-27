@@ -18,7 +18,7 @@ from pathlib import Path
 
 import click
 
-from strata.commands.options import output_option, quiet_option, verbose_option
+from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
 from strata.controllers.deploy_controller import deploy_run
 from strata.controllers.solution_context import open_solution
@@ -100,7 +100,7 @@ def deploy_run_command(
     only executes what is already on disk at --build-path.
     """
     with command_run("deploy run", output=output, quiet=quiet, verbose=verbose) as run:
-        context = open_solution(path).require_valid()
+        context = open_solution(resolve_work_path(path)).require_valid()
         solution = context.controller.solution
         target = build_path or build_dir(context.root, deployment)
 

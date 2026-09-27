@@ -15,7 +15,7 @@ from pathlib import Path
 
 import click
 
-from strata.commands.options import output_option, quiet_option, verbose_option
+from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
 from strata.controllers.build_controller import build_run
 from strata.controllers.solution_context import open_solution
@@ -109,7 +109,7 @@ def build_run_command(
     secrets and integration-backed stores, and reports any that fail.
     """
     with command_run("build run", output=output, quiet=quiet, verbose=verbose) as run:
-        context = open_solution(path).require_valid()
+        context = open_solution(resolve_work_path(path)).require_valid()
         solution = context.controller.solution
         target = build_path or build_dir(context.root, deployment)
         should_clean = clean if clean is not None else build_path is None

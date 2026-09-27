@@ -19,7 +19,7 @@ from pathlib import Path
 
 import click
 
-from strata.commands.options import output_option, quiet_option, verbose_option
+from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
 from strata.controllers.solution_context import open_solution
 from strata.utils.diagnostics import Diagnostics
@@ -60,7 +60,7 @@ def validate_command(
         # a local file walk finishing well under a second; streaming progress
         # matters when a phase is genuinely slow (fetching remotes, deploying),
         # and the reporter already supports it.
-        context = open_solution(path)
+        context = open_solution(resolve_work_path(path))
         solution = context.controller.solution
         document_count = len(context.controller.index)
 
