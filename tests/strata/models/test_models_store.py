@@ -122,6 +122,41 @@ def test_variable_store_default_accepted_on_integration_backed_store():
     assert model.default == "eu-fr"
 
 
+def test_variable_store_artifact_is_valid():
+    """A `store: artifact` variable with a `field` selector validates."""
+    model = VariableStoreModel.model_validate(
+        {"key": "dspapi_container_image_tag", "store": "artifact", "value": "dspapi_container", "field": "image_tag"}
+    )
+    assert model.store.value == "artifact"
+    assert model.field == "image_tag"
+
+
+def test_variable_store_artifact_field_accepts_image_name_image_tag_and_image_ref():
+    """All three real field selectors are accepted."""
+    for field in ("image_name", "image_tag", "image_ref"):
+        model = VariableStoreModel.model_validate(
+            {"key": "k", "store": "artifact", "value": "dspapi_container", "field": field}
+        )
+        assert model.field == field
+
+
+def test_variable_store_field_rejected_on_non_artifact_store():
+    """'field' is only valid on 'store: artifact'."""
+    with pytest.raises(ValidationError, match="only valid on 'store: artifact'"):
+        VariableStoreModel.model_validate(
+            {"key": "region", "store": "constant", "value": "eu-west", "field": "image_tag"}
+        )
+
+
+def test_variable_store_default_rejected_on_artifact_store():
+    """'default' is rejected on 'store: artifact' too — it's a built-in, in-solution lookup, not an
+    integration-backed store with something to seed."""
+    with pytest.raises(ValidationError, match="not valid on built-in store"):
+        VariableStoreModel.model_validate(
+            {"key": "k", "store": "artifact", "value": "dspapi_container", "default": "fallback"}
+        )
+
+
 # ---------------------------------------------------------------------------
 # SecretStoreModel
 # ---------------------------------------------------------------------------

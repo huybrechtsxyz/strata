@@ -124,17 +124,21 @@ def test_pin_rejects_unknown_status():
 
 
 def test_all_categories_are_supported():
-    """images/charts/remotes each map to something strata itself materialises."""
+    """images/charts/remotes map to something strata itself materialises;
+    artifacts is the one deliberate exception (docs/design/
+    artifact-references.md) — a pinnable reference to something strata
+    never fetches or deploys itself."""
     model = VersionModel.model_validate(
         _version(
             {
                 "images": {"server": "ghcr.io/goauthentik/server:2026.5.6"},
                 "charts": {"cert-manager": "v1.16.2"},
                 "remotes": {"infra": "abc64feae2da19a61b76460269941399b04acb7b"},
+                "artifacts": {"dspapi_container": "env_sbx11006400201_20260907.11"},
             }
         )
     )
-    assert {c for c, _, _ in model.spec.pins.iter_pins()} == {"images", "charts", "remotes"}
+    assert {c for c, _, _ in model.spec.pins.iter_pins()} == {"images", "charts", "remotes", "artifacts"}
 
 
 def test_version_rejects_tools_pins():
@@ -171,3 +175,38 @@ def test_version_accepts_tooling_hash():
     data["spec"]["hash"] = "c3f7bbe0e93803073e8d080ace0e69be92b54185ecf94a4200d0c16d81a74c95"
     model = VersionModel.model_validate(data)
     assert model.spec.hash.startswith("c3f7bbe0")
+
+
+def test_artifacts_pin_is_a_separate_category_from_images():
+    """pins.artifacts is not an overload of pins.images — the same name in
+    both categories is two independent pins (no cross-category collision)."""
+    model = VersionModel.model_validate(
+        _version(
+            {
+                "images": {"dspapi_container": "ghcr.io/other:1.0"},
+                "artifacts": {"dspapi_container": "env_sbx11006400201_20260907.11"},
+            }
+        )
+    )
+    assert model.spec.pins.images["dspapi_container"].version == "ghcr.io/other:1.0"
+    assert model.spec.pins.artifacts["dspapi_container"].version == "env_sbx11006400201_20260907.11"
+
+
+def test_artifacts_pin_shorthand_and_held_status():
+    """Same shorthand/structured/rationale rules as every other category."""
+    model = VersionModel.model_validate(
+        _version(
+            {
+                "artifacts": {
+                    "dspapi_container": {
+                        "version": "env_sbx11006400201_20260907.10",
+                        "status": "held",
+                        "reason": "pending product team confirmation",
+                    }
+                }
+            }
+        )
+    )
+    pin = model.spec.pins.artifacts["dspapi_container"]
+    assert pin.status is VersionPinStatus.HELD
+    assert pin.reason == "pending product team confirmation"

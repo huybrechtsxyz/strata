@@ -22,16 +22,18 @@ solution loading layer lands.
 """
 
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
 from strata.models.common_models import PlatformBaseModel, VariableKey
 
 #: Store types resolvable without any integration — a literal value
-#: (`constant`) or an environment variable read directly (`environment`).
+#: (`constant`) or an environment variable read directly (`environment`),
+#: or an in-solution `kind: artifact` document lookup (`artifact` — no
+#: external system involved, same bar as constant/environment).
 BUILTIN_FEATURE_STORE_TYPES = frozenset({"constant", "environment"})
-BUILTIN_VARIABLE_STORE_TYPES = frozenset({"constant", "environment"})
+BUILTIN_VARIABLE_STORE_TYPES = frozenset({"constant", "environment", "artifact"})
 #: Secrets additionally treat `github` as built-in — env vars injected by the
 #: GitHub Actions runner, resolved the same way as `environment`, no
 #: integration lookup involved.
@@ -130,12 +132,16 @@ class VariableValueType(str, Enum):
 class VariableStoreType(str, Enum):
     """Variable store backend type.
 
-    `CONSTANT`/`ENVIRONMENT` are built-in resolvers (no integration needed).
-    The rest are integration-backed placeholders (see module docstring).
+    `CONSTANT`/`ENVIRONMENT`/`ARTIFACT` are built-in resolvers (no
+    integration needed) — `ARTIFACT` resolves against an in-solution
+    `kind: artifact` document, not an external system
+    (docs/design/artifact-references.md). The rest are integration-backed
+    placeholders (see module docstring).
     """
 
     CONSTANT = "constant"
     ENVIRONMENT = "environment"
+    ARTIFACT = "artifact"
     AZURE_APPCONFIG = "azure-appconfig"
     HASHICORP_CONSUL = "consul"
     HASHICORP_VAULT = "vault"
@@ -155,11 +161,12 @@ class VariableStoreModel(PlatformBaseModel):
 
     key: VariableKey = Field(description="Variable key name for referencing in configurations")
     store: VariableStoreType = Field(
-        description="Variable store type: constant, environment, azure-appconfig, consul, vault, infisical, or etcd"
+        description="Variable store type: constant, environment, artifact, azure-appconfig, consul, vault, "
+        "infisical, or etcd"
     )
     value: Any = Field(
-        description="Variable identifier: literal for constant, env var name for environment, "
-        "config path/key for integration-backed stores"
+        description="Variable identifier: literal for constant, env var name for environment, ArtifactModel."
+        "meta.name for artifact, config path/key for integration-backed stores"
     )
     type: VariableValueType | None = Field(
         None,
@@ -170,6 +177,12 @@ class VariableStoreModel(PlatformBaseModel):
     description: str | None = Field(None, description="Optional description for documentation purposes")
     default: str | None = Field(
         None, description="Seed the store with this value when the key is missing (integration-backed stores only)"
+    )
+    field: Literal["image_name", "image_tag", "image_ref"] | None = Field(
+        None,
+        description="Which field of the `store: artifact` target to read: image_name, image_tag (kind: "
+        "version's pins.artifacts-overlaid), or the synthesised image_ref ('{image_name}:{image_tag}'). "
+        "Only valid on 'store: artifact'.",
     )
 
     @model_validator(mode="after")
@@ -205,6 +218,24 @@ class VariableStoreModel(PlatformBaseModel):
             store_value=self.store.value,
             builtin_types=BUILTIN_VARIABLE_STORE_TYPES,
         )
+        return self
+
+    @model_validator(mode="after")
+    def validate_field_only_on_artifact_store(self) -> "VariableStoreModel":
+        """`field` only makes sense for `store: artifact` — every other
+        store's `value` is already the whole resolved identifier (a
+        literal, an env var name, a config path/key), with nothing further
+        to select. Conversely, `store: artifact` *requires* `field` —
+        without it, which of the artifact's fields this variable's value
+        should be is ambiguous.
+        """
+        if self.store == VariableStoreType.ARTIFACT and self.field is None:
+            raise ValueError(f"Variable '{self.key}': 'store: artifact' requires 'field' to be set.")
+        if self.field is not None and self.store != VariableStoreType.ARTIFACT:
+            raise ValueError(
+                f"Variable '{self.key}': 'field' is only valid on 'store: artifact' (got store "
+                f"'{self.store.value}')."
+            )
         return self
 
 

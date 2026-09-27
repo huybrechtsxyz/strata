@@ -309,7 +309,7 @@ def build_run(
     workspace = cast(WorkspaceModel, workspace_entry.model)
 
     environments = reachable_environments(context, deployment)
-    variable_refs, feature_refs, secret_refs = build_value_references(environments)
+    variable_refs, feature_refs, secret_refs = build_value_references(environments, context=context, deployment=deployment)
     properties = merge_workspace_environment_deployment_properties(workspace, environments, deployment, "properties")
     custom = merge_workspace_environment_deployment_properties(workspace, environments, deployment, "custom")
     tenant = resolve_tenant(context, deployment)

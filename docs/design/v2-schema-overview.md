@@ -1,13 +1,13 @@
 # v2 Schema — Kind Overview
 
 - Status: current
-- Last updated: 2026-09-24
+- Last updated: 2026-09-27
 
 ## Overview
 
 One-page catalog of every v2 kind (and load-bearing cross-cutting
 sub-model/convention), its purpose, and its current implementation status —
-so "what does v2 look like today" doesn't require reading all 23 ADRs.
+so "what does v2 look like today" doesn't require reading all 26 ADRs.
 Detailed rationale for each stays in its own ADR; this doc only tracks
 current state and links out. Update this table when a kind is added or its
 status changes.
@@ -34,6 +34,7 @@ status changes.
 | `tenant` | Customer/organisation identity — geographies, defaults inherited by every deployment | Implemented — no dedicated ADR (built directly from a real-usage census; see [ADR-0024](../decisions/0024-tenant-defaults-merge.md) for the one follow-up decision) | [ADR-0024](../decisions/0024-tenant-defaults-merge.md) |
 | `deployment` | The "container instance": Workspace + Environment + Tenant, `extends` chains, stages | Implemented (schema + `extends`/tenant-defaults resolution, [validate-command.md](validate-command.md)); no dedicated ADR; stage *execution* not started | [ADR-0024](../decisions/0024-tenant-defaults-merge.md) |
 | `environment` | Real declared variables/secrets/features that Value tokens resolve against | Implemented — deliberately a small slice of v1 (variables/secrets/features/properties only; `overrides`/`lifecycle`/`promotion` excluded, zero real usage found) — no dedicated ADR | Referenced throughout as a blocker since [ADR-0002](../decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md) |
+| `artifact` | Pinnable, named reference to something external strata doesn't fetch/deploy itself (a container image today) | Partially implemented — Path 2 (`store: artifact` variable) fully wired; Path 1 (`ModuleServiceModel.artifact` → Compose/Helm rendering) deferred, zero real usage yet | [ADR-0026](../decisions/0026-pinnable-artifact-references.md), [artifact-references.md](artifact-references.md) |
 
 ## Cross-cutting sub-models and conventions
 
@@ -53,7 +54,7 @@ status changes.
 
 ## Related Decisions
 
-All 23 ADRs in `docs/decisions/` — see the tables above for which applies to
+All 26 ADRs in `docs/decisions/` — see the tables above for which applies to
 which kind/concept.
 
 ## Remaining Work / Open Questions
@@ -71,3 +72,5 @@ which kind/concept.
 ## Changelog
 
 - 2026-09-24: Created.
+- 2026-09-27: Added `artifact` (ADR-0026) — a new kind, not present at
+  creation time.

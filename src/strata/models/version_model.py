@@ -67,7 +67,7 @@ from strata.models.common_models import (
 
 #: Pin categories, in the order they are reported. Each maps to exactly one
 #: field elsewhere in the schema — see `VersionPinsModel`.
-PIN_CATEGORIES = ("images", "charts", "remotes")
+PIN_CATEGORIES = ("images", "charts", "remotes", "artifacts")
 
 
 class VersionPinStatus(str, Enum):
@@ -159,6 +159,12 @@ class VersionPinsModel(PlatformBaseModel):
       remote is `fetch: strata`. A `fetch: external` remote is placed by CI
       before strata runs, so pinning it cannot take effect — resolution
       rejects such a pin rather than ignoring it silently.
+    - ``artifacts`` -> `ArtifactSpecModel.image_tag` (docs/design/
+      artifact-references.md). A separate category from `images`, not an
+      overload of it — `images` stays unambiguously `ModuleServiceModel.
+      name`, no disambiguation logic needed. `image_name` is identity and
+      is never overlaid by a pin here, same as `charts` never overlays
+      `chart_name`.
 
     Keys are the target's own name, so a pin is a plain identity reference
     like every other cross-document link in v2 (ADR-0015).
@@ -174,6 +180,11 @@ class VersionPinsModel(PlatformBaseModel):
         default=None,
         description="Git/OCI ref pins. Key = SolutionRemoteModel.name. Only valid for remotes strata "
         "materialises itself (fetch: strata).",
+    )
+    artifacts: dict[PlatformName, VersionPinModel] | None = Field(
+        default=None,
+        description="Artifact image tag pins. Key = ArtifactModel.meta.name; overlays spec.image_tag only "
+        "(image_name is identity, never pinned).",
     )
 
     def iter_pins(self) -> Iterator[tuple[str, str, VersionPinModel]]:

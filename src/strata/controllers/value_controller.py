@@ -29,6 +29,7 @@ from strata.integrations.errors import ValueResolutionError
 from strata.integrations.registry import IntegrationNotFoundError
 from strata.integrations.registry import get as get_integration
 from strata.integrations.resolved_context import ValueReference, ValueResolution
+from strata.models.artifact_model import ArtifactModel
 from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import DeploymentModel
 from strata.models.environment_model import EnvironmentModel
@@ -41,6 +42,7 @@ from strata.models.store_model import (
     VariableStoreType,
 )
 from strata.models.tenant_model import TenantModel
+from strata.models.version_model import VersionModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
 from strata.utils.dict_merge import deep_merge
@@ -138,6 +140,64 @@ def resolve_tenant(context: SolutionContext, deployment: DeploymentModel) -> Ten
     return cast(TenantModel, entry.model)
 
 
+def resolve_artifact(context: SolutionContext, artifact_name: str) -> ArtifactModel | None:
+    """The `ArtifactModel` named `artifact_name`, or `None` if unresolvable
+    (docs/design/artifact-references.md).
+
+    A missing artifact reference silently returns `None` — `validate_references`
+    is the layer that reports a bad reference, not this function, matching
+    `resolve_tenant()`'s identical treatment.
+    """
+    entry = context.controller.index.get(PlatformKind.ARTIFACT, artifact_name)
+    if entry is None:
+        return None
+    return cast(ArtifactModel, entry.model)
+
+
+def resolve_artifact_field(
+    context: SolutionContext, deployment: DeploymentModel, artifact_name: str, field: str
+) -> str | None:
+    """Resolve one `(artifact_name, field)` pair to a plain string
+    (docs/design/artifact-references.md's `store: artifact` mechanism).
+
+    `field` is one of `image_name`/`image_tag`/`image_ref`:
+
+    - `image_name` is identity — read straight off the artifact document,
+      never pin-overlaid (matches `chart_name`'s treatment — a pin never
+      changes what's being pinned, only its version).
+    - `image_tag` consults `deployment.spec.version` -> `VersionModel.spec.
+      pins.artifacts[artifact_name]` first; falls back to the artifact's
+      own declared `image_tag` when unset or no pin exists.
+    - `image_ref` synthesises `"{image_name}:{image_tag}"` (or bare
+      `image_name` when the tag is blank/unset) — adminapp's real combined
+      Terraform variable shape (docs/design/artifact-references.md).
+
+    Returns `None` when `artifact_name` doesn't resolve — same
+    silently-return-None treatment as `resolve_artifact()`/`resolve_tenant()`.
+    """
+    artifact = resolve_artifact(context, artifact_name)
+    if artifact is None:
+        return None
+    if field == "image_name":
+        return artifact.spec.image_name
+
+    image_tag = artifact.spec.image_tag
+    if deployment.spec.version:
+        version_entry = context.controller.index.get(PlatformKind.VERSION, deployment.spec.version)
+        if version_entry is not None:
+            version = cast(VersionModel, version_entry.model)
+            pin = (version.spec.pins.artifacts or {}).get(artifact_name)
+            if pin is not None:
+                image_tag = pin.version
+
+    if field == "image_tag":
+        return image_tag
+    # field == "image_ref": synthesised, never a stored field.
+    if not image_tag:
+        return artifact.spec.image_name
+    return f"{artifact.spec.image_name}:{image_tag}"
+
+
 
 def reachable_environments(context: SolutionContext, deployment: DeploymentModel) -> list[EnvironmentModel]:
     """Every `EnvironmentModel` `deployment.spec.environments` names.
@@ -175,6 +235,9 @@ def _coerce_feature_value(raw: Any) -> bool:
 
 def build_value_references(
     environments: list[EnvironmentModel],
+    *,
+    context: SolutionContext | None = None,
+    deployment: DeploymentModel | None = None,
 ) -> tuple[list[ValueReference], list[ValueReference], list[ValueReference]]:
     """Build `(variable_refs, feature_refs, secret_refs)` for
     `ResolvedWorkspaceGraph` (docs/design/build-time-value-categories.md, Q1/Q4).
@@ -184,11 +247,21 @@ def build_value_references(
     definitions directly rather than resolving through `resolve_values()`.
     `value` is populated **only** for `constant` (literal passthrough - no
     casting, `VariableStoreModel.value`/`FeatureStoreModel.value` are not
-    cross-validated against `type` in v2 either) and `environment` (a local
-    `os.environ` read - not network I/O) stores. Every other store type,
-    and every secret regardless of store type, gets `value=None` -
-    structurally, never resolved here (Q5: integration-backed resolution is
-    deploy's job, not build's).
+    cross-validated against `type` in v2 either), `environment` (a local
+    `os.environ` read - not network I/O), and `artifact` (an in-solution
+    document lookup, docs/design/artifact-references.md - variables only,
+    never features/secrets) stores. Every other store type, and every
+    secret regardless of store type, gets `value=None` - structurally,
+    never resolved here (Q5: integration-backed resolution is deploy's
+    job, not build's). `artifact` clears this bar for the same reason
+    `constant`/`environment` do: no external system involved, fully known
+    at build time.
+
+    `context`/`deployment` are optional and keyword-only, matching the
+    other `graph`-assembly kwargs' pattern (docs/design/
+    build-time-value-categories.md) - omitted, a `store: artifact`
+    variable's `value` is simply `None` (no context to resolve against),
+    same treatment integration-backed stores already get.
     """
     from os import environ
 
@@ -204,13 +277,20 @@ def build_value_references(
             return _coerce_feature_value(env_val) if is_feature else env_val
         return None
 
+    def _variable_value(store: VariableStoreModel) -> Any:
+        if store.store == VariableStoreType.ARTIFACT:
+            if context is None or deployment is None or store.field is None:
+                return None
+            return resolve_artifact_field(context, deployment, str(store.value), store.field)
+        return _value_for(store.store, store.value, is_feature=False)
+
     variable_refs = [
         ValueReference(
             key=key,
             store=store.store.value,
             description=store.description,
             value_type=store.type,
-            value=_value_for(store.store, store.value, is_feature=False),
+            value=_variable_value(store),
         )
         for key, store in variables.items()
     ]

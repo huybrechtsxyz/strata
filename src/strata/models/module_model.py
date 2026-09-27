@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pydantic models for module configuration validation."""
 
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import Field, field_validator, model_validator
 
@@ -14,6 +14,7 @@ from strata.models.common_models import (
     SourceModel,
     validate_kind_matches,
 )
+from strata.models.reference_fields import References
 from strata.utils.builtin_types import WORKLOAD_DEPLOYER_TYPES, ProvisionerType
 from strata.utils.names import check_unique_names
 from strata.utils.path_safety import validate_file_ref_no_traversal
@@ -186,7 +187,14 @@ class ModuleServiceModel(PlatformBaseModel):
     image: str | None = Field(
         None,
         description="Container image and tag (e.g. 'postgres:16-alpine'). "
-        "Omit for Helm charts that define their own image.",
+        "Omit for Helm charts that define their own image. Mutually exclusive with `artifact`.",
+    )
+    artifact: Annotated[PlatformName, References(PlatformKind.ARTIFACT)] | None = Field(
+        None,
+        description="Name of an Artifact document supplying this service's image (image_name[:image_tag], "
+        "kind: version's pins.artifacts-pinnable). Mutually exclusive with `image` — use `image` for a "
+        "literal, unpinned string; use `artifact` to source it from a named, pinnable reference "
+        "(docs/design/artifact-references.md).",
     )
     command: list[str] | None = Field(
         None,
@@ -230,6 +238,20 @@ class ModuleServiceModel(PlatformBaseModel):
         description="Deployer-specific overrides merged verbatim. For compose: merged into the service block. "
         "For helm: merged into values.{service.name}.",
     )
+
+    @model_validator(mode="after")
+    def validate_image_and_artifact_exclusive(self) -> "ModuleServiceModel":
+        """`image` and `artifact` are mutually exclusive — both name the same
+        thing (this service's container image), by two different means (a
+        literal string vs. a named, pinnable reference). Neither is required
+        (a Helm chart may define its own image, unchanged from today).
+        """
+        if self.image is not None and self.artifact is not None:
+            raise ValueError(
+                f"service '{self.name}': 'image' and 'artifact' are mutually exclusive — "
+                "use 'image' for a literal string, or 'artifact' to source it from a named Artifact document."
+            )
+        return self
 
 
 class ModulePropertiesModel(PlatformBaseModel):

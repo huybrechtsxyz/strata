@@ -9,6 +9,9 @@ from strata.controllers.solution_context import open_solution
 from strata.controllers.value_controller import (
     build_value_references,
     merge_workspace_environment_deployment_properties,
+    reachable_environments,
+    resolve_artifact,
+    resolve_artifact_field,
     resolve_deployment,
     resolve_tenant,
     resolve_values,
@@ -43,14 +46,17 @@ def _write(root: Path, relative: str, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
-def _deployment(root: Path, name: str, *, tenant: str | None = None, environments: list[str]) -> None:
+def _deployment(
+    root: Path, name: str, *, tenant: str | None = None, version: str | None = None, environments: list[str]
+) -> None:
     tenant_line = f"  tenant: {tenant}\n" if tenant else ""
+    version_line = f"  version: {version}\n" if version else ""
     envs = "\n".join(f"    - {e}" for e in environments)
     _write(
         root,
         f"{name}.yaml",
         f"apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: {name}\n"
-        f"spec:\n  partial: true\n{tenant_line}  environments:\n{envs}\n",
+        f"spec:\n  partial: true\n{tenant_line}{version_line}  environments:\n{envs}\n",
     )
 
 
@@ -200,6 +206,175 @@ def test_resolve_tenant_returns_none_when_deployment_has_no_tenant(tmp_path):
     deployment = resolve_deployment(context, "app")
 
     assert resolve_tenant(context, deployment) is None
+
+
+# ---------------------------------------------------------------------------
+# resolve_artifact() / resolve_artifact_field() (docs/design/artifact-references.md)
+# ---------------------------------------------------------------------------
+
+
+def _artifact(root: Path, name: str, *, image_name: str, image_tag: str | None = None) -> None:
+    tag_line = f"  image_tag: {image_tag!r}\n" if image_tag is not None else ""
+    _write(
+        root,
+        f"{name}.yaml",
+        f"apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: {name}\n"
+        f"spec:\n  image_name: {image_name}\n{tag_line}",
+    )
+
+
+def _version_doc(root: Path, name: str, *, artifact_pins: dict[str, str] | None = None) -> None:
+    pins_block = ""
+    if artifact_pins:
+        lines = [f"      {k}: {v!r}" for k, v in artifact_pins.items()]
+        pins_block = "  pins:\n    artifacts:\n" + "\n".join(lines) + "\n"
+    _write(
+        root,
+        f"{name}.yaml",
+        f"apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: {name}\nspec:\n{pins_block}",
+    )
+
+
+def test_resolve_artifact_returns_model_when_it_exists(tmp_path):
+    root = _solution(tmp_path)
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/omp.dispatcher.api")
+
+    context = _context(root)
+    artifact = resolve_artifact(context, "dspapi_container")
+
+    assert artifact is not None
+    assert artifact.spec.image_name == "int-docker-test/src/omp.dispatcher.api"
+
+
+def test_resolve_artifact_returns_none_when_missing(tmp_path):
+    root = _solution(tmp_path)
+    context = _context(root)
+
+    assert resolve_artifact(context, "ghost") is None
+
+
+def test_resolve_artifact_field_image_name_is_never_pin_overlaid(tmp_path):
+    root = _solution(tmp_path)
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/omp.dispatcher.api")
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", environments=["prd"])
+
+    context = _context(root)
+    deployment = resolve_deployment(context, "app")
+
+    assert (
+        resolve_artifact_field(context, deployment, "dspapi_container", "image_name")
+        == "int-docker-test/src/omp.dispatcher.api"
+    )
+
+
+def test_resolve_artifact_field_image_tag_falls_back_to_declared_value(tmp_path):
+    root = _solution(tmp_path)
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/omp.dispatcher.api", image_tag="1.0.0")
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", environments=["prd"])
+
+    context = _context(root)
+    deployment = resolve_deployment(context, "app")
+
+    assert resolve_artifact_field(context, deployment, "dspapi_container", "image_tag") == "1.0.0"
+
+
+def test_resolve_artifact_field_image_tag_uses_version_pin_when_present(tmp_path):
+    root = _solution(tmp_path)
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/omp.dispatcher.api", image_tag="1.0.0")
+    _version_doc(root, "prd", artifact_pins={"dspapi_container": "2.0.0"})
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", version="prd", environments=["prd"])
+
+    context = _context(root)
+    deployment = resolve_deployment(context, "app")
+
+    assert resolve_artifact_field(context, deployment, "dspapi_container", "image_tag") == "2.0.0"
+
+
+def test_resolve_artifact_field_image_ref_synthesises_name_and_tag(tmp_path):
+    root = _solution(tmp_path)
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/omp.dispatcher.api", image_tag="1.0.0")
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", environments=["prd"])
+
+    context = _context(root)
+    deployment = resolve_deployment(context, "app")
+
+    assert (
+        resolve_artifact_field(context, deployment, "dspapi_container", "image_ref")
+        == "int-docker-test/src/omp.dispatcher.api:1.0.0"
+    )
+
+
+def test_resolve_artifact_field_image_ref_is_bare_name_when_tag_blank(tmp_path):
+    root = _solution(tmp_path)
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/omp.dispatcher.api")
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", environments=["prd"])
+
+    context = _context(root)
+    deployment = resolve_deployment(context, "app")
+
+    assert (
+        resolve_artifact_field(context, deployment, "dspapi_container", "image_ref")
+        == "int-docker-test/src/omp.dispatcher.api"
+    )
+
+
+def test_resolve_artifact_field_returns_none_when_artifact_missing(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", environments=["prd"])
+
+    context = _context(root)
+    deployment = resolve_deployment(context, "app")
+
+    assert resolve_artifact_field(context, deployment, "ghost", "image_tag") is None
+
+
+def test_build_value_references_artifact_store_resolves_with_context_and_deployment(tmp_path):
+    root = _solution(tmp_path)
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/omp.dispatcher.api", image_tag="1.0.0")
+    _write(
+        root,
+        "environments/prd.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  variables:\n    - key: dspapi_container_image_tag\n      store: artifact\n"
+        "      value: dspapi_container\n      field: image_tag\n",
+    )
+    _deployment(root, "app", environments=["prd"])
+
+    context = _context(root)
+    deployment = resolve_deployment(context, "app")
+    environments = reachable_environments(context, deployment)
+
+    variable_refs, _features, _secrets = build_value_references(environments, context=context, deployment=deployment)
+
+    assert variable_refs[0].key == "dspapi_container_image_tag"
+    assert variable_refs[0].value == "1.0.0"
+
+
+def test_build_value_references_artifact_store_is_none_without_context(tmp_path):
+    root = _solution(tmp_path)
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/omp.dispatcher.api", image_tag="1.0.0")
+    _write(
+        root,
+        "environments/prd.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  variables:\n    - key: dspapi_container_image_tag\n      store: artifact\n"
+        "      value: dspapi_container\n      field: image_tag\n",
+    )
+    _deployment(root, "app", environments=["prd"])
+
+    context = _context(root)
+    deployment = resolve_deployment(context, "app")
+    environments = reachable_environments(context, deployment)
+
+    variable_refs, _features, _secrets = build_value_references(environments)
+
+    assert variable_refs[0].value is None
 
 
 def test_unimplemented_store_type_produces_a_clear_error(tmp_path):
