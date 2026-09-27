@@ -39,7 +39,11 @@ one field's own string value, for values that need to live inside a
 document *strata itself owns*, not a third-party tool's native config
 (that's what (A) is for). Always deploy-time (confirmed directly in v1:
 `resolve_expr_string()`/`EXPR_PATTERN` is used exclusively by
-`TerraformDeployer`/`HelmDeployer`, never any build-time builder).
+`TerraformDeployer`/`HelmDeployer`, never any build-time builder). A 4th
+kind, `${output:step.key}` (a prior step's collected outputs, dependency-
+scoped), is being added for `deploy run` specifically —
+[deploy-command.md](deploy-command.md)'s "Cross-step output context"
+section.
 
 **C. Jinja2 full-file templates** — `output.template` (ADR-0023 D3). Use
 this when **generating/templating an entire file** strata's own default

@@ -283,6 +283,93 @@ def test_prepare_output_template_skips_default_output_entirely(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
+# InfraIntegration.render_output_template() (docs/design/deploy-command.md
+# Implementation Plan phase 8) — the deploy-time actual-render counterpart
+# to prepare()'s build-time validate-only branch above.
+# ---------------------------------------------------------------------------
+
+
+def test_render_output_template_writes_the_rendered_file_stripping_j2(tmp_path: Path):
+    template_path = tmp_path / "variables.json.j2"
+    template_path.write_text('{"region": "{{ variables.REGION }}"}')
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    integration = _Bare()
+    output_path = integration.render_output_template(
+        out_dir,
+        resolved=ValueResolution(deployment="d", values={"REGION": "westeurope"}),
+        provisioner=_provisioner_with_template("variables.json.j2"),
+        graph=_graph_with_refs(),
+        template_path=template_path,
+    )
+
+    assert output_path == out_dir / "variables.json"
+    assert output_path.read_text() == '{"region": "westeurope"}'
+
+
+def test_render_output_template_uses_resolved_values_not_ref_value(tmp_path: Path):
+    """`graph.variable_refs[].value` stays build-time-safe-only (None here,
+    matching `build_value_references()`'s real restriction) — the render
+    must come from `resolved.values`, never from the ref's own `.value`."""
+    template_path = tmp_path / "variables.json.j2"
+    template_path.write_text('{"region": "{{ variables.REGION }}"}')
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    integration = _Bare()
+    output_path = integration.render_output_template(
+        out_dir,
+        resolved=ValueResolution(deployment="d", values={"REGION": "westeurope"}),
+        provisioner=_provisioner_with_template("variables.json.j2"),
+        graph=_graph_with_refs(),  # its ValueReference(key="REGION", value="westeurope") is unused for the render
+        template_path=template_path,
+    )
+
+    assert output_path.read_text() == '{"region": "westeurope"}'
+
+
+def test_render_output_template_raises_on_unresolvable_reference(tmp_path: Path):
+    """A dynamic/unresolved reference `validate_template_references()`
+    couldn't check statically still fails, loudly, at render time."""
+    import jinja2
+    import pytest
+
+    template_path = tmp_path / "variables.json.j2"
+    template_path.write_text("{{ graph.workspace.meta.ghost_field }}")
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    integration = _Bare()
+    with pytest.raises(jinja2.TemplateError):
+        integration.render_output_template(
+            out_dir,
+            resolved=ValueResolution(deployment="d"),
+            provisioner=_provisioner_with_template("variables.json.j2"),
+            graph=_graph_with_refs(),
+            template_path=template_path,
+        )
+
+
+def test_render_output_template_leaves_non_j2_filenames_unchanged(tmp_path: Path):
+    template_path = tmp_path / "variables.json"
+    template_path.write_text('{"region": "{{ variables.REGION }}"}')
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    integration = _Bare()
+    output_path = integration.render_output_template(
+        out_dir,
+        resolved=ValueResolution(deployment="d", values={"REGION": "westeurope"}),
+        provisioner=_provisioner_with_template("variables.json"),
+        graph=_graph_with_refs(),
+        template_path=template_path,
+    )
+
+    assert output_path == out_dir / "variables.json"
+
+
+# ---------------------------------------------------------------------------
 # InfraIntegration.prepare_namespace() (ADR-0022 D6/D7)
 # ---------------------------------------------------------------------------
 

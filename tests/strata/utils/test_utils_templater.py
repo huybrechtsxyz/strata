@@ -3,7 +3,7 @@
 value-token-resolution.md, Value Supply Mechanisms option C — static
 reference validation only, no rendering)."""
 
-from strata.utils.templater import validate_template_references
+from strata.utils.templater import render_template, validate_template_references
 
 KNOWN_NAMES = {
     "graph": None,
@@ -71,3 +71,32 @@ def test_multiple_problems_are_all_reported():
     source = "{{ varaibles.REGION }} {{ variables.REGOIN }}"
     errors = validate_template_references(source, KNOWN_NAMES)
     assert len(errors) == 2
+
+
+# ---------------------------------------------------------------------------
+# render_template() (docs/design/deploy-command.md Implementation Plan phase
+# 8 — the deploy-time actual-render counterpart; every value fully resolved
+# by then, unlike validate_template_references()'s build-time check above.
+# ---------------------------------------------------------------------------
+
+
+def test_render_template_substitutes_real_values():
+    source = '{"region": "{{ variables.REGION }}", "flag": {{ flags.NEW_UI }}}'
+    context = {"variables": {"REGION": "westeurope"}, "flags": {"NEW_UI": "true"}}
+    assert render_template(source, context) == '{"region": "westeurope", "flag": true}'
+
+
+def test_render_template_raises_on_undefined_reference():
+    import jinja2
+    import pytest
+
+    with pytest.raises(jinja2.TemplateError):
+        render_template("{{ variables.GHOST }}", {"variables": {}})
+
+
+def test_render_template_raises_on_syntax_error():
+    import jinja2
+    import pytest
+
+    with pytest.raises(jinja2.TemplateError):
+        render_template("{{ variables.REGION ", {"variables": {"REGION": "x"}})

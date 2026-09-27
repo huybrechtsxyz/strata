@@ -388,6 +388,48 @@ def test_unimplemented_store_type_produces_a_clear_error(tmp_path):
     assert "vault" in result.diagnostics.messages()[0]
 
 
+def test_resolve_values_resolves_artifact_store_directly_not_via_a_store_integration(tmp_path):
+    """docs/design/deploy-command.md's Remaining Work item 8, resolved
+    2026-09-27: `store: artifact` used to fall into the generic
+    `StoreIntegration` dispatch (like `vault` above) and fail with
+    'no resolver implemented yet for store artifact' \u2014 it now resolves
+    directly against the real ArtifactModel + kind: version pins, same
+    mechanism `build_value_references()` already uses at build time."""
+    root = _solution(tmp_path)
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/omp.dispatcher.api", image_tag="1.0.0")
+    _write(
+        root,
+        "environments/prd.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  variables:\n    - key: dspapi_container_image_tag\n      store: artifact\n"
+        "      value: dspapi_container\n      field: image_tag\n",
+    )
+    _deployment(root, "app", environments=["prd"])
+
+    result = resolve_values(_context(root), "app", ["dspapi_container_image_tag"])
+
+    assert result.diagnostics.ok, result.diagnostics.messages()
+    assert result.values == {"dspapi_container_image_tag": "1.0.0"}
+
+
+def test_resolve_values_artifact_store_reports_a_missing_artifact(tmp_path):
+    root = _solution(tmp_path)
+    _write(
+        root,
+        "environments/prd.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  variables:\n    - key: dspapi_container_image_tag\n      store: artifact\n"
+        "      value: ghost_artifact\n      field: image_tag\n",
+    )
+    _deployment(root, "app", environments=["prd"])
+
+    result = resolve_values(_context(root), "app", ["dspapi_container_image_tag"])
+
+    assert not result.diagnostics.ok
+    assert "dspapi_container_image_tag" not in result.values
+    assert "ghost_artifact" in result.diagnostics.messages()[0]
+
+
 def test_unknown_deployment_name_raises_usage_error(tmp_path):
     root = _solution(tmp_path)
     _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])

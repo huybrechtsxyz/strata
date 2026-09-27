@@ -75,6 +75,7 @@ def run_semantic_checks(
     diagnostics.extend(_check_providers(index))
     diagnostics.extend(_check_resources(index))
     diagnostics.extend(_check_workspaces(index))
+    diagnostics.extend(_check_environments(index))
     diagnostics.extend(_check_deployment_value_tokens(index, resolved))
     return diagnostics
 
@@ -201,6 +202,29 @@ def _check_workspace_topology_components(
 
     service = WorkspaceService.from_model(workspace)
     return service.validate_topology_components(configuration, topology_config_models, topology_models)
+
+
+# ---------------------------------------------------------------------------
+# Environment -> Artifact: store: artifact variables reference a real artifact
+# ---------------------------------------------------------------------------
+
+
+def _check_environments(index: DocumentIndex) -> Diagnostics:
+    """Every `store: artifact` variable's `value` names a real `ArtifactModel`
+    (docs/design/artifact-references.md's full-review finding, 2026-09-27):
+    `VariableStoreModel.value: Any` is only conditionally an artifact
+    reference, so `references.py`'s generic `References()` walker never
+    checks it — this is that missing check, following the exact
+    `WorkspaceService.validate_topology_references()` precedent for a
+    conditionally-meaningful field.
+    """
+    diagnostics = Diagnostics()
+    artifact_names = set(index.names_of(PlatformKind.ARTIFACT))
+    for entry in index.all_of(PlatformKind.ENVIRONMENT):
+        environment = cast(EnvironmentModel, entry.model)
+        service = EnvironmentService.from_model(environment)
+        diagnostics.extend(service.validate_artifact_references(artifact_names), source=str(entry.source))
+    return diagnostics
 
 
 # ---------------------------------------------------------------------------

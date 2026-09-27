@@ -7,7 +7,7 @@
 
 One-page catalog of every v2 kind (and load-bearing cross-cutting
 sub-model/convention), its purpose, and its current implementation status —
-so "what does v2 look like today" doesn't require reading all 26 ADRs.
+so "what does v2 look like today" doesn't require reading all 27 ADRs.
 Detailed rationale for each stays in its own ADR; this doc only tracks
 current state and links out. Update this table when a kind is added or its
 status changes.
@@ -49,12 +49,13 @@ status changes.
 | Build pipeline (Integration → build run → rendering) | Renders workspace/module documents into Terraform/Compose/Helm artifacts | Mixed — see dedicated status doc | [build-pipeline-status.md](build-pipeline-status.md), [build-command.md](build-command.md) |
 | Solution-wide document loading & Phase 2 validation | The loader every kind's deferred cross-document check waits on | Loader implemented; 4 of 7 validators wired, 3 still open | [solution-loading-and-phase2-validation.md](solution-loading-and-phase2-validation.md) |
 | `strata validate` command | Schema + cross-document validation entry point | Implemented | [validate-command.md](validate-command.md) |
-| `strata build run` command | Renders artifacts, does not execute | Not implemented (building blocks exist) | [build-command.md](build-command.md) |
+| `strata build run` command | Renders artifacts, does not execute | Implemented — end-to-end tested, own remaining work exhausted | [build-command.md](build-command.md) |
+| `strata deploy run` command | Executes `plan`/`apply` (Terraform)/upgrade (Compose/Helm) against `build run`'s output, using fully-resolved values | Partially implemented — orchestrator/CLI/`TF_VAR_` injection/cross-step outputs/`output.template` render/`store: artifact` resolution all built and tested; locking/SIEM/whole-run timeout deferred | [ADR-0027](../decisions/0027-strata-deploy-run.md), [deploy-command.md](deploy-command.md) |
 | v1 schema audit resolution | Tracks resolution of ADR-0001's 14 original findings | See tracker | [v1-schema-parity-tracking.md](v1-schema-parity-tracking.md) |
 
 ## Related Decisions
 
-All 26 ADRs in `docs/decisions/` — see the tables above for which applies to
+All 27 ADRs in `docs/decisions/` — see the tables above for which applies to
 which kind/concept.
 
 ## Remaining Work / Open Questions
@@ -63,9 +64,10 @@ which kind/concept.
   numbered ADR (only ADR-0024, a narrow follow-up decision, exists) —
   consider writing one retroactively per the repo's own ADR convention if
   their design is revisited.
-- Deployment *stage execution* (`gates`/`promotion`, the actual `build`/
-  `deploy run` commands) is the remaining structural gap now — not the
-  kinds themselves, which are built.
+- Deployment *stage execution* — `deploy run` (ADR-0027,
+  [deploy-command.md](deploy-command.md)) is now built and tested;
+  `gates`/`promotion` remain undesigned, as does locking/SIEM for deploy
+  run specifically.
 - Keep this table in sync when a new kind is added or a status changes —
   it's the fastest place to look before opening an ADR.
 
@@ -74,3 +76,16 @@ which kind/concept.
 - 2026-09-24: Created.
 - 2026-09-27: Added `artifact` (ADR-0026) — a new kind, not present at
   creation time.
+- 2026-09-27: Corrected the stale `strata build run` row (said "not
+  implemented," actually done and end-to-end tested); added `strata
+  deploy run` row, new design doc created ([deploy-command.md](deploy-command.md)).
+- 2026-09-27: `strata deploy run` built (9 phases, ADR-0027) — row
+  corrected from "not started" to "partially implemented"; ADR count
+  bumped to 27; Remaining Work's "deployment stage execution" gap note
+  updated to reflect it's now built.
+- 2026-09-27: Full review of `artifact`/`deploy run` together found and
+  fixed two real gaps: `store: artifact` had no Phase 2 cross-reference
+  validation (`EnvironmentService.validate_artifact_references()`, new
+  8th semantic check) and `resolve_values()` had no deploy-time dispatch
+  for it at all (now resolves via `resolve_artifact_field()` directly).
+  `strata deploy run` row updated accordingly.

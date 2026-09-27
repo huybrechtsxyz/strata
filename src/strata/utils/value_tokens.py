@@ -7,6 +7,11 @@ concatenated string like a connection string). Reused verbatim from v1
 (ADR-0075) rather than ``{{ }}``-style templating, since ``{{`` collides
 with strata's existing Jinja/Helm templating elsewhere.
 
+A 4th kind, ``${output:STEP.KEY}``, references a prior `deploy run` step's
+collected output (docs/design/deploy-command.md's "Cross-step output
+context") — dependency-scoped resolution lives in `deploy_controller.py`,
+not here; this module stays kind-agnostic (see `resolve_value_tokens()`).
+
 Lives in `strata.utils` (below `strata.models` in the layered architecture,
 ADR-0003): pure regex/string logic, no Pydantic dependency, reused across
 many model files (dns, module, network, firewall...) — same reasoning as
@@ -15,10 +20,11 @@ many model files (dns, module, network, firewall...) — same reasoning as
 
 import ipaddress
 import re
+from typing import Any
 
-VALUE_TOKEN_KINDS = ("var", "secret", "feature")
+VALUE_TOKEN_KINDS = ("var", "secret", "feature", "output")
 
-VALUE_TOKEN_PATTERN = re.compile(r"\$\{(?P<kind>var|secret|feature):(?P<key>[A-Za-z0-9_.-]+)\}")
+VALUE_TOKEN_PATTERN = re.compile(r"\$\{(?P<kind>var|secret|feature|output):(?P<key>[A-Za-z0-9_.-]+)\}")
 
 _VALUE_TOKEN_CANDIDATE_PATTERN = re.compile(r"\$\{[^}]*\}")
 
@@ -85,3 +91,68 @@ def validate_cidr_or_token(value: str) -> None:
             ipaddress.ip_network(value, strict=False)
         except ValueError as e:
             raise ValueError(f"Invalid CIDR/IP: {value}") from e
+
+
+def resolve_value_tokens(value: str, values: dict[str, str]) -> str:
+    """Replace every ``${var:KEY}``/``${secret:KEY}``/``${feature:KEY}``/
+    ``${output:STEP.KEY}`` token in `value` with its resolved value from
+    `values` — the deploy-time resolver Mechanism B has always been missing
+    (docs/design/value-token-resolution.md; `strata deploy run`, docs/design/
+    deploy-command.md).
+
+    `kind` (`var`/`secret`/`feature`/`output`) only matters to the token's
+    author, not to resolution: callers (`resolve_values()`/
+    `build_value_references()`/`deploy_controller.py`'s per-step output
+    context) already merge every source into one flat `key -> value` mapping
+    before this function ever runs — it reads `key` only, indifferent to
+    which kind prefixed it. An `${output:STEP.KEY}` token's `key` is simply
+    `"STEP.KEY"` — the regex's `key` group already permits `.`, so no special
+    handling is needed here; dependency-scoping (a step may only reference a
+    step it `depends_on`) is enforced by the caller building `values`, not by
+    this function.
+
+    A plain literal with no tokens (`has_value_tokens(value)` is `False`) is
+    returned unchanged — this function is safe to call unconditionally on
+    every string-typed field, tokens or not.
+
+    Raises:
+        ValueError: a referenced key is not in `values` — matches
+            `output.template`'s own build-time precedent (`templater.py`):
+            an unknown reference is always an error, never a silent
+            empty-string substitution.
+    """
+
+    def _substitute(match: re.Match[str]) -> str:
+        key = match.group("key")
+        if key not in values:
+            raise ValueError(
+                f"Value token '${{{match.group('kind')}:{key}}}' references key '{key}', "
+                "which did not resolve to a value."
+            )
+        return values[key]
+
+    return VALUE_TOKEN_PATTERN.sub(_substitute, value)
+
+
+def resolve_value_tokens_in_mapping(data: dict[str, Any], values: dict[str, str]) -> dict[str, Any]:
+    """Apply `resolve_value_tokens()` to every string value in `data`.
+
+    Recurses into nested `dict`/`list` structures so a real, deeply-nested
+    `configuration`/`custom` payload resolves in one call; non-string leaves
+    (`int`/`bool`/`None`/already-resolved values) pass through unchanged.
+    Every real `provisioner.backend.configuration` value checked so far is a
+    flat top-level string (`resource_group_name: ${var:tf_state_resource_group}`),
+    but recursing costs nothing and avoids a silent gap if a deeper structure
+    ever needs it.
+    """
+
+    def _resolve(node: Any) -> Any:
+        if isinstance(node, str):
+            return resolve_value_tokens(node, values)
+        if isinstance(node, dict):
+            return {k: _resolve(v) for k, v in node.items()}
+        if isinstance(node, list):
+            return [_resolve(v) for v in node]
+        return node
+
+    return {k: _resolve(v) for k, v in data.items()}

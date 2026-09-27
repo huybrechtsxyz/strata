@@ -1,23 +1,35 @@
 #!/usr/bin/env python3
-"""Static Jinja2 template reference validation (docs/design/
-value-token-resolution.md, "Value Supply Mechanisms" option C —
-`output.template`) — never rendering, only checking that a template's
-referenced names exist somewhere in a known schema. Build never has every
-value resolved (secrets, integration-backed variables/features are
-deploy-only), so a "final" render can't honestly happen here; this catches
-the more common mistake (a typo'd reference) before deploy ever runs.
+"""Jinja2 template handling for `output.template` (docs/design/
+value-token-resolution.md, "Value Supply Mechanisms" option C).
+
+Two halves, deliberately separate (docs/design/deploy-command.md's
+Implementation Plan, phases 3/8): `validate_template_references()` is
+build-time-only — never rendering, only checking that a template's
+referenced names exist somewhere in a known schema, since build never has
+every value resolved (secrets, integration-backed variables/features are
+deploy-only). `render_template()` is deploy-time-only — every value is
+fully resolved by then, so an honest render can finally happen; callers are
+expected to have already validated the same template at build time.
 
 Deliberately has no dependency on `strata.integrations`/`ResolvedWorkspaceGraph`
 — those sit above `strata.utils` in the import-linter layering (ADR-0003).
-Callers build the `known_names` schema themselves and pass it in as plain
-`dict`/`set` data.
+Callers build the `known_names`/render context themselves and pass it in as
+plain `dict`/`set` data.
 """
 
-from jinja2 import Environment, TemplateSyntaxError, nodes
+from typing import Any
+
+from jinja2 import Environment, StrictUndefined, TemplateSyntaxError, nodes
 from jinja2.meta import find_undeclared_variables
 
-#: Parse-only — no loader/undefined config needed since nothing is rendered.
-_ENV = Environment()
+#: `StrictUndefined` so a reference `validate_template_references()` couldn't
+#: check statically (any nested access under a `None`-valued `known_names`
+#: root, e.g. `graph.*`, or a dynamic key) still raises loudly at render
+#: time instead of silently rendering as an empty string — matches
+#: `resolve_value_tokens()`'s own "unknown reference is always an error"
+#: precedent. Has no effect on `validate_template_references()`'s own
+#: `_ENV.parse()` call, which never evaluates Undefined access at all.
+_ENV = Environment(undefined=StrictUndefined)
 
 
 def validate_template_references(source: str, known_names: dict[str, set[str] | None]) -> list[str]:
@@ -78,3 +90,25 @@ def _referenced_keys(ast: nodes.Template) -> dict[str, set[str]]:
             key = arg.value
         result.setdefault(root, set()).add(key)
     return result
+
+
+def render_template(source: str, context: dict[str, Any]) -> str:
+    """Render `source` (a Jinja2 template) with `context` — the deploy-time
+    counterpart to `validate_template_references()`'s build-time,
+    render-nothing check (docs/design/deploy-command.md's Implementation
+    Plan phase 8). `context`'s keys mirror `validate_template_references()`'s
+    `known_names` exactly (`graph`/`variables`/`flags`/`secrets`/
+    `properties`/`custom`/`provisioner`, `InfraIntegration.render_output_
+    template()`'s own job to assemble) — a template that already passed
+    build-time validation is guaranteed every name it references exists in
+    this same shape.
+
+    Raises:
+        jinja2.TemplateError: `source` is malformed, or a reference that
+            passed static validation still fails at render time (a dynamic
+            key access `validate_template_references()` couldn't check
+            statically, for example) — not caught here; callers decide how
+            to surface it (`deploy_controller.py` converts it to a
+            `Diagnostics.error()`, matching every other per-step failure).
+    """
+    return _ENV.from_string(source).render(**context)

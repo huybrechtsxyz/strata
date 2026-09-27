@@ -663,3 +663,13 @@ in Open questions below for the full reasoning.
   rendering wiring remains open, explicitly not built — zero real haven
   module sets `.artifact` today (every real module still uses a plain
   `image:` literal) — tracked in ADR-0026's `## Remaining Work`.
+- 2026-09-27: **Full-review finding: `store: artifact`'s `value` has zero
+  cross-reference validation — resolved the same day.** Found while
+  reviewing this feature and `deploy run` together end to end
+  (docs/design/deploy-command.md's Remaining Work item 9 has the full
+  write-up). Fixed with a new `EnvironmentService.
+  validate_artifact_references()`, wired into `semantic_checks.py` as an
+  8th cross-document check — the same precedent `WorkspaceService.
+  validate_topology_references()` already established for a
+  conditionally-meaningful field `references.py`'s generic walker can't
+  check itself. 6 new tests. Full check suite green (1128 tests).

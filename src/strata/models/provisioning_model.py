@@ -222,6 +222,15 @@ class ProvisioningStepModel(PlatformBaseModel):
     depends_on: list[PlatformName] | None = Field(
         None, description="Names of other ProvisioningSteps that must complete before this one runs"
     )
+    scope: str | None = Field(
+        None,
+        description="Free-form label for CLI-level step filtering (`strata deploy run --scope <label>`) — "
+        "e.g. 'infra'/'apps'. Not a fixed vocabulary (matches v1's real, identically-documented field). "
+        "Lives here, not on DeploymentStageModel: whether a step is 'infra' or 'apps' is a fact about what "
+        "the step does, not about which environment/deployment runs it (docs/design/deploy-command.md) — "
+        "same reasoning as this model's own 'topology is a derived fact, not declared' rule above. Multiple "
+        "steps may share a scope label by design; uniqueness is deliberately not enforced.",
+    )
 
     @model_validator(mode="after")
     def validate_unique_targets(self) -> "ProvisioningStepModel":

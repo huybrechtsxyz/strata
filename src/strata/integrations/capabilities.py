@@ -21,7 +21,7 @@ from strata.integrations.errors import IntegrationError
 from strata.integrations.resolved_context import ResolvedModule, ResolvedWorkspaceGraph, ValueResolution
 from strata.models.namespace_model import NamespaceModel
 from strata.models.provisioning_model import ProvisionerModel
-from strata.utils.templater import validate_template_references
+from strata.utils.templater import render_template, validate_template_references
 from strata.utils.transport import CommandResult
 
 
@@ -104,6 +104,67 @@ class InfraIntegration(Integration):
         for filename, content in self.default_output(resolved, provisioner, graph).items():
             (path / filename).write_text(content)
         return path
+
+    def render_output_template(
+        self,
+        path: Path,
+        *,
+        resolved: ValueResolution,
+        provisioner: ProvisionerModel,
+        graph: ResolvedWorkspaceGraph,
+        template_path: Path,
+    ) -> Path:
+        """Actually render `provisioner.output.template` (D3) — `prepare()`'s
+        deploy-time counterpart, called separately by `deploy_controller.py`
+        (docs/design/deploy-command.md's Implementation Plan, phase 8).
+        `prepare()` itself only ever validates this field, never renders it
+        (see its own docstring) — by the time `deploy run` calls this, every
+        value is fully resolved (secrets, integration-backed variables/
+        features included), so a real render is finally honest.
+
+        Base-implemented, not abstract, same reasoning as `prepare()`
+        (ADR-0023 D5) — nothing about this field is tool-specific
+        (`OutputModel`'s own docstring: "Valid for any tool").
+
+        Uses the identical context shape `validate_template_references()`'s
+        `known_names` already checked against at build time (`graph`,
+        `variables`, `flags`, `secrets`, `properties`, `custom`,
+        `provisioner`) — a template that passed that validation is
+        guaranteed every name it references exists in this same context.
+        `variables`/`flags`/`secrets` are keyed from `graph.variable_refs`/
+        `.feature_refs`/`.secret_refs` (which keys belong to which root) but
+        valued from `resolved.values` (the real, fully-resolved value) —
+        never from the refs' own `.value`, which stays build-time-safe-only
+        (`None` for secrets) even when `graph` was assembled for a deploy.
+
+        The rendered file's name is `template_path`'s own basename with a
+        trailing `.j2`/`.jinja2`/`.jinja` extension stripped
+        (`variables.json.j2` -> `variables.json`) — unchanged otherwise.
+
+        Returns:
+            The path the rendered file was written to.
+
+        Raises:
+            jinja2.TemplateError: see `render_template()`.
+        """
+        context: dict[str, Any] = {
+            "graph": graph,
+            "variables": {ref.key: resolved.values.get(ref.key) for ref in graph.variable_refs},
+            "flags": {ref.key: resolved.values.get(ref.key) for ref in graph.feature_refs},
+            "secrets": {ref.key: resolved.values.get(ref.key) for ref in graph.secret_refs},
+            "properties": graph.properties,
+            "custom": graph.custom,
+            "provisioner": provisioner,
+        }
+        rendered = render_template(template_path.read_text(), context)
+        name = template_path.name
+        for suffix in (".j2", ".jinja2", ".jinja"):
+            if name.endswith(suffix):
+                name = name[: -len(suffix)]
+                break
+        output_path = path / name
+        output_path.write_text(rendered)
+        return output_path
 
     def default_output(
         self,

@@ -406,3 +406,45 @@ def test_deployment_with_no_resolvable_environment_skips_token_checking(tmp_path
     # here we only assert this does not crash the token check.
     context = _resolve(root)
     assert not context.ok
+
+
+# ---------------------------------------------------------------------------
+# Environment -> Artifact: store: artifact references (docs/design/
+# artifact-references.md's full-review finding)
+# ---------------------------------------------------------------------------
+
+
+def _solution_with_artifact_reference(tmp_path: Path, *, artifact_value: str = "dspapi_container") -> Path:
+    root = _base_solution(tmp_path)
+    _write(
+        root,
+        "artifact.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: artifact
+meta:
+  name: dspapi_container
+spec:
+  image_name: int-docker-test/src/omp.dispatcher.api
+  image_tag: "1.0.0"
+""",
+    )
+    path = root / "environment.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8")
+        + f"    - key: IMAGE_TAG\n      store: artifact\n      value: {artifact_value}\n      field: image_tag\n",
+        encoding="utf-8",
+    )
+    return root
+
+
+def test_artifact_reference_to_a_real_artifact_passes(tmp_path):
+    context = _resolve(_solution_with_artifact_reference(tmp_path))
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_artifact_reference_to_an_unknown_artifact_is_caught(tmp_path):
+    root = _solution_with_artifact_reference(tmp_path, artifact_value="ghost_artifact")
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any("ghost_artifact" in m for m in context.diagnostics.messages())

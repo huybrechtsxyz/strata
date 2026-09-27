@@ -338,6 +338,16 @@ def merge_workspace_environment_deployment_properties(
 def resolve_values(context: SolutionContext, deployment_name: str, keys: list[str]) -> ValueResolution:
     """Resolve `keys` against `deployment_name`'s merged environment(s).
 
+    `store: artifact` variables are resolved directly against the
+    solution's own `ArtifactModel` + `kind: version` pins
+    (`resolve_artifact_field()`) — the same mechanism
+    `build_value_references()`'s `_variable_value()` already uses at build
+    time (docs/design/deploy-command.md's Remaining Work item 8, resolved
+    2026-09-27) — never dispatched to `_resolve_store_value()`'s
+    `StoreIntegration` lookup, since `artifact` is not, and never will be,
+    a registered integration (it resolves an in-solution document
+    reference, not an external system).
+
     Args:
         context: An already-`require_valid()`-ed solution.
         deployment_name: `meta.name` of the deployment to resolve values for.
@@ -366,6 +376,22 @@ def resolve_values(context: SolutionContext, deployment_name: str, keys: list[st
                 location=key,
                 code="unknown_value_key",
             )
+            continue
+        if isinstance(store, VariableStoreModel) and store.store == VariableStoreType.ARTIFACT:
+            # `field` is guaranteed set — `VariableStoreModel.
+            # validate_field_only_on_artifact_store()` requires it whenever
+            # `store == artifact`.
+            assert store.field is not None
+            artifact_value = resolve_artifact_field(context, deployment, str(store.value), store.field)
+            if artifact_value is None:
+                result.diagnostics.error(
+                    f"'{key}': 'store: artifact' references '{store.value}', which is not a "
+                    "known artifact in this solution.",
+                    location=key,
+                    code="value_resolution_failed",
+                )
+                continue
+            result.values[key] = artifact_value
             continue
         try:
             value = _resolve_store_value(store, resolvers)

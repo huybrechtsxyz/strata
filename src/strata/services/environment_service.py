@@ -5,7 +5,7 @@ from typing import Any
 
 from strata.models.common_models import PlatformBaseModel
 from strata.models.environment_model import EnvironmentModel
-from strata.models.store_model import FeatureStoreModel, SecretStoreModel, VariableStoreModel
+from strata.models.store_model import FeatureStoreModel, SecretStoreModel, VariableStoreModel, VariableStoreType
 from strata.services.base_service import BaseService
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.value_tokens import extract_value_tokens
@@ -62,6 +62,44 @@ class EnvironmentService(BaseService[EnvironmentModel]):
         self._ensure_validated()
         assert self.model is not None
         return unresolved_value_tokens(model, self.declared_keys(), self.model.meta.name)
+
+    def validate_artifact_references(self, artifact_names: set[str]) -> Diagnostics:
+        """Check every `store: artifact` variable's `value` names a real
+        `ArtifactModel` (docs/design/artifact-references.md).
+
+        The one `(kind, name)` reference `references.py`'s generic
+        `References()` field walker can't check itself:
+        `VariableStoreModel.value: Any` is only *conditionally* an artifact
+        reference (only when `store == artifact`; for every other store it
+        means something else entirely) — the same reasoning
+        `references.py`'s own docstring gives for why topology components
+        are deliberately excluded there too and checked by a dedicated
+        service method instead (`WorkspaceService.validate_topology_
+        references()`).
+
+        Args:
+            artifact_names: Every declared `ArtifactModel.meta.name` in the
+                solution.
+
+        Returns:
+            One error per `store: artifact` variable whose `value` does not
+            name a real artifact.
+        """
+        diagnostics = Diagnostics()
+        self._ensure_validated()
+        assert self.model is not None
+        for variable in self.model.spec.variables or []:
+            if variable.store != VariableStoreType.ARTIFACT:
+                continue
+            artifact_name = str(variable.value)
+            if artifact_name not in artifact_names:
+                diagnostics.error(
+                    f"Variable '{variable.key}': 'store: artifact' references unknown artifact "
+                    f"'{artifact_name}'. Available: {sorted(artifact_names)}",
+                    location="spec.variables",
+                    code="undefined_artifact",
+                )
+        return diagnostics
 
 
 def unresolved_value_tokens(model: PlatformBaseModel, declared: dict[str, set[str]], owner_name: str) -> Diagnostics:

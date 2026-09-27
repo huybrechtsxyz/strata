@@ -162,3 +162,49 @@ def test_keys_unique_to_either_environment_both_survive_the_merge():
     variables, _, _ = merge_environment_models([base, extra])
     assert set(variables) == {"REGION", "EXTRA"}
 
+
+# ---------------------------------------------------------------------------
+# validate_artifact_references() (docs/design/artifact-references.md's
+# full-review finding — store: artifact's value had no cross-reference check)
+# ---------------------------------------------------------------------------
+
+
+def _environment_with_artifact_variable() -> EnvironmentService:
+    service = EnvironmentService(
+        data={
+            "meta": {"name": "prd"},
+            "spec": {
+                "variables": [
+                    {"key": "IMAGE_TAG", "store": "artifact", "value": "dspapi_container", "field": "image_tag"}
+                ],
+            },
+        }
+    )
+    service.validate()
+    return service
+
+
+def test_artifact_reference_to_a_real_artifact_passes():
+    result = _environment_with_artifact_variable().validate_artifact_references({"dspapi_container"})
+    assert result.ok
+    assert result.messages() == []
+
+
+def test_artifact_reference_to_an_unknown_artifact_is_rejected():
+    result = _environment_with_artifact_variable().validate_artifact_references({"some-other-artifact"})
+    assert not result.ok
+    assert "dspapi_container" in result.messages()[0]
+    assert "undefined_artifact" in [d.code for d in result.errors]
+
+
+def test_non_artifact_variables_are_never_checked():
+    """A constant/environment-store variable's value means something else
+    entirely — never mistaken for an artifact reference."""
+    result = _environment().validate_artifact_references(set())
+    assert result.ok
+
+
+def test_no_artifacts_declared_anywhere_still_reports_the_reference():
+    result = _environment_with_artifact_variable().validate_artifact_references(set())
+    assert not result.ok
+

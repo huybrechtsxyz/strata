@@ -261,6 +261,28 @@ def test_provisioning_step_accepts_depends_on():
     assert model.depends_on == ["provision-network"]
 
 
+def test_provisioning_step_scope_defaults_to_none():
+    """scope is optional and defaults to None — most steps won't set it."""
+    model = ProvisioningStepModel.model_validate(_minimal_step())
+    assert model.scope is None
+
+
+def test_provisioning_step_accepts_free_form_scope():
+    """scope is a free-form label, not a fixed 'infra'/'apps' vocabulary — any string is accepted."""
+    for label in ("infra", "apps", "network", "some-other-label"):
+        model = ProvisioningStepModel.model_validate(_minimal_step(scope=label))
+        assert model.scope == label
+
+
+def test_provisioning_step_scope_uniqueness_not_enforced():
+    """Multiple steps may share a scope label by design — that's the whole point of the filter."""
+    steps = [
+        ProvisioningStepModel.model_validate(_minimal_step(name="a", targets=["t1"], scope="infra")),
+        ProvisioningStepModel.model_validate(_minimal_step(name="b", targets=["t2"], scope="infra")),
+    ]
+    validate_provisioning_steps(steps)  # must not raise
+
+
 # ---------------------------------------------------------------------------
 # validate_provisioning_steps (cross-step validation)
 # ---------------------------------------------------------------------------
