@@ -6,8 +6,9 @@
   whole-run timeout, and `--force`'s real advisory-gate consumption are
   deliberately deferred (no real evidence forces them yet); a confirmed
   gap (not just a hypothetical) remains for `store: artifact` at deploy
-  time (Remaining Work item 8)
-- Last updated: 2026-09-27
+  time (Remaining Work item 8); Helm/Compose deploy orchestration
+  (`docs/_gap_v1.md` gap #13) is now implemented for both container tools
+- Last updated: 2026-09-28 (TF_VAR_ delivery keyed by integration.ENV_VAR_PREFIX, not a hardcoded literal)
 
 ## Overview
 
@@ -194,6 +195,289 @@ so it slots in as one more per-step branch (mirroring
 branch, just actually rendering instead of only validating) — not
 designed in detail here since it's a template-rendering mechanism, not
 an orchestration one.
+
+## Helm/Compose orchestration — avoiding tool-type branching (docs/_gap_v1.md gap #13, 2026-09-28)
+
+The pseudocode above is Terraform-shaped (`init`/`validate`/`plan`/`deploy`
+against one root module per step) and is genuinely all that's wired up
+today — `docs/_gap_v1.md` gap #13 found that a Helm/Compose step through
+`deploy_run()` would crash (`HelmIntegration.plan()`/`.deploy()` require
+`release`/`namespace`/`chart`, which nothing in `ProvisionerModel` supplies
+and nothing in the loop above passes). This section is the concrete design
+for closing that gap **without** `deploy_run()` ever branching on tool type
+— per explicit request ("the goal is to avoid if=helm or if=terraform
+code"), checked against real precedent rather than invented from scratch.
+
+### Real precedent, both in v1 and already in v2 today
+
+**v1** (`e:\SourcesXYZ\strata\src\strata\deployers\`) solves this exactly
+this way — confirmed by reading the real code, not assumed:
+- `DeployerFactory.create(provisioner_type, ...)` (`factory.py`) is a pure
+  lookup-table dispatch (`{"terraform": TerraformDeployer, "helm":
+  HelmDeployer, "compose": ComposeDeployer, ...}`) — the only place a tool
+  name is ever read, and it never branches on it, just returns the right
+  class.
+- Every concrete `BaseDeployer` subclass implements its own
+  `validate_workspace()`/`apply()`/`plan()`/etc. **its own way** — the
+  orchestrator (`base_deploy_command.py`'s `_create_deployer()`,
+  `run_deploy_command.py`'s step loop) only ever calls
+  `getattr(deployer, step_name)()` polymorphically. Zero `if
+  provisioner_type == "helm"` anywhere in the orchestrator.
+- `HelmDeployer.validate_workspace()` discovers **every** namespace+module
+  combination for the whole stage up front (iterating
+  `deployment_service.get_namespace_services()` → each namespace's
+  `spec.modules`, filtered by `stage.helm_namespaces`/`--namespace`),
+  builds a flat `List[HelmModuleTarget]` (release name + chart coordinates
+  read back from `meta.yaml` — the same self-contained build artifact
+  `prepare_namespace()` already writes, zero new schema fields needed),
+  and every lifecycle step method (`apply`/`plan`/`destroy`/...) loops
+  over that same list, running one `helm upgrade`/etc. **per module**.
+  Compose doesn't need this at all — it already merges every module in a
+  namespace into one file at build time, so it stays one release-
+  equivalent per namespace.
+
+**v2 already has the identical pattern, proven, at build time** — not a
+new idea, just extending one that already ships:
+`workload_controller.build_workload_modules()` groups a namespace's
+modules `by_type` (`{"helm": [...], "compose": [...]}`), resolves the
+integration for each type via `resolve_module_integration()` (the same
+kind of factory `resolve_integration()`/v1's `DeployerFactory` are), and
+calls `integration.prepare_namespace(namespace, group, resolved=resolved)`
+polymorphically — that function has **zero** branching on `module_type`
+anywhere. `TerraformIntegration` never implements `prepare_namespace()`
+(it doesn't need to — Terraform never goes through the namespace/module
+pipeline at all, only the provisioner pipeline `prepare()` serves);
+`InfraIntegration.prepare_namespace()`'s own base implementation raises
+`IntegrationError` by default, exactly the "not abstract, subclasses that
+need it override it" shape `default_output()` also uses.
+
+### The design: a `deploy_namespace()` deploy-time counterpart
+
+Mirror `prepare_namespace()` exactly, one level later in the pipeline —
+same split, same non-abstract/raise-by-default shape, same "Compose merges,
+Helm doesn't" per-tool freedom:
+
+```python
+# InfraIntegration (capabilities.py) — new method, alongside prepare_namespace()
+def deploy_namespace(
+    self,
+    namespace: NamespaceModel,
+    modules: list[ResolvedModule],
+    *,
+    tokens: dict[str, str],
+    dry_run: bool,
+) -> Diagnostics:
+    """Deploy every module in `modules` — all attached to `namespace`.
+    Mirrors prepare_namespace()'s own "not abstract, raise by default"
+    shape (base raises IntegrationError; Terraform never implements it,
+    same reason it never implements prepare_namespace() either)."""
+    del namespace, modules, tokens, dry_run
+    raise IntegrationError(f"{self.name} does not support namespace-scoped module deployment.")
+```
+
+- **`HelmIntegration.deploy_namespace()`**: for each module in `modules`,
+  read its already-written `meta.yaml` (release/namespace/chart — zero new
+  schema, matching v1 exactly), call `resolve_module_values(item.module,
+  tokens)` (already built, gap #9 Phase 4) to get the resolved
+  `values.yaml` dict + secret-shaped dotted paths, rewrite `values.yaml`,
+  build `--set-string <path>=<value>` args from the secrets map, then call
+  `self.plan()`/`.deploy()` with the release/namespace/chart just read —
+  one `helm upgrade` per module, exactly v1's proven shape.
+- **`ComposeIntegration.deploy_namespace()`**: resolve the already-merged
+  compose file's tokens in one pass (a Compose-equivalent of
+  `resolve_module_values()`, not yet built — Phase 5), rewrite it, then one
+  `self.deploy()` call with `namespace=<namespace.meta.name>` (the Swarm
+  stack name) — no per-module loop needed, matches the merge-at-build-time
+  design already in place.
+
+### Orchestrator side — one polymorphic call, no tool-type branching
+
+**Corrected twice now, 2026-09-28** — first for coupling the wrong data to
+the wrong resolution step (see below), then for a deeper mismatch with
+v1's own real mechanism, found by direct pushback: v1 never infers "this
+is an app deployment" from namespace-linkage at all.
+`DeployerFactory.resolve_type()` (`factory.py`) is uniform for **every**
+tool, infra or app — every stage explicitly names a provisioner (directly,
+or via a topology's own `provisioner` field), and that provisioner's own
+declared type picks the deployer class. A real `provisioner: helm` entry
+is exactly as explicit as `provisioner: terraform` — v1 never asks "does
+this stage's targets include a namespace" to decide *what kind* of stage
+it is. What namespace-linkage actually does, one level further in
+(`HelmDeployer.validate_workspace()`), is decide **which modules** an
+already-known-to-be-Helm stage should touch — filtering
+`deployment_service.get_namespace_services()`'s modules down to
+`module.spec.type == ServiceDeployerType.HELM`, silently skipping any
+mismatched type. Namespace-linkage answers "which modules", never "is this
+stage Helm".
+
+v2 already has the *cleaner* version of the exact same "what kind of stage
+is this" signal v1's provisioner-type check provides — one layer more
+principled, since it's a real capability the class declares, not a string
+a human could misspell: `InfraIntegration.CAPABILITIES`
+(`TerraformIntegration = frozenset({Capability.INFRASTRUCTURE})`,
+`HelmIntegration`/`ComposeIntegration = frozenset({Capability.CONTAINER})`
+— `Capability` (`models/integration_model.py`) is the closed, `str`-backed
+enum every core capability name lives on, added specifically so a dispatch
+check names a member instead of a bare string literal — see that class's
+own docstring for why it isn't `enum.StrEnum`,
+`capabilities.py`'s own docstring: "the label says what *kind* of thing is
+provisioned... for a human reading the document; the contract is
+identical"). `resolve_integration(index, provisioner)` — the exact call
+every step already makes today, unchanged — already resolves this. No
+second, separate resolution is needed, and no namespace-inference either:
+
+```
+for step in steps:
+    provisioner = find_provisioner(workspace, step.provisioner)
+    integration = resolve_integration(index, provisioner)   # unchanged, today's exact call
+
+    if Capability.CONTAINER in integration.CAPABILITIES:
+        namespaces_targeted = [graph.namespaces[t] for t in step.targets if t in graph.namespaces]
+        for namespace in namespaces_targeted:
+            # mirrors HelmDeployer.validate_workspace()'s own
+            # `if module.spec.type != HELM: continue` filter exactly —
+            # the SAME integration already resolved above, not a second
+            # resolve_module_integration() call per module.
+            modules = [m for m in namespace's resolved modules if m.module.spec.type == integration.TYPE]
+            diagnostics.extend(integration.deploy_namespace(namespace, modules, tokens=tokens, dry_run=dry_run))
+    else:
+        # today's existing Terraform-shaped sequence, unchanged
+        integration.init(...); integration.validate(...); integration.plan(...); integration.deploy(...)
+```
+
+Both branches now share **one** integration resolution — `step.provisioner`
+is never unused, resolving the previous draft's own open consequence.
+`Capability.CONTAINER in integration.CAPABILITIES` is a **capability** check
+(a class-level property, set once per integration, the same kind of thing
+`prepare_namespace()`'s own base-vs-override split already keys off) —
+never a string comparison against `"helm"`/`"compose"`/`"terraform"`
+anywhere in the orchestrator's own control flow. A namespace with
+**mixed-type** modules simply needs one step per type, each bound to a
+provisioner of that type — matching v1's real per-stage, per-tool-type
+shape exactly (haven's own `applications_forge` stage is uniformly Helm;
+a workspace needing both Helm and Compose modules in one namespace would
+declare two steps, each targeting that namespace with its own
+correctly-typed provisioner).
+
+### Superseded: the previous two drafts' mistakes, kept visible for the record
+
+1. **First draft** resolved `integration` from `step.provisioner` once and
+   reused it for every module regardless of the module's own type —
+   wrong, a namespace's modules can be mixed-type.
+2. **Second draft** "fixed" that by abandoning `step.provisioner` entirely
+   — grouping modules `by_type` and calling `resolve_module_integration()`
+   per group, dispatching on whether `step.targets` contained a namespace
+   at all. That over-corrected: it matched `build_workload_modules()`'s
+   grouping shape, but diverged from v1's real mechanism (which always
+   keeps an explicit, stage-level provisioner/type binding) and left
+   `step.provisioner` genuinely unused for that step's real behaviour.
+3. **This draft** keeps one integration resolution (`step.provisioner`,
+   unchanged from today), uses its `CAPABILITIES` to pick the branch, and
+   its own `TYPE` to filter which same-typed modules in the targeted
+   namespace(s) it touches — faithful to v1, no unused field, no second
+   resolution call, no branch naming a tool.
+
+### Open design points, not yet resolved
+
+1. v1 scopes Helm's namespace filter **per stage** (`stage.helm_namespaces`/
+   `--namespace`), not per individual module-owning step. v2's natural
+   equivalent is a step's own `targets` (matches gap #12's precedent
+   exactly) — simpler, no separate CLI flag needed, but means a v1
+   `--namespace` override at deploy time has no direct v2 equivalent yet
+   (would need to filter `namespaces_targeted` further, if ever evidenced
+   as needed).
+2. `resolve_module_values()`'s Compose equivalent isn't built (Phase 5 is
+   still blocked on this same gap #13, see `docs/design/
+   value-token-resolution.md`).
+3. This is a real refactor of `deploy_run()`'s current step-loop body —
+   the existing Terraform-shaped sequence needs to become the "else"
+   branch above, not a rewrite of its own logic, matching how gap #12
+   made an additive schema change (not a rewrite) to `target_names`.
+4. Not designed here: how deploy-time namespace/module resolution builds
+   its own `list[ResolvedModule]` per namespace at deploy time — build
+   time's `build_workload_modules()` does this already; deploy time needs
+   the identical resolution (probably reusable directly, since neither the
+   module list nor its source paths change between build and deploy).
+5. A mismatched-type module in a targeted namespace (e.g. a Compose module
+   sitting in a namespace a Helm-typed step targets) is silently skipped
+   by the filter above, mirroring v1's identical silent skip — worth a
+   validate-time diagnostic ("namespace X has a module of type Y no
+   targeting step handles") rather than silent staying silent forever,
+   not designed here.
+
+### Implemented 2026-09-28 — Helm only
+
+Built exactly as designed above, with the concrete pieces filled in:
+
+- **`InfraIntegration.deploy_namespace()`** (`capabilities.py`): the base,
+  not-abstract/raise-by-default method, `**kwargs: Any` added to its
+  signature (override-compatible with `plan()`/`.deploy()`/`.destroy()`'s
+  own `**kwargs: Any` convention) so a subclass can accept extra
+  integration-specific kwargs (Helm's `remotes=`) without breaking the
+  Liskov contract for one that hasn't overridden it (mypy caught this: a
+  subclass signature with a narrower kwarg set than the base is an
+  incompatible override).
+- **`HelmIntegration.deploy_namespace()`** (`helm.py`): reads each
+  module's already-written `meta.yaml`, resolves the chart reference
+  (below), calls `resolve_module_values()` (gap #9 Phase 4), rewrites
+  `values.yaml` for non-secret leaves, and calls `self.deploy()` with a
+  new `set_string=` kwarg for the secret-shaped ones. A missing
+  `meta.yaml` or an unresolvable chart reference reports a `Diagnostics`
+  error for that module and continues with the rest — never raises,
+  matching the method's own contract.
+- **Chart reference resolution** (`_resolve_chart()`, `helm.py`): no
+  `chartName` in `meta.yaml` (git-based/local chart `source`) → the
+  module's own `item.source_path` **is** the chart, `_resolve_chart()` is
+  not even called. Otherwise, the `chartRemote` name is looked up in a
+  `{name: SolutionRemoteModel}` dict (`deploy_controller.py` builds it
+  identically to `build_controller.py`'s own `remotes` lookup — same
+  `context.controller.solution.spec.remotes` source). `RemoteType.OCI` →
+  `f"{url}/{chart_name}"` directly (no repo add — Helm resolves `oci://`
+  natively). `RemoteType.HELM` → `helm repo add <alias> <url>` first
+  (alias via `_sanitize_repo_name()`, ported verbatim from v1's real
+  `helm_deployer.py`), then `f"{alias}/{chart_name}"`. `RemoteType.GIT`/
+  `LOCAL` are rejected with a clear error (neither is a valid chart
+  registry type).
+- **`--set-string` delivery** (`plan()`/`.deploy()`, `helm.py`): new
+  `set_string: Sequence[tuple[str, str]] | None` kwarg, rendered via
+  `_set_string_args()` → `_escape_set_value()` (both ported verbatim from
+  v1's real `helm_deployer.py`) — secret values are backslash-escaped for
+  Helm's `--set` mini-language (`\ , . = { } [ ]`) so a value containing
+  one of those characters survives as a literal string.
+- **Deploy-time module resolution** (`resolve_namespace_modules()`,
+  `workload_controller.py`): mirrors `build_workload_modules()`'s
+  per-reference loop, grouped `by_type`, but never re-materialises a
+  module's source (deploy time only deploys what `build run` already
+  rendered) — resolves the answer to open design point 4 above.
+- **Orchestrator wiring** (`deploy_controller.py`): the per-step loop now
+  branches on `Capability.CONTAINER in integration.CAPABILITIES` exactly as
+  designed — the container branch resolves `step.targets` against
+  `graph.namespaces`, calls `resolve_namespace_modules()` per namespace,
+  filters to `integration.TYPE`, and calls `deploy_namespace()`; the
+  `else` branch is the pre-existing Terraform-shaped sequence, untouched.
+  A container-capable step whose `targets` names no namespace is a clear
+  preflight-style error, not a silent no-op.
+- **Compose implemented the same week** (2026-09-28, Full Solution Phase 5):
+  `ComposeIntegration.deploy_namespace()` reads the namespace's already-merged
+  `docker-compose.yml` (one file per namespace, not per module — Compose
+  merges at build time), resolves it via the new `resolve_compose_values()`
+  (`compose.py`, wrapping `value_tokens.py`'s new
+  `resolve_value_tokens_renaming_secrets()`), and calls one `docker stack
+  deploy` for the whole namespace. Secret tokens are renamed to Compose's
+  own bare `${KEY}` interpolation syntax and delivered via the subprocess's
+  own environment — never written to disk. Open design point 2 (Phase 5's
+  Compose value-resolution primitive) is now resolved.
+- Open design points 1 (v1's `--namespace` CLI override) and 5
+  (mismatched-type-module validate-time diagnostic) remain unresolved —
+  neither blocks either container tool's own deploy path, both left for a
+  future pass.
+- **Verified:** 40 tests in `test_integrations_helm.py`, 6 in
+  `test_integrations_compose.py`, 11 in `test_utils_value_tokens.py`, 4 new
+  tests in `test_deploy_controller.py` (end-to-end dispatch for both Helm
+  and Compose alongside an unchanged Terraform step, scope filtering,
+  no-matching-target error); full check suite green (mypy 107 files, ruff
+  clean, import-linter 1/0, pytest 1203 passed).
+
 
 ## Example — `scope` on the workspace, operational overrides on the deployment
 
@@ -1002,4 +1286,176 @@ were — small, independently-testable, full check suite after each.
   to `partially-implemented`, reflecting the deliberately-deferred items
   (locking/SIEM/whole-run timeout/advanced `--force` gates/`store:
   artifact`) rather than `implemented`, which would overstate it.
+- 2026-09-28: **Designed Helm/Compose orchestration** (`docs/_gap_v1.md`
+  gap #13), per direct request to look at how v1 avoided
+  `if tool == "helm"`/`if tool == "terraform"` branching and design v2's
+  fix the same way. Read v1's real `deployers/` package directly:
+  `DeployerFactory.create(provisioner_type, ...)` is a pure lookup-table
+  dispatch, and `HelmDeployer` discovers every namespace+module
+  combination for the whole stage up front (`validate_workspace()`),
+  building a flat target list every lifecycle step method then loops
+  over — one `helm upgrade` per module, release/chart read back from
+  `meta.yaml` (self-contained build artifact, zero extra schema).
+  Confirmed v2 already has the identical pattern, proven, at build time:
+  `workload_controller.build_workload_modules()` groups a namespace's
+  modules `by_type`, resolves the integration via
+  `resolve_module_integration()`, and calls
+  `integration.prepare_namespace(...)` polymorphically — zero
+  `module_type` branching anywhere. Designed a `deploy_namespace()`
+  deploy-time counterpart mirroring `prepare_namespace()`'s own
+  "not abstract, raise-by-default" shape exactly, consuming gap #9
+  Phase 4's already-built `resolve_module_values()` for Helm. The
+  orchestrator dispatches on **data** (does this step's `targets`
+  include a namespace?), never on tool type — a Terraform step's
+  `targets` never contains a namespace, so it always falls through to
+  today's unchanged sequence without any branch naming Terraform.
+  Design only — nothing implemented; flagged as a real refactor of
+  `deploy_run()`'s current step-loop body, not a pure addition.
+- 2026-09-28: **Validated the Helm/Compose orchestration design against
+  literal-name coupling before implementing, per request** ("let's
+  validate the design is not linked to literal provisioner names").
+  Found a real bug in the first draft's orchestrator pseudocode: it
+  resolved `integration` once from `step.provisioner`'s own `.tool` and
+  reused it for every module in a targeted namespace — wrong, since a
+  namespace's modules can be mixed-type, and `build_workload_modules()`
+  (the real precedent this design leans on) never resolves a module's
+  integration from any `ProvisionerModel` at all — it groups `by_type`
+  and calls `resolve_module_integration()` per group, independent of any
+  step. Corrected the pseudocode to do the identical grouping at deploy
+  time. Confirmed separately that `resolve_integration()`/
+  `resolve_module_integration()` themselves were already clean — both
+  dispatch purely on type strings (`.tool`/`module.spec.type`), never on
+  any document's `.name`. Flagged one new open consequence: `step
+  .provisioner` becomes unused for a namespace-targeting step's actual
+  deploy action under this correction — still a required schema field
+  with no conditional exemption. Design only, still nothing implemented.
+- 2026-09-28: **Corrected the orchestration design again**, per direct
+  pushback ("so also in v1 there was this split? its not a compose
+  provisioner or helm provisioner it is the link to the namespace that
+  makes it either helm/compose"). Re-checked v1's real
+  `DeployerFactory.resolve_type()` directly: it is uniform for every tool,
+  infra or app — every stage explicitly names a provisioner (or a
+  topology naming one), and that provisioner's own declared type picks
+  the deployer class. v1 never infers "this is an app deployment" from
+  namespace-linkage — that only decides *which modules* an
+  already-known-to-be-Helm stage touches, one level further in. Corrected
+  the previous draft (which dispatched on whether `step.targets` contained
+  a namespace, abandoning `step.provisioner` entirely) to instead branch
+  on `integration.CAPABILITIES` (`"infrastructure"` vs `"container"`) —
+  the exact "what kind of stage is this" signal v1's provisioner-type
+  check provides, already resolved by the same `resolve_integration()`
+  call every step makes today. `step.targets` now only decides which
+  namespaces a container-capability step concerns; `integration.TYPE`
+  filters same-typed modules within them, mirroring
+  `HelmDeployer.validate_workspace()`'s own `if module.spec.type != HELM:
+  continue` filter exactly. This resolves the previous draft's own open
+  consequence (`step.provisioner` unused) — one integration resolution,
+  shared by both branches, `step.provisioner` always meaningful. Both
+  earlier drafts' mistakes kept visible in a new "Superseded" subsection
+  rather than silently overwritten. Design only, still nothing
+  implemented.
+- 2026-09-28: **Implemented the CAPABILITIES-based design (Helm only)**.
+  Added `InfraIntegration.deploy_namespace()` (`capabilities.py`,
+  `**kwargs: Any` needed for a Liskov-compatible override — mypy caught
+  the narrower subclass signature), `HelmIntegration.deploy_namespace()`
+  (`helm.py`, reads `meta.yaml`, resolves chart ref, calls
+  `resolve_module_values()`, delivers secrets via a new `set_string=`
+  kwarg on `plan()`/`.deploy()`), chart-reference resolution
+  (`_resolve_chart()`/`_sanitize_repo_name()`/`_escape_set_value()`/
+  `_set_string_args()`, the latter three ported verbatim from v1's real
+  `helm_deployer.py`), a deploy-time module-resolution helper
+  (`resolve_namespace_modules()`, `workload_controller.py`, mirrors
+  `build_workload_modules()` without re-materialising sources), and the
+  `deploy_controller.py` orchestrator branch exactly as designed. Genuine
+  new sub-problem surfaced mid-implementation (not anticipated by the
+  design): `meta.yaml`'s `chartRemote` is a *name*, not a URL — resolving
+  it needed a real `{name: SolutionRemoteModel}` lookup (rebuilt in
+  `deploy_controller.py` identically to `build_controller.py`'s own) and
+  an OCI-vs-HTTP-registry branch on `RemoteType`, since v2's remotes are
+  typed distinctly (`git`/`oci`/`helm`/`local`) rather than v1's
+  URL-prefix-sniffing. Compose left unimplemented (Phase 5 still
+  blocked). 40 tests in `test_integrations_helm.py`, 3 in
+  `test_deploy_controller.py`. Full check suite green: mypy 107 files,
+  ruff clean, import-linter 1/0, pytest 1185 passed.
+- 2026-09-28: **Replaced bare capability string literals with a `Capability`
+  enum**, per direct request ("this should at least be an enum right we do
+  not want string values in ifs"). Added `Capability(str, Enum)`
+  (`models/integration_model.py`, not `enum.StrEnum` — needs Python 3.11+,
+  this project's floor is 3.10) covering the closed core vocabulary
+  (`variables`/`secrets`/`features`/`infrastructure`/`container`/`sources`);
+  `VALID_INTEGRATION_CAPABILITIES` now derives from it
+  (`frozenset(Capability)`) so the two can never drift. Every real
+  integration class's `CAPABILITIES` declaration
+  (`terraform.py`/`helm.py`/`compose.py`/the three store resolvers) and
+  `capabilities.py`'s `CAPABILITY_ABCS` dict now use `Capability.X`
+  members instead of string literals; the flagged
+  `if "container" in integration.CAPABILITIES:` line in
+  `deploy_controller.py` is now `if Capability.CONTAINER in
+  integration.CAPABILITIES:`. `IntegrationSpecModel.capabilities`/
+  `Integration.CAPABILITIES` deliberately stay `set[str]`/`frozenset[str]`
+  — an `x-`-prefixed plugin capability (real, tested:
+  `test_integrations_registry.py`'s `"x-ticketing"`) has no enum member by
+  design, so the field/ClassVar type can't be narrowed to `Capability`
+  without breaking that legitimate open-extension case; `Capability <: str`
+  makes plain-string membership checks/dict lookups against it work
+  unchanged either direction. Initially built as a hand-rolled `str, Enum`
+  mixin (project floor was still declared 3.10) with an explicit `__str__`
+  override to work around a real formatting gotcha — a hand-rolled mixin
+  does NOT get `str`'s own `__format__`/`__str__` for free, unlike
+  `enum.StrEnum` (confirmed empirically: an f-string like
+  `f"'{capability}'"` rendered `'Capability.CONTAINER'` instead of
+  `'container'`). **Superseded same day**: per direct question ("you can
+  assume 3.13+ no?"), confirmed the rest of the project already assumes
+  3.13 (`.cruft.json`, both CI workflows already pin `PYTHON_VERSION:
+  "3.13"`) while `pyproject.toml`'s `requires-python`/mypy/ruff still
+  claimed a stale `>=3.10` floor — corrected all three to `3.13`, then
+  simplified `Capability` to a plain `enum.StrEnum` (no `__str__` override
+  needed — `StrEnum` gets the plain-value formatting natively). No test
+  changes needed — full check suite green: mypy 107 files, ruff clean,
+  import-linter 1/0, pytest 1185 passed.
+- 2026-09-28: **Implemented Compose's `deploy_namespace()`** (Full Solution
+  Phase 5), closing gap #13 for both container tools. `ComposeIntegration.
+  deploy_namespace()` mirrors Helm's shape but is genuinely simpler in one
+  way (one `docker stack deploy` per namespace, since Compose already
+  merged every module into one file at build time) and needs a different
+  resolution primitive in another: `resolve_value_tokens_renaming_secrets()`
+  (`value_tokens.py`) resolves per-token, not per-leaf, since Compose has
+  no whole-path override mechanism the way Helm's `--set-string` does —
+  a `${secret:KEY}` token is renamed to Compose's own bare `${KEY}`
+  syntax and the real value delivered only via the `docker stack deploy`
+  subprocess's own environment (`Integration.run()`'s existing per-call
+  `env` merge — no `.env` file needed, simpler than v1's real
+  `os.environ`-mutating `inject_compose_env()` context manager). 11 new
+  tests in `test_utils_value_tokens.py`, 6 in `test_integrations_compose.py`,
+  1 new end-to-end dispatch test in `test_deploy_controller.py` mirroring
+  the existing Helm one. Full check suite green: mypy 107 files, ruff
+  clean, import-linter 1/0, pytest 1203 passed.
+- 2026-09-28: **`tf_var_env()`/dns-networks-firewalls/Phase-6-configuration
+  delivery now name their env var via `integration.ENV_VAR_PREFIX`, never
+  a hardcoded `"TF_VAR_"` literal**, per direct question ("why would we
+  always use TF_VAR while terraform might not even be in the project for
+  others?"). New `Integration.ENV_VAR_PREFIX: ClassVar[str | None] = None`
+  (`base.py`) — `TerraformIntegration` is the only class that overrides it
+  (`"TF_VAR_"`, Terraform's own real CLI contract, not a strata
+  convention). Confirmed a generic `STRATA_<name>` alternative genuinely
+  can't work uniformly: Helm has no env-var substitution mechanism at all
+  (only `-f`/`--set*` CLI flags); Compose uses unprefixed `${KEY}`
+  interpolation, a different mechanism, not "an empty prefix" — each tool
+  already has its own real delivery mechanism (Phases 2/4/5), and none of
+  the three could read a fourth, invented prefix. This also fixed a real,
+  if harmless, pre-existing leak: `tf_var_env(resolved)` ran unconditionally
+  before the container-capability branch, so a Helm/Compose step's own
+  `deploy_namespace()` call previously received `TF_VAR_`-prefixed secrets
+  meant for Terraform in its `env=` kwarg — `tf_var_env()` now returns `{}`
+  for a `None` prefix, so that stops. The two delivery loops inside the
+  Terraform-shaped branch are now also guarded by `integration.
+  ENV_VAR_PREFIX is not None`, both to avoid the same leak for any future
+  non-container infra tool and to avoid an f-string literally inserting
+  the text `"None"` into an env var name. 2 new tests
+  (`test_tf_var_env_empty_when_prefix_is_none`,
+  `test_deploy_run_does_not_leak_tf_var_env_into_container_capable_steps`),
+  plus a `TerraformIntegration.ENV_VAR_PREFIX == "TF_VAR_"` /
+  `HelmIntegration`/`ComposeIntegration.ENV_VAR_PREFIX is None` assertion
+  added to each class's existing contract test. Full check suite green:
+  mypy 107 files, ruff clean, import-linter 1/0, pytest 1214 passed.
 

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from strata.integrations.compose import ComposeIntegration
+from strata.integrations.compose import ComposeIntegration, resolve_compose_values
 from strata.integrations.errors import IntegrationError
 from strata.integrations.registry import get
 from strata.integrations.resolved_context import ResolvedModule, ValueResolution
@@ -44,6 +44,10 @@ def test_class_declares_its_contract():
     assert ComposeIntegration.CAPABILITIES == {"container"}
     assert ComposeIntegration.TRANSPORTS == {"cli"}
     assert ComposeIntegration.COMMAND == "docker"
+    # Compose uses unprefixed `${KEY}` interpolation - a different
+    # mechanism entirely, not "an empty prefix" - so it inherits the base
+    # `None`, never declares its own.
+    assert ComposeIntegration.ENV_VAR_PREFIX is None
 
 
 def test_registered_in_the_registry():
@@ -315,8 +319,12 @@ def test_prepare_namespace_renders_healthcheck_from_command(tmp_path: Path):
             ModuleServiceModel(
                 name="db",
                 healthcheck=ModuleCheckModel(
-                    name="pg-ready", type="command", command=["pg_isready", "-U", "authentik"],
-                    interval="30s", timeout="5s", retries=5,
+                    name="pg-ready",
+                    type="command",
+                    command=["pg_isready", "-U", "authentik"],
+                    interval="30s",
+                    timeout="5s",
+                    retries=5,
                 ),
             )
         ],
@@ -329,7 +337,9 @@ def test_prepare_namespace_renders_healthcheck_from_command(tmp_path: Path):
         resolved=ValueResolution(deployment="app"),
     )
 
-    healthcheck = yaml.safe_load((namespace_dir / "docker-compose.yml").read_text())["services"]["authentik-db"]["healthcheck"]
+    healthcheck = yaml.safe_load((namespace_dir / "docker-compose.yml").read_text())["services"]["authentik-db"][
+        "healthcheck"
+    ]
     assert healthcheck == {
         "test": ["CMD", "pg_isready", "-U", "authentik"],
         "interval": "30s",
@@ -369,3 +379,156 @@ def test_prepare_namespace_compose_file_passthrough_raises_clearly(tmp_path: Pat
 def test_prepare_namespace_does_nothing_for_an_empty_group():
     # No modules, no directory to require - must not raise or touch disk.
     ComposeIntegration().prepare_namespace(_namespace("hearth"), [], resolved=ValueResolution(deployment="app"))
+
+
+# ---------------------------------------------------------------------------
+# resolve_compose_values() — docs/_gap_v1.md gap #9, Full Solution Phase 5.
+# Deliberately pure (no disk I/O) — mirrors resolve_module_values()'s own
+# testable-without-touching-disk convention.
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_compose_values_resolves_non_secret_leaves():
+    document = {"services": {"portainer": {"environment": {"TZ": "${var:tz}"}}}}
+    resolved, secrets = resolve_compose_values(document, {"tz": "Europe/Brussels"})
+    assert resolved == {"services": {"portainer": {"environment": {"TZ": "Europe/Brussels"}}}}
+    assert secrets == {}
+
+
+def test_resolve_compose_values_renames_a_secret_token_to_bare_dollar_brace_key():
+    document = {"services": {"portainer": {"environment": {"DB_PASSWORD": "${secret:db_password}"}}}}
+    resolved, secrets = resolve_compose_values(document, {"db_password": "hunter2"})
+    assert resolved == {"services": {"portainer": {"environment": {"DB_PASSWORD": "${db_password}"}}}}
+    assert secrets == {"db_password": "hunter2"}
+
+
+def test_resolve_compose_values_does_not_touch_disk():
+    document = {"services": {"portainer": {"image": "portainer/portainer-ce"}}}
+    resolved, secrets = resolve_compose_values(document, {})
+    assert resolved == document
+    assert secrets == {}
+
+
+# ---------------------------------------------------------------------------
+# deploy_namespace() — docs/_gap_v1.md gap #13
+# ---------------------------------------------------------------------------
+
+
+def test_deploy_namespace_rewrites_the_compose_file_and_deploys_the_stack(monkeypatch, tmp_path: Path):
+    captured = _capture(monkeypatch)
+    module = _module("portainer", services=[ModuleServiceModel(name="portainer")])
+    namespace_dir = tmp_path / "hearth"
+    namespace_dir.mkdir(parents=True)
+    (namespace_dir / "docker-compose.yml").write_text(
+        yaml.safe_dump(
+            {
+                "services": {
+                    "portainer": {
+                        "environment": {"TZ": "${var:tz}", "DB_PASSWORD": "${secret:db_password}"},
+                    }
+                }
+            }
+        )
+    )
+    resolved_module = _resolved("portainer", module, namespace_dir / "portainer")
+
+    diagnostics = ComposeIntegration().deploy_namespace(
+        _namespace("hearth"),
+        [resolved_module],
+        tokens={"tz": "Europe/Brussels", "db_password": "hunter2"},
+        dry_run=False,
+    )
+
+    assert diagnostics.ok
+    assert captured["args"] == [
+        "docker",
+        "stack",
+        "deploy",
+        "--with-registry-auth",
+        "-c",
+        str(namespace_dir / "docker-compose.yml"),
+        "hearth",
+    ]
+    assert captured["env"] == {"db_password": "hunter2"}
+    document = yaml.safe_load((namespace_dir / "docker-compose.yml").read_text())
+    assert document["services"]["portainer"]["environment"] == {
+        "TZ": "Europe/Brussels",
+        "DB_PASSWORD": "${db_password}",
+    }
+
+
+def test_deploy_namespace_merges_caller_env_with_secrets(monkeypatch, tmp_path: Path):
+    captured = _capture(monkeypatch)
+    module = _module("portainer", services=[ModuleServiceModel(name="portainer")])
+    namespace_dir = tmp_path / "hearth"
+    namespace_dir.mkdir(parents=True)
+    (namespace_dir / "docker-compose.yml").write_text(
+        yaml.safe_dump({"services": {"portainer": {"environment": {"DB_PASSWORD": "${secret:db_password}"}}}})
+    )
+    resolved_module = _resolved("portainer", module, namespace_dir / "portainer")
+
+    ComposeIntegration().deploy_namespace(
+        _namespace("hearth"),
+        [resolved_module],
+        tokens={"db_password": "hunter2"},
+        dry_run=False,
+        env={"TF_VAR_unrelated": "x"},
+    )
+
+    assert captured["env"] == {"TF_VAR_unrelated": "x", "db_password": "hunter2"}
+
+
+def test_deploy_namespace_missing_compose_file_reports_a_diagnostic(monkeypatch, tmp_path: Path):
+    _capture(monkeypatch)
+    module = _module("portainer", services=[ModuleServiceModel(name="portainer")])
+    namespace_dir = tmp_path / "hearth"
+    namespace_dir.mkdir(parents=True)
+    resolved_module = _resolved("portainer", module, namespace_dir / "portainer")
+
+    diagnostics = ComposeIntegration().deploy_namespace(
+        _namespace("hearth"), [resolved_module], tokens={}, dry_run=False
+    )
+
+    assert not diagnostics.ok
+    assert "docker-compose.yml not found" in diagnostics.errors[0].message
+
+
+def test_deploy_namespace_unresolvable_token_reports_a_diagnostic(monkeypatch, tmp_path: Path):
+    _capture(monkeypatch)
+    module = _module("portainer", services=[ModuleServiceModel(name="portainer")])
+    namespace_dir = tmp_path / "hearth"
+    namespace_dir.mkdir(parents=True)
+    (namespace_dir / "docker-compose.yml").write_text(
+        yaml.safe_dump({"services": {"portainer": {"environment": {"TZ": "${var:missing}"}}}})
+    )
+    resolved_module = _resolved("portainer", module, namespace_dir / "portainer")
+
+    diagnostics = ComposeIntegration().deploy_namespace(
+        _namespace("hearth"), [resolved_module], tokens={}, dry_run=False
+    )
+
+    assert not diagnostics.ok
+    assert "did not resolve to a value" in diagnostics.errors[0].message
+
+
+def test_deploy_namespace_dry_run_never_touches_disk_or_runs_a_command(monkeypatch, tmp_path: Path):
+    captured = _capture(monkeypatch)
+    module = _module("portainer", services=[ModuleServiceModel(name="portainer")])
+    namespace_dir = tmp_path / "hearth"
+    namespace_dir.mkdir(parents=True)
+    contents_before = yaml.safe_dump({"services": {"portainer": {"environment": {"TZ": "${var:tz}"}}}})
+    (namespace_dir / "docker-compose.yml").write_text(contents_before)
+    resolved_module = _resolved("portainer", module, namespace_dir / "portainer")
+
+    diagnostics = ComposeIntegration().deploy_namespace(
+        _namespace("hearth"), [resolved_module], tokens={"tz": "Europe/Brussels"}, dry_run=True
+    )
+
+    assert diagnostics.ok
+    assert "args" not in captured
+    assert (namespace_dir / "docker-compose.yml").read_text() == contents_before
+
+
+def test_deploy_namespace_does_nothing_for_an_empty_group():
+    diagnostics = ComposeIntegration().deploy_namespace(_namespace("hearth"), [], tokens={}, dry_run=False)
+    assert diagnostics.ok

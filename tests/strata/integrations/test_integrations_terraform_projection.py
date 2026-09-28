@@ -8,6 +8,7 @@ topology, one resource, one namespace, one firewall.
 
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph, ValueReference
 from strata.integrations.terraform_projection import (
+    build_configuration_payloads,
     build_platform_projection,
     planned_files,
 )
@@ -477,3 +478,87 @@ def test_tenant_writes_to_tenant_auto_tfvars_json():
     payload = build_platform_projection(_graph(tenant=_tenant()), _provisioner())
     files = dict(planned_files(payload))
     assert files["tenant.auto.tfvars.json"] == payload["tenant"]
+
+
+# ---------------------------------------------------------------------------
+# build_configuration_payloads() — docs/_gap_v1.md gap #8's Terraform-side
+# refinement, docs/design/value-token-resolution.md's "Full Solution" Phase 6.
+# Broadcast-only (no per-name ownership, unlike build_dns_networks_firewalls_
+# payloads()) delivery of resx_<type>/topologies/properties/custom/tenant.
+# ---------------------------------------------------------------------------
+
+
+def test_configuration_payloads_includes_resources_and_topologies_by_default():
+    """The default `_graph()` fixture always has one resource and one
+    topology - both present, keyed to match `planned_files()`'s own
+    per-category naming exactly."""
+    payloads = build_configuration_payloads(_graph())
+    assert set(payloads) == {"resx_virtualmachine", "topologies"}
+
+
+def test_configuration_payloads_resx_key_matches_the_resource_type():
+    payloads = build_configuration_payloads(_graph())
+    assert payloads["resx_virtualmachine"] == {
+        "resources": {
+            "haven_vm_hetzner_hearth": {
+                "provider_type": "hetzner",
+                "resource_type": "virtualmachine",
+                "subcategory": None,
+                "unit_cost": 4.15,
+                "role": None,
+                "count": 1,
+                "configuration": {"image": "ubuntu-24.04", "server_type": "cx23"},
+                "default_tags": {"managed-by": "strata"},
+                "custom_tags": {},
+                "firewalls": [],
+                "subnet": None,
+            }
+        }
+    }
+
+
+def test_configuration_payloads_matches_build_platform_projection_exactly():
+    """Not a second, divergent implementation - same underlying
+    `_build_resources_payload()`/`_build_topologies_payload()` calls
+    `build_platform_projection()` itself uses."""
+    graph = _graph(tenant=_tenant(), properties={"region": "eu"}, custom={"team": "platform"})
+    platform_payload = build_platform_projection(graph, _provisioner())
+    configuration_payloads = build_configuration_payloads(graph)
+
+    assert configuration_payloads["resx_virtualmachine"] == platform_payload["resources_by_category"]["virtualmachine"]
+    assert configuration_payloads["topologies"] == platform_payload["topologies"]
+    assert configuration_payloads["properties"] == platform_payload["properties"]
+    assert configuration_payloads["custom"] == platform_payload["custom"]
+    assert configuration_payloads["tenant"] == platform_payload["tenant"]
+
+
+def test_configuration_payloads_excludes_empty_categories():
+    """No resources, no topology, no properties/custom/tenant - nothing to
+    deliver, matching `planned_files()`'s own "skip empty categories"
+    convention."""
+    payloads = build_configuration_payloads(_graph(resources=[], topology_name=None))
+    assert payloads == {}
+
+
+def test_configuration_payloads_includes_properties_and_custom_when_set():
+    payloads = build_configuration_payloads(
+        _graph(resources=[], topology_name=None, properties={"region": "eu"}, custom={"team": "platform"})
+    )
+    assert payloads == {"properties": {"region": "eu"}, "custom": {"team": "platform"}}
+
+
+def test_configuration_payloads_includes_tenant_when_set():
+    payloads = build_configuration_payloads(_graph(resources=[], topology_name=None, tenant=_tenant()))
+    assert payloads["tenant"] == {
+        "code": "acme",
+        "name": "Acme",
+        "zones": ["europe"],
+        "onboarded": None,
+        "configuration": {"tier": "sandbox"},
+    }
+
+
+def test_configuration_payloads_excludes_disabled_resource():
+    disabled = WorkspaceResourceModel(name="haven_vm_hetzner_hearth", resource="haven_vm_hetzner_hearth", enabled=False)
+    payloads = build_configuration_payloads(_graph(resources=[disabled], topology_name=None))
+    assert "resx_virtualmachine" not in payloads

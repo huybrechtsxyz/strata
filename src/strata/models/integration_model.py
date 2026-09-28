@@ -43,6 +43,7 @@ schema — out of scope for this models-only rewrite entirely, not merely
 deferred. ADR-0021 replaces both with `strata.integrations`.
 """
 
+from enum import StrEnum
 from typing import Any
 
 from pydantic import Field, RootModel, field_validator
@@ -70,35 +71,53 @@ _EXTENSION_CAPABILITY_PREFIX = "x-"
 #: extension -> interpreter map exists (ADR-0021 D11).
 _INTEGRATION_SCRIPT_EXTENSIONS = frozenset({".py"})
 
-#: Capability vocabulary v2 currently has real consumers for. v1's real set
-#: has ~16 entries (azure/aws/gcloud CLI, identity, siem audit, cve scanner,
-#: cost estimator, diagram render, etc.) — deliberately not ported wholesale;
-#: extend only when a concrete v2 feature needs the capability (ADR-0003's
-#: "minimal slice" policy). Closed/curated on purpose, unlike `type` below —
-#: a capability is an abstract contract the codebase itself dispatches on,
-#: not an arbitrary tool name (same reasoning as `STANDARD_SLOT_TYPES` being
-#: closed while `Module.spec.type` stays open). An `x-`-prefixed capability
-#: bypasses this vocabulary entirely (ADR-0021 D9) — this set is the *core*
-#: tier only.
-VALID_INTEGRATION_CAPABILITIES = frozenset(
-    {
-        "variables",  # VariableStoreModel-backed stores
-        "secrets",  # SecretStoreModel-backed stores
-        "features",  # FeatureStoreModel-backed stores
-        "infrastructure",  # Provisioner.tool-backed IaC/CM tools
-        # Distinct from "infrastructure" even though both map to the same
-        # InfraIntegration ABC (ADR-0021 D1/D6) — the label says *what kind*
-        # of thing is provisioned (v1's IContainerTool vs IInfrastructureTool
-        # split), which matters for a human reading the document even where
-        # the runtime contract doesn't distinguish them.
-        "container",  # Compose/Helm-backed container tools
-        # Named `sources`, not v1's `repository` (which maps to its
-        # `IRepositoryTool` Protocol): a v2 remote covers git, OCI registries
-        # and Helm chart indexes alike, so the narrower "repository" would be
-        # as misleading here as `CONTAINER`/`GITOPS` were on `RemoteType`.
-        "sources",  # SolutionRemoteModel-backed artifact sources (git/oci/helm auth)
-    }
-)
+
+class Capability(StrEnum):
+    """The core, closed capability vocabulary (ADR-0021 D9) — a `StrEnum`
+    (project floor is Python 3.13, `pyproject.toml`'s own `requires-python`)
+    so every dispatch site (`if Capability.CONTAINER in
+    integration.CAPABILITIES`) checks a named member instead of a bare
+    string literal a typo could slip past unnoticed, while still comparing
+    equal to (and hashing the same as) the plain strings a YAML document or
+    an `x-`-prefixed plugin capability uses —
+    `IntegrationSpecModel.capabilities`/`Integration.CAPABILITIES` both stay
+    `set[str]`/`frozenset[str]` deliberately (see their own docstrings): an
+    `x-`-prefixed extension capability (ADR-0021 D9,
+    `test_integrations_registry.py`'s real `"x-ticketing"` plugin) has no
+    enum member and never will, by design — only this closed core tier gets
+    one.
+
+    v1's real set has ~16 entries (azure/aws/gcloud CLI, identity, siem
+    audit, cve scanner, cost estimator, diagram render, etc.) — deliberately
+    not ported wholesale; extend only when a concrete v2 feature needs the
+    capability (ADR-0003's "minimal slice" policy).
+    """
+
+    VARIABLES = "variables"  #: VariableStoreModel-backed stores
+    SECRETS = "secrets"  #: SecretStoreModel-backed stores
+    FEATURES = "features"  #: FeatureStoreModel-backed stores
+    INFRASTRUCTURE = "infrastructure"  #: Provisioner.tool-backed IaC/CM tools
+    # Distinct from INFRASTRUCTURE even though both map to the same
+    # InfraIntegration ABC (ADR-0021 D1/D6) — the label says *what kind* of
+    # thing is provisioned (v1's IContainerTool vs IInfrastructureTool
+    # split), which matters for a human reading the document even where the
+    # runtime contract doesn't distinguish them.
+    CONTAINER = "container"  #: Compose/Helm-backed container tools
+    # Named `sources`, not v1's `repository` (which maps to its
+    # `IRepositoryTool` Protocol): a v2 remote covers git, OCI registries and
+    # Helm chart indexes alike, so the narrower "repository" would be as
+    # misleading here as `CONTAINER`/`GITOPS` were on `RemoteType`.
+    SOURCES = "sources"  #: SolutionRemoteModel-backed artifact sources (git/oci/helm auth)
+
+
+#: Capability vocabulary v2 currently has real consumers for. Closed/curated
+#: on purpose, unlike `type` below — a capability is an abstract contract the
+#: codebase itself dispatches on, not an arbitrary tool name (same reasoning
+#: as `STANDARD_SLOT_TYPES` being closed while `Module.spec.type` stays
+#: open). An `x-`-prefixed capability bypasses this vocabulary entirely
+#: (ADR-0021 D9) — this set is the *core* tier only. Derived from `Capability`
+#: itself (`frozenset(Capability)`) so the two can never drift apart.
+VALID_INTEGRATION_CAPABILITIES: frozenset[Capability] = frozenset(Capability)
 
 
 class IntegrationSpecModel(PlatformBaseModel):
@@ -146,11 +165,12 @@ class IntegrationSpecModel(PlatformBaseModel):
         "need this.",
     )
     endpoints: "IntegrationEndpointsModel | None" = Field(
-        None, description="Service endpoint. Required once 'transport' is networked; meaningless for a CLI-only "
-        "integration.",
+        None,
+        description="Service endpoint. Required once 'transport' is networked; meaningless for a CLI-only integration.",
     )
     lifecycle: "IntegrationLifecycleModel | None" = Field(
-        None, description="Hook scripts keyed by phase name (e.g. 'connect_before', 'teardown'). Restricted to "
+        None,
+        description="Hook scripts keyed by phase name (e.g. 'connect_before', 'teardown'). Restricted to "
         "Python scripts — see IntegrationLifecyclePhaseModel.",
     )
     configuration: dict[str, Any] | None = Field(
@@ -173,7 +193,8 @@ class IntegrationSpecModel(PlatformBaseModel):
         if invalid:
             raise ValueError(
                 f"Invalid capability names: {sorted(invalid)}. "
-                f"Valid capabilities: {sorted(VALID_INTEGRATION_CAPABILITIES)}, or an 'x-'-prefixed extension."
+                f"Valid capabilities: {sorted(c.value for c in VALID_INTEGRATION_CAPABILITIES)}, "
+                "or an 'x-'-prefixed extension."
             )
         return v
 

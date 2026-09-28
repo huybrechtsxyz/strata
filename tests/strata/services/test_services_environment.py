@@ -128,6 +128,65 @@ def test_multiple_tokens_in_one_string_are_each_checked():
 
 
 # ---------------------------------------------------------------------------
+# Generalized Phase 1 (malformed-syntax) check in configuration/custom
+# passthrough fields — docs/design/value-token-resolution.md's "Full
+# Solution" section, docs/_gap_v1.md gap #8. `DnsZoneModel.configuration`
+# has no field_validator of its own (dict[str, Any], real .v2-haven shape),
+# unlike DnsRecordModel.value.
+# ---------------------------------------------------------------------------
+
+
+def _dns_with_zone_configuration(configuration: dict) -> DnsModel:
+    return DnsModel.model_validate(
+        {
+            "meta": {"name": "public-dns"},
+            "spec": {
+                "zones": [
+                    {
+                        "name": "example.com",
+                        "configuration": configuration,
+                        "default_tags": {"environment": "test"},
+                    }
+                ]
+            },
+        }
+    )
+
+
+def test_bare_token_in_configuration_passthrough_is_now_caught():
+    """The real gap #8 case: 'configuration' has no field_validator, so a bare
+    '${IMMICH_DB_PASSWORD}' (missing 'kind:') was previously invisible to
+    both Phase 1 and Phase 2. Now caught by the generalized walk."""
+    result = _environment().validate_document_tokens(
+        _dns_with_zone_configuration({"env": {"DB_PASSWORD": "${IMMICH_DB_PASSWORD}"}})
+    )
+    assert not result.ok
+    message = result.messages()[0]
+    assert "Malformed Value token" in message
+    assert "IMMICH_DB_PASSWORD" in message
+
+
+def test_escaped_token_in_configuration_passthrough_validates_clean():
+    """Gatus's real, documented case: a chart's own native '${TOKEN}'
+    placeholder, escaped as '$${TOKEN}', must not be flagged."""
+    result = _environment().validate_document_tokens(
+        _dns_with_zone_configuration({"env": {"SMTP_HOST": "$${GATUS_SMTP_HOST}"}})
+    )
+    assert result.ok
+    assert result.messages() == []
+
+
+def test_real_token_in_configuration_passthrough_is_cross_checked_as_before():
+    """A well-formed '${secret:KEY}' in configuration still goes through the
+    normal Phase 2 declared-key check, unaffected by the new Phase 1 pass."""
+    result = _environment().validate_document_tokens(
+        _dns_with_zone_configuration({"env": {"DB_PASSWORD": "${secret:GHOST_PASSWORD}"}})
+    )
+    assert not result.ok
+    assert "is not declared" in result.messages()[0]
+
+
+# ---------------------------------------------------------------------------
 # merge_environment_models
 # ---------------------------------------------------------------------------
 

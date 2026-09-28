@@ -8,7 +8,7 @@ from strata.models.environment_model import EnvironmentModel
 from strata.models.store_model import FeatureStoreModel, SecretStoreModel, VariableStoreModel, VariableStoreType
 from strata.services.base_service import BaseService
 from strata.utils.diagnostics import Diagnostics
-from strata.utils.value_tokens import extract_value_tokens
+from strata.utils.value_tokens import VALUE_TOKEN_KINDS, extract_value_tokens, find_malformed_value_tokens
 
 #: Maps a Value token's kind to the environment store that declares it.
 _STORE_BY_TOKEN_KIND = {"var": "variables", "secret": "secrets", "feature": "features"}
@@ -113,6 +113,19 @@ def unresolved_value_tokens(model: PlatformBaseModel, declared: dict[str, set[st
     Building a synthetic merged model would be a bigger change than lifting
     the walk itself out.
 
+    Also carries the generalized Phase 1 malformed-syntax check (design
+    validated 2026-09-28, docs/design/value-token-resolution.md's "Full
+    Solution" section): the four fields with their own `field_validator`
+    (`dns`/`module`/`network`/`firewall`) already reject a malformed token at
+    schema time and can never reach here with one. Every other string in the
+    document — `configuration`/`custom` passthrough dicts included — has no
+    such validator, so this is the only place a malformed candidate there
+    (e.g. gap #8's real `${IMMICH_DB_PASSWORD}`, missing its `kind:` prefix)
+    is ever caught. Reuses the existing generic walk instead of adding a
+    second, Pydantic-level mechanism (a `model_validator` couldn't have
+    walked `configuration`/`custom` either — it's `dict[str, Any]`, which
+    Pydantic never recurses into on its own).
+
     Args:
         model: Any already-validated strata document.
         declared: Keys already declared, by token kind (`var`/`secret`/`feature`).
@@ -120,11 +133,20 @@ def unresolved_value_tokens(model: PlatformBaseModel, declared: dict[str, set[st
             (an environment's name, or a description of several merged).
 
     Returns:
-        One error per unresolved token, each located at the field path where
-        the token was written.
+        One error per malformed or unresolved token, each located at the
+        field path where it was written.
     """
     diagnostics = Diagnostics()
     for path, text in _iter_strings(model.model_dump(by_alias=True, mode="json")):
+        for candidate in find_malformed_value_tokens(text):
+            kinds = "|".join(VALUE_TOKEN_KINDS)
+            diagnostics.error(
+                f"Malformed Value token {candidate!r}. Expected '${{{kinds}:KEY}}', e.g. '${{var:region}}'. "
+                "If this isn't meant to be a strata Value token (e.g. a third-party tool's own "
+                "'${...}' syntax), escape it as '$${...}' instead.",
+                location=path,
+                code="malformed_value_token",
+            )
         for kind, key in extract_value_tokens(text):
             if kind not in declared:
                 # `output` (and any future token kind) has no declared-keys set to check

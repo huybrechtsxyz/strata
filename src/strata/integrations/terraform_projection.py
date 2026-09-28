@@ -24,11 +24,13 @@ assumed):
   zero use of `TopologyComponentModel.modules` in any of them (Compose/Helm
   modules go through the entirely separate `prepare_namespace()` pipeline,
   ADR-0022 D5-D7, never this projection). Skipped, not built.
-- `dns`/`networks` are built, but with a known gap: `DnsRecordModel.value`/
-  `SubnetModel.cidr`/`NetworkDefinitionModel.address_space` may themselves
-  contain `${var:}`/`${secret:}`/`${feature:}` tokens (ADR-0002) - written
-  as-is here, unresolved; wiring Phase 3's `resolve_expr_tokens()` into
-  these two categories too is not done yet (see ADR's Remaining Work).
+- `dns`/`networks` are built with `DnsRecordModel.value`/`SubnetModel.cidr`/
+  `NetworkDefinitionModel.address_space` written as-is, tokens (ADR-0002)
+  unresolved — this build-time projection deliberately never resolves them
+  (ADR-0022 D4); `deploy_run()` re-resolves both categories per step via
+  `build_dns_networks_firewalls_payloads()` below, delivered as
+  `TF_VAR_dns`/`TF_VAR_networks` (docs/design/value-token-resolution.md's
+  "Full Solution" Phase 2, implemented — not a gap anymore).
 - `required_variables`/`required_features`/`required_secrets` (deferred —
   no v2 model has a `references` field to walk for this; building it means
   regex-scanning resolved config for `${var:}`/`${secret:}`/`${feature:}`
@@ -44,7 +46,6 @@ assumed):
   the real `spoke_resx`/`env_resx` case in `cfg-int-deployment`) has
   nothing to categorise and is skipped too.
 """
-
 
 from typing import Any
 
@@ -216,9 +217,13 @@ def _build_dns_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     separate `value`/`var`/`secret`/`output_key` fields - v2 never ported
     `output_key` at all (ADR-0006, no shared runtime Context store yet), so
     there is no `dns_secret_records`/`dns_output_records` bucketing to
-    reproduce. `record.value` is written as-is here, tokens and all -
-    resolving those tokens is Phase 3's `resolve_expr_tokens()` job, not yet
-    wired into this category (known gap, see ADR's Remaining Work).
+    reproduce. `record.value` is written as-is here, tokens and all - this
+    build-time projection deliberately never resolves them (ADR-0022 D4:
+    "build run renders; it does not execute"); `deploy_run()` re-resolves
+    this whole category per step via `build_dns_networks_firewalls_payloads()`
+    (docs/design/value-token-resolution.md's "Full Solution" Phase 2,
+    `deploy_controller.py`), delivered as `TF_VAR_dns`, never rewriting the
+    file this function produced.
     """
     payload: dict[str, Any] = {}
     for name in graph.workspace.spec.dns_zones or []:
@@ -256,8 +261,9 @@ def _build_networks_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
 
     Adapted from v1's real `_build_network_vars()`. `address_space`/
     `subnet.cidr` may themselves contain `${var:}`/`${secret:}`/`${feature:}`
-    tokens (ADR-0002) - written as-is, same known gap as `_build_dns_payload()`
-    above pending Phase 3's token resolution.
+    tokens (ADR-0002) - written as-is here, same build-time-never-resolves
+    reasoning as `_build_dns_payload()` above; `deploy_run()` re-resolves
+    this category per step as `TF_VAR_networks` (Phase 2, same function).
     """
     payload: dict[str, Any] = {}
     for name in graph.workspace.spec.networks or []:
@@ -271,8 +277,7 @@ def _build_networks_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
                 net.name: {
                     "address_space": list(net.address_space),
                     "subnets": {
-                        subnet.name: {"cidr": subnet.cidr, "description": subnet.description}
-                        for subnet in net.subnets
+                        subnet.name: {"cidr": subnet.cidr, "description": subnet.description} for subnet in net.subnets
                     },
                     "peerings": {p.name: {"target": p.target} for p in net.peerings or []},
                 }
@@ -341,6 +346,72 @@ def _build_tenant_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
         "onboarded": spec.onboarded.isoformat() if spec.onboarded else None,
         "configuration": spec.configuration or {},
     }
+
+
+def build_dns_networks_firewalls_payloads(graph: ResolvedWorkspaceGraph) -> dict[str, dict[str, Any]]:
+    """The three Terraform-delivered, Value-token-bearing categories with
+    per-name step ownership (docs/_gap_v1.md gap #12) — `dns`/`networks`/
+    `firewalls` — grouped for deploy-time token resolution
+    (docs/design/value-token-resolution.md's "Full Solution" Phase 2).
+
+    **Not the only token-bearing categories** — `build_configuration_payloads()`
+    (below) delivers five more (`resx_<type>`/`topologies`/`properties`/
+    `custom`/`tenant`, Phase 6) via a deliberately *separate* function:
+    those five have no per-name ownership concept at all (`${output:}` is
+    rejected outright for them), a genuinely different claiming semantics
+    than this function's own dns/networks/firewalls, which do support it
+    (gap #12).
+    """
+    return {
+        "dns": _build_dns_payload(graph),
+        "networks": _build_networks_payload(graph),
+        "firewalls": _build_firewalls_payload(graph),
+    }
+
+
+def build_configuration_payloads(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
+    """Five more Value-token-bearing categories, broadcast (no per-name step
+    ownership, unlike `build_dns_networks_firewalls_payloads()` above) —
+    `resx_<type>`/`topologies`/`properties`/`custom`/`tenant`
+    (docs/design/value-token-resolution.md's "Full Solution" Phase 6,
+    docs/_gap_v1.md gap #8's Terraform-side refinement).
+
+    Each of these five carries a real `configuration`/`custom` free-form
+    passthrough (`ResourceSpecModel.configuration`/`WorkspaceResourceModel
+    .configuration`, `TopologyVolumeModel.configuration`, the merged
+    `properties`/`custom` dicts, `TenantSpecModel.configuration`) that can
+    contain a `${var:}`/`${secret:}`/`${feature:}` token — projected into a
+    `*.auto.tfvars.json` file at build time (`build_platform_projection()`)
+    but, until this function, never re-resolved at deploy time the way
+    dns/networks/firewalls already are.
+
+    Keyed to match `planned_files()`'s own per-category filenames exactly
+    (`resx_<type>`, not a combined `resources_by_category` key — a real
+    root module declares `variable "resx_compute" {}` per resource type,
+    matching the one-file-per-type convention `planned_files()` already
+    uses at build time) — so `deploy_controller.py` can deliver each as
+    `TF_VAR_<key>` with zero translation.
+
+    `${output:...}` is never valid in any of these five — deliberately not
+    checked here (that is `deploy_controller.py`'s pre-flight job, same
+    split `build_dns_networks_firewalls_payloads()`'s own caller already
+    has for its three categories) — this function only builds the raw,
+    still-token-bearing payloads.
+
+    Returns:
+        Only non-empty categories — matches `planned_files()`'s own
+        "skip empty categories" convention, so an unset `tenant`/no
+        `resources`/no `topologies` contributes nothing to deliver.
+    """
+    payloads: dict[str, Any] = {
+        "properties": _build_properties_payload(graph),
+        "custom": _build_custom_payload(graph),
+        "tenant": _build_tenant_payload(graph),
+        "topologies": _build_topologies_payload(graph),
+    }
+    for resource_type, type_payload in _build_resources_payload(graph).items():
+        payloads[f"resx_{resource_type}"] = type_payload
+    return {name: payload for name, payload in payloads.items() if payload}
 
 
 def build_platform_projection(graph: ResolvedWorkspaceGraph, provisioner: ProvisionerModel) -> dict[str, Any]:

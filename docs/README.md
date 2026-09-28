@@ -54,7 +54,7 @@ task-focused guide; that one is the up-to-date status table.
 
 | Tool                                                   | Version | Required for                                       |
 | ------------------------------------------------------ | ------- | -------------------------------------------------- |
-| Python                                                 | 3.13+   | CLI runtime (dev target; `requires-python >=3.10`) |
+| Python                                                 | 3.13+   | CLI runtime (`requires-python >=3.13`)             |
 | [uv](https://docs.astral.sh/uv/)                       | latest  | Package and environment management                 |
 | [Terraform](https://developer.hashicorp.com/terraform) | 1.5+    | Only if a workspace uses a `terraform` provisioner |
 | [Helm](https://helm.sh/)                               | 3.x     | Only if a workspace uses a `helm` provisioner      |

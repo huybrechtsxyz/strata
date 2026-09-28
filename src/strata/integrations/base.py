@@ -64,6 +64,20 @@ class Integration(ABC):
     #: whose binary isn't known until the document supplies it.
     COMMAND: ClassVar[str | None] = None
 
+    #: Env var prefix this integration's own CLI reads variables from
+    #: *natively*, with no strata-invented meaning — Terraform's real
+    #: `TF_VAR_<name>` contract is the only reason this exists, not a
+    #: strata convention applied uniformly. `None` (default) when the tool
+    #: has no such mechanism at all: Helm has none whatsoever (values only
+    #: come from `-f`/`--set*` CLI flags, confirmed in `helm.py`'s own
+    #: docstring); Compose uses unprefixed `${KEY}` interpolation, which is
+    #: a genuinely different mechanism, not "an empty prefix". Only
+    #: meaningful for `deploy_controller.py`'s Terraform-shaped delivery
+    #: (`tf_var_env()`, dns/networks/firewalls, Phase 6 configuration) — a
+    #: container-capable integration's `deploy_namespace()` has its own,
+    #: entirely separate delivery mechanism instead.
+    ENV_VAR_PREFIX: ClassVar[str | None] = None
+
     #: Arguments that print this tool's version, for `get_version()`.
     #: Overridden per-class — CLIs disagree on the flag (`--version`,
     #: `version`, `-version`, ...).
@@ -134,8 +148,7 @@ class Integration(ABC):
         if configured is not None:
             if configured not in self.TRANSPORTS:
                 raise IntegrationError(
-                    f"{self.name}: transport '{configured}' is not supported. "
-                    f"Supported: {sorted(self.TRANSPORTS)}."
+                    f"{self.name}: transport '{configured}' is not supported. Supported: {sorted(self.TRANSPORTS)}."
                 )
             self._transport = configured
         elif len(self.TRANSPORTS) == 1:
@@ -189,9 +202,7 @@ class Integration(ABC):
         """`path` joined onto `spec.endpoints.address` (see `strata.utils.transport.http_request`)."""
         endpoints = self.config.spec.endpoints if self.config is not None else None
         if endpoints is None:
-            return HttpResult(
-                status=NO_RESPONSE, body=f"{self.name}: no endpoint configured for a networked transport"
-            )
+            return HttpResult(status=NO_RESPONSE, body=f"{self.name}: no endpoint configured for a networked transport")
         url = f"{endpoints.address.rstrip('/')}/{path.lstrip('/')}"
         return http_request(method, url, headers=headers, body=body, timeout=timeout)
 

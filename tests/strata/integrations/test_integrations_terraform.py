@@ -40,6 +40,7 @@ def test_class_declares_its_contract():
     assert TerraformIntegration.CAPABILITIES == {"infrastructure"}
     assert TerraformIntegration.TRANSPORTS == {"cli"}
     assert TerraformIntegration.COMMAND == "terraform"
+    assert TerraformIntegration.ENV_VAR_PREFIX == "TF_VAR_"
 
 
 def test_registered_in_the_registry():

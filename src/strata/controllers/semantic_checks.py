@@ -109,8 +109,7 @@ def _check_deployments(index: DocumentIndex, resolved: dict[str, DeploymentModel
 def _check_tenants(index: DocumentIndex) -> Diagnostics:
     diagnostics = Diagnostics()
     provider_configs: dict[str, ProviderConfigModel] = {
-        entry.ref.name: cast(ProviderConfigModel, entry.model)
-        for entry in index.all_of(PlatformKind.PROVIDERCONFIG)
+        entry.ref.name: cast(ProviderConfigModel, entry.model) for entry in index.all_of(PlatformKind.PROVIDERCONFIG)
     }
     for entry in index.all_of(PlatformKind.TENANT):
         tenant = cast(TenantModel, entry.model)
@@ -240,12 +239,24 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
     Deployment names which Environments apply (merged with its Tenant's, per
     `TenantSpecModel.environments`'s own description — tenant merges in
     first), and *its* Workspace is what reaches the dns/network/firewall/
-    module documents that might use them. Checking module tokens against
-    an unrelated environment would be either a false positive (flags a
-    token satisfied by whichever environment actually deploys it) or a
-    false negative (passes against an environment that never applies) —
-    scoping by the real reachability graph is the only version that can't be
-    wrong in either direction.
+    module/resource/provider/topology documents that might use them.
+    Checking module tokens against an unrelated environment would be either
+    a false positive (flags a token satisfied by whichever environment
+    actually deploys it) or a false negative (passes against an environment
+    that never applies) — scoping by the real reachability graph is the
+    only version that can't be wrong in either direction.
+
+    **Also checks the deployment/tenant/environment/workspace/resource/
+    provider/topology documents themselves** — docs/_gap_v1.md gap #10's
+    Phase 7 finding: this function used to only check DNS/network/
+    firewall/module (`_documents_reachable_from_workspace()`'s original,
+    narrower scope), so a `${var:}`/`${secret:}` token in, say,
+    `ResourceSpecModel.configuration` or `WorkspaceSpecModel.custom` was
+    never checked at all — not a "resolves at deploy time or not" question
+    (gap #9/Phase 6's own concern), a "does `strata validate` even look at
+    this field" one. Verified real: gap #9 Phase 6 delivers exactly these
+    fields at deploy time now, but nothing validated their tokens before
+    that ever ran.
     """
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
@@ -255,9 +266,38 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
             continue  # no resolvable environment — nothing to check tokens against
 
         owner = "+".join(deployment.spec.environments or []) or "(none)"
-        for document in _documents_reachable_from_workspace(index, deployment.spec.workspace):
+        documents = _documents_reachable_from_workspace(index, deployment.spec.workspace)
+        documents.append(deployment)
+        if deployment.spec.tenant:
+            tenant_entry = index.get(PlatformKind.TENANT, deployment.spec.tenant)
+            if tenant_entry is not None:
+                documents.append(tenant_entry.model)
+        for name in _reachable_environment_names(index, deployment):
+            env_entry = index.get(PlatformKind.ENVIRONMENT, name)
+            if env_entry is not None:
+                documents.append(env_entry.model)
+
+        for document in documents:
             diagnostics.extend(unresolved_value_tokens(document, declared, owner), source=str(entry.source))
     return diagnostics
+
+
+def _reachable_environment_names(index: DocumentIndex, deployment: DeploymentModel) -> list[str]:
+    """Every Environment name this deployment resolves — its Tenant's own
+    `spec.environments` first (tenant merges in before deployment), then
+    the deployment's own. Shared by `_merged_declared_keys()` (which only
+    needs the union of *keys*) and `_check_deployment_value_tokens()`
+    (which also needs each environment's own *document*, gap #10's Phase 7
+    finding, to check tokens written directly in an Environment's own
+    `properties`/`custom`).
+    """
+    names = list(deployment.spec.environments or [])
+    if deployment.spec.tenant:
+        tenant_entry = index.get(PlatformKind.TENANT, deployment.spec.tenant)
+        if tenant_entry is not None:
+            tenant = cast(TenantModel, tenant_entry.model)
+            names = list(tenant.spec.environments or []) + names
+    return names
 
 
 def _merged_declared_keys(index: DocumentIndex, deployment: DeploymentModel) -> dict[str, set[str]] | None:
@@ -266,16 +306,9 @@ def _merged_declared_keys(index: DocumentIndex, deployment: DeploymentModel) -> 
     Existence-checking only needs the union: a token is fine if *any*
     resolved environment declares it.
     """
-    names = list(deployment.spec.environments or [])
-    if deployment.spec.tenant:
-        tenant_entry = index.get(PlatformKind.TENANT, deployment.spec.tenant)
-        if tenant_entry is not None:
-            tenant = cast(TenantModel, tenant_entry.model)
-            names = list(tenant.spec.environments or []) + names
-
     merged: dict[str, set[str]] = {"var": set(), "secret": set(), "feature": set()}
     found_any = False
-    for name in names:
+    for name in _reachable_environment_names(index, deployment):
         env_entry = index.get(PlatformKind.ENVIRONMENT, name)
         if env_entry is None:
             continue
@@ -288,14 +321,23 @@ def _merged_declared_keys(index: DocumentIndex, deployment: DeploymentModel) -> 
     return merged if found_any else None
 
 
-def _documents_reachable_from_workspace(
-    index: DocumentIndex, workspace_name: str | None
-) -> list[PlatformBaseModel]:
-    """Every DNS/Network/Firewall/Module document a workspace can render.
+def _documents_reachable_from_workspace(index: DocumentIndex, workspace_name: str | None) -> list[PlatformBaseModel]:
+    """Every document a workspace renders or configures — DNS/Network/
+    Firewall/Module (rendered artifacts) plus the workspace document itself
+    and every Resource/Provider/Topology it references (config passthrough
+    fields: docs/_gap_v1.md gap #10's Phase 7 finding — these were never
+    checked at all before, a validate-time coverage gap entirely separate
+    from gap #9/Phase 6's deploy-time delivery fix).
 
-    A bounded, one-then-two-hop walk — not a generic graph traversal — since
-    the schema only has one indirection: a workspace names Topology/
-    Namespace documents directly, and those in turn attach Modules.
+    A bounded, one-then-two-hop walk — not a generic graph traversal —
+    since the schema only has one indirection beyond the workspace's own
+    direct references: a workspace names Topology/Namespace documents
+    directly, and those in turn attach Modules. The workspace document
+    itself is included whole (not just its `configuration`/`custom`/
+    `properties` fields individually) — `unresolved_value_tokens()` already
+    walks a document's entire serialized form generically, so this covers
+    `WorkspaceResourceModel.configuration` (the workspace's own per-resource
+    override) for free, without a separate fetch.
     """
     if not workspace_name:
         return []
@@ -305,21 +347,31 @@ def _documents_reachable_from_workspace(
     workspace = cast(WorkspaceModel, workspace_entry.model)
     spec = workspace.spec
 
-    documents: list[PlatformBaseModel] = []
+    documents: list[PlatformBaseModel] = [workspace]
+
     for kind, names in (
         (PlatformKind.DNS, spec.dns_zones),
         (PlatformKind.NETWORK, spec.networks),
         (PlatformKind.FIREWALL, spec.firewalls),
+        (PlatformKind.PROVIDER, spec.providers),
     ):
         for name in names or []:
             found = index.get(kind, name)
             if found is not None:
                 documents.append(found.model)
 
+    for workspace_resource in spec.resources or []:
+        if workspace_resource.resource is None:
+            continue
+        resource_entry = index.get(PlatformKind.RESOURCE, workspace_resource.resource)
+        if resource_entry is not None:
+            documents.append(resource_entry.model)
+
     for name in spec.topology or []:
         topology_entry = index.get(PlatformKind.TOPOLOGY, name)
         if topology_entry is None:
             continue
+        documents.append(topology_entry.model)
         topology = cast(TopologyModel, topology_entry.model)
         for component in topology.spec.components:
             for module_ref in component.modules or []:

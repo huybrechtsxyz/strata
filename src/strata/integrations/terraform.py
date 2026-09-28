@@ -36,6 +36,7 @@ from typing import Any
 from strata.integrations.capabilities import InfraIntegration
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph, ValueResolution
 from strata.integrations.terraform_projection import build_platform_projection, planned_files
+from strata.models.integration_model import Capability
 from strata.models.provisioning_model import ProvisionerModel
 from strata.utils.transport import CommandResult
 
@@ -44,9 +45,13 @@ class TerraformIntegration(InfraIntegration):
     """Terraform CLI — plans, applies, and destroys infrastructure."""
 
     TYPE = "terraform"
-    CAPABILITIES = frozenset({"infrastructure"})
+    CAPABILITIES = frozenset({Capability.INFRASTRUCTURE})
     TRANSPORTS = frozenset({"cli"})
     COMMAND = "terraform"
+    #: Terraform's own real CLI contract (not a strata convention) — see
+    #: `Integration.ENV_VAR_PREFIX`'s own docstring for why this can't be
+    #: generalised to Helm/Compose.
+    ENV_VAR_PREFIX = "TF_VAR_"
     #: v1 precedent: the version subcommand, not a flag.
     VERSION_ARGS = ("version",)
 
@@ -82,8 +87,9 @@ class TerraformIntegration(InfraIntegration):
             args.append("-reconfigure")
         return self.run(*args, cwd=path, env=env, timeout=timeout)
 
-    def validate(self, path: Path, *, json_output: bool = False, timeout: int = 60,
-                 env: Mapping[str, str] | None = None) -> CommandResult:
+    def validate(
+        self, path: Path, *, json_output: bool = False, timeout: int = 60, env: Mapping[str, str] | None = None
+    ) -> CommandResult:
         """`terraform validate`. v1's `check` step."""
         args = ["validate"]
         if json_output:

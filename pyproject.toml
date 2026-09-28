@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "strata-v2"
 dynamic = ["version"]
 description = "Strata v2 - Infrastructure as Code Platform"
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 dependencies = [
     "click>=8.0",
     "pydantic>=2.0",
@@ -25,9 +25,7 @@ otel = [
     "opentelemetry-sdk>=1.24",
     "opentelemetry-exporter-otlp-proto-http>=1.24",
 ]
-azure-monitor = [
-    "azure-monitor-opentelemetry>=1.6",
-]
+azure-monitor = ["azure-monitor-opentelemetry>=1.6"]
 docs = [
     "sphinx",
     "sphinx-toggleprompt",
@@ -53,7 +51,7 @@ dev = [
 strata = "strata.commands.cli:main"
 
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = { "" = "src" }
 
 # VERSION.txt is the single source of the version. Any tool in any language
 # reads it with one line — no TOML parser, no Python import — which is what
@@ -80,7 +78,7 @@ python_files = ["test_*.py", "*_test.py"]
 addopts = "-v"
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.13"
 strict = true
 warn_unused_ignores = true
 mypy_path = "src"
@@ -132,11 +130,11 @@ exclude = [
     "dist",
     "site-packages",
     "venv",
-    "docs", # Sphinx docs — RST/MD, not Python
+    "docs",               # Sphinx docs — RST/MD, not Python
 ]
 line-length = 120
 indent-width = 4
-target-version = "py310"
+target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "B", "I", "N"]

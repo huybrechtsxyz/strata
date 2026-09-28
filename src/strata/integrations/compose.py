@@ -51,16 +51,19 @@ import yaml
 from strata.integrations.capabilities import InfraIntegration
 from strata.integrations.errors import IntegrationError
 from strata.integrations.resolved_context import ResolvedModule, ValueResolution
+from strata.models.integration_model import Capability
 from strata.models.module_model import ModuleCheckModel, ModuleMountModel
 from strata.models.namespace_model import NamespaceModel
+from strata.utils.diagnostics import Diagnostics
 from strata.utils.transport import CommandResult
+from strata.utils.value_tokens import resolve_value_tokens_renaming_secrets
 
 
 class ComposeIntegration(InfraIntegration):
     """Docker Swarm — deploys a compose file as a stack."""
 
     TYPE = "compose"
-    CAPABILITIES = frozenset({"container"})
+    CAPABILITIES = frozenset({Capability.CONTAINER})
     TRANSPORTS = frozenset({"cli"})
     COMMAND = "docker"
     VERSION_ARGS = ("--version",)
@@ -84,10 +87,11 @@ class ComposeIntegration(InfraIntegration):
         `${var:KEY}`/`${secret:KEY}`/`${feature:KEY}` tokens inside a
         service's `environment[].value` are written verbatim, unresolved —
         matches Helm's own stance (deploy-time substitution, ADR-0023's
-        value-substitution table), though Compose's real convention is a
-        bare `${KEY}` in the rendered file (`.env`-file substitution, no
-        type prefix); rewriting a typed token down to that bare shape is
-        deferred (`resolved` is accepted for signature symmetry with every
+        value-substitution table). Rewriting a typed token down to
+        Compose's own bare `${KEY}` shape and delivering the value are
+        `deploy_namespace()`'s job (docs/_gap_v1.md gap #13, docs/design/
+        value-token-resolution.md Full Solution Phase 5), never `build
+        run`'s (`resolved` is accepted for signature symmetry with every
         other `InfraIntegration` rendering method, but unused here for the
         same reason).
 
@@ -123,8 +127,74 @@ class ComposeIntegration(InfraIntegration):
             yaml.safe_dump(document, sort_keys=False, default_flow_style=False)
         )
 
-    def plan(self, path: Path, *, timeout: int = 60, env: Mapping[str, str] | None = None,
-             **kwargs: Any) -> CommandResult:
+    def deploy_namespace(
+        self,
+        namespace: NamespaceModel,
+        modules: list[ResolvedModule],
+        *,
+        tokens: dict[str, str],
+        dry_run: bool,
+        env: dict[str, str] | None = None,
+        **kwargs: Any,
+    ) -> Diagnostics:
+        """Deploy `namespace`'s merged `docker-compose.yml` as one Swarm stack
+        (docs/_gap_v1.md gap #13).
+
+        Unlike Helm (one release per module, `deploy_namespace()` loops over
+        `modules`), Compose already merged every module into **one** file at
+        build time (`prepare_namespace()`) — there is exactly one
+        `docker stack deploy` per namespace, not per module; `modules` is
+        only consulted to locate that shared file
+        (`modules[0].source_path.parent`, the same namespace build
+        directory `prepare_namespace()` wrote to) and to short-circuit
+        when a namespace has no compose modules at all.
+
+        Non-secret tokens (`${var:}`/`${feature:}`/`${output:}`) are
+        resolved to their literal value and rewritten into the compose
+        file, same as Helm's `values.yaml`. A `${secret:KEY}` token is
+        rewritten to Compose's own native, bare `${KEY}` interpolation
+        syntax instead (`resolve_compose_values()`) — never written to disk
+        as a literal — and its real value is delivered only as the
+        `docker stack deploy`/`stack config` subprocess's own environment
+        (`env=`, merged by `Integration.run()`), which Compose's own
+        interpolation engine reads at parse time.
+        """
+        del kwargs
+        diagnostics = Diagnostics()
+        if not modules:
+            return diagnostics
+
+        compose_file = modules[0].source_path.parent / "docker-compose.yml"
+        if not compose_file.exists():
+            diagnostics.error(
+                f"Namespace '{namespace.meta.name}': docker-compose.yml not found — run 'strata build run' first.",
+                location=str(namespace.meta.name),
+            )
+            return diagnostics
+
+        document = yaml.safe_load(compose_file.read_text()) or {}
+        try:
+            resolved_document, secrets = resolve_compose_values(document, tokens)
+        except ValueError as exc:
+            diagnostics.error(f"Namespace '{namespace.meta.name}': {exc}", location=str(namespace.meta.name))
+            return diagnostics
+
+        if dry_run:
+            return diagnostics
+
+        compose_file.write_text(yaml.safe_dump(resolved_document, sort_keys=False, default_flow_style=False))
+
+        result = self.deploy(compose_file, namespace=str(namespace.meta.name), env={**(env or {}), **secrets})
+        if not result.is_successful:
+            diagnostics.error(
+                f"Namespace '{namespace.meta.name}': docker stack deploy failed — {result.stderr}",
+                location=str(namespace.meta.name),
+            )
+        return diagnostics
+
+    def plan(
+        self, path: Path, *, timeout: int = 60, env: Mapping[str, str] | None = None, **kwargs: Any
+    ) -> CommandResult:
         """`docker stack config -c path` — renders the merged compose file.
         No true dry-run exists for Swarm (v1's own admitted limitation);
         this is the closest real analog. Takes no stack name — it renders
@@ -174,11 +244,38 @@ class ComposeIntegration(InfraIntegration):
             raise IntegrationError(f"{self.name}: 'namespace' is required to remove a stack.")
         return self.run("stack", "rm", namespace, cwd=path.parent, env=env, timeout=timeout)
 
-    def output(self, path: Path, *, namespace: str, timeout: int = 60,
-               env: Mapping[str, str] | None = None) -> CommandResult:
+    def output(
+        self, path: Path, *, namespace: str, timeout: int = 60, env: Mapping[str, str] | None = None
+    ) -> CommandResult:
         """`docker stack services namespace`. Not part of `InfraIntegration` —
         an extra method, matching v1's `output` step."""
         return self.run("stack", "services", namespace, cwd=path.parent, env=env, timeout=timeout)
+
+
+def resolve_compose_values(document: dict[str, Any], values: dict[str, str]) -> tuple[dict[str, Any], dict[str, str]]:
+    """Resolve Value tokens in a namespace's already-merged `docker-compose.yml`
+    payload for deploy-time delivery (docs/_gap_v1.md gap #9, docs/design/
+    value-token-resolution.md's Full Solution Phase 5).
+
+    Thin wrapper around `resolve_value_tokens_renaming_secrets()`
+    (`value_tokens.py`) — unlike Helm's `resolve_module_values()`, there is
+    no per-module payload to build first: `prepare_namespace()` already
+    merged every module into the one document this function receives
+    directly, verbatim off disk.
+
+    Deliberately pure and side-effect-free, matching `resolve_module_values()`'s
+    own "testable without touching disk" convention — writing the resolved
+    document back and running `docker stack deploy` are `deploy_namespace()`'s
+    job, not this function's.
+
+    Returns:
+        `(resolved_document, secrets)` — `resolved_document` is what
+        `docker-compose.yml` should be rewritten to (non-secret tokens
+        resolved to their literal value, secret tokens renamed to bare
+        `${KEY}`); `secrets` is every `{KEY: resolved_value}` pair to
+        deliver as the deploy subprocess's own environment.
+    """
+    return resolve_value_tokens_renaming_secrets(document, values)
 
 
 # ----------------------------------------------------------------------
@@ -239,9 +336,7 @@ def _render_namespace_services(
                 if vol_list:
                     entry["volumes"] = vol_list
             if service.depends_on:
-                entry["depends_on"] = [
-                    _resolve_depends_on(module_name, dep, registry) for dep in service.depends_on
-                ]
+                entry["depends_on"] = [_resolve_depends_on(module_name, dep, registry) for dep in service.depends_on]
             if service.healthcheck:
                 healthcheck = _render_healthcheck(service.healthcheck)
                 if healthcheck:

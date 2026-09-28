@@ -95,9 +95,7 @@ class WorkspaceResourceModel(PlatformBaseModel):
     depends_on: list[str] | None = Field(
         None, description="List of resource names this resource depends on (workspace-specific gluing)"
     )
-    firewalls: list[str] | None = Field(
-        None, description="References to firewall resource names for network security"
-    )
+    firewalls: list[str] | None = Field(None, description="References to firewall resource names for network security")
     subnet: WorkspaceResourceSubnetModel | None = Field(
         None, description="Structured reference to a subnet within one of this workspace's networks"
     )
@@ -115,8 +113,7 @@ class WorkspaceResourceModel(PlatformBaseModel):
     )
     custom_tags: dict[str, str] | None = Field(
         None,
-        description="Workspace-specific additions to this resource's custom_tags (see "
-        "ResourceSpecModel.custom_tags).",
+        description="Workspace-specific additions to this resource's custom_tags (see ResourceSpecModel.custom_tags).",
     )
 
     @field_validator("depends_on", mode="before")
@@ -271,7 +268,17 @@ class WorkspaceSpecModel(PlatformBaseModel):
     @model_validator(mode="after")
     def validate_execution(self) -> "WorkspaceSpecModel":
         """Validate the execution recipe: internal step consistency plus
-        cross-references against this workspace's own provisioners/resources/namespaces.
+        cross-references against this workspace's own provisioners/resources/
+        namespaces/dns_zones/networks/firewalls.
+
+        DNS/network/firewall names became valid targets 2026-09-28
+        (docs/_gap_v1.md gap #12) — a step names one of these to claim
+        ownership of it for `${output:...}` token resolution at deploy time
+        (`deploy_controller.py`), reusing `validate_provisioning_steps()`'s
+        existing shared-target ordering rule unchanged. Optional: a
+        DNS/network/firewall document named by no step still resolves
+        `${var:}`/`${secret:}` tokens broadcast to every step exactly as
+        before this gap — only `${output:...}` requires an owning step.
         """
         if not self.execution:
             return self
@@ -279,7 +286,13 @@ class WorkspaceSpecModel(PlatformBaseModel):
         validate_provisioning_steps(self.execution)
 
         provisioner_names = {p.name for p in self.provisioners}
-        target_names = {r.name for r in (self.resources or [])} | set(self.namespaces or [])
+        target_names = (
+            {r.name for r in (self.resources or [])}
+            | set(self.namespaces or [])
+            | set(self.dns_zones or [])
+            | set(self.networks or [])
+            | set(self.firewalls or [])
+        )
 
         errors = []
         for step in self.execution:
@@ -287,7 +300,10 @@ class WorkspaceSpecModel(PlatformBaseModel):
                 errors.append(f"Execution step '{step.name}' references undefined provisioner '{step.provisioner}'")
             for target in step.targets:
                 if target not in target_names:
-                    errors.append(f"Execution step '{step.name}' targets undefined resource/namespace '{target}'")
+                    errors.append(
+                        f"Execution step '{step.name}' targets undefined resource/namespace/"
+                        f"dns_zone/network/firewall '{target}'"
+                    )
         if errors:
             raise ValueError("; ".join(errors))
         return self

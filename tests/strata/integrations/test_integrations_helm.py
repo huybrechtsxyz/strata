@@ -6,7 +6,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-from strata.integrations.helm import HelmIntegration
+from strata.integrations.helm import (
+    HelmIntegration,
+    _resolve_chart,
+    _sanitize_repo_name,
+    _set_string_args,
+    resolve_module_values,
+)
 from strata.integrations.registry import get
 from strata.integrations.resolved_context import ResolvedModule, ValueResolution
 from strata.models.common_models import ModuleReferenceModel, SourceModel
@@ -19,6 +25,7 @@ from strata.models.module_model import (
     ModuleSpecModel,
 )
 from strata.models.namespace_model import NamespaceMetaModel, NamespaceModel, NamespaceSpecModel
+from strata.models.solution_model import RemoteType, SolutionRemoteModel
 from strata.utils.transport import CommandResult
 
 
@@ -42,6 +49,10 @@ def test_class_declares_its_contract():
     assert HelmIntegration.CAPABILITIES == {"container"}
     assert HelmIntegration.TRANSPORTS == {"cli"}
     assert HelmIntegration.COMMAND == "helm"
+    # Helm has no env-var substitution mechanism at all for values.yaml —
+    # confirmed in this class's own module docstring — so it inherits the
+    # base `None`, never declares its own prefix.
+    assert HelmIntegration.ENV_VAR_PREFIX is None
 
 
 def test_registered_in_the_registry():
@@ -232,9 +243,7 @@ def test_prepare_namespace_writes_one_values_and_meta_file_per_module(tmp_path: 
     module_dir.mkdir(parents=True)
     resolved_module = _resolved_module("authentik", module, module_dir)
 
-    HelmIntegration().prepare_namespace(
-        _namespace(), [resolved_module], resolved=ValueResolution(deployment="app")
-    )
+    HelmIntegration().prepare_namespace(_namespace(), [resolved_module], resolved=ValueResolution(deployment="app"))
 
     values = yaml.safe_load((module_dir / "values.yaml").read_text())
     assert values == {
@@ -386,3 +395,283 @@ def test_prepare_namespace_omits_chart_coordinates_for_local_charts(tmp_path: Pa
 
     meta = yaml.safe_load((module_dir / "meta.yaml").read_text())
     assert "chartName" not in meta
+
+
+# ---------------------------------------------------------------------------
+# resolve_module_values() — docs/_gap_v1.md gap #9, Full Solution Phase 4.
+# Deliberately pure (no disk I/O) — mirrors `_render_values()`'s own
+# testable-without-touching-disk convention. Wiring a real `helm upgrade`
+# invocation per module is gap #13, not this function's job.
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_module_values_resolves_non_secret_leaves():
+    module = _module(
+        services=[
+            ModuleServiceModel(name="server", environment=[ModuleServiceEnvironmentModel(key="TZ", value="${var:tz}")])
+        ]
+    )
+    resolved, secrets = resolve_module_values(module, {"tz": "Europe/Brussels"})
+    assert resolved == {"authentik-server": {"env": {"TZ": "Europe/Brussels"}}}
+    assert secrets == {}
+
+
+def test_resolve_module_values_leaves_a_secret_shaped_leaf_unresolved_and_tracks_it():
+    module = _module(
+        services=[
+            ModuleServiceModel(
+                name="server",
+                environment=[ModuleServiceEnvironmentModel(key="DB_PASSWORD", value="${secret:db_password}")],
+            )
+        ]
+    )
+    resolved, secrets = resolve_module_values(module, {"db_password": "hunter2"})
+    assert resolved == {"authentik-server": {"env": {"DB_PASSWORD": "${secret:db_password}"}}}
+    assert secrets == {"authentik-server.env.DB_PASSWORD": "hunter2"}
+
+
+def test_resolve_module_values_matches_the_real_immich_style_configuration_path():
+    """Real gap #8 shape: a raw `configuration` passthrough (not `services`),
+    e.g. `controllers.main.containers.main.env.DB_PASSWORD`."""
+    module = _module(
+        services=None,
+        configuration={
+            "controllers": {"main": {"containers": {"main": {"env": {"DB_PASSWORD": "${secret:db_password}"}}}}}
+        },
+    )
+    resolved, secrets = resolve_module_values(module, {"db_password": "hunter2"})
+    assert resolved["controllers"]["main"]["containers"]["main"]["env"]["DB_PASSWORD"] == "${secret:db_password}"
+    assert secrets == {"controllers.main.containers.main.env.DB_PASSWORD": "hunter2"}
+
+
+def test_resolve_module_values_does_not_touch_disk():
+    """Pure — no ResolvedModule/source_path needed at all, unlike prepare_namespace()."""
+    module = _module(services=[ModuleServiceModel(name="server")])
+    resolved, secrets = resolve_module_values(module, {})
+    assert resolved == {"authentik-server": {}}
+    assert secrets == {}
+
+
+# ---------------------------------------------------------------------------
+# deploy_namespace() — docs/_gap_v1.md gap #13
+# ---------------------------------------------------------------------------
+
+
+def _remote(name: str, remote_type: RemoteType, url: str) -> SolutionRemoteModel:
+    reference = "main" if remote_type in (RemoteType.GIT, RemoteType.OCI) else None
+    return SolutionRemoteModel(name=name, type=remote_type, url=url, reference=reference)
+
+
+def test_set_string_args_escapes_special_characters():
+    args = _set_string_args([("authentik-server.env.DB_PASSWORD", "a,b=c.d{e}[f]\\g")])
+    assert args == ["--set-string", "authentik-server.env.DB_PASSWORD=a\\,b\\=c\\.d\\{e\\}\\[f\\]\\\\g"]
+
+
+def test_set_string_args_empty_when_no_secrets():
+    assert _set_string_args(None) == []
+    assert _set_string_args([]) == []
+
+
+def test_sanitize_repo_name_strips_scheme_and_truncates():
+    assert _sanitize_repo_name("https://charts.example.com/goauthentik") == "charts-example-com-g"
+    assert len(_sanitize_repo_name("https://charts.example.com/goauthentik")) == 20
+
+
+def test_resolve_chart_oci_remote_needs_no_repo_add(monkeypatch):
+    captured = _capture(monkeypatch)
+    remotes = {"goauthentik": _remote("goauthentik", RemoteType.OCI, "oci://registry.example.com/charts")}
+    chart, error = _resolve_chart(
+        HelmIntegration(), {"chartName": "authentik", "chartRemote": "goauthentik"}, remotes, env=None
+    )
+    assert error is None
+    assert chart == "oci://registry.example.com/charts/authentik"
+    assert "args" not in captured
+
+
+def test_resolve_chart_helm_remote_adds_a_repo(monkeypatch):
+    captured = _capture(monkeypatch)
+    remotes = {"goauthentik": _remote("goauthentik", RemoteType.HELM, "https://charts.goauthentik.io")}
+    chart, error = _resolve_chart(
+        HelmIntegration(), {"chartName": "authentik", "chartRemote": "goauthentik"}, remotes, env=None
+    )
+    assert error is None
+    assert chart == "charts-goauthentik-i/authentik"
+    assert captured["args"] == ["helm", "repo", "add", "charts-goauthentik-i", "https://charts.goauthentik.io"]
+
+
+def test_resolve_chart_unknown_remote_reports_an_error():
+    chart, error = _resolve_chart(HelmIntegration(), {"chartName": "authentik", "chartRemote": "missing"}, {}, env=None)
+    assert chart is None
+    assert error is not None
+    assert "not declared" in error
+
+
+def test_resolve_chart_missing_chart_remote_reports_an_error():
+    chart, error = _resolve_chart(HelmIntegration(), {"chartName": "authentik"}, {}, env=None)
+    assert chart is None
+    assert error is not None
+    assert "no 'chartRemote'" in error
+
+
+def test_resolve_chart_git_or_local_typed_remote_is_rejected():
+    remotes = {"infra": _remote("infra", RemoteType.GIT, "https://github.com/org/infra.git")}
+    chart, error = _resolve_chart(
+        HelmIntegration(), {"chartName": "authentik", "chartRemote": "infra"}, remotes, env=None
+    )
+    assert chart is None
+    assert error is not None
+    assert "not a valid Helm chart source" in error
+
+
+def test_deploy_namespace_local_chart_uses_source_path_directly(monkeypatch, tmp_path: Path):
+    captured = _capture(monkeypatch)
+    module = _module(
+        services=[
+            ModuleServiceModel(name="server", environment=[ModuleServiceEnvironmentModel(key="TZ", value="${var:tz}")])
+        ]
+    )
+    module_dir = tmp_path / "apps" / "authentik"
+    module_dir.mkdir(parents=True)
+    (module_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "authentik", "namespace": "apps"}))
+    (module_dir / "values.yaml").write_text(yaml.safe_dump({"authentik-server": {"env": {"TZ": "${var:tz}"}}}))
+    resolved_module = _resolved_module("authentik", module, module_dir)
+
+    diagnostics = HelmIntegration().deploy_namespace(
+        _namespace(), [resolved_module], tokens={"tz": "Europe/Brussels"}, dry_run=False
+    )
+
+    assert diagnostics.ok
+    assert captured["args"] == [
+        "helm",
+        "upgrade",
+        "--install",
+        "--create-namespace",
+        "--wait",
+        "--atomic",
+        "--timeout",
+        "5m",
+        "--namespace",
+        "apps",
+        "-f",
+        str(module_dir / "values.yaml"),
+        "authentik",
+        str(module_dir),
+    ]
+    assert yaml.safe_load((module_dir / "values.yaml").read_text()) == {
+        "authentik-server": {"env": {"TZ": "Europe/Brussels"}}
+    }
+
+
+def test_deploy_namespace_registry_chart_resolves_chart_ref_and_delivers_secrets_via_set_string(
+    monkeypatch, tmp_path: Path
+):
+    captured = _capture(monkeypatch)
+    module = _module(
+        source=SourceModel(remote="goauthentik", chart_name="authentik", chart_version="2024.12.0"),
+        services=[
+            ModuleServiceModel(
+                name="server",
+                environment=[ModuleServiceEnvironmentModel(key="DB_PASSWORD", value="${secret:db_password}")],
+            )
+        ],
+    )
+    module_dir = tmp_path / "apps" / "authentik"
+    module_dir.mkdir(parents=True)
+    (module_dir / "meta.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "releaseName": "authentik",
+                "namespace": "apps",
+                "chartName": "authentik",
+                "chartVersion": "2024.12.0",
+                "chartRemote": "goauthentik",
+            }
+        )
+    )
+    (module_dir / "values.yaml").write_text(
+        yaml.safe_dump({"authentik-server": {"env": {"DB_PASSWORD": "${secret:db_password}"}}})
+    )
+    resolved_module = _resolved_module("authentik", module, module_dir)
+    remotes = {"goauthentik": _remote("goauthentik", RemoteType.OCI, "oci://registry.example.com/charts")}
+
+    diagnostics = HelmIntegration().deploy_namespace(
+        _namespace(), [resolved_module], tokens={"db_password": "hunter2"}, dry_run=False, remotes=remotes
+    )
+
+    assert diagnostics.ok
+    assert captured["args"] == [
+        "helm",
+        "upgrade",
+        "--install",
+        "--create-namespace",
+        "--wait",
+        "--atomic",
+        "--timeout",
+        "5m",
+        "--namespace",
+        "apps",
+        "-f",
+        str(module_dir / "values.yaml"),
+        "--set-string",
+        "authentik-server.env.DB_PASSWORD=hunter2",
+        "authentik",
+        "oci://registry.example.com/charts/authentik",
+    ]
+    # Secret-shaped leaf is left as a literal token on disk, never written resolved.
+    assert yaml.safe_load((module_dir / "values.yaml").read_text()) == {
+        "authentik-server": {"env": {"DB_PASSWORD": "${secret:db_password}"}}
+    }
+
+
+def test_deploy_namespace_missing_meta_file_reports_a_diagnostic_and_skips(monkeypatch, tmp_path: Path):
+    _capture(monkeypatch)
+    module = _module()
+    module_dir = tmp_path / "apps" / "authentik"
+    module_dir.mkdir(parents=True)
+    resolved_module = _resolved_module("authentik", module, module_dir)
+
+    diagnostics = HelmIntegration().deploy_namespace(_namespace(), [resolved_module], tokens={}, dry_run=False)
+
+    assert not diagnostics.ok
+    assert "meta.yaml not found" in diagnostics.errors[0].message
+
+
+def test_deploy_namespace_unresolvable_chart_remote_reports_a_diagnostic_and_skips(monkeypatch, tmp_path: Path):
+    _capture(monkeypatch)
+    module = _module(source=SourceModel(remote="missing", chart_name="authentik"))
+    module_dir = tmp_path / "apps" / "authentik"
+    module_dir.mkdir(parents=True)
+    (module_dir / "meta.yaml").write_text(
+        yaml.safe_dump(
+            {"releaseName": "authentik", "namespace": "apps", "chartName": "authentik", "chartRemote": "missing"}
+        )
+    )
+    resolved_module = _resolved_module("authentik", module, module_dir)
+
+    diagnostics = HelmIntegration().deploy_namespace(_namespace(), [resolved_module], tokens={}, dry_run=False)
+
+    assert not diagnostics.ok
+    assert "not declared" in diagnostics.errors[0].message
+
+
+def test_deploy_namespace_dry_run_never_touches_disk_or_runs_a_command(monkeypatch, tmp_path: Path):
+    captured = _capture(monkeypatch)
+    module = _module(
+        services=[
+            ModuleServiceModel(name="server", environment=[ModuleServiceEnvironmentModel(key="TZ", value="${var:tz}")])
+        ]
+    )
+    module_dir = tmp_path / "apps" / "authentik"
+    module_dir.mkdir(parents=True)
+    (module_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "authentik", "namespace": "apps"}))
+    values_before = yaml.safe_dump({"authentik-server": {"env": {"TZ": "${var:tz}"}}})
+    (module_dir / "values.yaml").write_text(values_before)
+    resolved_module = _resolved_module("authentik", module, module_dir)
+
+    diagnostics = HelmIntegration().deploy_namespace(
+        _namespace(), [resolved_module], tokens={"tz": "Europe/Brussels"}, dry_run=True
+    )
+
+    assert diagnostics.ok
+    assert "args" not in captured
+    assert (module_dir / "values.yaml").read_text() == values_before

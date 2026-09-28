@@ -400,12 +400,118 @@ def test_deployment_with_no_resolvable_environment_skips_token_checking(tmp_path
     """No environment to check against — must not raise or false-positive."""
     root = _base_solution(tmp_path)
     path = root / "deployment.yaml"
-    path.write_text(path.read_text(encoding="utf-8").replace("environments: [prd]", "environments: [ghost-env]"), encoding="utf-8")
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("environments: [prd]", "environments: [ghost-env]"), encoding="utf-8"
+    )
 
     # The dangling 'ghost-env' reference is caught by validate_references;
     # here we only assert this does not crash the token check.
     context = _resolve(root)
     assert not context.ok
+
+
+# ---------------------------------------------------------------------------
+# gap #10 Phase 7: tokens are now also checked in the workspace/resource/
+# provider/topology/tenant/environment/deployment documents themselves, not
+# just DNS/network/firewall/module — these were never checked at all before,
+# regardless of whether gap #9's deploy-time delivery (Phase 2/6) resolves
+# them.
+# ---------------------------------------------------------------------------
+
+
+def test_resource_configuration_token_not_declared_is_caught(tmp_path):
+    root = _base_solution(tmp_path)
+    path = root / "resource.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "  configuration:\n    admin_password: '${secret:GHOST_RESOURCE_SECRET}'\n",
+        encoding="utf-8",
+    )
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any("GHOST_RESOURCE_SECRET" in m for m in context.diagnostics.messages())
+
+
+def test_provider_configuration_token_not_declared_is_caught(tmp_path):
+    root = _base_solution(tmp_path)
+    path = root / "provider.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "  configuration:\n    tenant_id: '${var:GHOST_PROVIDER_VAR}'\n",
+        encoding="utf-8",
+    )
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any("GHOST_PROVIDER_VAR" in m for m in context.diagnostics.messages())
+
+
+def test_workspace_custom_token_not_declared_is_caught(tmp_path):
+    root = _base_solution(tmp_path)
+    path = root / "workspace.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "  custom:\n    owner: '${var:GHOST_WORKSPACE_VAR}'\n",
+        encoding="utf-8",
+    )
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any("GHOST_WORKSPACE_VAR" in m for m in context.diagnostics.messages())
+
+
+def test_tenant_configuration_token_not_declared_is_caught(tmp_path):
+    root = _base_solution(tmp_path)
+    path = root / "tenant.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "  configuration:\n    tier: '${var:GHOST_TENANT_VAR}'\n",
+        encoding="utf-8",
+    )
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any("GHOST_TENANT_VAR" in m for m in context.diagnostics.messages())
+
+
+def test_environment_custom_token_not_declared_is_caught(tmp_path):
+    root = _base_solution(tmp_path)
+    path = root / "environment.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "  custom:\n    team: '${var:GHOST_ENV_VAR}'\n",
+        encoding="utf-8",
+    )
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any("GHOST_ENV_VAR" in m for m in context.diagnostics.messages())
+
+
+def test_deployment_custom_token_not_declared_is_caught(tmp_path):
+    root = _base_solution(tmp_path)
+    path = root / "deployment.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "  custom:\n    owner: '${var:GHOST_DEPLOYMENT_VAR}'\n",
+        encoding="utf-8",
+    )
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any("GHOST_DEPLOYMENT_VAR" in m for m in context.diagnostics.messages())
+
+
+def test_topology_document_itself_is_now_checked_for_tokens(tmp_path):
+    """The topology document itself (not just modules reached through it)
+    is now part of the reachable set - proven directly against
+    `_documents_reachable_from_workspace()` rather than a full end-to-end
+    fixture, since the base solution's topology has no string field handy
+    to embed a token in without extra fixture plumbing."""
+    from strata.controllers.semantic_checks import _documents_reachable_from_workspace
+
+    context = _resolve(_base_solution(tmp_path))
+    documents = _documents_reachable_from_workspace(context.controller.index, "main")
+    kinds = {type(document).__name__ for document in documents}
+    assert "TopologyModel" in kinds
+    assert "WorkspaceModel" in kinds
+    assert "ProviderModel" in kinds
+    assert "ResourceModel" in kinds
 
 
 # ---------------------------------------------------------------------------

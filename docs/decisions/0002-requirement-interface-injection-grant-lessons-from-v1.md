@@ -1,9 +1,11 @@
 # Requirement, Interface, Injection, Grant, Value, and Translation — Lessons from v1's References Model
 
 - Status: partially-implemented — Requirement rejection and the Value token
-  syntax are implemented (see [docs/design/value-token-resolution.md](../design/value-token-resolution.md));
-  Interface/Injection/Grant/Translation/Context are fully designed but not
-  implemented (see [docs/design/provisioning-injection-model.md](../design/provisioning-injection-model.md))
+  syntax **and its full deploy-time resolver/delivery mechanism** are
+  implemented (see [docs/design/value-token-resolution.md](../design/value-token-resolution.md),
+  "Full Solution", all 7 phases done as of 2026-09-28); Interface/Injection/
+  Grant/Translation/Context are fully designed but not implemented (see
+  [docs/design/provisioning-injection-model.md](../design/provisioning-injection-model.md))
 - Date: 2026-09-20
 - Revised: 2026-09-21 — added **Value** as a fifth, distinct concept (the
   document-local `value`/`var`/`secret`/`feature` binding site), after
@@ -89,6 +91,21 @@
   (jinja2-template-engine), v1 ADR-0073
   (embedded-string-syntax-inventory-and-creep-prevention), v1 ADR-0075
   (unify-terraform-helm-value-expression-syntax)
+- Revised: 2026-09-28 — **the Value token *resolver* (not just its syntax)
+  is now fully implemented**, closing the gap this ADR's original Decision
+  5 left open ("resolver design... but not implemented"). Built as
+  [docs/design/value-token-resolution.md](../design/value-token-resolution.md)'s
+  "Full Solution", 7 phases: an escape syntax (`$${...}`) for a
+  third-party tool's own colliding `${...}` syntax; per-integration
+  deploy-time delivery matching how each tool actually accepts input
+  (Terraform `TF_VAR_<name>=<json>`; Helm `--set-string <path>=<value>`;
+  Compose bare-`${KEY}` rename + subprocess env, never a fourth invented
+  convention — confirmed no single mechanism can serve all three, Helm
+  has no env-var substitution at all); extended to every `configuration`/
+  `custom`/`properties` passthrough field on every kind, not just the
+  four originally schema-validated ones; and `strata validate`'s own
+  cross-check extended to match. `docs/_gap_v1.md` gaps #1/#8/#9/#10/#12/#13
+  are all now closed as a consequence.
 
 ## Context and Problem Statement
 
@@ -110,14 +127,14 @@ path.
 
 ### Six concepts; v1 modeled one and a half, plus a fifth that gets confused with the first, plus a sixth it never modeled at all
 
-| # | Concept | Question it answers | v1 status |
-|---|---|---|---|
-| 1 | **Requirement** | "What does this component need, by name?" | Modeled in v1 (`spec.references`). **v2: rejected** — see "V2 decision" below |
-| 2 | **Interface** | "What can this provisioner/root accept?" | Parsed (e.g. Terraform `variables.tf`) but **discarded** — computed by one code path, ignored by the one that emits values. **v2: load-bearing** — see "V2 decision" below |
-| 3 | **Injection** | "What does it actually get?" | v1: never defined, defaults to "everything." **v2: `Interface ∩ Environment`** — see "V2 decision" below |
-| 4 | **Grant** | "What is this run allowed to see?" | v1: secrets-only (`stage.secrets`), deploy-time, hand-authored. **v2: kept, secrets-only confirmed correct, derived-by-default** — see "V2 decision" below |
-| 5 | **Value** | "At *this specific point* in the document, what literal/key supplies the value?" | Modeled per-kind, inconsistently (DNS/Module: flat fields; Network: nested `CidrSourceModel`) — see below |
-| 6 | **Translation** | "The platform calls it X; this specific provisioner's code calls it Y — how do they connect?" | **Not modeled at all** — ADR-0001 explicitly states "no renaming happens" as policy, which holds only until a pre-existing, team-owned module's naming doesn't match |
+| #   | Concept         | Question it answers                                                                           | v1 status                                                                                                                                                                  |
+| --- | --------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Requirement** | "What does this component need, by name?"                                                     | Modeled in v1 (`spec.references`). **v2: rejected** — see "V2 decision" below                                                                                              |
+| 2   | **Interface**   | "What can this provisioner/root accept?"                                                      | Parsed (e.g. Terraform `variables.tf`) but **discarded** — computed by one code path, ignored by the one that emits values. **v2: load-bearing** — see "V2 decision" below |
+| 3   | **Injection**   | "What does it actually get?"                                                                  | v1: never defined, defaults to "everything." **v2: `Interface ∩ Environment`** — see "V2 decision" below                                                                   |
+| 4   | **Grant**       | "What is this run allowed to see?"                                                            | v1: secrets-only (`stage.secrets`), deploy-time, hand-authored. **v2: kept, secrets-only confirmed correct, derived-by-default** — see "V2 decision" below                 |
+| 5   | **Value**       | "At *this specific point* in the document, what literal/key supplies the value?"              | Modeled per-kind, inconsistently (DNS/Module: flat fields; Network: nested `CidrSourceModel`) — see below                                                                  |
+| 6   | **Translation** | "The platform calls it X; this specific provisioner's code calls it Y — how do they connect?" | **Not modeled at all** — ADR-0001 explicitly states "no renaming happens" as policy, which holds only until a pre-existing, team-owned module's naming doesn't match       |
 
 (3) is the structural gap. Because it was never decided, `stage.secrets` ended up
 silently standing in for it — "the secret allowlist is compensating for the
@@ -170,12 +187,12 @@ fifth concept, **Value**, wearing the same field names (`var:`/`secret:`/
 collapsed into one mental model just because both deal in "variable/secret/
 feature key names":
 
-| | Requirement (`spec.references`) | Value (`var:`/`secret:`/`feature:` on a specific field) |
-|---|---|---|
-| Question | "What keys does this *document* need, in total?" | "What supplies the value for *this one field*, right here?" |
-| Shape | A flat list of key names | A single key name (or a literal), attached to one specific field |
-| Cardinality | One list per document | One per resolvable field — a document can have many |
-| Without it | Nothing is declared — unscoped (Job 1) or nothing validates (Job 2) | A field has no value at all — the document doesn't compile/build |
+|             | Requirement (`spec.references`)                                     | Value (`var:`/`secret:`/`feature:` on a specific field)          |
+| ----------- | ------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Question    | "What keys does this *document* need, in total?"                    | "What supplies the value for *this one field*, right here?"      |
+| Shape       | A flat list of key names                                            | A single key name (or a literal), attached to one specific field |
+| Cardinality | One list per document                                               | One per resolvable field — a document can have many              |
+| Without it  | Nothing is declared — unscoped (Job 1) or nothing validates (Job 2) | A field has no value at all — the document doesn't compile/build |
 
 Concretely:
 
@@ -283,14 +300,14 @@ choice to make.
 **Real-world syntax survey done before keeping v1's own** (not just reused
 out of inertia):
 
-| Platform | Syntax | Kind discrimination | Verdict for strata |
-|---|---|---|---|
-| GitHub Actions | `${{ secrets.X }}` / `${{ vars.X }}` / `${{ env.X }}` | Yes, by namespace | Most widely recognized, but starts with `{{` — collision risk with Helm/Jinja templating strata already uses elsewhere |
-| AWS CloudFormation | `{{resolve:secretsmanager:id:key}}` | Yes, by service prefix | Bare `{{ }}`, same collision risk, no `$` to distinguish |
-| Azure DevOps | `$(name)` / `${{ variables.name }}` | **No** — secret-ness is a separate declared flag, not part of the reference syntax | Doesn't give static secret detection from the token alone |
-| Kubernetes | `valueFrom.secretKeyRef` | Yes, but structured YAML, not an embeddable string token | Can't express the composite/concatenation case at all |
-| Ansible / Consul-template | `{{ var }}` (Jinja/Go-template) | No | Same Jinja collision problem already ruled out |
-| **v1's own** | `${var:KEY}` / `${secret:KEY}` / `${feature:KEY}` | Yes, explicit prefix | **Never uses `{{`, zero collision with Helm/Jinja, already proven in strata's own codebase** |
+| Platform                  | Syntax                                                | Kind discrimination                                                                | Verdict for strata                                                                                                     |
+| ------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| GitHub Actions            | `${{ secrets.X }}` / `${{ vars.X }}` / `${{ env.X }}` | Yes, by namespace                                                                  | Most widely recognized, but starts with `{{` — collision risk with Helm/Jinja templating strata already uses elsewhere |
+| AWS CloudFormation        | `{{resolve:secretsmanager:id:key}}`                   | Yes, by service prefix                                                             | Bare `{{ }}`, same collision risk, no `$` to distinguish                                                               |
+| Azure DevOps              | `$(name)` / `${{ variables.name }}`                   | **No** — secret-ness is a separate declared flag, not part of the reference syntax | Doesn't give static secret detection from the token alone                                                              |
+| Kubernetes                | `valueFrom.secretKeyRef`                              | Yes, but structured YAML, not an embeddable string token                           | Can't express the composite/concatenation case at all                                                                  |
+| Ansible / Consul-template | `{{ var }}` (Jinja/Go-template)                       | No                                                                                 | Same Jinja collision problem already ruled out                                                                         |
+| **v1's own**              | `${var:KEY}` / `${secret:KEY}` / `${feature:KEY}`     | Yes, explicit prefix                                                               | **Never uses `{{`, zero collision with Helm/Jinja, already proven in strata's own codebase**                           |
 
 **Chosen: keep v1's own `${var:}`/`${secret:}`/`${feature:}` syntax
 verbatim.** GitHub Actions' `${{ }}` is more widely recognized, but strata
@@ -374,11 +391,11 @@ designed here — a candidate for its own decision when Network is built.
 Working through candidate fields revealed strata already has (or needs) three
 different patterns, not one, and conflating them would be a regression:
 
-| Pattern | Shape | Example | Why |
-|---|---|---|---|
-| Always literal | plain `str`/`int`, no indirection | `Resource.spec.properties.resource_type` | A structural fact, never meant to vary by environment |
-| Always a reference, never literal | plain `str`, but the string *is* a key name by convention | `AuthenticationModel.client_id`, `.access_key_id` | Credentials should never have a "just hardcode it here" escape hatch |
-| Either literal or reference, explicit union | `ValueSourceModel` (`value`/`var`/`secret`) | `DnsRecordModel`, `ModuleServiceEnvironmentModel` | The field's value genuinely needs to vary by environment without duplicating the whole document |
+| Pattern                                     | Shape                                                     | Example                                           | Why                                                                                             |
+| ------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Always literal                              | plain `str`/`int`, no indirection                         | `Resource.spec.properties.resource_type`          | A structural fact, never meant to vary by environment                                           |
+| Always a reference, never literal           | plain `str`, but the string *is* a key name by convention | `AuthenticationModel.client_id`, `.access_key_id` | Credentials should never have a "just hardcode it here" escape hatch                            |
+| Either literal or reference, explicit union | `ValueSourceModel` (`value`/`var`/`secret`)               | `DnsRecordModel`, `ModuleServiceEnvironmentModel` | The field's value genuinely needs to vary by environment without duplicating the whole document |
 
 The deciding question per field is **"does this value legitimately need to
 vary by environment without duplicating the whole document?"** — not "could
@@ -508,21 +525,21 @@ so a requirement declared on a resource is a statement about code one step
 removed from the declaring object. The useful test for where a concern belongs:
 **who is the authority, and who would be wrong to override them?**
 
-| Role | Authority on | Artifact |
-|---|---|---|
-| Component author | what the code consumes | the IaC/module source |
-| Platform engineer | what exists and how it composes | workspace, resources |
-| Operator / SRE | values, and who may see them | environment, deployment |
+| Role              | Authority on                    | Artifact                |
+| ----------------- | ------------------------------- | ----------------------- |
+| Component author  | what the code consumes          | the IaC/module source   |
+| Platform engineer | what exists and how it composes | workspace, resources    |
+| Operator / SRE    | values, and who may see them    | environment, deployment |
 
 ### Two independent input channels
 
 A consumer (provisioner, module, etc.) receives values through two channels that
 should not be conflated:
 
-| Channel | Contents | Source |
-|---|---|---|
-| Structural | the platform's own composed model (resources, topologies, modules, …) | the platform artifact |
-| Environmental | `variables`, `features`, and `secrets` | the environment |
+| Channel       | Contents                                                              | Source                |
+| ------------- | --------------------------------------------------------------------- | --------------------- |
+| Structural    | the platform's own composed model (resources, topologies, modules, …) | the platform artifact |
+| Environmental | `variables`, `features`, and `secrets`                                | the environment       |
 
 `references` (Requirement/Injection/Grant) only ever governs the **environmental**
 channel. Keeping that boundary explicit avoids scope creep of `references` into
@@ -629,11 +646,11 @@ a small platform-defined table (same style as the existing `SCRIPT_EXTENSIONS`
 constant), because it's a fact about the provisioner type, not something an
 author configures:
 
-| Provisioner type | Interface capability | Basis |
-|---|---|---|
-| `terraform` | **Always capable** | Real HCL parser, deterministic, proven in v1 |
-| `helm` | **Conditionally capable** | Only if the specific chart ships `values.schema.json` — checked per-instance at build time, not per-type |
-| `ansible`, `bicep`, `compose`, `script`, `argocd`, `flux` | **Never capable** | No parser exists for any of these today |
+| Provisioner type                                          | Interface capability      | Basis                                                                                                    |
+| --------------------------------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `terraform`                                               | **Always capable**        | Real HCL parser, deterministic, proven in v1                                                             |
+| `helm`                                                    | **Conditionally capable** | Only if the specific chart ships `values.schema.json` — checked per-instance at build time, not per-type |
+| `ansible`, `bicep`, `compose`, `script`, `argocd`, `flux` | **Never capable**         | No parser exists for any of these today                                                                  |
 
 The capability determines which formula runs, per provisioner instance, at
 build time:
@@ -749,13 +766,13 @@ alone — there is no separate Grant question for them.
 **Worked example** (continuing the `web_infra` case, `Injection =
 {enable_monitoring: true, db_password: <resolved>}`):
 
-| Stage | kind | Derived Grant | `db_password` flows? |
-|---|---|---|---|
-| `validate` | plan | deny-all-secrets | No |
-| `rollout` | apply | allow-all-injected | Yes |
-| `teardown` | destroy | allow-all-injected | Yes |
-| `emergency-patch` (override: `grant.deny: [db_password]`) | apply | allow-all-injected, minus override | No, despite kind=apply |
-| `cost-estimate` (override: `grant.allow: [db_password]`) | plan | deny-all-secrets, plus override | Yes, despite kind=plan |
+| Stage                                                     | kind    | Derived Grant                      | `db_password` flows?   |
+| --------------------------------------------------------- | ------- | ---------------------------------- | ---------------------- |
+| `validate`                                                | plan    | deny-all-secrets                   | No                     |
+| `rollout`                                                 | apply   | allow-all-injected                 | Yes                    |
+| `teardown`                                                | destroy | allow-all-injected                 | Yes                    |
+| `emergency-patch` (override: `grant.deny: [db_password]`) | apply   | allow-all-injected, minus override | No, despite kind=apply |
+| `cost-estimate` (override: `grant.allow: [db_password]`)  | plan    | deny-all-secrets, plus override    | Yes, despite kind=plan |
 
 Exact schema (field names, how overrides attach to a stage) is intentionally
 left undecided here — this section records the conceptual model

@@ -47,8 +47,7 @@ def resolve_module(index: DocumentIndex, reference: ModuleReferenceModel) -> Mod
     entry = index.get(PlatformKind.MODULE, reference.module)
     if entry is None:
         raise UsageError(
-            f"Module reference '{reference.name}' names module '{reference.module}', "
-            "which is not in the index."
+            f"Module reference '{reference.name}' names module '{reference.module}', which is not in the index."
         )
     return cast(ModuleModel, entry.model)
 
@@ -164,3 +163,50 @@ def build_workload_modules(
             # integration that has not implemented prepare_namespace() yet.
             raise UsageError(f"Namespace '{namespace.meta.name}', module type '{module_type}': {exc}") from exc
         _step(f"rendered {module_type} workload for namespace '{namespace.meta.name}'")
+
+
+def resolve_namespace_modules(
+    index: DocumentIndex, namespace: NamespaceModel, build_path: Path
+) -> dict[str, list[ResolvedModule]]:
+    """`deploy_run()`'s counterpart to `build_workload_modules()` (docs/_gap_v1.md
+    gap #13) — resolves `namespace`'s modules, grouped by `module.spec.type`,
+    without re-materialising any source.
+
+    Deploy time only *deploys* what `build run` already rendered — it never
+    fetches/syncs a module's source again, so this skips
+    `sync_module_source()`/`describe_source()` entirely and simply recomputes
+    each module's already-known build directory (`build_path/
+    namespace.meta.name/reference.name`, the exact same path
+    `build_workload_modules()` wrote it to).
+
+    Args:
+        index: The loaded, already-`require_valid()`-ed `DocumentIndex`.
+        namespace: The namespace whose `spec.modules` to resolve.
+        build_path: The build output root `build run` already rendered into.
+
+    Returns:
+        Every enabled module reference, grouped by `module.spec.type` — the
+        caller (`deploy_controller.py`) filters this to its own integration's
+        `TYPE` before calling `deploy_namespace()`.
+
+    Raises:
+        UsageError: a module reference does not resolve, or `module.spec.type`
+            is unset — same failure modes `build_workload_modules()` raises.
+    """
+    by_type: dict[str, list[ResolvedModule]] = {}
+    for reference in namespace.spec.modules or []:
+        if not reference.enabled:
+            continue
+
+        module = resolve_module(index, reference)
+        if module.spec.type is None:
+            raise UsageError(
+                f"Namespace '{namespace.meta.name}', module '{reference.name}': "
+                "spec.type is required to deploy this module."
+            )
+
+        module_dir = build_path / namespace.meta.name / reference.name
+        by_type.setdefault(module.spec.type, []).append(
+            ResolvedModule(reference=reference, module=module, source_path=module_dir)
+        )
+    return by_type

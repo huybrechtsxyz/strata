@@ -29,14 +29,14 @@ from azure.keyvault.secrets import SecretClient
 
 from strata.integrations.capabilities import StoreIntegration
 from strata.integrations.errors import ValueResolutionError
-from strata.models.integration_model import IntegrationModel
+from strata.models.integration_model import Capability, IntegrationModel
 
 
 class AzureKeyVaultResolver(StoreIntegration):
     """Resolves Azure Key Vault secrets, by name."""
 
     TYPE = "azure-keyvault"
-    CAPABILITIES = frozenset({"secrets"})
+    CAPABILITIES = frozenset({Capability.SECRETS})
     TRANSPORTS = frozenset({"sdk"})
 
     def __init__(self, config: IntegrationModel | None = None) -> None:

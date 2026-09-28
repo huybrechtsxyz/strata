@@ -30,14 +30,14 @@ from azure.identity import DefaultAzureCredential
 
 from strata.integrations.capabilities import StoreIntegration
 from strata.integrations.errors import ValueResolutionError
-from strata.models.integration_model import IntegrationModel
+from strata.models.integration_model import Capability, IntegrationModel
 
 
 class AzureAppConfigResolver(StoreIntegration):
     """Resolves Azure App Configuration variables/feature flags, by key."""
 
     TYPE = "azure-appconfig"
-    CAPABILITIES = frozenset({"variables", "features"})
+    CAPABILITIES = frozenset({Capability.VARIABLES, Capability.FEATURES})
     TRANSPORTS = frozenset({"sdk"})
 
     def __init__(self, config: IntegrationModel | None = None) -> None:
@@ -49,9 +49,7 @@ class AzureAppConfigResolver(StoreIntegration):
         if not self._endpoint:
             raise ValueResolutionError("Azure App Configuration: AZURE_APPCONFIG_ENDPOINT is not set.")
         if self._client is None:
-            self._client = AzureAppConfigurationClient(
-                base_url=self._endpoint, credential=DefaultAzureCredential()
-            )
+            self._client = AzureAppConfigurationClient(base_url=self._endpoint, credential=DefaultAzureCredential())
         return self._client
 
     def resolve(self, key: str) -> str:
@@ -65,9 +63,7 @@ class AzureAppConfigResolver(StoreIntegration):
         try:
             setting = client.get_configuration_setting(key=key)
         except ResourceNotFoundError as exc:
-            raise ValueResolutionError(
-                f"Azure App Configuration: no key named '{key}' in '{self._endpoint}'."
-            ) from exc
+            raise ValueResolutionError(f"Azure App Configuration: no key named '{key}' in '{self._endpoint}'.") from exc
         except AzureError as exc:
             raise ValueResolutionError(f"Azure App Configuration: could not resolve '{key}': {exc}") from exc
         if setting is None or setting.value is None:

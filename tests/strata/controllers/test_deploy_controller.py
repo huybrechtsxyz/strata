@@ -164,9 +164,7 @@ def test_deploy_run_filters_by_stage(tmp_path: Path, _capture):
     build_run(_context(root), "app", build_path)
 
     steps: list[str] = []
-    deploy_run(
-        _context(root), "app", build_path, force=True, stage="apply_infra", on_step=steps.append
-    )
+    deploy_run(_context(root), "app", build_path, force=True, stage="apply_infra", on_step=steps.append)
 
     assert any("apply_infra" in s for s in steps)
     assert not any("apply_apps" in s for s in steps)
@@ -200,13 +198,22 @@ def test_deploy_run_runs_dependent_steps_in_order(tmp_path: Path, _capture):
 def test_tf_var_env_maps_resolved_values_to_tf_var_prefixed_env():
     resolved = ValueResolution(deployment="app", values={"db_password": "hunter2", "api_key": "abc123"})
 
-    assert tf_var_env(resolved) == {"TF_VAR_db_password": "hunter2", "TF_VAR_api_key": "abc123"}
+    assert tf_var_env(resolved, "TF_VAR_") == {"TF_VAR_db_password": "hunter2", "TF_VAR_api_key": "abc123"}
 
 
 def test_tf_var_env_empty_when_no_values_resolved():
     resolved = ValueResolution(deployment="app", values={})
 
-    assert tf_var_env(resolved) == {}
+    assert tf_var_env(resolved, "TF_VAR_") == {}
+
+
+def test_tf_var_env_empty_when_prefix_is_none():
+    """docs/_gap_v1.md: a container-capable integration (or any future
+    infra tool with no env-var-prefix mechanism) declares `ENV_VAR_PREFIX
+    = None` - this whole mechanism has nothing to deliver for it."""
+    resolved = ValueResolution(deployment="app", values={"db_password": "hunter2"})
+
+    assert tf_var_env(resolved, None) == {}
 
 
 def test_deploy_run_injects_tf_var_env_for_every_step(tmp_path: Path, monkeypatch):
@@ -264,7 +271,11 @@ def test_deploy_run_injects_tf_var_env_for_every_step(tmp_path: Path, monkeypatc
 
     assert diagnostics.ok
     assert len(envs) == 5  # init, validate, plan, apply, output
-    assert all(env == {"TF_VAR_db_password": "hunter2"} for env in envs)
+    assert all(env is not None and env.get("TF_VAR_db_password") == "hunter2" for env in envs)
+    # Phase 6 (docs/_gap_v1.md gap #8): resource configuration is now also
+    # delivered, broadcast to every step regardless of ownership. Grouped
+    # by resource_type ("server" here), not category ("compute").
+    assert all(env is not None and "TF_VAR_resx_server" in env for env in envs)
 
 
 def test_deploy_run_stops_on_plan_failure(tmp_path: Path, monkeypatch):
@@ -367,6 +378,355 @@ def test_deploy_run_resolves_backend_configuration_tokens(tmp_path: Path):
     assert "resource_group_name=rg-prd" in init_call
 
 
+def test_deploy_run_resolves_dns_networks_firewalls_tokens_via_tf_var(tmp_path: Path):
+    """docs/_gap_v1.md gap #9 / value-token-resolution.md Full Solution Phase 2:
+    a '${var:KEY}' inside a DNS record's value (or a network/firewall field)
+    is delivered as a whole resolved JSON payload via TF_VAR_dns/networks/
+    firewalls — never rewritten into the on-disk .auto.tfvars.json."""
+    root = _solution(tmp_path)
+    _write(root, "infra/main.tf", "# root module\n")
+    _write(
+        root,
+        "provider.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
+        "  properties:\n    type: local\n    region: local\n",
+    )
+    _write(
+        root,
+        "resource.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
+        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  default_tags:\n    managed-by: strata\n",
+    )
+    _write(
+        root,
+        "dns.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: dns\nmeta:\n  name: public-dns\nspec:\n"
+        "  zones:\n    - name: example.com\n      records:\n"
+        "        - name: '@'\n          type: A\n          value: '${var:public_ip}'\n"
+        "      default_tags:\n        environment: prd\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  dns_zones:\n    - public-dns\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  variables:\n    - key: public_ip\n      store: constant\n      value: 1.2.3.4\n",
+    )
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        "  workspace: main\n  environments:\n    - prd\n",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    envs: list[dict[str, str] | None] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        envs.append(env)
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+        monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+        diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok
+    init_env = next(env for env in envs if env is not None)
+    assert "TF_VAR_dns" in init_env
+    dns_payload = json.loads(init_env["TF_VAR_dns"])
+    record_value = dns_payload["public-dns"]["zones"]["example.com"]["records"][0]["value"]
+    assert record_value == "1.2.3.4"
+    # On-disk build artifact stays literal/unresolved — never rewritten.
+    on_disk = json.loads((build_path / "infra" / "dns.auto.tfvars.json").read_text())
+    assert on_disk["public-dns"]["zones"]["example.com"]["records"][0]["value"] == "${var:public_ip}"
+    # No networks/firewalls documents in this workspace — no TF_VAR set.
+    assert "TF_VAR_networks" not in init_env
+    assert "TF_VAR_firewalls" not in init_env
+
+
+def test_deploy_run_resolves_configuration_payloads_tokens_via_tf_var(tmp_path: Path):
+    """docs/_gap_v1.md gap #8 (Terraform-side refinement) / value-token-
+    resolution.md Full Solution Phase 6: a '${var:KEY}' inside a resource's
+    'configuration' is delivered via TF_VAR_resx_<type> — broadcast to
+    every step, never rewritten into the on-disk .auto.tfvars.json."""
+    root = _solution(tmp_path)
+    _write(root, "infra/main.tf", "# root module\n")
+    _write(
+        root,
+        "provider.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
+        "  properties:\n    type: local\n    region: local\n",
+    )
+    _write(
+        root,
+        "resource.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
+        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  configuration:\n    admin_password: '${secret:vm_admin_password}'\n"
+        "  default_tags:\n    managed-by: strata\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  secrets:\n    - key: vm_admin_password\n      store: constant\n      value: hunter2\n",
+    )
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        "  workspace: main\n  environments:\n    - prd\n",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    envs: list[dict[str, str] | None] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        envs.append(env)
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+        monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+        diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok
+    init_env = next(env for env in envs if env is not None)
+    assert "TF_VAR_resx_server" in init_env
+    resx_payload = json.loads(init_env["TF_VAR_resx_server"])
+    assert resx_payload["resources"]["r1"]["configuration"]["admin_password"] == "hunter2"
+    # On-disk build artifact stays literal/unresolved — never rewritten.
+    on_disk = json.loads((build_path / "infra" / "resx_server.auto.tfvars.json").read_text())
+    assert on_disk["resources"]["r1"]["configuration"]["admin_password"] == "${secret:vm_admin_password}"
+
+
+def test_deploy_run_rejects_output_token_in_configuration_payloads(tmp_path: Path):
+    """docs/_gap_v1.md gap #8: '${output:...}' has no ownership mechanism
+    for resx_<type>/topologies/properties/custom/tenant (broadcast-only,
+    unlike dns/networks/firewalls) — rejected outright, not silently
+    ignored or left unresolved."""
+    root = _solution(tmp_path)
+    _write(root, "infra/main.tf", "# root module\n")
+    _write(
+        root,
+        "provider.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
+        "  properties:\n    type: local\n    region: local\n",
+    )
+    _write(
+        root,
+        "resource.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
+        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  configuration:\n    ip: '${output:apply_infra.vm_ip}'\n"
+        "  default_tags:\n    managed-by: strata\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec: {}\n",
+    )
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        "  workspace: main\n  environments:\n    - prd\n",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert not diagnostics.ok
+    assert "not supported outside dns/networks/firewalls" in diagnostics.messages()[0]
+
+
+def test_deploy_run_resolves_output_token_in_dns_via_owning_step_targets(tmp_path: Path):
+    """docs/_gap_v1.md gap #12: a DNS document claimed by a step's `targets`
+    resolves '${output:...}' using THAT step's own dependency-scoped
+    outputs — the worked example from the design discussion (a VM's public
+    IP, produced by 'provision-hearth', consumed by 'apply-dns')."""
+    root = _solution(tmp_path)
+    _write(root, "infra_hearth/main.tf", "# root module\n")
+    _write(root, "infra_dns/main.tf", "# root module\n")
+    _write(
+        root,
+        "provider.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
+        "  properties:\n    type: local\n    region: local\n",
+    )
+    _write(
+        root,
+        "resource.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: hearth\nspec:\n"
+        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  default_tags:\n    managed-by: strata\n",
+    )
+    _write(
+        root,
+        "dns.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: dns\nmeta:\n  name: public-dns\nspec:\n"
+        "  zones:\n    - name: example.com\n      records:\n"
+        "        - name: '@'\n          type: A\n          value: '${output:provision-hearth.public_ip}'\n"
+        "      default_tags:\n        environment: prd\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  dns_zones:\n    - public-dns\n"
+        "  provisioners:\n"
+        "    - name: tf_hearth\n      tool: terraform\n      source:\n        source_path: infra_hearth\n"
+        "    - name: tf_dns\n      tool: terraform\n      source:\n        source_path: infra_dns\n"
+        "  execution:\n"
+        "    - name: provision-hearth\n      provisioner: tf_hearth\n      targets:\n        - hearth\n"
+        "    - name: apply-dns\n      provisioner: tf_dns\n      targets:\n        - hearth\n        - public-dns\n"
+        "      depends_on:\n        - provision-hearth\n"
+        "  resources:\n    - name: hearth\n      resource: hearth\n",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec: {}\n",
+    )
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        "  workspace: main\n  environments:\n    - prd\n",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    envs_by_step: dict[str, list[dict[str, str] | None]] = {"provision-hearth": [], "apply-dns": []}
+    current_step = {"name": None}
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if cwd is not None and "infra_hearth" in str(cwd):
+            envs_by_step["provision-hearth"].append(env)
+        elif cwd is not None and "infra_dns" in str(cwd):
+            envs_by_step["apply-dns"].append(env)
+        if args[1] == "output":
+            return CommandResult(returncode=0, stdout=json.dumps({"public_ip": {"value": "20.1.2.3"}}), stderr="")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+        monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+        diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    hearth_envs = [e for e in envs_by_step["provision-hearth"] if e is not None]
+    dns_envs = [e for e in envs_by_step["apply-dns"] if e is not None]
+    # provision-hearth doesn't target public-dns — never sees TF_VAR_dns.
+    assert all("TF_VAR_dns" not in e for e in hearth_envs)
+    # apply-dns targets public-dns — sees the real, resolved output value.
+    dns_payload = json.loads(dns_envs[0]["TF_VAR_dns"])
+    record_value = dns_payload["public-dns"]["zones"]["example.com"]["records"][0]["value"]
+    assert record_value == "20.1.2.3"
+
+
+def test_deploy_run_rejects_unclaimed_output_token_in_dns(tmp_path: Path):
+    """docs/_gap_v1.md gap #12: a DNS document using '${output:...}' with no
+    step naming it in `targets` is a clear, single diagnostic error — not a
+    per-step crash or silently inconsistent resolution."""
+    root = _solution(tmp_path)
+    _write(root, "infra/main.tf", "# root module\n")
+    _write(
+        root,
+        "provider.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
+        "  properties:\n    type: local\n    region: local\n",
+    )
+    _write(
+        root,
+        "resource.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
+        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  default_tags:\n    managed-by: strata\n",
+    )
+    _write(
+        root,
+        "dns.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: dns\nmeta:\n  name: public-dns\nspec:\n"
+        "  zones:\n    - name: example.com\n      records:\n"
+        "        - name: '@'\n          type: A\n          value: '${output:provision-hearth.public_ip}'\n"
+        "      default_tags:\n        environment: prd\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  dns_zones:\n    - public-dns\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec: {}\n",
+    )
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        "  workspace: main\n  environments:\n    - prd\n",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert not diagnostics.ok
+    message = diagnostics.messages()[0]
+    assert "public-dns" in message
+    assert "output" in message
+    assert "targets" in message
+
+
 def _output_chained_solution(tmp_path: Path) -> Path:
     """Two Terraform steps, two provisioners: `apply_infra` (no backend
     tokens) and `apply_apps` (depends_on apply_infra, backend.configuration
@@ -442,7 +802,9 @@ def test_deploy_run_resolves_output_token_from_upstream_step(tmp_path: Path, mon
     diagnostics = deploy_run(_context(root), "app", build_path)
 
     assert diagnostics.ok, diagnostics.messages()
-    apps_init_call = next(call for call, cwd in calls if cwd is not None and cwd.name == "infra_b" and call[1] == "init")
+    apps_init_call = next(
+        call for call, cwd in calls if cwd is not None and cwd.name == "infra_b" and call[1] == "init"
+    )
     assert "-backend-config" in apps_init_call
     assert "host=10.0.0.5" in apps_init_call
 
@@ -642,3 +1004,228 @@ def test_deploy_run_reports_a_template_render_failure(tmp_path: Path, _capture):
     assert not diagnostics.ok
     assert "failed to render" in diagnostics.messages()[0]
     assert _capture == []  # never reached init
+
+
+# ---------------------------------------------------------------------------
+# Helm/Compose namespace dispatch (docs/_gap_v1.md gap #13,
+# docs/design/deploy-command.md) - a "container"-capable step deploys the
+# namespace(s) its own `targets` names directly, bypassing Terraform's
+# init/validate/plan/apply sequence entirely.
+# ---------------------------------------------------------------------------
+
+
+def _helm_solution(tmp_path: Path) -> Path:
+    """One Terraform infra step plus one Helm-provisioner step targeting a
+    namespace - real dispatch evidence for gap #13 (v1's real
+    `DeployerFactory.resolve_type()`: the step's own provisioner picks the
+    tool, never inferred from namespace linkage)."""
+    root = _terraform_solution(tmp_path)
+    _write(root, "charts/authentik/Chart.yaml", "name: authentik\n")
+    _write(
+        root,
+        "module.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: module\nmeta:\n  name: authentik\nspec:\n"
+        "  source:\n    source_path: charts/authentik\n  type: helm\n"
+        "  default_labels:\n    app: authentik\n"
+        "  services:\n    - name: server\n",
+    )
+    _write(
+        root,
+        "namespace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: namespace\nmeta:\n  name: apps\nspec:\n"
+        "  default_labels:\n    app: apps\n"
+        "  modules:\n    - name: auth\n      module: authentik\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  namespaces:\n    - apps\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "    - name: helm_main\n      tool: helm\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "      scope: infra\n"
+        "    - name: deploy_apps\n      provisioner: helm_main\n      targets:\n        - apps\n"
+        "      scope: apps\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    return root
+
+
+def test_deploy_run_dispatches_container_capable_step_to_deploy_namespace(tmp_path: Path, _capture):
+    root = _helm_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+
+    # Terraform step ran its normal lifecycle, unchanged.
+    tf_commands = [call[1] for call in _capture if call[0] == "terraform"]
+    assert tf_commands == ["init", "validate", "plan", "apply", "output"]
+
+    # The Helm step never goes through init/validate/plan at all - straight
+    # to one `helm upgrade` per namespace module.
+    helm_calls = [call for call in _capture if call[0] == "helm"]
+    assert len(helm_calls) == 1
+    module_dir = build_path / "apps" / "auth"
+    assert helm_calls[0] == [
+        "helm",
+        "upgrade",
+        "--install",
+        "--create-namespace",
+        "--wait",
+        "--atomic",
+        "--timeout",
+        "5m",
+        "--namespace",
+        "apps",
+        "-f",
+        str(module_dir / "values.yaml"),
+        "auth",
+        str(module_dir),
+    ]
+
+
+def test_deploy_run_filters_helm_steps_by_scope_like_terraform_steps(tmp_path: Path, _capture):
+    root = _helm_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    steps: list[str] = []
+    deploy_run(_context(root), "app", build_path, force=True, scope="apps", on_step=steps.append)
+
+    assert any("deploy_apps" in s for s in steps)
+    assert not any("apply_infra" in s for s in steps)
+    assert [call[0] for call in _capture] == ["helm"]
+
+
+def test_deploy_run_container_step_with_no_matching_namespace_target_errors(tmp_path: Path, _capture):
+    root = _helm_solution(tmp_path)
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  namespaces:\n    - apps\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "    - name: helm_main\n      tool: helm\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "      scope: infra\n"
+        "    - name: deploy_apps\n      provisioner: helm_main\n      targets:\n        - r1\n"
+        "      depends_on:\n        - apply_infra\n"
+        "      scope: apps\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert not diagnostics.ok
+    assert "names no namespace" in diagnostics.messages()[0]
+
+
+def _compose_solution(tmp_path: Path) -> Path:
+    """Same shape as `_helm_solution()`, but `tool: compose` - proves the
+    orchestrator's container-capability branch is genuinely tool-agnostic
+    (docs/_gap_v1.md gap #13), not accidentally Helm-specific."""
+    root = _terraform_solution(tmp_path)
+    _write(root, "services/portainer/.keep", "")
+    _write(
+        root,
+        "module.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: module\nmeta:\n  name: portainer\nspec:\n"
+        "  source:\n    source_path: services/portainer\n  type: compose\n"
+        "  default_labels:\n    app: portainer\n"
+        "  services:\n    - name: portainer\n      image: portainer/portainer-ce\n",
+    )
+    _write(
+        root,
+        "namespace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: namespace\nmeta:\n  name: apps\nspec:\n"
+        "  default_labels:\n    app: apps\n"
+        "  modules:\n    - name: mgmt\n      module: portainer\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  namespaces:\n    - apps\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "    - name: compose_main\n      tool: compose\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "      scope: infra\n"
+        "    - name: deploy_apps\n      provisioner: compose_main\n      targets:\n        - apps\n"
+        "      scope: apps\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    return root
+
+
+def test_deploy_run_dispatches_compose_step_to_deploy_namespace(tmp_path: Path, _capture):
+    root = _compose_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+
+    # Terraform step ran its normal lifecycle, unchanged.
+    tf_commands = [call[1] for call in _capture if call[0] == "terraform"]
+    assert tf_commands == ["init", "validate", "plan", "apply", "output"]
+
+    # The Compose step never goes through init/validate/plan at all -
+    # straight to one `docker stack deploy` for the whole namespace.
+    docker_calls = [call for call in _capture if call[0] == "docker"]
+    assert len(docker_calls) == 1
+    compose_file = build_path / "apps" / "docker-compose.yml"
+    assert docker_calls[0] == [
+        "docker",
+        "stack",
+        "deploy",
+        "--with-registry-auth",
+        "-c",
+        str(compose_file),
+        "apps",
+    ]
+
+
+def test_deploy_run_does_not_leak_tf_var_env_into_container_capable_steps(tmp_path: Path):
+    """docs/_gap_v1.md: Helm/Compose declare no `ENV_VAR_PREFIX` (base
+    default `None`) - `tf_var_env()` now returns `{}` for them, so a
+    container-capable step's own subprocess never receives TF_VAR_-
+    prefixed secrets meant for Terraform."""
+    root = _helm_solution(tmp_path)
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  secrets:\n    - key: db_password\n      store: constant\n      value: hunter2\n",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    calls: list[tuple[str, dict[str, str] | None]] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        calls.append((args[0], env))
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+        monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+        diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok
+    terraform_env = next(env for command, env in calls if command == "terraform")
+    assert terraform_env is not None and terraform_env.get("TF_VAR_db_password") == "hunter2"
+    helm_env = next(env for command, env in calls if command == "helm")
+    assert not helm_env

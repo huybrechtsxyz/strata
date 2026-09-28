@@ -31,7 +31,7 @@ from urllib.parse import urlencode
 
 from strata.integrations.capabilities import StoreIntegration
 from strata.integrations.errors import ValueResolutionError
-from strata.models.integration_model import IntegrationModel
+from strata.models.integration_model import Capability, IntegrationModel
 from strata.utils.transport import NO_RESPONSE, http_request
 
 _DEFAULT_ADDR = "https://app.infisical.com"
@@ -43,7 +43,7 @@ class InfisicalResolver(StoreIntegration):
     """Resolves Infisical-backed variable/secret values, by key."""
 
     TYPE = "infisical"
-    CAPABILITIES = frozenset({"variables", "secrets"})
+    CAPABILITIES = frozenset({Capability.VARIABLES, Capability.SECRETS})
     TRANSPORTS = frozenset({"http"})
 
     def __init__(self, config: IntegrationModel | None = None) -> None:
@@ -74,8 +74,7 @@ class InfisicalResolver(StoreIntegration):
             return self._token
         if not (self._client_id and self._client_secret):
             raise ValueResolutionError(
-                "Infisical: not authenticated. Set INFISICAL_TOKEN, or "
-                "INFISICAL_CLIENT_ID + INFISICAL_CLIENT_SECRET."
+                "Infisical: not authenticated. Set INFISICAL_TOKEN, or INFISICAL_CLIENT_ID + INFISICAL_CLIENT_SECRET."
             )
         payload = json.dumps({"clientId": self._client_id, "clientSecret": self._client_secret}).encode("utf-8")
         result = http_request(

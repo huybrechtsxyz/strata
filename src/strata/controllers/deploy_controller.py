@@ -37,29 +37,61 @@ from strata.controllers.value_controller import (
     resolve_tenant,
     resolve_values,
 )
+from strata.controllers.workload_controller import resolve_namespace_modules
 from strata.integrations.capabilities import InfraIntegration
 from strata.integrations.resolved_context import ValueResolution
+from strata.integrations.terraform_projection import (
+    build_configuration_payloads,
+    build_dns_networks_firewalls_payloads,
+)
 from strata.models.common_models import PlatformKind
+from strata.models.integration_model import Capability
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel
+from strata.models.solution_model import SolutionRemoteModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError
-from strata.utils.value_tokens import resolve_value_tokens_in_mapping
+from strata.utils.value_tokens import extract_value_tokens, resolve_value_tokens_in_mapping
 
 
-def tf_var_env(resolved: ValueResolution) -> dict[str, str]:
-    """Map every resolved value to its `TF_VAR_<key>` env-var form —
-    haven's own confirmed convention: "the terraform deployer
-    auto-injects each resolved secret as `TF_VAR_<key>`... no manual
-    `TF_VAR_*` wiring needed" (docs/design/deploy-command.md's "Real
-    evidence"). Applied uniformly to every step regardless of tool —
-    Compose/Helm integrations simply never read these extra env vars,
-    and `transport.run_command()`'s `env` kwarg already merges rather
-    than replaces the process environment, so cloud-auth vars the
-    workflow set (Azure OIDC, `TF_TOKEN_*`) survive untouched.
+def _contains_output_token(node: object) -> bool:
+    """True if `node` (a raw dns/networks/firewalls payload, or any nested
+    piece of one) contains a well-formed `${output:...}` token anywhere.
+
+    Used to flag a DNS/network/firewall document that needs an owning step
+    (docs/_gap_v1.md gap #12) but has none — `${var:}`/`${secret:}` tokens
+    don't need this check, they resolve identically for every step
+    regardless of ownership.
     """
-    return {f"TF_VAR_{key}": value for key, value in resolved.values.items()}
+    if isinstance(node, str):
+        return any(kind == "output" for kind, _ in extract_value_tokens(node))
+    if isinstance(node, dict):
+        return any(_contains_output_token(v) for v in node.values())
+    if isinstance(node, list):
+        return any(_contains_output_token(v) for v in node)
+    return False
+
+
+def tf_var_env(resolved: ValueResolution, prefix: str | None) -> dict[str, str]:
+    """Map every resolved value to its `<prefix><key>` env-var form —
+    haven's own confirmed convention for Terraform specifically: "the
+    terraform deployer auto-injects each resolved secret as `TF_VAR_<key>`
+    ... no manual `TF_VAR_*` wiring needed" (docs/design/deploy-command.md's
+    "Real evidence").
+
+    `prefix` is the resolved step's own `integration.ENV_VAR_PREFIX`, never
+    a hardcoded literal here — this function has no opinion on which tool
+    it's for, only whether that tool declares an env-var-prefix delivery
+    mechanism at all (see `Integration.ENV_VAR_PREFIX`'s own docstring for
+    why Helm/Compose can't just use a different, empty prefix). Returns
+    `{}` when `prefix` is `None` — this whole mechanism has nothing to
+    deliver for such a tool; a container-capable step's `deploy_namespace()`
+    gets its own tokens/secrets through entirely separate kwargs instead.
+    """
+    if prefix is None:
+        return {}
+    return {f"{prefix}{key}": value for key, value in resolved.values.items()}
 
 
 def collect_step_outputs(integration: InfraIntegration, path: Path, env: Mapping[str, str]) -> dict[str, str]:
@@ -192,8 +224,7 @@ def deploy_run(
     workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
     if workspace_entry is None:
         raise UsageError(
-            f"Deployment '{deployment_name}' names workspace '{deployment.spec.workspace}', "
-            "which is not in the index."
+            f"Deployment '{deployment_name}' names workspace '{deployment.spec.workspace}', which is not in the index."
         )
     workspace = cast(WorkspaceModel, workspace_entry.model)
 
@@ -214,7 +245,9 @@ def deploy_run(
     # (`build_value_references()`'s deliberate restriction) but is never read
     # here — only `.key` membership matters; the real value always comes
     # from `resolved.values` (full resolution, secrets included).
-    variable_refs, feature_refs, secret_refs = build_value_references(environments, context=context, deployment=deployment)
+    variable_refs, feature_refs, secret_refs = build_value_references(
+        environments, context=context, deployment=deployment
+    )
     properties = merge_workspace_environment_deployment_properties(workspace, environments, deployment, "properties")
     custom = merge_workspace_environment_deployment_properties(workspace, environments, deployment, "custom")
     tenant = resolve_tenant(context, deployment)
@@ -229,7 +262,96 @@ def deploy_run(
         tenant=tenant,
     )
 
-    steps = ordered_by_depends_on(workspace.spec.execution or [])
+    # Raw (unresolved) snapshot, built once per run — workspace-wide, not
+    # per-step data (matches `build_platform_projection()`'s own dns/
+    # networks/firewalls categories exactly). Re-resolved per step below
+    # using that step's own `tokens` (mirrors `backend.configuration`'s
+    # existing per-step pattern). A `${output:...}` token needs an owning
+    # step to scope which step's outputs apply — see the ownership/claiming
+    # logic right below (docs/_gap_v1.md gap #12) — `${var:}`/`${secret:}`
+    # tokens need no such owner and resolve identically for every step.
+    #
+    # Why built once here but `backend_config` is built per step inside the
+    # loop below: `backend_config` genuinely is per-step data (each step's
+    # `provisioner.backend.configuration` is a different field on a
+    # different provisioner). `dns`/`networks`/`firewalls` come from
+    # `workspace.spec.dns_zones`/`.networks`/`.firewalls` instead — the same
+    # three payloads for every step, no per-step variant exists — so only
+    # the *resolution* (which needs the per-step `tokens`) happens in the
+    # loop; building the raw payload does not, since recomputing identical
+    # data every iteration would be pure waste.
+    #
+    # Why three separate dict entries instead of one merged payload: this
+    # mirrors Terraform's own variable convention, not an arbitrary choice.
+    # `terraform_projection.py`'s `planned_files()` already writes one
+    # `*.auto.tfvars.json` file per category at build time, because each is
+    # Terraform's own natural `variable "dns" {}`/`variable "networks" {}`/
+    # `variable "firewalls" {}` unit — `TF_VAR_<name>` has to match that
+    # per-variable convention 1:1 (`TF_VAR_dns`/`TF_VAR_networks`/
+    # `TF_VAR_firewalls`), so a merged blob under one name wouldn't be
+    # readable by any of them.
+    dns_networks_firewalls = build_dns_networks_firewalls_payloads(graph)
+
+    # Five more Value-token-bearing categories (docs/_gap_v1.md gap #8's
+    # Terraform-side refinement, docs/design/value-token-resolution.md's
+    # "Full Solution" Phase 6) — broadcast only, unlike the three above:
+    # `resx_<type>`/`topologies`/`properties`/`custom`/`tenant` are either
+    # workspace/deployment-wide singletons (no name to claim by) or grouped
+    # by type/topology name (addressable, but nothing evidences a real need
+    # for per-name ownership yet, gap #12-style) — so `${output:...}` is
+    # rejected outright for all five (checked once, right below) rather
+    # than given a claiming mechanism.
+    configuration_payloads = build_configuration_payloads(graph)
+
+    # Same lookup `build_workload_modules()` uses at build time (docs/_gap_v1.md
+    # gap #13) — `HelmIntegration.deploy_namespace()` needs it to resolve a
+    # chart-based module's `chartRemote` name into a real registry URL.
+    solution = context.controller.solution
+    remotes: dict[str, SolutionRemoteModel] = (
+        {remote.name: remote for remote in (solution.spec.remotes or [])} if solution is not None else {}
+    )
+
+    all_steps = workspace.spec.execution or []
+
+    # Ownership (docs/_gap_v1.md gap #12): a document is "claimed" once any
+    # step's `targets` names it (`workspace_model.py`'s `validate_execution()`
+    # accepts dns/network/firewall names there since 2026-09-28, reusing
+    # `validate_provisioning_steps()`'s existing shared-target ordering rule
+    # for two steps that both claim one). An unclaimed document still
+    # broadcasts to every step for `${var:}`/`${secret:}` (unchanged, Phase 2
+    # behaviour) — only `${output:...}` needs an owner, since that's the
+    # only per-step-varying data a dns/network/firewall document could ever
+    # reference.
+    claimed_by_category: dict[str, set[str]] = {category: set() for category in dns_networks_firewalls}
+    for step in all_steps:
+        for category, docs in dns_networks_firewalls.items():
+            claimed_by_category[category] |= set(step.targets) & docs.keys()
+
+    for category, docs in dns_networks_firewalls.items():
+        for name, payload in docs.items():
+            if name not in claimed_by_category[category] and _contains_output_token(payload):
+                diagnostics.error(
+                    f"'{name}' uses '${{output:...}}' but no execution step's 'targets' names "
+                    f"this document — add it to the step that should apply it (docs/_gap_v1.md gap #12).",
+                    location=name,
+                )
+
+    # None of Phase 6's five broadcast categories may ever contain
+    # `${output:...}` — there is no per-step-varying data they could
+    # meaningfully reference (no claiming mechanism exists for a
+    # workspace-wide singleton or a type-grouped category, unlike
+    # dns/networks/firewalls above).
+    for name, payload in configuration_payloads.items():
+        if _contains_output_token(payload):
+            diagnostics.error(
+                f"'{name}' uses '${{output:...}}', which is not supported outside dns/networks/firewalls "
+                "(docs/_gap_v1.md gap #8) — remove it or move the value into a dns/network/firewall document instead.",
+                location=name,
+            )
+    if not diagnostics.ok:
+        return diagnostics
+
+    steps = ordered_by_depends_on(all_steps)
     if stage is not None:
         steps = [s for s in steps if s.name == stage]
     if scope is not None:
@@ -258,7 +380,6 @@ def deploy_run(
     if not diagnostics.ok:
         return diagnostics
 
-    all_steps = workspace.spec.execution or []
     upstream_by_step = {s.name: _upstream_step_names(s.name, all_steps) for s in all_steps}
     step_outputs: dict[str, dict[str, str]] = {}
 
@@ -287,7 +408,7 @@ def deploy_run(
             _step(f"would deploy step '{step.name}' via {integration_type}")
             continue
 
-        env = tf_var_env(resolved)
+        env = tf_var_env(resolved, integration.ENV_VAR_PREFIX)
 
         upstream = upstream_by_step.get(step.name, set())
         visible_outputs = {
@@ -296,12 +417,87 @@ def deploy_run(
             if upstream_step in upstream
             for key, value in outputs.items()
         }
+        tokens = {**resolved.values, **visible_outputs}
+
+        # Helm/Compose dispatch (docs/_gap_v1.md gap #13): a
+        # container-capable step never goes through Terraform's
+        # init/validate/plan/deploy sequence at all — it deploys every
+        # namespace its own `targets` names instead, one `deploy_namespace()`
+        # call per namespace, filtered to this integration's own module
+        # `TYPE` (mirrors v1's real `DeployerFactory.resolve_type()`: the
+        # step's own provisioner picks the tool, never inferred from
+        # namespace linkage — see docs/design/deploy-command.md's
+        # "Superseded" section for the two earlier, wrong drafts).
+        if Capability.CONTAINER in integration.CAPABILITIES:
+            namespaces_targeted = [graph.namespaces[name] for name in step.targets if name in graph.namespaces]
+            if not namespaces_targeted:
+                diagnostics.error(
+                    f"Step '{step.name}': provisioner '{provisioner.name}' ({integration_type}) is "
+                    "container-capable but 'targets' names no namespace.",
+                    location=step.name,
+                )
+                return diagnostics
+            for namespace in namespaces_targeted:
+                by_type = resolve_namespace_modules(index, namespace, build_path)
+                modules = by_type.get(integration.TYPE, [])
+                if not modules:
+                    continue
+                diagnostics.extend(
+                    integration.deploy_namespace(
+                        namespace, modules, tokens=tokens, dry_run=dry_run, remotes=remotes, env=env
+                    )
+                )
+            if not diagnostics.ok:
+                return diagnostics
+            _step(f"deployed step '{step.name}' via {integration_type}")
+            continue
 
         backend_config: dict[str, str] = {}
         if provisioner.backend is not None:
-            tokens = {**resolved.values, **visible_outputs}
             resolved_config = resolve_value_tokens_in_mapping(provisioner.backend.configuration, tokens)
             backend_config = {k: str(v) for k, v in resolved_config.items()}
+
+        # Terraform delivery for dns/networks/firewalls (docs/_gap_v1.md gap
+        # #9/#12, docs/design/value-token-resolution.md's "Full Solution"
+        # Phase 2) and Phase 6's five broadcast categories (gap #8): the
+        # whole resolved payload as one JSON-encoded env var per category,
+        # same never-touches-disk pattern `backend.configuration` already
+        # has (`terraform_projection.py`'s own `*.auto.tfvars.json` written
+        # by `build run` is never rewritten). Named via `integration.
+        # ENV_VAR_PREFIX`, never a hardcoded `"TF_VAR_"` literal — `None`
+        # for a tool with no such mechanism (see that attribute's own
+        # docstring); this whole block is then correctly a no-op for it,
+        # rather than injecting a meaningless `"NoneD ns"`-shaped env var.
+        # A document claimed by some step's `targets` (gap #12) is
+        # delivered only to its owning step(s) — resolved using that step's
+        # own `tokens`, so `${output:}` sees exactly that step's
+        # dependency-scoped outputs, never another step's. An unclaimed
+        # document still broadcasts to every step (Phase 2's original,
+        # unchanged behaviour — the pre-flight check above already
+        # guarantees it has no `${output:}` token to be wrong about).
+        # Empty categories are skipped, matching `planned_files()`'s own
+        # convention.
+        if integration.ENV_VAR_PREFIX is not None:
+            for category, docs in dns_networks_firewalls.items():
+                docs_for_step = {
+                    name: payload
+                    for name, payload in docs.items()
+                    if name in step.targets or name not in claimed_by_category[category]
+                }
+                if not docs_for_step:
+                    continue
+                resolved_payload = resolve_value_tokens_in_mapping(docs_for_step, tokens)
+                env[f"{integration.ENV_VAR_PREFIX}{category}"] = json.dumps(resolved_payload)
+
+            # Phase 6's five broadcast categories (gap #8) — identical for
+            # every step (no ownership to vary by, and no `${output:...}`
+            # can be present, guaranteed by the pre-flight check above), so
+            # this is pure repetition of the same resolution per step, same
+            # as an unclaimed dns/network/firewall document already does
+            # above.
+            for name, payload in configuration_payloads.items():
+                resolved_payload = resolve_value_tokens_in_mapping(payload, tokens)
+                env[f"{integration.ENV_VAR_PREFIX}{name}"] = json.dumps(resolved_payload)
 
         if provisioner.output and provisioner.output.template:
             template_path = context.root / provisioner.output.template

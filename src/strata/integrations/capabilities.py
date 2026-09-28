@@ -19,8 +19,10 @@ from typing import Any
 from strata.integrations.base import Integration
 from strata.integrations.errors import IntegrationError
 from strata.integrations.resolved_context import ResolvedModule, ResolvedWorkspaceGraph, ValueResolution
+from strata.models.integration_model import Capability
 from strata.models.namespace_model import NamespaceModel
 from strata.models.provisioning_model import ProvisionerModel
+from strata.utils.diagnostics import Diagnostics
 from strata.utils.templater import render_template, validate_template_references
 from strata.utils.transport import CommandResult
 
@@ -96,9 +98,7 @@ class InfraIntegration(Integration):
             }
             errors = validate_template_references(template_path.read_text(), known_names)
             if errors:
-                raise IntegrationError(
-                    f"output.template '{provisioner.output.template}': " + "; ".join(errors)
-                )
+                raise IntegrationError(f"output.template '{provisioner.output.template}': " + "; ".join(errors))
             return path
 
         for filename, content in self.default_output(resolved, provisioner, graph).items():
@@ -212,6 +212,53 @@ class InfraIntegration(Integration):
         del namespace, modules, resolved
         raise IntegrationError(f"{self.name} does not support namespace-scoped module rendering (prepare_namespace).")
 
+    def deploy_namespace(
+        self,
+        namespace: NamespaceModel,
+        modules: list[ResolvedModule],
+        *,
+        tokens: dict[str, str],
+        dry_run: bool,
+        env: dict[str, str] | None = None,
+        **kwargs: Any,
+    ) -> Diagnostics:
+        """Deploy every module in `modules` — all attached to `namespace`,
+        all sharing one `module.spec.type` (docs/_gap_v1.md gap #13).
+
+        The deploy-time counterpart to `prepare_namespace()`, one level
+        later in the pipeline — same split, same not-abstract/raise-by-
+        default shape (`TerraformIntegration` never implements this either,
+        the same reason it never implements `prepare_namespace()`: it never
+        goes through the namespace/module pipeline at all).
+
+        Callers pass an already type-homogeneous `modules` list (filtered
+        by the caller to this integration's own `TYPE`, mirroring v1's real
+        `HelmDeployer.validate_workspace()`'s own `if module.spec.type !=
+        HELM: continue` filter) — this method does not re-filter.
+
+        Args:
+            namespace: The namespace every module in `modules` is attached to.
+            modules: Every module of this integration's own type in `namespace`.
+            tokens: Fully-resolved `${var:}`/`${secret:}`/`${feature:}`/
+                `${output:}` values (`resolved.values` merged with this
+                step's dependency-scoped outputs) — same shape
+                `deploy_run()`'s existing `tokens` dict already has.
+            dry_run: Report what would happen without touching disk or
+                running any command.
+            env: Extra environment variables for the underlying command
+                (matches every other `InfraIntegration` method's `env` kwarg).
+
+        Returns:
+            One error per module that failed to deploy — never raises for
+            a single module's failure, so the rest of `modules` still runs.
+
+        Raises:
+            IntegrationError: This integration does not support
+                namespace-scoped module deployment.
+        """
+        del namespace, modules, tokens, dry_run, env, kwargs
+        raise IntegrationError(f"{self.name} does not support namespace-scoped module deployment (deploy_namespace).")
+
     @abstractmethod
     def plan(self, path: Path, **kwargs: Any) -> CommandResult:
         """Preview the change `path`'s code would make, without applying it."""
@@ -225,16 +272,23 @@ class InfraIntegration(Integration):
         """Tear down what `path`'s code previously created."""
 
 
-#: Capability string -> the ABC a class declaring it must implement.
-#: `"sources"` has no entry yet — remote fetching is not built (ADR-0021
-#: D9); a capability with no entry here is declarable but not dispatchable,
-#: which `find_capability_mismatches` treats as compliant, not an error.
+#: Capability -> the ABC a class declaring it must implement. Keyed by
+#: `str`, not `Capability`, even though every key is a `Capability` member
+#: (`Capability <: str`, so this stays assignable) — `find_capability_
+#: mismatches()` below looks up an `Integration.CAPABILITIES` entry, which
+#: stays `frozenset[str]` (it must also accept `x-`-prefixed extensions
+#: with no enum member), so a `dict[Capability, ...]` key type would reject
+#: a plain-`str` lookup under strict mypy.
+#: `Capability.SOURCES` has no entry yet — remote fetching is not built
+#: (ADR-0021 D9); a capability with no entry here is declarable but not
+#: dispatchable, which `find_capability_mismatches` treats as compliant,
+#: not an error.
 CAPABILITY_ABCS: dict[str, type[Integration]] = {
-    "variables": StoreIntegration,
-    "secrets": StoreIntegration,
-    "features": StoreIntegration,
-    "infrastructure": InfraIntegration,
-    "container": InfraIntegration,
+    Capability.VARIABLES: StoreIntegration,
+    Capability.SECRETS: StoreIntegration,
+    Capability.FEATURES: StoreIntegration,
+    Capability.INFRASTRUCTURE: InfraIntegration,
+    Capability.CONTAINER: InfraIntegration,
 }
 
 
@@ -260,5 +314,7 @@ def find_capability_mismatches(integration_cls: type[Integration]) -> list[str]:
     for capability in integration_cls.CAPABILITIES:
         abc = CAPABILITY_ABCS.get(capability)
         if abc is not None and not issubclass(integration_cls, abc):
-            mismatches.append(f"{integration_cls.__name__} declares '{capability}' but does not implement {abc.__name__}")
+            mismatches.append(
+                f"{integration_cls.__name__} declares '{capability}' but does not implement {abc.__name__}"
+            )
     return mismatches
