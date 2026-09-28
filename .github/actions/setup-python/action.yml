@@ -1,0 +1,31 @@
+# ===============================================================================
+# Action Name  : setup-python
+# Description  : Install Python, uv, and sync project dependencies from the
+#                local repo. Required before any strata dev/CI action.
+# ===============================================================================
+
+name: "Setup Python"
+description: "Install Python, uv, and sync project dependencies (uv sync --frozen)."
+
+inputs:
+  python-version:
+    description: "Python version to install."
+    required: false
+    default: "3.13"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python ${{ inputs.python-version }}
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v8.1.0
+      with:
+        enable-cache: true
+
+    - name: Sync dependencies
+      shell: bash
+      run: uv sync

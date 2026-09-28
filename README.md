@@ -57,12 +57,11 @@ strata-v2/
 ### Setup Development Environment
 
 ```powershell
-# Create and activate virtual environment
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+# Install dependencies (uv creates and manages ./.venv automatically)
+uv sync
 
-# Install dependencies
-pip install -e ".[dev]"
+# Activate the virtual environment
+.\.venv\Scripts\Activate.ps1
 
 # Run tests
 pytest

@@ -1,0 +1,49 @@
+# ===============================================================================
+# Script Name   : ci-pr-images.yml
+# Author        : Vincent Huybrechts
+# Version       : 1.0.0
+# Description   : PR preview images are rarely needed, so they are NOT built
+#                 automatically on every push — dispatch ci-image.yml from the
+#                 PR's branch on demand instead. This workflow only sweeps up
+#                 stray (non-release) CLI images from GHCR once the PR closes,
+#                 so an on-demand preview image never outlives its PR.
+# ===============================================================================
+
+name: "CI PR Images"
+
+permissions:
+  contents: read
+  packages: write # delete images in GHCR
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job: Delete stray CLI PR preview image from GHCR on PR close
+  # ---------------------------------------------------------------------------
+  cleanup-ghcr-cli:
+    name: Cleanup — delete CLI PR image (GHCR)
+    runs-on: ubuntu-latest
+    continue-on-error: true # GitHub blocks deletion of packages with 5000+ downloads
+
+    steps:
+      - name: Delete CLI PR image versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: strata
+          package-type: container
+          token: ${{ secrets.GITHUB_TOKEN }}
+          delete-only-untagged-versions: false
+          ignore-versions: "^(latest|edge|\\d+\\.\\d+(\\.\\d+)?)$"
+          min-versions-to-keep: 0

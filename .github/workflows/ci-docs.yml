@@ -1,0 +1,35 @@
+name: Build & Deploy Docs
+
+on:
+  push:
+    tags:
+      - "v*" # triggers only on release tags like v0.8.0
+  workflow_dispatch: # allows manual trigger from GitHub Actions UI
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Build docs with Sphinx
+        run: |
+          uv sync --group doc
+          uv run sphinx-build -b html docs docs/_build/html -q
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs/_build/html

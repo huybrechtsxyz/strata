@@ -21,15 +21,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=7.0",
-    "pytest-cov>=4.0",
-    "mypy>=1.0",
-    "ruff>=0.1.0",
-    "import-linter>=2.0",
-    "types-PyYAML",
-    "types-requests",
-]
 otel = [
     "opentelemetry-sdk>=1.24",
     "opentelemetry-exporter-otlp-proto-http>=1.24",
@@ -43,6 +34,19 @@ docs = [
     "sphinx-copybutton",
     "sphinx-rtd-theme",
     "myst_parser",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "mypy>=1.0",
+    "ruff>=0.1.0",
+    "import-linter>=2.0",
+    "yamllint",
+    "nox",
+    "types-PyYAML",
+    "types-requests",
 ]
 
 [project.scripts]

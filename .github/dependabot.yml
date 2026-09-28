@@ -1,0 +1,37 @@
+# ==============================================================================
+# Config Name   : Dependabot
+# File Name     : dependabot.yml
+# Description   : Dependabot configuration for automated dependency updates
+#
+# Author        : Vincent Huybrechts
+# Created       : 2026-05-07
+# Last Updated  : 2026-05-07
+# Version       : 1.0.0
+# ==============================================================================
+
+version: 2
+
+updates:
+  # GitHub Actions — workflows and composite actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(actions)"
+
+  # Python — pyproject.toml dependencies
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "chore(deps)"
