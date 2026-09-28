@@ -94,12 +94,12 @@ def test_resource_missing_required_field_is_invalid():
         ResourceModel.model_validate(data)
 
 
-def test_resource_missing_default_tags_is_invalid():
-    """default_tags is required — omitting it raises a ValidationError."""
+def test_resource_missing_default_tags_is_valid():
+    """default_tags is optional (gap #4, docs/_gap_v1.md) — omitting it validates successfully."""
     data = _minimal_resource()
     del data["spec"]["default_tags"]
-    with pytest.raises(ValidationError):
-        ResourceModel.model_validate(data)
+    model = ResourceModel.model_validate(data)
+    assert model.spec.default_tags is None
 
 
 def test_resource_custom_tags_is_valid():

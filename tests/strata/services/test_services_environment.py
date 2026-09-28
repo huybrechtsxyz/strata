@@ -79,6 +79,16 @@ def test_token_kind_is_checked_against_the_right_store():
     assert "spec.secrets" in result.messages()[0]
 
 
+def test_output_token_is_rejected_cleanly_not_a_crash():
+    """A '${output:}' token has no declared-keys set (gap #11, docs/_gap_v1.md) —
+    must produce a clean diagnostic, not an unhandled KeyError."""
+    result = _environment().validate_document_tokens(_dns("${output:provision-hearth.public_ip}"))
+    assert not result.ok
+    message = result.messages()[0]
+    assert "output" in message
+    assert "not supported" in message
+
+
 def test_literal_document_without_tokens_passes():
     """A document with no tokens has nothing to resolve."""
     result = _environment().validate_document_tokens(_dns("1.2.3.4"))
@@ -112,9 +122,7 @@ def test_tokens_are_found_in_deeply_nested_documents():
 
 def test_multiple_tokens_in_one_string_are_each_checked():
     """A composite string reports one error per unresolved token."""
-    result = _environment().validate_document_tokens(
-        _dns("${var:PUBLIC_IP}-${var:NOPE}-${secret:ALSO_NOPE}")
-    )
+    result = _environment().validate_document_tokens(_dns("${var:PUBLIC_IP}-${var:NOPE}-${secret:ALSO_NOPE}"))
     assert not result.ok
     assert len(result.errors) == 2
 
@@ -207,4 +215,3 @@ def test_non_artifact_variables_are_never_checked():
 def test_no_artifacts_declared_anywhere_still_reports_the_reference():
     result = _environment_with_artifact_variable().validate_artifact_references(set())
     assert not result.ok
-

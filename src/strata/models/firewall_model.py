@@ -167,10 +167,12 @@ class FirewallSpecModel(PlatformBaseModel):
     custom: dict[str, Any] | None = Field(
         None, description="Custom user-defined data for scripts or extensions (e.g. becomes env vars)"
     )
-    default_tags: dict[str, str] = Field(
-        description="Required baseline cloud provider tags for this firewall/NSG (e.g. cost-center, "
+    default_tags: dict[str, str] | None = Field(
+        None,
+        description="Baseline cloud provider tags for this firewall/NSG (e.g. cost-center, "
         "environment, owner). Deliberately distinct from meta.tags (a free-form list used for strata-internal "
-        "categorization/documentation, not cloud tags). Strata does not enforce a maximum tag count."
+        "categorization/documentation, not cloud tags). Optional (v1-derived documents commonly carry no "
+        "cloud tags at all — gap #4, docs/_gap_v1.md). Strata does not enforce a maximum tag count.",
     )
     custom_tags: dict[str, str] | None = Field(
         None, description="Optional additional cloud provider tags beyond default_tags."

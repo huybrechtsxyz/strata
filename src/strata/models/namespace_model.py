@@ -56,10 +56,12 @@ class NamespaceSpecModel(PlatformBaseModel):
     # a real Kubernetes Namespace object supports metadata.labels directly on itself (e.g. for
     # namespace selectors, network policies, istio-injection), distinct from the labels applied
     # to the individual Modules/workloads placed inside it.
-    default_labels: dict[str, str] = Field(
-        description="Required baseline labels applied to this namespace itself (Kubernetes "
+    default_labels: dict[str, str] | None = Field(
+        None,
+        description="Baseline labels applied to this namespace itself (Kubernetes "
         "metadata.labels on the generated Namespace object) — e.g. environment, team, "
-        "istio-injection. Strata does not enforce a maximum label count."
+        "istio-injection. Optional (v1-derived documents commonly carry no labels at all — gap #4, "
+        "docs/_gap_v1.md). Strata does not enforce a maximum label count.",
     )
     custom_labels: dict[str, str] | None = Field(
         None, description="Optional additional namespace labels beyond default_labels."

@@ -1,78 +1,29 @@
-# Strata v2
+# strata
 
-Infrastructure as Code Platform - Version 2.0
+You already have Terraform. The problem is you have eight environment folders: `dev`, `staging`, `prd`, `prd-eu`, `prd-us`, `dr`, `sandbox`, `perf` and they are 90% identical. Every change gets applied to one folder, forgotten in three others, and you only find out when production drifts. `strata` is a YAML layer over Terraform, Helm, and Compose that treats your environments as data, not copy-pasted folders. One source of truth, one command to validate it, one command to deploy it.
 
-## Project Structure
+**This is v2**. A ground-up, evidence-driven rebuild of strata: every feature here is justified by v1's real source or a real consumer's real CI, not by assumption. It's alpha, so schemas and the CLI surface are still moving. See [docs/design/v2-schema-overview.md](docs/design/v2-schema-overview.md) for what's actually implemented today.
 
-```
-strata-v2/
-├── .venv/                  # Python virtual environment
-├── src/
-│   ├── strata/
-│   │   ├── models/
-│   │   │   ├── __init__.py
-│   │   │   ├── common_models.py       # Base classes and enums
-│   │   │   ├── auth_models.py         # Authentication models
-│   │   │   └── provider_model.py      # Provider configuration model
-│   │   └── __init__.py
-│   └── tests/
-│       └── __init__.py
-├── pyproject.toml          # Project configuration
-└── README.md              # This file
-```
+---
 
-## Models Implemented
+## Why a YAML layer over Terraform/Helm/Compose
 
-### Core Models
+- **One document model, many provisioners.** Providers, resources, networks, modules, and namespaces are declared once as plain YAML and rendered into Terraform, Helm, or Compose, you don't hand-roll the same VM, network, or module three times per environment.
+- **Environments are data, not folders.** A deployment composes a workspace with an environment's variables/secrets and a tenant's defaults, promoting to a new environment is a small new YAML document, not a copy-pasted directory tree.
+- **Validate before you touch anything.** Every document is schema-checked and cross-referenced (unresolved variables, missing modules, dangling version pins) before anything is rendered or applied.
+- **Built to be scripted.** Structured JSON output and stable exit codes, so CI pipelines and AI agents can drive it without screen-scraping.
 
-1. **ProviderModel** - Root model for provider configuration
-   - metadata (name, annotations, labels, tags)
-   - specification (properties, authentication, references, lifecycle)
+## Status
 
-2. **ProviderPropertiesModel** - Provider configuration details
-   - type: Cloud/infrastructure provider (e.g., kamatera, local)
-   - region: Datacenter region
-   - location: Optional datacenter location
-   - organization: Optional organization/subscription
-   - version: Optional version constraint
+v2 is a rebuild, not a fork. [docs/decisions/](docs/decisions/) holds the full trail of architecture decision records (ADRs) behind it; [docs/design/](docs/design/) tracks living, current status per feature. See [.github/CHANGELOG.md](.github/CHANGELOG.md).
 
-3. **AuthenticationModel** - Multi-method authentication support
-   - OAuth2
-   - AWS (access key)
-   - GCP (service account)
-   - API Key
-   - Certificate/mTLS
-   - SAML
-   - CLI-based
-   - Managed Identity
+## Documentation
 
-4. **Common Models**
-   - PlatformBaseModel: Base for all models
-   - PlatformKind: Enum of supported kinds
-   - PlatformVersion: API version support
-   - CommonLifecycleModel: IaC workflow phases
+- [config/README.md](config/README.md): a real, working example solution used to dogfood the CLI end to end
+- [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md): dev environment setup and contribution workflow
+- [.github/CHANGELOG.md](.github/CHANGELOG.md) / [.github/HISTORY.md](.github/HISTORY.md): what's changed
 
-## Getting Started
+## License
 
-### Setup Development Environment
+GNU Affero General Public License v3.0. See [LICENSE](LICENSE).
 
-```powershell
-# Install dependencies (uv creates and manages ./.venv automatically)
-uv sync
-
-# Activate the virtual environment
-.\.venv\Scripts\Activate.ps1
-
-# Run tests
-pytest
-
-# Type checking
-mypy src/
-```
-
-## Development Notes
-
-- All models are Pydantic v2 based
-- Strict validation with extra field rejection
-- Type hints throughout
-- Support for key references (runtime resolution of env vars/secrets)

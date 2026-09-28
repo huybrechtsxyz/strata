@@ -8,3 +8,29 @@ strata-v2
    :caption: Getting Started:
 
    README
+   GLOSSARY
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Configuration Files:
+
+   config/readme
+   config/solution
+   config/configuration
+   config/provider
+   config/providerconfig
+   config/resource
+   config/network
+   config/firewall
+   config/dns
+   config/topology
+   config/topologyconfig
+   config/workspace
+   config/module
+   config/namespace
+   config/tenant
+   config/environment
+   config/deployment
+   config/version
+   config/artifact
+   config/integration

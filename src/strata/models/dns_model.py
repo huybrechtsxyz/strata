@@ -60,7 +60,9 @@ class DnsRecordModel(PlatformBaseModel):
     )
     ttl: int | None = Field(None, ge=1, description="Record-level TTL override in seconds (>=1 if set)")
     priority: int | None = Field(None, ge=1, le=65535, description="Priority for MX/SRV records (1-65535 if set)")
-    description: str | None = Field(None, min_length=1, description="Description of the DNS record, optionally for provider")
+    description: str | None = Field(
+        None, min_length=1, description="Description of the DNS record, optionally for provider"
+    )
     notes: str | None = Field(None, min_length=1, description="Additional notes for the DNS record, not for provider")
 
     @field_validator("value")
@@ -102,10 +104,12 @@ class DnsZoneModel(PlatformBaseModel):
     custom: dict[str, Any] | None = Field(
         None, description="Custom user-defined data for scripts or extensions (e.g. becomes env vars)"
     )
-    default_tags: dict[str, str] = Field(
-        description="Required baseline cloud provider tags for this zone (e.g. cost-center, environment, "
+    default_tags: dict[str, str] | None = Field(
+        None,
+        description="Baseline cloud provider tags for this zone (e.g. cost-center, environment, "
         "owner). Deliberately distinct from meta.tags (a free-form list used for strata-internal "
-        "categorization/documentation, not cloud tags). Strata does not enforce a maximum tag count."
+        "categorization/documentation, not cloud tags). Optional (v1-derived documents commonly carry no "
+        "cloud tags at all — gap #4, docs/_gap_v1.md). Strata does not enforce a maximum tag count.",
     )
     custom_tags: dict[str, str] | None = Field(
         None, description="Optional additional cloud provider tags beyond default_tags."

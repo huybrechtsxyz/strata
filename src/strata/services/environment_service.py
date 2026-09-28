@@ -126,6 +126,20 @@ def unresolved_value_tokens(model: PlatformBaseModel, declared: dict[str, set[st
     diagnostics = Diagnostics()
     for path, text in _iter_strings(model.model_dump(by_alias=True, mode="json")):
         for kind, key in extract_value_tokens(text):
+            if kind not in declared:
+                # `output` (and any future token kind) has no declared-keys set to check
+                # against here — an output key isn't declared anywhere, it's produced by a
+                # prior deploy step at runtime, which Phase 2 (schema + cross-document
+                # validation, no execution) has no visibility into. Flag it explicitly
+                # rather than crashing on `declared[kind]` (docs/_gap_v1.md gap #11) —
+                # `${output:}` is not yet wired into any of the fields this function
+                # checks (DNS/network/firewall/module), pending Context (ADR-0006).
+                diagnostics.error(
+                    f"'${{{kind}:{key}}}' tokens are not supported in this field yet (pending Context, ADR-0006).",
+                    location=path,
+                    code="unsupported_value_token_kind",
+                )
+                continue
             if key not in declared[kind]:
                 store = _STORE_BY_TOKEN_KIND[kind]
                 known = sorted(declared[kind])

@@ -288,10 +288,12 @@ class ModuleSpecModel(PlatformBaseModel):
     # Instead it gets default_labels/custom_labels — Kubernetes/Compose labels, not cloud tags,
     # since what Module actually produces (Pods/Deployments, or Compose services) speaks
     # labels, not ARM/AWS tags.
-    default_labels: dict[str, str] = Field(
-        description="Required baseline labels applied to this module's workload (e.g. Kubernetes "
+    default_labels: dict[str, str] | None = Field(
+        None,
+        description="Baseline labels applied to this module's workload (e.g. Kubernetes "
         "metadata.labels on generated Pods/Deployments, or Docker Compose service labels) — e.g. "
-        "app.kubernetes.io/name, environment. Strata does not enforce a maximum label count."
+        "app.kubernetes.io/name, environment. Optional (v1-derived documents commonly carry no labels at all "
+        "— gap #4, docs/_gap_v1.md). Strata does not enforce a maximum label count.",
     )
     custom_labels: dict[str, str] | None = Field(
         None, description="Optional additional workload labels beyond default_labels."
@@ -407,9 +409,7 @@ class ModuleSpecModel(PlatformBaseModel):
                             f"expected @module or @module/service."
                         )
                     elif svc_part is not None and not svc_part:
-                        errors.append(
-                            f"service '{service.name}': depends_on '{dep}' has empty service name after '/'."
-                        )
+                        errors.append(f"service '{service.name}': depends_on '{dep}' has empty service name after '/'.")
                 elif dep not in service_names:
                     errors.append(
                         f"service '{service.name}': depends_on '{dep}' is not a service defined in this "

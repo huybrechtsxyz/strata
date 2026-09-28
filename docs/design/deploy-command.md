@@ -114,7 +114,9 @@ while investigating what `deploy run` would need to call:
   `WorkspaceSpecModel.execution[].name`), `enabled` (bool or unevaluated
   string expression), `on_failure` (`stop`/`rollback`/`continue`),
   `timeouts`, `health_checks`, `scripts`, `secrets`, `namespace`,
-  `helm_namespaces`. **Missing: `scope`** (see Remaining Work below).
+  `helm_namespaces`. No `scope` here by design — it lives on
+  `ProvisioningStepModel` instead (workspace-owned, not deployment-owned;
+  see the flow below and `docs/_gap_v1.md`'s gap #6 for why).
 - **`ordered_by_depends_on()`** (`build_controller.py`) — topological
   sort over `workspace.spec.execution`, already reused as-is by
   `build_run()`; `deploy run`'s orchestrator needs the identical
