@@ -87,10 +87,10 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup YQ
-        uses: huybrechtsxyz/strata/.github/actions/setup-yq@v1
+        uses: huybrechtsxyz/strata/.github/actions/setup-yq@v2
 
       - name: Setup Strata
-        uses: huybrechtsxyz/strata/.github/actions/setup-strata@v1
+        uses: huybrechtsxyz/strata/.github/actions/setup-strata@v2
         with:
           python-version: "3.13"
 
@@ -121,7 +121,7 @@ jobs:
       # ----------------------------------------------------------------
       - name: Azure Login
         if: inputs.run_plan || inputs.deep_validation
-        uses: huybrechtsxyz/strata/.github/actions/azure-login@v1
+        uses: huybrechtsxyz/strata/.github/actions/azure-login@v2
         with:
           azure_tenant_id: ${{ inputs.azure_tenant_id }}
           azure_subscription_id: ${{ inputs.azure_subscription_id }}
