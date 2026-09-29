@@ -155,8 +155,13 @@ class SolutionRemoteModel(PlatformBaseModel):
         None,
         min_length=1,
         description="Ref every artifact from this remote is taken at (git branch/tag/commit SHA, or OCI "
-        "tag/digest). Required for git/oci. Deliberately the ONLY place a ref is declared — there is no "
-        "per-use-site override, so one remote resolves to exactly one tree per solution.",
+        "tag/digest). Required for git remotes always. For OCI, required only when the remote serves "
+        "non-chart artifacts (a real image/blob pinned at one immutable digest) — optional when every "
+        "consumer is a chart-based SourceModel, since a chart index legitimately serves many versions and "
+        "the real pin is SourceModel.chart_version instead. Whether an OCI remote is chart-serving needs "
+        "the loaded solution's SourceModel usages, so that half of the rule is a Phase 2 check "
+        "(docs/design/solution-loading-and-phase2-validation.md, gap #3) — this field is merely optional "
+        "here, and schema-valid to omit even for a non-chart OCI remote until Phase 2 sees a real consumer.",
     )
     fetch: RemoteFetch = Field(
         default=RemoteFetch.STRATA,
@@ -174,21 +179,23 @@ class SolutionRemoteModel(PlatformBaseModel):
 
     @model_validator(mode="after")
     def validate_reference_for_type(self) -> "SolutionRemoteModel":
-        """`reference` is required for git/oci and meaningless for helm/local.
+        """`reference` is required for git always; OCI's requirement is mode-dependent (Phase 2, gap #3).
 
-        A git/oci remote at a ref IS one immutable tree, so the ref is part of
-        its identity. A helm remote is an index serving many (chart, version)
-        pairs — the version is a per-chart *selection*
-        (`SourceModel.chart_version`), not remote identity. A local remote is
-        whatever is on disk.
+        A git remote at a ref IS one immutable tree, so the ref is part of
+        its identity — checked here, unconditionally. An OCI remote is the
+        same *if* it serves a real image/artifact, but not if it serves a
+        Helm chart index (many versions, no single ref) — telling those
+        apart needs the loaded solution's SourceModel usages, so that half
+        is deferred to a Phase 2 check rather than guessed here. A helm
+        remote is always an index serving many (chart, version) pairs — the
+        version is a per-chart *selection* (`SourceModel.chart_version`),
+        not remote identity. A local remote is whatever is on disk.
         """
-        if self.type in (RemoteType.GIT, RemoteType.OCI):
-            if self.reference is None:
-                raise ValueError(
-                    f"Remote '{self.name}': 'reference' is required for type '{self.type.value}' "
-                    "(pin a branch, tag, commit SHA or digest)."
-                )
-        elif self.reference is not None:
+        if self.type is RemoteType.GIT and self.reference is None:
+            raise ValueError(
+                f"Remote '{self.name}': 'reference' is required for type 'git' (pin a branch, tag, or commit SHA)."
+            )
+        if self.type in (RemoteType.HELM, RemoteType.LOCAL) and self.reference is not None:
             raise ValueError(
                 f"Remote '{self.name}': 'reference' is not valid for type '{self.type.value}'. "
                 "Chart versions are selected per-use via SourceModel.chart_version."

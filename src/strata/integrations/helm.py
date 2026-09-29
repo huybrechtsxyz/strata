@@ -407,13 +407,16 @@ def _render_meta(namespace: NamespaceModel, item: ResolvedModule) -> dict[str, A
     attachment (the reference name) is the only safe default; `module.meta.name`
     is not, and would silently collide if that ever happens.
 
-    Chart coordinates (`chartName`/`chartVersion`/`chartRemote`) are
-    included only for a chart-based `source` (`chart_name` set) — a
-    registry chart has no local copy for a deploy-time `helm upgrade` to
-    reference by path, so `meta.yaml` must carry enough for the deployer to
-    pull it directly instead (mirrors v1's real "self-contained build
-    artifact" reasoning). Omitted for a git-based (local chart) `source`,
-    where `item.source_path` itself is the chart to deploy.
+    Chart coordinates (`chartName`/`chartVersion`/`chartRemote`/
+    `chartRepository`) are included only for a chart-based `source`
+    (`chart_name` set) — a registry chart has no local copy for a
+    deploy-time `helm upgrade` to reference by path, so `meta.yaml` must
+    carry enough for the deployer to pull it directly instead (mirrors
+    v1's real "self-contained build artifact" reasoning). Omitted for a
+    git-based (local chart) `source`, where `item.source_path` itself is
+    the chart to deploy. `chartRemote`/`chartRepository` are mutually
+    exclusive on `SourceModel` (docs/_gap_v1.md gap #2's Option 1) — at
+    most one is ever written.
     """
     module = item.module
     meta: dict[str, Any] = {
@@ -428,6 +431,8 @@ def _render_meta(namespace: NamespaceModel, item: ResolvedModule) -> dict[str, A
             meta["chartVersion"] = source.chart_version
         if source.remote is not None:
             meta["chartRemote"] = source.remote
+        elif source.chart_repository is not None:
+            meta["chartRepository"] = source.chart_repository
 
     return meta
 
@@ -480,6 +485,27 @@ def _set_string_args(set_string: "Sequence[tuple[str, str]] | None") -> list[str
     return args
 
 
+def _chart_ref_from_url(
+    integration: "HelmIntegration", url: str, chart_name: str, *, is_oci: bool, env: dict[str, str] | None
+) -> str:
+    """Build the real `helm upgrade` chart argument from a resolved registry
+    URL — shared by both `chartRemote` (a `SolutionRemoteModel` lookup) and
+    `chartRepository` (an inline URL, docs/_gap_v1.md gap #2's Option 1)
+    resolution paths, which differ only in *where* the URL and OCI-ness
+    come from, never in what happens once both are known.
+
+    No `helm repo add` needed for an OCI registry — Helm resolves `oci://`
+    refs natively. Otherwise, register a repo alias first (`helm repo add
+    <alias> <url>`, ignoring failure — may already be registered, matches
+    v1's own "best effort" comment).
+    """
+    if is_oci:
+        return f"{url.rstrip('/')}/{chart_name}"
+    alias = _sanitize_repo_name(url)
+    integration.run("repo", "add", alias, url, env=env, timeout=60)
+    return f"{alias}/{chart_name}"
+
+
 def _resolve_chart(
     integration: "HelmIntegration",
     meta: dict[str, Any],
@@ -495,37 +521,48 @@ def _resolve_chart(
     before this function is even reached in that case — this function is
     only called when `chartName` is present, matching v1's real branch.
 
-    A `chartRemote` name must resolve to a real, declared
-    `SolutionRemoteModel` (looked up by name, never guessed). Its `type`
-    decides the mechanism, matching v1's real OCI-vs-HTTP split:
-    - `RemoteType.OCI`: no `helm repo add` needed — Helm resolves `oci://`
-      refs natively. `chart_ref = "{url}/{chart_name}"`.
-    - `RemoteType.HELM`: needs a registered repo alias first
-      (`helm repo add <alias> <url>`, ignoring failure — may already be
-      registered, matches v1's own "best effort" comment) —
-      `chart_ref = "{alias}/{chart_name}"`.
-    - Anything else (`git`/`local`): not a valid chart remote type.
+    Two mutually exclusive ways a chart-based source names its registry
+    (`SourceModel`'s own validator enforces exactly one — see its
+    docstring, docs/_gap_v1.md gap #2):
+
+    - `chartRemote`: a name that must resolve to a real, declared
+      `SolutionRemoteModel` (looked up by name, never guessed). Its `type`
+      decides the mechanism, matching v1's real OCI-vs-HTTP split —
+      `RemoteType.OCI` or `RemoteType.HELM` only; `git`/`local` are not
+      valid chart remote types.
+    - `chartRepository`: an inline URL/OCI reference, for the common
+      single-consumer, unauthenticated case (gap #2's real haven evidence:
+      every one of its 6 chart modules has a distinct, unshared registry).
+      No `SolutionRemoteModel` to read a `type` from, so OCI-ness is
+      sniffed from the URL's own `oci://` prefix instead — the same
+      sniffing v1 always did (v2's typed remotes only exist for the
+      `chartRemote` path).
 
     Returns:
         `(chart_ref, None)` on success, `(None, error_message)` on failure.
     """
     chart_name = meta.get("chartName")
     remote_name = meta.get("chartRemote")
+    inline_repository = meta.get("chartRepository")
+    if chart_name is None:
+        # Defensive only — callers only reach this function once they've
+        # already confirmed `meta["chartName"]` is present; satisfies the
+        # type checker for `_chart_ref_from_url()`'s `str` parameter too.
+        return None, "meta.yaml has no 'chartName' — cannot resolve a chart registry."
+    chart_name = str(chart_name)
 
-    if remote_name is None:
-        return None, "meta.yaml has 'chartName' but no 'chartRemote' — cannot resolve a chart registry."
-
-    remote = remotes.get(str(remote_name))
-    if remote is None:
-        return None, f"chart remote '{remote_name}' is not declared in this solution's remotes."
-
-    if remote.type is RemoteType.OCI:
-        chart_ref = f"{remote.url.rstrip('/')}/{chart_name}"
-    elif remote.type is RemoteType.HELM:
-        alias = _sanitize_repo_name(remote.url)
-        integration.run("repo", "add", alias, remote.url, env=env, timeout=60)
-        chart_ref = f"{alias}/{chart_name}"
-    else:
+    if remote_name is not None:
+        remote = remotes.get(str(remote_name))
+        if remote is None:
+            return None, f"chart remote '{remote_name}' is not declared in this solution's remotes."
+        if remote.type is RemoteType.OCI:
+            return _chart_ref_from_url(integration, remote.url, chart_name, is_oci=True, env=env), None
+        if remote.type is RemoteType.HELM:
+            return _chart_ref_from_url(integration, remote.url, chart_name, is_oci=False, env=env), None
         return None, f"chart remote '{remote_name}' has type '{remote.type.value}', not a valid Helm chart source."
 
-    return chart_ref, None
+    if inline_repository is not None:
+        url = str(inline_repository)
+        return _chart_ref_from_url(integration, url, chart_name, is_oci=url.startswith("oci://"), env=env), None
+
+    return None, "meta.yaml has 'chartName' but no 'chartRemote'/'chartRepository' — cannot resolve a chart registry."

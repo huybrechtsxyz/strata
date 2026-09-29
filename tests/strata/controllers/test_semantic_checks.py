@@ -554,3 +554,146 @@ def test_artifact_reference_to_an_unknown_artifact_is_caught(tmp_path):
     context = _resolve(root)
     assert not context.ok
     assert any("ghost_artifact" in m for m in context.diagnostics.messages())
+
+
+# ---------------------------------------------------------------------------
+# SolutionRemoteModel -> Module/Provisioner SourceModel usages: an OCI
+# remote's `reference` is required only when a real non-chart consumer needs
+# it (docs/_gap_v1.md gap #3).
+# ---------------------------------------------------------------------------
+
+
+def _manifest_with_oci_remote(*, reference: str | None = None) -> str:
+    reference_line = f'      reference: "{reference}"\n' if reference is not None else ""
+    return f"""apiVersion: strata.huybrechts.xyz/v2
+kind: solution
+meta:
+  name: test-solution
+spec:
+  remotes:
+    - name: charts
+      type: oci
+      url: oci://ghcr.io/org/charts
+{reference_line}"""
+
+
+def _solution_with_module_source(tmp_path: Path, source_yaml: str) -> Path:
+    root = tmp_path / "sln"
+    _write(root, "strata.yaml", _manifest_with_oci_remote())
+    _write(
+        root,
+        "module.yaml",
+        f"""apiVersion: strata.huybrechts.xyz/v2
+kind: module
+meta:
+  name: authentik
+spec:
+  source:
+{source_yaml}
+""",
+    )
+    return root
+
+
+def test_oci_remote_without_reference_used_only_by_chart_based_module_passes(tmp_path):
+    root = _solution_with_module_source(
+        tmp_path, '    remote: charts\n    chart_name: authentik\n    chart_version: "2024.12.0"\n'
+    )
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_oci_remote_without_reference_used_by_a_git_based_module_is_caught(tmp_path):
+    root = _solution_with_module_source(tmp_path, "    remote: charts\n    source_path: modules/authentik\n")
+    context = _resolve(root)
+    assert not context.ok
+    assert any(e.code == "oci_remote_missing_reference" for e in context.diagnostics.errors)
+    assert any("'charts'" in m and "non-chart source" in m for m in context.diagnostics.messages())
+
+
+def test_oci_remote_with_reference_used_by_a_git_based_module_passes(tmp_path):
+    root = tmp_path / "sln"
+    _write(root, "strata.yaml", _manifest_with_oci_remote(reference="v1.2.3"))
+    _write(
+        root,
+        "module.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: module
+meta:
+  name: authentik
+spec:
+  source:
+    remote: charts
+    source_path: modules/authentik
+""",
+    )
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_oci_remote_without_reference_used_by_a_git_based_provisioner_source_is_caught(tmp_path):
+    root = tmp_path / "sln"
+    _write(root, "strata.yaml", _manifest_with_oci_remote())
+    _write(
+        root,
+        "provider.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: provider
+meta:
+  name: azure-main
+spec:
+  properties:
+    type: azure
+    region: westeurope
+""",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: workspace
+meta:
+  name: main
+spec:
+  providers: [azure-main]
+  provisioners:
+    - name: tf
+      tool: terraform
+      source:
+        remote: charts
+        source_path: terraform/main
+""",
+    )
+    context = _resolve(root)
+    assert not context.ok
+    assert any(e.code == "oci_remote_missing_reference" for e in context.diagnostics.errors)
+
+
+def test_oci_remote_with_no_remotes_needing_the_check_is_a_no_op(tmp_path):
+    """No OCI remote lacks a reference at all — the check must not even
+    look at consumers (and must not crash on a solution with no remotes)."""
+    root = tmp_path / "sln"
+    _write(
+        root,
+        "strata.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: solution
+meta:
+  name: test-solution
+spec: {}
+""",
+    )
+    _write(
+        root,
+        "module.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: module
+meta:
+  name: web
+spec:
+  source:
+    source_path: modules/web
+""",
+    )
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()

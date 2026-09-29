@@ -110,8 +110,10 @@ class SourceModel(PlatformBaseModel):
 
       1. Git-based: ``remote`` + ``source_path`` — Terraform modules, local charts, etc.
          ``remote`` may be omitted to mean "this solution's own repository".
-      2. Chart-based: ``remote`` + ``chart_name`` — Helm/ArgoCD chart registry pulls.
-         ``remote`` is required; a chart always comes from a registry.
+      2. Chart-based: ``remote`` + ``chart_name``, OR ``chart_repository`` +
+         ``chart_name`` — Helm/ArgoCD chart registry pulls. Exactly one of
+         ``remote``/``chart_repository`` is required; a chart always comes
+         from a registry, named one way or the other.
 
     v1 (and v2's own earlier pass) had two fields that both answered "which
     remote" — `repository` for git and `chart_repository` for charts —
@@ -122,6 +124,20 @@ class SourceModel(PlatformBaseModel):
     mirror by editing one declaration. Mirrors Flux's single `sourceRef`,
     which spans Git/OCI/Helm repositories alike.
 
+    **`chart_repository` reintroduced 2026-09-28 (docs/_gap_v1.md gap #2),
+    as an *alternative* to `remote`, not a full revert.** Real haven usage
+    checked directly: every one of its 6 chart-based modules references a
+    distinct registry with zero sharing — the `remote` indirection's whole
+    payoff ("one remote, one ref, so two modules can't silently drift to
+    different versions of the same source") never materialises in a
+    strict 1:1 mapping, so it was pure friction for that real, common case.
+    `remote` remains required (not deprecated) once a registry is either
+    shared across modules or needs credentials (`SolutionRemoteModel
+    .integration`) — this field only removes the friction for the
+    single-consumer, unauthenticated case, mirroring the existing
+    `ModuleServiceModel.image`/`.artifact` mutual-exclusivity shape (either
+    inline or by-reference, never both, never neither).
+
     Example — git-based::
 
         source:
@@ -129,10 +145,17 @@ class SourceModel(PlatformBaseModel):
           source_path: terraform/modules/vpc
           target_path: build/vpc
 
-    Example — Helm chart registry::
+    Example — Helm chart registry, shared/authenticated (`remote`)::
 
         source:
           remote: goauthentik
+          chart_name: authentik
+          chart_version: "2024.12.0"
+
+    Example — Helm chart registry, single-consumer, inline (`chart_repository`)::
+
+        source:
+          chart_repository: https://charts.goauthentik.io
           chart_name: authentik
           chart_version: "2024.12.0"
     """
@@ -141,8 +164,10 @@ class SourceModel(PlatformBaseModel):
         None,
         description="Name of a remote declared in the solution manifest's spec.remotes (strata.yaml). The "
         "remote owns the URL, the git/OCI ref and the credentials; this only selects which one to take "
-        "from. Required for chart-based sources; optional for git-based ones, where omitting it means "
-        "this solution's own repository.",
+        "from. Required for a git-based source with credentials/a pinned ref; for a chart-based source, "
+        "either this or `chart_repository` is required (mutually exclusive) — use `remote` when the "
+        "registry is shared across modules or needs credentials, `chart_repository` otherwise. Omitting "
+        "both on a git-based source means this solution's own repository.",
     )
     source_path: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] | None = Field(
         None,
@@ -167,13 +192,25 @@ class SourceModel(PlatformBaseModel):
     # Helm / ArgoCD chart registry fields
     chart_name: str | None = Field(
         None,
-        description="Helm chart name (e.g. 'authentik'). Selects chart-based mode; requires `remote`.",
+        description="Helm chart name (e.g. 'authentik'). Selects chart-based mode; requires exactly one "
+        "of `remote`/`chart_repository`.",
     )
     chart_version: str | None = Field(
         None,
         description="Helm chart version (e.g. '2024.12.0'). Omit to use latest. Only valid in chart-based "
         "mode. Unlike a git ref, this is NOT remote identity — a chart index legitimately serves many "
         "versions, so picking one is selection and belongs here rather than on the remote.",
+    )
+    chart_repository: str | None = Field(
+        None,
+        description="Inline Helm chart repository URL or OCI reference (e.g. "
+        "'https://charts.goauthentik.io' or 'oci://ghcr.io/org/charts'), for the common case where this "
+        "chart source is used by exactly one module and needs no registry credentials. Only valid in "
+        "chart-based mode; mutually exclusive with `remote` — use `remote` instead once the registry is "
+        "shared across modules (so they can't silently drift to different underlying URLs) or needs "
+        "credentials (`SolutionRemoteModel.integration`). Unlike `remote`, this is a raw string strata "
+        "never validates against the solution manifest — a typo here is caught only when `helm repo add` "
+        "itself fails, not at schema time.",
     )
 
     @model_validator(mode="after")
@@ -191,16 +228,28 @@ class SourceModel(PlatformBaseModel):
 
         if not has_git and not has_chart:
             raise ValueError(
-                "SourceModel requires either a git-based source (source_path) "
-                "or a chart-based source (chart_name)."
+                "SourceModel requires either a git-based source (source_path) or a chart-based source (chart_name)."
             )
         if has_git and has_chart:
             raise ValueError(
                 "SourceModel cannot mix git-based (source_path) and chart-based (chart_name) "
                 "selection. Use one mode only."
             )
-        if has_chart and self.remote is None:
-            raise ValueError("remote is required for chart-based sources (a chart comes from a registry).")
+        if has_git and self.chart_repository is not None:
+            raise ValueError("chart_repository is only valid for chart-based sources.")
+        if has_chart:
+            has_remote = self.remote is not None
+            has_inline_repo = self.chart_repository is not None
+            if not has_remote and not has_inline_repo:
+                raise ValueError(
+                    "A chart-based source requires exactly one of `remote` or `chart_repository` "
+                    "(a chart always comes from a registry, named one way or the other)."
+                )
+            if has_remote and has_inline_repo:
+                raise ValueError(
+                    "SourceModel cannot mix `remote` and `chart_repository` — use `remote` for a shared "
+                    "or credentialed registry, `chart_repository` for an inline, single-consumer one."
+                )
         if has_git and self.chart_version is not None:
             raise ValueError("chart_version is only valid for chart-based sources.")
         return self

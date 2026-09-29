@@ -70,7 +70,6 @@ class SolutionContext:
             raise ValidationError(self.diagnostics)
         return self
 
-
     def resolve(self) -> Diagnostics:
         """Run cross-document checks and merge the findings in.
 
@@ -109,7 +108,7 @@ class SolutionContext:
         found.extend(validate_references(self.controller.index, self.controller.solution))
         resolved_deployments, resolution_diagnostics = resolve_deployment_chains(self.controller.index)
         found.extend(resolution_diagnostics)
-        found.extend(run_semantic_checks(self.controller.index, resolved_deployments))
+        found.extend(run_semantic_checks(self.controller.index, resolved_deployments, self.controller.solution))
         found.extend(check_version_pins(self.controller.index, self.controller.solution))
         self.diagnostics.extend(found)
         return found
@@ -144,8 +143,7 @@ def open_solution(path: Path) -> SolutionContext:
     root = find_solution_root(start)
     if root is None:
         raise UsageError(
-            f"Not inside a strata solution: no {MANIFEST_FILENAME} found in '{start}' "
-            f"or any parent directory."
+            f"Not inside a strata solution: no {MANIFEST_FILENAME} found in '{start}' or any parent directory."
         )
 
     controller = SolutionController(root)

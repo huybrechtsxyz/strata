@@ -100,11 +100,12 @@ def test_module_source_rejects_absolute_path():
         ModuleModel.model_validate(data)
 
 
-def test_module_source_chart_requires_remote():
-    """A chart-based source must name a remote — a chart always comes from a registry."""
+def test_module_source_chart_requires_remote_or_chart_repository():
+    """A chart-based source must name a remote or an inline chart_repository — a chart
+    always comes from a registry, named one way or the other (docs/_gap_v1.md gap #2)."""
     data = _minimal_module()
     data["spec"]["source"] = {"chart_name": "authentik"}
-    with pytest.raises(ValidationError, match="remote is required for chart-based"):
+    with pytest.raises(ValidationError, match="requires exactly one of `remote` or `chart_repository`"):
         ModuleModel.model_validate(data)
 
 

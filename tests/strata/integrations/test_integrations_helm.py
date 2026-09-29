@@ -384,6 +384,23 @@ def test_prepare_namespace_writes_chart_coordinates_for_registry_charts(tmp_path
     assert meta["chartRemote"] == "goauthentik"
 
 
+def test_prepare_namespace_writes_inline_chart_repository_instead_of_chart_remote(tmp_path: Path):
+    module = _module(
+        source=SourceModel(chart_repository="https://charts.goauthentik.io", chart_name="authentik"),
+    )
+    module_dir = tmp_path / "apps" / "authentik"
+    module_dir.mkdir(parents=True)
+
+    HelmIntegration().prepare_namespace(
+        _namespace(), [_resolved_module("authentik", module, module_dir)], resolved=ValueResolution(deployment="app")
+    )
+
+    meta = yaml.safe_load((module_dir / "meta.yaml").read_text())
+    assert meta["chartName"] == "authentik"
+    assert meta["chartRepository"] == "https://charts.goauthentik.io"
+    assert "chartRemote" not in meta
+
+
 def test_prepare_namespace_omits_chart_coordinates_for_local_charts(tmp_path: Path):
     module = _module(source=SourceModel(source_path="charts/authentik"))
     module_dir = tmp_path / "apps" / "authentik"
@@ -523,6 +540,37 @@ def test_resolve_chart_git_or_local_typed_remote_is_rejected():
     assert "not a valid Helm chart source" in error
 
 
+# ---------------------------------------------------------------------------
+# _resolve_chart()/inline chart_repository — docs/_gap_v1.md gap #2 Option 1.
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_chart_inline_oci_chart_repository_needs_no_repo_add(monkeypatch):
+    captured = _capture(monkeypatch)
+    chart, error = _resolve_chart(
+        HelmIntegration(),
+        {"chartName": "authentik", "chartRepository": "oci://ghcr.io/org/charts"},
+        {},
+        env=None,
+    )
+    assert error is None
+    assert chart == "oci://ghcr.io/org/charts/authentik"
+    assert "args" not in captured
+
+
+def test_resolve_chart_inline_http_chart_repository_adds_a_repo(monkeypatch):
+    captured = _capture(monkeypatch)
+    chart, error = _resolve_chart(
+        HelmIntegration(),
+        {"chartName": "authentik", "chartRepository": "https://charts.goauthentik.io"},
+        {},
+        env=None,
+    )
+    assert error is None
+    assert chart == "charts-goauthentik-i/authentik"
+    assert captured["args"] == ["helm", "repo", "add", "charts-goauthentik-i", "https://charts.goauthentik.io"]
+
+
 def test_deploy_namespace_local_chart_uses_source_path_directly(monkeypatch, tmp_path: Path):
     captured = _capture(monkeypatch)
     module = _module(
@@ -621,6 +669,55 @@ def test_deploy_namespace_registry_chart_resolves_chart_ref_and_delivers_secrets
     assert yaml.safe_load((module_dir / "values.yaml").read_text()) == {
         "authentik-server": {"env": {"DB_PASSWORD": "${secret:db_password}"}}
     }
+
+
+def test_deploy_namespace_inline_chart_repository_resolves_chart_ref_without_a_declared_remote(
+    monkeypatch, tmp_path: Path
+):
+    captured = _capture(monkeypatch)
+    module = _module(
+        source=SourceModel(chart_repository="https://charts.goauthentik.io", chart_name="authentik"),
+        services=[
+            ModuleServiceModel(name="server", environment=[ModuleServiceEnvironmentModel(key="TZ", value="${var:tz}")])
+        ],
+    )
+    module_dir = tmp_path / "apps" / "authentik"
+    module_dir.mkdir(parents=True)
+    (module_dir / "meta.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "releaseName": "authentik",
+                "namespace": "apps",
+                "chartName": "authentik",
+                "chartRepository": "https://charts.goauthentik.io",
+            }
+        )
+    )
+    (module_dir / "values.yaml").write_text(yaml.safe_dump({"authentik-server": {"env": {"TZ": "${var:tz}"}}}))
+    resolved_module = _resolved_module("authentik", module, module_dir)
+
+    # No `remotes=` passed at all — an inline chart_repository needs no solution-level declaration.
+    diagnostics = HelmIntegration().deploy_namespace(
+        _namespace(), [resolved_module], tokens={"tz": "Europe/Brussels"}, dry_run=False
+    )
+
+    assert diagnostics.ok
+    assert captured["args"] == [
+        "helm",
+        "upgrade",
+        "--install",
+        "--create-namespace",
+        "--wait",
+        "--atomic",
+        "--timeout",
+        "5m",
+        "--namespace",
+        "apps",
+        "-f",
+        str(module_dir / "values.yaml"),
+        "authentik",
+        "charts-goauthentik-i/authentik",
+    ]
 
 
 def test_deploy_namespace_missing_meta_file_reports_a_diagnostic_and_skips(monkeypatch, tmp_path: Path):

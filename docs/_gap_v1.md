@@ -54,7 +54,7 @@ durable, reviewable record.
   top-level keys — see gap #8's `immich.yaml` example), use raw
   `configuration`/`custom` instead — also token-aware now (gap #8).
 
-### 2. Module `source.chart_repository` (inline Helm registry URL) has no v2 equivalent
+### 2. ~~Module `source.chart_repository` (inline Helm registry URL) has no v2 equivalent~~ — RESOLVED
 
 - **Found in:** every helm-chart-registry module in haven (`cert-manager`,
   `gatus`, `homarr`, `immich`, `jellyfin`, `nextcloud` — 6 real modules).
@@ -76,58 +76,121 @@ durable, reviewable record.
   corresponding payoff — not a modeling mistake, just a real-world case this
   pattern wasn't optimizing for (an internal chart museum feeding many
   modules is the case it helps).
-- **Reopened as a design question, per request** (2026-09-28): two candidate
-  directions to remove the 1:1-case friction, neither designed yet:
-  1. **Let a module's `source` declare a chart repository inline**
-     (bring back something like v1's `chart_repository`, as an *alternative*
-     to `remote:` — not a replacement), for the common single-consumer case,
-     while still requiring `remote:` when a registry genuinely needs
-     credentials (`integration:`) or is shared across modules. Needs a
-     validation rule for the two being mutually exclusive, same shape as
-     `ModuleServiceModel.image`/`.artifact`.
-  2. **Route chart registry location through the `artifact` kind** ("make
-     OCI artifact-aware"). Needs to reconcile with an existing, explicit
-     decision: `artifact_model.py`'s own docstring already rejected a "chart
-     mode" — but for a narrower reason (chart *version* pinning is already
-     served by `kind: version`'s `pins.charts` overlaying a module's
-     `SourceModel.chart_version` — ADR-0026). That rejection was about the
-     version pin, not the registry *location* a chart is pulled from, so
-     this direction isn't automatically blocked by it, but needs to
-     explicitly address why registry location is a different concern before
-     reusing `artifact` for it.
-  Until one of these is designed, the migration action below is the only
-  path.
-- **Migration action:** declare one `spec.remotes` entry per distinct chart
-  source in `strata.yaml`, then reference it via `source.remote` + `chart_name`
-  instead of `chart_repository`. For haven: 6 remotes needed
-  (jetstack, twin/gatus, homarr-labs, immich-app, jellyfin.github.io,
-  nextcloud.github.io) — mechanical, no design question left open, just
-  more entries than the 1:1 mapping makes feel worthwhile.
+- **Decision (2026-09-28): Direction 1 — inline `SourceModel.chart_repository`,
+  as an *alternative* to `remote:`, not a replacement.** Direction 2 (route
+  chart registry location through the `artifact` kind) was investigated and
+  rejected: `ArtifactModel.registry`'s own docstring is explicit that the
+  field is "free text for documentation only... NOT a `SolutionRemoteModel`
+  reference, since strata never fetches an image" — i.e. it is inert.
+  Helm's registry location is the opposite: `HelmIntegration._resolve_chart()`
+  actively reads it to run `helm repo add` and build the chart-ref argument
+  for `helm upgrade`. Reusing `artifact.registry` for charts would make the
+  same field mean two different things (inert for images, actionable for
+  charts) — a discriminated-union smell the schema was already deliberately
+  avoiding once (its docstring already rejected a "chart mode" for the
+  narrower reason of version-pinning, ADR-0026; this is a second, independent
+  reason pointing the same way).
+- **Implemented:**
+  - `SourceModel.chart_repository: str | None` (`common_models.py`) — raw
+    Helm repo URL or `oci://` reference. Chart-based mode (`chart_name` set)
+    now requires **exactly one** of `remote` or `chart_repository`; both
+    together, or `chart_repository` on a git-based source, are rejected by
+    `validate_source_mode()`. Unlike `remote`, this is never validated
+    against the solution manifest — a typo surfaces only when `helm repo
+    add` itself fails, not at schema time (documented in the field itself).
+  - `HelmIntegration._render_meta()` (`helm.py`) — writes `chartRepository`
+    to the build-time `meta.yaml` artifact when `source.chart_repository` is
+    set (mutually exclusive with `chartRemote`, mirroring the schema).
+  - `HelmIntegration._resolve_chart()` (`helm.py`) — now resolves a chart ref
+    from either `chartRemote` (existing path, needs `remotes=`) or the new
+    `chartRepository` (no solution-level declaration needed at all). Both
+    branches share a new `_chart_ref_from_url()` helper for the
+    OCI-vs-`helm repo add` branching, so the logic isn't duplicated between
+    the two sources.
+  - Tests: `tests/strata/models/test_models_common.py` (new `SourceModel`
+    section — valid git/chart modes, both mutual-exclusivity rules, the
+    "requires exactly one of" rule), `tests/strata/integrations/
+    test_integrations_helm.py` (`_render_meta()` writing `chartRepository`,
+    `_resolve_chart()`'s OCI and HTTP inline-repository paths, an end-to-end
+    `deploy_namespace()` test with no `remotes=` passed at all), plus one
+    pre-existing `test_models_module.py` test updated for the new error
+    message. Full check suite green: mypy (107 files), ruff, import-linter
+    (1 kept, 0 broken), pytest (1236 passed).
+- **Migration action:** for haven's 6 single-consumer chart modules, prefer
+  `source.chart_repository` inline over a `spec.remotes` entry + `source.remote`
+  — no `strata.yaml`-level declaration needed at all now. Keep using
+  `remote:` only where a registry is genuinely shared across modules or
+  needs credentials (`SolutionRemoteModel.integration`).
 
-### 3. OCI-type remotes require a `reference`, but an OCI chart index has no natural one
+
+### 3. ~~OCI-type remotes require a `reference`, but an OCI chart index has no natural one~~ — RESOLVED
 
 - **Found in:** `strata.yaml`'s `jetstack`/`homarr-charts`/`immich-charts`
   remotes (all `type: oci`).
-- **Status:** minor schema friction, not blocking. `SolutionRemoteModel`
-  requires `reference` for every remote type uniformly, but for a chart
-  registry the actual version pin lives on `chart_version` at the module's
-  `source` (module-level, not remote-level) — there is no single meaningful
-  "ref" for the whole registry the way a git branch/tag/commit is.
-- **Relationship to gap #2:** related but not automatically closed by it —
-  depends which direction #2 takes. Direction 2 (route chart registries
-  through `artifact`, replacing the remote-based path for charts entirely)
-  would likely close this as a side effect: the remaining `type: oci`
-  remotes would be genuine artifact sources with a real ref, or would route
-  through `artifact` instead (no `reference` constraint there at all).
+- **Status: closed (2026-09-29).** `SolutionRemoteModel` used to require
+  `reference` for every git/oci remote uniformly, but for a chart registry
+  the actual version pin lives on `chart_version` at the module's `source`
+  (module-level, not remote-level) — there is no single meaningful "ref" for
+  the whole registry the way a git branch/tag/commit is.
+- **Relationship to gap #2:** related, but not closed by it. Gap #2 chose
   Direction 1 (inline `chart_repository` as an *alternative* to `remote:`,
   not a replacement — `remote:` stays required for shared/credentialed
-  registries) only shrinks how often this is hit, it doesn't fix the
-  underlying schema rule. Either way, this gap is broader than charts —
-  `RemoteType.OCI`'s own docstring says OCI "serves container images, Helm
-  charts and arbitrary artifacts alike," so a non-chart OCI source with no
-  natural single ref could hit the same friction regardless of #2's outcome.
-- **Migration action:** use a placeholder (`reference: latest`) until/unless
-  the model special-cases chart-serving OCI remotes.
+  registries), which only shrinks how often this is hit (fewer `type: oci`
+  remotes need declaring at all now), it doesn't fix the underlying schema
+  rule. This gap is also broader than charts — `RemoteType.OCI`'s own
+  docstring says OCI "serves container images, Helm charts and arbitrary
+  artifacts alike," so a non-chart OCI source with no natural single ref
+  could hit the same friction regardless of gap #2.
+- **Design/Implementation (2026-09-29):** split the rule the same way gap
+  #2 split `SourceModel`'s own mode selection — what the field *allows* is
+  a Phase 1 (schema-only) check; what it *requires* depends on how the
+  remote is actually used elsewhere in the solution, which needs the loaded
+  manifest, so that half is a new Phase 2 check. Considered and rejected a
+  simpler always-optional relaxation (drop the requirement for every OCI
+  remote, chart-serving or not) — rejected because it silently loses real
+  pinning for the non-chart case (a genuine container image/blob remote,
+  which `RemoteType.OCI`'s own docstring says is just as valid a use as
+  charts): that remote losing its immutable-digest guarantee would be a
+  real regression, not a convenience.
+  1. **Phase 1 (`SolutionRemoteModel.reference`, `solution_model.py`):**
+     `reference` is now required unconditionally only for `git`; merely
+     *optional* (not forbidden) for `oci`; still forbidden for
+     `helm`/`local` (unchanged).
+  2. **Phase 2 (new — `semantic_checks._check_remotes()`):** wired into
+     `run_semantic_checks()` as its 8th check (which now also takes
+     `solution: SolutionModel | None`, since the manifest's own kind is
+     never indexed — same reason `check_version_pins()` already takes it
+     directly). Collects every `SourceModel` in the solution (`ModuleModel.
+     spec.source` + every `WorkspaceModel.spec.provisioners[].source`); for
+     each `type: oci` remote with `reference is None`, any consumer naming
+     it via `remote:` with `chart_name` unset (git-based/non-chart mode)
+     raises an `oci_remote_missing_reference` error naming the remote and
+     that consumer's `source_path`; a chart-based consumer, or zero
+     consumers at all, is valid as-is (an unused remote is a separate,
+     still-unbuilt gap — not this check's concern).
+  - Ended up simpler than the original design sketch's naming: implemented
+    as a standalone function in `semantic_checks.py` (matching
+    `check_version_pins()`'s own "controller-level function scanning
+    multiple kinds against the manifest" shape) rather than a
+    `SolutionRemoteService` method — there's no single natural "referencing
+    kind" here the way `WorkspaceService.validate_topology_references()`
+    has one (this check's two consumer kinds, Module and Workspace, are
+    peers, not a service validating itself against another document).
+  - **Verified:** full check suite green (mypy 107 files, ruff clean,
+    import-linter 1 kept/0 broken, pytest 1243 passed — 7 new tests: 2 in
+    `test_models_solution.py` for the relaxed Phase 1 rule, 5 in
+    `test_semantic_checks.py` for the new Phase 2 check, covering
+    chart-based/git-based Module consumers, a Workspace provisioner
+    consumer, a remote with `reference` already set, and the no-remotes
+    no-op case). `strata validate` against `.v2-haven/` confirmed to add
+    zero new findings (its pre-existing 44 `malformed_value_token` errors,
+    unrelated to remotes, were confirmed via `git stash` to already exist
+    on the unmodified branch).
+- **Migration action:** none needed — an OCI remote already omitting
+  `reference` (or a fresh `chart_repository`-based module needing no remote
+  at all, gap #2) now validates as long as every real consumer is
+  chart-based; a genuine non-chart OCI consumer still needs a real pin,
+  exactly as before.
 
 ### 4. ~~`default_tags` is REQUIRED on Resource/Firewall; `default_labels` is REQUIRED on Module/Namespace~~ — RESOLVED
 
@@ -1073,3 +1136,61 @@ and the provider/providerconfig/topologyconfig registry split.
   consequence). Full history kept visible in `docs/design/deploy-command.md`'s
   new "Superseded" subsection rather than silently overwritten. Design
   only, still nothing implemented.
+- 2026-09-28: **Resolved gap #2**, per request ("good. design, plan,
+  implement"). Chose Direction 1 (inline `SourceModel.chart_repository`)
+  over Direction 2 (route through `artifact`) — rejected the latter with
+  concrete evidence: `ArtifactModel.registry`'s own docstring says it is
+  inert ("strata never fetches an image"), while Helm's registry location
+  is actively read by `HelmIntegration._resolve_chart()` to run
+  `helm repo add`/build a chart ref, so reusing the same field for both
+  would make it mean two different things. Implemented: `SourceModel.
+  chart_repository` + mutual-exclusivity validator against `remote`
+  (`common_models.py`); `HelmIntegration._render_meta()`/`_resolve_chart()`
+  updated to write/resolve `chartRepository` alongside the existing
+  `chartRemote` path, sharing a new `_chart_ref_from_url()` helper
+  (`helm.py`). New tests in `test_models_common.py` (`SourceModel` mode/
+  validator coverage) and `test_integrations_helm.py` (`_render_meta()`,
+  `_resolve_chart()`, an end-to-end `deploy_namespace()` case with no
+  `remotes=` passed); one pre-existing `test_models_module.py` test updated
+  for the new error message. Full check suite green: mypy (107 files),
+  ruff, import-linter (1 kept, 0 broken), pytest (1236 passed).
+- 2026-09-29: **Designed gap #3**, per request ("do the full design in the
+  _gap_v1 doc"). Split the rule the same way gap #2 split `SourceModel`'s
+  own mode selection: what `SolutionRemoteModel.reference` *allows* stays a
+  Phase 1 schema check (require it for `git` only now, still forbid it for
+  `helm`/`local`, newly make it optional-not-forbidden for `oci`); what it
+  actually *requires* for an OCI remote depends on how it's used elsewhere
+  in the solution (chart-serving vs a real pinned image/artifact), which
+  needs the loaded manifest, so that half becomes a new Phase 2 check,
+  `SolutionRemoteService.validate_oci_reference_usage()` — flagged as
+  genuinely new plumbing, not an extension of proven code, since no
+  existing check validates remote-type-vs-use-site-mode at all yet
+  (`common_models.py`'s own docstring already parks that as a separate,
+  broader, still-unbuilt gap). Considered and rejected a simpler
+  always-optional relaxation (drop `reference` for every OCI remote
+  regardless of use) — rejected because it silently loses real pinning for
+  the non-chart case, a genuine regression, not just lost convenience.
+  Design only, recorded inline in gap #3 itself (not a separate design doc,
+  per request); nothing implemented yet.
+- 2026-09-29: **Resolved gap #3**, per request ("design, plan, and implement
+  gap 3"). Implemented per the design: `SolutionRemoteModel.reference`
+  (`solution_model.py`) now required only for `git`, merely optional (not
+  forbidden) for `oci`; new Phase 2 check `semantic_checks._check_remotes()`
+  (`run_semantic_checks()`'s 8th check, now also taking `solution:
+  SolutionModel | None` — `solution_context.py`'s call site updated to pass
+  it, same reason `check_version_pins()` already does) scans every
+  `ModuleModel.spec.source` + `WorkspaceModel.spec.provisioners[].source`
+  and raises `oci_remote_missing_reference` only when a real non-chart
+  consumer names an OCI remote with no `reference`. Implemented as a
+  standalone function rather than the design sketch's `SolutionRemoteService`
+  method — no single natural "referencing kind" exists here, since Module
+  and Workspace are peer consumers, not a service validating against
+  another document (same shape `check_version_pins()` already uses). 7 new
+  tests (2 model, 5 semantic-check integration tests covering chart-based/
+  git-based Module and Workspace-provisioner consumers, a remote with
+  `reference` already set, and the no-remotes-need-checking no-op). Full
+  check suite green: mypy (107 files), ruff, import-linter (1 kept, 0
+  broken), pytest (1243 passed). `strata validate .v2-haven` confirmed to
+  add zero new findings — its pre-existing 44 `malformed_value_token`
+  errors (unrelated) were confirmed via `git stash` to already exist on the
+  unmodified branch.

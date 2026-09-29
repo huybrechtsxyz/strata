@@ -29,14 +29,16 @@ finding here — `validate_references` already reported it.
 from typing import cast
 
 from strata.controllers.solution_controller import DocumentIndex
-from strata.models.common_models import PlatformBaseModel, PlatformKind
+from strata.models.common_models import PlatformBaseModel, PlatformKind, SourceModel
 from strata.models.configuration_model import ConfigurationModel
 from strata.models.deployment_model import DeploymentModel
 from strata.models.environment_model import EnvironmentModel
+from strata.models.module_model import ModuleModel
 from strata.models.namespace_model import NamespaceModel
 from strata.models.provider_config_model import ProviderConfigModel
 from strata.models.provider_model import ProviderModel
 from strata.models.resource_model import ResourceModel
+from strata.models.solution_model import RemoteType, SolutionModel
 from strata.models.tenant_model import TenantModel
 from strata.models.topology_config_model import TopologyConfigModel
 from strata.models.topology_model import TopologyModel
@@ -51,7 +53,9 @@ from strata.utils.diagnostics import Diagnostics
 
 
 def run_semantic_checks(
-    index: DocumentIndex, resolved_deployments: dict[str, DeploymentModel] | None = None
+    index: DocumentIndex,
+    resolved_deployments: dict[str, DeploymentModel] | None = None,
+    solution: SolutionModel | None = None,
 ) -> Diagnostics:
     """Run every cross-document semantic check over an already-loaded index.
 
@@ -64,9 +68,14 @@ def run_semantic_checks(
             deployment that gets `workspace`/`environments` only through
             `extends` would silently skip these checks, since the raw model
             never has them.
+        solution: The manifest, for `spec.remotes` (`_check_remotes()`, gap
+            #3). Its own kind is never indexed (`SolutionController._load_manifest()`'s
+            own docstring), so this is the only cross-document check here
+            that cannot get its second document from `index` alone — same
+            reason `check_version_pins()` also takes `solution` directly.
 
     Returns:
-        Every finding, from all seven checks combined.
+        Every finding, from all eight checks combined.
     """
     resolved = resolved_deployments or {}
     diagnostics = Diagnostics()
@@ -77,6 +86,7 @@ def run_semantic_checks(
     diagnostics.extend(_check_workspaces(index))
     diagnostics.extend(_check_environments(index))
     diagnostics.extend(_check_deployment_value_tokens(index, resolved))
+    diagnostics.extend(_check_remotes(index, solution))
     return diagnostics
 
 
@@ -390,3 +400,69 @@ def _documents_reachable_from_workspace(index: DocumentIndex, workspace_name: st
                 documents.append(module_entry.model)
 
     return documents
+
+
+# ---------------------------------------------------------------------------
+# SolutionRemoteModel -> Module/Provisioner SourceModel usages: an OCI
+# remote's `reference` is required only when a real (non-chart) consumer
+# needs it (docs/_gap_v1.md gap #3).
+# ---------------------------------------------------------------------------
+
+
+def _check_remotes(index: DocumentIndex, solution: SolutionModel | None) -> Diagnostics:
+    """Every `type: oci` remote with no `reference` must have no non-chart consumer.
+
+    `SolutionRemoteModel.validate_reference_for_type()` (Phase 1) can only
+    enforce this half of the rule once it knows how the remote is actually
+    used, which needs the loaded solution — so Phase 1 leaves `reference`
+    merely optional for every OCI remote, and this is the check that makes
+    "optional unless a real consumer needs it" actually true. A chart-based
+    consumer (`SourceModel.chart_name` set) never needs it — a chart index
+    legitimately serves many versions, and the real pin is
+    `SourceModel.chart_version` instead. A git-based consumer
+    (`SourceModel.source_path` set) does — an OCI remote serving a real
+    artifact IS one immutable tree, same as a git remote, and `reference`
+    is how that tree is pinned.
+
+    An OCI remote with `reference` already set, or with zero consumers at
+    all, produces no finding either way — an unused remote is a separate,
+    still-unbuilt gap (see docs/_gap_v1.md), not this check's concern.
+    """
+    diagnostics = Diagnostics()
+    if solution is None:
+        return diagnostics
+
+    remotes_needing_check = {
+        remote.name: remote
+        for remote in (solution.spec.remotes or [])
+        if remote.type is RemoteType.OCI and remote.reference is None
+    }
+    if not remotes_needing_check:
+        return diagnostics
+
+    sources: list[tuple[SourceModel, str]] = []
+    for entry in index.all_of(PlatformKind.MODULE):
+        module = cast(ModuleModel, entry.model)
+        sources.append((module.spec.source, str(entry.source)))
+    for entry in index.all_of(PlatformKind.WORKSPACE):
+        workspace = cast(WorkspaceModel, entry.model)
+        for provisioner in workspace.spec.provisioners:
+            if provisioner.source is not None:
+                sources.append((provisioner.source, str(entry.source)))
+
+    for source, doc_source in sources:
+        if source.remote is None or source.chart_name is not None:
+            continue  # not naming a remote, or a chart-based consumer (no reference needed)
+        remote = remotes_needing_check.get(source.remote)
+        if remote is None:
+            continue  # not one of the OCI-and-missing-reference remotes
+        diagnostics.error(
+            f"Remote '{remote.name}' (type oci) has no 'reference', but is used by a non-chart "
+            f"source (source_path '{source.source_path}') — a real artifact needs an immutable "
+            "ref/digest pinned on the remote, the same way a git remote does (chart-based consumers "
+            "are the only case that can omit it, since their pin is SourceModel.chart_version instead).",
+            source=doc_source,
+            location="spec.source.remote",
+            code="oci_remote_missing_reference",
+        )
+    return diagnostics

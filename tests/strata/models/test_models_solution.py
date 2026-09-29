@@ -75,9 +75,7 @@ def test_solution_accepts_git_remote():
 def test_solution_remote_defaults_to_strata_fetch():
     """fetch defaults to 'strata' — strata materialises the remote itself."""
     data = _minimal_solution()
-    data["spec"]["remotes"] = [
-        {"name": "infra", "type": "git", "url": "https://host/infra.git", "reference": "main"}
-    ]
+    data["spec"]["remotes"] = [{"name": "infra", "type": "git", "url": "https://host/infra.git", "reference": "main"}]
     model = SolutionModel.model_validate(data)
     assert model.spec.remotes[0].fetch.value == "strata"
 
@@ -125,6 +123,26 @@ def test_solution_accepts_helm_remote_without_reference():
     assert model.spec.remotes[0].reference is None
 
 
+def test_solution_oci_remote_accepts_a_reference():
+    """An OCI remote pinning a real artifact still works exactly as before."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [
+        {"name": "images", "type": "oci", "url": "oci://ghcr.io/org/images", "reference": "v1.2.3"}
+    ]
+    model = SolutionModel.model_validate(data)
+    assert model.spec.remotes[0].reference == "v1.2.3"
+
+
+def test_solution_oci_remote_without_reference_is_now_schema_valid():
+    """gap #3: Phase 1 no longer requires `reference` for OCI — whether it's
+    actually needed depends on real consumers, checked at Phase 2 instead
+    (`semantic_checks._check_remotes()`)."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [{"name": "charts", "type": "oci", "url": "oci://ghcr.io/org/charts"}]
+    model = SolutionModel.model_validate(data)
+    assert model.spec.remotes[0].reference is None
+
+
 def test_solution_local_remote_rejects_absolute_path():
     """A local remote's url must be a solution-relative path, not absolute."""
     data = _minimal_solution()
@@ -144,9 +162,7 @@ def test_solution_local_remote_rejects_traversal():
 def test_solution_local_remote_rejects_integration():
     """On-disk local remotes need no credentials."""
     data = _minimal_solution()
-    data["spec"]["remotes"] = [
-        {"name": "bundled", "type": "local", "url": "modules", "integration": "corp-git"}
-    ]
+    data["spec"]["remotes"] = [{"name": "bundled", "type": "local", "url": "modules", "integration": "corp-git"}]
     with pytest.raises(ValidationError, match="'integration' is not valid"):
         SolutionModel.model_validate(data)
 
