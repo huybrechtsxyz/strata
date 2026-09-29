@@ -12,6 +12,12 @@ strata-v2
 
 .. toctree::
    :maxdepth: 1
+   :caption: How-To Guides:
+
+   how-to/azure-certificates
+
+.. toctree::
+   :maxdepth: 1
    :caption: Configuration Files:
 
    config/readme
@@ -34,3 +40,12 @@ strata-v2
    config/version
    config/artifact
    config/integration
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Integrations:
+
+   integrations/README
+   integrations/infisical
+   integrations/azure-keyvault
+   integrations/azure-appconfig

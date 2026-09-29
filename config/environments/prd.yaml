@@ -34,6 +34,10 @@ spec:
       store: constant
       value: "example-not-a-real-secret"
       description: "Placeholder — the authentik module's real secret would come from an integration-backed store"
+    - key: APPGW_CERT_SECRET_ID
+      store: azure-keyvault
+      value: "https://kv-example.vault.azure.net/secrets/appgw-cert"
+      description: "App Gateway's HTTPS listener certificate. The cert itself is issued/renewed in Key Vault out-of-band — a Key Vault-integrated CA issuer (DigiCert/GlobalSign), or Key Vault Acmebot for Let's Encrypt — never generated or uploaded by strata/Terraform. This value only names the existing secret; the azure-keyvault integration resolves it at deploy time."
 
   # '${feature:KEY}'.
   features:

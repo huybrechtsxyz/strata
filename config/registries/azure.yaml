@@ -27,3 +27,17 @@ spec:
       subcategory: virtualmachine
       description: "Azure Virtual Machine"
       additional_configurations: true
+    - name: key_vault
+      category: security
+      subcategory: secrets
+      description: "Azure Key Vault"
+      additional_configurations: true
+      configuration:
+        sku_name: "^(standard|premium)$"
+    - name: application_gateway
+      category: networking
+      subcategory: waf
+      description: "Azure Application Gateway v2 / WAF"
+      additional_configurations: true
+      configuration:
+        sku_tier: "^(Standard_v2|WAF_v2)$"

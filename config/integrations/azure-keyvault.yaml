@@ -1,0 +1,14 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: integration
+meta:
+  name: azure-keyvault
+spec:
+  type: azure-keyvault
+  capabilities: [secrets]
+  description: "Azure Key Vault - resolves ${secret:KEY} tokens whose store is azure-keyvault (e.g. the app-gateway-waf resource's TLS certificate secret). Certificate issuance/rotation itself happens outside strata - see resources/networking.yaml's annotation."
+  required: false
+  enabled: true
+  authentication:
+    method: managed_identity
+    managed_identity:
+      use_managed_identity: true

@@ -10,15 +10,19 @@ adds `type` (declared HCL type + value-consistency check), `Secret` adds
 `store` values map to integration types in v1 (`IntegrationFactory`). The
 `Integration` **kind** now exists in v2 (`integration_model.py`) and can
 declare a `variables`/`secrets`/`features` capability, so a non-built-in
-`store` is expected to name one. What does NOT exist is the *runtime*
-resolution layer — v1's `IntegrationFactory` registry that turns a store
-type into a live backend client is execution-layer code, out of scope here.
-So `constant`/`environment` (+ `github` for secrets) are the only stores
-that resolve to anything today; the rest validate as recognized values but
-have no resolver behind them yet (same discipline as
-`Provisioner.tool`, ADR-0011). Cross-checking a store against a real
-Integration document is a Phase 2 check, deferred with the others until the
-solution loading layer lands.
+`store` is expected to name one. The runtime resolution layer for these
+also now exists (`strata.controllers.value_controller`, auto-binding a
+real `Integration` document by type per
+docs/design/store-integration-configuration.md): `infisical`
+(variables + secrets), `azure-keyvault` (secrets), and `azure-appconfig`
+(variables + features) resolve against a real backend today — either the
+bound `Integration` document's `spec.endpoints`/`.configuration`, or the
+resolver's own env-var fallback if none is bound. `consul`/`vault`/`etcd`
+(variables), `bitwarden` (secrets), and `flagsmith` (features) remain
+recognized values with no resolver behind them yet (same discipline as
+`Provisioner.tool`, ADR-0011) — `constant`/`environment` (+ `github` for
+secrets, `artifact` for variables) are still the only *built-in* stores,
+needing no integration at all.
 """
 
 from enum import Enum
@@ -61,10 +65,9 @@ class FeatureStoreType(str, Enum):
     """Feature flag store backend type.
 
     `CONSTANT`/`ENVIRONMENT` are built-in resolvers (no integration needed).
-    `AZURE_APPCONFIG`/`FLAGSMITH` name integration-backed stores — recognized
-    values (matching v1's real vocabulary) that an `Integration` with the
-    `features` capability is expected to back, but with no runtime resolver
-    behind them yet (see module docstring).
+    `AZURE_APPCONFIG` resolves against a real `Integration` document today
+    (see module docstring); `FLAGSMITH` is still a recognized value
+    (matching v1's real vocabulary) with no runtime resolver behind it yet.
     """
 
     CONSTANT = "constant"
@@ -84,7 +87,9 @@ class FeatureStoreModel(PlatformBaseModel):
     """
 
     key: VariableKey = Field(description="Feature flag key name for referencing in configurations")
-    store: FeatureStoreType = Field(description="Feature store type: constant, environment, azure-appconfig, or flagsmith")
+    store: FeatureStoreType = Field(
+        description="Feature store type: constant, environment, azure-appconfig, or flagsmith"
+    )
     value: Any = Field(
         description="Feature flag identifier: literal for constant, env var name for environment, "
         "flag name/key for integration-backed stores"
@@ -135,8 +140,10 @@ class VariableStoreType(str, Enum):
     `CONSTANT`/`ENVIRONMENT`/`ARTIFACT` are built-in resolvers (no
     integration needed) — `ARTIFACT` resolves against an in-solution
     `kind: artifact` document, not an external system
-    (docs/design/artifact-references.md). The rest are integration-backed
-    placeholders (see module docstring).
+    (docs/design/artifact-references.md). `AZURE_APPCONFIG`/`INFISICAL`
+    resolve against a real `Integration` document today (see module
+    docstring); `HASHICORP_CONSUL`/`HASHICORP_VAULT`/`ETCD` are still
+    recognized values with no runtime resolver behind them yet.
     """
 
     CONSTANT = "constant"
@@ -233,8 +240,7 @@ class VariableStoreModel(PlatformBaseModel):
             raise ValueError(f"Variable '{self.key}': 'store: artifact' requires 'field' to be set.")
         if self.field is not None and self.store != VariableStoreType.ARTIFACT:
             raise ValueError(
-                f"Variable '{self.key}': 'field' is only valid on 'store: artifact' (got store "
-                f"'{self.store.value}')."
+                f"Variable '{self.key}': 'field' is only valid on 'store: artifact' (got store '{self.store.value}')."
             )
         return self
 
@@ -288,8 +294,9 @@ class SecretStoreType(str, Enum):
     """Secret store backend type.
 
     `CONSTANT`/`ENVIRONMENT`/`GITHUB` are built-in resolvers (no integration
-    needed). The rest are integration-backed placeholders (see module
-    docstring).
+    needed). `AZURE_KEYVAULT`/`INFISICAL` resolve against a real
+    `Integration` document today (see module docstring); `BITWARDEN` is
+    still a recognized value with no runtime resolver behind it yet.
     """
 
     CONSTANT = "constant"

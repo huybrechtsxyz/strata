@@ -3,7 +3,7 @@
 - Status: current — Phases 1-6 implemented (transport primitives, model
   fields, base/capability ABCs, registry + store retrofit, Terraform,
   Compose + Helm)
-- Last updated: 2026-09-24
+- Last updated: 2026-09-29
 
 ## Overview
 
@@ -89,14 +89,14 @@ real behaviour there).
 
 ### Built classes
 
-| Class | Type | Transport(s) | Capability | Notes |
-| --- | --- | --- | --- | --- |
-| `InfisicalResolver` | `infisical` | — | `variables`/`secrets`/`features` | Retrofit of the pre-existing resolver, unchanged behaviour |
-| `AzureKeyVaultResolver` | `azure-keyvault` | SDK | `secrets` | Retrofit |
-| `AzureAppConfigResolver` | `azure-appconfig` | SDK | `variables`/`features` | Retrofit |
-| `TerraformIntegration` | `terraform` | `cli` | `infrastructure` | `plan`/`deploy`/`destroy` + real v1 extras (`init`/`validate`/`output`/`show`); secrets injected via `TF_VAR_*` env vars, never argv; `default_output()` built |
-| `ComposeIntegration` | `compose` | `cli` (`docker`) | `container` | Deploys via `docker stack` (Swarm), not standalone Compose CLI — matches real v1 usage. `plan()` has no true dry-run (`docker stack config`, admitted v1 limitation) |
-| `HelmIntegration` | `helm` | `cli` (`helm`) | `container` | Argv shapes copied from v1's real `HelmDeployer` |
+| Class                    | Type              | Transport(s)     | Capability                       | Notes                                                                                                                                                                                                                                       |
+| ------------------------ | ----------------- | ---------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `InfisicalResolver`      | `infisical`       | —                | `variables`/`secrets`/`features` | Retrofit of the pre-existing resolver; now reads a bound `Integration` document's `spec.endpoints`/`.configuration` first, falling back to its original env vars ([store-integration-configuration.md](store-integration-configuration.md)) |
+| `AzureKeyVaultResolver`  | `azure-keyvault`  | SDK              | `secrets`                        | Retrofit; same config-first, env-fallback wiring as `InfisicalResolver`                                                                                                                                                                     |
+| `AzureAppConfigResolver` | `azure-appconfig` | SDK              | `variables`/`features`           | Retrofit; same config-first, env-fallback wiring as `InfisicalResolver`                                                                                                                                                                     |
+| `TerraformIntegration`   | `terraform`       | `cli`            | `infrastructure`                 | `plan`/`deploy`/`destroy` + real v1 extras (`init`/`validate`/`output`/`show`); secrets injected via `TF_VAR_*` env vars, never argv; `default_output()` built                                                                              |
+| `ComposeIntegration`     | `compose`         | `cli` (`docker`) | `container`                      | Deploys via `docker stack` (Swarm), not standalone Compose CLI — matches real v1 usage. `plan()` has no true dry-run (`docker stack config`, admitted v1 limitation)                                                                        |
+| `HelmIntegration`        | `helm`            | `cli` (`helm`)   | `container`                      | Argv shapes copied from v1's real `HelmDeployer`                                                                                                                                                                                            |
 
 ### Version ownership
 
@@ -135,3 +135,4 @@ integration document's `version` (a PEP 440 specifier).
 ## Changelog
 
 - 2026-09-24: Created, grounded directly in `src/strata/integrations/` (base.py, capabilities.py, registry.py, terraform.py, compose.py, helm.py) rather than reconstructed from ADR-0021 text alone.
+- 2026-09-29: Noted that store auto-bind wiring is now built — `value_controller.py`'s store resolution auto-binds a real `Integration` document by type (reusing `integration_resolution.py`'s `bind_integration_config()`), and all three store resolvers now read that document's `spec.endpoints`/`.configuration` before falling back to their original env vars. Full design, rationale, and worked examples in [store-integration-configuration.md](store-integration-configuration.md) — not duplicated here.

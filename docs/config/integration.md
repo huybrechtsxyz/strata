@@ -3,8 +3,11 @@
 A connection to an external tool or service — Terraform, Helm, Compose today; Vault, Azure Key
 Vault, git, or a custom plugin as capability-backed stores grow. A standalone kind (unlike v1,
 which embedded it as a bare list on `Configuration`) so each integration is independently
-authorable and reusable, referenced by name from a [`provisioner`](workspace.md) or a
-[`variable`/`secret`/`feature` store](environment.md).
+authorable and reusable — referenced **by name** from a [`provisioner`](workspace.md) (its
+optional `integration:` field), or found automatically **by type** for a
+[`variable`/`secret`/`feature` store](environment.md)'s `store:` field, which has no field to name
+one by at all. See [docs/integrations/](../integrations/README.md) for a configuration guide per
+real integration (Infisical, Azure Key Vault, Azure App Configuration).
 
 ## Schema
 

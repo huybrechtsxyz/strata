@@ -7,3 +7,5 @@ spec:
   components:
     - resource: web-storage
     - resource: web-vm
+    - resource: security-kv
+    - resource: edge-waf

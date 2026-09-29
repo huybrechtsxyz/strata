@@ -45,6 +45,8 @@ see [docs/design/v2-schema-overview.md](../design/v2-schema-overview.md).
 **Tooling:**
 
 - [integration.md](integration.md) — a connection to an external tool (Terraform, Helm, Compose, ...)
+  — for a configuration guide per real integration (Infisical, Azure Key Vault, Azure App
+  Configuration), see [docs/integrations/](../integrations/README.md)
 
 ## Architecture
 

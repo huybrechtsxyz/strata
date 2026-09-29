@@ -17,6 +17,7 @@ from strata.controllers.value_controller import (
     resolve_tenant,
     resolve_values,
 )
+from strata.integrations.capabilities import StoreIntegration
 from strata.integrations.resolved_context import ValueReference
 from strata.models.common_models import SourceModel
 from strata.models.deployment_model import DeploymentMetaModel, DeploymentModel, DeploymentSpecModel
@@ -872,3 +873,112 @@ def test_resolve_values_reports_an_unresolvable_value_reference_without_raising(
     assert "tenant.doesnotexist.meta.name" not in result.values
     message = result.diagnostics.messages()[0]
     assert "does not exist" in message
+
+
+# ---------------------------------------------------------------------------
+# Store resolution binds a real `kind: integration` document by type —
+# docs/design/store-integration-configuration.md's Phase 1.
+# `get_integration()` is monkeypatched with a spy returning a lightweight
+# fake `StoreIntegration` (never a real network call) so these tests only
+# verify *wiring* — what `config` reached the registry call — matching
+# `test_integration_resolution.py`'s own `integration.config`-inspection
+# style for the equivalent `InfraIntegration` binding.
+# ---------------------------------------------------------------------------
+
+
+class _FakeStore(StoreIntegration):
+    """Minimal concrete `StoreIntegration` — never talks to a real backend."""
+
+    TYPE = "infisical"
+    CAPABILITIES = frozenset({"secrets"})
+    TRANSPORTS: frozenset[str] = frozenset()
+
+    def resolve(self, key: str) -> str:
+        return f"resolved-{key}"
+
+
+def _integration_doc(root: Path, name: str, *, type: str = "infisical", enabled: bool = True) -> None:
+    _write(
+        root,
+        f"integrations/{name}.yaml",
+        f"apiVersion: strata.huybrechts.xyz/v2\nkind: integration\nmeta:\n  name: {name}\nspec:\n"
+        f"  type: {type}\n  enabled: {str(enabled).lower()}\n",
+    )
+
+
+def _spy_get_integration(monkeypatch, captured: list):
+    def _fake(integration_type, config=None):
+        captured.append(config)
+        return _FakeStore(config)
+
+    monkeypatch.setattr("strata.controllers.value_controller.get_integration", _fake)
+
+
+def test_resolve_values_binds_the_sole_enabled_integration_document_to_the_store(tmp_path, monkeypatch):
+    root = _solution(tmp_path)
+    _integration_doc(root, "infisical-prod")
+    _environment(root, "prd", secrets=[{"key": "DB_PASSWORD", "store": "infisical", "value": "db-password"}])
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+
+    captured: list = []
+    _spy_get_integration(monkeypatch, captured)
+
+    result = resolve_values(context, "app", ["DB_PASSWORD"])
+
+    assert result.diagnostics.ok, result.diagnostics.messages()
+    assert result.values["DB_PASSWORD"] == "resolved-db-password"
+    assert len(captured) == 1
+    assert captured[0] is not None
+    assert captured[0].meta.name == "infisical-prod"
+
+
+def test_resolve_values_passes_none_when_no_integration_document_declared(tmp_path, monkeypatch):
+    """Zero candidates — today's behaviour, unchanged: `config=None`, same
+    as before this design existed (falls back to env-var-only inside the
+    real resolver classes)."""
+    root = _solution(tmp_path)
+    _environment(root, "prd", secrets=[{"key": "DB_PASSWORD", "store": "infisical", "value": "db-password"}])
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+
+    captured: list = []
+    _spy_get_integration(monkeypatch, captured)
+
+    result = resolve_values(context, "app", ["DB_PASSWORD"])
+
+    assert result.diagnostics.ok, result.diagnostics.messages()
+    assert captured == [None]
+
+
+def test_resolve_values_ignores_a_disabled_integration_document(tmp_path, monkeypatch):
+    root = _solution(tmp_path)
+    _integration_doc(root, "infisical-disabled", enabled=False)
+    _environment(root, "prd", secrets=[{"key": "DB_PASSWORD", "store": "infisical", "value": "db-password"}])
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+
+    captured: list = []
+    _spy_get_integration(monkeypatch, captured)
+
+    resolve_values(context, "app", ["DB_PASSWORD"])
+
+    assert captured == [None]
+
+
+def test_resolve_values_raises_on_multiple_enabled_integration_documents(tmp_path, monkeypatch):
+    """More than one enabled candidate is a `UsageError` naming every one —
+    the same rule `bind_integration_config()` already enforces for
+    `InfraIntegration`, reused unchanged for a store type."""
+    root = _solution(tmp_path)
+    _integration_doc(root, "infisical-a")
+    _integration_doc(root, "infisical-b")
+    _environment(root, "prd", secrets=[{"key": "DB_PASSWORD", "store": "infisical", "value": "db-password"}])
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+
+    captured: list = []
+    _spy_get_integration(monkeypatch, captured)
+
+    with pytest.raises(UsageError, match="infisical-a.*infisical-b|infisical-b.*infisical-a"):
+        resolve_values(context, "app", ["DB_PASSWORD"])

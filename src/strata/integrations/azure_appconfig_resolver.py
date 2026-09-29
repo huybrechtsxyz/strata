@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """Azure App Configuration resolver — variables and feature flags.
 
-Configured entirely from environment variables:
+The store endpoint may come from a bound `kind: integration` document's
+`spec.endpoints.address` (docs/design/store-integration-configuration.md's
+Phase 2) — falls back to the environment variable below, unchanged, when
+no document is bound or its `endpoints` is unset:
 
 - ``AZURE_APPCONFIG_ENDPOINT`` — the store endpoint
   (e.g. ``https://my-config.azconfig.io``).
 
 Authentication uses `azure.identity.DefaultAzureCredential` — see
 `azure_keyvault_resolver.py`'s docstring for why (same reasoning, same
-managed-identity production usage).
+managed-identity production usage, never read from `spec.authentication`).
 
 Resolves a plain configuration key/value. **Not yet special-cased for a
 `.appconfig.featureflag/*`-style feature flag key** — Azure App Config
@@ -42,12 +45,16 @@ class AzureAppConfigResolver(StoreIntegration):
 
     def __init__(self, config: IntegrationModel | None = None) -> None:
         super().__init__(config)
-        self._endpoint = environ.get("AZURE_APPCONFIG_ENDPOINT")
+        endpoint_address = config.spec.endpoints.address if config is not None and config.spec.endpoints else None
+        self._endpoint = endpoint_address or environ.get("AZURE_APPCONFIG_ENDPOINT")
         self._client: AzureAppConfigurationClient | None = None
 
     def _get_client(self) -> AzureAppConfigurationClient:
         if not self._endpoint:
-            raise ValueResolutionError("Azure App Configuration: AZURE_APPCONFIG_ENDPOINT is not set.")
+            raise ValueResolutionError(
+                "Azure App Configuration: no endpoint configured — set AZURE_APPCONFIG_ENDPOINT, or bind an "
+                "Integration document with spec.endpoints.address set."
+            )
         if self._client is None:
             self._client = AzureAppConfigurationClient(base_url=self._endpoint, credential=DefaultAzureCredential())
         return self._client

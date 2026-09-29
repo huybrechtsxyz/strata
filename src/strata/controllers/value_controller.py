@@ -23,7 +23,9 @@ different fixes.
 from typing import Any, cast
 
 from strata.controllers.deployment_resolution import resolve_deployment_chains
+from strata.controllers.integration_resolution import bind_integration_config
 from strata.controllers.solution_context import SolutionContext
+from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.value_references import resolve_document_value_references
 from strata.integrations.capabilities import StoreIntegration
 from strata.integrations.errors import ValueResolutionError
@@ -72,9 +74,17 @@ class _Resolvers:
     A resolver may hold a live client/bearer token — constructing one per
     key instead of reusing it across a `resolve_values()` call would mean
     re-authenticating once per key for no reason.
+
+    `index` (docs/design/store-integration-configuration.md, Phase 1):
+    threaded through so `.get()` can look up a real `kind: integration`
+    document by type before constructing — the exact same zero-or-one-
+    enabled-match rule `integration_resolution.py`'s `bind_integration_config()`
+    already uses for `InfraIntegration`, reused here rather than
+    reimplemented, since the rule itself does not vary by capability tier.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, index: DocumentIndex) -> None:
+        self._index = index
         self._instances: dict[str, StoreIntegration] = {}
 
     def get(self, integration_type: str) -> StoreIntegration:
@@ -82,12 +92,18 @@ class _Resolvers:
 
         Raises:
             IntegrationNotFoundError: No class is registered for `integration_type`.
+            UsageError: More than one enabled `Integration` document declares
+                `spec.type == integration_type` (`bind_integration_config()`'s
+                own rule, reused unchanged here).
             ValueResolutionError: A class is registered, but it isn't a `StoreIntegration`
                 (e.g. an `InfraIntegration` sharing a type string — not possible today,
                 guarded here for when the registry grows non-store types).
         """
         if integration_type not in self._instances:
-            instance = get_integration(integration_type)
+            config = bind_integration_config(
+                self._index, integration_type, requester=f"Store type '{integration_type}'"
+            )
+            instance = get_integration(integration_type, config=config)
             if not isinstance(instance, StoreIntegration):
                 raise ValueResolutionError(f"'{integration_type}' does not resolve values (not a store integration).")
             self._instances[integration_type] = instance
@@ -386,7 +402,7 @@ def resolve_values(context: SolutionContext, deployment_name: str, keys: list[st
     environments = reachable_environments(context, deployment)
 
     variables, secrets, features = merge_environment_models(environments)
-    resolvers = _Resolvers()
+    resolvers = _Resolvers(context.controller.index)
     result = ValueResolution(deployment=deployment_name)
 
     value_reference_values, value_reference_diagnostics = resolve_document_value_references(context.controller.index)

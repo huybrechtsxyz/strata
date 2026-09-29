@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Azure Key Vault secret resolver — Azure SDK, not the `az` CLI.
 
-Configured entirely from environment variables:
+The vault URL may come from a bound `kind: integration` document's
+`spec.endpoints.address` (docs/design/store-integration-configuration.md's
+Phase 2) — falls back to the environment variable below, unchanged, when
+no document is bound or its `endpoints` is unset:
 
 - ``AZURE_KEYVAULT_URL`` — the vault URL (e.g. ``https://my-vault.vault.azure.net``).
 
@@ -13,7 +16,8 @@ managed identity, which `DefaultAzureCredential` picks up with no
 configuration when running on an Azure resource with one assigned. A
 user-assigned identity's client id is picked up from the standard
 ``AZURE_CLIENT_ID`` env var by the same chain — no strata-specific wiring
-needed.
+needed, and never read from `spec.authentication` (see that design's own
+"Deliberately out of scope" section for why).
 
 ADR-0021 D7 retrofit: a `StoreIntegration`, `TRANSPORTS={"sdk"}` — keeps
 `SecretClient` unchanged. No `http_request`/`self.request()` involved: the
@@ -41,12 +45,16 @@ class AzureKeyVaultResolver(StoreIntegration):
 
     def __init__(self, config: IntegrationModel | None = None) -> None:
         super().__init__(config)
-        self._vault_url = environ.get("AZURE_KEYVAULT_URL")
+        endpoint_address = config.spec.endpoints.address if config is not None and config.spec.endpoints else None
+        self._vault_url = endpoint_address or environ.get("AZURE_KEYVAULT_URL")
         self._client: SecretClient | None = None
 
     def _get_client(self) -> SecretClient:
         if not self._vault_url:
-            raise ValueResolutionError("Azure Key Vault: AZURE_KEYVAULT_URL is not set.")
+            raise ValueResolutionError(
+                "Azure Key Vault: no vault URL configured — set AZURE_KEYVAULT_URL, or bind an "
+                "Integration document with spec.endpoints.address set."
+            )
         if self._client is None:
             self._client = SecretClient(vault_url=self._vault_url, credential=DefaultAzureCredential())
         return self._client

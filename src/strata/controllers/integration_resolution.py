@@ -16,11 +16,14 @@ about. Two entry points, sharing one auto-bind rule:
   is looked up directly, no `ProvisionerModel` involved), so only the
   auto-bind half applies, keyed on the module's bare `type` string.
 
-Auto-bind itself (`_auto_bind_config()`): zero or one *enabled*
+Auto-bind itself (`bind_integration_config()`): zero or one *enabled*
 `Integration` document whose `spec.type` matches construct the same way
 (zero falls back to the registry's env/PATH-only default, matching what
 Phases 4-6 already default to without any `Integration` document at all);
 more than one is an error naming every candidate by name, never a guess.
+Public (no leading underscore) since `value_controller.py`'s store
+resolution (docs/design/store-integration-configuration.md) reuses this
+exact rule too, not just the two `InfraIntegration` entry points here.
 """
 
 from typing import cast
@@ -67,7 +70,7 @@ def resolve_integration(index: DocumentIndex, provisioner: ProvisionerModel) -> 
         named_config = cast(IntegrationModel, entry.model)
         integration = _construct(named_config.spec.type, named_config, context=f"Provisioner '{provisioner.name}'")
     else:
-        config = _auto_bind_config(index, provisioner.tool, requester=f"Provisioner '{provisioner.name}'")
+        config = bind_integration_config(index, provisioner.tool, requester=f"Provisioner '{provisioner.name}'")
         integration = _construct(provisioner.tool, config, context=f"Provisioner '{provisioner.name}'")
 
     return _require_infra_integration(f"Provisioner '{provisioner.name}': tool '{provisioner.tool}'", integration)
@@ -94,18 +97,24 @@ def resolve_module_integration(index: DocumentIndex, module_type: str) -> InfraI
             integration type, or it resolves to an integration that is not
             infrastructure/container-capable.
     """
-    config = _auto_bind_config(index, module_type, requester=f"Module type '{module_type}'")
+    config = bind_integration_config(index, module_type, requester=f"Module type '{module_type}'")
     integration = _construct(module_type, config, context=f"Module type '{module_type}'")
     return _require_infra_integration(f"Module type '{module_type}'", integration)
 
 
-def _auto_bind_config(index: DocumentIndex, integration_type: str, *, requester: str) -> IntegrationModel | None:
-    """Zero-or-one-enabled-match auto-bind, shared by both entry points above.
+def bind_integration_config(index: DocumentIndex, integration_type: str, *, requester: str) -> IntegrationModel | None:
+    """Zero-or-one-enabled-match auto-bind, shared by every caller that
+    resolves an `Integration` document by **type** rather than by name —
+    `resolve_integration()`/`resolve_module_integration()` below
+    (`InfraIntegration`), and `value_controller.py`'s store resolution
+    (`StoreIntegration`, docs/design/store-integration-configuration.md) —
+    the same rule applies regardless of which capability tier is asking.
 
     Raises:
         UsageError: more than one enabled `Integration` document declares
             `spec.type == integration_type` — named in the message so the
-            fix (`integration:`/named binding) is obvious, never a guess.
+            fix (`integration:`/named binding, where that field exists;
+            otherwise disabling all but one) is obvious, never a guess.
     """
     candidates = [
         entry
@@ -147,5 +156,7 @@ def _construct(integration_type: str, config: IntegrationModel | None, *, contex
 
 def _require_infra_integration(context: str, integration: Integration) -> InfraIntegration:
     if not isinstance(integration, InfraIntegration):
-        raise UsageError(f"{context} resolves to '{type(integration).__name__}', which is not an infrastructure/container integration.")
+        raise UsageError(
+            f"{context} resolves to '{type(integration).__name__}', which is not an infrastructure/container integration."
+        )
     return integration

@@ -1,17 +1,26 @@
 #!/usr/bin/env python3
 """Infisical secret/variable resolver — REST only, no CLI dependency.
 
-Configured entirely from environment variables (see module docstring in
-`strata.integrations`) — matches the real production auth mode (universal
-auth / machine identity) confirmed in `/memories/repo/v1-consumer-usage.md`,
-plus a service-token fallback since it costs nothing extra to support:
+Non-secret connection settings (address/project/environment) may come from
+a bound `kind: integration` document's `spec.endpoints`/`.configuration`
+(docs/design/store-integration-configuration.md's Phase 2) — falls back to
+environment variables, unchanged, when no document is bound or a specific
+field is left unset. Real credentials are **always** environment variables
+regardless — matches the real production auth mode (universal auth /
+machine identity) confirmed in `/memories/repo/v1-consumer-usage.md`, plus
+a service-token fallback since it costs nothing extra to support (see that
+design's own "Deliberately out of scope" section for why `spec.
+authentication` is never used here, even once bound):
 
 - ``INFISICAL_TOKEN`` — a service token, used directly as the bearer token.
 - ``INFISICAL_CLIENT_ID`` + ``INFISICAL_CLIENT_SECRET`` — universal auth
   (machine identity); exchanged for an access token via one login call.
-- ``INFISICAL_PROJECT_ID`` — required either way.
-- ``INFISICAL_ENVIRONMENT`` — defaults to ``prod``.
-- ``INFISICAL_ADDR`` — defaults to ``https://app.infisical.com``.
+- ``INFISICAL_PROJECT_ID`` — required either way, unless `configuration.
+  project_id` is set on a bound `Integration` document instead.
+- ``INFISICAL_ENVIRONMENT`` — defaults to ``prod``, unless `configuration.
+  environment` is set on a bound `Integration` document instead.
+- ``INFISICAL_ADDR`` — defaults to ``https://app.infisical.com``, unless
+  `endpoints.address` is set on a bound `Integration` document instead.
 
 Resolves every requested key in one bulk call (``GET /api/v3/secrets/raw``),
 mirroring v1's `_fetch_all_secret_values` — cheaper than one request per key,
@@ -19,10 +28,19 @@ and the same endpoint already returns every value in one response.
 
 ADR-0021 D7 retrofit: a `StoreIntegration`, transport moved from hand-rolled
 `urllib` to `http_request` (D5). Still calls the free function directly
-rather than `self.request()` — that method joins onto `config.spec.
-endpoints.address`, and this resolver has no config (env-var-driven,
-`config=None` always: nothing looks up a named `Integration` document for a
-store yet, see `strata.integrations` module docstring).
+rather than `self.request()` — that method joins `path` onto `config.spec.
+endpoints.address` with no default and no query-string support, neither of
+which fits `_fetch_all()`'s own URL shape (a default host, a querystring)
+or `_access_token()`'s separate login endpoint.
+
+docs/design/store-integration-configuration.md's Phase 2: `config.spec.
+endpoints.address`/`configuration["project_id"]`/`configuration["environment"]`
+are now preferred over the matching env var above when a real `Integration`
+document is bound (docs/_gap_v1.md gap-adjacent — closes the "config
+document exists but nothing reads it" finding that design confirmed
+directly). Every env var above still works completely unchanged when no
+document is bound (`config is None`) or a specific field is left unset on
+one that is — this is purely additive, never a breaking change.
 """
 
 import json
@@ -48,9 +66,16 @@ class InfisicalResolver(StoreIntegration):
 
     def __init__(self, config: IntegrationModel | None = None) -> None:
         super().__init__(config)
-        self._addr = environ.get("INFISICAL_ADDR", _DEFAULT_ADDR).rstrip("/")
-        self._project_id = environ.get("INFISICAL_PROJECT_ID")
-        self._environment = environ.get("INFISICAL_ENVIRONMENT", _DEFAULT_ENVIRONMENT)
+        configuration = (config.spec.configuration or {}) if config is not None else {}
+        endpoint_address = config.spec.endpoints.address if config is not None and config.spec.endpoints else None
+        if endpoint_address is not None:
+            self._addr = endpoint_address.rstrip("/")
+        else:
+            self._addr = environ.get("INFISICAL_ADDR", _DEFAULT_ADDR).rstrip("/")
+        self._project_id = configuration.get("project_id") or environ.get("INFISICAL_PROJECT_ID")
+        self._environment = configuration.get("environment") or environ.get(
+            "INFISICAL_ENVIRONMENT", _DEFAULT_ENVIRONMENT
+        )
         self._token = environ.get("INFISICAL_TOKEN")
         self._client_id = environ.get("INFISICAL_CLIENT_ID")
         self._client_secret = environ.get("INFISICAL_CLIENT_SECRET")
