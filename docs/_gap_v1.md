@@ -1,7 +1,9 @@
 # v1 -> v2 Coverage Gaps
 
 - Status: living — update in place as gaps are closed or new ones are found
-- Last updated: 2026-09-29 (gap #16 added and resolved — found while designing "Cross-invocation output access" in docs/design/deploy-command.md)
+- Last updated: 2026-09-29 (gap #17 added and resolved — Provider
+  `configuration`/`custom` universal-resolution-reach fix, found while
+  designing docs/design/cross-document-value-references.md)
 
 ## Overview
 
@@ -997,6 +999,59 @@ durable, reviewable record.
   unclaimed one is still correctly rejected, unchanged from gap #12's
   original behavior.
 
+### 17. ~~Provider's `configuration`/`custom` passed `strata validate` cleanly but was never projected into any Terraform artifact~~ — RESOLVED
+
+- **Found in:** not a haven/cfg-int-deployment document originally — found
+  while designing `docs/design/cross-document-value-references.md`'s new
+  `${value:kind.name.path}` kind (2026-09-29), whose own "universal
+  resolution reach" requirement was checked against every kind's real
+  delivery path rather than assumed. **Confirmed live in a real document
+  too**: `.v2-haven/providers/hetzner-eu-de.yaml` has both `spec.
+  configuration` (`organization`/`version`) and `spec.custom` (`engine`)
+  set — neither literal ever reached `providers.auto.tfvars.json` before
+  this fix, confirmed by reading `_build_providers_payload()`
+  (`terraform_projection.py`) directly: it only ever read `properties.
+  type`/`.region`/`.display_name`, never `spec.configuration`/`.custom` at
+  all, despite `_documents_reachable_from_workspace()`
+  (`semantic_checks.py`) already walking the *whole* Provider document for
+  `strata validate` — a `${var:}`/`${secret:}` token there passed
+  validation cleanly, then was silently dropped rather than delivered
+  unresolved or flagged.
+- **Root cause:** `build_configuration_payloads()` (Phase 6, gap #8's
+  Terraform-side refinement) delivered a curated 5-category subset
+  (`resx_<type>`/`topologies`/`properties`/`custom`/`tenant`) at deploy
+  time — a hand-picked list, not a generic "every category
+  `build_platform_projection()` builds" walk. `providers` (and, less
+  consequentially, `workspace`/`namespaces`/`flags`/`variables`, none of
+  which realistically carry a token) was simply never on that list.
+  Recorded as a formal decision in
+  [value-token-resolution.md](design/value-token-resolution.md)'s
+  "Decision (2026-09-29)" section: resolution reach must match validation
+  reach — no curated allowlist, ever, for exactly this reason.
+- **Status: closed (2026-09-29).** `_build_providers_payload()` now
+  includes `configuration`/`custom` (empty dict when unset, matching every
+  other category's own convention); `build_configuration_payloads()`
+  extended from 5 to all 10 non-claimable categories (adds `workspace`/
+  `providers`/`namespaces`/`flags`/`variables` — the last four are true
+  no-ops in practice, included on principle so this function can never
+  regress into a curated allowlist again). `dns`/`networks`/`firewalls`
+  keep their existing, unchanged per-name claiming rule (gap #12) — this
+  fix only touches the ten broadcast-only categories.
+- **Verified:** 3 new tests (`test_integrations_terraform_projection.py`:
+  provider configuration/custom projection; `test_deploy_controller.py`:
+  end-to-end `TF_VAR_providers` delivery with a real `${var:}`/`${secret:}`
+  token, on-disk artifact confirmed to stay literal/unresolved) plus 4
+  existing tests updated for the wider category set (`workspace`/
+  `providers` are unconditionally present in every fixture, since a
+  workspace document always has a name and the fixture always seeds one
+  provider). Full check suite green: mypy (107 files), ruff, import-linter
+  (1 kept, 0 broken), pytest (1258 passed).
+- **Migration action:** none required — a document with a token in
+  `Provider.spec.configuration`/`.custom` (e.g. `.v2-haven`'s real
+  `hetzner-eu-de.yaml`, though it uses only plain literals today) now has
+  that value actually delivered to Terraform at deploy time, where before
+  it was silently absent from every artifact.
+
 ## Not gaps (converted cleanly)
 
 Confirmed during the same migration to have zero loss of expressiveness:
@@ -1434,3 +1489,22 @@ and the provider/providerconfig/topologyconfig registry split.
   deferred — per the user's own framing, next up is revisiting the value
   resolver more broadly rather than continuing straight through those
   remaining steps.
+- 2026-09-29: **Found and resolved gap #17** ("design, plan, and implement
+  phase 1" — Phase 1 of
+  [cross-document-value-references.md](design/cross-document-value-references.md)'s
+  Implementation Plan). Confirmed the real gap directly against source
+  before changing anything: `_build_providers_payload()`
+  (`terraform_projection.py`) never read `ProviderSpecModel.configuration`/
+  `.custom`, and grep confirmed nothing else in the codebase reads them
+  either — the two fields were validated (whole-document walk,
+  `_documents_reachable_from_workspace()`) but never actually delivered
+  anywhere, live in `.v2-haven`'s real `hetzner-eu-de.yaml`. Fixed
+  `_build_providers_payload()` to include both; extended
+  `build_configuration_payloads()` from its curated 5-category subset to
+  all 10 non-claimable categories (`workspace`/`providers` newly included
+  unconditionally, `namespaces`/`flags`/`variables` newly included as
+  true no-ops) — `deploy_controller.py` needed no logic changes, only
+  updated comments, since it already called `build_configuration_payloads()`
+  generically. 3 new tests, 4 existing tests updated for the wider
+  category set. Full check suite green: mypy (107 files), ruff,
+  import-linter (1 kept, 0 broken), pytest (1258 passed).

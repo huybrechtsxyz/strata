@@ -13,6 +13,7 @@ from strata.controllers.value_controller import (
     resolve_artifact,
     resolve_artifact_field,
     resolve_deployment,
+    resolve_document_value_references,
     resolve_tenant,
     resolve_values,
 )
@@ -502,9 +503,12 @@ def test_build_value_references_integration_backed_and_secrets_are_always_none()
 def test_build_value_references_merges_multiple_environments_later_wins():
     """Multiple reachable environments — later one wins on a key collision,
     same convention as `merge_environment_models()`/`resolve_values()`."""
-    base = _env_model("base", variables=[VariableStoreModel(key="REGION", store=VariableStoreType.CONSTANT, value="from-base")])
+    base = _env_model(
+        "base", variables=[VariableStoreModel(key="REGION", store=VariableStoreType.CONSTANT, value="from-base")]
+    )
     override = _env_model(
-        "override", variables=[VariableStoreModel(key="REGION", store=VariableStoreType.CONSTANT, value="from-override")]
+        "override",
+        variables=[VariableStoreModel(key="REGION", store=VariableStoreType.CONSTANT, value="from-override")],
     )
     variable_refs, _features, _secrets = build_value_references([base, override])
 
@@ -565,3 +569,306 @@ def test_merge_properties_multiple_environments_merge_in_order():
 
     assert merged == {"region": "westeurope", "tier": "gold", "workspace_only": 1, "base_only": 2}
 
+
+# ---------------------------------------------------------------------------
+# resolve_document_value_references() — docs/design/cross-document-value-
+# references.md's Phase 3, the `${value:kind.name.path}` resolution
+# primitive. Solution-wide (not deployment-scoped), so every test here
+# loads a real solution via `open_solution()` and calls the function
+# directly against `context.controller.index` — no deployment involved.
+# ---------------------------------------------------------------------------
+
+
+def _tenant_doc(root: Path, name: str, *, display_name: str = "GSK", geographies: list[str] | None = None) -> None:
+    zones = "\n".join(f"    - {g}" for g in (geographies or ["europe"]))
+    _write(
+        root,
+        f"{name}.yaml",
+        f"apiVersion: strata.huybrechts.xyz/v2\nkind: tenant\nmeta:\n  name: {name}\n"
+        f'spec:\n  display_name: "{display_name}"\n  geographies:\n{zones}\n',
+    )
+
+
+def _probe(root: Path, token: str, *, name: str = "probe") -> None:
+    """A minimal Environment whose `spec.properties.probe` holds one
+    `${value:...}` token — `properties` is a free-form `dict[str, Any]`,
+    so any string survives Pydantic loading unexamined (the malformed/
+    unsupported-kind checks that inspect it are Phase 2 checks, run by
+    `.resolve()`, never by `open_solution()` alone — irrelevant here since
+    Phase 3's resolver is being called directly, not through validate)."""
+    _write(
+        root,
+        f"environments/{name}.yaml",
+        f"apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: {name}\nspec:\n"
+        f'  properties:\n    probe: "{token}"\n',
+    )
+
+
+def test_resolve_document_value_references_happy_path_matches_design_example(tmp_path):
+    """The exact `tenant.c0062.meta.name` example from this design's own
+    "Problem" section."""
+    root = _solution(tmp_path)
+    _tenant_doc(root, "c0062")
+    _probe(root, "${value:tenant.c0062.meta.name}")
+    context = _context(root)
+
+    values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert values == {"tenant.c0062.meta.name": "c0062"}
+
+
+def test_resolve_document_value_references_resolves_a_nested_spec_field(tmp_path):
+    root = _solution(tmp_path)
+    _tenant_doc(root, "c0062", display_name="GSK plc")
+    _probe(root, "${value:tenant.c0062.spec.display_name}")
+    context = _context(root)
+
+    values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert values == {"tenant.c0062.spec.display_name": "GSK plc"}
+
+
+def test_resolve_document_value_references_rejects_unknown_kind(tmp_path):
+    root = _solution(tmp_path)
+    _probe(root, "${value:bogus.c0062.meta.name}")
+    context = _context(root)
+
+    values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert not diagnostics.ok
+    assert values == {}
+    assert diagnostics.items[0].code == "value_reference_unknown_kind"
+    assert "bogus" in diagnostics.messages()[0]
+
+
+def test_resolve_document_value_references_bare_single_segment_is_also_unknown_kind(tmp_path):
+    """`${value:onlyonesegment}` — 'onlyonesegment' genuinely isn't a real
+    `PlatformKind` value either, so this is reported as the more
+    fundamental, more useful `value_reference_unknown_kind` rather than
+    `value_reference_invalid_path`. See `resolve_document_value_references()`'s
+    own docstring point 2 for why this differs from the design's own,
+    looser Phase 2 framing."""
+    root = _solution(tmp_path)
+    _probe(root, "${value:onlyonesegment}")
+    context = _context(root)
+
+    values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert not diagnostics.ok
+    assert diagnostics.items[0].code == "value_reference_unknown_kind"
+
+
+def test_resolve_document_value_references_rejects_a_bare_kind_with_no_name(tmp_path):
+    """`${value:tenant}` — 'tenant' IS a real kind, but there is nothing to
+    look up: no name segment at all. This is the clean, distinct
+    `value_reference_invalid_path` case (as opposed to the unknown-kind
+    case above)."""
+    root = _solution(tmp_path)
+    _probe(root, "${value:tenant}")
+    context = _context(root)
+
+    values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert not diagnostics.ok
+    assert diagnostics.items[0].code == "value_reference_invalid_path"
+
+
+def test_resolve_document_value_references_rejects_unknown_document(tmp_path):
+    root = _solution(tmp_path)
+    _probe(root, "${value:tenant.doesnotexist.meta.name}")
+    context = _context(root)
+
+    values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert not diagnostics.ok
+    assert values == {}
+    assert diagnostics.items[0].code == "value_reference_unknown_document"
+    assert "tenant/doesnotexist" in diagnostics.messages()[0]
+
+
+def test_resolve_document_value_references_kind_solution_is_always_unknown_document(tmp_path):
+    """Edge case confirmed in this design's own "Resolution model" section:
+    the solution manifest's own kind is deliberately never indexed
+    (`SolutionController._load_manifest()`), so `${value:solution....}`
+    always fails existence, never a crash — no special-case code needed."""
+    root = _solution(tmp_path)
+    _probe(root, "${value:solution.test-solution.meta.name}")
+    context = _context(root)
+
+    values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert not diagnostics.ok
+    assert diagnostics.items[0].code == "value_reference_unknown_document"
+
+
+def test_resolve_document_value_references_rejects_a_nonexistent_field_path(tmp_path):
+    root = _solution(tmp_path)
+    _tenant_doc(root, "c0062")
+    _probe(root, "${value:tenant.c0062.spec.nonexistent_field}")
+    context = _context(root)
+
+    values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert not diagnostics.ok
+    assert values == {}
+    assert diagnostics.items[0].code == "value_reference_invalid_path"
+
+
+def test_resolve_document_value_references_rejects_a_whole_sub_object(tmp_path):
+    """`${value:tenant.c0062.spec}` — a real path, but it resolves to the
+    whole `spec` dict, not a scalar. "Referencing a whole sub-object is
+    out of scope" (this design's own "Deliberately out of scope" section)."""
+    root = _solution(tmp_path)
+    _tenant_doc(root, "c0062")
+    _probe(root, "${value:tenant.c0062.spec}")
+    context = _context(root)
+
+    values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert not diagnostics.ok
+    assert values == {}
+    assert diagnostics.items[0].code == "value_reference_not_scalar"
+
+
+def test_resolve_document_value_references_empty_path_is_also_not_scalar(tmp_path):
+    """`${value:tenant.c0062}` — no path segments at all (unlike the bare
+    `${value:tenant}` case above, this one DOES have a name). Resolves to
+    the whole document dict via a zero-length path walk, which then fails
+    the same scalar check as any other whole-sub-object reference — no
+    dedicated empty-path special case exists, by design."""
+    root = _solution(tmp_path)
+    _tenant_doc(root, "c0062")
+    _probe(root, "${value:tenant.c0062}")
+    context = _context(root)
+
+    values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert not diagnostics.ok
+    assert diagnostics.items[0].code == "value_reference_not_scalar"
+
+
+def test_resolve_document_value_references_rejects_a_non_literal_target(tmp_path):
+    """The target field itself contains an unresolved `${var:...}` token —
+    not yet a pure literal, so referencing it is rejected. This is also
+    the exact mechanism that makes chained/transitive `${value:}`
+    resolution and cycles both impossible by construction (this design's
+    own "cycles are impossible by construction" section)."""
+    root = _solution(tmp_path)
+    _tenant_doc(root, "c0062", display_name="${var:tenant_display_name}")
+    _probe(root, "${value:tenant.c0062.spec.display_name}")
+    context = _context(root)
+
+    values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert not diagnostics.ok
+    assert values == {}
+    assert diagnostics.items[0].code == "value_reference_target_not_literal"
+
+
+def test_resolve_document_value_references_rejects_chaining_through_another_value_token(tmp_path):
+    """Same rejection, but the target field's own unresolved token is
+    itself a `${value:...}` rather than `${var:...}` — proves the "no
+    transitive/chained resolution" rule holds for this kind referencing
+    itself, not just for a mix of kinds."""
+    root = _solution(tmp_path)
+    _tenant_doc(root, "c0062", display_name="${value:tenant.other.meta.name}")
+    _tenant_doc(root, "other", display_name="Other Co")
+    _probe(root, "${value:tenant.c0062.spec.display_name}")
+    context = _context(root)
+
+    values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert not diagnostics.ok
+    assert diagnostics.items[0].code == "value_reference_target_not_literal"
+
+
+def test_resolve_document_value_references_reports_source_and_location(tmp_path):
+    """Diagnostics are attributed to the document the token was *found
+    in* (not the target) — matching `unresolved_value_tokens()`'s own
+    convention every other Value-token diagnostic already follows."""
+    root = _solution(tmp_path)
+    _probe(root, "${value:tenant.doesnotexist.meta.name}")
+    context = _context(root)
+
+    _values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    diagnostic = diagnostics.items[0]
+    assert diagnostic.source is not None and "probe.yaml" in diagnostic.source
+    assert diagnostic.location == "spec.properties.probe"
+
+
+def test_resolve_document_value_references_ignores_documents_with_no_value_tokens(tmp_path):
+    """A solution with real documents but zero `${value:...}` tokens
+    anywhere resolves cleanly to an empty map — confirms the walk doesn't
+    misfire on ordinary `${var:}`/plain-literal content."""
+    root = _solution(tmp_path)
+    _tenant_doc(root, "c0062")
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    context = _context(root)
+
+    values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert values == {}
+
+
+# ---------------------------------------------------------------------------
+# resolve_values() merging in resolve_document_value_references() — Phase 4.
+# Solution-wide, so a `${value:...}` entry appears in `.values` regardless
+# of the `keys` list passed in (it is never a declared var/secret/feature
+# key an Environment could name).
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_values_merges_value_references_into_values(tmp_path):
+    root = _solution(tmp_path)
+    _tenant_doc(root, "c0062")
+    _probe(root, "${value:tenant.c0062.meta.name}", name="prd")
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+
+    result = resolve_values(context, "app", [])
+
+    assert result.diagnostics.ok, result.diagnostics.messages()
+    assert result.values["tenant.c0062.meta.name"] == "c0062"
+
+
+def test_resolve_values_still_resolves_declared_keys_alongside_value_references(tmp_path):
+    """The merge is additive, not a replacement — a real declared `keys`
+    entry still resolves exactly as before."""
+    root = _solution(tmp_path)
+    _tenant_doc(root, "c0062")
+    _write(
+        root,
+        "environments/prd.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  variables:\n    - key: REGION\n      store: constant\n      value: westeurope\n"
+        '  properties:\n    probe: "${value:tenant.c0062.meta.name}"\n',
+    )
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+
+    result = resolve_values(context, "app", ["REGION"])
+
+    assert result.diagnostics.ok, result.diagnostics.messages()
+    assert result.values["REGION"] == "westeurope"
+    assert result.values["tenant.c0062.meta.name"] == "c0062"
+
+
+def test_resolve_values_reports_an_unresolvable_value_reference_without_raising(tmp_path):
+    """A `${value:...}` failure surfaces in `.diagnostics`, exactly like an
+    unresolvable declared key already does — it does not raise, and does
+    not prevent the rest of `keys` from resolving."""
+    root = _solution(tmp_path)
+    _probe(root, "${value:tenant.doesnotexist.meta.name}", name="prd")
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+
+    result = resolve_values(context, "app", [])
+
+    assert not result.diagnostics.ok
+    assert "tenant.doesnotexist.meta.name" not in result.values
+    message = result.diagnostics.messages()[0]
+    assert "does not exist" in message

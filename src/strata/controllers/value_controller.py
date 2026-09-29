@@ -24,6 +24,7 @@ from typing import Any, cast
 
 from strata.controllers.deployment_resolution import resolve_deployment_chains
 from strata.controllers.solution_context import SolutionContext
+from strata.controllers.value_references import resolve_document_value_references
 from strata.integrations.capabilities import StoreIntegration
 from strata.integrations.errors import ValueResolutionError
 from strata.integrations.registry import IntegrationNotFoundError
@@ -198,7 +199,6 @@ def resolve_artifact_field(
     return f"{artifact.spec.image_name}:{image_tag}"
 
 
-
 def reachable_environments(context: SolutionContext, deployment: DeploymentModel) -> list[EnvironmentModel]:
     """Every `EnvironmentModel` `deployment.spec.environments` names.
 
@@ -267,7 +267,9 @@ def build_value_references(
 
     variables, secrets, features = merge_environment_models(environments)
 
-    def _value_for(store_type: VariableStoreType | FeatureStoreType | SecretStoreType, raw: Any, *, is_feature: bool) -> Any:
+    def _value_for(
+        store_type: VariableStoreType | FeatureStoreType | SecretStoreType, raw: Any, *, is_feature: bool
+    ) -> Any:
         if store_type in _CONSTANT_TYPES:
             return _coerce_feature_value(raw) if is_feature else raw
         if store_type in _ENVIRONMENT_TYPES:
@@ -348,6 +350,23 @@ def resolve_values(context: SolutionContext, deployment_name: str, keys: list[st
     a registered integration (it resolves an in-solution document
     reference, not an external system).
 
+    Also always merges every `${value:kind.name.path}` cross-document
+    reference found anywhere in the whole solution (docs/design/
+    cross-document-value-references.md's Phase 4) —
+    `resolve_document_value_references()`'s output, unconditionally, not
+    filtered by or dependent on `keys` at all. This is deliberately
+    different from every `keys` entry above: a `${value:...}` token is
+    never declared in an Environment the way `var`/`secret`/`feature` are
+    (it names its own target directly via `(kind, name)` document
+    identity, ADR-0015), so callers never pass one in `keys` — the
+    resolved deployment-wide `all_keys` union `deploy_controller.py`
+    builds only ever contains declared var/secret/feature names. Merging
+    it here regardless of `keys`/`deployment_name` is what makes it
+    reachable at all: `ValueResolution.values` is the one flat map every
+    downstream consumer (`resolve_value_tokens()`'s per-key lookup,
+    Terraform `TF_VAR_`/Helm/Compose delivery) already reads uniformly,
+    blind to which mechanism produced an entry.
+
     Args:
         context: An already-`require_valid()`-ed solution.
         deployment_name: `meta.name` of the deployment to resolve values for.
@@ -355,7 +374,10 @@ def resolve_values(context: SolutionContext, deployment_name: str, keys: list[st
 
     Returns:
         Every key in `keys`, either in `.values` or as a finding in
-        `.diagnostics` explaining why it did not resolve.
+        `.diagnostics` explaining why it did not resolve — plus every
+        resolved `${value:...}` cross-document reference found anywhere in
+        the solution, and a `.diagnostics` entry for every one that did
+        not resolve.
 
     Raises:
         UsageError: `deployment_name` does not name a real deployment.
@@ -367,12 +389,15 @@ def resolve_values(context: SolutionContext, deployment_name: str, keys: list[st
     resolvers = _Resolvers()
     result = ValueResolution(deployment=deployment_name)
 
+    value_reference_values, value_reference_diagnostics = resolve_document_value_references(context.controller.index)
+    result.values.update(value_reference_values)
+    result.diagnostics.extend(value_reference_diagnostics)
+
     for key in keys:
         store = secrets.get(key) or features.get(key) or variables.get(key)
         if store is None:
             result.diagnostics.error(
-                f"'{key}' is not declared in any environment reachable from deployment "
-                f"'{deployment_name}'.",
+                f"'{key}' is not declared in any environment reachable from deployment '{deployment_name}'.",
                 location=key,
                 code="unknown_value_key",
             )

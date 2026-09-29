@@ -29,6 +29,7 @@ finding here — `validate_references` already reported it.
 from typing import cast
 
 from strata.controllers.solution_controller import DocumentIndex
+from strata.controllers.value_references import resolve_document_value_references
 from strata.models.common_models import PlatformBaseModel, PlatformKind, SourceModel
 from strata.models.configuration_model import ConfigurationModel
 from strata.models.deployment_model import DeploymentModel
@@ -75,7 +76,7 @@ def run_semantic_checks(
             reason `check_version_pins()` also takes `solution` directly.
 
     Returns:
-        Every finding, from all eight checks combined.
+        Every finding, from all nine checks combined.
     """
     resolved = resolved_deployments or {}
     diagnostics = Diagnostics()
@@ -87,6 +88,7 @@ def run_semantic_checks(
     diagnostics.extend(_check_environments(index))
     diagnostics.extend(_check_deployment_value_tokens(index, resolved))
     diagnostics.extend(_check_remotes(index, solution))
+    diagnostics.extend(_check_value_references(index))
     return diagnostics
 
 
@@ -484,4 +486,33 @@ def _check_remotes(index: DocumentIndex, solution: SolutionModel | None) -> Diag
             location="spec.source.remote",
             code="oci_remote_missing_reference",
         )
+    return diagnostics
+
+
+# ---------------------------------------------------------------------------
+# ${value:kind.name.path} cross-document references (docs/design/
+# cross-document-value-references.md's Phase 5).
+# ---------------------------------------------------------------------------
+
+
+def _check_value_references(index: DocumentIndex) -> Diagnostics:
+    """Every `${value:kind.name.path}` token anywhere in the solution
+    resolves to a real, literal, scalar field.
+
+    Solution-wide, like `_check_remotes()` above — not deployment-scoped
+    like most other checks in this module, since a `${value:...}` token
+    names its own target directly via `(kind, name)` document identity
+    (ADR-0015), not through an Environment a deployment happens to reach.
+
+    Deliberately just discards `resolve_document_value_references()`'s
+    resolved values and returns only its `Diagnostics` — `strata validate`
+    has no use for the actual resolved strings, only whether every
+    reference in the solution *would* resolve. Reusing that function
+    directly (rather than a second, parallel implementation) is the whole
+    point of this check: `strata validate` and real deploy-time resolution
+    (`value_controller.py`'s `resolve_values()`, Phase 4) share one
+    implementation, so they can never silently disagree about whether a
+    given token is valid.
+    """
+    _values, diagnostics = resolve_document_value_references(index)
     return diagnostics

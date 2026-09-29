@@ -226,8 +226,32 @@ def test_workspace_category_present():
 def test_providers_category_present():
     payload = build_platform_projection(_graph(), _provisioner())
     assert payload["providers"] == {
-        "hetzner_dc_eu_de": {"type": "hetzner", "region": "nbg1", "display_name": "Nuremberg"}
+        "hetzner_dc_eu_de": {
+            "type": "hetzner",
+            "region": "nbg1",
+            "display_name": "Nuremberg",
+            "configuration": {},
+            "custom": {},
+        }
     }
+
+
+def test_providers_category_includes_configuration_and_custom_when_set():
+    """docs/_gap_v1.md gap #17: `ProviderSpecModel.configuration`/`.custom`
+    used to be silently dropped entirely — now projected like every other
+    category's own passthrough fields."""
+    graph = _graph()
+    graph.providers["hetzner_dc_eu_de"] = ProviderModel(
+        meta=ProviderMetaModel(name="hetzner_dc_eu_de"),
+        spec=ProviderSpecModel(
+            properties=ProviderPropertiesModel(type="hetzner", region="nbg1", display_name="Nuremberg"),
+            configuration={"skip_provider_registration": True},
+            custom={"cost_center": "platform"},
+        ),
+    )
+    payload = build_platform_projection(graph, _provisioner())
+    assert payload["providers"]["hetzner_dc_eu_de"]["configuration"] == {"skip_provider_registration": True}
+    assert payload["providers"]["hetzner_dc_eu_de"]["custom"] == {"cost_center": "platform"}
 
 
 def test_topologies_category_present():
@@ -482,18 +506,23 @@ def test_tenant_writes_to_tenant_auto_tfvars_json():
 
 # ---------------------------------------------------------------------------
 # build_configuration_payloads() — docs/_gap_v1.md gap #8's Terraform-side
-# refinement, docs/design/value-token-resolution.md's "Full Solution" Phase 6.
-# Broadcast-only (no per-name ownership, unlike build_dns_networks_firewalls_
-# payloads()) delivery of resx_<type>/topologies/properties/custom/tenant.
+# refinement + gap #17's universal-resolution-reach extension,
+# docs/design/value-token-resolution.md's "Full Solution" Phase 6 and
+# "Decision (2026-09-29)". Broadcast-only (no per-name ownership, unlike
+# build_dns_networks_firewalls_payloads()) delivery of workspace/providers/
+# resx_<type>/topologies/namespaces/flags/variables/properties/custom/tenant.
+# `workspace`/`providers` are unconditionally present in every `_graph()`
+# fixture below (a workspace always has a name; the fixture always seeds one
+# provider) — confirmed real, not an artifact of a specific test's setup.
 # ---------------------------------------------------------------------------
 
 
 def test_configuration_payloads_includes_resources_and_topologies_by_default():
-    """The default `_graph()` fixture always has one resource and one
-    topology - both present, keyed to match `planned_files()`'s own
-    per-category naming exactly."""
+    """The default `_graph()` fixture always has one resource, one
+    topology, one workspace, and one provider - all four present, keyed to
+    match `planned_files()`'s own per-category naming exactly."""
     payloads = build_configuration_payloads(_graph())
-    assert set(payloads) == {"resx_virtualmachine", "topologies"}
+    assert set(payloads) == {"resx_virtualmachine", "topologies", "workspace", "providers"}
 
 
 def test_configuration_payloads_resx_key_matches_the_resource_type():
@@ -530,21 +559,26 @@ def test_configuration_payloads_matches_build_platform_projection_exactly():
     assert configuration_payloads["properties"] == platform_payload["properties"]
     assert configuration_payloads["custom"] == platform_payload["custom"]
     assert configuration_payloads["tenant"] == platform_payload["tenant"]
+    assert configuration_payloads["workspace"] == platform_payload["workspace"]
+    assert configuration_payloads["providers"] == platform_payload["providers"]
 
 
-def test_configuration_payloads_excludes_empty_categories():
-    """No resources, no topology, no properties/custom/tenant - nothing to
-    deliver, matching `planned_files()`'s own "skip empty categories"
-    convention."""
+def test_configuration_payloads_excludes_resource_and_topology_categories_when_absent():
+    """No resources, no topology - only `workspace`/`providers` remain
+    (unconditionally present, see module-level comment above), matching
+    `planned_files()`'s own "skip empty categories" convention for
+    everything else."""
     payloads = build_configuration_payloads(_graph(resources=[], topology_name=None))
-    assert payloads == {}
+    assert set(payloads) == {"workspace", "providers"}
 
 
 def test_configuration_payloads_includes_properties_and_custom_when_set():
     payloads = build_configuration_payloads(
         _graph(resources=[], topology_name=None, properties={"region": "eu"}, custom={"team": "platform"})
     )
-    assert payloads == {"properties": {"region": "eu"}, "custom": {"team": "platform"}}
+    assert payloads["properties"] == {"region": "eu"}
+    assert payloads["custom"] == {"team": "platform"}
+    assert set(payloads) == {"workspace", "providers", "properties", "custom"}
 
 
 def test_configuration_payloads_includes_tenant_when_set():

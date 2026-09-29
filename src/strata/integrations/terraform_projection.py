@@ -31,6 +31,9 @@ assumed):
   `build_dns_networks_firewalls_payloads()` below, delivered as
   `TF_VAR_dns`/`TF_VAR_networks` (docs/design/value-token-resolution.md's
   "Full Solution" Phase 2, implemented — not a gap anymore).
+- Until docs/_gap_v1.md gap #17, `_build_providers_payload()` silently
+  dropped `ProviderSpecModel.configuration`/`.custom` entirely — fixed;
+  see that function's own docstring.
 - `required_variables`/`required_features`/`required_secrets` (deferred —
   no v2 model has a `references` field to walk for this; building it means
   regex-scanning resolved config for `${var:}`/`${secret:}`/`${feature:}`
@@ -66,7 +69,18 @@ def _build_workspace_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
 
 
 def _build_providers_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
-    """name -> {type, region, display_name} per `ProviderPropertiesModel`."""
+    """name -> {type, region, display_name, configuration, custom} per
+    `ProviderPropertiesModel`/`ProviderSpecModel`.
+
+    `configuration`/`custom` added docs/design/value-token-resolution.md's
+    "Decision (2026-09-29)" fix (docs/_gap_v1.md gap #17) — previously
+    silently dropped from every Terraform artifact despite passing `strata
+    validate` cleanly (`ProviderSpecModel.configuration`/`.custom` are
+    checked by `unresolved_value_tokens()` via `_documents_reachable_from_
+    workspace()`'s whole-document walk, but were never read anywhere in
+    this module before this fix — confirmed by grep, unlike every other
+    `configuration`/`custom`-bearing category here).
+    """
     payload: dict[str, Any] = {}
     for name, provider in graph.providers.items():
         properties = provider.spec.properties
@@ -74,6 +88,8 @@ def _build_providers_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
             "type": properties.type,
             "region": properties.region,
             "display_name": properties.display_name,
+            "configuration": provider.spec.configuration or {},
+            "custom": provider.spec.custom or {},
         }
     return payload
 
@@ -355,12 +371,13 @@ def build_dns_networks_firewalls_payloads(graph: ResolvedWorkspaceGraph) -> dict
     (docs/design/value-token-resolution.md's "Full Solution" Phase 2).
 
     **Not the only token-bearing categories** — `build_configuration_payloads()`
-    (below) delivers five more (`resx_<type>`/`topologies`/`properties`/
-    `custom`/`tenant`, Phase 6) via a deliberately *separate* function:
-    those five have no per-name ownership concept at all (`${output:}` is
-    rejected outright for them), a genuinely different claiming semantics
-    than this function's own dns/networks/firewalls, which do support it
-    (gap #12).
+    (below) delivers ten more (`workspace`/`providers`/`resx_<type>`/
+    `topologies`/`namespaces`/`flags`/`variables`/`properties`/`custom`/
+    `tenant`, Phase 6 + gap #17's universal-reach fix) via a deliberately
+    *separate* function: those ten have no per-name ownership concept at
+    all (`${output:}` is rejected outright for them), a genuinely different
+    claiming semantics than this function's own dns/networks/firewalls,
+    which do support it (gap #12).
     """
     return {
         "dns": _build_dns_payload(graph),
@@ -370,19 +387,38 @@ def build_dns_networks_firewalls_payloads(graph: ResolvedWorkspaceGraph) -> dict
 
 
 def build_configuration_payloads(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
-    """Five more Value-token-bearing categories, broadcast (no per-name step
+    """Ten more Value-token-bearing categories, broadcast (no per-name step
     ownership, unlike `build_dns_networks_firewalls_payloads()` above) —
-    `resx_<type>`/`topologies`/`properties`/`custom`/`tenant`
-    (docs/design/value-token-resolution.md's "Full Solution" Phase 6,
-    docs/_gap_v1.md gap #8's Terraform-side refinement).
+    every one of `build_platform_projection()`'s 13 categories except
+    dns/networks/firewalls: `workspace`/`providers`/`resx_<type>`/
+    `topologies`/`namespaces`/`flags`/`variables`/`properties`/`custom`/
+    `tenant`.
 
-    Each of these five carries a real `configuration`/`custom` free-form
-    passthrough (`ResourceSpecModel.configuration`/`WorkspaceResourceModel
-    .configuration`, `TopologyVolumeModel.configuration`, the merged
-    `properties`/`custom` dicts, `TenantSpecModel.configuration`) that can
-    contain a `${var:}`/`${secret:}`/`${feature:}` token — projected into a
+    Originally five (`resx_<type>`/`topologies`/`properties`/`custom`/
+    `tenant`, docs/design/value-token-resolution.md's "Full Solution"
+    Phase 6, docs/_gap_v1.md gap #8's Terraform-side refinement) — extended
+    to all ten by gap #17 (docs/design/value-token-resolution.md's
+    "Decision (2026-09-29)": resolution reach must match validation reach,
+    no curated subset). The confirmed real gap that motivated the
+    extension: `ProviderSpecModel.configuration`/`.custom` passed `strata
+    validate` cleanly (`_documents_reachable_from_workspace()` already
+    walks the whole Provider document) yet was never projected into any
+    Terraform artifact at all — silently dropped, not even delivered as an
+    unresolved literal. `workspace`/`namespaces`/`flags`/`variables` came
+    along for free from the same generalization (none of the four
+    realistically carry a token-bearing field, so adding them is a no-op
+    in practice — see this module's own tests) but are included on
+    principle: a curated allowlist is exactly the shape of bug gap #17
+    fixes, so this function must not reintroduce one.
+
+    Each category carries a real `configuration`/`custom`-shaped free-form
+    passthrough (`ProviderSpecModel.configuration`/`.custom`,
+    `ResourceSpecModel.configuration`/`WorkspaceResourceModel.configuration`,
+    `TopologyVolumeModel.configuration`, the merged `properties`/`custom`
+    dicts, `TenantSpecModel.configuration`) that can contain a
+    `${var:}`/`${secret:}`/`${feature:}` token — projected into a
     `*.auto.tfvars.json` file at build time (`build_platform_projection()`)
-    but, until this function, never re-resolved at deploy time the way
+    but, until resolved here, never re-resolved at deploy time the way
     dns/networks/firewalls already are.
 
     Keyed to match `planned_files()`'s own per-category filenames exactly
@@ -392,7 +428,7 @@ def build_configuration_payloads(graph: ResolvedWorkspaceGraph) -> dict[str, Any
     uses at build time) — so `deploy_controller.py` can deliver each as
     `TF_VAR_<key>` with zero translation.
 
-    `${output:...}` is never valid in any of these five — deliberately not
+    `${output:...}` is never valid in any of these ten — deliberately not
     checked here (that is `deploy_controller.py`'s pre-flight job, same
     split `build_dns_networks_firewalls_payloads()`'s own caller already
     has for its three categories) — this function only builds the raw,
@@ -402,12 +438,22 @@ def build_configuration_payloads(graph: ResolvedWorkspaceGraph) -> dict[str, Any
         Only non-empty categories — matches `planned_files()`'s own
         "skip empty categories" convention, so an unset `tenant`/no
         `resources`/no `topologies` contributes nothing to deliver.
+        `workspace` is a practical exception: a workspace document always
+        has a non-empty `name`, so it is unconditionally present whenever
+        any category is (harmless — no realistic token there, and the
+        value already matches what `build_platform_projection()` wrote to
+        disk at build time).
     """
     payloads: dict[str, Any] = {
+        "workspace": _build_workspace_payload(graph),
+        "providers": _build_providers_payload(graph),
         "properties": _build_properties_payload(graph),
         "custom": _build_custom_payload(graph),
         "tenant": _build_tenant_payload(graph),
         "topologies": _build_topologies_payload(graph),
+        "namespaces": _build_namespaces_payload(graph),
+        "flags": _build_flags_payload(graph),
+        "variables": _build_variables_payload(graph),
     }
     for resource_type, type_payload in _build_resources_payload(graph).items():
         payloads[f"resx_{resource_type}"] = type_payload

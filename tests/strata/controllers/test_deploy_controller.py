@@ -528,6 +528,82 @@ def test_deploy_run_resolves_configuration_payloads_tokens_via_tf_var(tmp_path: 
     assert on_disk["resources"]["r1"]["configuration"]["admin_password"] == "${secret:vm_admin_password}"
 
 
+def test_deploy_run_resolves_provider_configuration_tokens_via_tf_var(tmp_path: Path):
+    """docs/_gap_v1.md gap #17 / value-token-resolution.md's "Decision
+    (2026-09-29)": a '${var:}'/'${secret:}' token inside a Provider's
+    'configuration'/'custom' used to pass 'strata validate' cleanly but
+    was never projected into any Terraform artifact at all — silently
+    dropped, not even delivered unresolved. Now delivered via
+    TF_VAR_providers, same broadcast mechanism as resx_<type>/topologies/
+    properties/custom/tenant already had."""
+    root = _solution(tmp_path)
+    _write(root, "infra/main.tf", "# root module\n")
+    _write(
+        root,
+        "provider.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
+        "  properties:\n    type: local\n    region: local\n"
+        "  configuration:\n    partner_id: '${var:partner_id}'\n"
+        "  custom:\n    cost_center: '${secret:cost_center}'\n",
+    )
+    _write(
+        root,
+        "resource.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
+        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  default_tags:\n    managed-by: strata\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  variables:\n    - key: partner_id\n      store: constant\n      value: 'ACME123'\n"
+        "  secrets:\n    - key: cost_center\n      store: constant\n      value: platform\n",
+    )
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        "  workspace: main\n  environments:\n    - prd\n",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    envs: list[dict[str, str] | None] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        envs.append(env)
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+        monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+        diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok
+    init_env = next(env for env in envs if env is not None)
+    assert "TF_VAR_providers" in init_env
+    providers_payload = json.loads(init_env["TF_VAR_providers"])
+    assert providers_payload["p1"]["configuration"]["partner_id"] == "ACME123"
+    assert providers_payload["p1"]["custom"]["cost_center"] == "platform"
+    # On-disk build artifact stays literal/unresolved — never rewritten.
+    on_disk = json.loads((build_path / "infra" / "providers.auto.tfvars.json").read_text())
+    assert on_disk["p1"]["configuration"]["partner_id"] == "${var:partner_id}"
+    assert on_disk["p1"]["custom"]["cost_center"] == "${secret:cost_center}"
+
+
 def test_deploy_run_rejects_output_token_in_configuration_payloads(tmp_path: Path):
     """docs/_gap_v1.md gap #8: '${output:...}' has no ownership mechanism
     for resx_<type>/topologies/properties/custom/tenant (broadcast-only,

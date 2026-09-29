@@ -12,6 +12,16 @@ collected output (docs/design/deploy-command.md's "Cross-step output
 context") — dependency-scoped resolution lives in `deploy_controller.py`,
 not here; this module stays kind-agnostic (see `resolve_value_tokens()`).
 
+A 5th kind, ``${value:kind.name.path}``, is a cross-document reference into
+another already-loaded document's own literal field (docs/design/
+cross-document-value-references.md) — addressed by `(kind, name)` document
+identity plus a dotted path from that document's root, not by an
+Environment-declared key the way `var`/`secret`/`feature` are. This module
+only recognizes its *syntax* (the `key` group already permits the extra
+dots, no regex redesign needed); resolving `kind.name.path` against a real
+`DocumentIndex` is `value_references.py`'s job (`resolve_document_value_references()`),
+not this module's — same kind-agnostic split `output` already established.
+
 Lives in `strata.utils` (below `strata.models` in the layered architecture,
 ADR-0003): pure regex/string logic, no Pydantic dependency, reused across
 many model files (dns, module, network, firewall...) — same reasoning as
@@ -22,9 +32,9 @@ import ipaddress
 import re
 from typing import Any
 
-VALUE_TOKEN_KINDS = ("var", "secret", "feature", "output")
+VALUE_TOKEN_KINDS = ("var", "secret", "feature", "output", "value")
 
-VALUE_TOKEN_PATTERN = re.compile(r"\$\{(?P<kind>var|secret|feature|output):(?P<key>[A-Za-z0-9_.-]+)\}")
+VALUE_TOKEN_PATTERN = re.compile(r"\$\{(?P<kind>var|secret|feature|output|value):(?P<key>[A-Za-z0-9_.-]+)\}")
 
 _VALUE_TOKEN_CANDIDATE_PATTERN = re.compile(r"\$\{[^}]*\}")
 
@@ -45,7 +55,7 @@ _ESCAPED_VALUE_TOKEN_PATTERN = re.compile(r"\$\$(\{[^}]*\})")
 #: stray literal "$" prepended to the resolved value).
 _RESOLVE_VALUE_TOKEN_PATTERN = re.compile(
     r"\$\$(?P<escaped>\{[^}]*\})"
-    r"|\$\{(?P<kind>var|secret|feature|output):(?P<key>[A-Za-z0-9_.-]+)\}"
+    r"|\$\{(?P<kind>var|secret|feature|output|value):(?P<key>[A-Za-z0-9_.-]+)\}"
 )
 
 
@@ -153,8 +163,22 @@ def resolve_value_tokens(value: str, values: dict[str, str]) -> str:
     (docs/design/value-token-resolution.md; `strata deploy run`, docs/design/
     deploy-command.md).
 
-    `kind` (`var`/`secret`/`feature`/`output`) only matters to the token's
-    author, not to resolution: callers (`resolve_values()`/
+    A ``${value:kind.name.path}`` token (docs/design/
+    cross-document-value-references.md) is resolved exactly like any other
+    kind — `key` here is the exact `"kind.name.path"` string, and
+    `resolve_values()` (`value_controller.py`) already merges every
+    resolved cross-document reference into the same flat `values` mapping
+    passed in here (Phase 4) before this function ever runs. A
+    `${value:...}` token this function is called with directly (outside
+    that flow — e.g. a bespoke caller that built its own `values` dict)
+    still raises the same "did not resolve to a value" error below if its
+    key is missing, exactly like an undeclared `var`/`secret` would — this
+    function itself has no special knowledge of `value:`'s own
+    `(kind, name)`-lookup semantics; that resolution already happened
+    upstream, in `value_references.py`.
+
+    `kind` (`var`/`secret`/`feature`/`output`/`value`) only matters to the
+    token's author, not to resolution: callers (`resolve_values()`/
     `build_value_references()`/`deploy_controller.py`'s per-step output
     context) already merge every source into one flat `key -> value` mapping
     before this function ever runs — it reads `key` only, indifferent to

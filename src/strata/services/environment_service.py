@@ -159,6 +159,18 @@ def unresolved_value_tokens(
                 code="malformed_value_token",
             )
         for kind, key in extract_value_tokens(text):
+            if kind == "value":
+                # Existence/path/scalar/target-is-literal checks for this
+                # kind are a `DocumentIndex` lookup
+                # (`semantic_checks.py`'s `_check_value_references()`,
+                # docs/design/cross-document-value-references.md's Phase
+                # 5, reusing `resolve_document_value_references()` from
+                # Phase 3) — not an Environment-declared-keys question
+                # this function could ever answer. Skip entirely, same
+                # shape as the `output_claimed` early-exit below, not a
+                # `declared[kind]` lookup that would otherwise misreport
+                # it as `unsupported_value_token_kind`.
+                continue
             if kind == "output" and output_claimed:
                 # Accepted — some execution step's `targets` claims this
                 # document (gap #12), so a real step can legitimately

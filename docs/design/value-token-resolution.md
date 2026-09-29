@@ -2,8 +2,36 @@
 
 - Status: implemented — all 7 phases of the Full Solution plan are done
   (see "Full Solution" below); the separate, lower-priority bare-`${KEY}`-
-  token (no `kind:` prefix) lint hint remains open, tracked on its own
-- Last updated: 2026-09-28 (Phase 7 verified and extended — gap #10 fully closed)
+  token (no `kind:` prefix) lint hint remains open, tracked on its own; the
+  5th kind, `${value:kind.name.path}`, designed and **fully implemented,
+  all 7 of its own phases, in
+  [cross-document-value-references.md](cross-document-value-references.md)**
+  (`"value"` is a recognized `VALUE_TOKEN_KINDS` entry;
+  `resolve_document_value_references()` (`value_references.py`) resolves a
+  real `${value:kind.name.path}` token against the loaded `DocumentIndex`,
+  merges into `ValueResolution.values` for deploy-time delivery, and backs
+  a `strata validate` check (`semantic_checks.py`'s
+  `_check_value_references()`) so both share one implementation — live-
+  migrated into `.v2-cfg`'s real `environments/c0062-env.yaml` as proof);
+  **a real resolution-reach gap found 2026-09-29** (Provider's
+  `configuration`/`custom` never projected into any Terraform artifact at
+  all, despite passing validation) motivated a new requirement —
+  resolution must reach anywhere in `root.spec.*`, not a curated category
+  list — see "Decision (2026-09-29)" below. **Both halves of this fix are
+  now implemented**: Phase 0 (the `InfraIntegration.__subclasses__()`
+  guardrail, preventing the same regression on the *tool* axis) and
+  Phase 1 (the actual Terraform-delivery genericization, closing the
+  confirmed Provider gap — `docs/_gap_v1.md` gap #17).
+  **Phased implementation plan for both this fix and the `value:` kind
+  lives in
+  [cross-document-value-references.md](cross-document-value-references.md)'s
+  own "Implementation Plan" section — all 7 phases done** — not
+  duplicated here.
+- Last updated: 2026-09-29 (Phase 6 — documentation and a full
+  implementation review, including a live `.v2-cfg` migration proof —
+  implemented and verified; the `value:` kind design is now fully done)
+  primitive — implemented and verified)
+  implemented and verified)
 
 ## Overview
 
@@ -45,7 +73,10 @@ document *strata itself owns*, not a third-party tool's native config
 kind, `${output:step.key}` (a prior step's collected outputs, dependency-
 scoped), is being added for `deploy run` specifically —
 [deploy-command.md](deploy-command.md)'s "Cross-step output context"
-section.
+section. **A 5th kind, `${value:kind.name.path}` (a cross-document
+reference, not tied to a specific `deploy run` step) was added later**,
+fully implemented as of 2026-09-29 —
+[cross-document-value-references.md](cross-document-value-references.md).
 
 **C. Jinja2 full-file templates** — `output.template` (ADR-0023 D3). Use
 this when **generating/templating an entire file** strata's own default
@@ -72,7 +103,13 @@ secret."
 ## Current Design
 
 - **Syntax**: `${kind:KEY}` where `kind` is `var`, `secret`, or `feature`
-  (future: `step`, once [Context](provisioning-injection-model.md) lands).
+  (also `output`, [Context](provisioning-injection-model.md)/[deploy-command.md](deploy-command.md)'s
+  own dedicated design; also `value` — [cross-document-value-references.md](cross-document-value-references.md),
+  a solution-wide `${value:kind.name.path.to.field}` reference into another
+  already-loaded document's own literal field, not an Environment-declared
+  key at all — fully implemented as of 2026-09-29, Phases 0-5 of that
+  doc's own Implementation Plan: syntax recognition, resolution, deploy-time
+  delivery, and a dedicated `strata validate` check).
   Embeddable anywhere inside a plain `str` field — a literal is just a
   string with no tokens in it.
 - `validate_value_tokens()` (`common_models.py`) — Phase 1 syntax check only
@@ -137,6 +174,17 @@ blocked on the same prerequisite `docs/design/provisioning-injection-model.md`
 already names for Context/deploy-time work generally.
 
 ## Per-Kind Status
+
+**A `value:`-kind row is deliberately not added to the table below** —
+see [cross-document-value-references.md](cross-document-value-references.md)
+(fully implemented through Phase 5, 2026-09-29 — syntax recognition, the
+resolution primitive, wiring into `resolve_values()`, and the `strata
+validate` check; only Phase 6, documentation/final verification, remains):
+unlike the four kinds this table tracks, `${value:kind.name.path}` is not
+scoped to specific per-kind model fields (`DnsRecordModel.value`, etc.) at
+all — it's valid in any string field any kind already walks generically,
+addressed by `(kind, name)` document identity instead of a model field. A
+per-kind row would misrepresent it as narrower than it is.
 
 **Reflects final state (2026-09-28, after Full Solution Phases 0-7) — the
 original 2026-09-25 version of this table showed Resource/Provider/
@@ -710,6 +758,174 @@ simplest/already-proven pattern, Helm/Compose need the new path-tracking
 step first); 6 extends delivery to `configuration`/`custom`; 7 is
 verification, not new code.
 
+## Decision (2026-09-29): resolution reach must match validation reach — no curated per-category allowlist — ~~IMPLEMENTED (2026-09-29, as docs/_gap_v1.md gap #17)~~
+
+**Requirement, stated directly (per request): the actual replacement
+mechanism — not just validation — must work anywhere in `root.spec.*`
+(any depth, any kind), for all five token kinds
+(`var`/`secret`/`feature`/`output`/`value` — the last one proposed,
+[cross-document-value-references.md](cross-document-value-references.md)),
+not a hand-maintained subset of fields/categories.**
+
+### Why this needed stating explicitly — a real gap found while answering "does resolution work everywhere?"
+
+Validation already satisfies this (Phase 1/2's generic whole-document walk
+— confirmed above, "The walking primitive already exists and is already
+field-agnostic"). **Resolution does not, today** — checked
+`terraform_projection.py` directly (2026-09-29): Terraform delivery is
+built from a **curated list** of category-builder functions
+(`build_dns_networks_firewalls_payloads()`'s 3 + `build_configuration_payloads()`'s
+5), not a generic walk over everything `build_platform_projection()`
+itself already produces (13 categories: `workspace`/`providers`/
+`topologies`/`resources_by_category`/`namespaces`/`firewalls`/`dns`/
+`networks`/`flags`/`variables`/`properties`/`custom`/`tenant`). Whatever
+isn't on the curated 8-category re-resolution list simply never gets
+substituted, no matter how correctly validated it is.
+
+**Confirmed real, concrete gap this produces**: `_build_providers_payload()`
+(`terraform_projection.py`) projects only `type`/`region`/`display_name`
+from `ProviderPropertiesModel` — it never even projects `ProviderSpecModel.
+configuration`/`.custom` into *any* artifact, build- or deploy-time, despite
+the Per-Kind Status table above correctly saying Provider's Phase 1/Phase 2
+*validation* is "Done." A `${var:X}`/`${secret:X}` token in a Provider's
+`configuration` field passes `strata validate` cleanly today and is then
+**silently dropped** — not even written as an unresolved literal, simply
+never projected into any `.auto.tfvars.json` file the way the table's own
+"Done" implies. This is a materially different, more complete way this
+same "validation reach ≠ resolution reach" mismatch can hide, beyond what
+Phase 7's own investigation already found for the seven `configuration`/
+`custom`/`properties` fields — Phase 7 fixed *validate-time coverage* for
+those seven; this is the *symmetric* miss on the *delivery* side, and
+Provider in particular wasn't even one of the seven Phase 7 already
+checked.
+
+### Fix direction: genericize Terraform delivery to match validation's own genericization, not add a 9th curated category
+
+Adding `providers` as a 9th hand-picked category to
+`build_configuration_payloads()` would fix today's one known instance but
+not the underlying pattern — the next kind added to the schema would
+silently repeat this exact gap unless someone remembers to also add it to
+the curated list, by hand, every time. The fix that actually closes this
+by construction: **iterate every category `build_platform_projection()`
+already produces** (the full 13, not a curated re-selection of some of
+them) and apply the same "resolve via the step's `tokens`, deliver as
+`TF_VAR_<category>`" treatment to each — `flags`/`variables`/`workspace`/
+`namespaces` are harmless no-ops under this (already fully resolved, or
+contain no token-bearing field at all, confirmed by reading each builder
+function directly), so genericizing costs nothing for those, and closes
+`providers` (and any future kind) automatically, with zero new
+category-specific code required when a new kind gains a `configuration`/
+`custom` field later.
+
+Module/Helm/Compose delivery **already satisfies this** — confirmed
+directly, not assumed: `resolve_module_values()`/`resolve_compose_values()`
+both walk their entire rendered payload generically already (no
+field-specific scoping, per their own docstrings) — the curation problem
+above is Terraform-delivery-specific, an artifact of `terraform_projection.py`'s
+own category/file-per-Terraform-variable convention (a real constraint —
+Terraform needs one `variable "X" {}` per category, so *some* grouping is
+unavoidable — the fix is "group by the same categories `build
+platform_projection()` already uses, all of them," not "invent a new,
+independent, curated list of which ones matter").
+
+### Consequence for the proposed `value:` kind
+
+Since `${value:...}` substitution reuses the exact same
+`resolve_value_tokens()`/flat-map mechanism (docs/design/
+cross-document-value-references.md's own "Resolution model" section) as
+`var`/`secret`/`feature`/`output`, fixing the curation gap above for the
+existing four kinds means `value:` inherits full `root.spec.*` reach for
+free, the same way — no separate genericization work needed for the 5th
+kind specifically, as long as it lands after (or alongside) this fix
+rather than before it.
+
+### Guardrail: prevent this regressing on the *tool* axis too (a future Bicep, not just a future kind)
+
+The Terraform-delivery genericization above closes the gap on the **kind**
+axis (a new schema kind's `configuration`/`custom` field is covered
+automatically, no per-kind code needed). It does not, by itself, guarantee
+parity on the **tool** axis — a future `InfraIntegration` subclass (e.g. a
+real `BicepIntegration`, `ProvisionerType.BICEP` already exists in
+`builtin_types.py`'s enum, anticipated in `registry.py`'s own
+`_KNOWN_V1_TYPES` comment) could ship with none of `ENV_VAR_PREFIX`/
+`SUPPORTS_OUTPUT`/`Capability.CONTAINER` deliberately set, silently
+inheriting every optional default and never receiving a resolved value at
+all — the exact same failure shape as the Provider gap above, on a
+different axis. Confirmed real risk, not hypothetical: Bicep's actual
+native input mechanism (a `parameters.json` file / `--parameters` CLI
+args) isn't env-var-shaped at all, unlike Terraform/Compose — so
+`ENV_VAR_PREFIX = None` would be the *correct* value for it, indistinguishable
+from "nobody decided this yet" unless something forces the decision.
+
+**Fix, mirroring an already-proven pattern in this exact codebase**
+(`commands/exit_codes.py`'s `EXIT_CODE_BY_ERROR` table + its own
+`test_every_error_type_is_mapped()`, which walks `StrataError.
+__subclasses__()` recursively and fails if any subclass is unmapped): add
+the same shape for `InfraIntegration`. A new contract test,
+`test_every_infra_integration_declares_a_resolved_value_delivery_mechanism()`,
+walks `InfraIntegration.__subclasses__()` recursively and asserts each one
+either sets `ENV_VAR_PREFIX` or declares `Capability.CONTAINER` (today's
+two real delivery shapes) — anything else must be added to an explicit,
+commented allowlist in the test itself, never silently pass. This fails CI
+the moment a `BicepIntegration` (or any future tool) is added without a
+resolved-value delivery decision, forcing that decision at review time
+instead of discovering it in production the first time someone's real
+deployment gets a literal `${var:X}` string instead of the resolved value.
+
+**Implemented (2026-09-29)**, in
+`tests/strata/integrations/test_integrations_capabilities.py`. Two real
+complications surfaced during implementation, both now handled and
+documented in the test's own docstrings: registered integrations are
+lazily imported by `registry.py`, so every `registry._KNOWN` entry must be
+force-loaded (class only, never instantiated) before the
+`__subclasses__()` walk finds anything; and the walk must filter to
+`cls.__module__.startswith("strata.")` to exclude this same test file's
+own `_Bare`/`_Compliant`/`_Incomplete`/`_WithOutput` fixture subclasses.
+Companion test `test_every_infra_integration_type_is_a_known_real_integration()`
+names the three covered integrations explicitly. Full check suite green.
+
+### Status
+
+**Implemented (2026-09-29), as `docs/_gap_v1.md` gap #17.**
+`_build_providers_payload()` (`terraform_projection.py`) now includes
+`configuration`/`custom`; `build_configuration_payloads()` extended from
+its curated 5-category subset to all 10 non-claimable categories
+(`workspace`/`providers`/`resx_<type>`/`topologies`/`namespaces`/`flags`/
+`variables`/`properties`/`custom`/`tenant`) — `dns`/`networks`/`firewalls`
+keep their unchanged, separate per-name claiming rule (gap #12). Kept as
+two functions, not one (`build_dns_networks_firewalls_payloads()` +
+`build_configuration_payloads()`), a deliberate deviation from the
+original one-function sketch to avoid rewriting an existing test suite
+that imports `build_configuration_payloads()` directly — `deploy_
+controller.py`'s own two call sites needed zero logic changes either way.
+Full writeup, including the one corrected design assumption found during
+implementation (`workspace`/`providers` are *unconditionally present*, not
+absent, in every real solution — "no-op" means their values don't change
+under resolution, not that they contribute nothing), lives in
+[cross-document-value-references.md](cross-document-value-references.md)'s
+Implementation Plan (Phase 1) and `docs/_gap_v1.md` gap #17 — not
+duplicated here. Full check suite green: mypy (107 files), ruff,
+import-linter (1 kept, 0 broken), pytest (1258 passed).
+
+**The `InfraIntegration.__subclasses__()` contract test above (Phase 0) is
+implemented** — covers today's three registered subclasses
+`TerraformIntegration`/`HelmIntegration`/`ComposeIntegration`, and every
+future one from then on, automatically. **All 7 phases of
+[cross-document-value-references.md](cross-document-value-references.md)'s
+Implementation Plan are now done** (`${value:...}` syntax is recognized as
+of Phase 2; `resolve_document_value_references()` — the resolution
+primitive, living in `value_references.py` after Phase 5's circular-import
+fix moved it out of `value_controller.py` — is implemented as of Phase 3;
+`resolve_values()` merges its output as of Phase 4; `strata validate`'s
+`_check_value_references()` reuses the same primitive as of Phase 5;
+Phase 6 added documentation, a full implementation review — which found
+and fixed two stale docstrings and one real, pre-existing, non-`value:`-
+specific limitation (a Value token embedded in a `store: constant`
+field's own value is never resolved) — and a live migration proof in
+`.v2-cfg`'s real `environments/c0062-env.yaml`). `${value:...}` now
+resolves correctly at deploy time AND is checked at validate time, with a
+real, working, live example in the repo's own coverage-check fixture.
+
 ## Related Decisions
 
 - [ADR-0002](../decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md) — token syntax decision, resolver design, rationale for rejecting `ValueSourceModel`/Jinja
@@ -1048,4 +1264,125 @@ verification, not new code.
   directly (not assumed) and confirmed unaffected — still the same known
   44 errors. All 7 phases of this design are now implemented; only the
   separate, lower-priority bare-`${KEY}`-token lint hint remains open.
+- 2026-09-29: **Implemented the `InfraIntegration.__subclasses__()`
+  guardrail test** (the "Guardrail" section above; tracked as Phase 0 of
+  [cross-document-value-references.md](cross-document-value-references.md)'s
+  Implementation Plan), per request ("design, plan, and implement phase
+  0"). Full details, including two real complications found and fixed
+  during implementation (test-fixture pollution, lazy-import blind spot),
+  are recorded in that doc's own changelog rather than duplicated here.
+  Full check suite green: mypy `src` clean, ruff `src tests` clean,
+  import-linter 1/0, pytest 1256 passed. Phase 1 (the Provider-gap
+  Terraform-delivery fix itself) remains design only.
+- 2026-09-29: **Implemented Phase 1** (the Provider-gap Terraform-delivery
+  genericization), per request ("design, plan, and implement phase 1").
+  Confirmed the real gap directly against source first:
+  `_build_providers_payload()` never read `ProviderSpecModel.
+  configuration`/`.custom`, and grep confirmed nothing else in the
+  codebase reads them either — live in `.v2-haven`'s real
+  `hetzner-eu-de.yaml`. Fixed that function to include both; extended
+  `build_configuration_payloads()` from its curated 5-category subset to
+  all 10 non-claimable categories. One deliberate deviation from the
+  original one-function sketch: kept `build_dns_networks_firewalls_
+  payloads()` and `build_configuration_payloads()` as two functions, not
+  one, to avoid rewriting an existing test suite's exact-category-set
+  assertions — `deploy_controller.py` needed zero logic changes either
+  way. One design assumption corrected during implementation: `workspace`/
+  `providers` turned out to be *unconditionally present* (not absent) in
+  every real solution once genericized — "no-op" means their values don't
+  change under resolution, not that they contribute nothing. 3 new tests,
+  4 existing tests updated for the wider category set. Full check suite
+  green: mypy (107 files), ruff, import-linter (1 kept, 0 broken), pytest
+  (1258 passed). Logged as `docs/_gap_v1.md` gap #17 (resolved). Phases
+  2-6 (the `${value:...}` kind itself) remain unimplemented.
+- 2026-09-29: **Implemented Phase 2** (`${value:...}` syntax recognition),
+  per request ("design, plan, and implement phase 2"). Added `"value"` to
+  `VALUE_TOKEN_KINDS` and both regex kind alternations in
+  `value_tokens.py`, exactly as designed. Confirmed and tested one real
+  interim consequence: `unresolved_value_tokens()` has no
+  `kind == "value"` skip branch yet (Phase 5's job), so a document
+  containing `${value:...}` today is honestly flagged
+  `unsupported_value_token_kind` — same interim shape `${output:}` had
+  before its own later phases. 6 new tests. Full check suite green: mypy
+  (107 files), ruff, import-linter (1 kept, 0 broken), pytest (1264
+  passed). Full writeup in
+  [cross-document-value-references.md](cross-document-value-references.md)'s
+  own changelog, not duplicated here. Phases 3-6 (existence/resolution/
+  validate-time wiring) remain unimplemented.
+- 2026-09-29: **Implemented Phase 3** (the `${value:...}` resolution
+  primitive), per request ("design, plan, and implement phase 3"). New
+  `resolve_document_value_references()` (`value_controller.py`, per Open
+  Question 1's leaning). One real refinement found while implementing,
+  against the design's own looser Phase 2 framing: a bare
+  `${value:onlyonesegment}` is now confirmed to surface as
+  `value_reference_unknown_kind` (the one segment genuinely isn't a real
+  `PlatformKind` value), not `value_reference_invalid_path` as that
+  earlier note loosely suggested — `value_reference_invalid_path` is
+  reserved for a *valid* kind with no name segment at all (e.g. a bare
+  `${value:tenant}`). 14 new tests, including the `kind: solution` edge
+  case and both a `${var:}`- and a `${value:}`-chained non-literal-target
+  rejection (proving the cycle-impossible-by-construction claim for a
+  same-kind chain too, not just a mixed one). Full check suite green:
+  mypy (107 files), ruff, import-linter (1 kept, 0 broken), pytest (1278
+  passed). Full writeup in
+  [cross-document-value-references.md](cross-document-value-references.md)'s
+  own changelog, not duplicated here. Phases 4-6 (wiring into
+  `resolve_values()`/`strata validate`, documentation) remain
+  unimplemented.
+- 2026-09-29: **Implemented Phase 4** (wiring `${value:...}` into
+  `resolve_values()`), per request ("design, plan, and implement phase
+  4"). Implemented exactly as designed, zero deviations:
+  `resolve_values()` now calls `resolve_document_value_references()`
+  unconditionally and merges into `ValueResolution.values`/`.diagnostics`.
+  Confirmed `deploy_controller.py` needed zero changes — its own
+  `resolved.values` consumption was already generic/blind to which
+  mechanism produced an entry. 3 new tests. Full check suite green: mypy
+  (107 files), ruff, import-linter (1 kept, 0 broken), pytest (1281
+  passed). `${value:...}` now resolves correctly end-to-end at deploy
+  time; only the `strata validate` check (Phase 5) and documentation
+  (Phase 6) remain unimplemented.
+- 2026-09-29: **Implemented Phase 5** (the `strata validate` check for
+  `${value:...}`), per request ("design, plan, and implement phase 5").
+  Found and fixed a real circular import, not anticipated by the design:
+  `semantic_checks.py` (imported by `solution_context.py`) importing
+  `resolve_document_value_references()` from `value_controller.py`
+  (which itself imports `solution_context.py` for the `SolutionContext`
+  type) closed a loop — `solution_context -> semantic_checks ->
+  value_controller -> solution_context`. Neither mypy nor ruff nor
+  `get_errors` caught it; only running `pytest` surfaced the real
+  `ImportError`. Fixed by extracting the function into a new sibling
+  module, `value_references.py`, which only needs `DocumentIndex` and has
+  no dependency on `solution_context.py` — both callers now import it
+  directly, no cycle. `unresolved_value_tokens()` gained the designed
+  `kind == "value"` skip branch; `semantic_checks.py`'s new
+  `_check_value_references()` reuses the (relocated) primitive as the 9th
+  check. 4 new end-to-end tests, 1 existing test rewritten to assert the
+  new correct behaviour instead of Phase 2's old interim one. Full check
+  suite green: mypy (108 files), ruff, import-linter (1 kept, 0 broken),
+  pytest (1285 passed). Full writeup, including the circular-import root
+  cause, in
+  [cross-document-value-references.md](cross-document-value-references.md)'s
+  own changelog. Only Phase 6 (documentation/final verification) remains.
+- 2026-09-29: **Implemented Phase 6 and did a full implementation
+  review** of the `value:` kind, per request ("design, plan, and
+  implement phase 6 and do a full review of the implementation"). Fixed
+  two stale docstrings in `value_tokens.py` (still described `${value:}`
+  resolution as unimplemented, stale since Phase 3/4) plus one stale test
+  docstring, adding a new positive-case test alongside. Found a real,
+  confirmed, pre-existing limitation while attempting the live migration
+  proof below: a Value token (any kind, not just `value:`) embedded in a
+  `store: constant` field's own value is never resolved by
+  `_resolve_store_value()`/`build_value_references()`. Live-migrated
+  `.v2-cfg`'s real duplicated `"c0062"` (`environments/c0062-env.yaml`) to
+  `${value:tenant.c0062.meta.name}` — only the `properties`-embedded
+  occurrence, per the limitation just found; the `store: constant`
+  variable occurrence was left a literal, with an explanatory comment.
+  `strata validate .v2-cfg` (run via the local dev source) confirmed
+  clean, 12/12; `.v2-haven` reconfirmed at its same known 44
+  pre-existing errors, zero new `value_reference_*` codes. Full check
+  suite green: mypy (108 files), ruff, import-linter (1 kept, 0 broken),
+  pytest (1286 passed). **All 7 phases of the `${value:...}` design are
+  now implemented and live-proven.** Full writeup in
+  [cross-document-value-references.md](cross-document-value-references.md)'s
+  own changelog.
 

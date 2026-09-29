@@ -842,3 +842,66 @@ spec:
     )
     context = _resolve(root)
     assert context.ok, context.diagnostics.messages()
+
+
+# ---------------------------------------------------------------------------
+# ${value:kind.name.path} cross-document references (docs/design/
+# cross-document-value-references.md's Phase 5) — end-to-end through real
+# `strata validate` (`open_solution(...).resolve()`), not the private
+# `_check_value_references()`/`resolve_document_value_references()` directly
+# (already unit-tested in `test_value_controller.py`). Proves the wiring:
+# `strata validate` now actually calls this check, and no longer flags
+# `${value:...}` as `unsupported_value_token_kind` the way it used to
+# before Phase 5 (docs/design/cross-document-value-references.md's own
+# Phase 2 changelog entry documented that exact interim behaviour).
+# ---------------------------------------------------------------------------
+
+
+def _solution_with_tenant_and_probe(tmp_path: Path, token: str) -> Path:
+    root = tmp_path / "sln"
+    _write(root, "strata.yaml", MANIFEST)
+    _write(
+        root,
+        "c0062.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: tenant\nmeta:\n  name: c0062\nspec:\n"
+        '  display_name: "GSK"\n  geographies:\n    - europe\n',
+    )
+    _write(
+        root,
+        "environments/probe.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: probe\nspec:\n"
+        f'  properties:\n    probe: "{token}"\n',
+    )
+    return root
+
+
+def test_value_reference_that_resolves_passes_validate(tmp_path):
+    root = _solution_with_tenant_and_probe(tmp_path, "${value:tenant.c0062.meta.name}")
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_value_reference_to_an_unknown_document_is_caught_by_validate(tmp_path):
+    root = _solution_with_tenant_and_probe(tmp_path, "${value:tenant.doesnotexist.meta.name}")
+    context = _resolve(root)
+    assert not context.ok
+    assert any(e.code == "value_reference_unknown_document" for e in context.diagnostics.errors)
+
+
+def test_value_reference_no_longer_reported_as_unsupported_token_kind(tmp_path):
+    """Before Phase 5, `${value:...}` was flagged `unsupported_value_token_kind`
+    by `unresolved_value_tokens()` (the exact interim behaviour Phase 2's own
+    changelog entry documented and tested) — confirm that code never appears
+    now, for either a resolving or a failing reference."""
+    for token in ("${value:tenant.c0062.meta.name}", "${value:tenant.doesnotexist.meta.name}"):
+        context = _resolve(_solution_with_tenant_and_probe(tmp_path, token))
+        assert not any(e.code == "unsupported_value_token_kind" for e in context.diagnostics.errors)
+
+
+def test_value_reference_with_no_value_tokens_anywhere_is_a_no_op(tmp_path):
+    """The base solution (every other check's control case) has zero
+    `${value:...}` tokens anywhere — confirms wiring `_check_value_references()`
+    into `run_semantic_checks()` doesn't regress the fully-clean case."""
+    context = _resolve(_base_solution(tmp_path))
+    assert context.ok, context.diagnostics.messages()
+    assert not any(e.code and e.code.startswith("value_reference_") for e in context.diagnostics.errors)

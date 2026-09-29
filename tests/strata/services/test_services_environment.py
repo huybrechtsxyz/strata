@@ -89,6 +89,25 @@ def test_output_token_is_rejected_cleanly_not_a_crash():
     assert "not supported" in message
 
 
+def test_value_token_is_skipped_entirely_not_judged_here():
+    """docs/design/cross-document-value-references.md's 5th kind,
+    `${value:...}` — Phase 5 added a `kind == "value"` skip branch to
+    `unresolved_value_tokens()` specifically because this function has no
+    way to judge it at all: existence/path/scalar/literal correctness is a
+    `DocumentIndex` lookup (`semantic_checks.py`'s `_check_value_references()`),
+    never an Environment-declared-keys question. So a `${value:...}` token
+    passes *this* function unconditionally, even one that would fail
+    `_check_value_references()` (e.g. an unknown target) — this function
+    genuinely has no opinion on it either way, unlike `${output:}` above,
+    which this function does still judge (with an explicit
+    'not supported' rejection by default)."""
+    result = _environment().validate_document_tokens(_dns("${value:tenant.c0062.meta.name}"))
+    assert result.ok, result.messages()
+
+    result = _environment().validate_document_tokens(_dns("${value:tenant.doesnotexist.meta.name}"))
+    assert result.ok, result.messages()
+
+
 def test_output_token_is_accepted_when_output_claimed_is_true():
     """docs/design/deploy-command.md's "Cross-invocation output access"
     fix: a document some execution step's `targets` claims (gap #12,

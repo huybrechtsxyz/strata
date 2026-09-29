@@ -164,6 +164,60 @@ def test_resolve_value_tokens_resolves_a_real_token_alongside_an_escaped_one():
     assert result == "${TOKEN}-westeurope"
 
 
+# ---------------------------------------------------------------------------
+# ${value:kind.name.path} — docs/design/cross-document-value-references.md's
+# 5th token kind, Phase 2: syntax recognition only, no existence/resolution
+# check yet (that's Phase 3+, `value_controller.py`, not this module).
+# ---------------------------------------------------------------------------
+
+
+def test_extract_value_tokens_recognizes_a_value_kind_token():
+    assert extract_value_tokens("${value:tenant.c0062.meta.name}") == [("value", "tenant.c0062.meta.name")]
+
+
+def test_find_malformed_value_tokens_accepts_a_well_formed_value_token():
+    assert find_malformed_value_tokens("${value:tenant.c0062.meta.name}") == []
+
+
+def test_validate_value_tokens_accepts_a_well_formed_value_token():
+    """Doesn't raise — '${value:...}' is syntactically well-formed like any
+    other kind, even though nothing resolves it yet."""
+    validate_value_tokens("${value:tenant.c0062.meta.name}")
+
+
+def test_extract_value_tokens_accepts_a_bare_single_segment_value_token():
+    """Deliberately NOT a Phase 1 malformed-token error: the regex's `key`
+    group doesn't parse `kind.name.path` internally, only Phase 3's resolver
+    does — a missing `name`/`path` surfaces later as
+    `value_reference_invalid_path`, not here."""
+    assert extract_value_tokens("${value:onlyonesegment}") == [("value", "onlyonesegment")]
+    assert find_malformed_value_tokens("${value:onlyonesegment}") == []
+
+
+def test_resolve_value_tokens_raises_on_an_unresolved_value_token():
+    """This low-level function has no special knowledge of `value:`'s own
+    `(kind, name)`-lookup semantics — that resolution happens upstream, in
+    `resolve_values()`/`value_references.py` (Phase 3/4, now implemented),
+    which populates the `"kind.name.path"` entry in `values` *before*
+    calling this function. Called directly with an empty `values` dict
+    (bypassing that upstream resolution), a `${value:...}` token still
+    raises the same "did not resolve" error an undeclared var/secret key
+    would — this function's own raw contract is unaffected by Phase 3/4,
+    only `resolve_values()`'s wrapping of it changed."""
+    with pytest.raises(ValueError, match="did not resolve to a value"):
+        resolve_value_tokens("${value:tenant.c0062.meta.name}", {})
+
+
+def test_resolve_value_tokens_substitutes_a_value_token_once_its_key_is_populated():
+    """The positive case completing the pair above — once a caller (in
+    practice, `resolve_values()`'s Phase 4 merge) has populated the exact
+    `"kind.name.path"` key, this function substitutes a `${value:...}`
+    token exactly like any other kind — no special-casing needed, matching
+    `kind` only ever mattering to the token's author."""
+    result = resolve_value_tokens("code=${value:tenant.c0062.meta.name}", {"tenant.c0062.meta.name": "c0062"})
+    assert result == "code=c0062"
+
+
 def test_resolve_value_tokens_in_mapping_unescapes_nested_escaped_literals():
     data = {"env": {"SMTP_HOST": "$${GATUS_SMTP_HOST}"}}
     assert resolve_value_tokens_in_mapping(data, {}) == {"env": {"SMTP_HOST": "${GATUS_SMTP_HOST}"}}

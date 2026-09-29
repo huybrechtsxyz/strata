@@ -292,15 +292,21 @@ def deploy_run(
     # readable by any of them.
     dns_networks_firewalls = build_dns_networks_firewalls_payloads(graph)
 
-    # Five more Value-token-bearing categories (docs/_gap_v1.md gap #8's
-    # Terraform-side refinement, docs/design/value-token-resolution.md's
-    # "Full Solution" Phase 6) — broadcast only, unlike the three above:
-    # `resx_<type>`/`topologies`/`properties`/`custom`/`tenant` are either
-    # workspace/deployment-wide singletons (no name to claim by) or grouped
-    # by type/topology name (addressable, but nothing evidences a real need
-    # for per-name ownership yet, gap #12-style) — so `${output:...}` is
-    # rejected outright for all five (checked once, right below) rather
-    # than given a claiming mechanism.
+    # Ten more Value-token-bearing categories (docs/_gap_v1.md gap #8's
+    # Terraform-side refinement + gap #17's universal-resolution-reach
+    # fix, docs/design/value-token-resolution.md's "Full Solution" Phase 6
+    # and "Decision (2026-09-29)") — broadcast only, unlike the three
+    # above: `workspace`/`providers`/`resx_<type>`/`topologies`/
+    # `namespaces`/`flags`/`variables`/`properties`/`custom`/`tenant` are
+    # either workspace/deployment-wide singletons (no name to claim by) or
+    # grouped by type/topology/namespace name (addressable, but nothing
+    # evidences a real need for per-name ownership yet, gap #12-style) —
+    # so `${output:...}` is rejected outright for all ten (checked once,
+    # right below) rather than given a claiming mechanism. Gap #17 closed
+    # the confirmed real hole here: `providers` used to be entirely absent
+    # from this delivery, so a `${var:}`/`${secret:}` token in a Provider's
+    # `configuration`/`custom` passed `strata validate` but was silently
+    # never resolved or delivered anywhere.
     configuration_payloads = build_configuration_payloads(graph)
 
     # Same lookup `build_workload_modules()` uses at build time (docs/_gap_v1.md
@@ -336,9 +342,9 @@ def deploy_run(
                     location=name,
                 )
 
-    # None of Phase 6's five broadcast categories may ever contain
-    # `${output:...}` — there is no per-step-varying data they could
-    # meaningfully reference (no claiming mechanism exists for a
+    # None of build_configuration_payloads()'s ten broadcast categories may
+    # ever contain `${output:...}` — there is no per-step-varying data they
+    # could meaningfully reference (no claiming mechanism exists for a
     # workspace-wide singleton or a type-grouped category, unlike
     # dns/networks/firewalls above).
     for name, payload in configuration_payloads.items():
@@ -459,7 +465,8 @@ def deploy_run(
 
         # Terraform delivery for dns/networks/firewalls (docs/_gap_v1.md gap
         # #9/#12, docs/design/value-token-resolution.md's "Full Solution"
-        # Phase 2) and Phase 6's five broadcast categories (gap #8): the
+        # Phase 2) and build_configuration_payloads()'s ten broadcast
+        # categories (gap #8 + gap #17): the
         # whole resolved payload as one JSON-encoded env var per category,
         # same never-touches-disk pattern `backend.configuration` already
         # has (`terraform_projection.py`'s own `*.auto.tfvars.json` written
@@ -489,7 +496,8 @@ def deploy_run(
                 resolved_payload = resolve_value_tokens_in_mapping(docs_for_step, tokens)
                 env[f"{integration.ENV_VAR_PREFIX}{category}"] = json.dumps(resolved_payload)
 
-            # Phase 6's five broadcast categories (gap #8) — identical for
+            # build_configuration_payloads()'s ten broadcast categories
+            # (gap #8 + gap #17) — identical for
             # every step (no ownership to vary by, and no `${output:...}`
             # can be present, guaranteed by the pre-flight check above), so
             # this is pure repetition of the same resolution per step, same

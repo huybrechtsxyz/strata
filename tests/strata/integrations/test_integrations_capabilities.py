@@ -12,6 +12,7 @@ from strata.integrations.capabilities import (
 )
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph, ValueResolution
 from strata.models.common_models import SourceModel
+from strata.models.integration_model import Capability
 from strata.models.provisioning_model import ProvisionerModel
 from strata.models.workspace_model import WorkspaceMetaModel, WorkspaceModel, WorkspaceSpecModel
 
@@ -327,6 +328,91 @@ def test_render_output_template_uses_resolved_values_not_ref_value(tmp_path: Pat
     )
 
     assert output_path.read_text() == '{"region": "westeurope"}'
+
+
+# ---------------------------------------------------------------------------
+# Guardrail: every real InfraIntegration must declare a resolved-value
+# delivery mechanism (docs/design/value-token-resolution.md's "Guardrail:
+# prevent this regressing on the tool axis too" section, Phase 0 of
+# docs/design/cross-document-value-references.md's Implementation Plan).
+#
+# Mirrors tests/strata/commands/test_commands_exit_codes.py's
+# _all_error_types()/test_every_error_type_is_mapped() shape exactly: walk
+# every subclass recursively, fail if any of them is unaccounted for.
+# ---------------------------------------------------------------------------
+
+
+def _all_infra_integration_types() -> list[type]:
+    """Every InfraIntegration subclass strata itself registers as a real
+    integration, recursively — test-only fixture subclasses (this file's
+    own `_Bare`/`_Compliant`/`_Incomplete`/`_WithOutput`, and any future
+    ones anywhere else in the test suite) are deliberately excluded by
+    module: they are incomplete-by-design test doubles (this file's own
+    `_Bare` docstring literally models "Bicep's real... behaviour" as a
+    minimal stand-in), never a real integration strata dispatches a
+    resolved value to. Filtering by `__module__` rather than by name
+    means a *future* test fixture is excluded automatically too, with no
+    per-class allowlist to maintain.
+
+    Registered classes are lazily imported (`registry.py`'s own module
+    docstring: "the only thing standing between 'add a Vault integration'
+    and every strata invocation hard-depending on hvac") — a class that
+    was never imported never registers as a subclass at all, so every
+    known type is force-loaded (class only, never instantiated) via
+    `registry._resolve_class()` first. Iterating `registry._KNOWN` rather
+    than hardcoding today's three names means a future registration is
+    force-loaded and checked automatically too.
+    """
+    from strata.integrations import registry
+
+    for known_type in registry._KNOWN:
+        registry._resolve_class(known_type)
+
+    found: list[type] = []
+    stack: list[type] = list(InfraIntegration.__subclasses__())
+    while stack:
+        cls = stack.pop()
+        if cls.__module__.startswith("strata."):
+            found.append(cls)
+        stack.extend(cls.__subclasses__())
+    return found
+
+
+def test_every_infra_integration_declares_a_resolved_value_delivery_mechanism():
+    """A new tool (e.g. a future BicepIntegration — ProvisionerType.BICEP
+    already exists in builtin_types.py, anticipated in registry.py's own
+    _KNOWN_V1_TYPES comment) that ships with neither ENV_VAR_PREFIX nor
+    Capability.CONTAINER declared would silently never receive a resolved
+    var/secret/feature/output value at all — this fails CI the moment that
+    happens, forcing the delivery-mechanism decision at review time
+    instead of discovering it in production the first time someone's real
+    deployment gets a literal '${var:X}' string instead of the resolved
+    value.
+
+    Passes today against the three real registered integrations
+    (Terraform via ENV_VAR_PREFIX, Helm/Compose via Capability.CONTAINER) —
+    a pure safety net, zero behaviour change.
+    """
+    checked = _all_infra_integration_types()
+    assert checked, "No real InfraIntegration subclasses found — the walk itself is broken."
+
+    for cls in checked:
+        has_env_var_delivery = cls.ENV_VAR_PREFIX is not None
+        has_container_delivery = Capability.CONTAINER in cls.CAPABILITIES
+        assert has_env_var_delivery or has_container_delivery, (
+            f"{cls.__module__}.{cls.__name__} declares neither ENV_VAR_PREFIX nor "
+            "Capability.CONTAINER — how does it receive resolved var/secret/feature/"
+            "output values? If genuinely no mechanism applies yet, this test needs an "
+            "explicit, commented exception — not a silent pass."
+        )
+
+
+def test_every_infra_integration_type_is_a_known_real_integration():
+    """Names the three integrations this guard currently covers explicitly,
+    so adding a fourth real one is visible in a diff here too, not just
+    implicitly covered by the generic walk above."""
+    names = {cls.__name__ for cls in _all_infra_integration_types()}
+    assert names == {"TerraformIntegration", "HelmIntegration", "ComposeIntegration"}
 
 
 def test_render_output_template_raises_on_unresolvable_reference(tmp_path: Path):
