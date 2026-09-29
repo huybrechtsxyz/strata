@@ -59,3 +59,44 @@ def test_configuration_rejects_duplicate_topology_names():
     with pytest.raises(ValidationError, match="Duplicate"):
         ConfigurationModel.model_validate(data)
 
+
+# ---------------------------------------------------------------------------
+# spec.security (docs/_gap_v1.md gap #7 — real usage: cfg-int-deployment's
+# config/stores.yaml)
+# ---------------------------------------------------------------------------
+
+
+def test_configuration_security_is_optional():
+    """spec.security may be omitted entirely — no restriction declared."""
+    model = ConfigurationModel.model_validate(_minimal_configuration())
+    assert model.spec.security is None
+
+
+def test_configuration_accepts_security_allow_lists():
+    data = _minimal_configuration()
+    data["spec"]["security"] = {
+        "allowed_secret_stores": ["github", "azure-keyvault"],
+        "allowed_variable_stores": ["constant", "azure-appconfig"],
+        "allowed_feature_stores": ["constant", "azure-appconfig"],
+    }
+    model = ConfigurationModel.model_validate(data)
+    assert model.spec.security.allowed_secret_stores == ["github", "azure-keyvault"]
+    assert model.spec.security.allowed_variable_stores == ["constant", "azure-appconfig"]
+    assert model.spec.security.allowed_feature_stores == ["constant", "azure-appconfig"]
+
+
+def test_configuration_security_fields_are_each_independently_optional():
+    data = _minimal_configuration()
+    data["spec"]["security"] = {"allowed_secret_stores": ["azure-keyvault"]}
+    model = ConfigurationModel.model_validate(data)
+    assert model.spec.security.allowed_secret_stores == ["azure-keyvault"]
+    assert model.spec.security.allowed_variable_stores is None
+    assert model.spec.security.allowed_feature_stores is None
+
+
+def test_configuration_security_rejects_unknown_fields():
+    """extra='forbid' still applies to the nested security model."""
+    data = _minimal_configuration()
+    data["spec"]["security"] = {"allowed_widget_stores": ["nope"]}
+    with pytest.raises(ValidationError):
+        ConfigurationModel.model_validate(data)

@@ -660,6 +660,58 @@ def test_topology_document_itself_is_now_checked_for_tokens(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Environment -> Configuration.spec.security (docs/_gap_v1.md gap #7 —
+# real usage: cfg-int-deployment's config/stores.yaml)
+# ---------------------------------------------------------------------------
+
+
+def test_environment_store_allowed_by_security_passes(tmp_path):
+    root = _base_solution(tmp_path)
+    path = root / "configuration.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "  security:\n    allowed_variable_stores: [constant]\n",
+        encoding="utf-8",
+    )
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_environment_store_not_allowed_by_security_is_caught(tmp_path):
+    root = _base_solution(tmp_path)
+    path = root / "configuration.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "  security:\n    allowed_variable_stores: [azure-appconfig]\n",
+        encoding="utf-8",
+    )
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any("PUBLIC_IP" in m for m in context.diagnostics.messages())
+    assert any(d.code == "disallowed_store" for d in context.diagnostics.errors)
+
+
+def test_security_check_is_skipped_without_a_configuration_document(tmp_path):
+    """No Configuration doc means no declared policy — skip, don't guess.
+    Mirrors `test_topology_component_check_is_skipped_without_a_configuration_document`'s
+    own reasoning for spec.topologies."""
+    root = _base_solution(tmp_path)
+    (root / "configuration.yaml").unlink()
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_security_with_no_fields_set_restricts_nothing(tmp_path):
+    root = _base_solution(tmp_path)
+    path = root / "configuration.yaml"
+    path.write_text(path.read_text(encoding="utf-8") + "  security: {}\n", encoding="utf-8")
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+# ---------------------------------------------------------------------------
 # Environment -> Artifact: store: artifact references (docs/design/
 # artifact-references.md's full-review finding)
 # ---------------------------------------------------------------------------

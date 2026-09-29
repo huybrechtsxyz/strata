@@ -1,9 +1,9 @@
 # v1 -> v2 Coverage Gaps
 
 - Status: living — update in place as gaps are closed or new ones are found
-- Last updated: 2026-09-29 (gap #17 added and resolved — Provider
-  `configuration`/`custom` universal-resolution-reach fix, found while
-  designing docs/design/cross-document-value-references.md)
+- Last updated: 2026-09-29 (gap #7 split apart and `security` resolved,
+  after reading `cfg-int-deployment`'s real, current `config/*.yaml` files
+  directly)
 
 ## Overview
 
@@ -274,11 +274,54 @@ durable, reviewable record.
 - **Found in:** haven's real `config/configuration.yaml` (`spec.integrations`
   — git/terraform/infisical tool declarations with capabilities/validation/
   authentication — plus `spec.deployment.properties` schema).
-- **Status:** deliberate, already deferred per `ConfigurationSpecModel`'s
-  own docstring (ADR-0003) — reconfirmed here with a concrete example, not
-  newly discovered.
-- **Migration action:** none — dropped with a comment pointing here until
-  the corresponding v2 kind/feature is built.
+- **Status:** split apart 2026-09-29 after reading `cfg-int-deployment`'s
+  real, current `config/*.yaml` directly (7 files: `base`/`stores`/`zones`/
+  `policies`/`audit`/`paths`/`promotions`/`remotes`) — this entry's original
+  blanket "all deferred" framing was too coarse. Per-field status now:
+  - `security` (`allowed_secret_stores`/`allowed_variable_stores`/
+    `allowed_feature_stores`) — **RESOLVED 2026-09-29.**
+    `ConfigurationSecurityModel`/`ConfigurationSpecModel.security` +
+    `EnvironmentService.validate_allowed_stores()` (wired into
+    `semantic_checks.py`'s `_check_environments()`) now enforce this — see
+    the Changelog entry below. The one field here with no v2 equivalent to
+    derive it from elsewhere, unlike the three below.
+  - `zones` — **NOT A GAP**, confirmed while investigating this entry: `zones` was
+    already deliberately superseded, differently, by `TenantSpecModel.
+    geographies` + `ProviderConfigRegionModel.geography` (see that model's own
+    docstring, point 4) — `TenantService.validate_geographies_against_provider_configs()`
+    already implements the real cross-check v1's `config/zones.yaml` exists
+    for. Migration action: tag each real region with the matching
+    `geography` value in its `ProviderConfig` document (e.g. `westeurope`/
+    `northeurope` -> `geography: europe`, matching `zones.yaml`'s real
+    groupings) instead of authoring a separate `zones:` section anywhere.
+  - `remotes` — **NOT A GAP**, confirmed while investigating this entry:
+    `SolutionRemoteModel`'s own docstring already made this decision
+    deliberately (bootstrap ordering — Configuration itself can live in a
+    remote) and its `RemoteFetch.EXTERNAL` value already covers the exact
+    real case `remotes.yaml`'s `type: bundled` git-repos-checked-out-by-CI
+    entries need. Migration action: `config/remotes.yaml`'s content maps to
+    `strata.yaml`'s `spec.remotes`, not to any `kind: configuration`
+    document — a placement difference from v1, not a missing feature.
+  - `integrations` (the embedded-list style, e.g. `config/stores.yaml`'s
+    `spec.integrations: [{name: terraform, type: terraform, ...}]`) — still
+    open, but now a **shape gap, not a modeling gap**: ADR-0021 already
+    built the equivalent capability as a standalone `kind: integration`
+    document (deliberately, not an embedded list — see that ADR's D3).
+    Migration action: convert each embedded list entry into its own
+    `kind: integration` document; no new v2 code needed for this specific
+    shape translation.
+  - `policies`/`audit`/`paths`/`promotions` — still fully open, unstarted.
+    Real active usage is narrower than the documented feature catalog
+    (checked directly, 2026-09-29): only 2 of `policies.yaml`'s many
+    documented policy `type`s are actually enabled
+    (`tenant_zone`@phase `plan`, `path_convention`@phase `validate`); the
+    one real ELK audit sink is `enabled: false`; `promotions.yaml` declares
+    a `progressions.standard` ring sequence but no active `strategies`
+    entry. A future design should scope to this real subset first, not the
+    full documented catalog.
+- **Migration action:** see per-field notes above; `policies`/`audit`/
+  `paths`/`promotions` still drop with a comment pointing here until built.
+
 
 ### 8. ~~Value tokens inside `spec.configuration`/`spec.custom` passthrough dicts are never resolved~~ — RESOLVED
 
@@ -1508,3 +1551,35 @@ and the provider/providerconfig/topologyconfig registry split.
   generically. 3 new tests, 4 existing tests updated for the wider
   category set. Full check suite green: mypy (107 files), ruff,
   import-linter (1 kept, 0 broken), pytest (1258 passed).
+- 2026-09-29: **Split gap #7, resolved its `security` piece**, per request
+  ("lets find the next prio so we can deploy the cfg-int-deployemtns" ->
+  narrowed via `vscode_askQuestions` to "resolve remotes placement + model
+  security/zones"). Read `cfg-int-deployment`'s real, current `config/`
+  directory directly (`e:\sources\cfg-int-deployment`, 7 files) rather than
+  relying on ADR-0020's older workflow-only survey — found gap #7's
+  blanket "all deferred" framing was too coarse: `zones` and `remotes` are
+  both already resolved by existing, deliberate v2 design (`TenantSpecModel.
+  geographies`/`SolutionRemoteModel`'s docstrings respectively), not open
+  gaps at all; `integrations` (the real repo's embedded-list style) is a
+  shape-translation migration action, not a modeling gap, now that
+  ADR-0021's standalone `kind: integration` exists; only `security` had no
+  v2 equivalent anywhere. Implemented `security`: new
+  `ConfigurationSecurityModel` (`allowed_secret_stores`/
+  `allowed_variable_stores`/`allowed_feature_stores`, each independently
+  optional, no `additional_*: bool` escape hatch since real usage is a
+  strict allow-list) on `ConfigurationSpecModel.security`; new
+  `EnvironmentService.validate_allowed_stores()`, following
+  `validate_artifact_references()`'s exact precedent; wired into
+  `semantic_checks.py`'s `_check_environments()` using
+  `_check_workspace_topology_components()`'s existing "exactly one
+  Configuration document, else skip" pattern (multiple same-kind
+  Configuration documents already known-unhandled, ADR-0003). 13 new tests
+  (4 model, 5 service unit, 4 semantic-check integration). Full check
+  suite green: mypy (108 files), ruff, import-linter (1 kept, 0 broken),
+  pytest (1318 passed — same pre-existing, unrelated `config/`
+  example-solution drift as the sole failure). `strata validate .v2-cfg`
+  re-confirmed clean (12/12), unaffected. `policies`/`audit`/`paths`/
+  `promotions` remain open — real active usage in the source repo is
+  narrower than their documented feature catalogs (only 2 of many
+  documented policy types are actually enabled today), a future design
+  should scope to that real subset first.

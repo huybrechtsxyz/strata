@@ -4,6 +4,7 @@
 from typing import Any
 
 from strata.models.common_models import PlatformBaseModel
+from strata.models.configuration_model import ConfigurationSecurityModel
 from strata.models.environment_model import EnvironmentModel
 from strata.models.store_model import FeatureStoreModel, SecretStoreModel, VariableStoreModel, VariableStoreType
 from strata.services.base_service import BaseService
@@ -99,6 +100,67 @@ class EnvironmentService(BaseService[EnvironmentModel]):
                     location="spec.variables",
                     code="undefined_artifact",
                 )
+        return diagnostics
+
+    def validate_allowed_stores(self, security: ConfigurationSecurityModel) -> Diagnostics:
+        """Check every variable/secret/feature's `store` against the platform's
+        allow-lists (`docs/_gap_v1.md` gap #7, real usage: cfg-int-deployment's
+        `config/stores.yaml`).
+
+        Each of `security`'s three fields is independently optional — `None`
+        means that store kind is unrestricted, matching every other
+        allow-list in this codebase (`ConfigurationSpecModel.providers`/
+        `.topologies`, both `None`-safe the same way). A field that IS set is
+        a closed list: real usage deliberately omits a recognized builtin
+        store type (`environment`) from it, so builtins get no automatic
+        exemption here — same discipline that field's own real-world
+        example was found using.
+
+        Args:
+            security: The single `Configuration` document's `spec.security`
+                (never `None` itself — callers only invoke this when it's
+                set; an absent `Configuration`/absent `spec.security` means
+                no restriction, checked by the caller, not repeated here).
+
+        Returns:
+            One error per variable/secret/feature whose `store` is not in
+            the corresponding allow-list.
+        """
+        diagnostics = Diagnostics()
+        self._ensure_validated()
+        assert self.model is not None
+        spec = self.model.spec
+
+        if security.allowed_variable_stores is not None:
+            for variable in spec.variables or []:
+                if variable.store.value not in security.allowed_variable_stores:
+                    diagnostics.error(
+                        f"Variable '{variable.key}': store '{variable.store.value}' is not in the platform's "
+                        f"allowed_variable_stores. Available: {sorted(security.allowed_variable_stores)}",
+                        location="spec.variables",
+                        code="disallowed_store",
+                    )
+
+        if security.allowed_secret_stores is not None:
+            for secret in spec.secrets or []:
+                if secret.store.value not in security.allowed_secret_stores:
+                    diagnostics.error(
+                        f"Secret '{secret.key}': store '{secret.store.value}' is not in the platform's "
+                        f"allowed_secret_stores. Available: {sorted(security.allowed_secret_stores)}",
+                        location="spec.secrets",
+                        code="disallowed_store",
+                    )
+
+        if security.allowed_feature_stores is not None:
+            for feature in spec.features or []:
+                if feature.store.value not in security.allowed_feature_stores:
+                    diagnostics.error(
+                        f"Feature '{feature.key}': store '{feature.store.value}' is not in the platform's "
+                        f"allowed_feature_stores. Available: {sorted(security.allowed_feature_stores)}",
+                        location="spec.features",
+                        code="disallowed_store",
+                    )
+
         return diagnostics
 
 

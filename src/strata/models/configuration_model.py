@@ -2,10 +2,15 @@
 """Pydantic model for solution-wide configuration validation.
 
 This is a deliberately minimal slice of v1's `configuration_model.py` — v1's
-real ConfigurationModel also covers security policy, path conventions,
-logging, manifest/output shaping, cost and drift tracking, and change
-tracking. Those are ported only when the corresponding v2 kind/feature that
-needs them is built (see ADR-0003).
+real ConfigurationModel also covers path conventions, logging, manifest/
+output shaping, cost and drift tracking, and change tracking. Those are
+ported only when the corresponding v2 kind/feature that needs them is built
+(see ADR-0003). `spec.security` (below) is the one exception ported ahead
+of a specific consuming feature — real usage
+(docs/_gap_v1.md gap #7) had no equivalent to derive it from elsewhere,
+unlike `zones` (superseded by `TenantSpecModel.geographies` + `ProviderConfigRegionModel.geography`)
+or `integrations`/`remotes` (already their own standalone kind/the solution
+manifest, respectively).
 
 `spec.providers`/`spec.topologies` are plain lists of ProviderConfig/
 TopologyConfig document **names**, resolved by discovery against the
@@ -45,31 +50,63 @@ from strata.models.reference_fields import References
 from strata.utils.names import check_unique_names
 
 
+class ConfigurationSecurityModel(PlatformBaseModel):
+    """Allow-lists restricting which store types a `variable`/`secret`/`feature`
+    may declare, platform-wide.
+
+    Ported from v1's real, active usage (`config/stores.yaml`'s
+    `spec.security`, cfg-int-deployment) — ADR-0020/gap #7 originally
+    deferred this alongside `zones`/`remotes`/`policies`/`audit`/`paths`, but
+    unlike those, `security` has no v2 equivalent elsewhere to derive it
+    from (compare `zones`, superseded by `TenantSpecModel.geographies`).
+
+    Each field is `None` (no restriction — every store type recognized by
+    the corresponding `StoreType` enum is allowed) or a closed allow-list —
+    there is no `additional_*_stores: bool` escape hatch, since v1's own
+    real usage is already a strict allow-list ("Anything not listed here is
+    rejected") with no such toggle. A builtin store type (`constant`,
+    `environment`, ...) still needs to appear in the list to be allowed —
+    v1's real `config/stores.yaml` deliberately excludes `environment`
+    platform-wide this way, proving builtins are not implicitly exempt.
+    """
+
+    allowed_secret_stores: list[str] | None = Field(
+        None,
+        description="Secret store types (SecretStoreType values, e.g. 'azure-keyvault') permitted in any "
+        "`kind: environment` document. None means unrestricted.",
+    )
+    allowed_variable_stores: list[str] | None = Field(
+        None,
+        description="Variable store types (VariableStoreType values, e.g. 'azure-appconfig') permitted in "
+        "any `kind: environment` document. None means unrestricted.",
+    )
+    allowed_feature_stores: list[str] | None = Field(
+        None,
+        description="Feature store types (FeatureStoreType values, e.g. 'azure-appconfig') permitted in any "
+        "`kind: environment` document. None means unrestricted.",
+    )
+
+
 class ConfigurationSpecModel(PlatformBaseModel):
     """Configuration specification.
 
-    Only `providers`/`topologies` are modeled so far — see module docstring
-    for what v1 has that v2 is deliberately deferring.
+    Only `providers`/`topologies`/`security` are modeled so far — see module
+    docstring for what v1 has that v2 is deliberately deferring.
     """
 
-    properties: dict[str, Any] | None = Field(
-        None, description="Optional additional properties for the configuration."
-    )
-    configuration: dict[str, Any] | None = Field(
-        None, description="Optional configuration-specific properties."
-    )
-    custom: dict[str, Any] | None = Field(
-        None, description="Optional custom properties for the configuration."
-    )
+    properties: dict[str, Any] | None = Field(None, description="Optional additional properties for the configuration.")
+    configuration: dict[str, Any] | None = Field(None, description="Optional configuration-specific properties.")
+    custom: dict[str, Any] | None = Field(None, description="Optional custom properties for the configuration.")
 
     providers: list[Annotated[PlatformName, References(PlatformKind.PROVIDERCONFIG)]] | None = Field(
         None, description="Provider type registry: names of ProviderConfig documents"
     )
-    additional_topologies: bool = Field(
-        False, description="Allow topology types not listed in spec.topologies"
-    )
+    additional_topologies: bool = Field(False, description="Allow topology types not listed in spec.topologies")
     topologies: list[Annotated[PlatformName, References(PlatformKind.TOPOLOGYCONFIG)]] | None = Field(
         None, description="Topology type registry: names of TopologyConfig documents"
+    )
+    security: ConfigurationSecurityModel | None = Field(
+        None, description="Allow-lists restricting which store types a variable/secret/feature may declare."
     )
 
     @model_validator(mode="after")

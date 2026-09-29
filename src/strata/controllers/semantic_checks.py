@@ -31,7 +31,7 @@ from typing import cast
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.value_references import resolve_document_value_references
 from strata.models.common_models import PlatformBaseModel, PlatformKind, SourceModel
-from strata.models.configuration_model import ConfigurationModel
+from strata.models.configuration_model import ConfigurationModel, ConfigurationSecurityModel
 from strata.models.deployment_model import DeploymentModel
 from strata.models.environment_model import EnvironmentModel
 from strata.models.module_model import ModuleModel
@@ -228,13 +228,28 @@ def _check_environments(index: DocumentIndex) -> Diagnostics:
     checks it — this is that missing check, following the exact
     `WorkspaceService.validate_topology_references()` precedent for a
     conditionally-meaningful field.
+
+    Also enforces `Configuration.spec.security`'s store allow-lists
+    (docs/_gap_v1.md gap #7), when exactly one `Configuration` document
+    exists and declares it — same "skip rather than guess a policy that was
+    never declared" rule `_check_workspace_topology_components()` already
+    uses for `spec.topologies`.
     """
     diagnostics = Diagnostics()
     artifact_names = set(index.names_of(PlatformKind.ARTIFACT))
+
+    security: ConfigurationSecurityModel | None = None
+    configuration_entries = index.all_of(PlatformKind.CONFIGURATION)
+    if len(configuration_entries) == 1:
+        configuration = cast(ConfigurationModel, configuration_entries[0].model)
+        security = configuration.spec.security
+
     for entry in index.all_of(PlatformKind.ENVIRONMENT):
         environment = cast(EnvironmentModel, entry.model)
         service = EnvironmentService.from_model(environment)
         diagnostics.extend(service.validate_artifact_references(artifact_names), source=str(entry.source))
+        if security is not None:
+            diagnostics.extend(service.validate_allowed_stores(security), source=str(entry.source))
     return diagnostics
 
 

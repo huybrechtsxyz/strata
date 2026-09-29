@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests for EnvironmentService — declared keys and Phase 2 token resolution."""
 
+from strata.models.configuration_model import ConfigurationSecurityModel
 from strata.models.dns_model import DnsModel
 from strata.models.network_model import NetworkModel
 from strata.services.environment_service import EnvironmentService
@@ -319,3 +320,54 @@ def test_non_artifact_variables_are_never_checked():
 def test_no_artifacts_declared_anywhere_still_reports_the_reference():
     result = _environment_with_artifact_variable().validate_artifact_references(set())
     assert not result.ok
+
+
+# ---------------------------------------------------------------------------
+# validate_allowed_stores() (docs/_gap_v1.md gap #7 — Configuration's
+# spec.security allow-lists, real usage: cfg-int-deployment's
+# config/stores.yaml)
+# ---------------------------------------------------------------------------
+
+
+def _security(**overrides) -> ConfigurationSecurityModel:
+    return ConfigurationSecurityModel.model_validate(overrides)
+
+
+def test_store_in_the_allow_list_passes():
+    result = _environment().validate_allowed_stores(_security(allowed_variable_stores=["constant"]))
+    assert result.ok
+    assert result.messages() == []
+
+
+def test_store_not_in_the_allow_list_is_rejected():
+    result = _environment().validate_allowed_stores(_security(allowed_variable_stores=["azure-appconfig"]))
+    assert not result.ok
+    message = result.messages()[0]
+    assert "PUBLIC_IP" in message
+    assert "constant" in message
+    assert "disallowed_store" in [d.code for d in result.errors]
+
+
+def test_a_builtin_store_type_is_not_implicitly_exempt():
+    """v1's own real usage deliberately omits 'environment' from
+    allowed_variable_stores platform-wide — builtins get no free pass."""
+    result = _environment().validate_allowed_stores(_security(allowed_variable_stores=[]))
+    assert not result.ok
+    assert "constant" in result.messages()[0]
+
+
+def test_each_store_kind_is_checked_independently():
+    """An unset field on ConfigurationSecurityModel means that store kind is
+    unrestricted, even when the other two are restricted."""
+    result = _environment().validate_allowed_stores(
+        _security(allowed_secret_stores=["azure-keyvault"], allowed_feature_stores=["azure-appconfig"])
+    )
+    assert not result.ok
+    codes = [d.code for d in result.errors]
+    assert codes.count("disallowed_store") == 2  # secrets + features; variables unrestricted
+
+
+def test_no_fields_set_on_security_means_fully_unrestricted():
+    result = _environment().validate_allowed_stores(_security())
+    assert result.ok
+    assert result.messages() == []
