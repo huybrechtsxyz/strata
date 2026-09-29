@@ -1,7 +1,7 @@
 # v1 -> v2 Coverage Gaps
 
 - Status: living — update in place as gaps are closed or new ones are found
-- Last updated: 2026-09-28 (full review: gaps #1/#13 status corrected, RESOLVED headings added to #1/#8/#9/#10/#13)
+- Last updated: 2026-09-29 (gap #14 resolved, gap #15 added — both found while building `.v2-cfg`)
 
 ## Overview
 
@@ -841,6 +841,89 @@ durable, reviewable record.
 - **Migration action:** none — Helm and Compose namespace deployment are
   both wired end-to-end now.
 
+### 14. ~~`TenantService`'s own docstring says `spec.environments` cross-checking is deferred — it already isn't~~ — RESOLVED
+
+- **Found in:** not a haven/cfg-int-deployment document itself — found
+  while migrating `.v2-cfg`'s tenant (`customers/c0062/tenant.yaml`,
+  2026-09-29), reading `TenantService`'s docstring to check whether
+  `Tenant.spec.environments` needed a manual existence check the same way
+  `WorkspaceService.validate_topology_references()` supplies one for
+  Topology.
+- **Status: closed (2026-09-29).** `tenant_service.py`'s class docstring
+  said: *"`spec.environments` cross-checking is still deferred: it names
+  Environment documents and the `environment` kind is not built yet (it is
+  the most authored kind missing from v2). Becomes an index lookup once it
+  lands."* This was true when written, but the `environment` kind has
+  since been built (gap #9's whole arc depends on it) and
+  `TenantSpecModel.environments` is already typed
+  `Annotated[PlatformName, References(PlatformKind.ENVIRONMENT)]`
+  (`tenant_model.py`) — which `references.py`'s generic walker already
+  checks for every document, unconditionally, with no per-kind opt-in
+  needed. **Confirmed empirically**, not just by reading the type
+  annotation: pointed `.v2-cfg`'s tenant at a nonexistent environment name
+  and re-ran `strata validate` — it correctly failed with `spec.environments.0:
+  unknown environment 'ghost-env-that-does-not-exist' [unknown_reference]`,
+  proving the check already runs today, unconditionally, via the generic
+  reference-existence pass (`validate_references()`), not via any
+  `TenantService`-specific method.
+- **Fixed:** `tenant_service.py`'s class docstring rewritten to state the
+  check is already covered generically (no per-kind opt-in needed), and to
+  drop the now-inaccurate "most authored kind missing from v2"
+  characterization of `environment`, which is one of the most-built-out
+  kinds in v2 today — gaps #8/#9/#10/#12/#13 all depend on it. No behavior
+  change — the check itself was already correct and already running; only
+  the docstring was wrong.
+- **Migration action:** none.
+
+### 15. Terraform input validation against `variables.tf` has no v2 equivalent
+
+- **Found in:** not a fresh discovery — `docs/design/build-command.md`'s
+  own "Remaining Work / Open Questions" section already tracks this
+  ("Terraform input validation against `variables.tf` — v1 fails the build
+  on a declared-input/schema mismatch before `apply` would.
+  [provisioning-injection-model.md](design/provisioning-injection-model.md)
+  mentions parsing `variables.tf` as a capability lookup, but not as a
+  build-time gate."). Cross-referenced into this file's numbered gap list
+  for the first time while migrating `.v2-cfg`'s spoke stack (2026-09-29):
+  the real `stacks/spoke/environment.yaml`'s own comment names the exact
+  mechanism v1 has and v2 lacks — declaring that `tf_state_*` variables are
+  "NOT stack-root inputs... strata excludes keys referenced by
+  `backend.configuration` from the variables.tf check, so no Terraform root
+  should declare them." That exclusion rule only makes sense as one small
+  carve-out *of* a real, broader v1 feature: every other declared
+  `variables`/`features` key in a v1 environment document IS cross-checked
+  against the target Terraform root's real `variables.tf` at build time,
+  and `strata build run` fails before `apply` would if a key is undeclared
+  there or type-mismatched.
+- **Status:** open — deliberate scope limitation so far
+  (`build-command.md`'s own framing: "mentions parsing `variables.tf` as a
+  capability lookup, but not as a build-time gate"), not yet designed or
+  scheduled. No v2 code path reads a Terraform root's `variables.tf` file
+  at all today — `.v2-cfg`'s `workspaces/spoke.yaml`/`environments/
+  spoke-env.yaml` declare `keyvaults`/`ring_subnet_cidrs`/`aks_config`/etc.
+  with no cross-check against the real `spoke/terraform` root's declared
+  inputs (out of reach anyway in this fixture, since `iac-int`'s real
+  Terraform content isn't checked out here — but the check would be a
+  no-op for every v2 solution today regardless of whether the root is
+  materialized).
+- **Consequence:** a typo'd or renamed variable/feature key in a v2
+  Environment document is silently accepted at `strata validate`/
+  `build run` time and only surfaces later, as Terraform's own "undeclared
+  variable" warning (or worse, `terraform plan` silently ignoring an
+  extra `*.auto.tfvars.json` key) — exactly the failure mode
+  `stacks/core/environment.yaml`'s own real v1 comment warns about for its
+  `properties` block ("unlike `variables`/`features`, `properties` keys
+  are NOT cross-checked against `variables.tf` ... a typo here is silently
+  emitted and only surfaces as a Terraform... warning").
+- **Migration action:** none available yet — no design exists. Would need,
+  at minimum: locating the target Terraform root on disk (post-`sync_source()`,
+  `docs/design/remotes.md`'s own still-open prerequisite), parsing
+  `variables.tf` (HCL, not YAML — a new parsing dependency `provisioning-injection-model.md`
+  already flagged as a capability-lookup-only concern today), and deciding
+  where in `build run`'s flow the check runs and how strict it is (error
+  vs. warning, and whether backend-referenced keys are excluded the same
+  way v1's real exclusion rule works).
+
 ## Not gaps (converted cleanly)
 
 Confirmed during the same migration to have zero loss of expressiveness:
@@ -850,6 +933,18 @@ and the provider/providerconfig/topologyconfig registry split.
 
 ## Related
 
+- `.v2-cfg/` at the workspace root — a small hand-migrated slice of the
+  real `cfg-int-deployment` repo (`e:\sources\cfg-int-deployment`): one
+  tenant (`c0062`), one provider (`westeurope`), and the spoke stack
+  (`stacks/spoke/*` — the reusable hub x spoke shared-AKS-cluster
+  template), deliberately not a full migration. Chosen because the spoke
+  stack is v1's real, most concrete example of gap #5's exact structural
+  change (v1's `workspace.yaml` binds `provider`/`provisioner` directly
+  onto a `topology[].components` entry). **Passes `strata validate` clean
+  (12/12 documents, zero findings)** as of 2026-09-29 — gap #14 (now
+  resolved) and gap #15 (cross-linked from `docs/design/build-command.md`'s
+  existing Remaining Work) were both found/logged while building it; no
+  other new schema/feature gap surfaced.
 - `.v2-haven/` at the workspace root — a full 52-document hand-migration of
   every real document in `e:\SourcesXYZ\haven\config`, kept as a live
   fixture. **Currently failing `strata validate` (44 errors, 17 module
@@ -1194,3 +1289,46 @@ and the provider/providerconfig/topologyconfig registry split.
   add zero new findings — its pre-existing 44 `malformed_value_token`
   errors (unrelated) were confirmed via `git stash` to already exist on the
   unmodified branch.
+- 2026-09-29: **Built `.v2-cfg`**, per request to start the same
+  coverage-check migration exercise `.v2-haven` already does against a
+  second, differently-shaped real repo (`e:\sources\cfg-int-deployment` —
+  multi-tenant Azure platform, vs. haven's single-operator homelab).
+  Scoped to one tenant (`c0062`), one provider (`westeurope`) and the spoke
+  stack (`stacks/spoke/*`), per request, not a full migration. Chose the
+  spoke stack specifically because its real `workspace.yaml` binds
+  `provider`/`provisioner` directly onto a `topology[].components` entry —
+  v1's most concrete real example of gap #5's exact structural change
+  (ADR-0011), converted here to a pure-grouping Topology + explicit
+  `execution:` step, mirroring `.v2-haven`'s own precedent. Caught one real
+  discrepancy against the source material: the real `stacks/spoke/
+  README.md` describes `enable_key_vault`/`enable_aks` as "flags it turns
+  on", but the actual current `environment.yaml` has both forced `false`
+  (with dated comments explaining why) — used the file's real values, not
+  the README's description. **Result: `strata validate .v2-cfg` passes
+  clean, 12/12 documents, zero findings, on the first run.** Found and
+  logged gap #14 (a stale `TenantService` docstring) while migrating the
+  tenant document — confirmed empirically (temporarily pointed
+  `spec.environments` at a nonexistent name, `strata validate` correctly
+  caught it, then reverted) that the docstring's claimed deferral is
+  already false; no other new schema/feature gap surfaced by this pass.
+  Separately (not a new finding, already documented in
+  `docs/design/build-command.md`'s Remaining Work): the real spoke
+  environment's own comment about `tf_state_*` variables being "excluded
+  from strata's variable declaration check" is live evidence for that
+  doc's already-tracked "Terraform input validation against `variables.tf`"
+  gap — not yet cross-referenced into this file's numbered gap list, left
+  as a candidate rather than added unasked.
+- 2026-09-29: **Resolved gap #14, added gap #15**, per request ("fix gap
+  14, add gap 15 but put is as documented for the remaining work in the
+  build command"). Gap #14: rewrote `tenant_service.py`'s class docstring
+  to state `spec.environments` existence is already covered generically
+  (no per-kind opt-in needed) and dropped the stale "most authored kind
+  missing from v2" characterization of `environment` — no behavior change,
+  the check itself was already correct, only the docstring was wrong. Gap
+  #15: cross-referenced `docs/design/build-command.md`'s existing
+  Remaining Work item ("Terraform input validation against `variables.tf`")
+  into this file's numbered gap list for the first time, per request —
+  explicitly framed as already-documented, not a fresh discovery here; the
+  real `.v2-cfg` spoke environment's own comment about `tf_state_*` being
+  excluded from that check is the concrete evidence tying it to this
+  migration pass.

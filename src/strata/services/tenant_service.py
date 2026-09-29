@@ -10,9 +10,13 @@ from strata.utils.diagnostics import Diagnostics
 class TenantService(BaseService[TenantModel]):
     """Service for handling tenant configuration.
 
-    `spec.environments` cross-checking is still deferred: it names Environment
-    documents and the `environment` kind is not built yet (it is the most
-    authored kind missing from v2). Becomes an index lookup once it lands.
+    `spec.environments` existence is already checked — it is typed
+    `Annotated[PlatformName, References(PlatformKind.ENVIRONMENT)]`
+    (`tenant_model.py`), which `references.py`'s generic reference-existence
+    walker checks for every document unconditionally, no per-kind opt-in
+    needed. No dedicated method lives here for it (unlike
+    `validate_geographies_against_provider_configs()` below, which needs a
+    second document's *content*, not just its existence).
     """
 
     def _get_model_class(self) -> type[TenantModel]:
