@@ -1,7 +1,7 @@
 # v1 -> v2 Coverage Gaps
 
 - Status: living — update in place as gaps are closed or new ones are found
-- Last updated: 2026-09-29 (gap #14 resolved, gap #15 added — both found while building `.v2-cfg`)
+- Last updated: 2026-09-29 (gap #16 added and resolved — found while designing "Cross-invocation output access" in docs/design/deploy-command.md)
 
 ## Overview
 
@@ -924,6 +924,79 @@ durable, reviewable record.
   vs. warning, and whether backend-referenced keys are excluded the same
   way v1's real exclusion rule works).
 
+### 16. ~~`strata validate` rejected every `${output:...}` token unconditionally, even ones gap #12 already made work~~ — RESOLVED
+
+- **Found in:** not a haven/cfg-int-deployment document — found while
+  designing `docs/design/deploy-command.md`'s "Cross-invocation output
+  access" section (2026-09-29): reviewing that design against real code
+  before writing new checks on top of it, `unresolved_value_tokens()`
+  (`environment_service.py`, the function `strata validate`'s Phase 2 pass
+  actually calls) still carried a comment unchanged since gap #11 —
+  "`${output:}` is not yet wired into any of the fields this function
+  checks (DNS/network/firewall/module), pending Context (ADR-0006)" — no
+  longer true since gap #12 wired real, tested, step-owned `${output:...}`
+  resolution into DNS/network/firewall documents. **Confirmed empirically**:
+  ran `unresolved_value_tokens()` directly against the identical DNS
+  document gap #12's own passing test uses
+  (`test_deploy_run_resolves_output_token_in_dns_via_owning_step_targets`),
+  with the token legitimately claimed by a real step — it failed with
+  `unsupported_value_token_kind`, even though `deploy_run()` resolves that
+  exact document correctly. That test only ever calls `open_solution()`
+  (Phase 1) before calling `deploy_run()` directly, never
+  `context.resolve()` (the real `strata validate` Phase 2 path), so the
+  inconsistency was never caught.
+- **Expanded scope found on the same review**: the bug also affects
+  Modules, not just DNS/network/firewall — `unresolved_value_tokens()` has
+  no per-document-kind special-casing at all, so a Module's `services[].
+  environment[].value` using `${output:X.key}` (already correctly resolved
+  at deploy time via `HelmIntegration.deploy_namespace()`'s `tokens =
+  {**resolved.values, **visible_outputs}`) was rejected by `strata
+  validate` for the identical reason. Gap #12's own "modules are already
+  safe" note is about deploy-time dependency *ordering*, not validate-time
+  *acceptance* — it never touched `unresolved_value_tokens()`.
+- **Status: closed (2026-09-29).** New `WorkspaceService.
+  claimed_document_names()` generalizes gap #12's dns/network/firewall-only
+  claiming rule to the full `target_names` vocabulary
+  `workspace_model.py`'s own `validate_execution()` already validates
+  against (`dns_zones ∪ networks ∪ firewalls ∪ namespaces`) — a Module
+  reached through a targeted Namespace is exactly as claimed as a
+  directly-targeted DNS document. `_documents_reachable_from_workspace()`
+  (`semantic_checks.py`) now returns `(document, claimed)` pairs instead of
+  a bare list, threading each document's claim status through (a module
+  inherits the claim of the namespace it was reached through).
+  `unresolved_value_tokens()` gained an `output_claimed: bool = False`
+  parameter — `True` accepts an `${output:...}` token instead of rejecting
+  it (key/step existence is still unvalidatable, matching ADR-0006's own
+  admission that Context "does not solve output validation" — only the
+  false rejection is fixed, nothing new is checked). Every existing caller
+  (`validate_document_tokens()` included) keeps the old default and is
+  unaffected. Deliberately **not** touched: `deploy_controller.py`'s own,
+  separate, narrower `claimed_by_category`/`_contains_output_token()`
+  (per-category, feeds `TF_VAR_` delivery) — the new
+  `claimed_document_names()` is an independent, coarser computation
+  purpose-built for this validate-time question; the two mechanisms
+  coexist rather than being unified.
+- **Verified:** 11 new tests — 5 in `test_services_workspace.py`
+  (`claimed_document_names()` unit coverage: empty/no-model, a targeted
+  DNS zone, a targeted namespace, an untargeted document, a targeted
+  resource correctly excluded since it has no Value-token-bearing field of
+  its own), 4 in `test_semantic_checks.py` (end-to-end via
+  `open_solution(...).resolve()`: a claimed DNS document accepted, an
+  unclaimed one still rejected, a Module reached through a claimed
+  namespace accepted, one through an unclaimed namespace still rejected),
+  2 in `test_services_environment.py` (`unresolved_value_tokens()` direct:
+  `output_claimed=True` accepts, omitted/`False` still rejects — matching
+  gap #11's original test). Full check suite green: mypy (107 files),
+  ruff, import-linter (1 kept, 0 broken), pytest (1254 passed).
+  `.v2-cfg`/`.v2-haven` re-validated: `.v2-cfg` still passes clean (12/12),
+  `.v2-haven` still fails with exactly its same known 44 pre-existing,
+  unrelated errors.
+- **Migration action:** none — a document already claimed by an execution
+  step's `targets` (DNS/network/firewall directly, or a Module via its
+  namespace) now validates cleanly with an `${output:...}` token; an
+  unclaimed one is still correctly rejected, unchanged from gap #12's
+  original behavior.
+
 ## Not gaps (converted cleanly)
 
 Confirmed during the same migration to have zero loss of expressiveness:
@@ -1332,3 +1405,32 @@ and the provider/providerconfig/topologyconfig registry split.
   real `.v2-cfg` spoke environment's own comment about `tf_state_*` being
   excluded from that check is the concrete evidence tying it to this
   migration pass.
+- 2026-09-29: **Found and resolved gap #16**, discovered while reviewing
+  the "Cross-invocation output access" design (`docs/design/deploy-command.md`)
+  before implementing new checks on top of it, per request ("lets review
+  the design first"). `unresolved_value_tokens()` still unconditionally
+  rejected every `${output:...}` token — confirmed empirically against
+  gap #12's own passing DNS test fixture, which only ever exercises
+  `deploy_run()` directly, never `strata validate`'s real Phase 2 path.
+  Expanded scope on the same review, per direct follow-up ("well not only
+  terraform - but for all provisioners" / design review): the identical
+  bug affects Modules too, not just DNS/network/firewall, since
+  `unresolved_value_tokens()` has no per-document-kind special-casing.
+  Wrote the full 4-step implementation plan into `deploy-command.md` first
+  ("lets create a design first so we can review it"), then implemented it
+  per request ("ok lets fix the bug, we will be revisiting the value
+  resolver after this"): new `WorkspaceService.claimed_document_names()`
+  generalizes gap #12's claiming rule to the full `target_names`
+  vocabulary (dns_zones/networks/firewalls/namespaces, so a Module via a
+  targeted namespace counts too); `_documents_reachable_from_workspace()`
+  now threads `(document, claimed)` pairs;
+  `unresolved_value_tokens()` gained `output_claimed: bool = False`.
+  11 new tests across 3 files; full check suite green (mypy 107 files,
+  ruff clean, import-linter 1/0, pytest 1254 passed); `.v2-cfg` still
+  clean (12/12), `.v2-haven` still exactly its same known 44 pre-existing,
+  unrelated errors. The remaining, larger "Cross-invocation output access"
+  design (`SUPPORTS_OUTPUT` capability, the two new Phase 2 static checks,
+  and the deploy-time opportunistic re-collection itself) is intentionally
+  deferred — per the user's own framing, next up is revisiting the value
+  resolver more broadly rather than continuing straight through those
+  remaining steps.

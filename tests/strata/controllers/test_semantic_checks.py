@@ -411,6 +411,151 @@ def test_deployment_with_no_resolvable_environment_skips_token_checking(tmp_path
 
 
 # ---------------------------------------------------------------------------
+# docs/_gap_v1.md gap #12, generalized (docs/design/deploy-command.md's
+# "Cross-invocation output access" section, "Expanded finding"): `strata
+# validate` previously rejected EVERY `${output:...}` token unconditionally,
+# even one a real execution step's `targets` claims — confirmed to affect
+# both DNS/network/firewall *and* Modules (reached through a targeted
+# namespace), not just DNS/network/firewall as gap #12 originally scoped.
+# ---------------------------------------------------------------------------
+
+
+def test_output_token_in_a_claimed_dns_document_is_accepted(tmp_path):
+    root = _base_solution(tmp_path)
+    _write(
+        root,
+        "dns.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: dns
+meta:
+  name: example
+spec:
+  provider: cloudflare
+  zones:
+    - name: example.com
+      records:
+        - name: "@"
+          type: A
+          value: "${output:provision-infra.public_ip}"
+      default_tags:
+        environment: test
+""",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: workspace
+meta:
+  name: main
+spec:
+  providers: [azure-main]
+  provisioners:
+    - name: tf
+      tool: terraform
+      source: {source_path: terraform/main}
+  execution:
+    - name: provision-infra
+      provisioner: tf
+      targets: [storage-account, example]
+  resources:
+    - name: storage-account
+      resource: storage-account
+      role: control-plane
+  topology: [main-topology]
+  namespaces: [apps]
+  dns_zones: [example]
+""",
+    )
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_output_token_in_an_unclaimed_dns_document_is_still_rejected(tmp_path):
+    """Regression: an unclaimed document must still be rejected — this fix
+    only changes the claimed case, matching gap #12's own ownership rule."""
+    root = _base_solution(tmp_path)
+    path = root / "dns.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace('value: "1.2.3.4"', 'value: "${output:provision-infra.public_ip}"'),
+        encoding="utf-8",
+    )
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any("output" in m and "not supported" in m for m in context.diagnostics.messages())
+
+
+def test_output_token_in_a_module_reached_through_a_claimed_namespace_is_accepted(tmp_path):
+    """The expanded finding: a Module inherits its owning namespace's claim,
+    not just directly-targeted DNS/network/firewall documents."""
+    root = _base_solution(tmp_path)
+    _write(
+        root,
+        "module.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: module
+meta:
+  name: web
+spec:
+  type: docker-compose
+  default_labels:
+    environment: test
+  source:
+    source_path: modules/web
+  services:
+    - name: web
+      environment:
+        - key: PUBLIC_IP
+          value: "${output:provision-infra.public_ip}"
+""",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: workspace
+meta:
+  name: main
+spec:
+  providers: [azure-main]
+  provisioners:
+    - name: tf
+      tool: terraform
+      source: {source_path: terraform/main}
+  execution:
+    - name: provision-infra
+      provisioner: tf
+      targets: [storage-account, apps]
+  resources:
+    - name: storage-account
+      resource: storage-account
+      role: control-plane
+  topology: [main-topology]
+  namespaces: [apps]
+  dns_zones: [example]
+""",
+    )
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_output_token_in_a_module_reached_through_an_unclaimed_namespace_is_still_rejected(tmp_path):
+    root = _base_solution(tmp_path)
+    path = root / "module.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            'value: "${var:PUBLIC_IP}"', 'value: "${output:provision-infra.public_ip}"'
+        ),
+        encoding="utf-8",
+    )
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any("output" in m and "not supported" in m for m in context.diagnostics.messages())
+
+
+# ---------------------------------------------------------------------------
 # gap #10 Phase 7: tokens are now also checked in the workspace/resource/
 # provider/topology/tenant/environment/deployment documents themselves, not
 # just DNS/network/firewall/module — these were never checked at all before,
@@ -507,7 +652,7 @@ def test_topology_document_itself_is_now_checked_for_tokens(tmp_path):
 
     context = _resolve(_base_solution(tmp_path))
     documents = _documents_reachable_from_workspace(context.controller.index, "main")
-    kinds = {type(document).__name__ for document in documents}
+    kinds = {type(document).__name__ for document, _claimed in documents}
     assert "TopologyModel" in kinds
     assert "WorkspaceModel" in kinds
     assert "ProviderModel" in kinds

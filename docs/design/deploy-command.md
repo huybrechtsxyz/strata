@@ -7,8 +7,19 @@
   deliberately deferred (no real evidence forces them yet); a confirmed
   gap (not just a hypothetical) remains for `store: artifact` at deploy
   time (Remaining Work item 8); Helm/Compose deploy orchestration
-  (`docs/_gap_v1.md` gap #13) is now implemented for both container tools
-- Last updated: 2026-09-28 (TF_VAR_ delivery keyed by integration.ENV_VAR_PREFIX, not a hardcoded literal)
+  (`docs/_gap_v1.md` gap #13) is now implemented for both container tools;
+  cross-invocation output access (a later, separate `deploy run` reading
+  an earlier one's outputs) is designed but not implemented (new section
+  below), including a static `SUPPORTS_OUTPUT` capability flag and two
+  validate/build-time checks for a doomed or non-durable `${output:}`
+  reference — **review (2026-09-29) found a real, confirmed prerequisite
+  bug blocking it**: `strata validate` already rejects every
+  `${output:...}` token unconditionally today, even gap #12's own
+  already-working, already-tested claimed example (empirically
+  reproduced) — fixing that is now step (0) of this design, ahead of the
+  new capability/checks
+- Last updated: 2026-09-29 (design review found `unresolved_value_tokens()`
+  is stale post-gap-#12 — added as prerequisite step (0))
 
 ## Overview
 
@@ -702,6 +713,380 @@ it's a display-redaction hint only.
   simply contribute nothing (no native "outputs" concept in either real
   repo) — same tool-agnostic `getattr(integration, "output", None)`
   pattern the loop already uses for `init`/`validate`.
+
+## Cross-invocation output access — a later, separate `deploy run` reading an earlier one's outputs
+
+The section above solves output-chaining **within one `deploy run`
+process** (dependency-scoped, in-memory `step_outputs`, discarded at exit
+— confirmed directly in `deploy_controller.py`'s own `step_outputs: dict[str,
+dict[str, str]] = {}`, a plain local variable). It does not solve a
+different, real question: what does a step get when `${output:X.key}`
+names a step `X` that did **not** run in *this* invocation — because
+`--stage`/`--scope` filtered it out, or because it was a wholly separate,
+earlier `strata deploy run` process? Design settled 2026-09-29, per direct
+request ("how to 'store' terraform output for another deploy run... not
+only terraform - but for all provisioners"), found by tracing what v1's
+real production CI actually does for this exact case, not assuming a new
+store is needed.
+
+**v1 never solved this either.** `ResolvedValues` (ADR-0006's own v1
+precedent) is built once per deploy run and mutated stage-by-stage for
+that process's lifetime only — no disk/remote persistence anywhere in its
+real source. And the real haven CI genuinely *is* split across separate
+invocations on fresh, ephemeral runners with no shared disk: `10 - Infra -
+haven` (`deploy-infra.yml`, Terraform apply) runs as one completely
+separate GitHub Actions job from `21 - Hearth - Init`
+(`deploy-hearth-init.yml`), which needs the VM Terraform just created.
+
+**How the later job actually gets that VM's IP today is the key finding:
+it does not go through strata's output/Context mechanism at all.**
+`.github/actions/hetzner-ssh-open/action.yml` does a plain
+`curl -H "Authorization: Bearer $HETZNER_API_TOKEN"
+https://api.hetzner.cloud/v1/servers?name=haven-platform-hearth`, looked
+up **by the server's well-known name** — bypassing `terraform output`,
+`ResolvedValues`, and strata entirely. The durable store the later job
+actually reads is the cloud provider's own API, not anything strata
+persisted.
+
+### Design: opportunistic live re-collection, not a new persisted store
+
+Rejected building a strata-owned cache (a JSON file under `.strata/`, a
+remote blob, etc.) as the primary mechanism for two reasons, both
+evidence-based, not hypothetical:
+
+1. **A local cache would not even survive the real topology it's meant
+   for** — haven's separate deploy jobs run on fresh, ephemeral runners
+   with no shared filesystem between them, so a `.strata/`-local cache
+   written by `deploy-infra.yml`'s job would already be gone before
+   `deploy-hearth-init.yml`'s job started.
+2. **No real consumer needs anything beyond what the tool's own state
+   already durably provides.** Terraform (and anything backed by real
+   remote state — OpenTofu, Bicep via `az deployment show`) already
+   persists its outputs remotely, in the state backend
+   `provisioner.backend.configuration` already names — re-reading them
+   later needs no new strata machinery, just permission to ask again.
+
+Instead: when `${output:X.key}` names a step `X` **not** among this
+invocation's filtered `resolved_steps`, look up `X`'s `ProvisionerModel`
+from `workspace.spec.provisioners` (always available regardless of
+`--stage`/`--scope` — filtering only narrows *execution*, never the
+workspace's own declarations) and its already-`build run`-rendered
+directory at `build_path/X.name` (`build_run()` renders every declared
+provisioner unconditionally, not just ones a later `deploy run` happens
+to filter to — so this directory already exists on disk before `deploy
+run` is ever invoked). Resolve that integration
+(`resolve_integration(index, provisioner)`, the same call already used
+for every step), call its `init()` (safe/idempotent — reads the same
+remote backend, mutates nothing) then its `output(path,
+json_format=True, env=env)` — exactly `collect_step_outputs()`'s existing
+logic, called opportunistically for a *not-currently-running* step
+instead of only a just-deployed one. Merge the result into `step_outputs`
+before token resolution, so a later, separate invocation resolves
+`${output:X.key}` identically to how a same-invocation dependent step
+already does.
+
+### A formal `SUPPORTS_OUTPUT` capability, not just duck-typing
+
+`collect_step_outputs()` today decides per-instance, at the moment it's
+called, via `getattr(integration, "output", None)` — fine for *runtime*
+dispatch (exactly the same pattern already used for `init`/`validate`),
+but insufficient for what's needed next: knowing, **before any step
+runs** (at `strata validate`/`build run` time), whether a given
+`${output:X.key}` reference could *ever* resolve. A `getattr` check can't
+run then — no integration instance necessarily exists yet, and the point
+is to catch the mistake before spending a deploy attempt on it.
+
+Add a class-level capability, mirroring the exact convention
+`ENV_VAR_PREFIX` already established on `Integration` (`base.py`) for the
+identical shape of problem ("a fact about what this tool can do, knowable
+statically, defaulting to the safe/absent case"):
+
+```python
+class Integration(ABC):
+    ...
+    #: Whether this integration can report already-applied outputs after
+    #: the fact (`output(path, json_format=True)`), independent of
+    #: whether *this* deploy run's step actually ran — true only for tools
+    #: backed by real, independently-durable state (Terraform's remote
+    #: backend: re-querying needs nothing this run itself produced).
+    #: `False` (default) for tools with no native "outputs" concept at all
+    #: (Helm, Compose) — confirmed, not merely unbuilt, per the "Cross-step
+    #: output context" section above (no native outputs concept in either
+    #: real reference repo).
+    SUPPORTS_OUTPUT: ClassVar[bool] = False
+```
+
+`TerraformIntegration.SUPPORTS_OUTPUT = True`; every other integration
+keeps the base class's `False` default, with no per-class override
+needed unless a future integration (OpenTofu, Bicep via
+`az deployment show`) earns one the same way. `collect_step_outputs()`
+and the opportunistic re-collection above both switch from
+`getattr(integration, "output", None)` to checking `SUPPORTS_OUTPUT`
+first (still calling `getattr` for the actual method — the flag says
+*whether*, the method is still *how*) — no behavior change for either,
+just a name a validator can also ask *before* any integration is
+instantiated for real.
+
+### Static validation — catching a doomed `${output:}` reference at validate/build time, not deploy time
+
+This is the concrete answer to "we can already in validate or build find
+out that certain things would not work with warning or error" — two
+distinct, independently-checkable failure modes, both knowable from the
+schema alone (no cloud call, no subprocess):
+
+1. **Error — the referenced step's tool has no output mechanism at
+   all.** `${output:X.key}` where `X`'s resolved integration has
+   `SUPPORTS_OUTPUT = False` (a Helm/Compose/Ansible step, or any custom
+   plugin that hasn't opted in) can **never** resolve, in any invocation,
+   same-process or not — this is not a "might not work later" case, it's
+   already wrong today.
+2. **Warning — the referenced step's tool supports output, but this
+   specific instance has nothing durable to re-query later.** A
+   Terraform provisioner with no `backend:` configured keeps its state
+   **local to that one `build_path/X.name` directory** — real within the
+   *same* invocation (the directory still exists, `terraform output`
+   still works), but gone the moment a later, separate invocation starts
+   from a fresh checkout/fresh `build_path` (exactly haven's real
+   ephemeral-runner topology). Same check, second condition: `X`'s
+   integration has `SUPPORTS_OUTPUT = True` but `X`'s `ProvisionerModel.
+   backend` is `None` → warning, not error (it demonstrably works
+   *today*, within one invocation — gap #12's own worked example proves
+   that path already — the risk is only realized if a future invocation
+   ever needs it split across processes, which the schema alone cannot
+   rule out or confirm).
+
+#### Blocking prerequisite found on review (2026-09-29): `strata validate` already rejects EVERY `${output:...}` token today, even ones that already work
+
+Re-reading `unresolved_value_tokens()` (`environment_service.py`, the
+function `strata validate`'s Phase 2 pass actually calls, via
+`_check_deployment_value_tokens()` in `semantic_checks.py`) before
+writing the two checks above as new code, its `kind not in declared`
+branch still carries this exact comment, unchanged since gap #11:
+
+> `${output:}` is not yet wired into any of the fields this function
+> checks (DNS/network/firewall/module), pending Context (ADR-0006).
+
+That is no longer true — gap #12 wired real, tested, step-owned
+`${output:...}` resolution into exactly DNS/network/firewall documents,
+in `deploy_controller.py`. But `unresolved_value_tokens()` was never
+updated to match: it still unconditionally emits
+`unsupported_value_token_kind` for **every** `${output:...}` token,
+regardless of whether a step claims it. **Confirmed empirically, not just
+read** — ran `unresolved_value_tokens()` directly against the identical
+DNS document gap #12's own passing test
+(`test_deploy_run_resolves_output_token_in_dns_via_owning_step_targets`)
+uses, with `${output:provision-hearth.public_ip}` claimed by a real
+`apply-dns` step:
+
+```
+ok: False
+spec.zones[0].records[0].value: '${output:provision-hearth.public_ip}'
+tokens are not supported in this field yet (pending Context, ADR-0006).
+[unsupported_value_token_kind]
+```
+
+That test only calls `open_solution(root)` (Phase 1 only) before calling
+`deploy_run()` directly — it never calls `context.resolve()` (the real
+`strata validate` Phase 2 path), so this inconsistency was never caught:
+**a real, correctly-authored, already-deploy-time-working document is
+rejected by `strata validate` alone today.** This is a genuine,
+independent gap — not a consequence of anything proposed above, and worth
+fixing regardless of whether the rest of this design is ever built.
+
+**Consequence for this design**: checks 1/2 above are unreachable as
+additive new code — `unresolved_value_tokens()`'s current blanket
+rejection fires first, for every `${output:...}` token, claimed or not.
+
+#### Expanded finding (2026-09-29): the same bug also affects Modules, not just DNS/network/firewall
+
+`unresolved_value_tokens()` has no per-document-kind special-casing at
+all — it walks `model_dump()` generically, so the blanket rejection above
+applies identically to a Module's `services[].environment[].value`. Gap
+#12's own "modules are already safe... no new design work needed there"
+note is about **deploy-time** dependency ordering (a module's namespace
+being a valid `targets` entry forces step ordering via
+`validate_provisioning_steps()`) — it says nothing about **validate-time**
+acceptance, and does not touch `unresolved_value_tokens()` at all. So a
+module already correctly resolving `${output:X.key}` at deploy time
+(`HelmIntegration.deploy_namespace()`'s own `tokens = {**resolved.values,
+**visible_outputs}`) is *also* rejected by `strata validate` today, for
+the identical reason as the DNS case above — confirmed by inspection of
+`_documents_reachable_from_workspace()` (`semantic_checks.py`): it
+flattens every document (dns/network/firewall/**module**/workspace/
+resource/provider/topology) into one plain `list[PlatformBaseModel]` with
+no per-document memory of which step (if any) claims it, before handing
+each to the same `unresolved_value_tokens()` call uniformly.
+
+### Concrete implementation plan (design only, not yet built)
+
+1. **`WorkspaceService.claimed_document_names()`** (new method,
+   `workspace_service.py`) — a pure function of this workspace's own
+   declarations, no other loaded document needed. Generalizes gap #12's
+   dns/network/firewall-only claiming to the *same* `target_names` set
+   `workspace_model.py`'s own `validate_execution()` already validates
+   against (`resources ∪ namespaces ∪ dns_zones ∪ networks ∪ firewalls`)
+   — a module reached through a targeted Namespace is exactly as claimed
+   as a directly-targeted DNS document, using the schema's own existing
+   target vocabulary rather than a second, narrower one:
+   ```python
+   def claimed_document_names(self) -> set[str]:
+       """Every dns_zones/networks/firewalls/namespaces name claimed by
+       some execution step's own `targets` — the ownership half of
+       `${output:...}` resolution (docs/_gap_v1.md gap #12, generalized
+       to namespaces so a module inside a targeted namespace is covered
+       too, per the 2026-09-29 review finding this also affects Modules).
+       """
+       if self.model is None:
+           return set()
+       spec = self.model.spec
+       claimable = set(spec.dns_zones or []) | set(spec.networks or []) | set(spec.firewalls or []) | set(spec.namespaces or [])
+       claimed: set[str] = set()
+       for step in spec.execution or []:
+           claimed |= set(step.targets) & claimable
+       return claimed
+   ```
+2. **`_documents_reachable_from_workspace()`** (`semantic_checks.py`) —
+   change its return type from `list[PlatformBaseModel]` to
+   `list[tuple[PlatformBaseModel, bool]]` (document, is_claimed), computed
+   once via step 1's new method before the existing walk: a dns/network/
+   firewall document's claim comes from its own name; a module's claim
+   comes from the **namespace it was reached through** (the existing
+   `for name in spec.namespaces` branch already has that name in scope —
+   just needs to thread the resulting bool alongside each
+   `module_entry.model` it appends instead of a bare append). Every other
+   document kind in the walk (workspace/resource/provider/topology, and
+   topology-attached modules) is never claimable today — `is_claimed =
+   False` unconditionally for those, unchanged behavior.
+3. **`unresolved_value_tokens()`** (`environment_service.py`) — new
+   `output_claimed: bool = False` parameter. When checking a token of
+   kind `"output"`: `output_claimed=True` → accept it (key existence
+   still unvalidatable — matches ADR-0006's own admission that Context
+   "does not solve output validation" — this only fixes the false
+   rejection, not add new key-checking); `output_claimed=False`
+   (default, every existing caller unaffected) → today's exact
+   `unsupported_value_token_kind` message, unchanged wording, still
+   correctly fires for a genuinely-unclaimed document.
+4. **`_check_deployment_value_tokens()`** (`semantic_checks.py`) —
+   iterate the new `(document, claimed)` pairs and pass
+   `output_claimed=claimed` through to `unresolved_value_tokens()`
+   instead of today's flat `for document in documents`.
+
+Deliberately **not** in this step: checks 1/2 (`SUPPORTS_OUTPUT`/backend
+durability) themselves — those need `output_claimed=True` to be reachable
+first, and are their own, separate follow-on step per the Status section
+below, not bundled into this fix.
+
+This means `_contains_output_token()`/the claim-computation currently
+inline inside `deploy_run()` (`claimed_by_category`) are a **separate,
+narrower, already-correct** mechanism (per-category, feeding `TF_VAR_`
+delivery) that this fix does not need to touch or reuse — step 1 above is
+a new, independent, coarser (claimed-or-not, no category) computation
+purpose-built for the validate-time question, not a refactor of the
+deploy-time one. Both can coexist; unifying them is not required for this
+fix and is not proposed here.
+
+Both checks are purely structural (provisioner + integration type lookup,
+no execution) — they belong in `strata validate`/`build run`'s existing
+Phase 2 pass, not deploy time, matching gap #10's own "catch it before it
+ever reaches a real deployment" framing.
+
+This is generic across provisioners by construction, not by special-
+casing Terraform: dispatch is `SUPPORTS_OUTPUT`/`getattr(integration,
+"output", None)`-based (`collect_step_outputs()`), so a Helm/Compose
+upstream step contributes nothing here too — matching the confirmed real
+precedent above that those tools' cross-invocation facts are the
+caller's problem (a Hetzner API lookup, an `az deployment show`,
+whatever fits the target platform), not something strata's own output
+plumbing was ever asked to solve.
+
+### Worked example
+
+```yaml
+# workspace.yaml (abridged) — two steps, no shared invocation required
+spec:
+  provisioners:
+    - name: core_iac        # provisions the VM, has a real remote backend
+      tool: terraform
+      source: {source_path: infra/terraform}
+      backend:
+        type: azurerm
+        configuration: {resource_group_name: ..., storage_account_name: ..., key: infra.tfstate}
+    - name: app_config      # a later, separate step — e.g. Ansible/Helm
+      tool: ansible
+      source: {source_path: infra/ansible}
+
+  execution:
+    - name: provision-infra
+      provisioner: core_iac
+      scope: infra
+      targets: [vm_resx]
+    - name: configure-app
+      provisioner: app_config
+      scope: apps
+      targets: [vm_resx]
+      depends_on: [provision-infra]
+      # references ${output:provision-infra.vm_ip} in its own config
+```
+
+- **Day 1, CI job A**: `strata deploy run deployment --scope infra` runs
+  `provision-infra` only. `step_outputs["provision-infra"]` is populated
+  from a real `terraform apply`, used immediately if anything else in
+  *this* invocation needs it, then the process exits — nothing persisted.
+- **Day 2, CI job B, a different runner, fresh checkout**:
+  `strata deploy run deployment --scope apps` runs only `configure-app`.
+  `provision-infra` is not in `resolved_steps` this time — but
+  `${output:provision-infra.vm_ip}` is still referenced. Per this design:
+  resolve `core_iac`'s integration, find `build_path/provision-infra`
+  (already rendered by job B's own preceding `build run`), run
+  `terraform init` (idempotent, points at the same `infra.tfstate` blob)
+  then `terraform output -json` — no re-apply, just a read against the
+  state job A already wrote remotely — and use that value to resolve the
+  token for `configure-app`, exactly as if both steps had run in one
+  process.
+
+**Two variations on the same example showing the new static checks:**
+
+- **Error variant**: the check fires on the **named** step (`provision-infra`,
+  the `X` in `${output:X.key}`), not the referencing step — if
+  `provision-infra` used `tool: helm` instead of `terraform` (its
+  integration has `SUPPORTS_OUTPUT = False`), `strata validate`/`build run`
+  reports it immediately, before any step ever runs: `"'configure-app'
+  references '${output:provision-infra.vm_ip}', but provisioner 'core_iac'
+  (tool 'helm') has no output mechanism — this can never resolve."
+  [output_reference_unsupported]`
+- **Warning variant**: if `core_iac` above had no `backend:` block at all
+  (local Terraform state only), `strata validate` reports:
+  `"'configure-app' references '${output:provision-infra.vm_ip}' — "
+  "provisioner 'core_iac' has no 'backend', so this only resolves within "
+  "the same deploy run that provisions it; a later, separate 'deploy run' "
+  "will not see it." [output_reference_not_durable]`, a warning (not an
+  error — `--strict` would upgrade it, matching every other warning in
+  v2's validate design, ADR-0019).
+
+### Status
+
+Design only, not yet implemented — four parts now, in dependency order:
+(0) **prerequisite, independently valuable on its own, and now confirmed
+to affect Modules too, not just DNS/network/firewall**: add
+`WorkspaceService.claimed_document_names()`, make
+`_documents_reachable_from_workspace()` return claiming alongside each
+document, and give `unresolved_value_tokens()` an `output_claimed`
+parameter — see "Concrete implementation plan" above for the exact
+4-step breakdown. This alone fixes a confirmed real bug (`strata
+validate` currently rejects gap #12's own already-working, already-tested
+DNS example, and would reject an equally-valid claimed Module example the
+same way); (1) the `SUPPORTS_OUTPUT` capability flag on `Integration`;
+(2) the two Phase 2 static checks (`output_reference_unsupported` error,
+`output_reference_not_durable` warning), layered on top of (0)'s now-
+claiming-aware check; (3) the opportunistic live-re-collection itself in
+`deploy_run()`. (0)-(2) need no new deploy mechanism to exist first and
+are independently useful even
+before (3) is built. `docs/_gap_v1.md` was not updated with a new numbered
+gap for (1)-(3) — a genuine capability *extension* beyond both v1 and v2's
+current design (v1 never solved cross-invocation output access via strata
+either). (0) **is** exactly gap-shaped (a real, confirmed, currently-wrong
+behavior) and should get its own numbered entry in `docs/_gap_v1.md` when
+this is implemented, separate from the (1)-(3) extension.
 
 ## Remaining Work / Open Questions
 

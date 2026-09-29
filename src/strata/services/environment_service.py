@@ -102,7 +102,9 @@ class EnvironmentService(BaseService[EnvironmentModel]):
         return diagnostics
 
 
-def unresolved_value_tokens(model: PlatformBaseModel, declared: dict[str, set[str]], owner_name: str) -> Diagnostics:
+def unresolved_value_tokens(
+    model: PlatformBaseModel, declared: dict[str, set[str]], owner_name: str, *, output_claimed: bool = False
+) -> Diagnostics:
     """Check every Value token in `model` against an already-computed declared-keys set.
 
     The free-function form `EnvironmentService.validate_document_tokens` wraps
@@ -131,6 +133,15 @@ def unresolved_value_tokens(model: PlatformBaseModel, declared: dict[str, set[st
         declared: Keys already declared, by token kind (`var`/`secret`/`feature`).
         owner_name: What to call the source of `declared` in an error message
             (an environment's name, or a description of several merged).
+        output_claimed: True when `model` is a document some workspace
+            execution step's own `targets` claims (docs/_gap_v1.md gap #12,
+            `WorkspaceService.claimed_document_names()`) — an `${output:}`
+            token is then accepted instead of rejected outright. Still
+            cannot validate the referenced step/key actually exists or ever
+            produces that output (ADR-0006: Context "does not solve output
+            validation" — unchanged by this parameter, only the false
+            rejection is fixed). `False` (default) preserves every existing
+            caller's behavior unchanged.
 
     Returns:
         One error per malformed or unresolved token, each located at the
@@ -148,14 +159,22 @@ def unresolved_value_tokens(model: PlatformBaseModel, declared: dict[str, set[st
                 code="malformed_value_token",
             )
         for kind, key in extract_value_tokens(text):
+            if kind == "output" and output_claimed:
+                # Accepted — some execution step's `targets` claims this
+                # document (gap #12), so a real step can legitimately
+                # produce this output at deploy time. Key/step existence is
+                # still unvalidatable here (Phase 2 has no visibility into
+                # what a provisioner will actually output at runtime).
+                continue
             if kind not in declared:
                 # `output` (and any future token kind) has no declared-keys set to check
                 # against here — an output key isn't declared anywhere, it's produced by a
                 # prior deploy step at runtime, which Phase 2 (schema + cross-document
                 # validation, no execution) has no visibility into. Flag it explicitly
                 # rather than crashing on `declared[kind]` (docs/_gap_v1.md gap #11) —
-                # `${output:}` is not yet wired into any of the fields this function
-                # checks (DNS/network/firewall/module), pending Context (ADR-0006).
+                # unclaimed by any step (or not one of the fields `output_claimed` callers
+                # ever pass True for), `${output:}` remains rejected here, pending Context
+                # (ADR-0006) for the parts of this it still doesn't solve (key validation).
                 diagnostics.error(
                     f"'${{{kind}:{key}}}' tokens are not supported in this field yet (pending Context, ADR-0006).",
                     location=path,

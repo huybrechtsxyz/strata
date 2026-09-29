@@ -35,6 +35,41 @@ class WorkspaceService(BaseService[WorkspaceModel]):
         """Return the WorkspaceModel class for validation."""
         return WorkspaceModel
 
+    def claimed_document_names(self) -> set[str]:
+        """Every dns_zones/networks/firewalls/namespaces name claimed by
+        some execution step's own `targets` — the ownership half of
+        `${output:...}` resolution (docs/_gap_v1.md gap #12, generalized to
+        namespaces so a Module reached through a targeted namespace is
+        covered too, not just a directly-targeted DNS/network/firewall
+        document — see docs/design/deploy-command.md's "Cross-invocation
+        output access" section, "Expanded finding" subsection, for why
+        Modules needed the same treatment).
+
+        Pure function of this workspace's own declarations — no other
+        loaded document needed, unlike `validate_topology_references()`
+        above. Reuses the same target vocabulary
+        `workspace_model.py`'s own `validate_execution()` already validates
+        `targets` against (`resources ∪ namespaces ∪ dns_zones ∪ networks ∪
+        firewalls`), rather than a second, narrower one — a resource is
+        deliberately not surfaced as "claimable" here even though it's a
+        valid target too: a Resource document has no Value-token-bearing
+        field of its own that `${output:...}` could ever appear in (unlike
+        a Module reached through a namespace).
+        """
+        if self.model is None:
+            return set()
+        spec = self.model.spec
+        claimable = (
+            set(spec.dns_zones or [])
+            | set(spec.networks or [])
+            | set(spec.firewalls or [])
+            | set(spec.namespaces or [])
+        )
+        claimed: set[str] = set()
+        for step in spec.execution or []:
+            claimed |= set(step.targets) & claimable
+        return claimed
+
     def validate_topology_references(self, topology_models: dict[str, TopologyModel]) -> Diagnostics:
         """Cross-check each referenced Topology's internal references
         (`components[].resource`, `namespaces[].namespace`) against this
@@ -65,8 +100,7 @@ class WorkspaceService(BaseService[WorkspaceModel]):
             for component in topology_model.spec.components:
                 if component.resource not in resource_names:
                     diagnostics.error(
-                        f"Topology '{topo_name}': component references undefined resource "
-                        f"'{component.resource}'",
+                        f"Topology '{topo_name}': component references undefined resource '{component.resource}'",
                         location="spec.resources",
                         code="undefined_resource",
                     )
@@ -193,4 +227,3 @@ class WorkspaceService(BaseService[WorkspaceModel]):
                     )
 
         return diagnostics
-

@@ -276,19 +276,23 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
             continue  # no resolvable environment — nothing to check tokens against
 
         owner = "+".join(deployment.spec.environments or []) or "(none)"
-        documents = _documents_reachable_from_workspace(index, deployment.spec.workspace)
-        documents.append(deployment)
+        documents: list[tuple[PlatformBaseModel, bool]] = _documents_reachable_from_workspace(
+            index, deployment.spec.workspace
+        )
+        documents.append((deployment, False))
         if deployment.spec.tenant:
             tenant_entry = index.get(PlatformKind.TENANT, deployment.spec.tenant)
             if tenant_entry is not None:
-                documents.append(tenant_entry.model)
+                documents.append((tenant_entry.model, False))
         for name in _reachable_environment_names(index, deployment):
             env_entry = index.get(PlatformKind.ENVIRONMENT, name)
             if env_entry is not None:
-                documents.append(env_entry.model)
+                documents.append((env_entry.model, False))
 
-        for document in documents:
-            diagnostics.extend(unresolved_value_tokens(document, declared, owner), source=str(entry.source))
+        for document, claimed in documents:
+            diagnostics.extend(
+                unresolved_value_tokens(document, declared, owner, output_claimed=claimed), source=str(entry.source)
+            )
     return diagnostics
 
 
@@ -331,13 +335,26 @@ def _merged_declared_keys(index: DocumentIndex, deployment: DeploymentModel) -> 
     return merged if found_any else None
 
 
-def _documents_reachable_from_workspace(index: DocumentIndex, workspace_name: str | None) -> list[PlatformBaseModel]:
+def _documents_reachable_from_workspace(
+    index: DocumentIndex, workspace_name: str | None
+) -> list[tuple[PlatformBaseModel, bool]]:
     """Every document a workspace renders or configures — DNS/Network/
     Firewall/Module (rendered artifacts) plus the workspace document itself
     and every Resource/Provider/Topology it references (config passthrough
     fields: docs/_gap_v1.md gap #10's Phase 7 finding — these were never
     checked at all before, a validate-time coverage gap entirely separate
     from gap #9/Phase 6's deploy-time delivery fix).
+
+    Returns `(document, claimed)` pairs — `claimed` is whether some
+    workspace execution step's `targets` claims this document
+    (`WorkspaceService.claimed_document_names()`, gap #12 generalized to
+    namespaces, docs/design/deploy-command.md's "Cross-invocation output
+    access" section) — `unresolved_value_tokens()` accepts an
+    `${output:...}` token only when `claimed` is True. A module reached
+    through a targeted namespace inherits that namespace's claim; every
+    other document here (workspace/resource/provider/topology, and a
+    topology-attached module) is never claimable today, so `claimed` is
+    unconditionally False for those.
 
     A bounded, one-then-two-hop walk — not a generic graph traversal —
     since the schema only has one indirection beyond the workspace's own
@@ -356,8 +373,9 @@ def _documents_reachable_from_workspace(index: DocumentIndex, workspace_name: st
         return []
     workspace = cast(WorkspaceModel, workspace_entry.model)
     spec = workspace.spec
+    claimed_names = WorkspaceService.from_model(workspace).claimed_document_names()
 
-    documents: list[PlatformBaseModel] = [workspace]
+    documents: list[tuple[PlatformBaseModel, bool]] = [(workspace, False)]
 
     for kind, names in (
         (PlatformKind.DNS, spec.dns_zones),
@@ -368,36 +386,37 @@ def _documents_reachable_from_workspace(index: DocumentIndex, workspace_name: st
         for name in names or []:
             found = index.get(kind, name)
             if found is not None:
-                documents.append(found.model)
+                documents.append((found.model, name in claimed_names))
 
     for workspace_resource in spec.resources or []:
         if workspace_resource.resource is None:
             continue
         resource_entry = index.get(PlatformKind.RESOURCE, workspace_resource.resource)
         if resource_entry is not None:
-            documents.append(resource_entry.model)
+            documents.append((resource_entry.model, False))
 
     for name in spec.topology or []:
         topology_entry = index.get(PlatformKind.TOPOLOGY, name)
         if topology_entry is None:
             continue
-        documents.append(topology_entry.model)
+        documents.append((topology_entry.model, False))
         topology = cast(TopologyModel, topology_entry.model)
         for component in topology.spec.components:
             for module_ref in component.modules or []:
                 module_entry = index.get(PlatformKind.MODULE, module_ref.module)
                 if module_entry is not None:
-                    documents.append(module_entry.model)
+                    documents.append((module_entry.model, False))
 
     for name in spec.namespaces or []:
         namespace_entry = index.get(PlatformKind.NAMESPACE, name)
         if namespace_entry is None:
             continue
         namespace = cast(NamespaceModel, namespace_entry.model)
+        namespace_claimed = name in claimed_names
         for module_ref in namespace.spec.modules or []:
             module_entry = index.get(PlatformKind.MODULE, module_ref.module)
             if module_entry is not None:
-                documents.append(module_entry.model)
+                documents.append((module_entry.model, namespace_claimed))
 
     return documents
 

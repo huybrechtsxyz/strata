@@ -141,9 +141,7 @@ def test_validate_topology_components_rejects_missing_required_role():
 def test_validate_topology_components_rejects_max_count_exceeded():
     """Exceeding a component role's registered max_count is rejected."""
     data = _workspace_with_topology()
-    data["spec"]["resources"].append(
-        {"name": "control-vm-2", "resource": "control-vm-class", "role": "control-plane"}
-    )
+    data["spec"]["resources"].append({"name": "control-vm-2", "resource": "control-vm-class", "role": "control-plane"})
     service = WorkspaceService(data=data)
     service.validate()
 
@@ -194,9 +192,7 @@ def test_validate_topology_components_allows_unregistered_type_when_additional_t
 def test_validate_topology_components_rejects_unregistered_role_without_additional_components():
     """A component role not in the topology type's registry entry is rejected when additional_components is False."""
     data = _workspace_with_topology()
-    data["spec"]["resources"].append(
-        {"name": "cache-vm", "resource": "cache-vm-class", "role": "cache"}
-    )
+    data["spec"]["resources"].append({"name": "cache-vm", "resource": "cache-vm-class", "role": "cache"})
     service = WorkspaceService(data=data)
     service.validate()
 
@@ -208,3 +204,82 @@ def test_validate_topology_components_rejects_unregistered_role_without_addition
     )
     assert not result.ok
     assert any("cache" in m for m in result.messages())
+
+
+# ---------------------------------------------------------------------------
+# claimed_document_names() — the ownership half of `${output:...}` resolution
+# (docs/_gap_v1.md gap #12, generalized to namespaces so a Module reached
+# through a targeted namespace counts as claimed too, not just directly-
+# targeted DNS/network/firewall documents — docs/design/deploy-command.md's
+# "Cross-invocation output access" section).
+# ---------------------------------------------------------------------------
+
+
+def _workspace_with_execution(**spec_overrides) -> dict:
+    return {
+        "meta": {"name": "myapp-workspace"},
+        "spec": {
+            "providers": ["azure-main"],
+            "provisioners": [
+                {
+                    "name": "terraform-main",
+                    "tool": "terraform",
+                    "source": {"remote": "infra-repo", "source_path": "terraform/main"},
+                }
+            ],
+            **spec_overrides,
+        },
+    }
+
+
+def test_claimed_document_names_returns_empty_when_no_execution_steps():
+    service = WorkspaceService(data=_workspace_with_execution(dns_zones=["public-dns"]))
+    assert service.validate().ok
+    assert service.claimed_document_names() == set()
+
+
+def test_claimed_document_names_returns_empty_before_validate():
+    """No model loaded yet — must not raise."""
+    service = WorkspaceService(data=_workspace_with_execution())
+    assert service.claimed_document_names() == set()
+
+
+def test_claimed_document_names_includes_a_targeted_dns_zone():
+    data = _workspace_with_execution(
+        dns_zones=["public-dns"],
+        resources=[{"name": "vm", "resource": "vm-class", "role": "node"}],
+        execution=[{"name": "apply", "provisioner": "terraform-main", "targets": ["vm", "public-dns"]}],
+    )
+    service = WorkspaceService(data=data)
+    assert service.validate().ok
+    # A resource ("vm") is a valid target too, but is never itself claimable —
+    # it has no Value-token-bearing field of its own (see the method's own
+    # docstring). Only "public-dns" is claimable here.
+    assert service.claimed_document_names() == {"public-dns"}
+
+
+def test_claimed_document_names_includes_a_targeted_namespace_not_just_dns_network_firewall():
+    """gap #12's rule generalized: a namespace is claimable too, so a Module
+    reached through it inherits the claim (docs/design/deploy-command.md's
+    "Expanded finding" — modules hit the identical bug DNS/network/firewall
+    did)."""
+    data = _workspace_with_execution(
+        namespaces=["apps"],
+        execution=[{"name": "deploy", "provisioner": "terraform-main", "targets": ["apps"]}],
+    )
+    service = WorkspaceService(data=data)
+    assert service.validate().ok
+    assert service.claimed_document_names() == {"apps"}
+
+
+def test_claimed_document_names_excludes_an_untargeted_document():
+    data = _workspace_with_execution(
+        dns_zones=["public-dns"],
+        resources=[{"name": "vm", "resource": "vm-class", "role": "node"}],
+        execution=[{"name": "apply", "provisioner": "terraform-main", "targets": ["vm"]}],
+    )
+    service = WorkspaceService(data=data)
+    assert service.validate().ok
+    # "public-dns" is never targeted by any step, so it's excluded — and
+    # "vm" (a resource) is never claimable at all regardless of targeting.
+    assert service.claimed_document_names() == set()

@@ -89,6 +89,32 @@ def test_output_token_is_rejected_cleanly_not_a_crash():
     assert "not supported" in message
 
 
+def test_output_token_is_accepted_when_output_claimed_is_true():
+    """docs/design/deploy-command.md's "Cross-invocation output access"
+    fix: a document some execution step's `targets` claims (gap #12,
+    generalized to namespaces/modules) must no longer be rejected —
+    `unresolved_value_tokens()`'s `output_claimed` param, called directly
+    since `validate_document_tokens()`'s wrapper has no claiming context of
+    its own (semantic_checks.py's `_check_deployment_value_tokens()` is the
+    real caller that computes and passes this)."""
+    from strata.services.environment_service import unresolved_value_tokens
+
+    declared = {"var": {"PUBLIC_IP"}, "secret": {"DB_PASSWORD"}, "feature": {"ENABLE_X"}}
+    result = unresolved_value_tokens(_dns("${output:provision-hearth.public_ip}"), declared, "prd", output_claimed=True)
+    assert result.ok, result.messages()
+
+
+def test_output_token_default_still_rejects_when_output_claimed_omitted():
+    """`output_claimed` defaults to False — every pre-existing caller
+    (e.g. `validate_document_tokens()`) is unaffected by this change."""
+    from strata.services.environment_service import unresolved_value_tokens
+
+    declared = {"var": {"PUBLIC_IP"}, "secret": {"DB_PASSWORD"}, "feature": {"ENABLE_X"}}
+    result = unresolved_value_tokens(_dns("${output:provision-hearth.public_ip}"), declared, "prd")
+    assert not result.ok
+    assert "not supported" in result.messages()[0]
+
+
 def test_literal_document_without_tokens_passes():
     """A document with no tokens has nothing to resolve."""
     result = _environment().validate_document_tokens(_dns("1.2.3.4"))
