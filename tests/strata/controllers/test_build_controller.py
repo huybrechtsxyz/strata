@@ -114,7 +114,9 @@ def test_build_resolved_workspace_graph_walks_providers():
         meta=ProviderMetaModel(name="p1"),
         spec=ProviderSpecModel(properties=ProviderPropertiesModel(type="local", region="local")),
     )
-    index.add(IndexEntry(ref=DocumentRef(kind=PlatformKind.PROVIDER, name="p1"), model=provider, source=Path("p1.yaml")))
+    index.add(
+        IndexEntry(ref=DocumentRef(kind=PlatformKind.PROVIDER, name="p1"), model=provider, source=Path("p1.yaml"))
+    )
 
     workspace = WorkspaceModel(
         meta=WorkspaceMetaModel(name="ws"),
@@ -215,11 +217,13 @@ def test_build_run_writes_tenant_output_when_deployment_references_one(tmp_path:
     tenant_path = build_path / "infra" / "tenant.auto.tfvars.json"
     assert tenant_path.exists()
     assert yaml.safe_load(tenant_path.read_text(encoding="utf-8")) == {
-        "code": "acme",
-        "name": "Acme",
-        "zones": ["europe"],
-        "onboarded": None,
-        "configuration": {},
+        "strata_tenant": {
+            "code": "acme",
+            "name": "Acme",
+            "zones": ["europe"],
+            "onboarded": None,
+            "configuration": {},
+        }
     }
 
 
@@ -540,7 +544,8 @@ def test_build_run_env_file_never_overrides_a_real_env_var(tmp_path: Path, monke
 
 def test_build_run_output_template_valid_writes_nothing_but_succeeds(tmp_path: Path):
     root = _solution_with_values(
-        tmp_path, extra_environment_spec="  variables:\n    - key: REGION\n      store: constant\n      value: westeurope\n"
+        tmp_path,
+        extra_environment_spec="  variables:\n    - key: REGION\n      store: constant\n      value: westeurope\n",
     )
     _write(
         root,
@@ -564,7 +569,8 @@ def test_build_run_output_template_valid_writes_nothing_but_succeeds(tmp_path: P
 
 def test_build_run_output_template_with_bad_reference_fails(tmp_path: Path):
     root = _solution_with_values(
-        tmp_path, extra_environment_spec="  variables:\n    - key: REGION\n      store: constant\n      value: westeurope\n"
+        tmp_path,
+        extra_environment_spec="  variables:\n    - key: REGION\n      store: constant\n      value: westeurope\n",
     )
     _write(
         root,
@@ -605,7 +611,8 @@ def test_build_run_dry_run_still_catches_a_bad_output_template_reference(tmp_pat
     """Cheap and local — dry run should catch this too, matching --resolve's
     own "dry run still catches a bad value" rule (build_run()'s own docstring)."""
     root = _solution_with_values(
-        tmp_path, extra_environment_spec="  variables:\n    - key: REGION\n      store: constant\n      value: westeurope\n"
+        tmp_path,
+        extra_environment_spec="  variables:\n    - key: REGION\n      store: constant\n      value: westeurope\n",
     )
     _write(
         root,
@@ -628,7 +635,8 @@ def test_build_run_dry_run_still_catches_a_bad_output_template_reference(tmp_pat
 
 def test_build_run_dry_run_reports_output_template_would_validate(tmp_path: Path):
     root = _solution_with_values(
-        tmp_path, extra_environment_spec="  variables:\n    - key: REGION\n      store: constant\n      value: westeurope\n"
+        tmp_path,
+        extra_environment_spec="  variables:\n    - key: REGION\n      store: constant\n      value: westeurope\n",
     )
     _write(
         root,
@@ -648,8 +656,6 @@ def test_build_run_dry_run_reports_output_template_would_validate(tmp_path: Path
 
     assert any("would validate output.template" in s for s in steps)
     assert not build_path.exists()
-
-
 
 
 # NOTE: "deployment has no workspace" is not separately testable through a

@@ -49,6 +49,7 @@ from strata.controllers.workload_controller import build_workload_modules
 from strata.integrations.errors import IntegrationError
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph, ValueReference, ValueResolution
 from strata.models.common_models import PlatformKind
+from strata.models.deployment_model import DeploymentModel
 from strata.models.dns_model import DnsModel
 from strata.models.firewall_model import FirewallModel
 from strata.models.namespace_model import NamespaceModel
@@ -96,12 +97,14 @@ def build_resolved_workspace_graph(
     properties: dict[str, Any] | None = None,
     custom: dict[str, Any] | None = None,
     tenant: TenantModel | None = None,
+    deployment: DeploymentModel | None = None,
 ) -> ResolvedWorkspaceGraph:
     """Assemble a `ResolvedWorkspaceGraph` by walking every name `workspace`
     references (ADR-0022 D1a).
 
-    `variable_refs`/`feature_refs`/`secret_refs`/`properties`/`custom`
-    (docs/design/build-time-value-categories.md, Q1/Q3/Q4) are optional —
+    `variable_refs`/`feature_refs`/`secret_refs`/`properties`/`custom`/
+    `deployment` (docs/design/build-time-value-categories.md, Q1/Q3/Q4;
+    docs/design/terraform-tfvars-parity.md for `deployment`) are optional —
     callers with no deployment in scope yet (none exist today; kept optional
     for exactly that reason) get the empty defaults `ResolvedWorkspaceGraph`
     itself already provides.
@@ -115,9 +118,7 @@ def build_resolved_workspace_graph(
         namespaces=cast(
             dict[str, NamespaceModel], _lookup_all(index, PlatformKind.NAMESPACE, workspace.spec.namespaces)
         ),
-        firewalls=cast(
-            dict[str, FirewallModel], _lookup_all(index, PlatformKind.FIREWALL, workspace.spec.firewalls)
-        ),
+        firewalls=cast(dict[str, FirewallModel], _lookup_all(index, PlatformKind.FIREWALL, workspace.spec.firewalls)),
         dns=cast(dict[str, DnsModel], _lookup_all(index, PlatformKind.DNS, workspace.spec.dns_zones)),
         networks=cast(dict[str, NetworkModel], _lookup_all(index, PlatformKind.NETWORK, workspace.spec.networks)),
         variable_refs=variable_refs or [],
@@ -126,6 +127,7 @@ def build_resolved_workspace_graph(
         properties=properties or {},
         custom=custom or {},
         tenant=tenant,
+        deployment=deployment,
     )
 
 
@@ -303,13 +305,14 @@ def build_run(
     workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
     if workspace_entry is None:
         raise UsageError(
-            f"Deployment '{deployment_name}' names workspace '{deployment.spec.workspace}', "
-            "which is not in the index."
+            f"Deployment '{deployment_name}' names workspace '{deployment.spec.workspace}', which is not in the index."
         )
     workspace = cast(WorkspaceModel, workspace_entry.model)
 
     environments = reachable_environments(context, deployment)
-    variable_refs, feature_refs, secret_refs = build_value_references(environments, context=context, deployment=deployment)
+    variable_refs, feature_refs, secret_refs = build_value_references(
+        environments, context=context, deployment=deployment
+    )
     properties = merge_workspace_environment_deployment_properties(workspace, environments, deployment, "properties")
     custom = merge_workspace_environment_deployment_properties(workspace, environments, deployment, "custom")
     tenant = resolve_tenant(context, deployment)
@@ -341,15 +344,18 @@ def build_run(
         properties=properties,
         custom=custom,
         tenant=tenant,
+        deployment=deployment,
     )
     if dry_run:
         _step(f"would write {build_path / 'resolved.yaml'}")
     else:
         manifest_path = write_resolved_manifest(build_path, graph)
         _step(f"wrote {manifest_path}")
-    remotes: dict[str, SolutionRemoteModel] = {
-        remote.name: remote for remote in (context.controller.solution.spec.remotes or [])
-    } if context.controller.solution is not None else {}
+    remotes: dict[str, SolutionRemoteModel] = (
+        {remote.name: remote for remote in (context.controller.solution.spec.remotes or [])}
+        if context.controller.solution is not None
+        else {}
+    )
 
     for step in ordered_by_depends_on(workspace.spec.execution or []):
         provisioner = find_provisioner(workspace, step.provisioner)

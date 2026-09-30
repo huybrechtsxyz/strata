@@ -260,6 +260,7 @@ def deploy_run(
         properties=properties,
         custom=custom,
         tenant=tenant,
+        deployment=deployment,
     )
 
     # Raw (unresolved) snapshot, built once per run — workspace-wide, not

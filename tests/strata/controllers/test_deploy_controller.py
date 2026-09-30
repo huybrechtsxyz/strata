@@ -452,8 +452,10 @@ def test_deploy_run_resolves_dns_networks_firewalls_tokens_via_tf_var(tmp_path: 
     record_value = dns_payload["public-dns"]["zones"]["example.com"]["records"][0]["value"]
     assert record_value == "1.2.3.4"
     # On-disk build artifact stays literal/unresolved — never rewritten.
+    # docs/design/terraform-tfvars-parity.md: the file's real v1 content is
+    # wrapped under "dns_zones", the real Terraform variable name.
     on_disk = json.loads((build_path / "infra" / "dns.auto.tfvars.json").read_text())
-    assert on_disk["public-dns"]["zones"]["example.com"]["records"][0]["value"] == "${var:public_ip}"
+    assert on_disk["dns_zones"]["public-dns"]["zones"]["example.com"]["records"][0]["value"] == "${var:public_ip}"
     # No networks/firewalls documents in this workspace — no TF_VAR set.
     assert "TF_VAR_networks" not in init_env
     assert "TF_VAR_firewalls" not in init_env
@@ -599,9 +601,11 @@ def test_deploy_run_resolves_provider_configuration_tokens_via_tf_var(tmp_path: 
     assert providers_payload["p1"]["configuration"]["partner_id"] == "ACME123"
     assert providers_payload["p1"]["custom"]["cost_center"] == "platform"
     # On-disk build artifact stays literal/unresolved — never rewritten.
+    # docs/design/terraform-tfvars-parity.md: the file's real v1 content is
+    # wrapped under "platform_providers", the real Terraform variable name.
     on_disk = json.loads((build_path / "infra" / "providers.auto.tfvars.json").read_text())
-    assert on_disk["p1"]["configuration"]["partner_id"] == "${var:partner_id}"
-    assert on_disk["p1"]["custom"]["cost_center"] == "${secret:cost_center}"
+    assert on_disk["platform_providers"]["p1"]["configuration"]["partner_id"] == "${var:partner_id}"
+    assert on_disk["platform_providers"]["p1"]["custom"]["cost_center"] == "${secret:cost_center}"
 
 
 def test_deploy_run_rejects_output_token_in_configuration_payloads(tmp_path: Path):

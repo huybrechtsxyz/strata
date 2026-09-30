@@ -13,6 +13,7 @@ from strata.integrations.terraform_projection import (
     planned_files,
 )
 from strata.models.common_models import ModuleReferenceModel, SourceModel
+from strata.models.deployment_model import DeploymentMetaModel, DeploymentModel, DeploymentSpecModel
 from strata.models.dns_model import DnsMetaModel, DnsModel, DnsRecordModel, DnsSpecModel, DnsZoneModel
 from strata.models.firewall_model import (
     FirewallDefaultsModel,
@@ -183,6 +184,7 @@ def _graph(
     properties=None,
     custom=None,
     tenant=None,
+    deployment=None,
     **workspace_kwargs,
 ) -> ResolvedWorkspaceGraph:
     workspace = _workspace(
@@ -206,6 +208,7 @@ def _graph(
         properties=properties or {},
         custom=custom or {},
         tenant=tenant,
+        deployment=deployment,
     )
 
 
@@ -214,13 +217,51 @@ def _provisioner() -> ProvisionerModel:
 
 
 def test_workspace_category_present():
+    """Matches v1's real `_build_workspace_vars()` shape exactly
+    (docs/design/terraform-tfvars-parity.md) — flat, six independent
+    variables, with `graph.deployment` unset falling back to v1's own
+    documented defaults (`environment="production"`,
+    `workspace_version="1.0.0"`, `deployment_name`=the workspace's own
+    name)."""
     payload = build_platform_projection(_graph(), _provisioner())
     assert payload["workspace"] == {
-        "name": "haven_platform",
+        "workspace_name": "haven_platform",
+        "workspace_version": "1.0.0",
+        "deployment_name": "haven_platform",
+        "environment": "production",
+        "platform_version": "",
         "labels": {},
-        "tags": ["haven", "hetzner"],
-        "annotations": {},
+        "metadata": {
+            "deployment_version": "1.0.0",
+            "workspace_description": "",
+            "deployment_description": "",
+            "workspace_tags": ["haven", "hetzner"],
+            "deployment_tags": [],
+        },
     }
+
+
+def test_workspace_category_uses_deployment_labels_when_present():
+    """`environment`/`metadata.deployment_version`/`deployment_name`/
+    `platform_version` all come from the resolved Deployment document, not
+    the workspace — confirmed against v1's real `_build_workspace_vars()`."""
+    deployment = DeploymentModel(
+        meta=DeploymentMetaModel(
+            name="deploy-hub-z00-spoke-s01",
+            labels={"version": "2.3.0", "environment": "production"},
+            annotations={"description": "Spoke deployment"},
+            tags=["spoke"],
+        ),
+        spec=DeploymentSpecModel(workspace="haven_platform", environments=["spoke-env"]),
+    )
+    graph = _graph(deployment=deployment)
+    payload = build_platform_projection(graph, _provisioner())
+    assert payload["workspace"]["deployment_name"] == "deploy-hub-z00-spoke-s01"
+    assert payload["workspace"]["environment"] == "production"
+    assert payload["workspace"]["platform_version"] == "strata.huybrechts.xyz/v2"
+    assert payload["workspace"]["metadata"]["deployment_version"] == "2.3.0"
+    assert payload["workspace"]["metadata"]["deployment_description"] == "Spoke deployment"
+    assert payload["workspace"]["metadata"]["deployment_tags"] == ["spoke"]
 
 
 def test_providers_category_present():
@@ -230,10 +271,36 @@ def test_providers_category_present():
             "type": "hetzner",
             "region": "nbg1",
             "display_name": "Nuremberg",
+            "description": "",
+            "labels": {},
+            "tags": [],
             "configuration": {},
             "custom": {},
         }
     }
+
+
+def test_providers_category_includes_description_labels_and_tags():
+    """docs/design/terraform-tfvars-parity.md — v1's real
+    `_build_provider_vars()` emits these three from the provider's own
+    `description`/`labels`/`tags`; v2 previously dropped them entirely."""
+    graph = _graph()
+    graph.providers["hetzner_dc_eu_de"] = ProviderModel(
+        meta=ProviderMetaModel(
+            name="hetzner_dc_eu_de",
+            annotations={"description": "Nuremberg datacenter"},
+            labels={"version": "1.0.0"},
+            tags=["hetzner", "nbg1"],
+        ),
+        spec=ProviderSpecModel(
+            properties=ProviderPropertiesModel(type="hetzner", region="nbg1", display_name="Nuremberg")
+        ),
+    )
+    payload = build_platform_projection(graph, _provisioner())
+    provider = payload["providers"]["hetzner_dc_eu_de"]
+    assert provider["description"] == "Nuremberg datacenter"
+    assert provider["labels"] == {"version": "1.0.0"}
+    assert provider["tags"] == ["hetzner", "nbg1"]
 
 
 def test_providers_category_includes_configuration_and_custom_when_set():
@@ -362,6 +429,40 @@ def test_resources_by_category_excludes_managed_by_provisioner():
     workspace_resource = WorkspaceResourceModel(name="opaque_resx", managed_by="provisioner")
     payload = build_platform_projection(_graph(resources=[workspace_resource]), _provisioner())
     assert payload["resources_by_category"] == {}
+
+
+def test_planned_files_wraps_categories_under_their_real_v1_variable_name():
+    """docs/design/terraform-tfvars-parity.md — confirmed directly against
+    v1's real `_planned_files()`: the file's content is nested one level
+    under the real Terraform variable name, which is not always the same
+    word as the category/filename (`providers` -> `platform_providers`,
+    `dns` -> `dns_zones`, `tenant` -> `strata_tenant`) but is for the rest
+    (`topologies`/`namespaces`/`firewalls`/`networks` wrap under their own
+    name unchanged).
+    """
+    payload = build_platform_projection(
+        _graph(
+            namespace_names=["hearth"],
+            firewall_names=["haven_fw_hetzner_hearth"],
+            dns_names=["huybrechts_xyz"],
+            network_names=["product_estate"],
+            tenant=_tenant(),
+        ),
+        _provisioner(),
+    )
+    files = dict(planned_files(payload))
+    assert set(files["providers.auto.tfvars.json"]) == {"platform_providers"}
+    assert set(files["topologies.auto.tfvars.json"]) == {"topologies"}
+    assert set(files["namespaces.auto.tfvars.json"]) == {"namespaces"}
+    assert set(files["firewalls.auto.tfvars.json"]) == {"firewalls"}
+    assert set(files["dns.auto.tfvars.json"]) == {"dns_zones"}
+    assert set(files["networks.auto.tfvars.json"]) == {"networks"}
+    assert set(files["tenant.auto.tfvars.json"]) == {"strata_tenant"}
+    assert files["providers.auto.tfvars.json"]["platform_providers"] == payload["providers"]
+    assert files["tenant.auto.tfvars.json"]["strata_tenant"] == payload["tenant"]
+    # workspace/flags/variables/properties/custom are v1's flat,
+    # multi-variable categories — never wrapped.
+    assert files["workspace.auto.tfvars.json"] == payload["workspace"]
 
 
 def test_planned_files_skips_empty_categories():
@@ -501,7 +602,7 @@ def test_tenant_category_empty_when_no_tenant_referenced():
 def test_tenant_writes_to_tenant_auto_tfvars_json():
     payload = build_platform_projection(_graph(tenant=_tenant()), _provisioner())
     files = dict(planned_files(payload))
-    assert files["tenant.auto.tfvars.json"] == payload["tenant"]
+    assert files["tenant.auto.tfvars.json"] == {"strata_tenant": payload["tenant"]}
 
 
 # ---------------------------------------------------------------------------

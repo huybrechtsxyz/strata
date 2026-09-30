@@ -58,19 +58,80 @@ from strata.models.workspace_model import WorkspaceResourceModel
 
 
 def _build_workspace_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
-    """`WorkspaceMetaModel`/`WorkspaceSpecModel` -> name/labels/tags/annotations."""
+    """`workspace_name`/`workspace_version`/`deployment_name`/`environment`/
+    `platform_version`/`labels`/`metadata` — six independent, flat
+    Terraform variables (docs/design/terraform-tfvars-parity.md), matching
+    v1's real `_build_workspace_vars()` exactly (confirmed directly):
+
+    - `workspace_version` — `workspace.meta.labels["version"]`, default
+      `"1.0.0"` (v1's own default, not a v2 invention).
+    - `deployment_name`/`platform_version` — the deployment document's own
+      `meta.name`/`apiVersion` (v1's `platform.meta.name`/`platform.apiVersion`
+      — v1 calls the resolved deployment artifact `platform`, the same
+      document this module's own `graph.deployment` now carries).
+    - `environment` — `deployment.meta.labels["environment"]`, default
+      `"production"` (v1's own default). **Not** `DeploymentSpecModel.
+      environments` — confirmed against v1's real source this is a plain
+      label, not the deployment's environment-reference list.
+    - `metadata.deployment_version` — `deployment.meta.labels["version"]`,
+      default to `workspace_version` (v1's own fallback chain).
+    - `metadata.workspace_description`/`deployment_description` —
+      `workspace.meta.annotations`/`deployment.meta.annotations`'s
+      `"description"` key, same convention every other category here
+      already uses for its own `description` field.
+    - `metadata.workspace_tags`/`deployment_tags` — `workspace.meta.tags`/
+      `deployment.meta.tags`.
+
+    `graph.deployment` is `None` for a caller with no deployment in scope
+    (none exist today) — falls back to v1's own documented defaults for
+    every deployment-derived field rather than raising, so `build run`
+    against a hypothetical deployment-less graph still gets a valid,
+    if minimal, `workspace.auto.tfvars.json`.
+    """
     meta = graph.workspace.meta
+    workspace_labels = meta.labels or {}
+    workspace_version = workspace_labels.get("version", "1.0.0")
+    deployment = graph.deployment
+
+    if deployment is not None:
+        deployment_labels = deployment.meta.labels or {}
+        deployment_name = deployment.meta.name
+        environment = deployment_labels.get("environment", "production")
+        platform_version = (
+            deployment.apiVersion.value if hasattr(deployment.apiVersion, "value") else str(deployment.apiVersion)
+        )
+        deployment_version = deployment_labels.get("version", workspace_version)
+        deployment_description = (deployment.meta.annotations or {}).get("description", "")
+        deployment_tags = deployment.meta.tags or []
+    else:
+        deployment_name = meta.name
+        environment = "production"
+        platform_version = ""
+        deployment_version = workspace_version
+        deployment_description = ""
+        deployment_tags = []
+
     return {
-        "name": meta.name,
-        "labels": meta.labels or {},
-        "tags": meta.tags or [],
-        "annotations": meta.annotations or {},
+        "workspace_name": meta.name,
+        "workspace_version": workspace_version,
+        "deployment_name": deployment_name,
+        "environment": environment,
+        "platform_version": platform_version,
+        "labels": workspace_labels,
+        "metadata": {
+            "deployment_version": deployment_version,
+            "workspace_description": (meta.annotations or {}).get("description", ""),
+            "deployment_description": deployment_description,
+            "workspace_tags": meta.tags or [],
+            "deployment_tags": deployment_tags,
+        },
     }
 
 
 def _build_providers_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
-    """name -> {type, region, display_name, configuration, custom} per
-    `ProviderPropertiesModel`/`ProviderSpecModel`.
+    """name -> {type, region, display_name, description, labels, tags,
+    configuration, custom} per `ProviderPropertiesModel`/`ProviderSpecModel`/
+    `ProviderMetaModel`.
 
     `configuration`/`custom` added docs/design/value-token-resolution.md's
     "Decision (2026-09-29)" fix (docs/_gap_v1.md gap #17) — previously
@@ -80,14 +141,28 @@ def _build_providers_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     workspace()`'s whole-document walk, but were never read anywhere in
     this module before this fix — confirmed by grep, unlike every other
     `configuration`/`custom`-bearing category here).
+
+    `description`/`labels`/`tags` added docs/design/terraform-tfvars-parity.md
+    — v1's real `_build_provider_vars()` (confirmed directly) emits these
+    three from the provider component's own `description`/`labels`/`tags`,
+    v2's equivalents being `meta.annotations["description"]`/`meta.labels`/
+    `meta.tags` (the same convention every other category here already
+    uses). v1 also emits a `version` field (`provider.properties.version`)
+    with no v2 model equivalent at all — deliberately not restored here;
+    that doc's own Open Questions track it as a separate, unresolved
+    question (no confirmed real usage evidence for it, unlike these three).
     """
     payload: dict[str, Any] = {}
     for name, provider in graph.providers.items():
         properties = provider.spec.properties
+        meta = provider.meta
         payload[name] = {
             "type": properties.type,
             "region": properties.region,
             "display_name": properties.display_name,
+            "description": (meta.annotations or {}).get("description", ""),
+            "labels": meta.labels or {},
+            "tags": meta.tags or [],
             "configuration": provider.spec.configuration or {},
             "custom": provider.spec.custom or {},
         }
@@ -343,10 +418,16 @@ def _build_tenant_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     reference (docs/design/build-command.md's `tenant` category), resolved
     once by `value_controller.resolve_tenant()`.
 
-    Flat top-level keys, matching every other category here - no fixture
-    data exists yet to confirm v1's exact real shape for this one
-    (unlike every other category), so this follows v2's own established,
-    consistent convention instead of guessing at a wrapper key.
+    Flat top-level keys here (the *value* this function returns), matching
+    every other category's own builder function — `planned_files()` wraps
+    this under `strata_tenant` before writing the file
+    (docs/design/terraform-tfvars-parity.md's `_REAL_VARIABLE_NAME`),
+    confirmed directly against v1's real `_build_tenant_vars()` (which
+    returns `{"strata_tenant": {code, name, zones, onboarded,
+    configuration}}`) *and* independently against `tenant_zone_policy.md`'s
+    own real `plan_data["variables"]["strata_tenant"]` read — the field
+    names below (`code`/`name`/`zones`/`onboarded`/`configuration`) already
+    matched v1 exactly before this fix; only the wrapper key was missing.
 
     Empty dict when the deployment references no tenant - `planned_files()`
     already skips empty categories, so no `tenant.auto.tfvars.json` is
@@ -488,6 +569,31 @@ def build_platform_projection(graph: ResolvedWorkspaceGraph, provisioner: Provis
     }
 
 
+# Real v1 Terraform variable name per category, where it differs from the
+# file's own category name (docs/design/terraform-tfvars-parity.md) —
+# confirmed directly against v1's real `_build_*_vars()` return values.
+# `planned_files()` wraps each category's payload under this key so the
+# file's *content* matches the real variable a Terraform root declares
+# (`variable "platform_providers" {}`, not `variable "providers" {}`),
+# while the *filename* stays `<category>.auto.tfvars.json` (v1's own real,
+# confirmed filenames — the two are independent conventions in v1, not one).
+# A category absent here (`topologies`/`namespaces`/`firewalls`/`networks`)
+# still gets wrapped — just under the *same* word as its own category name
+# (v1's real `_build_topology_vars()`/etc. all return `{"<name>": {...}}`,
+# one level of nesting, even where the wrapper key equals the file's own
+# category name) — `.get(category, category)` below covers that case.
+_REAL_VARIABLE_NAME: dict[str, str] = {
+    "providers": "platform_providers",
+    "dns": "dns_zones",
+    "tenant": "strata_tenant",
+}
+
+# Categories v1 treats as flat, multi-variable bags — no wrapper key at
+# all, each top-level key is its own independent Terraform variable
+# (docs/design/terraform-tfvars-parity.md's three-shape convention).
+_FLAT_CATEGORIES = {"workspace", "flags", "variables", "properties", "custom"}
+
+
 def planned_files(payload: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
     """(filename, data) per non-empty category - Terraform's
     `*.auto.tfvars.json` auto-load convention (D1), no `-var-file` flag
@@ -499,6 +605,21 @@ def planned_files(payload: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
     matches v1's real `_planned_files()` (confirmed directly): each
     resource type is Terraform's own natural `for_each` unit, not the
     category grouping as a whole.
+
+    Every category except `_FLAT_CATEGORIES` is wrapped under its real v1
+    Terraform variable name (`_REAL_VARIABLE_NAME`, defaulting to the
+    category's own name) before being written — e.g.
+    `providers.auto.tfvars.json`'s real content is
+    `{"platform_providers": {...}}`, and `topologies.auto.tfvars.json`'s is
+    `{"topologies": {...}}` — not the bare `{name: {...}}` map each
+    `_build_*_payload()` function itself returns. The wrap happens here,
+    not inside each builder function, so `build_configuration_payloads()`'s
+    deploy-time re-resolution (`deploy_controller.py`'s `TF_VAR_<category>`
+    delivery) keeps working against the same flat, unwrapped payloads —
+    only the on-disk *file* shape needs the real variable-name wrapper.
+    `resources_by_category` needs no wrapping here either — it is already
+    produced pre-wrapped per type (`{"resources": {...}}`) by
+    `_build_resources_payload()`.
     """
     files: list[tuple[str, dict[str, Any]]] = []
     for category, data in payload.items():
@@ -508,5 +629,9 @@ def planned_files(payload: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
             for resource_type, type_payload in data.items():
                 files.append((f"resx_{resource_type}.auto.tfvars.json", type_payload))
             continue
-        files.append((f"{category}.auto.tfvars.json", data))
+        if category in _FLAT_CATEGORIES:
+            files.append((f"{category}.auto.tfvars.json", data))
+            continue
+        real_variable_name = _REAL_VARIABLE_NAME.get(category, category)
+        files.append((f"{category}.auto.tfvars.json", {real_variable_name: data}))
     return files

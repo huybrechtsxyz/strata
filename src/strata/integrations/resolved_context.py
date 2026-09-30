@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from strata.models.common_models import ModuleReferenceModel
+from strata.models.deployment_model import DeploymentModel
 from strata.models.dns_model import DnsModel
 from strata.models.firewall_model import FirewallModel
 from strata.models.module_model import ModuleModel
@@ -115,6 +116,15 @@ class ResolvedWorkspaceGraph:
     the deployment's own `spec.tenant` reference, resolved once by
     `value_controller.resolve_tenant()` — `None` when the deployment
     references no tenant, or the reference doesn't resolve.
+
+    `deployment` is the whole resolved Deployment document — needed by
+    `terraform_projection.py`'s `_build_workspace_payload()` (docs/design/
+    terraform-tfvars-parity.md), which reads `deployment.meta.name`/
+    `.labels`/`.annotations`/`.tags`/`.apiVersion` alongside the workspace's
+    own, matching v1's real `_build_workspace_vars()` exactly. `None` for a
+    caller with no deployment in scope (none exist today; kept optional for
+    the same reason `tenant` is), in which case that function falls back to
+    workspace-only defaults.
     """
 
     workspace: WorkspaceModel
@@ -131,6 +141,7 @@ class ResolvedWorkspaceGraph:
     properties: dict[str, Any] = field(default_factory=dict)
     custom: dict[str, Any] = field(default_factory=dict)
     tenant: TenantModel | None = None
+    deployment: DeploymentModel | None = None
 
 
 @dataclass(frozen=True)

@@ -1002,6 +1002,15 @@ durable, reviewable record.
   where in `build run`'s flow the check runs and how strict it is (error
   vs. warning, and whether backend-referenced keys are excluded the same
   way v1's real exclusion rule works).
+- **Related:** [docs/design/terraform-tfvars-parity.md](design/terraform-tfvars-parity.md)
+  (2026-09-30, **fixed** the same day) is a distinct but adjacent gap —
+  that doc audited (and then fixed) whether v2 even *produced* the right
+  tfvars variable names/shapes a real Terraform root expects (found via a
+  real, empirical v1-vs-v2 build-output comparison); this gap is about
+  *validating* declared inputs against a root's real `variables.tf` once
+  produced — still open. That doc's fix only closes the *shape*
+  mismatch; a typo'd/undeclared key would still pass silently today,
+  which is exactly this gap's remaining concern.
 
 ### 16. ~~`strata validate` rejected every `${output:...}` token unconditionally, even ones gap #12 already made work~~ — RESOLVED
 
