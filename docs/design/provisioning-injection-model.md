@@ -35,7 +35,12 @@ has a `references` field):
   Terraform's `variables.tf`, parsed by a capability lookup: `terraform`
   always capable, `helm` conditionally (needs `values.schema.json`), others
   never). Build-time only — requires the provisioner's source to already be
-  fetched.
+  fetched (confirmed sufficient: `sync_source()` itself does zero network
+  I/O, `build_run()` already calls it before any tfvars are written — no
+  `terraform init` needed at all, since `variable` blocks are pure static
+  HCL with no dynamic generation, unlike reading an actual applied
+  `output` value). A parse failure on a capability-says-yes provisioner is
+  its own decision — see "Interface parse-failure policy" below.
 - **Injection** — `Interface ∩ Environment` (or `needs ∩ Environment` when
   Interface can't be derived). A required-but-missing Interface variable is
   a hard build error, not a silent omission.
@@ -108,6 +113,59 @@ things that were one sentence above:
   (`DeploymentStageModel`'s lock fields) that may be adjacent evidence, not
   yet checked for this specific question.
 
+## Interface parse-failure policy
+
+Confirmed against v1's real `parse_variables_tf()`: it silently skips a
+`.tf` file that fails to parse (`except Exception: continue`, logged at
+debug level only). That is a real reliability gap, not a hypothetical one
+— a skipped file's variable declarations become invisible, which makes
+Injection produce **false "undeclared"** errors for variables that
+genuinely exist, for no reason the platform author can see without
+digging into debug logs.
+
+**Decided: default to a hard build error, not a silent skip**, when a
+capability-says-yes provisioner's source fails to parse. This matches this
+doc's own established "required logic" precedent — Injection's
+required-but-missing rule (above) is *always* a hard fail with no toggle,
+specifically because a silent gap here is worse than a loud one. The same
+reasoning applies symmetrically: a parse failure could just as easily be
+masking a real, Terraform-rejected syntax error as it could a harmless
+`python-hcl2` library-lag limitation (the library not yet supporting a
+newer HCL feature) — defaulting to loud is the only choice that can't
+silently hide the first case to accommodate the second.
+
+**But an unconditional block has a real cost the "required variable
+missing" case doesn't**: a genuinely valid `.tf` file the parsing library
+doesn't yet support would block a team indefinitely, with no workaround
+except waiting for an upstream library release — unlike a missing
+variable (always fixable by the platform author, immediately, in their
+own document), a parser gap is not fixable by the person hitting it.
+That asymmetry is why this case, unlike Injection's required-but-missing
+rule, earns an escape hatch rather than being unconditional.
+
+**The escape hatch reuses `needs:` — no new schema field.** `needs:`
+already exists for the structurally-never-capable case (Injection's
+`needs ∩ Environment` fallback). Extending its meaning to *also* cover an
+empirically-failed parse on a capability-says-yes provisioner reuses a
+mechanism already designed and named, rather than inventing a second,
+parallel opt-out: if parsing `variables.tf` fails and the provisioner's
+`needs:` is non-empty, treat that instance as if capability were `never`
+for this build (`needs ∩ Environment`, same formula, same narrowing);
+if parsing fails and `needs:` is unset or empty, hard-fail the build with
+a message naming the parse error and telling the author to either fix the
+`.tf` source or author `needs:` to explicitly accept the narrower check.
+
+**Why the fallback must require a non-empty `needs:`, not just react to
+the failure itself**: falling back to `needs ∩ Environment` when `needs:`
+was never authored would silently narrow injection to the **empty set**
+(`∅ ∩ Environment`) — injecting *nothing* into Terraform, a far worse
+silent failure than v1's original one-file-skip bug, which only hides
+*some* declarations, not all of them. Requiring `needs:` to be non-empty
+first means accepting the degraded check is a deliberate, visible action
+the platform author takes (writing out what this provisioner actually
+needs), not an accidental side effect of a parser limitation they may not
+even have noticed.
+
 ## Related Decisions
 
 - [ADR-0002](../decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md) — the full Requirement/Interface/Injection/Grant/Value/Translation analysis
@@ -129,7 +187,12 @@ things that were one sentence above:
   require deploy-time Context at all — tracked as its own item in
   [build-command.md](build-command.md), not blocked on anything above.
 - Provisioner capability lookup (`always`/`conditional`/`never` per
-  `ProvisionerType`) — not built.
+  `ProvisionerType`) — not built. Its `terraform` = always-capable branch
+  needs "Interface parse-failure policy" above (hard-fail by default,
+  `needs:` as the deliberate opt-out) built alongside it, not as a
+  follow-on — a capability lookup that can silently produce zero
+  injection on a parser hiccup would be worse than not having the check
+  at all.
 - Concrete shape of Context as a Pydantic model — not designed in detail,
   only sketched (mirrors v1's `ResolvedValues` dataclass). The build-time
   half now has a real, working analog (`ValueResolution`,
@@ -162,3 +225,19 @@ things that were one sentence above:
   instead of writing it — not a missing Context, a one-method fix, tracked
   in [build-command.md](build-command.md) instead of here. No code changed
   in this update.
+- 2026-09-30: **Designed the Interface parse-failure policy**, per direct
+  request, prompted by a real question about gap #15's
+  (`docs/design/gap_fit_v1.md`) `variables.tf` check: confirmed against
+  v1's real `parse_variables_tf()` that it silently skips an unparseable
+  `.tf` file, a real reliability gap (invisible declarations → false
+  "undeclared" errors). Also confirmed, against v2's real `build_run()`/
+  `sync_source()` code, that this check needs nothing beyond the git
+  clone/pull `sync_source()`'s caller already does — no `terraform init`,
+  since `variable` blocks are static HCL with no dynamic generation.
+  Decided: default to a hard build error (matching Injection's own
+  required-but-missing precedent — a silent gap is worse than a loud one),
+  with `needs:` reused as the deliberate escape hatch (no new schema
+  field) — but only when `needs:` is non-empty, since falling back on an
+  unauthored empty `needs:` would silently zero out injection entirely, a
+  worse failure than the one being escaped. Design only — nothing
+  implemented yet.
