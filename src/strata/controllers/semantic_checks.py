@@ -121,6 +121,7 @@ def _check_deployments(
                 workspace = cast(WorkspaceModel, workspace_entry.model)
                 diagnostics.extend(service.validate_stages_against_workspace(workspace), source=str(entry.source))
         diagnostics.extend(_check_deployment_layers(index, entry, deployment, root), source=str(entry.source))
+        diagnostics.extend(_check_deployment_tenant_geography(index, deployment), source=str(entry.source))
     return diagnostics
 
 
@@ -185,6 +186,77 @@ def _check_deployment_layers(
                 f"Deployment '{deployment.meta.name}': layers.segments['{name}'] = '{declared_value}', but "
                 f"its real file path resolves '{name}' = '{captured_value}'.",
                 code="path_convention_layers_drift",
+            )
+    return diagnostics
+
+
+def _check_deployment_tenant_geography(index: DocumentIndex, deployment: DeploymentModel) -> Diagnostics:
+    """Cross-check a deployment's provider region(s) against its tenant's allowed
+    geographies (docs/design/tenant-zone-policy.md's "static tier" — the
+    cheap, config-time equivalent of v1's real, plan-time `tenant_zone` policy).
+
+    Fully automatic — no config field anywhere turns this on or off; it
+    activates purely from data that already exists (`deployment.spec.tenant`/
+    `.workspace`, each provider's resolved region), and skips silently
+    wherever any link in that chain is genuinely absent (see the design doc's
+    scenario matrix) rather than treating an absence as a violation. A
+    provider whose region isn't found in its `ProviderConfig` at all, or whose
+    matching region entry has no `geography` tag, is skipped the same way —
+    both are either already reported elsewhere (`_check_providers()`) or
+    structurally unknowable, never duplicated or guessed at here.
+
+    Every provider on the workspace is checked independently — never
+    short-circuits on the first violation, matching `_check_deployment_layers()`'s
+    own "report every mismatch" behavior. Severity is a fixed `Severity.ERROR`
+    (no `warn` option): there is no field anywhere to hold that choice, and
+    data residency is a governance boundary that should fail closed, matching
+    the one real production config's own `enforcement: deny` choice for this
+    exact policy.
+    """
+    diagnostics = Diagnostics()
+    if deployment.spec.tenant is None:
+        return diagnostics
+    tenant_entry = index.get(PlatformKind.TENANT, deployment.spec.tenant)
+    if tenant_entry is None:
+        return diagnostics  # reference existence already reports this
+    tenant = cast(TenantModel, tenant_entry.model)
+    if not tenant.spec.geographies:
+        return diagnostics
+
+    if deployment.spec.workspace is None:
+        return diagnostics
+    workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
+    if workspace_entry is None:
+        return diagnostics
+    workspace = cast(WorkspaceModel, workspace_entry.model)
+    if not workspace.spec.providers:
+        return diagnostics
+
+    allowed_geographies = set(tenant.spec.geographies)
+
+    for provider_name in workspace.spec.providers:
+        provider_entry = index.get(PlatformKind.PROVIDER, provider_name)
+        if provider_entry is None:
+            continue  # reference existence already reports this
+        provider = cast(ProviderModel, provider_entry.model)
+
+        config_entry = index.get(PlatformKind.PROVIDERCONFIG, provider.spec.properties.type)
+        if config_entry is None:
+            continue  # unregistered type — _check_providers()'s own existing skip
+        provider_config = cast(ProviderConfigModel, config_entry.model)
+
+        region = next(
+            (r for r in (provider_config.spec.regions or []) if r.name == provider.spec.properties.region), None
+        )
+        if region is None or region.geography is None:
+            continue  # invalid region (already reported by _check_providers()) or no geography tag declared
+
+        if region.geography not in allowed_geographies:
+            diagnostics.error(
+                f"Deployment '{deployment.meta.name}': provider '{provider_name}' is in region "
+                f"'{provider.spec.properties.region}' (geography '{region.geography}'), which is not in "
+                f"tenant '{tenant.meta.name}''s allowed geographies: {sorted(allowed_geographies)}",
+                code="tenant_geography_mismatch",
             )
     return diagnostics
 

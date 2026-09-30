@@ -35,12 +35,21 @@ def test_tenant_rejects_mismatched_kind():
         TenantModel.model_validate(data)
 
 
-def test_tenant_requires_at_least_one_geography():
-    """Data residency is mandatory — an empty geography list is rejected."""
+def test_tenant_geographies_is_optional():
+    """A tenant with no data-residency constraint at all omits geographies entirely
+    (the real, common case — no production tenant checked has this populated yet)."""
+    data = _minimal_tenant()
+    data["spec"].pop("geographies", None)
+    model = TenantModel.model_validate(data)
+    assert model.spec.geographies is None
+
+
+def test_tenant_accepts_empty_geography_list():
+    """An explicit empty list is equivalent to omitting the field — no constraint."""
     data = _minimal_tenant()
     data["spec"]["geographies"] = []
-    with pytest.raises(ValidationError):
-        TenantModel.model_validate(data)
+    model = TenantModel.model_validate(data)
+    assert model.spec.geographies == []
 
 
 def test_tenant_rejects_duplicate_geographies():

@@ -60,12 +60,14 @@ class TenantSpecModel(PlatformBaseModel):
         description="Human-readable tenant name (e.g. 'Acme Corporation'). The tenant's identifier/code is "
         "meta.name (e.g. 'c0062').",
     )
-    geographies: list[str] = Field(
-        min_length=1,
+    geographies: list[str] | None = Field(
+        default=None,
         description="Data residency boundaries this tenant may deploy into (e.g. 'europe'). Each must appear "
         "as a `geography` on some region in a ProviderConfig's spec.regions — checked by "
         "`TenantService.validate_geographies_against_provider_configs()`. A tenant's allowed set is what a "
-        "zone-isolation policy tests a planned resource's region against.",
+        "zone-isolation policy tests a planned resource's region against. None/omitted means this tenant has "
+        "no data-residency constraint at all — the real, common case (docs/design/tenant-zone-policy.md: no "
+        "real tenant in the one production consumer checked has this populated yet).",
     )
     onboarded: date | None = Field(
         None, description="ISO date the tenant was onboarded (e.g. 2026-03-15). Informational only."
@@ -94,8 +96,9 @@ class TenantSpecModel(PlatformBaseModel):
 
     @model_validator(mode="after")
     def validate_unique_geographies(self) -> "TenantSpecModel":
-        """Geography entries must be unique."""
-        check_unique_names(self.geographies, "geography entries in tenant spec")
+        """Geography entries must be unique, when declared at all."""
+        if self.geographies:
+            check_unique_names(self.geographies, "geography entries in tenant spec")
         return self
 
     @model_validator(mode="after")
@@ -133,9 +136,7 @@ class TenantModel(PlatformBaseModel):
         description="Platform kind (always 'tenant')",
     )
     meta: TenantMetaModel = Field(description="Tenant metadata (name, annotations, labels, tags)")
-    spec: TenantSpecModel = Field(
-        description="Tenant specification (identity, geographies, environments, defaults)"
-    )
+    spec: TenantSpecModel = Field(description="Tenant specification (identity, geographies, environments, defaults)")
 
     @field_validator("kind")
     @classmethod

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Tests for `value_controller.resolve_values` — dispatch, precedence, and merge order."""
 
+from datetime import datetime, timedelta, timezone
+from io import StringIO
 from pathlib import Path
 
 import pytest
@@ -8,16 +10,22 @@ import pytest
 from strata.controllers.solution_context import open_solution
 from strata.controllers.value_controller import (
     build_value_references,
+    list_values,
     merge_workspace_environment_deployment_properties,
     reachable_environments,
     resolve_artifact,
     resolve_artifact_field,
     resolve_deployment,
+    resolve_diagnostic,
     resolve_document_value_references,
     resolve_tenant,
     resolve_values,
+    rotate_secret,
+    secret_status,
+    set_value,
 )
 from strata.integrations.capabilities import StoreIntegration
+from strata.integrations.errors import IntegrationError, ValueResolutionError
 from strata.integrations.resolved_context import ValueReference
 from strata.models.common_models import SourceModel
 from strata.models.deployment_model import DeploymentMetaModel, DeploymentModel, DeploymentSpecModel
@@ -982,3 +990,1168 @@ def test_resolve_values_raises_on_multiple_enabled_integration_documents(tmp_pat
 
     with pytest.raises(UsageError, match="infisical-a.*infisical-b|infisical-b.*infisical-a"):
         resolve_values(context, "app", ["DB_PASSWORD"])
+
+
+# ---------------------------------------------------------------------------
+# list_values() — docs/design/values-secrets-command.md
+# ---------------------------------------------------------------------------
+
+
+def _full_environment(root: Path, name: str = "prd") -> None:
+    """One of each kind, plus a secret with `generate:`/`rotate:` specs —
+    everything `list_values()`'s declared-only rows need to surface."""
+    _write(
+        root,
+        f"environments/{name}.yaml",
+        f"apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: {name}\nspec:\n"
+        "  variables:\n"
+        "    - key: REGION\n      store: constant\n      value: westeurope\n"
+        "  secrets:\n"
+        "    - key: DB_PASSWORD\n      store: infisical\n      value: db/password\n"
+        "      generate:\n        type: password\n        length: 24\n"
+        "      rotate:\n        max_age: 90\n        policy: warn\n"
+        "  features:\n"
+        '    - key: ENABLE_BETA\n      store: constant\n      value: "true"\n',
+    )
+
+
+def test_list_values_declared_only_returns_one_row_per_kind(tmp_path):
+    root = _solution(tmp_path)
+    _full_environment(root)
+    _deployment(root, "app", environments=["prd"])
+
+    rows, diagnostics = list_values(_context(root), "app", declared_only=True)
+
+    assert diagnostics.ok
+    by_key = {row.key: row for row in rows}
+    assert set(by_key) == {"REGION", "DB_PASSWORD", "ENABLE_BETA"}
+    assert by_key["REGION"].kind == "variable"
+    assert by_key["DB_PASSWORD"].kind == "secret"
+    assert by_key["ENABLE_BETA"].kind == "feature"
+
+
+def test_list_values_declared_only_never_touches_a_store(tmp_path, monkeypatch):
+    """No `StoreIntegration` is ever constructed — declared-only listing is
+    pure YAML introspection."""
+    root = _solution(tmp_path)
+    _full_environment(root)
+    _deployment(root, "app", environments=["prd"])
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("declared-only listing must never construct an integration")
+
+    monkeypatch.setattr("strata.controllers.value_controller.get_integration", _boom)
+
+    rows, _diagnostics = list_values(_context(root), "app", declared_only=True)
+    assert len(rows) == 3
+
+
+def test_list_values_declared_only_carries_the_declared_value_ref_not_a_resolved_value(tmp_path):
+    root = _solution(tmp_path)
+    _full_environment(root)
+    _deployment(root, "app", environments=["prd"])
+
+    rows, _diagnostics = list_values(_context(root), "app", declared_only=True)
+
+    db_password = next(row for row in rows if row.key == "DB_PASSWORD")
+    assert db_password.value_ref == "db/password"  # the store path/ID, never the actual secret
+    assert db_password.store == "infisical"
+
+
+def test_list_values_declared_only_summarises_generate_and_rotate_specs(tmp_path):
+    root = _solution(tmp_path)
+    _full_environment(root)
+    _deployment(root, "app", environments=["prd"])
+
+    rows, _diagnostics = list_values(_context(root), "app", declared_only=True)
+
+    db_password = next(row for row in rows if row.key == "DB_PASSWORD")
+    assert db_password.generate == "password/24"
+    assert db_password.rotate == "90d/warn"
+
+    region = next(row for row in rows if row.key == "REGION")
+    assert region.generate is None
+    assert region.rotate is None
+
+
+def test_list_values_declared_only_type_filter_restricts_to_one_kind(tmp_path):
+    root = _solution(tmp_path)
+    _full_environment(root)
+    _deployment(root, "app", environments=["prd"])
+
+    rows, _diagnostics = list_values(_context(root), "app", type_filter="secrets", declared_only=True)
+
+    assert [row.key for row in rows] == ["DB_PASSWORD"]
+
+
+def test_list_values_declared_only_rows_are_sorted_by_kind_then_key(tmp_path):
+    root = _solution(tmp_path)
+    _full_environment(root)
+    _deployment(root, "app", environments=["prd"])
+
+    rows, _diagnostics = list_values(_context(root), "app", declared_only=True)
+
+    assert [(row.kind, row.key) for row in rows] == [
+        ("feature", "ENABLE_BETA"),
+        ("secret", "DB_PASSWORD"),
+        ("variable", "REGION"),
+    ]
+
+
+def test_list_values_declared_only_unknown_deployment_raises_usage_error(tmp_path):
+    root = _solution(tmp_path)
+    _full_environment(root)
+    _deployment(root, "app", environments=["prd"])
+
+    with pytest.raises(UsageError, match="No deployment named 'ghost'"):
+        list_values(_context(root), "ghost", declared_only=True)
+
+
+def test_list_values_declared_only_empty_environment_returns_no_rows(tmp_path):
+    root = _solution(tmp_path)
+    _deployment(root, "app", environments=[])
+
+    rows, diagnostics = list_values(_context(root), "app", declared_only=True)
+
+    assert rows == []
+    assert diagnostics.ok
+
+
+# ---------------------------------------------------------------------------
+# list_values() live mode (declared_only=False, the default) —
+# docs/design/values-secrets-command.md Phase 4.
+# ---------------------------------------------------------------------------
+
+
+def test_list_values_live_resolves_variables_and_features_in_full(tmp_path):
+    root = _solution(tmp_path)
+    _environment(
+        root,
+        "prd",
+        variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}],
+        features=[{"key": "ENABLE_BETA", "store": "constant", "value": "true"}],
+    )
+    _deployment(root, "app", environments=["prd"])
+
+    rows, diagnostics = list_values(_context(root), "app")
+
+    assert diagnostics.ok
+    by_key = {row.key: row for row in rows}
+    assert by_key["REGION"].value == "westeurope"
+    assert by_key["REGION"].ok is True
+    assert by_key["ENABLE_BETA"].value == "true"
+
+
+def test_list_values_live_masks_secret_values(tmp_path, monkeypatch):
+    root = _solution(tmp_path)
+    _environment(root, "prd", secrets=[{"key": "DB_PASSWORD", "store": "infisical", "value": "db/password"}])
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+
+    monkeypatch.setattr(
+        "strata.controllers.value_controller.get_integration", lambda integration_type, config=None: _FakeStore()
+    )
+
+    rows, diagnostics = list_values(context, "app")
+
+    assert diagnostics.ok
+    row = rows[0]
+    assert row.ok is True
+    # _FakeStore.resolve() returns f"resolved-{key}" — mask_secret()'s default show=4 keeps "reso".
+    assert row.value == "reso" + "*" * len("resolved-db/password"[4:])
+    assert "resolved-db/password" not in (row.value or "")
+
+
+def test_list_values_live_reports_a_failed_key_without_stopping_the_batch(tmp_path, monkeypatch):
+    monkeypatch.delenv("PROBE_MISSING_VAR", raising=False)
+    root = _solution(tmp_path)
+    _environment(
+        root,
+        "prd",
+        variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}],
+        secrets=[{"key": "GREETING", "store": "environment", "value": "PROBE_MISSING_VAR"}],
+    )
+    _deployment(root, "app", environments=["prd"])
+
+    rows, diagnostics = list_values(_context(root), "app")
+
+    assert not diagnostics.ok
+    by_key = {row.key: row for row in rows}
+    assert by_key["REGION"].ok is True  # unaffected by the other key's failure
+    assert by_key["GREETING"].ok is False
+    assert by_key["GREETING"].value is None
+    assert "PROBE_MISSING_VAR" in (by_key["GREETING"].reason or "")
+
+
+def test_list_values_live_unresolved_only_filters_to_failures(tmp_path, monkeypatch):
+    monkeypatch.delenv("PROBE_MISSING_VAR", raising=False)
+    root = _solution(tmp_path)
+    _environment(
+        root,
+        "prd",
+        variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}],
+        secrets=[{"key": "GREETING", "store": "environment", "value": "PROBE_MISSING_VAR"}],
+    )
+    _deployment(root, "app", environments=["prd"])
+
+    rows, _diagnostics = list_values(_context(root), "app", unresolved_only=True)
+
+    assert [row.key for row in rows] == ["GREETING"]
+
+
+def test_list_values_live_type_filter_restricts_to_one_kind(tmp_path):
+    root = _solution(tmp_path)
+    _environment(
+        root,
+        "prd",
+        variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}],
+        features=[{"key": "ENABLE_BETA", "store": "constant", "value": "true"}],
+    )
+    _deployment(root, "app", environments=["prd"])
+
+    rows, _diagnostics = list_values(_context(root), "app", type_filter="variables")
+
+    assert [row.key for row in rows] == ["REGION"]
+
+
+def test_list_values_live_rows_are_sorted_by_kind_then_key(tmp_path):
+    root = _solution(tmp_path)
+    _environment(
+        root,
+        "prd",
+        variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}],
+        secrets=[{"key": "DB_PASSWORD", "store": "constant", "value": "hunter2"}],
+        features=[{"key": "ENABLE_BETA", "store": "constant", "value": "true"}],
+    )
+    _deployment(root, "app", environments=["prd"])
+
+    rows, _diagnostics = list_values(_context(root), "app")
+
+    assert [(row.kind, row.key) for row in rows] == [
+        ("feature", "ENABLE_BETA"),
+        ("secret", "DB_PASSWORD"),
+        ("variable", "REGION"),
+    ]
+
+
+def test_list_values_live_unknown_deployment_raises_usage_error(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", environments=["prd"])
+
+    with pytest.raises(UsageError, match="No deployment named 'ghost'"):
+        list_values(_context(root), "ghost")
+
+
+# ---------------------------------------------------------------------------
+# resolve_diagnostic() — docs/design/values-secrets-command.md Phase 3
+# (`values resolve`): resolution-path diagnostics, never revealing a value.
+# ---------------------------------------------------------------------------
+
+
+class _FakeStoreThatFails(StoreIntegration):
+    """A `StoreIntegration` whose `resolve()` always fails — for `--probe` tests."""
+
+    TYPE = "infisical"
+    CAPABILITIES = frozenset({"secrets"})
+    TRANSPORTS: frozenset[str] = frozenset()
+
+    def resolve(self, key: str) -> str:
+        raise ValueResolutionError(f"backend unreachable for '{key}'")
+
+
+def test_resolve_diagnostic_constant_store_is_ok_without_registration_or_probe(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", environments=["prd"])
+
+    rows, diagnostics = resolve_diagnostic(_context(root), "app")
+
+    assert diagnostics.ok
+    row = rows[0]
+    assert row.key == "REGION"
+    assert row.kind == "variable"
+    assert row.store == "constant"
+    assert row.registered is True
+    assert row.probed is False
+    assert row.ok is True
+    assert row.reason is None
+
+
+def test_resolve_diagnostic_environment_store_set_is_ok(tmp_path, monkeypatch):
+    monkeypatch.setenv("PROBE_VAR", "hello")
+    root = _solution(tmp_path)
+    _environment(root, "prd", variables=[{"key": "GREETING", "store": "environment", "value": "PROBE_VAR"}])
+    _deployment(root, "app", environments=["prd"])
+
+    rows, diagnostics = resolve_diagnostic(_context(root), "app")
+
+    assert diagnostics.ok
+    assert rows[0].ok is True
+
+
+def test_resolve_diagnostic_environment_store_unset_is_not_ok(tmp_path, monkeypatch):
+    monkeypatch.delenv("PROBE_MISSING_VAR", raising=False)
+    root = _solution(tmp_path)
+    _environment(root, "prd", variables=[{"key": "GREETING", "store": "environment", "value": "PROBE_MISSING_VAR"}])
+    _deployment(root, "app", environments=["prd"])
+
+    rows, diagnostics = resolve_diagnostic(_context(root), "app")
+
+    assert not diagnostics.ok
+    assert rows[0].ok is False
+    assert "PROBE_MISSING_VAR" in (rows[0].reason or "")
+    assert "GREETING" in diagnostics.messages()[0]
+
+
+def test_resolve_diagnostic_never_reveals_a_value(tmp_path, monkeypatch):
+    monkeypatch.setenv("PROBE_VAR", "super-secret-value")
+    root = _solution(tmp_path)
+    _environment(root, "prd", secrets=[{"key": "DB_PASSWORD", "store": "environment", "value": "PROBE_VAR"}])
+    _deployment(root, "app", environments=["prd"])
+
+    rows, diagnostics = resolve_diagnostic(_context(root), "app")
+
+    assert "super-secret-value" not in repr(rows)
+    assert "super-secret-value" not in " ".join(diagnostics.messages())
+
+
+def test_resolve_diagnostic_artifact_store_found_is_ok(tmp_path):
+    root = _solution(tmp_path)
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/omp.dispatcher.api", image_tag="1.0.0")
+    _write(
+        root,
+        "environments/prd.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  variables:\n    - key: dspapi_container_image_tag\n      store: artifact\n"
+        "      value: dspapi_container\n      field: image_tag\n",
+    )
+    _deployment(root, "app", environments=["prd"])
+
+    rows, diagnostics = resolve_diagnostic(_context(root), "app")
+
+    assert diagnostics.ok
+    assert rows[0].store == "artifact"
+    assert rows[0].ok is True
+
+
+def test_resolve_diagnostic_artifact_store_missing_is_not_ok(tmp_path):
+    root = _solution(tmp_path)
+    _write(
+        root,
+        "environments/prd.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  variables:\n    - key: dspapi_container_image_tag\n      store: artifact\n"
+        "      value: ghost_artifact\n      field: image_tag\n",
+    )
+    _deployment(root, "app", environments=["prd"])
+
+    rows, diagnostics = resolve_diagnostic(_context(root), "app")
+
+    assert not diagnostics.ok
+    assert rows[0].ok is False
+    assert "ghost_artifact" in (rows[0].reason or "")
+
+
+def test_resolve_diagnostic_unregistered_store_type_is_not_ok(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", secrets=[{"key": "VAULT_SECRET", "store": "vault", "value": "kv/secret"}])
+    _deployment(root, "app", environments=["prd"])
+
+    rows, diagnostics = resolve_diagnostic(_context(root), "app")
+
+    assert rows[0].registered is False
+    assert rows[0].probed is False
+    assert rows[0].ok is False
+    assert "no resolver implemented yet" in (rows[0].reason or "")
+
+
+def test_resolve_diagnostic_registered_store_without_probe_is_ok_and_not_probed(tmp_path, monkeypatch):
+    """Without `--probe`, construction alone (never a real `resolve()` call) is enough."""
+    root = _solution(tmp_path)
+    _integration_doc(root, "infisical-prod")
+    _environment(root, "prd", secrets=[{"key": "DB_PASSWORD", "store": "infisical", "value": "db/password"}])
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+
+    captured: list = []
+    _spy_get_integration(monkeypatch, captured)
+
+    rows, diagnostics = resolve_diagnostic(context, "app", probe=False)
+
+    assert diagnostics.ok
+    assert rows[0].registered is True
+    assert rows[0].probed is False
+    assert rows[0].ok is True
+
+
+def test_resolve_diagnostic_probe_success(tmp_path, monkeypatch):
+    root = _solution(tmp_path)
+    _environment(root, "prd", secrets=[{"key": "DB_PASSWORD", "store": "infisical", "value": "db/password"}])
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+
+    monkeypatch.setattr(
+        "strata.controllers.value_controller.get_integration", lambda integration_type, config=None: _FakeStore()
+    )
+
+    rows, diagnostics = resolve_diagnostic(context, "app", probe=True)
+
+    assert diagnostics.ok
+    assert rows[0].probed is True
+    assert rows[0].ok is True
+
+
+def test_resolve_diagnostic_probe_failure_is_reported_without_revealing_anything(tmp_path, monkeypatch):
+    root = _solution(tmp_path)
+    _environment(root, "prd", secrets=[{"key": "DB_PASSWORD", "store": "infisical", "value": "db/password"}])
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+
+    monkeypatch.setattr(
+        "strata.controllers.value_controller.get_integration",
+        lambda integration_type, config=None: _FakeStoreThatFails(),
+    )
+
+    rows, diagnostics = resolve_diagnostic(context, "app", probe=True)
+
+    assert not diagnostics.ok
+    assert rows[0].probed is True
+    assert rows[0].ok is False
+    assert "backend unreachable" in (rows[0].reason or "")
+
+
+def test_resolve_diagnostic_key_filters_to_one_row(tmp_path):
+    root = _solution(tmp_path)
+    _environment(
+        root,
+        "prd",
+        variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}],
+        secrets=[{"key": "DB_PASSWORD", "store": "constant", "value": "hunter2"}],
+    )
+    _deployment(root, "app", environments=["prd"])
+
+    rows, diagnostics = resolve_diagnostic(_context(root), "app", key="REGION")
+
+    assert diagnostics.ok
+    assert [row.key for row in rows] == ["REGION"]
+
+
+def test_resolve_diagnostic_unknown_key_reports_a_diagnostic_and_no_rows(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", environments=["prd"])
+
+    rows, diagnostics = resolve_diagnostic(_context(root), "app", key="GHOST")
+
+    assert rows == []
+    assert not diagnostics.ok
+    assert diagnostics.items[0].code == "unknown_value_key"
+
+
+def test_resolve_diagnostic_rows_are_sorted_by_kind_then_key(tmp_path):
+    root = _solution(tmp_path)
+    _environment(
+        root,
+        "prd",
+        variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}],
+        secrets=[{"key": "DB_PASSWORD", "store": "constant", "value": "hunter2"}],
+        features=[{"key": "ENABLE_BETA", "store": "constant", "value": "true"}],
+    )
+    _deployment(root, "app", environments=["prd"])
+
+    rows, _diagnostics = resolve_diagnostic(_context(root), "app")
+
+    assert [(row.kind, row.key) for row in rows] == [
+        ("feature", "ENABLE_BETA"),
+        ("secret", "DB_PASSWORD"),
+        ("variable", "REGION"),
+    ]
+
+
+def test_resolve_diagnostic_unknown_deployment_raises_usage_error(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", environments=["prd"])
+
+    with pytest.raises(UsageError, match="No deployment named 'ghost'"):
+        resolve_diagnostic(_context(root), "ghost")
+
+
+def test_resolve_diagnostic_raises_on_multiple_enabled_integration_documents(tmp_path, monkeypatch):
+    """Same `bind_integration_config()` rule `resolve_values()` enforces — a real
+    configuration error, not a per-key finding."""
+    root = _solution(tmp_path)
+    _integration_doc(root, "infisical-a")
+    _integration_doc(root, "infisical-b")
+    _environment(root, "prd", secrets=[{"key": "DB_PASSWORD", "store": "infisical", "value": "db/password"}])
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+
+    captured: list = []
+    _spy_get_integration(monkeypatch, captured)
+
+    with pytest.raises(UsageError, match="infisical-a.*infisical-b|infisical-b.*infisical-a"):
+        resolve_diagnostic(context, "app")
+
+
+# ---------------------------------------------------------------------------
+# set_value() — docs/design/values-secrets-command.md Phase 6 (`values set`).
+# ---------------------------------------------------------------------------
+
+
+class _FakeWritableStore(StoreIntegration):
+    """A `StoreIntegration` whose `set()` records what was written —
+    for `values set` success-path tests."""
+
+    TYPE = "infisical"
+    CAPABILITIES = frozenset({"secrets"})
+    TRANSPORTS: frozenset[str] = frozenset()
+
+    def __init__(self) -> None:
+        super().__init__(None)
+        self.written: tuple[str, str] | None = None
+
+    def resolve(self, key: str) -> str:
+        return f"resolved-{key}"
+
+    def set(self, key: str, value: str) -> None:
+        self.written = (key, value)
+
+
+class _FakeStoreThatRejectsWrites(StoreIntegration):
+    """A `StoreIntegration` whose `set()` always fails — for `values set`
+    write-failure tests. Unlike the base default (`IntegrationError` for
+    "does not support writes"), this simulates a real, configured backend
+    rejecting the specific write (unreachable/unauthenticated)."""
+
+    TYPE = "infisical"
+    CAPABILITIES = frozenset({"secrets"})
+    TRANSPORTS: frozenset[str] = frozenset()
+
+    def resolve(self, key: str) -> str:
+        return f"resolved-{key}"
+
+    def set(self, key: str, value: str) -> None:
+        raise IntegrationError(f"backend rejected the write for '{key}'")
+
+
+def test_set_value_writes_an_explicit_value(tmp_path, monkeypatch):
+    root = _solution(tmp_path)
+    _environment(root, "prd", secrets=[{"key": "DB_PASSWORD", "store": "infisical", "value": "db/password"}])
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+
+    store = _FakeWritableStore()
+    monkeypatch.setattr("strata.controllers.value_controller.get_integration", lambda *a, **k: store)
+
+    result, diagnostics = set_value(context, "app", "DB_PASSWORD", value="new-secret-value")
+
+    assert diagnostics.ok
+    assert result is not None
+    assert result.key == "DB_PASSWORD"
+    assert result.kind == "secret"
+    assert result.store == "infisical"
+    assert result.generated is False
+    assert store.written == ("db/password", "new-secret-value")
+
+
+def test_set_value_never_carries_the_written_value_on_the_result(tmp_path, monkeypatch):
+    root = _solution(tmp_path)
+    _environment(root, "prd", secrets=[{"key": "DB_PASSWORD", "store": "infisical", "value": "db/password"}])
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+    monkeypatch.setattr("strata.controllers.value_controller.get_integration", lambda *a, **k: _FakeWritableStore())
+
+    result, _diagnostics = set_value(context, "app", "DB_PASSWORD", value="super-secret")
+
+    assert result is not None
+    assert "super-secret" not in repr(result)
+    assert not hasattr(result, "value")
+
+
+def test_set_value_from_file_reads_the_files_content(tmp_path, monkeypatch):
+    root = _solution(tmp_path)
+    _environment(root, "prd", secrets=[{"key": "TLS_CERT", "store": "infisical", "value": "certs/tls"}])
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+    store = _FakeWritableStore()
+    monkeypatch.setattr("strata.controllers.value_controller.get_integration", lambda *a, **k: store)
+
+    cert_file = tmp_path / "cert.pem"
+    cert_file.write_text("-----BEGIN CERTIFICATE-----\nmulti\nline\n-----END CERTIFICATE-----\n", encoding="utf-8")
+
+    result, diagnostics = set_value(context, "app", "TLS_CERT", from_file=str(cert_file))
+
+    assert diagnostics.ok
+    assert result is not None
+    assert store.written == ("certs/tls", cert_file.read_text(encoding="utf-8"))
+
+
+def test_set_value_from_file_missing_file_raises_usage_error(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", secrets=[{"key": "TLS_CERT", "store": "infisical", "value": "certs/tls"}])
+    _deployment(root, "app", environments=["prd"])
+
+    with pytest.raises(UsageError, match="Cannot read --from-file"):
+        set_value(_context(root), "app", "TLS_CERT", from_file=str(tmp_path / "ghost.pem"))
+
+
+def test_set_value_from_stdin_reads_stdin(tmp_path, monkeypatch):
+    root = _solution(tmp_path)
+    _environment(root, "prd", secrets=[{"key": "DB_PASSWORD", "store": "infisical", "value": "db/password"}])
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+    store = _FakeWritableStore()
+    monkeypatch.setattr("strata.controllers.value_controller.get_integration", lambda *a, **k: store)
+    monkeypatch.setattr("strata.controllers.value_controller.stdin", StringIO("piped-value"))
+
+    result, diagnostics = set_value(context, "app", "DB_PASSWORD", from_stdin=True)
+
+    assert diagnostics.ok
+    assert result is not None
+    assert store.written == ("db/password", "piped-value")
+
+
+def test_set_value_generate_uses_the_keys_own_generate_spec(tmp_path, monkeypatch):
+    root = _solution(tmp_path)
+    _write(
+        root,
+        "environments/prd.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  secrets:\n    - key: DB_PASSWORD\n      store: infisical\n      value: db/password\n"
+        "      generate:\n        type: password\n        length: 20\n",
+    )
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+    store = _FakeWritableStore()
+    monkeypatch.setattr("strata.controllers.value_controller.get_integration", lambda *a, **k: store)
+
+    result, diagnostics = set_value(context, "app", "DB_PASSWORD", generate=True)
+
+    assert diagnostics.ok
+    assert result is not None
+    assert result.generated is True
+    assert store.written is not None
+    written_key, written_value = store.written
+    assert written_key == "db/password"
+    assert len(written_value) == 20
+
+
+def test_set_value_generate_without_a_generate_spec_raises_usage_error(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", secrets=[{"key": "DB_PASSWORD", "store": "infisical", "value": "db/password"}])
+    _deployment(root, "app", environments=["prd"])
+
+    with pytest.raises(UsageError, match="has no generate: spec"):
+        set_value(_context(root), "app", "DB_PASSWORD", generate=True)
+
+
+def test_set_value_generate_on_a_variable_raises_usage_error(tmp_path):
+    """Uses an integration-backed (non-builtin) variable store, isolating
+    the "--generate is secrets-only" check from the separate "builtin
+    store, nothing to write to" rejection — a `constant`/`environment`
+    variable would raise for the builtin-store reason first, which is a
+    different, equally valid rejection, not what this test is about."""
+    root = _solution(tmp_path)
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "azure-appconfig", "value": "region"}])
+    _deployment(root, "app", environments=["prd"])
+
+    with pytest.raises(UsageError, match="only valid for secrets"):
+        set_value(_context(root), "app", "REGION", generate=True)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "expected_match"),
+    [
+        ({}, "exactly one"),
+        ({"value": "a", "from_stdin": True}, "exactly one"),
+        ({"value": "a", "generate": True}, "exactly one"),
+    ],
+)
+def test_set_value_requires_exactly_one_value_source(tmp_path, kwargs, expected_match):
+    root = _solution(tmp_path)
+    _environment(root, "prd", secrets=[{"key": "DB_PASSWORD", "store": "infisical", "value": "db/password"}])
+    _deployment(root, "app", environments=["prd"])
+
+    with pytest.raises(UsageError, match=expected_match):
+        set_value(_context(root), "app", "DB_PASSWORD", **kwargs)
+
+
+def test_set_value_rejects_a_constant_store(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", environments=["prd"])
+
+    with pytest.raises(UsageError, match="constant value"):
+        set_value(_context(root), "app", "REGION", value="northeurope")
+
+
+def test_set_value_rejects_an_environment_store(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "environment", "value": "REGION_VAR"}])
+    _deployment(root, "app", environments=["prd"])
+
+    with pytest.raises(UsageError, match="environment variable 'REGION_VAR'"):
+        set_value(_context(root), "app", "REGION", value="northeurope")
+
+
+def test_set_value_rejects_a_github_secret_store(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", secrets=[{"key": "DEPLOY_TOKEN", "store": "github", "value": "DEPLOY_TOKEN"}])
+    _deployment(root, "app", environments=["prd"])
+
+    with pytest.raises(UsageError, match="GitHub Actions secret"):
+        set_value(_context(root), "app", "DEPLOY_TOKEN", value="new-token")
+
+
+def test_set_value_rejects_an_artifact_store(tmp_path):
+    root = _solution(tmp_path)
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/omp.dispatcher.api", image_tag="1.0.0")
+    _write(
+        root,
+        "environments/prd.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  variables:\n    - key: dspapi_container_image_tag\n      store: artifact\n"
+        "      value: dspapi_container\n      field: image_tag\n",
+    )
+    _deployment(root, "app", environments=["prd"])
+
+    with pytest.raises(UsageError, match="in-solution artifact reference"):
+        set_value(_context(root), "app", "dspapi_container_image_tag", value="2.0.0")
+
+
+def test_set_value_unknown_key_raises_usage_error(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", environments=["prd"])
+
+    with pytest.raises(UsageError, match="'GHOST' is not declared"):
+        set_value(_context(root), "app", "GHOST", value="x")
+
+
+def test_set_value_unknown_deployment_raises_usage_error(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", environments=["prd"])
+
+    with pytest.raises(UsageError, match="No deployment named 'ghost'"):
+        set_value(_context(root), "ghost", "REGION", value="x")
+
+
+def test_set_value_write_failure_is_reported_not_raised(tmp_path, monkeypatch):
+    """A real write failure (IntegrationError from `.set()`) is not a
+    `StrataError` — must be converted to a Diagnostic, not left to
+    propagate uncaught past `command_run()`'s StrataError-only handler."""
+    root = _solution(tmp_path)
+    _environment(root, "prd", secrets=[{"key": "DB_PASSWORD", "store": "infisical", "value": "db/password"}])
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+    monkeypatch.setattr(
+        "strata.controllers.value_controller.get_integration", lambda *a, **k: _FakeStoreThatRejectsWrites()
+    )
+
+    result, diagnostics = set_value(context, "app", "DB_PASSWORD", value="x")
+
+    assert result is None
+    assert not diagnostics.ok
+    assert "backend rejected the write" in diagnostics.messages()[0]
+
+
+def test_set_value_unregistered_store_type_is_reported_not_raised(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", secrets=[{"key": "VAULT_SECRET", "store": "vault", "value": "kv/secret"}])
+    _deployment(root, "app", environments=["prd"])
+
+    result, diagnostics = set_value(_context(root), "app", "VAULT_SECRET", value="x")
+
+    assert result is None
+    assert not diagnostics.ok
+
+
+# ---------------------------------------------------------------------------
+# rotate_secret() — docs/design/values-secrets-command.md Phase 7 (`values rotate`).
+# ---------------------------------------------------------------------------
+
+
+def _rotatable_environment(root: Path, name: str = "prd") -> None:
+    """A secret with a `generate:` spec — the only kind `rotate_secret()`
+    will act on."""
+    _write(
+        root,
+        f"environments/{name}.yaml",
+        f"apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: {name}\nspec:\n"
+        "  secrets:\n    - key: DB_PASSWORD\n      store: infisical\n      value: db/password\n"
+        "      generate:\n        type: password\n        length: 20\n",
+    )
+
+
+def test_rotate_secret_generates_and_writes_a_new_value(tmp_path, monkeypatch):
+    root = _solution(tmp_path)
+    _rotatable_environment(root)
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+    store = _FakeWritableStore()
+    monkeypatch.setattr("strata.controllers.value_controller.get_integration", lambda *a, **k: store)
+
+    result, diagnostics = rotate_secret(context, "app", "DB_PASSWORD")
+
+    assert diagnostics.ok
+    assert result is not None
+    assert result.key == "DB_PASSWORD"
+    assert result.kind == "secret"
+    assert result.store == "infisical"
+    assert result.generated is True
+    assert store.written is not None
+    written_key, written_value = store.written
+    assert written_key == "db/password"
+    assert len(written_value) == 20
+
+
+def test_rotate_secret_never_carries_the_new_value_on_the_result(tmp_path, monkeypatch):
+    root = _solution(tmp_path)
+    _rotatable_environment(root)
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+    monkeypatch.setattr("strata.controllers.value_controller.get_integration", lambda *a, **k: _FakeWritableStore())
+
+    result, _diagnostics = rotate_secret(context, "app", "DB_PASSWORD")
+
+    assert result is not None
+    assert not hasattr(result, "value")
+
+
+def test_rotate_secret_two_rotations_generate_different_values(tmp_path, monkeypatch):
+    """A weak sanity check that rotation actually re-generates rather than
+    reusing a cached/fixed value."""
+    root = _solution(tmp_path)
+    _rotatable_environment(root)
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+    store = _FakeWritableStore()
+    monkeypatch.setattr("strata.controllers.value_controller.get_integration", lambda *a, **k: store)
+
+    rotate_secret(context, "app", "DB_PASSWORD")
+    assert store.written is not None
+    first_value = store.written[1]
+
+    rotate_secret(context, "app", "DB_PASSWORD")
+    assert store.written is not None
+    second_value = store.written[1]
+
+    assert first_value != second_value
+
+
+def test_rotate_secret_without_a_generate_spec_raises_usage_error(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", secrets=[{"key": "DB_PASSWORD", "store": "infisical", "value": "db/password"}])
+    _deployment(root, "app", environments=["prd"])
+
+    with pytest.raises(UsageError, match="has no generate: spec"):
+        rotate_secret(_context(root), "app", "DB_PASSWORD")
+
+
+def test_rotate_secret_on_a_constant_secret_raises_usage_error(tmp_path):
+    """A `constant`/`environment`/`github` secret can never carry a
+    `generate:` spec (`validate_generate_not_on_builtin`) — the "no
+    generate: spec" check alone already rejects every built-in store, with
+    no separate builtin-store check needed (unlike `set_value()`)."""
+    root = _solution(tmp_path)
+    _environment(root, "prd", secrets=[{"key": "DB_PASSWORD", "store": "constant", "value": "hunter2"}])
+    _deployment(root, "app", environments=["prd"])
+
+    with pytest.raises(UsageError, match="has no generate: spec"):
+        rotate_secret(_context(root), "app", "DB_PASSWORD")
+
+
+def test_rotate_secret_on_a_feature_raises_usage_error(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", features=[{"key": "ENABLE_BETA", "store": "constant", "value": "true"}])
+    _deployment(root, "app", environments=["prd"])
+
+    with pytest.raises(UsageError, match="rotation only applies to secrets"):
+        rotate_secret(_context(root), "app", "ENABLE_BETA")
+
+
+def test_rotate_secret_on_a_variable_raises_usage_error(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", environments=["prd"])
+
+    with pytest.raises(UsageError, match="rotation only applies to secrets"):
+        rotate_secret(_context(root), "app", "REGION")
+
+
+def test_rotate_secret_unknown_key_raises_usage_error(tmp_path):
+    root = _solution(tmp_path)
+    _rotatable_environment(root)
+    _deployment(root, "app", environments=["prd"])
+
+    with pytest.raises(UsageError, match="'GHOST' is not declared"):
+        rotate_secret(_context(root), "app", "GHOST")
+
+
+def test_rotate_secret_unknown_deployment_raises_usage_error(tmp_path):
+    root = _solution(tmp_path)
+    _rotatable_environment(root)
+    _deployment(root, "app", environments=["prd"])
+
+    with pytest.raises(UsageError, match="No deployment named 'ghost'"):
+        rotate_secret(_context(root), "ghost", "DB_PASSWORD")
+
+
+def test_rotate_secret_write_failure_is_reported_not_raised(tmp_path, monkeypatch):
+    """Same D4 reasoning as `set_value()` — `IntegrationError` is not a
+    `StrataError`, so a real write failure must be reported as a
+    Diagnostic, not left to propagate uncaught."""
+    root = _solution(tmp_path)
+    _rotatable_environment(root)
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+    monkeypatch.setattr(
+        "strata.controllers.value_controller.get_integration", lambda *a, **k: _FakeStoreThatRejectsWrites()
+    )
+
+    result, diagnostics = rotate_secret(context, "app", "DB_PASSWORD")
+
+    assert result is None
+    assert not diagnostics.ok
+    assert "backend rejected the write" in diagnostics.messages()[0]
+
+
+# ---------------------------------------------------------------------------
+# secret_status() — docs/design/values-secrets-command.md Phase 8 (`values status`).
+# ---------------------------------------------------------------------------
+
+
+class _FakeStoreWithMetadata(StoreIntegration):
+    """A `StoreIntegration` whose `.metadata()` returns a fixed, injected
+    `SecretMetadata` (or `None`) — for `secret_status()` tests. Never
+    implements `.set()` — `secret_status()` must never call it (D2)."""
+
+    TYPE = "infisical"
+    CAPABILITIES = frozenset({"secrets"})
+    TRANSPORTS: frozenset[str] = frozenset()
+
+    def __init__(self, metadata) -> None:
+        super().__init__(None)
+        self._metadata = metadata
+
+    def resolve(self, key: str) -> str:
+        return f"resolved-{key}"
+
+    def metadata(self, key: str):
+        return self._metadata
+
+
+def _secret_with_rotate(root: Path, *, max_age: int = 90, policy: str = "warn", name: str = "prd") -> None:
+    _write(
+        root,
+        f"environments/{name}.yaml",
+        f"apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: {name}\nspec:\n"
+        "  secrets:\n    - key: DB_PASSWORD\n      store: infisical\n      value: db/password\n"
+        "      generate:\n        type: password\n        length: 20\n"
+        f"      rotate:\n        max_age: {max_age}\n        policy: {policy}\n",
+    )
+
+
+def test_secret_status_ok_when_within_max_age(tmp_path, monkeypatch):
+    root = _solution(tmp_path)
+    _secret_with_rotate(root, max_age=90)
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+    from strata.integrations.resolved_context import SecretMetadata
+
+    meta = SecretMetadata(updated_at=datetime.now(timezone.utc) - timedelta(days=10))
+    monkeypatch.setattr(
+        "strata.controllers.value_controller.get_integration", lambda *a, **k: _FakeStoreWithMetadata(meta)
+    )
+
+    rows, diagnostics = secret_status(context, "app")
+
+    assert diagnostics.ok
+    row = rows[0]
+    assert row.key == "DB_PASSWORD"
+    assert row.status == "ok"
+    assert row.age_days == 10
+    assert row.days_remaining == 80
+    assert row.max_age == 90
+    assert row.policy == "warn"
+
+
+def test_secret_status_overdue_when_age_exceeds_max_age(tmp_path, monkeypatch):
+    root = _solution(tmp_path)
+    _secret_with_rotate(root, max_age=90)
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+    from strata.integrations.resolved_context import SecretMetadata
+
+    meta = SecretMetadata(updated_at=datetime.now(timezone.utc) - timedelta(days=100))
+    monkeypatch.setattr(
+        "strata.controllers.value_controller.get_integration", lambda *a, **k: _FakeStoreWithMetadata(meta)
+    )
+
+    rows, diagnostics = secret_status(context, "app")
+
+    assert not diagnostics.ok
+    row = rows[0]
+    assert row.status == "overdue"
+    assert row.age_days == 100
+    assert row.days_remaining is None
+    assert "overdue" in diagnostics.messages()[0]
+
+
+def test_secret_status_prefers_updated_at_over_created_at(tmp_path, monkeypatch):
+    root = _solution(tmp_path)
+    _secret_with_rotate(root, max_age=90)
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+    from strata.integrations.resolved_context import SecretMetadata
+
+    meta = SecretMetadata(
+        created_at=datetime.now(timezone.utc) - timedelta(days=200),
+        updated_at=datetime.now(timezone.utc) - timedelta(days=5),
+    )
+    monkeypatch.setattr(
+        "strata.controllers.value_controller.get_integration", lambda *a, **k: _FakeStoreWithMetadata(meta)
+    )
+
+    rows, _diagnostics = secret_status(context, "app")
+
+    assert rows[0].status == "ok"
+    assert rows[0].age_days == 5
+
+
+def test_secret_status_no_metadata_when_metadata_returns_none(tmp_path, monkeypatch):
+    root = _solution(tmp_path)
+    _secret_with_rotate(root)
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+    monkeypatch.setattr(
+        "strata.controllers.value_controller.get_integration", lambda *a, **k: _FakeStoreWithMetadata(None)
+    )
+
+    rows, diagnostics = secret_status(context, "app")
+
+    assert rows[0].status == "no_metadata"
+    assert rows[0].age_days is None
+    assert diagnostics.warnings
+    assert diagnostics.ok  # a warning, not an error — doesn't fail the command
+
+
+def test_secret_status_no_metadata_when_metadata_raises_integration_error(tmp_path, monkeypatch):
+    """Uses the base `StoreIntegration.metadata()` default (raises
+    `IntegrationError`, since `_FakeWritableStore` never overrides it)."""
+    root = _solution(tmp_path)
+    _secret_with_rotate(root)
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+    monkeypatch.setattr("strata.controllers.value_controller.get_integration", lambda *a, **k: _FakeWritableStore())
+
+    rows, diagnostics = secret_status(context, "app")
+
+    assert rows[0].status == "no_metadata"
+    assert diagnostics.warnings
+    assert diagnostics.ok
+
+
+def test_secret_status_no_timestamp_when_metadata_has_neither_field(tmp_path, monkeypatch):
+    root = _solution(tmp_path)
+    _secret_with_rotate(root)
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+    from strata.integrations.resolved_context import SecretMetadata
+
+    monkeypatch.setattr(
+        "strata.controllers.value_controller.get_integration", lambda *a, **k: _FakeStoreWithMetadata(SecretMetadata())
+    )
+
+    rows, diagnostics = secret_status(context, "app")
+
+    assert rows[0].status == "no_timestamp"
+    assert diagnostics.ok
+
+
+def test_secret_status_no_integration_for_unregistered_store_type(tmp_path):
+    root = _solution(tmp_path)
+    _write(
+        root,
+        "environments/prd.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  secrets:\n    - key: VAULT_SECRET\n      store: vault\n      value: kv/secret\n"
+        "      generate:\n        type: password\n        length: 20\n"
+        "      rotate:\n        max_age: 90\n        policy: warn\n",
+    )
+    _deployment(root, "app", environments=["prd"])
+
+    rows, diagnostics = secret_status(_context(root), "app")
+
+    assert rows[0].status == "no_integration"
+    assert diagnostics.ok
+
+
+def test_secret_status_skips_secrets_without_a_rotate_spec(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", secrets=[{"key": "DB_PASSWORD", "store": "constant", "value": "hunter2"}])
+    _deployment(root, "app", environments=["prd"])
+
+    rows, diagnostics = secret_status(_context(root), "app")
+
+    assert rows == []
+    assert diagnostics.ok
+
+
+def test_secret_status_never_writes_anything(tmp_path, monkeypatch):
+    """D2 — `values status` is a pure read; confirm the fake store's `set()`
+    is never invoked (it isn't even implemented on `_FakeStoreWithMetadata`,
+    so calling it would raise `AttributeError`/`TypeError`, not silently no-op)."""
+    root = _solution(tmp_path)
+    _secret_with_rotate(root)
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+    from strata.integrations.resolved_context import SecretMetadata
+
+    monkeypatch.setattr(
+        "strata.controllers.value_controller.get_integration",
+        lambda *a, **k: _FakeStoreWithMetadata(SecretMetadata(updated_at=datetime.now(timezone.utc))),
+    )
+
+    rows, _diagnostics = secret_status(context, "app")
+    assert rows[0].status == "ok"  # reached metadata() successfully, never touched set()
+
+
+def test_secret_status_rows_sorted_by_key(tmp_path, monkeypatch):
+    root = _solution(tmp_path)
+    _write(
+        root,
+        "environments/prd.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  secrets:\n"
+        "    - key: ZEBRA\n      store: infisical\n      value: zebra\n"
+        "      generate:\n        type: password\n        length: 20\n"
+        "      rotate:\n        max_age: 90\n        policy: warn\n"
+        "    - key: ALPHA\n      store: infisical\n      value: alpha\n"
+        "      generate:\n        type: password\n        length: 20\n"
+        "      rotate:\n        max_age: 90\n        policy: warn\n",
+    )
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+    from strata.integrations.resolved_context import SecretMetadata
+
+    monkeypatch.setattr(
+        "strata.controllers.value_controller.get_integration",
+        lambda *a, **k: _FakeStoreWithMetadata(SecretMetadata(updated_at=datetime.now(timezone.utc))),
+    )
+
+    rows, _diagnostics = secret_status(context, "app")
+
+    assert [row.key for row in rows] == ["ALPHA", "ZEBRA"]
+
+
+def test_secret_status_unknown_deployment_raises_usage_error(tmp_path):
+    root = _solution(tmp_path)
+    _secret_with_rotate(root)
+    _deployment(root, "app", environments=["prd"])
+
+    with pytest.raises(UsageError, match="No deployment named 'ghost'"):
+        secret_status(_context(root), "ghost")

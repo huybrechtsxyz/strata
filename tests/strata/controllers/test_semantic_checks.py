@@ -288,6 +288,119 @@ def test_tenant_geography_not_declared_by_any_provider_is_caught(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Deployment -> Tenant/Workspace/Provider: static geography cross-check
+# (docs/design/tenant-zone-policy.md's "static tier")
+# ---------------------------------------------------------------------------
+
+
+def _add_us_region_to_azure_config(root: Path) -> None:
+    path = root / "registries/azure.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "  regions:\n    - name: westeurope\n      geography: europe\n",
+            "  regions:\n    - name: westeurope\n      geography: europe\n    - name: eastus2\n      geography: us\n",
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_deployment_provider_geography_mismatch_is_caught(tmp_path):
+    """The base solution's tenant only allows 'europe' — pointing its one
+    provider at a region tagged 'us' instead must be caught."""
+    root = _base_solution(tmp_path)
+    _add_us_region_to_azure_config(root)
+    path = root / "provider.yaml"
+    path.write_text(path.read_text(encoding="utf-8").replace("region: westeurope", "region: eastus2"), encoding="utf-8")
+
+    context = _resolve(root)
+    assert not context.ok
+    messages = context.diagnostics.messages()
+    assert any("eastus2" in m and "geography 'us'" in m and "c0062" in m for m in messages)
+
+
+def test_deployment_with_no_tenant_skips_geography_check(tmp_path):
+    root = _base_solution(tmp_path)
+    _add_us_region_to_azure_config(root)
+    provider_path = root / "provider.yaml"
+    provider_path.write_text(
+        provider_path.read_text(encoding="utf-8").replace("region: westeurope", "region: eastus2"), encoding="utf-8"
+    )
+    deployment_path = root / "deployment.yaml"
+    deployment_path.write_text(
+        deployment_path.read_text(encoding="utf-8").replace("  tenant: c0062\n", ""), encoding="utf-8"
+    )
+
+    # No tenant on the deployment — the mismatch above has nothing to check against.
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_tenant_with_no_geographies_skips_geography_check(tmp_path):
+    """An empty (or omitted) `geographies` list means 'no data-residency
+    constraint at all' — not a violation waiting to happen. Proven the same
+    way `test_deployment_with_no_tenant_skips_geography_check` proves its own
+    skip: set up a real mismatch (a provider region tagged 'us') that WOULD
+    be caught if the tenant had any constraint, then confirm it isn't."""
+    root = _base_solution(tmp_path)
+    _add_us_region_to_azure_config(root)
+    provider_path = root / "provider.yaml"
+    provider_path.write_text(
+        provider_path.read_text(encoding="utf-8").replace("region: westeurope", "region: eastus2"), encoding="utf-8"
+    )
+    tenant_path = root / "tenant.yaml"
+    tenant_path.write_text(
+        tenant_path.read_text(encoding="utf-8").replace("geographies: [europe]", "geographies: []"),
+        encoding="utf-8",
+    )
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_provider_region_without_geography_tag_skips_geography_check(tmp_path):
+    """A region that exists but declares no 'geography' tag at all is
+    structurally unknowable, not a violation."""
+    root = _base_solution(tmp_path)
+    path = root / "registries/azure.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "  regions:\n    - name: westeurope\n      geography: europe\n",
+            "  regions:\n    - name: westeurope\n",
+        ),
+        encoding="utf-8",
+    )
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_deployment_with_multiple_providers_reports_each_mismatch_independently(tmp_path):
+    """Two providers on one workspace, one matching and one not — only the
+    mismatched one is reported, and it does not short-circuit the other."""
+    root = _base_solution(tmp_path)
+    _add_us_region_to_azure_config(root)
+    _write(
+        root,
+        "provider2.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: azure-secondary\nspec:\n"
+        "  properties:\n    type: azure\n    region: eastus2\n",
+    )
+    workspace_path = root / "workspace.yaml"
+    workspace_path.write_text(
+        workspace_path.read_text(encoding="utf-8").replace(
+            "  providers: [azure-main]\n", "  providers: [azure-main, azure-secondary]\n"
+        ),
+        encoding="utf-8",
+    )
+
+    context = _resolve(root)
+    assert not context.ok
+    messages = context.diagnostics.messages()
+    assert any("azure-secondary" in m and "eastus2" in m for m in messages)
+    assert not any("azure-main" in m and "westeurope" in m and "geography" in m for m in messages)
+
+
+# ---------------------------------------------------------------------------
 # Provider / Resource -> ProviderConfig
 # ---------------------------------------------------------------------------
 

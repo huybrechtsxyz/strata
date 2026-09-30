@@ -59,6 +59,70 @@ def test_store_integration_can_be_instantiated_when_complete():
 
 
 # ---------------------------------------------------------------------------
+# StoreIntegration.set()/.metadata() — base-implemented, not abstract (D3):
+# a subclass that never overrides either still instantiates fine, but both
+# calls raise a clear IntegrationError rather than silently no-op'ing.
+# ---------------------------------------------------------------------------
+
+
+def test_store_integration_set_base_default_raises_integration_error():
+    class _ReadOnly(StoreIntegration):
+        TYPE = "widget"
+        CAPABILITIES = frozenset({"secrets"})
+        TRANSPORTS = frozenset({"http"})
+
+        def resolve(self, key: str) -> str:
+            return "value"
+
+    import pytest
+
+    from strata.integrations.errors import IntegrationError
+
+    with pytest.raises(IntegrationError, match="does not support writes"):
+        _ReadOnly().set("k", "v")
+
+
+def test_store_integration_metadata_base_default_raises_integration_error():
+    class _ReadOnly(StoreIntegration):
+        TYPE = "widget"
+        CAPABILITIES = frozenset({"secrets"})
+        TRANSPORTS = frozenset({"http"})
+
+        def resolve(self, key: str) -> str:
+            return "value"
+
+    import pytest
+
+    from strata.integrations.errors import IntegrationError
+
+    with pytest.raises(IntegrationError, match="does not report secret metadata"):
+        _ReadOnly().metadata("k")
+
+
+def test_store_integration_can_override_set_and_metadata():
+    from strata.integrations.resolved_context import SecretMetadata
+
+    class _Writable(StoreIntegration):
+        TYPE = "widget"
+        CAPABILITIES = frozenset({"secrets"})
+        TRANSPORTS = frozenset({"http"})
+
+        def resolve(self, key: str) -> str:
+            return "value"
+
+        def set(self, key: str, value: str) -> None:
+            self.written = (key, value)  # type: ignore[attr-defined]
+
+        def metadata(self, key: str) -> SecretMetadata | None:
+            return SecretMetadata()
+
+    instance = _Writable()
+    instance.set("k", "v")
+    assert instance.written == ("k", "v")  # type: ignore[attr-defined]
+    assert instance.metadata("k") == SecretMetadata()
+
+
+# ---------------------------------------------------------------------------
 # find_capability_mismatches — the pairing checker Phase 4's registry test
 # reuses against real classes
 # ---------------------------------------------------------------------------

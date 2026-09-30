@@ -27,12 +27,12 @@ resolver.
 
 from os import environ
 
-from azure.appconfiguration import AzureAppConfigurationClient
+from azure.appconfiguration import AzureAppConfigurationClient, ConfigurationSetting
 from azure.core.exceptions import AzureError, ResourceNotFoundError
 from azure.identity import DefaultAzureCredential
 
 from strata.integrations.capabilities import StoreIntegration
-from strata.integrations.errors import ValueResolutionError
+from strata.integrations.errors import IntegrationError, ValueResolutionError
 from strata.models.integration_model import Capability, IntegrationModel
 
 
@@ -76,3 +76,20 @@ class AzureAppConfigResolver(StoreIntegration):
         if setting is None or setting.value is None:
             raise ValueResolutionError(f"Azure App Configuration: key '{key}' has no value.")
         return setting.value
+
+    def set(self, key: str, value: str) -> None:
+        """Create or overwrite configuration key `key`
+        (`set_configuration_setting()` is already an upsert).
+
+        Raises:
+            strata.integrations.errors.IntegrationError: Not configured,
+                unauthenticated, or the write itself failed.
+        """
+        try:
+            client = self._get_client()
+        except ValueResolutionError as exc:
+            raise IntegrationError(str(exc)) from exc
+        try:
+            client.set_configuration_setting(ConfigurationSetting(key=key, value=value))
+        except AzureError as exc:
+            raise IntegrationError(f"Azure App Configuration: could not write '{key}': {exc}") from exc

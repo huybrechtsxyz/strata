@@ -44,17 +44,32 @@ one that is — this is purely additive, never a breaking change.
 """
 
 import json
+from datetime import datetime
 from os import environ
+from typing import Any
 from urllib.parse import urlencode
 
 from strata.integrations.capabilities import StoreIntegration
-from strata.integrations.errors import ValueResolutionError
+from strata.integrations.errors import IntegrationError, ValueResolutionError
+from strata.integrations.resolved_context import SecretMetadata
 from strata.models.integration_model import Capability, IntegrationModel
 from strata.utils.transport import NO_RESPONSE, http_request
 
 _DEFAULT_ADDR = "https://app.infisical.com"
 _DEFAULT_ENVIRONMENT = "prod"
 _TIMEOUT_SECONDS = 10
+
+
+def _parse_timestamp(value: Any) -> datetime | None:
+    """Parse an Infisical `createdAt`/`updatedAt` ISO-8601 string, or `None`
+    on anything else (absent, malformed) — `metadata()` never raises for a
+    parse failure, matching its own "best-effort" contract."""
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 class InfisicalResolver(StoreIntegration):
@@ -133,3 +148,75 @@ class InfisicalResolver(StoreIntegration):
             for secret in data.get("secrets", [])
             if secret.get("secretKey")
         }
+
+    def set(self, key: str, value: str) -> None:
+        """Create or overwrite Infisical secret `key`.
+
+        Infisical's real API has distinct create (`POST`) and update
+        (`PATCH`) endpoints — presented here as one upsert (D3): tries
+        `PATCH` first (the common case, an existing secret being rotated
+        or edited), falling back to `POST` only on a 404 (the secret does
+        not exist yet).
+
+        Raises:
+            strata.integrations.errors.IntegrationError: Not configured,
+                unauthenticated, or the write itself failed.
+        """
+        if not self._project_id:
+            raise IntegrationError("Infisical: INFISICAL_PROJECT_ID is not set.")
+        try:
+            token = self._access_token()
+        except ValueResolutionError as exc:
+            raise IntegrationError(str(exc)) from exc
+
+        body = json.dumps(
+            {
+                "workspaceId": self._project_id,
+                "environment": self._environment,
+                "secretPath": "/",
+                "secretValue": value,
+            }
+        ).encode("utf-8")
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        url = f"{self._addr}/api/v3/secrets/raw/{key}"
+
+        result = http_request("PATCH", url, headers=headers, body=body, timeout=_TIMEOUT_SECONDS)
+        if result.status == 404:
+            result = http_request("POST", url, headers=headers, body=body, timeout=_TIMEOUT_SECONDS)
+        if not result.is_successful:
+            raise IntegrationError(f"Infisical: write for '{key}' failed ({result.status}): {result.payload}")
+
+        # Invalidate the bulk-fetch cache so a subsequent resolve() in this
+        # same instance sees the value just written, not a stale one.
+        self._cache = None
+
+    def metadata(self, key: str) -> SecretMetadata | None:
+        """Best-effort `createdAt`/`updatedAt` for `key`, via a dedicated
+        single-secret `GET` (the bulk list `_fetch_all()` uses for `resolve()`
+        never requests timestamp fields).
+
+        Returns `None` — never raises — when `key` isn't found, the request
+        fails, or the response doesn't parse as expected: `values status`
+        treats a missing timestamp as its own `no_timestamp`/`no_metadata`
+        classification, not a resolution failure.
+        """
+        if not self._project_id:
+            return None
+        try:
+            token = self._access_token()
+        except ValueResolutionError:
+            return None
+
+        params = {"workspaceId": self._project_id, "environment": self._environment, "secretPath": "/"}
+        url = f"{self._addr}/api/v3/secrets/raw/{key}?{urlencode(params)}"
+        result = http_request("GET", url, headers={"Authorization": f"Bearer {token}"}, timeout=_TIMEOUT_SECONDS)
+        if not result.is_successful:
+            return None
+        try:
+            secret = result.json().get("secret", {})
+        except (json.JSONDecodeError, AttributeError):
+            return None
+        return SecretMetadata(
+            created_at=_parse_timestamp(secret.get("createdAt")),
+            updated_at=_parse_timestamp(secret.get("updatedAt")),
+        )

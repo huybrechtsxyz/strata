@@ -18,6 +18,7 @@ type is the direction the contract allows).
 """
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +51,23 @@ class ValueResolution:
     deployment: str
     values: dict[str, str] = field(default_factory=dict)
     diagnostics: Diagnostics = field(default_factory=Diagnostics)
+
+
+@dataclass(frozen=True)
+class SecretMetadata:
+    """What a store can tell us about a secret without revealing its value
+    (docs/design/values-secrets-command.md D3) — `StoreIntegration.metadata()`'s
+    return type, consumed by `values status`'s age-vs-`rotate.max_age` check
+    (Phase 8).
+
+    Both fields are best-effort: a store that cannot report one, or either,
+    returns `None` for it rather than raising — `values status` treats a
+    missing timestamp as its own `no_timestamp` classification, not a
+    resolution failure.
+    """
+
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -142,4 +160,3 @@ class ResolvedModule:
     reference: ModuleReferenceModel
     module: ModuleModel
     source_path: Path
-

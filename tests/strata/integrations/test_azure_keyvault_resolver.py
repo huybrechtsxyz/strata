@@ -2,10 +2,11 @@
 """Tests for `AzureKeyVaultResolver` (ADR-0021 D7 retrofit — StoreIntegration, SDK client unchanged)."""
 
 import pytest
-from azure.core.exceptions import ResourceNotFoundError
+from azure.core.exceptions import AzureError, ResourceNotFoundError
 
 from strata.integrations.azure_keyvault_resolver import AzureKeyVaultResolver
-from strata.integrations.errors import ValueResolutionError
+from strata.integrations.errors import IntegrationError, ValueResolutionError
+from strata.integrations.resolved_context import SecretMetadata
 from strata.models.integration_model import (
     IntegrationEndpointsModel,
     IntegrationMetaModel,
@@ -14,19 +15,44 @@ from strata.models.integration_model import (
 )
 
 
+class _FakeSecretProperties:
+    def __init__(self, created_on=None, updated_on=None) -> None:
+        self.created_on = created_on
+        self.updated_on = updated_on
+
+
 class _FakeSecret:
-    def __init__(self, value: str | None) -> None:
+    def __init__(self, value: str | None, properties: _FakeSecretProperties | None = None) -> None:
         self.value = value
+        self.properties = properties or _FakeSecretProperties()
 
 
 class _FakeSecretClient:
-    def __init__(self, secrets: dict[str, str]) -> None:
+    def __init__(
+        self, secrets: dict[str, str], *, properties_by_key: dict[str, _FakeSecretProperties] | None = None
+    ) -> None:
         self._secrets = secrets
+        self._properties_by_key = properties_by_key or {}
 
     def get_secret(self, key: str) -> _FakeSecret:
         if key not in self._secrets:
             raise ResourceNotFoundError("not found")
-        return _FakeSecret(self._secrets[key])
+        return _FakeSecret(self._secrets[key], self._properties_by_key.get(key))
+
+    def set_secret(self, key: str, value: str) -> _FakeSecret:
+        self._secrets[key] = value
+        return _FakeSecret(value)
+
+
+class _FailingSecretClient:
+    """A client whose every call raises a generic `AzureError` — for
+    write/metadata failure-path tests."""
+
+    def get_secret(self, key: str) -> _FakeSecret:
+        raise AzureError("boom")
+
+    def set_secret(self, key: str, value: str) -> _FakeSecret:
+        raise AzureError("boom")
 
 
 def test_class_declares_its_contract():
@@ -105,3 +131,78 @@ def test_config_with_no_endpoints_falls_back_to_env_var(monkeypatch):
     resolver = AzureKeyVaultResolver(_config(address=None))
 
     assert resolver._vault_url == "https://env-vault.example/"
+
+
+# ---------------------------------------------------------------------------
+# set() / metadata() — docs/design/values-secrets-command.md Phase 5 (D3)
+# ---------------------------------------------------------------------------
+
+
+def test_set_writes_via_set_secret(monkeypatch):
+    monkeypatch.setenv("AZURE_KEYVAULT_URL", "https://vault.example/")
+    resolver = AzureKeyVaultResolver()
+    client = _FakeSecretClient({})
+    resolver._client = client
+
+    resolver.set("DB_PASSWORD", "new-value")
+
+    assert client._secrets == {"DB_PASSWORD": "new-value"}
+
+
+def test_set_without_vault_url_raises_integration_error(monkeypatch):
+    monkeypatch.delenv("AZURE_KEYVAULT_URL", raising=False)
+    resolver = AzureKeyVaultResolver()
+
+    with pytest.raises(IntegrationError, match="AZURE_KEYVAULT_URL"):
+        resolver.set("K", "v")
+
+
+def test_set_raises_integration_error_when_the_write_itself_fails(monkeypatch):
+    monkeypatch.setenv("AZURE_KEYVAULT_URL", "https://vault.example/")
+    resolver = AzureKeyVaultResolver()
+    resolver._client = _FailingSecretClient()
+
+    with pytest.raises(IntegrationError, match="could not write"):
+        resolver.set("K", "v")
+
+
+def test_metadata_returns_created_and_updated_timestamps(monkeypatch):
+    from datetime import datetime, timezone
+
+    monkeypatch.setenv("AZURE_KEYVAULT_URL", "https://vault.example/")
+    resolver = AzureKeyVaultResolver()
+    created = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    updated = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    resolver._client = _FakeSecretClient(
+        {"DB_PASSWORD": "hunter2"},
+        properties_by_key={"DB_PASSWORD": _FakeSecretProperties(created_on=created, updated_on=updated)},
+    )
+
+    meta = resolver.metadata("DB_PASSWORD")
+
+    assert meta == SecretMetadata(created_at=created, updated_at=updated)
+
+
+def test_metadata_returns_none_when_secret_not_found(monkeypatch):
+    monkeypatch.setenv("AZURE_KEYVAULT_URL", "https://vault.example/")
+    resolver = AzureKeyVaultResolver()
+    resolver._client = _FakeSecretClient({})
+
+    assert resolver.metadata("GHOST") is None
+
+
+def test_metadata_without_vault_url_raises_integration_error(monkeypatch):
+    monkeypatch.delenv("AZURE_KEYVAULT_URL", raising=False)
+    resolver = AzureKeyVaultResolver()
+
+    with pytest.raises(IntegrationError, match="AZURE_KEYVAULT_URL"):
+        resolver.metadata("K")
+
+
+def test_metadata_raises_integration_error_on_a_real_azure_failure(monkeypatch):
+    monkeypatch.setenv("AZURE_KEYVAULT_URL", "https://vault.example/")
+    resolver = AzureKeyVaultResolver()
+    resolver._client = _FailingSecretClient()
+
+    with pytest.raises(IntegrationError, match="could not read metadata"):
+        resolver.metadata("K")

@@ -327,18 +327,33 @@ durable, reviewable record.
     deliberately not ported — both its real instances are already covered
     by more precise v2 checks elsewhere (`ProviderConfig` region
     cross-check, `Tenant` reference existence).
-  - `policies`/`audit`/`promotions` — still fully open, unstarted.
-    Real active usage is narrower than the documented feature catalog
-    (checked directly, 2026-09-29): only 2 of `policies.yaml`'s many
-    documented policy `type`s are actually enabled
-    (`tenant_zone`@phase `plan`, `path_convention`@phase `validate` — the
-    latter is now what `_check_paths()` implements, without the generic
-    phase/enforcement-dispatching policy framework around it); the one
-    real ELK audit sink is `enabled: false`; `promotions.yaml` declares a
-    `progressions.standard` ring sequence but no active `strategies`
-    entry. A future design should scope to this real subset first, not the
-    full documented catalog.
-- **Migration action:** see per-field notes above; `policies`/`audit`/
+  - `policies`/`promotions` — still fully open, unstarted. `audit` —
+    **RESOLVED 2026-09-30** (Layers 1+2 only — see
+    [docs/design/audit-trail.md](design/audit-trail.md)). `strata sln init`/
+    `update` scaffold the real PR/issue templates (Layer 1), and `deploy
+    run` now writes a durable `_manifest.json`/`_metrics.json` per
+    execution with optional `git`-sink distribution (Layer 2's full
+    5-phase Implementation Plan, all shipped). Layer 3 (CLI reporting:
+    `audit changes`/`diff`/`resend`/`status`) and the `integration` sink
+    arm's actual dispatch (SIEM/webhook forwarding) remain unbuilt — no
+    evidenced consumer for either yet, deferred deliberately, not an
+    oversight. Real active usage is narrower than the documented feature
+    catalog for the two still-open fields (checked directly, 2026-09-29):
+    only 2 of `policies.yaml`'s many documented policy `type`s are
+    actually enabled (`tenant_zone`@phase `plan`, `path_convention`@phase
+    `validate` — the latter is now what `_check_paths()` implements,
+    without the generic phase/enforcement-dispatching policy framework
+    around it); `promotions.yaml` declares a `progressions.standard` ring
+    sequence but no active `strategies` entry. `policies` now has its own
+    catalog doc — [docs/design/tenant-zone-policy.md](design/tenant-zone-policy.md)
+    (2026-09-30) — scoped to `tenant_zone` (the one real, active-by-
+    declaration remaining type), not the full 18-type documented catalog;
+    catalog only so far, no v2 design decisions made yet. That doc also
+    found a real wrinkle worth restating here: `zone-isolation` is
+    declared with `enforcement: deny` in the real repo, but is currently
+    a structural no-op — no real tenant has zone constraints populated
+    yet, confirmed by grepping every real YAML document there.
+- **Migration action:** see per-field notes above; `policies`/
   `promotions` still drop with a comment pointing here until built.
 
 

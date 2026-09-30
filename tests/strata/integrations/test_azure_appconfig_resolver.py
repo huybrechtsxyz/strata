@@ -2,10 +2,10 @@
 """Tests for `AzureAppConfigResolver` (ADR-0021 D7 retrofit — StoreIntegration, SDK client unchanged)."""
 
 import pytest
-from azure.core.exceptions import ResourceNotFoundError
+from azure.core.exceptions import AzureError, ResourceNotFoundError
 
 from strata.integrations.azure_appconfig_resolver import AzureAppConfigResolver
-from strata.integrations.errors import ValueResolutionError
+from strata.integrations.errors import IntegrationError, ValueResolutionError
 from strata.models.integration_model import (
     IntegrationEndpointsModel,
     IntegrationMetaModel,
@@ -27,6 +27,18 @@ class _FakeAppConfigClient:
         if key not in self._settings:
             raise ResourceNotFoundError("not found")
         return _FakeSetting(self._settings[key])
+
+    def set_configuration_setting(self, setting) -> _FakeSetting:
+        self._settings[setting.key] = setting.value
+        return _FakeSetting(setting.value)
+
+
+class _FailingAppConfigClient:
+    """A client whose every call raises a generic `AzureError` — for the
+    write failure-path test."""
+
+    def set_configuration_setting(self, setting) -> _FakeSetting:
+        raise AzureError("boom")
 
 
 def test_class_declares_its_contract():
@@ -58,6 +70,41 @@ def test_resolve_without_endpoint_raises(monkeypatch):
 
     with pytest.raises(ValueResolutionError, match="AZURE_APPCONFIG_ENDPOINT"):
         resolver.resolve("ANY")
+
+
+# ---------------------------------------------------------------------------
+# set() — docs/design/values-secrets-command.md Phase 5 (D3). No metadata()
+# override for this resolver — only Infisical/Azure Key Vault are secret-
+# capable (see the module docstring).
+# ---------------------------------------------------------------------------
+
+
+def test_set_writes_via_set_configuration_setting(monkeypatch):
+    monkeypatch.setenv("AZURE_APPCONFIG_ENDPOINT", "https://config.example/")
+    resolver = AzureAppConfigResolver()
+    client = _FakeAppConfigClient({})
+    resolver._client = client
+
+    resolver.set("REGION", "northeurope")
+
+    assert client._settings == {"REGION": "northeurope"}
+
+
+def test_set_without_endpoint_raises_integration_error(monkeypatch):
+    monkeypatch.delenv("AZURE_APPCONFIG_ENDPOINT", raising=False)
+    resolver = AzureAppConfigResolver()
+
+    with pytest.raises(IntegrationError, match="AZURE_APPCONFIG_ENDPOINT"):
+        resolver.set("K", "v")
+
+
+def test_set_raises_integration_error_when_the_write_itself_fails(monkeypatch):
+    monkeypatch.setenv("AZURE_APPCONFIG_ENDPOINT", "https://config.example/")
+    resolver = AzureAppConfigResolver()
+    resolver._client = _FailingAppConfigClient()
+
+    with pytest.raises(IntegrationError, match="could not write"):
+        resolver.set("K", "v")
 
 
 # ---------------------------------------------------------------------------

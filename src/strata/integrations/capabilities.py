@@ -18,7 +18,7 @@ from typing import Any
 
 from strata.integrations.base import Integration
 from strata.integrations.errors import IntegrationError
-from strata.integrations.resolved_context import ResolvedModule, ResolvedWorkspaceGraph, ValueResolution
+from strata.integrations.resolved_context import ResolvedModule, ResolvedWorkspaceGraph, SecretMetadata, ValueResolution
 from strata.models.integration_model import Capability
 from strata.models.namespace_model import NamespaceModel
 from strata.models.provisioning_model import ProvisionerModel
@@ -38,6 +38,48 @@ class StoreIntegration(Integration):
             strata.integrations.errors.ValueResolutionError: `key` does not
                 exist, or the store could not be reached/authenticated.
         """
+
+    def set(self, key: str, value: str) -> None:
+        """Create or overwrite `key` in the store (docs/design/
+        values-secrets-command.md D3 — `values set`/`values rotate`'s write
+        primitive).
+
+        Base-implemented, not abstract, same reasoning as `InfraIntegration.
+        default_output()` (ADR-0023 D5): every real store resolver
+        (Infisical, Azure Key Vault, Azure App Config) can plausibly
+        support writes, so a whole second capability class just to gate
+        the rare resolver that cannot would be unearned ceremony —
+        overriding this one method is enough, and a resolver that never
+        will just inherits this default.
+
+        Deliberately a single upsert, not v1's separate `set_*`/`update_*`
+        pair: D2 (no implicit generate-on-missing/rotation-on-read) removed
+        the only caller that ever needed to distinguish create-vs-overwrite
+        — every real write in v2 (`values set`, `values rotate`) is fine
+        either way.
+
+        Raises:
+            strata.integrations.errors.IntegrationError: This integration
+                does not support writes (the base default), or the write
+                itself failed (unreachable/unauthenticated store).
+        """
+        raise IntegrationError(f"{self.name} does not support writes")
+
+    def metadata(self, key: str) -> SecretMetadata | None:
+        """Best-effort created/updated timestamps for `key`, or `None` when
+        the backend can't report them (docs/design/values-secrets-command.md
+        D3 — `values status`'s rotation-age check, Phase 8).
+
+        Base-implemented, not abstract — same reasoning as `set()` above.
+        Only meaningful for a secret-capable resolver with a `rotate:` spec
+        pointing at it; a variable/feature-only resolver simply never has
+        this called against it in practice.
+
+        Raises:
+            strata.integrations.errors.IntegrationError: This integration
+                does not report secret metadata (the base default).
+        """
+        raise IntegrationError(f"{self.name} does not report secret metadata")
 
 
 class InfraIntegration(Integration):

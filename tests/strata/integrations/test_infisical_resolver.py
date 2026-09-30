@@ -2,11 +2,12 @@
 """Tests for `InfisicalResolver` (ADR-0021 D7 retrofit — urllib -> http_request)."""
 
 import json
+from datetime import datetime, timezone
 
 import pytest
 
 from strata.integrations import infisical_resolver as module
-from strata.integrations.errors import ValueResolutionError
+from strata.integrations.errors import IntegrationError, ValueResolutionError
 from strata.integrations.infisical_resolver import InfisicalResolver
 from strata.models.integration_model import (
     IntegrationEndpointsModel,
@@ -216,6 +217,137 @@ def test_no_config_environment_falls_back_to_env_var(monkeypatch):
     resolver = InfisicalResolver(None)
 
     assert resolver._environment == "env-environment"
+
+
+# ---------------------------------------------------------------------------
+# set() / metadata() — docs/design/values-secrets-command.md Phase 5 (D3)
+# ---------------------------------------------------------------------------
+
+
+def test_set_tries_patch_first_and_succeeds_on_an_existing_secret(monkeypatch):
+    monkeypatch.setenv("INFISICAL_TOKEN", "svc-token")
+    monkeypatch.setenv("INFISICAL_PROJECT_ID", "proj-1")
+
+    calls: list[tuple[str, str]] = []
+
+    def _fake_http_request(method, url, *, headers=None, body=None, timeout=30):
+        calls.append((method, url))
+        return HttpResult(status=200, body=json.dumps({"secret": {"secretKey": "K"}}))
+
+    monkeypatch.setattr(module, "http_request", _fake_http_request)
+
+    resolver = InfisicalResolver()
+    resolver.set("DB_PASSWORD", "new-value")
+
+    assert calls == [("PATCH", f"{resolver._addr}/api/v3/secrets/raw/DB_PASSWORD")]
+
+
+def test_set_falls_back_to_post_when_patch_reports_not_found(monkeypatch):
+    monkeypatch.setenv("INFISICAL_TOKEN", "svc-token")
+    monkeypatch.setenv("INFISICAL_PROJECT_ID", "proj-1")
+
+    calls: list[str] = []
+
+    def _fake_http_request(method, url, *, headers=None, body=None, timeout=30):
+        calls.append(method)
+        if method == "PATCH":
+            return HttpResult(status=404, body="not found")
+        return HttpResult(status=200, body=json.dumps({"secret": {"secretKey": "K"}}))
+
+    monkeypatch.setattr(module, "http_request", _fake_http_request)
+
+    resolver = InfisicalResolver()
+    resolver.set("NEW_SECRET", "value")
+
+    assert calls == ["PATCH", "POST"]
+
+
+def test_set_invalidates_the_resolve_cache(monkeypatch):
+    monkeypatch.setenv("INFISICAL_TOKEN", "svc-token")
+    monkeypatch.setenv("INFISICAL_PROJECT_ID", "proj-1")
+
+    responses = iter(
+        [
+            HttpResult(status=200, body=json.dumps({"secrets": [{"secretKey": "K", "secretValue": "old"}]})),
+            HttpResult(status=200, body=json.dumps({"secret": {"secretKey": "K"}})),  # the PATCH write
+            HttpResult(status=200, body=json.dumps({"secrets": [{"secretKey": "K", "secretValue": "new"}]})),
+        ]
+    )
+    monkeypatch.setattr(module, "http_request", lambda *a, **k: next(responses))
+
+    resolver = InfisicalResolver()
+    assert resolver.resolve("K") == "old"
+    resolver.set("K", "new")
+    assert resolver.resolve("K") == "new"
+
+
+def test_set_raises_integration_error_when_write_fails(monkeypatch):
+    monkeypatch.setenv("INFISICAL_TOKEN", "svc-token")
+    monkeypatch.setenv("INFISICAL_PROJECT_ID", "proj-1")
+    monkeypatch.setattr(module, "http_request", lambda *a, **k: HttpResult(status=500, body="server error"))
+
+    resolver = InfisicalResolver()
+    with pytest.raises(IntegrationError, match="write for 'K' failed"):
+        resolver.set("K", "value")
+
+
+def test_set_raises_integration_error_when_not_authenticated(monkeypatch):
+    monkeypatch.delenv("INFISICAL_TOKEN", raising=False)
+    monkeypatch.delenv("INFISICAL_CLIENT_ID", raising=False)
+    monkeypatch.delenv("INFISICAL_CLIENT_SECRET", raising=False)
+    monkeypatch.setenv("INFISICAL_PROJECT_ID", "proj-1")
+
+    resolver = InfisicalResolver()
+    with pytest.raises(IntegrationError, match="not authenticated"):
+        resolver.set("K", "value")
+
+
+def test_metadata_parses_created_and_updated_timestamps(monkeypatch):
+    monkeypatch.setenv("INFISICAL_TOKEN", "svc-token")
+    monkeypatch.setenv("INFISICAL_PROJECT_ID", "proj-1")
+    monkeypatch.setattr(
+        module,
+        "http_request",
+        lambda *a, **k: HttpResult(
+            status=200,
+            body=json.dumps({"secret": {"createdAt": "2026-01-01T00:00:00Z", "updatedAt": "2026-06-01T12:30:00Z"}}),
+        ),
+    )
+
+    resolver = InfisicalResolver()
+    meta = resolver.metadata("DB_PASSWORD")
+
+    assert meta is not None
+    assert meta.created_at == datetime(2026, 1, 1, tzinfo=timezone.utc)
+    assert meta.updated_at == datetime(2026, 6, 1, 12, 30, tzinfo=timezone.utc)
+
+
+def test_metadata_returns_none_when_not_found(monkeypatch):
+    monkeypatch.setenv("INFISICAL_TOKEN", "svc-token")
+    monkeypatch.setenv("INFISICAL_PROJECT_ID", "proj-1")
+    monkeypatch.setattr(module, "http_request", lambda *a, **k: HttpResult(status=404, body="not found"))
+
+    resolver = InfisicalResolver()
+    assert resolver.metadata("GHOST") is None
+
+
+def test_metadata_returns_none_when_not_authenticated(monkeypatch):
+    monkeypatch.delenv("INFISICAL_TOKEN", raising=False)
+    monkeypatch.delenv("INFISICAL_CLIENT_ID", raising=False)
+    monkeypatch.delenv("INFISICAL_CLIENT_SECRET", raising=False)
+    monkeypatch.setenv("INFISICAL_PROJECT_ID", "proj-1")
+
+    resolver = InfisicalResolver()
+    assert resolver.metadata("K") is None
+
+
+def test_metadata_returns_none_when_response_is_malformed(monkeypatch):
+    monkeypatch.setenv("INFISICAL_TOKEN", "svc-token")
+    monkeypatch.setenv("INFISICAL_PROJECT_ID", "proj-1")
+    monkeypatch.setattr(module, "http_request", lambda *a, **k: HttpResult(status=200, body="not json"))
+
+    resolver = InfisicalResolver()
+    assert resolver.metadata("K") is None
 
 
 def test_no_config_environment_falls_back_to_default_when_env_var_also_unset(monkeypatch):

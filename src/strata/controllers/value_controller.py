@@ -21,6 +21,9 @@ different fixes.
 """
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from sys import stdin
 from typing import Any, cast
 
 from strata.controllers.deployment_resolution import resolve_deployment_chains
@@ -29,7 +32,7 @@ from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.value_references import resolve_document_value_references
 from strata.integrations.capabilities import StoreIntegration
-from strata.integrations.errors import ValueResolutionError
+from strata.integrations.errors import IntegrationError, ValueResolutionError
 from strata.integrations.registry import IntegrationNotFoundError
 from strata.integrations.registry import get as get_integration
 from strata.integrations.resolved_context import ValueReference, ValueResolution
@@ -52,6 +55,7 @@ from strata.services.environment_service import merge_environment_models
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.dict_merge import deep_merge
 from strata.utils.errors import UsageError
+from strata.utils.secret_generator import generate_secret, mask_secret
 
 #: Store types resolved without any integration — read directly.
 _CONSTANT_TYPES = {VariableStoreType.CONSTANT, SecretStoreType.CONSTANT, FeatureStoreType.CONSTANT}
@@ -527,53 +531,726 @@ def list_values(
     deployment_name: str,
     *,
     type_filter: str | None = None,
+    show_store: bool = False,
+    unresolved_only: bool = False,
     declared_only: bool = False,
-) -> tuple[list[DeclaredValueRow], Diagnostics]:
+) -> tuple[list[DeclaredValueRow] | list["ValueListRow"], Diagnostics]:
     """List every variable/secret/feature reachable from `deployment_name`.
 
-    Phase 2 of docs/design/values-secrets-command.md's Implementation Plan:
-    only the offline, no-store-I/O listing (`declared_only=True`,
-    generalizing v1's secret-only `secret list` to all three kinds) is
-    built. The live-resolve default mode (masking secrets, reusing
-    `_resolve_store_value()` per declared key — v1's `values list`) is
-    Phase 4 — `declared_only=False` raises `UsageError` for now rather than
-    silently returning an incomplete result.
+    Two modes, one function, matching `values list`'s own `--declared-only`
+    flag (docs/design/values-secrets-command.md):
+
+    - `declared_only=True` (Phase 2): skips all store I/O — reads
+      `merge_environment_models(reachable_environments(...))` and returns
+      one `DeclaredValueRow` per declared variable/secret/feature (store/
+      value-ref/generate-or-rotate summary only), no `resolve()` call at
+      all.
+    - `declared_only=False` (Phase 4, the default — v1's real `values list`
+      behavior): additionally resolves every declared key exactly like
+      `resolve_values()` does per requested key, masking secret values
+      (`mask_secret()`) and leaving variables/features in full, returning
+      one `ValueListRow` per key. `show_store`/`unresolved_only` only apply
+      to this mode (meaningless without a resolved value) — `show_store`
+      is console-rendering-only (`values_command.py`'s job; both modes'
+      rows always carry `store` regardless), `unresolved_only` filters the
+      returned rows to failures only.
+
+    `--trace` (v1's merge-provenance display) is **not** built in either
+    mode — v2 has no merge-provenance tracking at all yet (confirmed: no
+    `deployment_service.get_merge_provenance()`-equivalent exists;
+    `merge_environment_models()` returns only the final winning store per
+    key, not which environment file it came from). Adding `--trace` needs
+    that tracking built first, a separate effort from "reuse `resolve()`
+    per key" — out of scope here.
 
     Args:
         context: An already-`require_valid()`-ed solution.
         deployment_name: `meta.name` of the deployment to list values for.
         type_filter: Restrict to one of `VALUE_TYPE_FILTERS`, or `None` for
             all three kinds.
-        declared_only: Must be `True` today (see above).
+        show_store: Live mode only — passed through unused by this
+            function; kept as a parameter so callers/tests can pass every
+            CLI flag uniformly. Console rendering (whether the `store`
+            column is shown) is `values_command.py`'s concern, not this
+            function's — every row always carries `store`, live or declared.
+        unresolved_only: Live mode only — keep only rows that failed to
+            resolve.
+        declared_only: `True` for the offline Phase 2 path; `False`
+            (default) for the live Phase 4 path.
 
     Returns:
         `(rows, Diagnostics)`, sorted by `(kind, key)` for stable output.
-        `Diagnostics` is always empty in the declared-only path — nothing
-        is resolved, so nothing can fail to resolve.
+        In declared-only mode, `Diagnostics` is always empty — nothing is
+        resolved, so nothing can fail to resolve. In live mode, one
+        `Diagnostic` error per key that failed to resolve (D4: no
+        whole-batch preflight — the same uniform per-key failure model
+        `values get`/`values resolve` already use).
 
     Raises:
-        UsageError: `deployment_name` does not name a real deployment
-            (via `resolve_deployment()`), or `declared_only` is `False`.
+        UsageError: `deployment_name` does not name a real deployment (via
+            `resolve_deployment()`).
     """
-    if not declared_only:
-        raise UsageError(
-            "`values list` without --declared-only is not built yet "
-            "(docs/design/values-secrets-command.md's Implementation Plan, Phase 4). "
-            "Pass --declared-only for the offline listing, or use `values get KEY...` "
-            "to resolve specific keys today."
-        )
-
+    del show_store  # console-rendering-only, see docstring
     deployment = resolve_deployment(context, deployment_name)
     environments = reachable_environments(context, deployment)
     variables, secrets, features = merge_environment_models(environments)
 
-    rows: list[DeclaredValueRow] = []
+    if declared_only:
+        rows: list[DeclaredValueRow] = []
+        if type_filter in (None, "variables"):
+            rows.extend(_declared_variable_row(item) for item in variables.values())
+        if type_filter in (None, "secrets"):
+            rows.extend(_declared_secret_row(item) for item in secrets.values())
+        if type_filter in (None, "features"):
+            rows.extend(_declared_feature_row(item) for item in features.values())
+        rows.sort(key=lambda row: (row.kind, row.key))
+        return rows, Diagnostics()
+
+    return _list_values_live(
+        context, deployment, variables, secrets, features, type_filter=type_filter, unresolved_only=unresolved_only
+    )
+
+
+@dataclass(frozen=True)
+class ValueListRow:
+    """One resolved variable/secret/feature (`values list`, live mode —
+    Phase 4). Secrets always masked (`mask_secret()`); variables/features
+    shown in full — same per-kind treatment v1's real `values list` used.
+
+    `value` is `None` exactly when `ok` is `False` — a failed row carries
+    its failure `reason` instead (also reported as a `Diagnostic` on the
+    same call, matching `values get`/`values resolve`'s per-key model).
+    """
+
+    key: str
+    kind: str
+    """One of "variable"/"secret"/"feature"."""
+    store: str
+    value: str | None
+    ok: bool
+    reason: str | None = None
+
+
+def _list_values_live(
+    context: SolutionContext,
+    deployment: DeploymentModel,
+    variables: dict[str, VariableStoreModel],
+    secrets: dict[str, SecretStoreModel],
+    features: dict[str, FeatureStoreModel],
+    *,
+    type_filter: str | None,
+    unresolved_only: bool,
+) -> tuple[list[ValueListRow], Diagnostics]:
+    """Live-resolve every declared key, reusing the exact same per-key
+    resolution `resolve_values()` uses (`_resolve_store_value()`,
+    `store: artifact`'s direct dispatch) — see `list_values()` for the
+    public contract.
+    """
+    resolvers = _Resolvers(context.controller.index)
+    diagnostics = Diagnostics()
+
+    items: list[tuple[str, str, VariableStoreModel | SecretStoreModel | FeatureStoreModel]] = []
     if type_filter in (None, "variables"):
-        rows.extend(_declared_variable_row(item) for item in variables.values())
+        items.extend(("variable", key, item) for key, item in variables.items())
     if type_filter in (None, "secrets"):
-        rows.extend(_declared_secret_row(item) for item in secrets.values())
+        items.extend(("secret", key, item) for key, item in secrets.items())
     if type_filter in (None, "features"):
-        rows.extend(_declared_feature_row(item) for item in features.values())
+        items.extend(("feature", key, item) for key, item in features.items())
+
+    rows: list[ValueListRow] = []
+    for kind, key, store in items:
+        if isinstance(store, VariableStoreModel) and store.store == VariableStoreType.ARTIFACT:
+            assert store.field is not None  # guaranteed by validate_field_only_on_artifact_store
+            artifact_value = resolve_artifact_field(context, deployment, str(store.value), store.field)
+            if artifact_value is None:
+                reason = (
+                    f"'store: artifact' references '{store.value}', which is not a known artifact in this solution."
+                )
+                diagnostics.error(f"'{key}': {reason}", location=key, code="value_resolution_failed")
+                rows.append(ValueListRow(key=key, kind=kind, store="artifact", value=None, ok=False, reason=reason))
+                continue
+            rows.append(ValueListRow(key=key, kind=kind, store="artifact", value=artifact_value, ok=True))
+            continue
+
+        try:
+            value = _resolve_store_value(store, resolvers)
+        except ValueResolutionError as exc:
+            diagnostics.error(f"'{key}': {exc}", location=key, code="value_resolution_failed")
+            rows.append(
+                ValueListRow(key=key, kind=kind, store=store.store.value, value=None, ok=False, reason=str(exc))
+            )
+            continue
+
+        rendered = mask_secret(value) if kind == "secret" else value
+        rows.append(ValueListRow(key=key, kind=kind, store=store.store.value, value=rendered, ok=True))
+
+    if unresolved_only:
+        rows = [row for row in rows if not row.ok]
     rows.sort(key=lambda row: (row.kind, row.key))
 
-    return rows, Diagnostics()
+    return rows, diagnostics
+
+
+@dataclass(frozen=True)
+class ResolveRow:
+    """One key's resolution-path diagnostic (`values resolve`) — never
+    carries a value, only whether it would resolve and why.
+
+    `registered` is `True` for a built-in store (`constant`/`environment`/
+    `github`) or `store: artifact` — there is no integration to register,
+    so "registered" degenerates to "structurally resolvable" for those.
+    `probed` is `True` only when `--probe` actually attempted a live
+    `resolve()` call for this row (never for a built-in/artifact store,
+    which are cheap/local and already fully checked either way).
+    """
+
+    key: str
+    kind: str
+    """One of "variable"/"secret"/"feature"."""
+    store: str
+    registered: bool
+    probed: bool
+    ok: bool
+    reason: str | None = None
+
+
+def resolve_diagnostic(
+    context: SolutionContext,
+    deployment_name: str,
+    *,
+    key: str | None = None,
+    probe: bool = False,
+) -> tuple[list[ResolveRow], Diagnostics]:
+    """Diagnose whether declared keys would resolve, without revealing any value.
+
+    `values resolve`'s controller function — `build run`'s missing
+    pre-flight equivalent in v1 (its own docstring). For each in-scope key,
+    checks:
+
+    - **Store type** — `constant`/`environment`/`github` (built-in, no
+      integration) and `store: artifact` (an in-solution document lookup,
+      `resolve_artifact_field()` — same mechanism `resolve_values()` uses)
+      are checked directly, cheaply, always (no `--probe` needed: reading
+      `os.environ` or looking up an already-loaded document is not "store
+      I/O" in the sense `--probe` gates).
+    - **Integration registered** — for every other store type, constructs
+      the `StoreIntegration` via `_Resolvers.get()` (the same lazy,
+      per-store-type cache `resolve_values()` uses) and catches
+      `IntegrationNotFoundError`. Construction alone never performs network
+      I/O for any of the three real resolvers (Infisical/Azure Key Vault/
+      Azure App Config just read env vars/config) — safe to do unconditionally.
+    - **Reachable** — only with `--probe`: calls `.resolve(str(store.value))`
+      for real, discarding the value and keeping only success/failure.
+
+    Args:
+        context: An already-`require_valid()`-ed solution.
+        deployment_name: `meta.name` of the deployment to diagnose.
+        key: Diagnose this one declared key only, or `None` for every
+            variable/secret/feature reachable from the deployment.
+        probe: Also attempt a real `resolve()` call per integration-backed key.
+
+    Returns:
+        `(rows, Diagnostics)`, sorted by `(kind, key)`. One `Diagnostic`
+        error per row that would not resolve (D4: no whole-batch preflight —
+        every key reported independently, same uniform failure model
+        `values get`/`values list` already use).
+
+    Raises:
+        UsageError: `deployment_name` does not name a real deployment (via
+            `resolve_deployment()`), or more than one enabled `Integration`
+            document declares the same store type (`bind_integration_config()`'s
+            rule, via `_Resolvers.get()` — a real configuration error, not a
+            per-key finding).
+    """
+    deployment = resolve_deployment(context, deployment_name)
+    environments = reachable_environments(context, deployment)
+    variables, secrets, features = merge_environment_models(environments)
+
+    items: list[tuple[str, str, VariableStoreModel | SecretStoreModel | FeatureStoreModel]] = [
+        *(("variable", k, v) for k, v in variables.items()),
+        *(("secret", k, v) for k, v in secrets.items()),
+        *(("feature", k, v) for k, v in features.items()),
+    ]
+
+    diagnostics = Diagnostics()
+    if key is not None:
+        items = [item for item in items if item[1] == key]
+        if not items:
+            diagnostics.error(
+                f"'{key}' is not declared in any environment reachable from deployment '{deployment_name}'.",
+                location=key,
+                code="unknown_value_key",
+            )
+            return [], diagnostics
+
+    resolvers = _Resolvers(context.controller.index)
+    rows: list[ResolveRow] = [
+        _diagnose_item(context, deployment, kind, item_key, store, resolvers, probe, diagnostics)
+        for kind, item_key, store in items
+    ]
+    rows.sort(key=lambda row: (row.kind, row.key))
+
+    return rows, diagnostics
+
+
+def _diagnose_item(
+    context: SolutionContext,
+    deployment: DeploymentModel,
+    kind: str,
+    key: str,
+    store: VariableStoreModel | SecretStoreModel | FeatureStoreModel,
+    resolvers: "_Resolvers",
+    probe: bool,
+    diagnostics: Diagnostics,
+) -> ResolveRow:
+    """Diagnose one declared key. See `resolve_diagnostic()` for the checks performed."""
+    store_type = store.store
+
+    if store_type in _CONSTANT_TYPES:
+        return ResolveRow(key=key, kind=kind, store=store_type.value, registered=True, probed=False, ok=True)
+
+    if store_type in _ENVIRONMENT_TYPES or store_type == SecretStoreType.GITHUB:
+        from os import environ
+
+        var_name = str(store.value)
+        if var_name in environ:
+            return ResolveRow(key=key, kind=kind, store=store_type.value, registered=True, probed=False, ok=True)
+        reason = f"environment variable '{var_name}' is not set."
+        diagnostics.error(f"'{key}': {reason}", location=key, code="value_would_not_resolve")
+        return ResolveRow(
+            key=key, kind=kind, store=store_type.value, registered=True, probed=False, ok=False, reason=reason
+        )
+
+    if isinstance(store, VariableStoreModel) and store_type == VariableStoreType.ARTIFACT:
+        assert store.field is not None  # guaranteed by validate_field_only_on_artifact_store
+        value = resolve_artifact_field(context, deployment, str(store.value), store.field)
+        if value is not None:
+            return ResolveRow(key=key, kind=kind, store="artifact", registered=True, probed=False, ok=True)
+        reason = f"'store: artifact' references '{store.value}', which is not a known artifact in this solution."
+        diagnostics.error(f"'{key}': {reason}", location=key, code="value_would_not_resolve")
+        return ResolveRow(key=key, kind=kind, store="artifact", registered=True, probed=False, ok=False, reason=reason)
+
+    try:
+        integration = resolvers.get(store_type.value)
+    except IntegrationNotFoundError:
+        reason = f"no resolver implemented yet for store '{store_type.value}'."
+        diagnostics.error(f"'{key}': {reason}", location=key, code="value_would_not_resolve")
+        return ResolveRow(
+            key=key, kind=kind, store=store_type.value, registered=False, probed=False, ok=False, reason=reason
+        )
+
+    if not probe:
+        return ResolveRow(key=key, kind=kind, store=store_type.value, registered=True, probed=False, ok=True)
+
+    try:
+        integration.resolve(str(store.value))
+    except ValueResolutionError as exc:
+        diagnostics.error(f"'{key}': {exc}", location=key, code="value_would_not_resolve")
+        return ResolveRow(
+            key=key, kind=kind, store=store_type.value, registered=True, probed=True, ok=False, reason=str(exc)
+        )
+    return ResolveRow(key=key, kind=kind, store=store_type.value, registered=True, probed=True, ok=True)
+
+
+#: Built-in store types `set_value()` refuses to write — matches
+#: `_CONSTANT_TYPES`/`_ENVIRONMENT_TYPES` plus the two kind-specific
+#: built-ins (`github` for secrets, `artifact` for variables) that aren't
+#: in either of those sets.
+_NO_INTEGRATION_TO_WRITE_TO = "no store integration to write to — edit it directly instead:"
+
+
+@dataclass(frozen=True)
+class SetResult:
+    """What `values set` writes, for display — never the value itself
+    (docs/design/values-secrets-command.md Phase 6).
+    """
+
+    key: str
+    kind: str
+    """One of "variable"/"secret"/"feature"."""
+    store: str
+    generated: bool
+    """True when the written value came from `--generate` (the key's own
+    `generate:` spec), not an explicit `--value`/`--from-file`/`--stdin`."""
+
+
+def _reject_unwritable_builtin_store(
+    key: str, kind: str, store: VariableStoreModel | SecretStoreModel | FeatureStoreModel
+) -> None:
+    """Raise `UsageError` for a store `values set` cannot write to at all —
+    there is no integration to call `.set()` on; the value lives directly
+    in the environment YAML, an OS/CI environment variable, or another
+    in-solution document. Matches v1's `values set` messaging for these
+    same cases (its own docstring: "constant/environment: prints where to
+    edit").
+    """
+    store_type = store.store
+    if store_type in _CONSTANT_TYPES:
+        raise UsageError(
+            f"'{key}' is a constant value — {_NO_INTEGRATION_TO_WRITE_TO} edit its 'value:' "
+            "field in the environment YAML."
+        )
+    if store_type in _ENVIRONMENT_TYPES:
+        raise UsageError(
+            f"'{key}' reads from environment variable '{store.value}' — {_NO_INTEGRATION_TO_WRITE_TO} "
+            "set that variable directly (shell, CI job, etc.)."
+        )
+    if kind == "secret" and store_type == SecretStoreType.GITHUB:
+        raise UsageError(
+            f"'{key}' reads from GitHub Actions secret '{store.value}' — {_NO_INTEGRATION_TO_WRITE_TO} "
+            "set it in the repository/organization secrets."
+        )
+    if kind == "variable" and store_type == VariableStoreType.ARTIFACT:
+        raise UsageError(
+            f"'{key}' resolves from an in-solution artifact reference — {_NO_INTEGRATION_TO_WRITE_TO} "
+            "edit the referenced artifact/version document."
+        )
+
+
+def set_value(
+    context: SolutionContext,
+    deployment_name: str,
+    key: str,
+    *,
+    value: str | None = None,
+    from_file: str | None = None,
+    from_stdin: bool = False,
+    generate: bool = False,
+) -> tuple[SetResult | None, Diagnostics]:
+    """Write `key`'s value to its configured store backend for `deployment_name`.
+
+    `values set`'s controller function (docs/design/values-secrets-command.md
+    Phase 6, built on Phase 5's `StoreIntegration.set()`). Exactly one value
+    source is required: `value` (explicit), `from_file` (a path — read as
+    text, multiline-safe for certs/keys), `from_stdin` (reads `sys.stdin`),
+    or `generate` (uses the key's own declared `SecretGenerateSpec` — secrets
+    only).
+
+    A `constant`/`environment`/`github`/`store: artifact` key has no
+    integration to write to at all — rejected with a `UsageError` naming
+    where to edit it directly instead (`_reject_unwritable_builtin_store()`),
+    same messaging v1's `values set` used for these.
+
+    A *real* write failure — the integration's own `.set()` raised
+    `IntegrationError` (unsupported, unreachable, unauthenticated) — is
+    **not** raised further: it is reported as a single `Diagnostic` and
+    `(None, diagnostics)` is returned, matching `values get`/`list`/
+    `resolve`'s uniform "the operation itself failed" reporting (D4) rather
+    than propagating an exception type `command_run()`'s `StrataError`-only
+    handler does not recognize (`IntegrationError` is not a `StrataError`).
+
+    Args:
+        context: An already-`require_valid()`-ed solution.
+        deployment_name: `meta.name` of the deployment `key` is written for.
+        key: The declared variable/secret/feature key to write.
+        value: Explicit literal value.
+        from_file: Path to read the value from (text, as-is).
+        from_stdin: Read the value from `sys.stdin`.
+        generate: Use the key's own `generate:` spec instead of a supplied value.
+
+    Returns:
+        `(SetResult, Diagnostics)` on a successful write — `SetResult` never
+        carries the value itself, only what was written and where, safe to
+        print. `(None, Diagnostics)` when the write itself failed; the
+        `Diagnostics` explains why.
+
+    Raises:
+        UsageError: `deployment_name`/`key` does not exist, the value
+            source is missing/ambiguous (not exactly one of
+            value/from_file/from_stdin/generate), `--generate` was used on
+            a non-secret or a secret with no `generate:` spec, `from_file`
+            could not be read, or `key`'s store has no integration to
+            write to at all (see `_reject_unwritable_builtin_store()`).
+    """
+    deployment = resolve_deployment(context, deployment_name)
+    environments = reachable_environments(context, deployment)
+    variables, secrets, features = merge_environment_models(environments)
+
+    store: VariableStoreModel | SecretStoreModel | FeatureStoreModel | None
+    if key in secrets:
+        store, kind = secrets[key], "secret"
+    elif key in features:
+        store, kind = features[key], "feature"
+    elif key in variables:
+        store, kind = variables[key], "variable"
+    else:
+        raise UsageError(f"'{key}' is not declared in any environment reachable from deployment '{deployment_name}'.")
+
+    _reject_unwritable_builtin_store(key, kind, store)
+
+    sources = (value is not None, from_file is not None, from_stdin, generate)
+    if sum(sources) != 1:
+        raise UsageError("Provide exactly one of --value, --from-file, --stdin, or --generate.")
+
+    if generate:
+        if kind != "secret":
+            raise UsageError(f"--generate is only valid for secrets — '{key}' is a {kind}.")
+        assert isinstance(store, SecretStoreModel)
+        if store.generate is None:
+            raise UsageError(f"Secret '{key}' has no generate: spec — use --value/--from-file/--stdin instead.")
+        resolved_value = generate_secret(store.generate.type.value, store.generate.length)
+    elif from_file is not None:
+        try:
+            resolved_value = Path(from_file).read_text(encoding="utf-8")
+        except OSError as exc:
+            raise UsageError(f"Cannot read --from-file '{from_file}': {exc}") from exc
+    elif from_stdin:
+        resolved_value = stdin.read()
+    else:
+        assert value is not None  # guaranteed by the exactly-one-source check above
+        resolved_value = value
+
+    resolvers = _Resolvers(context.controller.index)
+    diagnostics = Diagnostics()
+    try:
+        integration = resolvers.get(store.store.value)
+        integration.set(str(store.value), resolved_value)
+    except (IntegrationNotFoundError, IntegrationError) as exc:
+        diagnostics.error(f"'{key}': {exc}", location=key, code="value_write_failed")
+        return None, diagnostics
+
+    return SetResult(key=key, kind=kind, store=store.store.value, generated=generate), diagnostics
+
+
+def rotate_secret(
+    context: SolutionContext,
+    deployment_name: str,
+    key: str,
+    *,
+    force: bool = False,
+) -> tuple[SetResult | None, Diagnostics]:
+    """Rotate secret `key`: generate a new value from its own `generate:`
+    spec and overwrite it in the store (docs/design/values-secrets-command.md
+    Phase 7, built on Phase 5's `StoreIntegration.set()`).
+
+    Reuses `SetResult` for the return type — a rotation is, from the
+    caller's point of view, exactly a generated `values set` write
+    (`kind="secret"`, `generated=True`) with no new shape needed.
+
+    A secret's `generate:` spec is only ever declared on an integration-
+    backed store — `SecretStoreModel.validate_generate_not_on_builtin()`
+    already guarantees a `constant`/`environment`/`github` secret can never
+    carry one — so checking for a `generate:` spec alone is sufficient to
+    also rule out every built-in store; unlike `set_value()`, there is no
+    separate `_reject_unwritable_builtin_store()` call needed here.
+
+    `force` is accepted only for CLI signature symmetry — the actual
+    confirmation prompt (`click.confirm()`) is the command layer's job
+    (`values_command.py:values_rotate()`), not this function's: every
+    controller in this codebase stays free of interactive I/O.
+
+    A real write failure (`.set()` raised `IntegrationError`) is reported
+    as a `Diagnostic` and returns `(None, diagnostics)` rather than being
+    raised further — same reasoning as `set_value()` (D4; `IntegrationError`
+    is not a `StrataError`, so `command_run()`'s exception handler would
+    not catch it).
+
+    Args:
+        context: An already-`require_valid()`-ed solution.
+        deployment_name: `meta.name` of the deployment `key` is rotated for.
+        key: The declared secret key to rotate.
+        force: Unused here — see docstring.
+
+    Returns:
+        `(SetResult, Diagnostics)` on a successful rotation. `(None,
+        Diagnostics)` when the write itself failed.
+
+    Raises:
+        UsageError: `deployment_name` does not name a real deployment,
+            `key` is not declared, `key` is a variable/feature (rotation
+            is secrets-only), or the secret has no `generate:` spec
+            (pointing at `values set --value`/`--from-file`/`--stdin`
+            instead).
+    """
+    del force  # accepted for CLI signature symmetry only — see docstring
+    deployment = resolve_deployment(context, deployment_name)
+    environments = reachable_environments(context, deployment)
+    variables, secrets, features = merge_environment_models(environments)
+
+    if key in secrets:
+        store = secrets[key]
+    elif key in features:
+        raise UsageError(f"'{key}' is a feature — rotation only applies to secrets.")
+    elif key in variables:
+        raise UsageError(f"'{key}' is a variable — rotation only applies to secrets.")
+    else:
+        raise UsageError(f"'{key}' is not declared in any environment reachable from deployment '{deployment_name}'.")
+
+    if store.generate is None:
+        raise UsageError(
+            f"Secret '{key}' has no generate: spec — cannot auto-rotate. "
+            "Use 'values set --value'/'--from-file'/'--stdin' to set it manually instead."
+        )
+
+    new_value = generate_secret(store.generate.type.value, store.generate.length)
+
+    resolvers = _Resolvers(context.controller.index)
+    diagnostics = Diagnostics()
+    try:
+        integration = resolvers.get(store.store.value)
+        integration.set(str(store.value), new_value)
+    except (IntegrationNotFoundError, IntegrationError) as exc:
+        diagnostics.error(f"'{key}': {exc}", location=key, code="value_write_failed")
+        return None, diagnostics
+
+    return SetResult(key=key, kind="secret", store=store.store.value, generated=True), diagnostics
+
+
+@dataclass(frozen=True)
+class SecretStatusRow:
+    """One secret's rotation health (`values status`, Phase 8) — never
+    carries the secret's value, only its age relative to its own
+    `rotate.max_age`.
+
+    `status` is one of:
+      - `"ok"`: has metadata, age is within `max_age`.
+      - `"overdue"`: has metadata, age has reached or exceeded `max_age`.
+      - `"no_metadata"`: the store integration couldn't report timestamps
+        for this key (`StoreIntegration.metadata()` returned `None` or
+        raised `IntegrationError`).
+      - `"no_integration"`: no resolver class is registered for this
+        secret's store type at all.
+      - `"no_timestamp"`: metadata came back, but with neither
+        `created_at` nor `updated_at` set.
+
+    `age_days`/`days_remaining` are only ever set for `"ok"`/`"overdue"`
+    (the only statuses with a usable timestamp to measure age from).
+    """
+
+    key: str
+    store: str
+    max_age: int
+    policy: str
+    """`"warn"` or `"rotate"` (`SecretRotatePolicy`'s value)."""
+    status: str
+    age_days: int | None = None
+    days_remaining: int | None = None
+
+
+def secret_status(context: SolutionContext, deployment_name: str) -> tuple[list[SecretStatusRow], Diagnostics]:
+    """Report rotation health for every secret reachable from
+    `deployment_name` that declares a `rotate:` spec.
+
+    `values status`'s controller function (docs/design/
+    values-secrets-command.md Phase 8, built on Phase 5's
+    `StoreIntegration.metadata()`) — the read-only counterpart to `values
+    rotate`: this never mutates a store (D2), it only reports age vs. each
+    secret's own `rotate.max_age`. Secrets with no `rotate:` spec at all
+    are silently skipped — there is nothing to report on.
+
+    Unlike every other function in this module, this returns a
+    `Diagnostics` that is **not** the sole success/failure signal — every
+    classification (`ok`/`overdue`/`no_metadata`/`no_integration`/
+    `no_timestamp`) is a valid, non-exceptional outcome, so `Diagnostics`
+    here is a presentation convenience (one `WARNING` for anything that
+    couldn't be measured, one `ERROR` per secret overdue for rotation —
+    the console/JSON renderers already print each row regardless) rather
+    than a resolution-failure bag like `values get`/`list`/`resolve`/`set`/
+    `rotate` return. `values_command.py` still derives the final exit code
+    from the rows themselves (`any(row.status == "overdue" ...)`), not
+    from `diagnostics.ok` alone, matching the design's own CLI contract.
+
+    Args:
+        context: An already-`require_valid()`-ed solution.
+        deployment_name: `meta.name` of the deployment to check.
+
+    Returns:
+        `(rows, Diagnostics)`, `rows` sorted by `key`.
+
+    Raises:
+        UsageError: `deployment_name` does not name a real deployment.
+    """
+    deployment = resolve_deployment(context, deployment_name)
+    environments = reachable_environments(context, deployment)
+    _variables, secrets, _features = merge_environment_models(environments)
+
+    resolvers = _Resolvers(context.controller.index)
+    diagnostics = Diagnostics()
+    rows: list[SecretStatusRow] = []
+    now = datetime.now(timezone.utc)
+
+    for key, store in secrets.items():
+        if store.rotate is None:
+            continue
+        max_age = store.rotate.max_age
+        policy = store.rotate.policy.value
+
+        try:
+            integration = resolvers.get(store.store.value)
+        except IntegrationNotFoundError:
+            diagnostics.warning(
+                f"'{key}': no resolver implemented yet for store '{store.store.value}' — cannot check rotation age.",
+                location=key,
+                code="secret_status_no_integration",
+            )
+            rows.append(
+                SecretStatusRow(
+                    key=key, store=store.store.value, max_age=max_age, policy=policy, status="no_integration"
+                )
+            )
+            continue
+
+        try:
+            meta = integration.metadata(str(store.value))
+        except IntegrationError as exc:
+            diagnostics.warning(f"'{key}': {exc}", location=key, code="secret_status_no_metadata")
+            rows.append(
+                SecretStatusRow(key=key, store=store.store.value, max_age=max_age, policy=policy, status="no_metadata")
+            )
+            continue
+
+        if meta is None:
+            diagnostics.warning(
+                f"'{key}': store did not report metadata for this secret.",
+                location=key,
+                code="secret_status_no_metadata",
+            )
+            rows.append(
+                SecretStatusRow(key=key, store=store.store.value, max_age=max_age, policy=policy, status="no_metadata")
+            )
+            continue
+
+        reference_time = meta.updated_at or meta.created_at
+        if reference_time is None:
+            diagnostics.warning(
+                f"'{key}': store reported metadata with no created_at/updated_at timestamp.",
+                location=key,
+                code="secret_status_no_timestamp",
+            )
+            rows.append(
+                SecretStatusRow(key=key, store=store.store.value, max_age=max_age, policy=policy, status="no_timestamp")
+            )
+            continue
+
+        age_days = (now - reference_time).days
+        if age_days >= max_age:
+            diagnostics.error(
+                f"'{key}' is overdue for rotation ({age_days}d / {max_age}d).",
+                location=key,
+                code="secret_rotation_overdue",
+            )
+            rows.append(
+                SecretStatusRow(
+                    key=key,
+                    store=store.store.value,
+                    max_age=max_age,
+                    policy=policy,
+                    status="overdue",
+                    age_days=age_days,
+                )
+            )
+        else:
+            rows.append(
+                SecretStatusRow(
+                    key=key,
+                    store=store.store.value,
+                    max_age=max_age,
+                    policy=policy,
+                    status="ok",
+                    age_days=age_days,
+                    days_remaining=max_age - age_days,
+                )
+            )
+
+    rows.sort(key=lambda row: row.key)
+    return rows, diagnostics

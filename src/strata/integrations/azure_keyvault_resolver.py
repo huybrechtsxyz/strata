@@ -32,7 +32,8 @@ from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
 
 from strata.integrations.capabilities import StoreIntegration
-from strata.integrations.errors import ValueResolutionError
+from strata.integrations.errors import IntegrationError, ValueResolutionError
+from strata.integrations.resolved_context import SecretMetadata
 from strata.models.integration_model import Capability, IntegrationModel
 
 
@@ -76,3 +77,46 @@ class AzureKeyVaultResolver(StoreIntegration):
         if secret.value is None:
             raise ValueResolutionError(f"Azure Key Vault: secret '{key}' has no value.")
         return secret.value
+
+    def set(self, key: str, value: str) -> None:
+        """Create or overwrite secret `key` (`SecretClient.set_secret()` is
+        already an upsert — no separate create/update call needed here,
+        unlike Infisical's real API).
+
+        Raises:
+            strata.integrations.errors.IntegrationError: Not configured,
+                unauthenticated, or the write itself failed.
+        """
+        try:
+            client = self._get_client()
+        except ValueResolutionError as exc:
+            raise IntegrationError(str(exc)) from exc
+        try:
+            client.set_secret(key, value)
+        except AzureError as exc:
+            raise IntegrationError(f"Azure Key Vault: could not write '{key}': {exc}") from exc
+
+    def metadata(self, key: str) -> SecretMetadata | None:
+        """Best-effort created/updated timestamps, from the same
+        `get_secret()` call `resolve()` uses (`SecretProperties.created_on`/
+        `.updated_on` — already-parsed `datetime` objects, no further
+        parsing needed here unlike Infisical's raw ISO-8601 strings).
+
+        Returns `None` when `key` doesn't exist — not configured/unreachable
+        still raises, matching `resolve()`'s own treatment of those cases.
+
+        Raises:
+            strata.integrations.errors.IntegrationError: Not configured,
+                unauthenticated, or unreachable.
+        """
+        try:
+            client = self._get_client()
+            secret = client.get_secret(key)
+        except ResourceNotFoundError:
+            return None
+        except ValueResolutionError as exc:
+            raise IntegrationError(str(exc)) from exc
+        except AzureError as exc:
+            raise IntegrationError(f"Azure Key Vault: could not read metadata for '{key}': {exc}") from exc
+        properties = secret.properties
+        return SecretMetadata(created_at=properties.created_on, updated_at=properties.updated_on)

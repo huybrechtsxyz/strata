@@ -64,7 +64,7 @@ class TenantService(BaseService[TenantModel]):
         if not known:
             return diagnostics  # no provider declares any geography — nothing to check against
 
-        for index, geography in enumerate(self.model.spec.geographies):
+        for index, geography in enumerate(self.model.spec.geographies or []):
             if geography not in known:
                 diagnostics.error(
                     f"Tenant '{self.model.meta.name}': geography '{geography}' is not declared by any "
