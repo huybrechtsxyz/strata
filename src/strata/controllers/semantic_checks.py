@@ -26,12 +26,13 @@ existence already vetted; an unresolved reference produces no duplicate
 finding here — `validate_references` already reported it.
 """
 
+from pathlib import Path
 from typing import cast
 
-from strata.controllers.solution_controller import DocumentIndex
+from strata.controllers.solution_controller import DocumentIndex, IndexEntry
 from strata.controllers.value_references import resolve_document_value_references
 from strata.models.common_models import PlatformBaseModel, PlatformKind, SourceModel
-from strata.models.configuration_model import ConfigurationModel, ConfigurationSecurityModel
+from strata.models.configuration_model import ConfigurationModel, ConfigurationSecurityModel, PathConventionModel
 from strata.models.deployment_model import DeploymentModel
 from strata.models.environment_model import EnvironmentModel
 from strata.models.module_model import ModuleModel
@@ -51,12 +52,14 @@ from strata.services.resource_service import ResourceService
 from strata.services.tenant_service import TenantService
 from strata.services.workspace_service import WorkspaceService
 from strata.utils.diagnostics import Diagnostics
+from strata.utils.path_conventions import in_scope, match_directory, match_filename, matches_segment_pattern
 
 
 def run_semantic_checks(
     index: DocumentIndex,
     resolved_deployments: dict[str, DeploymentModel] | None = None,
     solution: SolutionModel | None = None,
+    root: Path | None = None,
 ) -> Diagnostics:
     """Run every cross-document semantic check over an already-loaded index.
 
@@ -74,13 +77,20 @@ def run_semantic_checks(
             own docstring), so this is the only cross-document check here
             that cannot get its second document from `index` alone — same
             reason `check_version_pins()` also takes `solution` directly.
+        root: The solution root, for `_check_paths()`/the `DeploymentLayersModel`
+            cross-check (docs/design/path-conventions.md) — needed to turn
+            each `IndexEntry.source` (absolute) into a path relative to the
+            solution, which is what a `Configuration.spec.paths` convention's
+            `pattern` is written against. `None` (the default) skips both
+            checks entirely — same "nothing to check against" rule every
+            other Configuration-backed check here already uses.
 
     Returns:
-        Every finding, from all nine checks combined.
+        Every finding, from all ten checks combined.
     """
     resolved = resolved_deployments or {}
     diagnostics = Diagnostics()
-    diagnostics.extend(_check_deployments(index, resolved))
+    diagnostics.extend(_check_deployments(index, resolved, root))
     diagnostics.extend(_check_tenants(index))
     diagnostics.extend(_check_providers(index))
     diagnostics.extend(_check_resources(index))
@@ -89,6 +99,7 @@ def run_semantic_checks(
     diagnostics.extend(_check_deployment_value_tokens(index, resolved))
     diagnostics.extend(_check_remotes(index, solution))
     diagnostics.extend(_check_value_references(index))
+    diagnostics.extend(_check_paths(index, root))
     return diagnostics
 
 
@@ -97,19 +108,84 @@ def run_semantic_checks(
 # ---------------------------------------------------------------------------
 
 
-def _check_deployments(index: DocumentIndex, resolved: dict[str, DeploymentModel]) -> Diagnostics:
+def _check_deployments(
+    index: DocumentIndex, resolved: dict[str, DeploymentModel], root: Path | None = None
+) -> Diagnostics:
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.DEPLOYMENT):
         deployment = resolved.get(entry.ref.name, cast(DeploymentModel, entry.model))
-        if not deployment.spec.workspace:
-            continue
-        workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
-        if workspace_entry is None:
-            continue  # already reported by validate_references
+        if deployment.spec.workspace:
+            workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
+            if workspace_entry is not None:
+                service = DeploymentService.from_model(deployment)
+                workspace = cast(WorkspaceModel, workspace_entry.model)
+                diagnostics.extend(service.validate_stages_against_workspace(workspace), source=str(entry.source))
+        diagnostics.extend(_check_deployment_layers(index, entry, deployment, root), source=str(entry.source))
+    return diagnostics
 
-        service = DeploymentService.from_model(deployment)
-        workspace = cast(WorkspaceModel, workspace_entry.model)
-        diagnostics.extend(service.validate_stages_against_workspace(workspace), source=str(entry.source))
+
+def _single_configuration(index: DocumentIndex) -> ConfigurationModel | None:
+    """The one `Configuration` document, or `None` when absent or ambiguous.
+
+    Shared by `_check_paths()` and `_check_deployment_layers()` — both need
+    "the one declared source of truth, or nothing to check against at all"
+    (ADR-0003's already-known "ambiguous merging not implemented" case for
+    more than one), the same rule `_check_workspace_topology_components()`
+    already applies inline for `spec.topologies`.
+    """
+    entries = index.all_of(PlatformKind.CONFIGURATION)
+    if len(entries) != 1:
+        return None
+    return cast(ConfigurationModel, entries[0].model)
+
+
+def _check_deployment_layers(
+    index: DocumentIndex, entry: IndexEntry, deployment: DeploymentModel, root: Path | None
+) -> Diagnostics:
+    """Cross-check `Deployment.spec.layers` against the deployment document's
+    own real file path (docs/design/path-conventions.md Phase 3) — the check
+    that finally makes `DeploymentLayersModel` (previously "inert in v2")
+    mean something. Validation only, never mutates `segments` — auto-
+    derivation when absent is deliberately out of scope (no consumer of
+    `layers` exists yet to feed).
+    """
+    diagnostics = Diagnostics()
+    layers = deployment.spec.layers
+    if layers is None or layers.follows is None or root is None:
+        return diagnostics
+
+    configuration = _single_configuration(index)
+    if configuration is None:
+        return diagnostics  # nothing declared, nothing to check against (Open Question #2, resolved)
+
+    conventions = {c.name: c for c in (configuration.spec.paths or [])}
+    convention = conventions.get(layers.follows)
+    if convention is None:
+        diagnostics.error(
+            f"Deployment '{deployment.meta.name}': layers.follows names unknown path convention "
+            f"'{layers.follows}'. Available: {sorted(conventions)}",
+            code="unknown_path_convention",
+        )
+        return diagnostics
+
+    if not layers.segments:
+        return diagnostics  # nothing declared yet to cross-check
+
+    relative = entry.source.resolve().relative_to(root.resolve()).as_posix()
+    match = match_directory(relative, convention.pattern)
+    if match is None:
+        return diagnostics  # _check_paths() already reports this structural mismatch itself
+
+    captures = match.groupdict()
+    severity = diagnostics.error if convention.enforcement == "deny" else diagnostics.warning
+    for name, declared_value in layers.segments.items():
+        captured_value = captures.get(name)
+        if captured_value is not None and captured_value != declared_value:
+            severity(
+                f"Deployment '{deployment.meta.name}': layers.segments['{name}'] = '{declared_value}', but "
+                f"its real file path resolves '{name}' = '{captured_value}'.",
+                code="path_convention_layers_drift",
+            )
     return diagnostics
 
 
@@ -530,4 +606,90 @@ def _check_value_references(index: DocumentIndex) -> Diagnostics:
     given token is valid.
     """
     _values, diagnostics = resolve_document_value_references(index)
+    return diagnostics
+
+
+# ---------------------------------------------------------------------------
+# Configuration.spec.paths -> every document's real file location
+# (docs/design/path-conventions.md, docs/_gap_v1.md gap #7)
+# ---------------------------------------------------------------------------
+
+
+def _check_paths(index: DocumentIndex, root: Path | None) -> Diagnostics:
+    """Every document's real, on-disk location matches whichever declared
+    `PathConventionModel` covers it (structural shape only — the generic
+    `validate:` sub-block v1 also had is deliberately not ported, see the
+    design doc's "What's already solved differently").
+
+    Skips entirely without a single `Configuration` document declaring
+    `spec.paths`, or without `root` (needed to compute each document's path
+    relative to the solution) — same "nothing declared, nothing to check"
+    rule every other Configuration-backed check here already uses.
+    """
+    diagnostics = Diagnostics()
+    if root is None:
+        return diagnostics
+    configuration = _single_configuration(index)
+    if configuration is None or not configuration.spec.paths:
+        return diagnostics
+
+    resolved_root = root.resolve()
+    for entry in index.all():
+        relative = entry.source.resolve().relative_to(resolved_root).as_posix()
+        convention = next((c for c in configuration.spec.paths if in_scope(relative, c.scope)), None)
+        if convention is None:
+            continue
+        diagnostics.extend(
+            _check_document_against_path_convention(entry, relative, convention), source=str(entry.source)
+        )
+    return diagnostics
+
+
+def _check_document_against_path_convention(
+    entry: IndexEntry, relative: str, convention: PathConventionModel
+) -> Diagnostics:
+    """The per-document half of `_check_paths()` — one document, one already
+    in-scope convention. Split out so each of the three findings this can
+    produce (structural mismatch, tenant code mismatch, segment pattern
+    mismatch) stays a single, readable branch.
+
+    `pattern` (directory) and `filename_pattern` (filename, optional) are
+    two independent matches against different substrings of `relative` —
+    both must match (a set `filename_pattern` that doesn't is the same
+    `path_convention_mismatch` as a directory mismatch); captures from
+    both merge into one dict for the `resolves` checks below.
+    """
+    diagnostics = Diagnostics()
+    severity = diagnostics.error if convention.enforcement == "deny" else diagnostics.warning
+    directory_match = match_directory(relative, convention.pattern)
+    filename_match = match_filename(relative, convention.filename_pattern) if convention.filename_pattern else None
+    if directory_match is None or (convention.filename_pattern and filename_match is None):
+        severity(
+            f"'{relative}' does not match path convention '{convention.name}' (pattern "
+            f"'{convention.pattern}'"
+            + (f", filename_pattern '{convention.filename_pattern}'" if convention.filename_pattern else "")
+            + ").",
+            code="path_convention_mismatch",
+        )
+        return diagnostics
+
+    captures = {**directory_match.groupdict(), **(filename_match.groupdict() if filename_match else {})}
+    if convention.resolves == "tenant" and entry.ref.kind is PlatformKind.TENANT and len(captures) == 1:
+        tenant = cast(TenantModel, entry.model)
+        (code_value,) = captures.values()
+        if tenant.meta.name != code_value:
+            severity(
+                f"Tenant filed at '{relative}' has meta.name '{tenant.meta.name}', but path convention "
+                f"'{convention.name}' expects '{code_value}'.",
+                code="path_convention_tenant_mismatch",
+            )
+    elif convention.resolves == "layers":
+        for segment in convention.segments or []:
+            captured_value = captures.get(segment.name)
+            if captured_value is not None and not matches_segment_pattern(segment.pattern, captured_value):
+                severity(
+                    f"'{relative}': segment '{segment.name}' value '{captured_value}' does not match path "
+                    f"convention '{convention.name}''s declared pattern '{segment.pattern}'.",
+                    code="path_convention_segment_mismatch",
+                )
     return diagnostics

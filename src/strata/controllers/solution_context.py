@@ -108,7 +108,11 @@ class SolutionContext:
         found.extend(validate_references(self.controller.index, self.controller.solution))
         resolved_deployments, resolution_diagnostics = resolve_deployment_chains(self.controller.index)
         found.extend(resolution_diagnostics)
-        found.extend(run_semantic_checks(self.controller.index, resolved_deployments, self.controller.solution))
+        found.extend(
+            run_semantic_checks(
+                self.controller.index, resolved_deployments, self.controller.solution, self.controller.root
+            )
+        )
         found.extend(check_version_pins(self.controller.index, self.controller.solution))
         self.diagnostics.extend(found)
         return found

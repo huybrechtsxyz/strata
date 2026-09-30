@@ -100,3 +100,141 @@ def test_configuration_security_rejects_unknown_fields():
     data["spec"]["security"] = {"allowed_widget_stores": ["nope"]}
     with pytest.raises(ValidationError):
         ConfigurationModel.model_validate(data)
+
+
+# ---------------------------------------------------------------------------
+# spec.paths (docs/design/path-conventions.md, docs/_gap_v1.md gap #7 —
+# real usage: cfg-int-deployment's config/paths.yaml)
+# ---------------------------------------------------------------------------
+
+
+def test_configuration_paths_is_optional():
+    model = ConfigurationModel.model_validate(_minimal_configuration())
+    assert model.spec.paths is None
+
+
+def test_configuration_accepts_a_tenant_resolving_path_convention():
+    data = _minimal_configuration()
+    data["spec"]["paths"] = [
+        {
+            "name": "tenant-path",
+            "scope": "customers/**",
+            "pattern": "customers/{code}",
+            "filename_pattern": "tenant.yaml",
+            "resolves": "tenant",
+        }
+    ]
+    model = ConfigurationModel.model_validate(data)
+    assert model.spec.paths[0].name == "tenant-path"
+    assert model.spec.paths[0].filename_pattern == "tenant.yaml"
+    assert model.spec.paths[0].resolves == "tenant"
+    assert model.spec.paths[0].enforcement == "warn"
+
+
+def test_configuration_filename_pattern_is_optional():
+    """None (default) means any filename is accepted under a matching directory."""
+    data = _minimal_configuration()
+    data["spec"]["paths"] = [{"name": "hub-path", "scope": "deploy/hubs/**", "pattern": "deploy/hubs/{hub}"}]
+    model = ConfigurationModel.model_validate(data)
+    assert model.spec.paths[0].filename_pattern is None
+
+
+def test_configuration_filename_pattern_can_capture_with_no_directory_capture():
+    """provider-path's real shape: the capture lives entirely in the filename."""
+    data = _minimal_configuration()
+    data["spec"]["paths"] = [
+        {"name": "provider-path", "scope": "providers/**", "pattern": "providers", "filename_pattern": "{region}.yaml"}
+    ]
+    model = ConfigurationModel.model_validate(data)
+    assert model.spec.paths[0].pattern == "providers"
+    assert model.spec.paths[0].filename_pattern == "{region}.yaml"
+
+
+def test_configuration_accepts_a_structural_path_convention_with_no_resolves():
+    data = _minimal_configuration()
+    data["spec"]["paths"] = [
+        {"name": "provider-path", "scope": "providers/**", "pattern": "providers", "filename_pattern": "{region}.yaml"}
+    ]
+    model = ConfigurationModel.model_validate(data)
+    assert model.spec.paths[0].resolves is None
+    assert model.spec.paths[0].segments is None
+
+
+def test_configuration_accepts_a_layers_resolving_path_convention_with_segments():
+    data = _minimal_configuration()
+    data["spec"]["paths"] = [
+        {
+            "name": "control-path",
+            "scope": "deploy/control/**",
+            "pattern": "deploy/control/{control}",
+            "resolves": "layers",
+            "segments": [{"name": "control", "pattern": "^[a-z][a-z0-9-]*$"}],
+        }
+    ]
+    model = ConfigurationModel.model_validate(data)
+    assert model.spec.paths[0].segments[0].name == "control"
+
+
+def test_configuration_rejects_layers_resolving_convention_without_segments():
+    """docs/design/path-conventions.md's Open Question #1 (resolved: required)."""
+    data = _minimal_configuration()
+    data["spec"]["paths"] = [
+        {
+            "name": "control-path",
+            "scope": "deploy/control/**",
+            "pattern": "deploy/control/{control}",
+            "resolves": "layers",
+        }
+    ]
+    with pytest.raises(ValidationError, match="requires 'segments'"):
+        ConfigurationModel.model_validate(data)
+
+
+def test_configuration_rejects_layers_resolving_convention_with_empty_segments():
+    data = _minimal_configuration()
+    data["spec"]["paths"] = [
+        {
+            "name": "control-path",
+            "scope": "deploy/control/**",
+            "pattern": "deploy/control/{control}",
+            "resolves": "layers",
+            "segments": [],
+        }
+    ]
+    with pytest.raises(ValidationError, match="requires 'segments'"):
+        ConfigurationModel.model_validate(data)
+
+
+def test_configuration_rejects_unknown_resolves_value():
+    data = _minimal_configuration()
+    data["spec"]["paths"] = [{"name": "bogus-path", "scope": "bogus/**", "pattern": "bogus/{x}", "resolves": "bogus"}]
+    with pytest.raises(ValidationError):
+        ConfigurationModel.model_validate(data)
+
+
+def test_configuration_rejects_duplicate_path_convention_names():
+    data = _minimal_configuration()
+    entry = {
+        "name": "tenant-path",
+        "scope": "customers/**",
+        "pattern": "customers/{code}",
+        "filename_pattern": "tenant.yaml",
+    }
+    data["spec"]["paths"] = [entry, dict(entry)]
+    with pytest.raises(ValidationError, match="Duplicate"):
+        ConfigurationModel.model_validate(data)
+
+
+def test_configuration_path_convention_enforcement_can_be_set_to_deny():
+    data = _minimal_configuration()
+    data["spec"]["paths"] = [
+        {
+            "name": "provider-path",
+            "scope": "providers/**",
+            "pattern": "providers",
+            "filename_pattern": "{region}.yaml",
+            "enforcement": "deny",
+        }
+    ]
+    model = ConfigurationModel.model_validate(data)
+    assert model.spec.paths[0].enforcement == "deny"

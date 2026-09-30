@@ -712,6 +712,309 @@ def test_security_with_no_fields_set_restricts_nothing(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Configuration.spec.paths (docs/design/path-conventions.md, docs/_gap_v1.md
+# gap #7 — real usage: cfg-int-deployment's config/paths.yaml)
+# ---------------------------------------------------------------------------
+
+TENANT_PATH_CONVENTION = """  paths:
+    - name: tenant-path
+      scope: "customers/**"
+      pattern: "customers/{code}"
+      filename_pattern: "tenant.yaml"
+      resolves: tenant
+"""
+
+
+def _relocate_tenant_under_customers(root: Path, *, dir_code: str = "c0062", tenant_name: str | None = None) -> None:
+    """Move _base_solution()'s root-level tenant.yaml into
+    customers/{dir_code}/tenant.yaml, optionally overriding its meta.name
+    to set up a deliberate code-vs-content mismatch."""
+    tenant_path = root / "tenant.yaml"
+    content = tenant_path.read_text(encoding="utf-8")
+    if tenant_name is not None:
+        content = content.replace("name: c0062", f"name: {tenant_name}")
+    tenant_path.unlink()
+    _write(root, f"customers/{dir_code}/tenant.yaml", content)
+
+
+def _repoint_deployment_tenant(root: Path, tenant_name: str) -> None:
+    """Keep deployment.yaml's 'tenant: c0062' reference valid after
+    _relocate_tenant_under_customers() renames the tenant."""
+    path = root / "deployment.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("tenant: c0062", f"tenant: {tenant_name}"), encoding="utf-8"
+    )
+
+
+def _append_paths_config(root: Path, paths_yaml: str) -> None:
+    path = root / "configuration.yaml"
+    path.write_text(path.read_text(encoding="utf-8") + paths_yaml, encoding="utf-8")
+
+
+def test_tenant_matching_path_convention_passes_cleanly(tmp_path):
+    root = _base_solution(tmp_path)
+    _relocate_tenant_under_customers(root)
+    _append_paths_config(root, TENANT_PATH_CONVENTION)
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+    assert not context.diagnostics.warnings
+
+
+def test_tenant_mismatched_code_warns_by_default_and_does_not_fail_validate(tmp_path):
+    root = _base_solution(tmp_path)
+    _relocate_tenant_under_customers(root, tenant_name="c0099")
+    _repoint_deployment_tenant(root, "c0099")
+    _append_paths_config(root, TENANT_PATH_CONVENTION)
+
+    context = _resolve(root)
+    assert context.ok  # enforcement: warn (default) — reported, but does not fail validate
+    messages = [d.message for d in context.diagnostics.warnings]
+    assert any("c0099" in m and "c0062" in m for m in messages)
+    assert any(d.code == "path_convention_tenant_mismatch" for d in context.diagnostics.warnings)
+
+
+def test_tenant_mismatched_code_fails_when_enforcement_is_deny(tmp_path):
+    root = _base_solution(tmp_path)
+    _relocate_tenant_under_customers(root, tenant_name="c0099")
+    _repoint_deployment_tenant(root, "c0099")
+    _append_paths_config(
+        root,
+        """  paths:
+    - name: tenant-path
+      scope: "customers/**"
+      pattern: "customers/{code}"
+      filename_pattern: "tenant.yaml"
+      resolves: tenant
+      enforcement: deny
+""",
+    )
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any(d.code == "path_convention_tenant_mismatch" for d in context.diagnostics.errors)
+
+
+def test_structural_shape_mismatch_is_caught(tmp_path):
+    """A tenant filed one directory too deep for its convention (the real,
+    empirically-found v1 bug class) — caught even with no 'resolves' logic
+    involved, since the pattern itself simply doesn't match."""
+    root = _base_solution(tmp_path)
+    _relocate_tenant_under_customers(root, dir_code="c0062/nested")
+    _append_paths_config(root, TENANT_PATH_CONVENTION)
+
+    context = _resolve(root)
+    assert context.ok  # warn by default
+    assert any(d.code == "path_convention_mismatch" for d in context.diagnostics.warnings)
+
+
+def test_paths_check_is_skipped_without_a_configuration_document(tmp_path):
+    """No Configuration doc means no declared convention — skip, don't guess."""
+    root = _base_solution(tmp_path)
+    _relocate_tenant_under_customers(root)
+    _append_paths_config(root, TENANT_PATH_CONVENTION)
+    (root / "configuration.yaml").unlink()
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_document_outside_every_scope_is_unchecked(tmp_path):
+    """A file that matches no declared convention's scope is simply
+    unchecked — no 'closed universe' concept for spec.paths."""
+    root = _base_solution(tmp_path)
+    _append_paths_config(root, TENANT_PATH_CONVENTION)
+    # provider.yaml lives at the solution root, outside 'customers/**'.
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+    assert not context.diagnostics.warnings
+
+
+def test_filename_only_capture_with_no_directory_capture_is_checked(tmp_path):
+    """provider-path's real shape: the capture lives entirely in the
+    filename, the directory pattern is a pure literal with no capture at
+    all — moving provider.yaml to match confirms the split still works
+    end to end, not just at the utility level."""
+    root = _base_solution(tmp_path)
+    provider_path = root / "provider.yaml"
+    provider_path.rename(root / "providers-tmp.yaml")
+    _write(root, "providers/westeurope.yaml", (root / "providers-tmp.yaml").read_text(encoding="utf-8"))
+    (root / "providers-tmp.yaml").unlink()
+    _append_paths_config(
+        root,
+        """  paths:
+    - name: provider-path
+      scope: "providers/**"
+      pattern: "providers"
+      filename_pattern: "{region}.yaml"
+""",
+    )
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+    assert not context.diagnostics.warnings
+
+
+def test_filename_only_capture_mismatch_is_caught(tmp_path):
+    root = _base_solution(tmp_path)
+    provider_path = root / "provider.yaml"
+    provider_path.rename(root / "providers-tmp.yaml")
+    _write(root, "providers/azure/westeurope.yaml", (root / "providers-tmp.yaml").read_text(encoding="utf-8"))
+    (root / "providers-tmp.yaml").unlink()
+    _append_paths_config(
+        root,
+        """  paths:
+    - name: provider-path
+      scope: "providers/**"
+      pattern: "providers"
+      filename_pattern: "{region}.yaml"
+""",
+    )
+
+    context = _resolve(root)
+    assert context.ok  # warn by default
+    assert any(d.code == "path_convention_mismatch" for d in context.diagnostics.warnings)
+
+
+# ---------------------------------------------------------------------------
+# DeploymentLayersModel cross-check (docs/design/path-conventions.md Phase 3)
+# ---------------------------------------------------------------------------
+
+CONTROL_PATH_CONVENTION = """  paths:
+    - name: control-path
+      scope: "deploy/control/**"
+      pattern: "deploy/control/{control}"
+      resolves: layers
+      segments:
+        - name: control
+          pattern: "^[a-z][a-z0-9-]*$"
+"""
+
+
+def _partial_layers_deployment(name: str, *, follows: str, segments: dict) -> str:
+    segments_yaml = "\n".join(f"      {k}: {v}" for k, v in segments.items())
+    return f"""apiVersion: strata.huybrechts.xyz/v2
+kind: deployment
+meta:
+  name: {name}
+spec:
+  partial: true
+  layers:
+    follows: {follows}
+    segments:
+{segments_yaml}
+"""
+
+
+def test_layers_segment_pattern_violation_is_caught(tmp_path):
+    """The real, empirically-found v1 case: a segment value that doesn't
+    match its own declared pattern (here: uppercase, fails '^[a-z][a-z0-9-]*$')."""
+    root = _base_solution(tmp_path)
+    _append_paths_config(root, CONTROL_PATH_CONVENTION)
+    _write(
+        root,
+        "deploy/control/DEV/deployment.yaml",
+        _partial_layers_deployment("control-dev", follows="control-path", segments={"control": "DEV"}),
+    )
+
+    context = _resolve(root)
+    assert context.ok  # warn by default
+    assert any(d.code == "path_convention_segment_mismatch" for d in context.diagnostics.warnings)
+
+
+def test_layers_segments_agreeing_with_real_path_passes_cleanly(tmp_path):
+    root = _base_solution(tmp_path)
+    _append_paths_config(root, CONTROL_PATH_CONVENTION)
+    _write(
+        root,
+        "deploy/control/dev/deployment.yaml",
+        _partial_layers_deployment("control-dev", follows="control-path", segments={"control": "dev"}),
+    )
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+    assert not context.diagnostics.warnings
+
+
+def test_layers_segments_drift_from_real_path_is_caught(tmp_path):
+    """Both values are individually schema-valid ('dev'/'prod' both match
+    '^[a-z][a-z0-9-]*$'), so only the path-vs-declared-segments cross-check
+    (Phase 3) — not the structural pattern check — catches this."""
+    root = _base_solution(tmp_path)
+    _append_paths_config(root, CONTROL_PATH_CONVENTION)
+    _write(
+        root,
+        "deploy/control/dev/deployment.yaml",
+        _partial_layers_deployment("control-dev", follows="control-path", segments={"control": "prod"}),
+    )
+
+    context = _resolve(root)
+    assert context.ok  # warn by default
+    codes = [d.code for d in context.diagnostics.warnings]
+    assert "path_convention_layers_drift" in codes
+    assert "path_convention_segment_mismatch" not in codes
+
+
+def test_layers_follows_naming_an_unknown_convention_is_always_an_error(tmp_path):
+    """Resolved Open Question #2: unknown when a Configuration document
+    exists is always an error, regardless of any convention's own
+    'enforcement' (there is no convention to read one from)."""
+    root = _base_solution(tmp_path)
+    _append_paths_config(root, CONTROL_PATH_CONVENTION)
+    _write(
+        root,
+        "deploy/control/dev/deployment.yaml",
+        _partial_layers_deployment("control-dev", follows="bogus-path", segments={"control": "dev"}),
+    )
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any(d.code == "unknown_path_convention" for d in context.diagnostics.errors)
+
+
+def test_layers_cross_check_is_skipped_without_a_configuration_document(tmp_path):
+    root = _base_solution(tmp_path)
+    (root / "configuration.yaml").unlink()
+    _write(
+        root,
+        "deploy/control/dev/deployment.yaml",
+        _partial_layers_deployment("control-dev", follows="bogus-path", segments={"control": "dev"}),
+    )
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_layers_with_no_segments_declared_skips_the_cross_check_entirely(tmp_path):
+    """No consumer of `layers` exists yet to auto-populate segments — a
+    Deployment naming `follows` with no `segments` at all has nothing to
+    cross-check (docs/design/path-conventions.md's 'Deliberately out of
+    scope'). Structural path matching (_check_paths()) still applies
+    independently and passes here, since the file's own real location
+    matches control-path's pattern."""
+    root = _base_solution(tmp_path)
+    _append_paths_config(root, CONTROL_PATH_CONVENTION)
+    _write(
+        root,
+        "deploy/control/dev/deployment.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: deployment
+meta:
+  name: control-dev
+spec:
+  partial: true
+  layers:
+    follows: control-path
+""",
+    )
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+    assert not context.diagnostics.warnings
+
+
+# ---------------------------------------------------------------------------
 # Environment -> Artifact: store: artifact references (docs/design/
 # artifact-references.md's full-review finding)
 # ---------------------------------------------------------------------------

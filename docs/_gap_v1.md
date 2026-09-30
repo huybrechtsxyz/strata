@@ -1,9 +1,8 @@
 # v1 -> v2 Coverage Gaps
 
 - Status: living — update in place as gaps are closed or new ones are found
-- Last updated: 2026-09-29 (gap #7 split apart and `security` resolved,
-  after reading `cfg-int-deployment`'s real, current `config/*.yaml` files
-  directly)
+- Last updated: 2026-09-30 (gap #7's `paths` sub-item re-resolved after a
+  `pattern`/`filename_pattern` redesign — docs/design/path-conventions.md)
 
 ## Overview
 
@@ -310,17 +309,37 @@ durable, reviewable record.
     Migration action: convert each embedded list entry into its own
     `kind: integration` document; no new v2 code needed for this specific
     shape translation.
-  - `policies`/`audit`/`paths`/`promotions` — still fully open, unstarted.
+  - `paths` — **RESOLVED 2026-09-30** (structural half only —
+    see [docs/design/path-conventions.md](design/path-conventions.md)).
+    New `PathConventionModel`/`PathSegmentModel`/
+    `ConfigurationSpecModel.paths` (`pattern` for directory shape,
+    independently optional `filename_pattern` for filename shape — a
+    redesign from the first 2026-09-29 pass, which combined both into one
+    full-path field; real usage needs both split, e.g. `provider-path`'s
+    one real capture lives entirely in the filename with no directory
+    capture at all), `strata/utils/path_conventions.py` (pure regex
+    matching, no Pydantic dependency), `semantic_checks.py`'s
+    `_check_paths()`. Also finally activates `DeploymentLayersModel`
+    (previously "inert in v2"): `_check_deployment_layers()` cross-checks
+    a declared `layers.segments` against the values captured from the
+    deployment document's own real directory. v1's generic `validate:`
+    sub-block (arbitrary YAML-expression/file-existence cross-checks) is
+    deliberately not ported — both its real instances are already covered
+    by more precise v2 checks elsewhere (`ProviderConfig` region
+    cross-check, `Tenant` reference existence).
+  - `policies`/`audit`/`promotions` — still fully open, unstarted.
     Real active usage is narrower than the documented feature catalog
     (checked directly, 2026-09-29): only 2 of `policies.yaml`'s many
     documented policy `type`s are actually enabled
-    (`tenant_zone`@phase `plan`, `path_convention`@phase `validate`); the
-    one real ELK audit sink is `enabled: false`; `promotions.yaml` declares
-    a `progressions.standard` ring sequence but no active `strategies`
+    (`tenant_zone`@phase `plan`, `path_convention`@phase `validate` — the
+    latter is now what `_check_paths()` implements, without the generic
+    phase/enforcement-dispatching policy framework around it); the one
+    real ELK audit sink is `enabled: false`; `promotions.yaml` declares a
+    `progressions.standard` ring sequence but no active `strategies`
     entry. A future design should scope to this real subset first, not the
     full documented catalog.
 - **Migration action:** see per-field notes above; `policies`/`audit`/
-  `paths`/`promotions` still drop with a comment pointing here until built.
+  `promotions` still drop with a comment pointing here until built.
 
 
 ### 8. ~~Value tokens inside `spec.configuration`/`spec.custom` passthrough dicts are never resolved~~ — RESOLVED
@@ -1583,3 +1602,75 @@ and the provider/providerconfig/topologyconfig registry split.
   narrower than their documented feature catalogs (only 2 of many
   documented policy types are actually enabled today), a future design
   should scope to that real subset first.
+- 2026-09-29: **Resolved gap #7's `paths` sub-item**, per request ("lets
+  look at paths, lets create the design first" -> "design, plan, and
+  implement"). Full design written first
+  ([docs/design/path-conventions.md](design/path-conventions.md)), all 3
+  open questions resolved before implementing. Grounded in the real,
+  current `cfg-int-deployment/config/paths.yaml` and a real deep leaf
+  deployment's actual `layers:` usage. Found v1's generic `validate:`
+  sub-block isn't worth porting (both real instances already covered by
+  more precise v2 checks elsewhere), and caught a real discrepancy while
+  grounding implementation against test fixtures: v1's own real `hub-path`/
+  `control-path` patterns match only the containing directory (no
+  filename); this implementation's `pattern` always matches a document's
+  full relative path instead — simpler, documented as a deliberate
+  difference. Implemented: `PathConventionModel`/`PathSegmentModel`/
+  `ConfigurationSpecModel.paths` (`segments` required when
+  `resolves: layers`, model-validator-enforced); `strata/utils/
+  path_conventions.py` (pure regex matching — `in_scope()`/
+  `compile_pattern()`/`match_pattern()`/`matches_segment_pattern()`, no
+  Pydantic dependency, mirrors `path_safety.py`'s own placement);
+  `semantic_checks.py`'s `_check_paths()` (structural shape matching, plus
+  `resolves: tenant` code-vs-`meta.name` and `resolves: layers`
+  segment-pattern cross-checks) and `_check_deployment_layers()` (finally
+  activates `DeploymentLayersModel`, previously "inert in v2" — cross-checks
+  a declared `layers.segments` against the real path, unknown `follows`
+  names always error, agreement/absence otherwise skip cleanly);
+  `run_semantic_checks()`/`solution_context.py` thread a new `root: Path`
+  parameter through, same shape as the existing `solution` parameter.
+  Findings' severity (warning vs. error) follows each convention's own
+  `enforcement` field (default `warn`, matching the one real v1 policy
+  enabled today) — the full generic policy engine (phase/type dispatch
+  across `tenant_zone`/`naming_pattern`/`cve_max_severity`/etc.) is not
+  built; `enforcement` is modeled directly on `PathConventionModel`
+  instead. 32 new tests (9 model, 11 utility, 12 semantic-check
+  integration). Full check suite green: mypy (109 files), ruff,
+  import-linter (1 kept, 0 broken), pytest (1350 passed — same
+  pre-existing, unrelated `config/` example-solution drift as the sole
+  failure). `strata validate .v2-cfg` re-confirmed clean (12/12) — the
+  fixture declares no `paths`/`layers` at all, so both new checks skip
+  cleanly, zero new findings. `policies`/`audit`/`promotions` remain open.
+- 2026-09-30: **Redesigned and re-implemented `pattern`** as `pattern` +
+  independently optional `filename_pattern`, per direct feedback on the
+  2026-09-29 pass ("we will need to drop the file part" -> clarified over
+  several turns to "not everyone will call the file a specific thing? at
+  least it should be optional... should it be a regex too?"). `pattern`
+  now matches only a document's containing directory; `filename_pattern`
+  (also `{name}`-capable, also optional) independently matches just the
+  filename — fixes the discrepancy the first pass had already flagged
+  (v1's real `hub-path`/`control-path` never mention a filename at all)
+  *and* is required for `provider-path`'s real shape, discovered while
+  designing this: its one real capture (`{region}`) lives entirely in the
+  filename, with no directory capture at all — a case the single
+  combined-pattern design could express but conflated two independent
+  questions into one string. Design completed and its Implementation Plan
+  finalized first (a dedicated "design, plan" pass per explicit request),
+  *then* implemented as a rework of the 2026-09-29 code (not net-new):
+  `strata/utils/path_conventions.py`'s `match_pattern()` replaced by
+  `match_directory()`/`match_filename()` (both thin wrappers over the
+  unchanged `compile_pattern()`) plus a new `split_directory_and_filename()`;
+  `semantic_checks.py`'s `_check_document_against_path_convention()` and
+  `_check_deployment_layers()` updated to the two-step match;
+  `PathSegmentModel`, `enforcement`, `resolves`, and the single-
+  Configuration-document/unknown-`follows` rules are all unchanged, since
+  they only ever cared about the merged captures dict, not which half
+  produced them. 12 new tests (3 model, 8 utility rewritten for the split
+  API, 2 semantic-check integration covering `provider-path`'s real
+  filename-only-capture shape) on top of the existing 32 (mostly rewritten
+  in place, not additive, to match the new shape). Full check suite
+  green: mypy (109 files), ruff, import-linter (1 kept, 0 broken), pytest
+  (1362 passed — same pre-existing, unrelated `config/` example-solution
+  drift as the sole failure). `strata validate .v2-cfg` re-confirmed
+  clean (12/12), zero new findings. `policies`/`audit`/`promotions`
+  remain open.

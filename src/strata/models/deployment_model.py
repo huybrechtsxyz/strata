@@ -180,12 +180,8 @@ class DeploymentLockingModel(PlatformBaseModel):
         description="'wrap' makes strata take its own lock around the whole run; 'delegate' leaves locking "
         "to the provisioner's own state backend (e.g. Terraform's).",
     )
-    wait_timeout: str | None = Field(
-        None, description="How long to wait for a held lock before failing (e.g. '10m')"
-    )
-    force_unlock_after: str | None = Field(
-        None, description="Age after which a stale lock may be broken (e.g. '1h')"
-    )
+    wait_timeout: str | None = Field(None, description="How long to wait for a held lock before failing (e.g. '10m')")
+    force_unlock_after: str | None = Field(None, description="Age after which a stale lock may be broken (e.g. '1h')")
 
     @field_validator("strategy")
     @classmethod
@@ -199,10 +195,16 @@ class DeploymentLockingModel(PlatformBaseModel):
 class DeploymentLayersModel(PlatformBaseModel):
     """Position of this deployment in a hierarchy (v1 ADR-0072).
 
-    **Inert in v2.** `follows` names a path convention from
-    `configuration.spec.paths`, which v2 has not ported (ADR-0003 defers it).
-    Modelled anyway because 10 of 15 real deployments declare it, so dropping
-    it would block migration — but nothing resolves or validates it yet.
+    **Cross-checked in v2** (docs/design/path-conventions.md,
+    `semantic_checks.py`'s `_check_deployment_layers()`): `follows` names a
+    `Configuration.spec.paths` convention (`PathConventionModel`); when both
+    it and `segments` are declared, `segments` is compared against the
+    values captured from this deployment document's own real containing
+    directory (`PathConventionModel.pattern`) — an unknown `follows` name
+    is an error, a disagreeing segment value is a warning/error per that
+    convention's own `enforcement`. Validation only — `segments` is never
+    auto-populated from the real path when absent (no consumer of a
+    derived value exists yet).
     """
 
     follows: PlatformName | None = Field(
@@ -295,9 +297,7 @@ class DeploymentSpecModel(PlatformBaseModel):
         if self.partial or self.extends:
             return self
         missing = [
-            field
-            for field, value in (("workspace", self.workspace), ("environments", self.environments))
-            if not value
+            field for field, value in (("workspace", self.workspace), ("environments", self.environments)) if not value
         ]
         if missing:
             raise ValueError(
