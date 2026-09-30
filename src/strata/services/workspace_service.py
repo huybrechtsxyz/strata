@@ -38,7 +38,7 @@ class WorkspaceService(BaseService[WorkspaceModel]):
     def claimed_document_names(self) -> set[str]:
         """Every dns_zones/networks/firewalls/namespaces name claimed by
         some execution step's own `targets` — the ownership half of
-        `${output:...}` resolution (docs/_gap_v1.md gap #12, generalized to
+        `${output:...}` resolution (docs/design/gap_fit_v1.md gap #12, generalized to
         namespaces so a Module reached through a targeted namespace is
         covered too, not just a directly-targeted DNS/network/firewall
         document — see docs/design/deploy-command.md's "Cross-invocation

@@ -524,7 +524,7 @@ def test_deployment_with_no_resolvable_environment_skips_token_checking(tmp_path
 
 
 # ---------------------------------------------------------------------------
-# docs/_gap_v1.md gap #12, generalized (docs/design/deploy-command.md's
+# docs/design/gap_fit_v1.md gap #12, generalized (docs/design/deploy-command.md's
 # "Cross-invocation output access" section, "Expanded finding"): `strata
 # validate` previously rejected EVERY `${output:...}` token unconditionally,
 # even one a real execution step's `targets` claims — confirmed to affect
@@ -773,7 +773,7 @@ def test_topology_document_itself_is_now_checked_for_tokens(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Environment -> Configuration.spec.security (docs/_gap_v1.md gap #7 —
+# Environment -> Configuration.spec.security (docs/design/gap_fit_v1.md gap #7 —
 # real usage: cfg-int-deployment's config/stores.yaml)
 # ---------------------------------------------------------------------------
 
@@ -825,7 +825,7 @@ def test_security_with_no_fields_set_restricts_nothing(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Configuration.spec.paths (docs/design/path-conventions.md, docs/_gap_v1.md
+# Configuration.spec.paths (docs/design/path-conventions.md, docs/design/gap_fit_v1.md
 # gap #7 — real usage: cfg-int-deployment's config/paths.yaml)
 # ---------------------------------------------------------------------------
 
@@ -1172,7 +1172,7 @@ def test_artifact_reference_to_an_unknown_artifact_is_caught(tmp_path):
 # ---------------------------------------------------------------------------
 # SolutionRemoteModel -> Module/Provisioner SourceModel usages: an OCI
 # remote's `reference` is required only when a real non-chart consumer needs
-# it (docs/_gap_v1.md gap #3).
+# it (docs/design/gap_fit_v1.md gap #3).
 # ---------------------------------------------------------------------------
 
 

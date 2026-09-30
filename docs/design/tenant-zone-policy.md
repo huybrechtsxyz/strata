@@ -6,7 +6,7 @@
   v1-faithful check (Terraform plan-JSON parsing, resource-level location
   extraction) remains deliberately deferred — sized, not built.
 - Date: 2026-09-30
-- Related: [docs/_gap_v1.md](../_gap_v1.md) gap #7 (`policies`/`promotions`
+- Related: [docs/design/gap_fit_v1.md](../design/gap_fit_v1.md) gap #7 (`policies`/`promotions`
   still fully open), [docs/design/path-conventions.md](path-conventions.md)
   (the sibling policy type, `path_convention`, already resolved — same
   "don't port the generic engine, model the one real check directly"
@@ -398,7 +398,7 @@ this subsystem in the files read so far.
 
 ## Changelog
 
-- 2026-09-30: Created — split out from `docs/_gap_v1.md` gap #7's
+- 2026-09-30: Created — split out from `docs/design/gap_fit_v1.md` gap #7's
   `policies` bullet and `docs/design/audit-trail.md` (which this is
   explicitly *not* part of), per direct request ("create a new document
   for this, this is not really part of the audit"). Catalogs v1's real

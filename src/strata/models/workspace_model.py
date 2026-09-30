@@ -272,7 +272,7 @@ class WorkspaceSpecModel(PlatformBaseModel):
         namespaces/dns_zones/networks/firewalls.
 
         DNS/network/firewall names became valid targets 2026-09-28
-        (docs/_gap_v1.md gap #12) — a step names one of these to claim
+        (docs/design/gap_fit_v1.md gap #12) — a step names one of these to claim
         ownership of it for `${output:...}` token resolution at deploy time
         (`deploy_controller.py`), reusing `validate_provisioning_steps()`'s
         existing shared-target ordering rule unchanged. Optional: a

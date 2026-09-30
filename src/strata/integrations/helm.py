@@ -106,7 +106,7 @@ class HelmIntegration(InfraIntegration):
         env: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> Diagnostics:
-        """Deploy every Helm module in `modules` (docs/_gap_v1.md gap #13).
+        """Deploy every Helm module in `modules` (docs/design/gap_fit_v1.md gap #13).
 
         One `helm upgrade` per module — `prepare_namespace()`'s own
         already-written `values.yaml`/`meta.yaml` are this method's real
@@ -364,7 +364,7 @@ def _render_values(module: ModuleModel) -> dict[str, Any]:
 
 def resolve_module_values(module: ModuleModel, values: dict[str, str]) -> tuple[dict[str, Any], dict[str, str]]:
     """Resolve Value tokens in one module's rendered `values.yaml` payload
-    for deploy-time delivery (docs/_gap_v1.md gap #9, docs/design/
+    for deploy-time delivery (docs/design/gap_fit_v1.md gap #9, docs/design/
     value-token-resolution.md's Full Solution Phase 4).
 
     Reuses `_render_values()`'s own build-time payload (still containing
@@ -381,7 +381,7 @@ def resolve_module_values(module: ModuleModel, values: dict[str, str]) -> tuple[
     `values.yaml` back and assembling `helm upgrade`'s actual argv are a
     caller's job, not this function's. That caller doesn't exist yet:
     `deploy_run()`'s step loop has no release/namespace/chart derivation
-    for a Helm module at all (docs/_gap_v1.md gap #13) — this function only
+    for a Helm module at all (docs/design/gap_fit_v1.md gap #13) — this function only
     supplies the resolution primitive gap #9 needs, same reasoning gap #9's
     own design already gave for `helm.py`'s docstring naming `--set-string`
     as the intended mechanism before the path-tracking to make it buildable
@@ -415,7 +415,7 @@ def _render_meta(namespace: NamespaceModel, item: ResolvedModule) -> dict[str, A
     v1's real "self-contained build artifact" reasoning). Omitted for a
     git-based (local chart) `source`, where `item.source_path` itself is
     the chart to deploy. `chartRemote`/`chartRepository` are mutually
-    exclusive on `SourceModel` (docs/_gap_v1.md gap #2's Option 1) — at
+    exclusive on `SourceModel` (docs/design/gap_fit_v1.md gap #2's Option 1) — at
     most one is ever written.
     """
     module = item.module
@@ -439,7 +439,7 @@ def _render_meta(namespace: NamespaceModel, item: ResolvedModule) -> dict[str, A
 
 # ----------------------------------------------------------------------
 # deploy_namespace() helpers — chart reference resolution + --set-string
-# argv assembly (docs/_gap_v1.md gap #13). Ported from v1's real
+# argv assembly (docs/design/gap_fit_v1.md gap #13). Ported from v1's real
 # `helm_deployer.py` (`_sanitize_repo_name()`/`_escape_set_value()`), not
 # redesigned — same evidence-over-assumption reasoning as the argv shapes
 # `plan()`/`deploy()`/`destroy()` already copied verbatim.
@@ -490,7 +490,7 @@ def _chart_ref_from_url(
 ) -> str:
     """Build the real `helm upgrade` chart argument from a resolved registry
     URL — shared by both `chartRemote` (a `SolutionRemoteModel` lookup) and
-    `chartRepository` (an inline URL, docs/_gap_v1.md gap #2's Option 1)
+    `chartRepository` (an inline URL, docs/design/gap_fit_v1.md gap #2's Option 1)
     resolution paths, which differ only in *where* the URL and OCI-ness
     come from, never in what happens once both are known.
 
@@ -523,7 +523,7 @@ def _resolve_chart(
 
     Two mutually exclusive ways a chart-based source names its registry
     (`SourceModel`'s own validator enforces exactly one — see its
-    docstring, docs/_gap_v1.md gap #2):
+    docstring, docs/design/gap_fit_v1.md gap #2):
 
     - `chartRemote`: a name that must resolve to a real, declared
       `SolutionRemoteModel` (looked up by name, never guessed). Its `type`

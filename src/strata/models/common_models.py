@@ -124,7 +124,7 @@ class SourceModel(PlatformBaseModel):
     mirror by editing one declaration. Mirrors Flux's single `sourceRef`,
     which spans Git/OCI/Helm repositories alike.
 
-    **`chart_repository` reintroduced 2026-09-28 (docs/_gap_v1.md gap #2),
+    **`chart_repository` reintroduced 2026-09-28 (docs/design/gap_fit_v1.md gap #2),
     as an *alternative* to `remote`, not a full revert.** Real haven usage
     checked directly: every one of its 6 chart-based modules references a
     distinct registry with zero sharing — the `remote` indirection's whole

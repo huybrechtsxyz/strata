@@ -31,7 +31,7 @@ assumed):
   `build_dns_networks_firewalls_payloads()` below, delivered as
   `TF_VAR_dns`/`TF_VAR_networks` (docs/design/value-token-resolution.md's
   "Full Solution" Phase 2, implemented — not a gap anymore).
-- Until docs/_gap_v1.md gap #17, `_build_providers_payload()` silently
+- Until docs/design/gap_fit_v1.md gap #17, `_build_providers_payload()` silently
   dropped `ProviderSpecModel.configuration`/`.custom` entirely — fixed;
   see that function's own docstring.
 - `required_variables`/`required_features`/`required_secrets` (deferred —
@@ -134,7 +134,7 @@ def _build_providers_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     `ProviderMetaModel`.
 
     `configuration`/`custom` added docs/design/value-token-resolution.md's
-    "Decision (2026-09-29)" fix (docs/_gap_v1.md gap #17) — previously
+    "Decision (2026-09-29)" fix (docs/design/gap_fit_v1.md gap #17) — previously
     silently dropped from every Terraform artifact despite passing `strata
     validate` cleanly (`ProviderSpecModel.configuration`/`.custom` are
     checked by `unresolved_value_tokens()` via `_documents_reachable_from_
@@ -447,7 +447,7 @@ def _build_tenant_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
 
 def build_dns_networks_firewalls_payloads(graph: ResolvedWorkspaceGraph) -> dict[str, dict[str, Any]]:
     """The three Terraform-delivered, Value-token-bearing categories with
-    per-name step ownership (docs/_gap_v1.md gap #12) — `dns`/`networks`/
+    per-name step ownership (docs/design/gap_fit_v1.md gap #12) — `dns`/`networks`/
     `firewalls` — grouped for deploy-time token resolution
     (docs/design/value-token-resolution.md's "Full Solution" Phase 2).
 
@@ -477,7 +477,7 @@ def build_configuration_payloads(graph: ResolvedWorkspaceGraph) -> dict[str, Any
 
     Originally five (`resx_<type>`/`topologies`/`properties`/`custom`/
     `tenant`, docs/design/value-token-resolution.md's "Full Solution"
-    Phase 6, docs/_gap_v1.md gap #8's Terraform-side refinement) — extended
+    Phase 6, docs/design/gap_fit_v1.md gap #8's Terraform-side refinement) — extended
     to all ten by gap #17 (docs/design/value-token-resolution.md's
     "Decision (2026-09-29)": resolution reach must match validation reach,
     no curated subset). The confirmed real gap that motivated the
@@ -591,7 +591,41 @@ _REAL_VARIABLE_NAME: dict[str, str] = {
 # Categories v1 treats as flat, multi-variable bags — no wrapper key at
 # all, each top-level key is its own independent Terraform variable
 # (docs/design/terraform-tfvars-parity.md's three-shape convention).
-_FLAT_CATEGORIES = {"workspace", "flags", "variables", "properties", "custom"}
+# Public — `deploy_controller.py`'s `TF_VAR_<name>` delivery needs the same
+# set to know which categories are several independent variables (one per
+# top-level key) rather than one variable per category.
+FLAT_CATEGORIES = {"workspace", "flags", "variables", "properties", "custom"}
+
+
+def real_variable_name(category: str) -> str:
+    """The real v1 Terraform variable name for a `planned_files()`/
+    `build_configuration_payloads()`/`build_dns_networks_firewalls_payloads()`
+    category — `_REAL_VARIABLE_NAME`'s lookup, identity for everything
+    else (docs/design/terraform-tfvars-parity.md).
+
+    Identity is the correct answer, not a fallback-of-convenience, for two
+    different reasons depending on the category: `topologies`/`namespaces`/
+    `firewalls`/`networks` already use the same word for both their file
+    category and their real variable name (nothing to translate);
+    `FLAT_CATEGORIES` (`workspace`/`flags`/`variables`/`properties`/`custom`)
+    and `resx_<type>` have **no single real variable name at all** to
+    rename to — each is either several independent variables (`workspace`'s
+    six top-level keys, one per real variable) or, for `resx_<type>`,
+    actually named `resources` in every real file regardless of type
+    (confirmed against v1's real `_build_resources_by_category()`), which
+    cannot be delivered as a single env var without colliding across
+    resource types. `deploy_controller.py`'s `TF_VAR_<name>` delivery
+    handles both of those cases itself (`FLAT_CATEGORIES`'s per-key
+    delivery, `resx_<type>`'s merge-into-one-"resources"-variable) rather
+    than through this function, since neither reduces to a single rename.
+
+    Exposed for `deploy_controller.py`'s `TF_VAR_<name>` env var delivery
+    — the same rename `planned_files()` already applies to the on-disk
+    file's content key must also apply to the env var's own *name*, not
+    just its value, for a real Terraform root's `TF_VAR_<declared_variable_name>`
+    override mechanism to actually see it.
+    """
+    return _REAL_VARIABLE_NAME.get(category, category)
 
 
 def planned_files(payload: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
@@ -606,7 +640,7 @@ def planned_files(payload: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
     resource type is Terraform's own natural `for_each` unit, not the
     category grouping as a whole.
 
-    Every category except `_FLAT_CATEGORIES` is wrapped under its real v1
+    Every category except `FLAT_CATEGORIES` is wrapped under its real v1
     Terraform variable name (`_REAL_VARIABLE_NAME`, defaulting to the
     category's own name) before being written — e.g.
     `providers.auto.tfvars.json`'s real content is
@@ -629,9 +663,9 @@ def planned_files(payload: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
             for resource_type, type_payload in data.items():
                 files.append((f"resx_{resource_type}.auto.tfvars.json", type_payload))
             continue
-        if category in _FLAT_CATEGORIES:
+        if category in FLAT_CATEGORIES:
             files.append((f"{category}.auto.tfvars.json", data))
             continue
-        real_variable_name = _REAL_VARIABLE_NAME.get(category, category)
-        files.append((f"{category}.auto.tfvars.json", {real_variable_name: data}))
+        real_name = _REAL_VARIABLE_NAME.get(category, category)
+        files.append((f"{category}.auto.tfvars.json", {real_name: data}))
     return files

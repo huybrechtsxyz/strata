@@ -208,7 +208,7 @@ def test_validate_topology_components_rejects_unregistered_role_without_addition
 
 # ---------------------------------------------------------------------------
 # claimed_document_names() — the ownership half of `${output:...}` resolution
-# (docs/_gap_v1.md gap #12, generalized to namespaces so a Module reached
+# (docs/design/gap_fit_v1.md gap #12, generalized to namespaces so a Module reached
 # through a targeted namespace counts as claimed too, not just directly-
 # targeted DNS/network/firewall documents — docs/design/deploy-command.md's
 # "Cross-invocation output access" section).

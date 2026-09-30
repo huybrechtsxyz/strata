@@ -95,7 +95,7 @@ def test_resource_missing_required_field_is_invalid():
 
 
 def test_resource_missing_default_tags_is_valid():
-    """default_tags is optional (gap #4, docs/_gap_v1.md) — omitting it validates successfully."""
+    """default_tags is optional (gap #4, docs/design/gap_fit_v1.md) — omitting it validates successfully."""
     data = _minimal_resource()
     del data["spec"]["default_tags"]
     model = ResourceModel.model_validate(data)

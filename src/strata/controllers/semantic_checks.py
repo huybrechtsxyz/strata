@@ -378,7 +378,7 @@ def _check_environments(index: DocumentIndex) -> Diagnostics:
     conditionally-meaningful field.
 
     Also enforces `Configuration.spec.security`'s store allow-lists
-    (docs/_gap_v1.md gap #7), when exactly one `Configuration` document
+    (docs/design/gap_fit_v1.md gap #7), when exactly one `Configuration` document
     exists and declares it — same "skip rather than guess a policy that was
     never declared" rule `_check_workspace_topology_components()` already
     uses for `spec.topologies`.
@@ -422,7 +422,7 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
     only version that can't be wrong in either direction.
 
     **Also checks the deployment/tenant/environment/workspace/resource/
-    provider/topology documents themselves** — docs/_gap_v1.md gap #10's
+    provider/topology documents themselves** — docs/design/gap_fit_v1.md gap #10's
     Phase 7 finding: this function used to only check DNS/network/
     firewall/module (`_documents_reachable_from_workspace()`'s original,
     narrower scope), so a `${var:}`/`${secret:}` token in, say,
@@ -506,7 +506,7 @@ def _documents_reachable_from_workspace(
     """Every document a workspace renders or configures — DNS/Network/
     Firewall/Module (rendered artifacts) plus the workspace document itself
     and every Resource/Provider/Topology it references (config passthrough
-    fields: docs/_gap_v1.md gap #10's Phase 7 finding — these were never
+    fields: docs/design/gap_fit_v1.md gap #10's Phase 7 finding — these were never
     checked at all before, a validate-time coverage gap entirely separate
     from gap #9/Phase 6's deploy-time delivery fix).
 
@@ -589,7 +589,7 @@ def _documents_reachable_from_workspace(
 # ---------------------------------------------------------------------------
 # SolutionRemoteModel -> Module/Provisioner SourceModel usages: an OCI
 # remote's `reference` is required only when a real (non-chart) consumer
-# needs it (docs/_gap_v1.md gap #3).
+# needs it (docs/design/gap_fit_v1.md gap #3).
 # ---------------------------------------------------------------------------
 
 
@@ -610,7 +610,7 @@ def _check_remotes(index: DocumentIndex, solution: SolutionModel | None) -> Diag
 
     An OCI remote with `reference` already set, or with zero consumers at
     all, produces no finding either way — an unused remote is a separate,
-    still-unbuilt gap (see docs/_gap_v1.md), not this check's concern.
+    still-unbuilt gap (see docs/design/gap_fit_v1.md), not this check's concern.
     """
     diagnostics = Diagnostics()
     if solution is None:
@@ -683,7 +683,7 @@ def _check_value_references(index: DocumentIndex) -> Diagnostics:
 
 # ---------------------------------------------------------------------------
 # Configuration.spec.paths -> every document's real file location
-# (docs/design/path-conventions.md, docs/_gap_v1.md gap #7)
+# (docs/design/path-conventions.md, docs/design/gap_fit_v1.md gap #7)
 # ---------------------------------------------------------------------------
 
 

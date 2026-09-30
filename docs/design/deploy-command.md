@@ -7,7 +7,7 @@
   deliberately deferred (no real evidence forces them yet); a confirmed
   gap (not just a hypothetical) remains for `store: artifact` at deploy
   time (Remaining Work item 8); Helm/Compose deploy orchestration
-  (`docs/_gap_v1.md` gap #13) is now implemented for both container tools;
+  (`docs/design/gap_fit_v1.md` gap #13) is now implemented for both container tools;
   cross-invocation output access (a later, separate `deploy run` reading
   an earlier one's outputs) is designed but not implemented (new section
   below), including a static `SUPPORTS_OUTPUT` capability flag and two
@@ -128,7 +128,7 @@ while investigating what `deploy run` would need to call:
   `timeouts`, `health_checks`, `scripts`, `secrets`, `namespace`,
   `helm_namespaces`. No `scope` here by design — it lives on
   `ProvisioningStepModel` instead (workspace-owned, not deployment-owned;
-  see the flow below and `docs/_gap_v1.md`'s gap #6 for why).
+  see the flow below and `docs/design/gap_fit_v1.md`'s gap #6 for why).
 - **`ordered_by_depends_on()`** (`build_controller.py`) — topological
   sort over `workspace.spec.execution`, already reused as-is by
   `build_run()`; `deploy run`'s orchestrator needs the identical
@@ -207,11 +207,11 @@ branch, just actually rendering instead of only validating) — not
 designed in detail here since it's a template-rendering mechanism, not
 an orchestration one.
 
-## Helm/Compose orchestration — avoiding tool-type branching (docs/_gap_v1.md gap #13, 2026-09-28)
+## Helm/Compose orchestration — avoiding tool-type branching (docs/design/gap_fit_v1.md gap #13, 2026-09-28)
 
 The pseudocode above is Terraform-shaped (`init`/`validate`/`plan`/`deploy`
 against one root module per step) and is genuinely all that's wired up
-today — `docs/_gap_v1.md` gap #13 found that a Helm/Compose step through
+today — `docs/design/gap_fit_v1.md` gap #13 found that a Helm/Compose step through
 `deploy_run()` would crash (`HelmIntegration.plan()`/`.deploy()` require
 `release`/`namespace`/`chart`, which nothing in `ProvisionerModel` supplies
 and nothing in the loop above passes). This section is the concrete design
@@ -932,7 +932,7 @@ each to the same `unresolved_value_tokens()` call uniformly.
    def claimed_document_names(self) -> set[str]:
        """Every dns_zones/networks/firewalls/namespaces name claimed by
        some execution step's own `targets` — the ownership half of
-       `${output:...}` resolution (docs/_gap_v1.md gap #12, generalized
+       `${output:...}` resolution (docs/design/gap_fit_v1.md gap #12, generalized
        to namespaces so a module inside a targeted namespace is covered
        too, per the 2026-09-29 review finding this also affects Modules).
        """
@@ -1081,11 +1081,11 @@ same way); (1) the `SUPPORTS_OUTPUT` capability flag on `Integration`;
 claiming-aware check; (3) the opportunistic live-re-collection itself in
 `deploy_run()`. (0)-(2) need no new deploy mechanism to exist first and
 are independently useful even
-before (3) is built. `docs/_gap_v1.md` was not updated with a new numbered
+before (3) is built. `docs/design/gap_fit_v1.md` was not updated with a new numbered
 gap for (1)-(3) — a genuine capability *extension* beyond both v1 and v2's
 current design (v1 never solved cross-invocation output access via strata
 either). (0) **is** exactly gap-shaped (a real, confirmed, currently-wrong
-behavior) and should get its own numbered entry in `docs/_gap_v1.md` when
+behavior) and should get its own numbered entry in `docs/design/gap_fit_v1.md` when
 this is implemented, separate from the (1)-(3) extension.
 
 ## Remaining Work / Open Questions
@@ -1671,7 +1671,7 @@ were — small, independently-testable, full check suite after each.
   to `partially-implemented`, reflecting the deliberately-deferred items
   (locking/SIEM/whole-run timeout/advanced `--force` gates/`store:
   artifact`) rather than `implemented`, which would overstate it.
-- 2026-09-28: **Designed Helm/Compose orchestration** (`docs/_gap_v1.md`
+- 2026-09-28: **Designed Helm/Compose orchestration** (`docs/design/gap_fit_v1.md`
   gap #13), per direct request to look at how v1 avoided
   `if tool == "helm"`/`if tool == "terraform"` branching and design v2's
   fix the same way. Read v1's real `deployers/` package directly:

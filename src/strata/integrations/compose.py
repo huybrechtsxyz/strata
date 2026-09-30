@@ -89,7 +89,7 @@ class ComposeIntegration(InfraIntegration):
         matches Helm's own stance (deploy-time substitution, ADR-0023's
         value-substitution table). Rewriting a typed token down to
         Compose's own bare `${KEY}` shape and delivering the value are
-        `deploy_namespace()`'s job (docs/_gap_v1.md gap #13, docs/design/
+        `deploy_namespace()`'s job (docs/design/gap_fit_v1.md gap #13, docs/design/
         value-token-resolution.md Full Solution Phase 5), never `build
         run`'s (`resolved` is accepted for signature symmetry with every
         other `InfraIntegration` rendering method, but unused here for the
@@ -138,7 +138,7 @@ class ComposeIntegration(InfraIntegration):
         **kwargs: Any,
     ) -> Diagnostics:
         """Deploy `namespace`'s merged `docker-compose.yml` as one Swarm stack
-        (docs/_gap_v1.md gap #13).
+        (docs/design/gap_fit_v1.md gap #13).
 
         Unlike Helm (one release per module, `deploy_namespace()` loops over
         `modules`), Compose already merged every module into **one** file at
@@ -254,7 +254,7 @@ class ComposeIntegration(InfraIntegration):
 
 def resolve_compose_values(document: dict[str, Any], values: dict[str, str]) -> tuple[dict[str, Any], dict[str, str]]:
     """Resolve Value tokens in a namespace's already-merged `docker-compose.yml`
-    payload for deploy-time delivery (docs/_gap_v1.md gap #9, docs/design/
+    payload for deploy-time delivery (docs/design/gap_fit_v1.md gap #9, docs/design/
     value-token-resolution.md's Full Solution Phase 5).
 
     Thin wrapper around `resolve_value_tokens_renaming_secrets()`

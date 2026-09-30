@@ -78,7 +78,7 @@ def test_scripts_allows_none():
 
 # ---------------------------------------------------------------------------
 # SourceModel — git-based vs chart-based mode, and chart-based mode's own
-# `remote`/`chart_repository` mutual exclusivity (docs/_gap_v1.md gap #2).
+# `remote`/`chart_repository` mutual exclusivity (docs/design/gap_fit_v1.md gap #2).
 # ---------------------------------------------------------------------------
 
 

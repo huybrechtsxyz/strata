@@ -6,7 +6,7 @@ real ConfigurationModel also covers logging, manifest/output shaping, cost
 and drift tracking, and change tracking. Those are ported only when the
 corresponding v2 kind/feature that needs them is built (see ADR-0003).
 `spec.security`/`spec.paths`/`spec.audit` (below) are exceptions ported
-ahead of a specific consuming feature — real usage (docs/_gap_v1.md gap #7)
+ahead of a specific consuming feature — real usage (docs/design/gap_fit_v1.md gap #7)
 had no equivalent to derive them from elsewhere, unlike `zones` (superseded
 by `TenantSpecModel.geographies` + `ProviderConfigRegionModel.geography`)
 or `integrations`/`remotes` (already their own standalone kind/the solution
@@ -110,7 +110,7 @@ class PathSegmentModel(PlatformBaseModel):
 
 class PathConventionModel(PlatformBaseModel):
     """One directory-family naming convention (docs/design/path-conventions.md,
-    docs/_gap_v1.md gap #7).
+    docs/design/gap_fit_v1.md gap #7).
 
     Ported from v1's real, active `enforce-path-conventions` policy
     (`config/paths.yaml`, cfg-int-deployment) — structural shape only

@@ -265,7 +265,7 @@ class InfraIntegration(Integration):
         **kwargs: Any,
     ) -> Diagnostics:
         """Deploy every module in `modules` — all attached to `namespace`,
-        all sharing one `module.spec.type` (docs/_gap_v1.md gap #13).
+        all sharing one `module.spec.type` (docs/design/gap_fit_v1.md gap #13).
 
         The deploy-time counterpart to `prepare_namespace()`, one level
         later in the pipeline — same split, same not-abstract/raise-by-

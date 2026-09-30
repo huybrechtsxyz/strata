@@ -36,7 +36,7 @@ or `_access_token()`'s separate login endpoint.
 docs/design/store-integration-configuration.md's Phase 2: `config.spec.
 endpoints.address`/`configuration["project_id"]`/`configuration["environment"]`
 are now preferred over the matching env var above when a real `Integration`
-document is bound (docs/_gap_v1.md gap-adjacent — closes the "config
+document is bound (docs/design/gap_fit_v1.md gap-adjacent — closes the "config
 document exists but nothing reads it" finding that design confirmed
 directly). Every env var above still works completely unchanged when no
 document is bound (`config is None`) or a specific field is left unset on

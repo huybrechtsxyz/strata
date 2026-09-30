@@ -21,7 +21,7 @@
   now implemented**: Phase 0 (the `InfraIntegration.__subclasses__()`
   guardrail, preventing the same regression on the *tool* axis) and
   Phase 1 (the actual Terraform-delivery genericization, closing the
-  confirmed Provider gap — `docs/_gap_v1.md` gap #17).
+  confirmed Provider gap — `docs/design/gap_fit_v1.md` gap #17).
   **Phased implementation plan for both this fix and the `value:` kind
   lives in
   [cross-document-value-references.md](cross-document-value-references.md)'s
@@ -219,9 +219,9 @@ against the deployment's resolved environment) is achieved a different way.
 | Deployment  | `DeploymentSpecModel.properties`/`.custom` (Phase 7)                                                          | Done (generic walk)                                                     | Done (Phase 7)                  |
 | Tenant      | `TenantSpecModel.configuration` (Phase 6/7)                                                                   | Done (generic walk)                                                     | Done (Phase 7)                  |
 
-## Decision: unify `docs/_gap_v1.md` gaps #8/#9/#10 into one deploy-time resolver, general-scope, per-integration delivery (2026-09-28)
+## Decision: unify `docs/design/gap_fit_v1.md` gaps #8/#9/#10 into one deploy-time resolver, general-scope, per-integration delivery (2026-09-28)
 
-Triggered by reviewing the `.v2-haven` coverage-check migration (`docs/_gap_v1.md`
+Triggered by reviewing the `.v2-haven` coverage-check migration (`docs/design/gap_fit_v1.md`
 gaps #8-#10): a schema-correct `${secret:KEY}` in `ModuleServiceEnvironmentModel.value`
 still doesn't reach a deployed container today, because the resolver this doc
 already decided to build (2026-09-25, above) was only ever wired up for one
@@ -246,7 +246,7 @@ site exists for the document that owns them.
 
 The walk is one shared step; *where the resolved value ends up* differs per
 integration, because the three tools accept input differently (confirmed
-directly, not assumed — see `docs/_gap_v1.md` gap #9's own investigation):
+directly, not assumed — see `docs/design/gap_fit_v1.md` gap #9's own investigation):
 
 1. **Terraform — `dns`/`networks`/`firewalls` payloads.** `terraform_projection.py`
    already writes these as top-level Terraform variables (JSON, via
@@ -526,7 +526,7 @@ real problems, both now fixed above:
    `unresolved_value_tokens()` using `DnsZoneModel.configuration` (a real
    `dict[str, Any]` passthrough field, no field-level validator). Full
    check suite green (1152 tests). Real impact checked against
-   `.v2-haven`: 44 new errors across 17 module files (`docs/_gap_v1.md`
+   `.v2-haven`: 44 new errors across 17 module files (`docs/design/gap_fit_v1.md`
    gap #8's own "Real impact" note has the full breakdown) — left
    deliberately unfixed pending a dedicated follow-up pass, per explicit
    request, rather than mass-editing 17 real files in the same change.
@@ -574,7 +574,7 @@ real problems, both now fixed above:
    resolution unescapes any `$${...}` in the same pass); `--set-string`
    for secret-shaped leaves from step 3's path map.
    **Status: DONE 2026-09-28.** Scoped down first (checking what this
-   needed to wire into found gap #13, `docs/_gap_v1.md`: no real `helm
+   needed to wire into found gap #13, `docs/design/gap_fit_v1.md`: no real `helm
    upgrade` invocation per module existed in `deploy_run()` at all), then
    completed the same day once gap #13 was designed and implemented.
    `resolve_module_values()` (`helm.py`) applies Phase 3's path-tracking
@@ -749,7 +749,7 @@ real problems, both now fixed above:
    clean, import-linter 1/0, pytest 1221 passed); `.v2-haven` unaffected
    (still the same known 44 errors — zero real document puts a token in
    any of these seven fields today). Full write-up in
-   `docs/_gap_v1.md`'s gap #10.
+   `docs/design/gap_fit_v1.md`'s gap #10.
 
 Each phase is independently shippable and independently testable — 0-1 fix
 the escape/malformed-syntax questions with zero dependency on the rest; 2-5
@@ -758,7 +758,7 @@ simplest/already-proven pattern, Helm/Compose need the new path-tracking
 step first); 6 extends delivery to `configuration`/`custom`; 7 is
 verification, not new code.
 
-## Decision (2026-09-29): resolution reach must match validation reach — no curated per-category allowlist — ~~IMPLEMENTED (2026-09-29, as docs/_gap_v1.md gap #17)~~
+## Decision (2026-09-29): resolution reach must match validation reach — no curated per-category allowlist — ~~IMPLEMENTED (2026-09-29, as docs/design/gap_fit_v1.md gap #17)~~
 
 **Requirement, stated directly (per request): the actual replacement
 mechanism — not just validation — must work anywhere in `root.spec.*`
@@ -886,7 +886,7 @@ names the three covered integrations explicitly. Full check suite green.
 
 ### Status
 
-**Implemented (2026-09-29), as `docs/_gap_v1.md` gap #17.**
+**Implemented (2026-09-29), as `docs/design/gap_fit_v1.md` gap #17.**
 `_build_providers_payload()` (`terraform_projection.py`) now includes
 `configuration`/`custom`; `build_configuration_payloads()` extended from
 its curated 5-category subset to all 10 non-claimable categories
@@ -903,7 +903,7 @@ implementation (`workspace`/`providers` are *unconditionally present*, not
 absent, in every real solution — "no-op" means their values don't change
 under resolution, not that they contribute nothing), lives in
 [cross-document-value-references.md](cross-document-value-references.md)'s
-Implementation Plan (Phase 1) and `docs/_gap_v1.md` gap #17 — not
+Implementation Plan (Phase 1) and `docs/design/gap_fit_v1.md` gap #17 — not
 duplicated here. Full check suite green: mypy (107 files), ruff,
 import-linter (1 kept, 0 broken), pytest (1258 passed).
 
@@ -931,7 +931,7 @@ real, working, live example in the repo's own coverage-check fixture.
 - [ADR-0002](../decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md) — token syntax decision, resolver design, rationale for rejecting `ValueSourceModel`/Jinja
 - [ADR-0005](../decisions/0005-dns-model-design-decisions.md), [ADR-0007](../decisions/0007-network-model-design-decisions.md), [ADR-0008](../decisions/0008-firewall-model-design-decisions.md), [ADR-0009](../decisions/0009-module-model-design-decisions.md) — per-kind adoption
 - [ADR-0006](../decisions/0006-context-shared-stage-runtime-store.md) — Context, the `${step:}` token this doc doesn't cover yet
-- [docs/_gap_v1.md](../_gap_v1.md) gaps #8, #9, #10 — the real-world evidence (`.v2-haven`) that triggered this section
+- [docs/design/gap_fit_v1.md](../design/gap_fit_v1.md) gaps #8, #9, #10 — the real-world evidence (`.v2-haven`) that triggered this section
 
 ## Remaining Work / Open Questions
 
@@ -969,7 +969,7 @@ real, working, live example in the repo's own coverage-check fixture.
 ## Changelog
 
 - 2026-09-28: **Designed (not yet implemented)** the concrete deploy-time
-  resolver closing `docs/_gap_v1.md` gaps #8/#9/#10, triggered by the
+  resolver closing `docs/design/gap_fit_v1.md` gaps #8/#9/#10, triggered by the
   `.v2-haven` coverage-check migration. Key finding:
   `resolve_value_tokens_in_mapping()` is already field-agnostic, so closing
   gap #8 (`configuration`/`custom` dicts) needs new call sites, not a new
@@ -1079,7 +1079,7 @@ real, working, live example in the repo's own coverage-check fixture.
   tests; full check suite green (1152 tests). Did **not** make
   `resolve_value_tokens()` itself escape-aware yet — no real resolution
   call site needs it before Phases 2-5. Checked real impact against
-  `.v2-haven`: 44 new errors across 17 module files (`docs/_gap_v1.md`
+  `.v2-haven`: 44 new errors across 17 module files (`docs/design/gap_fit_v1.md`
   gap #8 has the full breakdown) — left unfixed, per explicit request, as
   its own dedicated follow-up rather than mass-editing 17 real files in
   the same change.
@@ -1110,13 +1110,13 @@ real, working, live example in the repo's own coverage-check fixture.
   `deploy_run()`, and Helm's real granularity (one release per module,
   many modules per namespace-targeting step) structurally doesn't fit the
   current per-step loop shape either. Logged as gap #13
-  (`docs/_gap_v1.md`), separate from gap #9. Built the piece that doesn't
+  (`docs/design/gap_fit_v1.md`), separate from gap #9. Built the piece that doesn't
   depend on it: new `resolve_module_values()` (`helm.py`) — pure,
   disk-free, applies Phase 3's path-tracking to one module's rendered
   `values.yaml`, mirroring `_render_values()`'s own testable convention.
   4 new tests; full check suite green (1169 tests). Compose (Phase 5) is
   blocked on gap #13 the same way — not attempted.
-- 2026-09-28: **Resolved gap #12** (`docs/_gap_v1.md`), per pushback that
+- 2026-09-28: **Resolved gap #12** (`docs/design/gap_fit_v1.md`), per pushback that
   the design's earlier "zero evidence" recommendation there was wrong, and
   a direct question about whether DNS/firewall/network genuinely need
   infra outputs (VM IPs, cluster data). Checked v1's real source (not the
@@ -1133,7 +1133,7 @@ real, working, live example in the repo's own coverage-check fixture.
   own outputs, and raises one clear diagnostic for an unclaimed
   `${output:}` document. 2 new tests; full check suite green (1158
   tests); `.v2-haven` unaffected. Full gap #12 write-up lives in
-  `docs/_gap_v1.md`, not duplicated here.
+  `docs/design/gap_fit_v1.md`, not duplicated here.
 - 2026-09-28: **Implemented Phase 3** (secret path-tracking primitive), per
   request ("design, plan phase 3" then "implement phase 3"). New
   `resolve_value_tokens_tracking_secrets()` (`value_tokens.py`) — a
@@ -1149,7 +1149,7 @@ real, working, live example in the repo's own coverage-check fixture.
   check suite green (1165 tests). No `deploy_controller.py`/`helm.py`
   wiring yet — that's Phase 4, which consumes this primitive's output.
 - 2026-09-28: **Completed Phase 4** (Helm delivery), by implementing gap
-  #13 (`docs/_gap_v1.md`) — the blocker this same day's earlier entry
+  #13 (`docs/design/gap_fit_v1.md`) — the blocker this same day's earlier entry
   scoped Phase 4 down around. `resolve_module_values()` (built earlier
   today) now has a real caller: `HelmIntegration.deploy_namespace()`
   rewrites `values.yaml` for non-secret leaves and delivers secret-shaped
@@ -1293,7 +1293,7 @@ real, working, live example in the repo's own coverage-check fixture.
   change under resolution, not that they contribute nothing. 3 new tests,
   4 existing tests updated for the wider category set. Full check suite
   green: mypy (107 files), ruff, import-linter (1 kept, 0 broken), pytest
-  (1258 passed). Logged as `docs/_gap_v1.md` gap #17 (resolved). Phases
+  (1258 passed). Logged as `docs/design/gap_fit_v1.md` gap #17 (resolved). Phases
   2-6 (the `${value:...}` kind itself) remain unimplemented.
 - 2026-09-29: **Implemented Phase 2** (`${value:...}` syntax recognition),
   per request ("design, plan, and implement phase 2"). Added `"value"` to

@@ -104,7 +104,7 @@ class EnvironmentService(BaseService[EnvironmentModel]):
 
     def validate_allowed_stores(self, security: ConfigurationSecurityModel) -> Diagnostics:
         """Check every variable/secret/feature's `store` against the platform's
-        allow-lists (`docs/_gap_v1.md` gap #7, real usage: cfg-int-deployment's
+        allow-lists (`docs/design/gap_fit_v1.md` gap #7, real usage: cfg-int-deployment's
         `config/stores.yaml`).
 
         Each of `security`'s three fields is independently optional — `None`
@@ -196,7 +196,7 @@ def unresolved_value_tokens(
         owner_name: What to call the source of `declared` in an error message
             (an environment's name, or a description of several merged).
         output_claimed: True when `model` is a document some workspace
-            execution step's own `targets` claims (docs/_gap_v1.md gap #12,
+            execution step's own `targets` claims (docs/design/gap_fit_v1.md gap #12,
             `WorkspaceService.claimed_document_names()`) — an `${output:}`
             token is then accepted instead of rejected outright. Still
             cannot validate the referenced step/key actually exists or ever
@@ -245,7 +245,7 @@ def unresolved_value_tokens(
                 # against here — an output key isn't declared anywhere, it's produced by a
                 # prior deploy step at runtime, which Phase 2 (schema + cross-document
                 # validation, no execution) has no visibility into. Flag it explicitly
-                # rather than crashing on `declared[kind]` (docs/_gap_v1.md gap #11) —
+                # rather than crashing on `declared[kind]` (docs/design/gap_fit_v1.md gap #11) —
                 # unclaimed by any step (or not one of the fields `output_claimed` callers
                 # ever pass True for), `${output:}` remains rejected here, pending Context
                 # (ADR-0006) for the parts of this it still doesn't solve (key validation).

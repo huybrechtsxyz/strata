@@ -415,7 +415,7 @@ def test_prepare_namespace_omits_chart_coordinates_for_local_charts(tmp_path: Pa
 
 
 # ---------------------------------------------------------------------------
-# resolve_module_values() — docs/_gap_v1.md gap #9, Full Solution Phase 4.
+# resolve_module_values() — docs/design/gap_fit_v1.md gap #9, Full Solution Phase 4.
 # Deliberately pure (no disk I/O) — mirrors `_render_values()`'s own
 # testable-without-touching-disk convention. Wiring a real `helm upgrade`
 # invocation per module is gap #13, not this function's job.
@@ -470,7 +470,7 @@ def test_resolve_module_values_does_not_touch_disk():
 
 
 # ---------------------------------------------------------------------------
-# deploy_namespace() — docs/_gap_v1.md gap #13
+# deploy_namespace() — docs/design/gap_fit_v1.md gap #13
 # ---------------------------------------------------------------------------
 
 
@@ -541,7 +541,7 @@ def test_resolve_chart_git_or_local_typed_remote_is_rejected():
 
 
 # ---------------------------------------------------------------------------
-# _resolve_chart()/inline chart_repository — docs/_gap_v1.md gap #2 Option 1.
+# _resolve_chart()/inline chart_repository — docs/design/gap_fit_v1.md gap #2 Option 1.
 # ---------------------------------------------------------------------------
 
 

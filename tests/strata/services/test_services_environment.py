@@ -81,7 +81,7 @@ def test_token_kind_is_checked_against_the_right_store():
 
 
 def test_output_token_is_rejected_cleanly_not_a_crash():
-    """A '${output:}' token has no declared-keys set (gap #11, docs/_gap_v1.md) —
+    """A '${output:}' token has no declared-keys set (gap #11, docs/design/gap_fit_v1.md) —
     must produce a clean diagnostic, not an unhandled KeyError."""
     result = _environment().validate_document_tokens(_dns("${output:provision-hearth.public_ip}"))
     assert not result.ok
@@ -176,7 +176,7 @@ def test_multiple_tokens_in_one_string_are_each_checked():
 # ---------------------------------------------------------------------------
 # Generalized Phase 1 (malformed-syntax) check in configuration/custom
 # passthrough fields — docs/design/value-token-resolution.md's "Full
-# Solution" section, docs/_gap_v1.md gap #8. `DnsZoneModel.configuration`
+# Solution" section, docs/design/gap_fit_v1.md gap #8. `DnsZoneModel.configuration`
 # has no field_validator of its own (dict[str, Any], real .v2-haven shape),
 # unlike DnsRecordModel.value.
 # ---------------------------------------------------------------------------
@@ -323,7 +323,7 @@ def test_no_artifacts_declared_anywhere_still_reports_the_reference():
 
 
 # ---------------------------------------------------------------------------
-# validate_allowed_stores() (docs/_gap_v1.md gap #7 — Configuration's
+# validate_allowed_stores() (docs/design/gap_fit_v1.md gap #7 — Configuration's
 # spec.security allow-lists, real usage: cfg-int-deployment's
 # config/stores.yaml)
 # ---------------------------------------------------------------------------

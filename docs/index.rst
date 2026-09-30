@@ -15,6 +15,7 @@ strata-v2
    :caption: How-To Guides:
 
    how-to/azure-certificates
+   how-to/migrate-v1-workspace-topology-provisioning
 
 .. toctree::
    :maxdepth: 1

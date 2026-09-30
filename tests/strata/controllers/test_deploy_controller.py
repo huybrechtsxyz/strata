@@ -208,7 +208,7 @@ def test_tf_var_env_empty_when_no_values_resolved():
 
 
 def test_tf_var_env_empty_when_prefix_is_none():
-    """docs/_gap_v1.md: a container-capable integration (or any future
+    """docs/design/gap_fit_v1.md: a container-capable integration (or any future
     infra tool with no env-var-prefix mechanism) declares `ENV_VAR_PREFIX
     = None` - this whole mechanism has nothing to deliver for it."""
     resolved = ValueResolution(deployment="app", values={"db_password": "hunter2"})
@@ -272,10 +272,12 @@ def test_deploy_run_injects_tf_var_env_for_every_step(tmp_path: Path, monkeypatc
     assert diagnostics.ok
     assert len(envs) == 5  # init, validate, plan, apply, output
     assert all(env is not None and env.get("TF_VAR_db_password") == "hunter2" for env in envs)
-    # Phase 6 (docs/_gap_v1.md gap #8): resource configuration is now also
-    # delivered, broadcast to every step regardless of ownership. Grouped
-    # by resource_type ("server" here), not category ("compute").
-    assert all(env is not None and "TF_VAR_resx_server" in env for env in envs)
+    # Phase 6 (docs/design/gap_fit_v1.md gap #8): resource configuration is now also
+    # delivered, broadcast to every step regardless of ownership. Every
+    # resx_<type> merges into one TF_VAR_resources (docs/design/
+    # terraform-tfvars-parity.md: every real file is actually named
+    # "resources" regardless of type, not TF_VAR_resx_<type>).
+    assert all(env is not None and "TF_VAR_resources" in env for env in envs)
 
 
 def test_deploy_run_stops_on_plan_failure(tmp_path: Path, monkeypatch):
@@ -379,10 +381,12 @@ def test_deploy_run_resolves_backend_configuration_tokens(tmp_path: Path):
 
 
 def test_deploy_run_resolves_dns_networks_firewalls_tokens_via_tf_var(tmp_path: Path):
-    """docs/_gap_v1.md gap #9 / value-token-resolution.md Full Solution Phase 2:
+    """docs/design/gap_fit_v1.md gap #9 / value-token-resolution.md Full Solution Phase 2:
     a '${var:KEY}' inside a DNS record's value (or a network/firewall field)
-    is delivered as a whole resolved JSON payload via TF_VAR_dns/networks/
-    firewalls — never rewritten into the on-disk .auto.tfvars.json."""
+    is delivered as a whole resolved JSON payload via TF_VAR_dns_zones/networks/
+    firewalls (docs/design/terraform-tfvars-parity.md: `dns`'s real v1
+    Terraform variable name is `dns_zones`, not the file-category name)
+    — never rewritten into the on-disk .auto.tfvars.json."""
     root = _solution(tmp_path)
     _write(root, "infra/main.tf", "# root module\n")
     _write(
@@ -447,8 +451,8 @@ def test_deploy_run_resolves_dns_networks_firewalls_tokens_via_tf_var(tmp_path: 
 
     assert diagnostics.ok
     init_env = next(env for env in envs if env is not None)
-    assert "TF_VAR_dns" in init_env
-    dns_payload = json.loads(init_env["TF_VAR_dns"])
+    assert "TF_VAR_dns_zones" in init_env
+    dns_payload = json.loads(init_env["TF_VAR_dns_zones"])
     record_value = dns_payload["public-dns"]["zones"]["example.com"]["records"][0]["value"]
     assert record_value == "1.2.3.4"
     # On-disk build artifact stays literal/unresolved — never rewritten.
@@ -462,10 +466,13 @@ def test_deploy_run_resolves_dns_networks_firewalls_tokens_via_tf_var(tmp_path: 
 
 
 def test_deploy_run_resolves_configuration_payloads_tokens_via_tf_var(tmp_path: Path):
-    """docs/_gap_v1.md gap #8 (Terraform-side refinement) / value-token-
+    """docs/design/gap_fit_v1.md gap #8 (Terraform-side refinement) / value-token-
     resolution.md Full Solution Phase 6: a '${var:KEY}' inside a resource's
-    'configuration' is delivered via TF_VAR_resx_<type> — broadcast to
-    every step, never rewritten into the on-disk .auto.tfvars.json."""
+    'configuration' is delivered via TF_VAR_resources (docs/design/
+    terraform-tfvars-parity.md: every resx_<type> merges into the one real
+    "resources" Terraform variable, not a separate TF_VAR_resx_<type> per
+    type) — broadcast to every step, never rewritten into the on-disk
+    .auto.tfvars.json."""
     root = _solution(tmp_path)
     _write(root, "infra/main.tf", "# root module\n")
     _write(
@@ -522,21 +529,221 @@ def test_deploy_run_resolves_configuration_payloads_tokens_via_tf_var(tmp_path: 
 
     assert diagnostics.ok
     init_env = next(env for env in envs if env is not None)
-    assert "TF_VAR_resx_server" in init_env
-    resx_payload = json.loads(init_env["TF_VAR_resx_server"])
-    assert resx_payload["resources"]["r1"]["configuration"]["admin_password"] == "hunter2"
+    assert "TF_VAR_resources" in init_env
+    resources_payload = json.loads(init_env["TF_VAR_resources"])
+    assert resources_payload["r1"]["configuration"]["admin_password"] == "hunter2"
     # On-disk build artifact stays literal/unresolved — never rewritten.
     on_disk = json.loads((build_path / "infra" / "resx_server.auto.tfvars.json").read_text())
     assert on_disk["resources"]["r1"]["configuration"]["admin_password"] == "${secret:vm_admin_password}"
 
 
+def test_deploy_run_merges_multiple_resx_types_into_one_tf_var_resources(tmp_path: Path):
+    """docs/design/terraform-tfvars-parity.md: every resx_<type> is really
+    the same "resources" Terraform variable regardless of type (confirmed
+    against v1's real `_build_resources_by_category()`) — two active
+    resource types must merge into one TF_VAR_resources, not clobber one
+    another under the same env var name."""
+    root = _solution(tmp_path)
+    _write(root, "infra/main.tf", "# root module\n")
+    _write(
+        root,
+        "provider.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
+        "  properties:\n    type: local\n    region: local\n",
+    )
+    _write(
+        root,
+        "resource.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
+        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  default_tags:\n    managed-by: strata\n",
+    )
+    _write(
+        root,
+        "resource2.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r2\nspec:\n"
+        "  properties:\n    provider_type: local\n    resource_type: storage\n    category: storage\n"
+        "  default_tags:\n    managed-by: strata\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n        - r2\n"
+        "  resources:\n    - name: r1\n      resource: r1\n    - name: r2\n      resource: r2\n",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec: {}\n",
+    )
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        "  workspace: main\n  environments:\n    - prd\n",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    envs: list[dict[str, str] | None] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        envs.append(env)
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+        monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+        diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    init_env = next(env for env in envs if env is not None)
+    assert "TF_VAR_resx_server" not in init_env
+    assert "TF_VAR_resx_storage" not in init_env
+    resources_payload = json.loads(init_env["TF_VAR_resources"])
+    assert set(resources_payload) == {"r1", "r2"}
+    assert resources_payload["r1"]["resource_type"] == "server"
+    assert resources_payload["r2"]["resource_type"] == "storage"
+
+
+def test_deploy_run_delivers_flat_categories_as_one_env_var_per_key(tmp_path: Path):
+    """docs/design/terraform-tfvars-parity.md: `flags`/`variables` (and
+    `workspace`/`properties`/`custom`) are flat, multi-variable categories
+    — each top-level key is its own independent real Terraform variable,
+    delivered as its own TF_VAR_<key>, never a single TF_VAR_flags/
+    TF_VAR_variables blob."""
+    root = _solution(tmp_path)
+    _write(root, "infra/main.tf", "# root module\n")
+    _write(
+        root,
+        "provider.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
+        "  properties:\n    type: local\n    region: local\n",
+    )
+    _write(
+        root,
+        "resource.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
+        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  default_tags:\n    managed-by: strata\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  features:\n    - key: NEW_UI\n      store: constant\n      value: true\n"
+        "  variables:\n    - key: REGION\n      store: constant\n      value: westeurope\n",
+    )
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        "  workspace: main\n  environments:\n    - prd\n",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    envs: list[dict[str, str] | None] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        envs.append(env)
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+        monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+        diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    init_env = next(env for env in envs if env is not None)
+    # Per-key delivery, not a category blob.
+    assert "TF_VAR_flags" not in init_env
+    assert "TF_VAR_variables" not in init_env
+    assert json.loads(init_env["TF_VAR_NEW_UI"]) is True
+    assert json.loads(init_env["TF_VAR_REGION"]) == "westeurope"
+    # workspace's own fixed keys are delivered the same way.
+    assert json.loads(init_env["TF_VAR_workspace_name"]) == "main"
+    assert "TF_VAR_workspace" not in init_env
+
+
+def test_deploy_run_rejects_flat_category_key_collision(tmp_path: Path):
+    """docs/design/terraform-tfvars-parity.md: two flat categories
+    declaring the same top-level key would silently collide as the same
+    env var with no ordering guarantee — caught as a hard error instead.
+    Here a user-declared variable happens to be named the same as one of
+    `workspace`'s own fixed keys."""
+    root = _solution(tmp_path)
+    _write(root, "infra/main.tf", "# root module\n")
+    _write(
+        root,
+        "provider.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
+        "  properties:\n    type: local\n    region: local\n",
+    )
+    _write(
+        root,
+        "resource.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
+        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  default_tags:\n    managed-by: strata\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  variables:\n    - key: workspace_name\n      store: constant\n      value: collides\n",
+    )
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        "  workspace: main\n  environments:\n    - prd\n",
+    )
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert not diagnostics.ok
+    assert any("workspace_name" in message for message in diagnostics.messages())
+
+
 def test_deploy_run_resolves_provider_configuration_tokens_via_tf_var(tmp_path: Path):
-    """docs/_gap_v1.md gap #17 / value-token-resolution.md's "Decision
+    """docs/design/gap_fit_v1.md gap #17 / value-token-resolution.md's "Decision
     (2026-09-29)": a '${var:}'/'${secret:}' token inside a Provider's
     'configuration'/'custom' used to pass 'strata validate' cleanly but
     was never projected into any Terraform artifact at all — silently
     dropped, not even delivered unresolved. Now delivered via
-    TF_VAR_providers, same broadcast mechanism as resx_<type>/topologies/
+    TF_VAR_platform_providers (the real v1 Terraform variable name,
+    docs/design/terraform-tfvars-parity.md — not TF_VAR_providers, the
+    file-category name), same broadcast mechanism as resx_<type>/topologies/
     properties/custom/tenant already had."""
     root = _solution(tmp_path)
     _write(root, "infra/main.tf", "# root module\n")
@@ -596,8 +803,8 @@ def test_deploy_run_resolves_provider_configuration_tokens_via_tf_var(tmp_path: 
 
     assert diagnostics.ok
     init_env = next(env for env in envs if env is not None)
-    assert "TF_VAR_providers" in init_env
-    providers_payload = json.loads(init_env["TF_VAR_providers"])
+    assert "TF_VAR_platform_providers" in init_env
+    providers_payload = json.loads(init_env["TF_VAR_platform_providers"])
     assert providers_payload["p1"]["configuration"]["partner_id"] == "ACME123"
     assert providers_payload["p1"]["custom"]["cost_center"] == "platform"
     # On-disk build artifact stays literal/unresolved — never rewritten.
@@ -609,7 +816,7 @@ def test_deploy_run_resolves_provider_configuration_tokens_via_tf_var(tmp_path: 
 
 
 def test_deploy_run_rejects_output_token_in_configuration_payloads(tmp_path: Path):
-    """docs/_gap_v1.md gap #8: '${output:...}' has no ownership mechanism
+    """docs/design/gap_fit_v1.md gap #8: '${output:...}' has no ownership mechanism
     for resx_<type>/topologies/properties/custom/tenant (broadcast-only,
     unlike dns/networks/firewalls) — rejected outright, not silently
     ignored or left unresolved."""
@@ -659,7 +866,7 @@ def test_deploy_run_rejects_output_token_in_configuration_payloads(tmp_path: Pat
 
 
 def test_deploy_run_resolves_output_token_in_dns_via_owning_step_targets(tmp_path: Path):
-    """docs/_gap_v1.md gap #12: a DNS document claimed by a step's `targets`
+    """docs/design/gap_fit_v1.md gap #12: a DNS document claimed by a step's `targets`
     resolves '${output:...}' using THAT step's own dependency-scoped
     outputs — the worked example from the design discussion (a VM's public
     IP, produced by 'provision-hearth', consumed by 'apply-dns')."""
@@ -739,16 +946,16 @@ def test_deploy_run_resolves_output_token_in_dns_via_owning_step_targets(tmp_pat
     assert diagnostics.ok, diagnostics.messages()
     hearth_envs = [e for e in envs_by_step["provision-hearth"] if e is not None]
     dns_envs = [e for e in envs_by_step["apply-dns"] if e is not None]
-    # provision-hearth doesn't target public-dns — never sees TF_VAR_dns.
-    assert all("TF_VAR_dns" not in e for e in hearth_envs)
+    # provision-hearth doesn't target public-dns — never sees TF_VAR_dns_zones.
+    assert all("TF_VAR_dns_zones" not in e for e in hearth_envs)
     # apply-dns targets public-dns — sees the real, resolved output value.
-    dns_payload = json.loads(dns_envs[0]["TF_VAR_dns"])
+    dns_payload = json.loads(dns_envs[0]["TF_VAR_dns_zones"])
     record_value = dns_payload["public-dns"]["zones"]["example.com"]["records"][0]["value"]
     assert record_value == "20.1.2.3"
 
 
 def test_deploy_run_rejects_unclaimed_output_token_in_dns(tmp_path: Path):
-    """docs/_gap_v1.md gap #12: a DNS document using '${output:...}' with no
+    """docs/design/gap_fit_v1.md gap #12: a DNS document using '${output:...}' with no
     step naming it in `targets` is a clear, single diagnostic error — not a
     per-step crash or silently inconsistent resolution."""
     root = _solution(tmp_path)
@@ -1087,7 +1294,7 @@ def test_deploy_run_reports_a_template_render_failure(tmp_path: Path, _capture):
 
 
 # ---------------------------------------------------------------------------
-# Helm/Compose namespace dispatch (docs/_gap_v1.md gap #13,
+# Helm/Compose namespace dispatch (docs/design/gap_fit_v1.md gap #13,
 # docs/design/deploy-command.md) - a "container"-capable step deploys the
 # namespace(s) its own `targets` names directly, bypassing Terraform's
 # init/validate/plan/apply sequence entirely.
@@ -1211,7 +1418,7 @@ def test_deploy_run_container_step_with_no_matching_namespace_target_errors(tmp_
 def _compose_solution(tmp_path: Path) -> Path:
     """Same shape as `_helm_solution()`, but `tool: compose` - proves the
     orchestrator's container-capability branch is genuinely tool-agnostic
-    (docs/_gap_v1.md gap #13), not accidentally Helm-specific."""
+    (docs/design/gap_fit_v1.md gap #13), not accidentally Helm-specific."""
     root = _terraform_solution(tmp_path)
     _write(root, "services/portainer/.keep", "")
     _write(
@@ -1276,7 +1483,7 @@ def test_deploy_run_dispatches_compose_step_to_deploy_namespace(tmp_path: Path, 
 
 
 def test_deploy_run_does_not_leak_tf_var_env_into_container_capable_steps(tmp_path: Path):
-    """docs/_gap_v1.md: Helm/Compose declare no `ENV_VAR_PREFIX` (base
+    """docs/design/gap_fit_v1.md: Helm/Compose declare no `ENV_VAR_PREFIX` (base
     default `None`) - `tf_var_env()` now returns `{}` for them, so a
     container-capable step's own subprocess never receives TF_VAR_-
     prefixed secrets meant for Terraform."""

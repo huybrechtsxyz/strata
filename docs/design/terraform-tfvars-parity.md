@@ -5,7 +5,7 @@
   doc). The category-by-category catalog above the fold is kept as-is,
   unmodified, as the evidence record the fix was built from.
 - Date: 2026-09-30 (catalog), 2026-09-30 (fix)
-- Related: [docs/_gap_v1.md](../_gap_v1.md) gap #15 (Terraform
+- Related: [docs/design/gap_fit_v1.md](../design/gap_fit_v1.md) gap #15 (Terraform
   `variables.tf` input validation — a related but distinct gap: that one
   is about *checking* declared inputs against a module's real
   `variables.tf`; this one is about whether v2 even *produces* the
@@ -162,22 +162,16 @@ Resolution" below for exactly what shipped.
    (`provider.properties.version`), v2 has no equivalent at all. Not
    restored (see above) — would need a new, currently-unjustified model
    field if real usage ever surfaces.
-2. **Deploy-time `TF_VAR_<name>` env var naming does not use the same
-   real-variable-name mapping the on-disk file now does.**
-   `deploy_controller.py`'s `build_configuration_payloads()` delivery
-   still sets `TF_VAR_providers`/`TF_VAR_tenant`/`TF_VAR_dns` (the
-   *category* name), not `TF_VAR_platform_providers`/
-   `TF_VAR_strata_tenant`/`TF_VAR_dns_zones` (the *real Terraform
-   variable* name) — a real root module reading `TF_VAR_<declared_name>`
-   overrides would not see these env vars at all today. This is a
-   v2-only mechanism with no v1 equivalent to compare against (v1 has no
-   deploy-time re-resolution/env-var-override concept at all — everything
-   is resolved once at build time), so it was deliberately left out of
-   this fix's scope (which targeted build-time *file* parity with v1).
-   Fixing it also raises its own question this doc doesn't answer: what
-   is the "real variable name" for `workspace`/`flags`/`variables` (v1's
-   flat, multi-variable categories, where there is no single variable to
-   name at all)? Needs its own design pass, not a one-line follow-on.
+2. ~~Deploy-time `TF_VAR_<name>` env var naming does not use the same
+   real-variable-name mapping the on-disk file now does.~~ **Fully
+   resolved** (see "Fix Design and Resolution — deploy-time env var
+   naming" below, both passes): `providers`/`dns`/`tenant` deliver as
+   `TF_VAR_platform_providers`/`TF_VAR_dns_zones`/`TF_VAR_strata_tenant`
+   (first pass); `workspace`/`flags`/`variables`/`properties`/`custom`
+   each deliver one `TF_VAR_<key>` per top-level key instead of one blob
+   per category, with a hard collision-detection error if two flat
+   categories ever declare the same key; every `resx_<type>` merges into
+   one `TF_VAR_resources` instead of colliding per type (second pass).
 
 ## Related Decisions
 
@@ -187,14 +181,14 @@ part of this workspace, read in full this pass) and
 `e:\sources\cfg-int-deployment`'s real, committed build output (also
 external).
 
-## Fix Design and Resolution
+## Fix Design and Resolution — build-time file wrapping
 
 Scope: build-time **file** parity only (`planned_files()`'s output) —
 matches this doc's own empirical method (comparing real committed
 `*.auto.tfvars.json` files). Deploy-time `TF_VAR_<name>` env var delivery
 (`build_configuration_payloads()`/`deploy_controller.py`) was
-deliberately left untouched — see "Newly opened by the fix itself" #2
-above.
+deliberately left untouched in this first pass — see the follow-on fix
+below.
 
 **Design, in order of how much surface it touches:**
 
@@ -238,6 +232,72 @@ above.
 - `src/strata/integrations/terraform_projection.py` — `_build_workspace_payload()` rewritten; `_build_providers_payload()` extended; `planned_files()` gained `_REAL_VARIABLE_NAME`/`_FLAT_CATEGORIES` and now wraps non-flat categories at file-write time; `_build_tenant_payload()`'s docstring corrected (it previously claimed "no fixture data exists" for v1's tenant shape — this doc's own evidence resolves that).
 - Tests updated in `tests/strata/integrations/test_integrations_terraform_projection.py` (new/updated assertions for the workspace/providers field sets and the wrapper-key behavior) and the three on-disk-file assertions in `tests/strata/controllers/test_build_controller.py`/`test_deploy_controller.py` that read a `.auto.tfvars.json` file's content directly.
 - Full check suite green: mypy (121 files), ruff, import-linter, pytest (1642 passed, only the pre-existing, unrelated `test_shipped_example_solution_loads_cleanly` failure remains — confirmed present before this change too).
+
+## Fix Design and Resolution — deploy-time env var naming (2026-09-30, follow-on, two passes)
+
+**Pass 1 — rename the categories with one real variable name.** Reused
+the exact same `_REAL_VARIABLE_NAME` knowledge the build-time file fix
+above already established, applied a second time to a second,
+independent call site.
+
+**Design:** added a public `real_variable_name(category: str) -> str` to
+`terraform_projection.py` — `_REAL_VARIABLE_NAME.get(category, category)`,
+exposed so `deploy_controller.py` can reuse it (identity for every
+category with no single rename target: `FLAT_CATEGORIES` and
+`resx_<type>`, handled separately in pass 2 below). Wired into both of
+`deploy_controller.py`'s delivery loops:
+`build_dns_networks_firewalls_payloads()`'s per-step-claimed categories
+(`dns` → `TF_VAR_dns_zones`; `networks`/`firewalls` unchanged, already
+identity) and `build_configuration_payloads()`'s ten broadcast categories
+(`providers` → `TF_VAR_platform_providers`, `tenant` →
+`TF_VAR_strata_tenant`; everything else unchanged).
+
+**Implementation:**
+- `src/strata/integrations/terraform_projection.py` — new `real_variable_name()` function.
+- `src/strata/controllers/deploy_controller.py` — both `env[f"{integration.ENV_VAR_PREFIX}{category}"]`/`{name}` sites now key through `real_variable_name(category)`/`real_variable_name(name)` instead of the bare category/file name.
+- Tests updated in `tests/strata/controllers/test_deploy_controller.py` (`TF_VAR_dns` → `TF_VAR_dns_zones`, `TF_VAR_providers` → `TF_VAR_platform_providers`, across all three affected tests).
+
+**Pass 2 — the two categories pass 1 deliberately left alone**, per
+direct request ("lets look into... the tfvars parity leftover item...
+before the variables.tf validation"):
+
+**Design:**
+1. **`FLAT_CATEGORIES`** (`workspace`/`flags`/`variables`/`properties`/
+   `custom`): each top-level key is its own independent real Terraform
+   variable (not one variable per category) — delivered as one
+   `TF_VAR_<key>` per key instead of one `TF_VAR_<category>` blob.
+   `FLAT_CATEGORIES` was promoted from a private `_FLAT_CATEGORIES` to a
+   public constant in `terraform_projection.py` so `deploy_controller.py`
+   can reuse the exact same set the build-time file fix already
+   established, rather than a second, possibly-drifting definition.
+2. **Collision detection**: an env var, unlike a separate on-disk
+   `*.auto.tfvars.json` file, can only hold one value per name — if two
+   flat categories (or `resx_<type>`'s merge, see below) ever declare the
+   same top-level key, the second one would silently overwrite the first
+   in the `env` dict before Terraform ever runs, with no ordering
+   guarantee at all (unlike the file case, at least loaded in a
+   deterministic order). Computed once, step-invariant, right alongside
+   the existing pre-flight `${output:...}` checks — a real hard error
+   (`diagnostics.error`), not a silent overwrite.
+3. **`resx_<type>`**: every real file is actually named `resources`
+   regardless of type (confirmed against v1's real
+   `_build_resources_by_category()`) — delivering each type as its own
+   `TF_VAR_resx_<type>` would be a made-up variable name no real root
+   declares, and delivering all types as separate `TF_VAR_resources`
+   assignments would have the last type silently clobber every earlier
+   one. Fixed by merging every active type's `resources` sub-dict into
+   one combined dict, delivered once as a single `TF_VAR_resources`.
+
+**Implementation:**
+- `src/strata/integrations/terraform_projection.py` — `_FLAT_CATEGORIES` renamed to public `FLAT_CATEGORIES`; `planned_files()`'s local variable renamed from `real_variable_name` to `real_name` (was shadowing the module-level function of the same name).
+- `src/strata/controllers/deploy_controller.py` — new step-invariant pre-loop block (`flat_key_owner`/`merged_resources`) computing collisions and the merged resources dict once; the per-step delivery loop now skips `FLAT_CATEGORIES`/`resx_<type>` in its generic `real_variable_name()` pass and delivers them via two dedicated blocks instead (per-key `TF_VAR_<key>` for flat categories, one merged `TF_VAR_resources`).
+- Tests: two existing assertions updated (`TF_VAR_resx_server` → `TF_VAR_resources`, unwrapped shape) in `tests/strata/controllers/test_deploy_controller.py`; three new tests added — `test_deploy_run_merges_multiple_resx_types_into_one_tf_var_resources`, `test_deploy_run_delivers_flat_categories_as_one_env_var_per_key`, `test_deploy_run_rejects_flat_category_key_collision`.
+- Full check suite green: mypy (121 files), ruff, import-linter, pytest (1645 passed, same one pre-existing unrelated failure as every prior run this doc records).
+
+This closes out every category identified in this doc's own "Newly
+opened by the fix itself" #2 — deploy-time `TF_VAR_<name>` delivery now
+matches the real Terraform variable name (or shape) for all thirteen
+categories, not just the eight the build-time file fix covered.
 
 ## Changelog
 
@@ -284,3 +344,40 @@ above.
   have no single "real variable name" to map to at all). Full check
   suite green (mypy 121 files, ruff, import-linter, pytest 1642 passed,
   same one pre-existing unrelated failure as before this change).
+- 2026-09-30: **Fixed the deploy-time env var naming leftover**, per
+  direct request ("lets look at the tfvars parity leftover item"),
+  scoped to exactly the categories that have one real Terraform variable
+  name (`providers`/`dns`/`tenant`) — reused the build-time fix's own
+  `_REAL_VARIABLE_NAME` lookup via a new public `real_variable_name()`,
+  wired into both of `deploy_controller.py`'s `TF_VAR_<name>` delivery
+  loops. `workspace`/`flags`/`variables`/`properties`/`custom` (no single
+  real variable name each) and `resx_<type>` (every real file is
+  actually named `resources` regardless of type — a single env var per
+  type would collide if more than one type is active in one step) remain
+  deliberately out of scope, now precisely identified as needing a
+  materially different delivery shape, not a rename. Full check suite
+  green (mypy 121 files, ruff, import-linter, pytest 1642 passed, same
+  one pre-existing unrelated failure).
+- 2026-09-30: **Closed the remaining deploy-time env var naming gap**,
+  per direct request ("lets look into... the tfvars parity leftover
+  item... before the variables.tf validation"). `FLAT_CATEGORIES`
+  (`workspace`/`flags`/`variables`/`properties`/`custom`) promoted from
+  private to public in `terraform_projection.py`, now delivers one
+  `TF_VAR_<key>` per top-level key instead of one blob per category —
+  with a new hard collision-detection error (computed once,
+  step-invariant) if two flat categories ever declare the same key,
+  since an env var, unlike a separate on-disk file, can only hold one
+  value per name with no ordering guarantee. `resx_<type>` now merges
+  every active resource type's `resources` sub-dict into one combined
+  dict, delivered once as `TF_VAR_resources` (the one real Terraform
+  variable name every real file actually uses, confirmed against v1's
+  `_build_resources_by_category()`) instead of a made-up
+  `TF_VAR_resx_<type>` per type that would silently clobber across
+  types. Two existing tests updated, three new tests added covering the
+  merge, the per-key delivery, and the collision error. This closes out
+  every category this doc's "Newly opened by the fix itself" #2
+  flagged — deploy-time `TF_VAR_<name>` delivery now matches v1's real
+  Terraform variable contract for all thirteen categories, not just the
+  eight the first deploy-time pass covered. Full check suite green
+  (mypy 121 files, ruff, import-linter, pytest 1645 passed, same one
+  pre-existing unrelated failure).

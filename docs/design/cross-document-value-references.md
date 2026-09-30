@@ -20,7 +20,7 @@
 
 ## Problem — real, concrete duplication found in `.v2-cfg`
 
-Building `.v2-cfg` (docs/_gap_v1.md's coverage-check fixture) surfaced a
+Building `.v2-cfg` (docs/design/gap_fit_v1.md's coverage-check fixture) surfaced a
 real authoring problem: the literal string `c0062` appears independently,
 by hand, in two separate documents that both already agree it's the same
 tenant:
@@ -56,7 +56,7 @@ in here instead of retyping it."
 ## Proposed syntax
 
 A 5th Value-token kind, alongside the existing `var`/`secret`/`feature`/
-`output` (docs/_gap_v1.md gap #11, [value-token-resolution.md](value-token-resolution.md)):
+`output` (docs/design/gap_fit_v1.md gap #11, [value-token-resolution.md](value-token-resolution.md)):
 
 ```
 ${value:kind.name.path.to.field}
@@ -287,7 +287,7 @@ Organized by how much changes, smallest first.
   extra dots a `kind.name.path` key needs; no regex redesign.
 - **`environment_service.py`'s `unresolved_value_tokens()`**: add a
   `kind == "value"` early branch that skips the Environment-declared-keys
-  path entirely (mirrors the `output_claimed` precedent, docs/_gap_v1.md
+  path entirely (mirrors the `output_claimed` precedent, docs/design/gap_fit_v1.md
   gap #16) — `value:` existence is a `DocumentIndex` lookup, not an
   Environment concern, so this function should not judge it at all;
   validation moves to a dedicated new check instead (below).
@@ -325,7 +325,7 @@ Organized by how much changes, smallest first.
   per-kind" — since this kind isn't scoped to specific model fields the
   way `DnsRecordModel.value`/`SubnetModel.cidr` are; it's valid in any
   string field any other kind already walks generically).
-- `docs/_gap_v1.md` — **not** a gap entry (this is a net-new feature no
+- `docs/design/gap_fit_v1.md` — **not** a gap entry (this is a net-new feature no
   version of v1 ever had — v1's real `ValueSourceModel` discriminated
   union predates even the `var`/`secret`/`feature` design this extends,
   per [ADR-0002](../decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md)).
@@ -444,7 +444,7 @@ gratuitous rename.
   `providers` are unconditionally present in every fixture). Full check
   suite green: mypy (107 files), ruff, import-linter (1 kept, 0 broken),
   pytest (1258 passed).
-- **Docs**: logged as `docs/_gap_v1.md` gap #17 (resolved); `.v2-haven`'s
+- **Docs**: logged as `docs/design/gap_fit_v1.md` gap #17 (resolved); `.v2-haven`'s
   real `hetzner-eu-de.yaml` provider document cited directly as the
   concrete evidence, not just a hypothetical.
 
@@ -472,7 +472,7 @@ Original design (for reference — see deviation note above):
   nothing to deliver, since none carry a token-bearing field); every
   existing dns/networks/firewalls/properties/custom/tenant/topologies/
   resx_`<type>` test must keep passing unchanged.
-- **Docs**: log this as a new numbered gap in `docs/_gap_v1.md` once
+- **Docs**: log this as a new numbered gap in `docs/design/gap_fit_v1.md` once
   implemented (per the design's own earlier note — flagged, not logged,
   until now); update the Per-Kind Status table's `Provider` row.
 
@@ -748,7 +748,7 @@ staleness:
   `tenants/c0062.yaml`'s own `meta.name`. Migrated the `properties`
   occurrence to `${value:tenant.c0062.meta.name}` — a real, working
   target, since `properties` is one of the ten broadcast-delivered
-  categories `docs/_gap_v1.md` gap #17 (Phase 1) already made resolve
+  categories `docs/design/gap_fit_v1.md` gap #17 (Phase 1) already made resolve
   correctly at deploy time. Left the `variables[].value` occurrence as a
   literal, with an explanatory comment, per the limitation found above —
   substituting it would have silently broken, not fixed, that field.
@@ -858,7 +858,7 @@ Original Phase 6 bullet list (for reference — all done):
   change under resolution, not that they contribute nothing. 3 new tests,
   4 existing tests updated for the wider category set. Full check suite
   green: mypy (107 files), ruff, import-linter (1 kept, 0 broken), pytest
-  (1258 passed). Logged as `docs/_gap_v1.md` gap #17 (resolved).
+  (1258 passed). Logged as `docs/design/gap_fit_v1.md` gap #17 (resolved).
 - 2026-09-29: **Implemented Phase 2** (`${value:...}` syntax recognition),
   per request ("design, plan, and implement phase 2"). Implemented exactly
   as designed, zero deviations: added `"value"` to `VALUE_TOKEN_KINDS` and

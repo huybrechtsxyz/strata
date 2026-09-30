@@ -104,7 +104,7 @@
   has no env-var substitution at all); extended to every `configuration`/
   `custom`/`properties` passthrough field on every kind, not just the
   four originally schema-validated ones; and `strata validate`'s own
-  cross-check extended to match. `docs/_gap_v1.md` gaps #1/#8/#9/#10/#12/#13
+  cross-check extended to match. `docs/design/gap_fit_v1.md` gaps #1/#8/#9/#10/#12/#13
   are all now closed as a consequence.
 
 ## Context and Problem Statement

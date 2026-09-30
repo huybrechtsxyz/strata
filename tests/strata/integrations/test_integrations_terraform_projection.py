@@ -304,7 +304,7 @@ def test_providers_category_includes_description_labels_and_tags():
 
 
 def test_providers_category_includes_configuration_and_custom_when_set():
-    """docs/_gap_v1.md gap #17: `ProviderSpecModel.configuration`/`.custom`
+    """docs/design/gap_fit_v1.md gap #17: `ProviderSpecModel.configuration`/`.custom`
     used to be silently dropped entirely — now projected like every other
     category's own passthrough fields."""
     graph = _graph()
@@ -606,7 +606,7 @@ def test_tenant_writes_to_tenant_auto_tfvars_json():
 
 
 # ---------------------------------------------------------------------------
-# build_configuration_payloads() — docs/_gap_v1.md gap #8's Terraform-side
+# build_configuration_payloads() — docs/design/gap_fit_v1.md gap #8's Terraform-side
 # refinement + gap #17's universal-resolution-reach extension,
 # docs/design/value-token-resolution.md's "Full Solution" Phase 6 and
 # "Decision (2026-09-29)". Broadcast-only (no per-name ownership, unlike

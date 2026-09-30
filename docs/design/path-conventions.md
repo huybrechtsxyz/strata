@@ -5,7 +5,7 @@
   the 2026-09-29 first pass). All 4 phases done: model, structural path
   matching, `DeploymentLayersModel` cross-check, documentation.
 - Date: 2026-09-29 (redesigned and re-implemented 2026-09-30)
-- Related: [docs/_gap_v1.md](../_gap_v1.md) gap #7 (the `paths` remainder —
+- Related: [docs/design/gap_fit_v1.md](../design/gap_fit_v1.md) gap #7 (the `paths` remainder —
   `security`/`zones`/`remotes`/`integrations` already resolved),
   `deployment_model.py`'s `DeploymentLayersModel` (now cross-checked, was
   **inert in v2** before this design), `tenant_model.py` (already solved
@@ -91,7 +91,7 @@ making `DeploymentLayersModel` real.
 
 ```python
 class PathConventionModel(PlatformBaseModel):
-    """One directory-family naming convention (docs/_gap_v1.md gap #7)."""
+    """One directory-family naming convention (docs/design/gap_fit_v1.md gap #7)."""
 
     name: PlatformName = Field(description="Convention name, referenced by DeploymentLayersModel.follows")
     scope: str = Field(
@@ -436,7 +436,7 @@ to feed.
   `root: Path` parameter.
 - `solution_context.py` — its one `run_semantic_checks(...)` call site
   passes `self.controller.root`.
-- `docs/_gap_v1.md` gap #7 — mark the `paths` sub-item resolved once
+- `docs/design/gap_fit_v1.md` gap #7 — mark the `paths` sub-item resolved once
   implemented, same as `security`'s own entry.
 
 ## Implementation Plan
@@ -495,7 +495,7 @@ Each phase below says exactly what changes vs. what already exists.
 
 - This design doc: flip Status back to "implemented," each phase heading
   back to `~~IMPLEMENTED~~`.
-- `docs/_gap_v1.md` gap #7's `paths` sub-item: update to describe the
+- `docs/design/gap_fit_v1.md` gap #7's `paths` sub-item: update to describe the
   final `pattern`/`filename_pattern` shape (it currently describes the
   now-superseded single combined pattern from the first pass).
 - `deployment_model.py`'s `DeploymentLayersModel` docstring: already
@@ -548,7 +548,7 @@ Each phase below says exactly what changes vs. what already exists.
 ## Changelog
 
 - 2026-09-29: Created, per request ("lets look at paths, lets create the
-  design first"), continuing docs/_gap_v1.md gap #7's remaining items
+  design first"), continuing docs/design/gap_fit_v1.md gap #7's remaining items
   after `security` (previous session). Grounded directly in the real,
   current `cfg-int-deployment/config/paths.yaml` and a real deep leaf
   deployment (`deploy/hubs/z00/s01/c0224/dev/deployment.yaml`)'s actual
@@ -605,7 +605,7 @@ Each phase below says exactly what changes vs. what already exists.
   failure). `strata validate .v2-cfg` re-confirmed clean (12/12), zero new
   findings (the fixture declares no `paths`/`layers`, so both new checks
   skip cleanly). `DeploymentLayersModel`'s docstring updated to drop
-  "inert in v2". `docs/_gap_v1.md` gap #7's `paths` sub-item marked
+  "inert in v2". `docs/design/gap_fit_v1.md` gap #7's `paths` sub-item marked
   resolved. This design is fully implemented; only `policies`/`audit`/
   `promotions` remain open in gap #7.
 - 2026-09-30: **Redesigned `pattern` into `pattern` + `filename_pattern`**,
@@ -679,7 +679,7 @@ Each phase below says exactly what changes vs. what already exists.
   as the sole failure). `strata validate .v2-cfg` re-confirmed clean
   (12/12), zero new findings. `DeploymentLayersModel`'s docstring
   corrected ("real file path" -> "real containing directory", matching
-  the split). `docs/_gap_v1.md` gap #7's `paths` sub-item updated to
+  the split). `docs/design/gap_fit_v1.md` gap #7's `paths` sub-item updated to
   describe the final shape. This design is fully implemented again;
   `policies`/`audit`/`promotions` remain open in gap #7.
 

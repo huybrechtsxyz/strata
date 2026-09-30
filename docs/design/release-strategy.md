@@ -177,7 +177,7 @@ revisit once beta is actually reached; premature to fix a number now).
 
 ### Stage 4 — `v2.0.0` (stable)
 
-**Entry bar:** RC trial period clean; `docs/_gap_v1.md`'s open gaps are
+**Entry bar:** RC trial period clean; `docs/design/gap_fit_v1.md`'s open gaps are
 each either resolved or explicitly re-confirmed as an accepted, documented
 scope cut (not silently dropped); `README.md`/`CONTRIBUTING.md` updated to
 describe v2 as *the* current version rather than a parallel-track rewrite;

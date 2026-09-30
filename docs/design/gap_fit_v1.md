@@ -29,7 +29,7 @@ durable, reviewable record.
   list (e.g. `authentik.yaml`, `vaultwarden.yaml`, `homarr-secrets.yaml`).
 - **Status:** closed (2026-09-28). The *field choice* was always deliberate
   (ADR-0002) and confirmed by
-  [docs/design/value-token-resolution.md](design/value-token-resolution.md)'s
+  [docs/design/value-token-resolution.md](value-token-resolution.md)'s
   Per-Kind Status table: v1's declared-keys list is replaced by inline
   `${secret:KEY}` value tokens at the point of use
   (`ModuleServiceEnvironmentModel.value` — the only field the four
@@ -237,6 +237,12 @@ durable, reviewable record.
 - **Migration action:** no shortcut — a migration guide/tool needs to spend
   real explanation budget here; this is the one part of the migration that
   isn't a mechanical field rename.
+- **Migration guide written 2026-09-30**:
+  [docs/how-to/migrate-v1-workspace-topology-provisioning.md](../how-to/migrate-v1-workspace-topology-provisioning.md)
+  — step-by-step, using the real, already-migrated
+  `.v2-cfg/workspaces/spoke.yaml`/`topologies/spoke-cluster.yaml` pair as
+  the worked example, plus a checklist for migrating any other real v1
+  workspace through the same split.
 
 ### 6. ~~Deployment stage `scope: infra|apps` has no v2 field~~ — WAS ALREADY WRONG, RESOLVED
 
@@ -310,7 +316,7 @@ durable, reviewable record.
     `kind: integration` document; no new v2 code needed for this specific
     shape translation.
   - `paths` — **RESOLVED 2026-09-30** (structural half only —
-    see [docs/design/path-conventions.md](design/path-conventions.md)).
+    see [docs/design/path-conventions.md](path-conventions.md)).
     New `PathConventionModel`/`PathSegmentModel`/
     `ConfigurationSpecModel.paths` (`pattern` for directory shape,
     independently optional `filename_pattern` for filename shape — a
@@ -329,7 +335,7 @@ durable, reviewable record.
     cross-check, `Tenant` reference existence).
   - `policies`/`promotions` — still fully open, unstarted. `audit` —
     **RESOLVED 2026-09-30** (Layers 1+2 only — see
-    [docs/design/audit-trail.md](design/audit-trail.md)). `strata sln init`/
+    [docs/design/audit-trail.md](audit-trail.md)). `strata sln init`/
     `update` scaffold the real PR/issue templates (Layer 1), and `deploy
     run` now writes a durable `_manifest.json`/`_metrics.json` per
     execution with optional `git`-sink distribution (Layer 2's full
@@ -345,7 +351,7 @@ durable, reviewable record.
     without the generic phase/enforcement-dispatching policy framework
     around it); `promotions.yaml` declares a `progressions.standard` ring
     sequence but no active `strategies` entry. `policies` now has its own
-    catalog doc — [docs/design/tenant-zone-policy.md](design/tenant-zone-policy.md)
+    catalog doc — [docs/design/tenant-zone-policy.md](tenant-zone-policy.md)
     (2026-09-30) — scoped to `tenant_zone` (the one real, active-by-
     declaration remaining type), not the full 18-type documented catalog;
     catalog only so far, no v2 design decisions made yet. That doc also
@@ -390,7 +396,7 @@ durable, reviewable record.
   (undocumented) or a plain oversight where `${secret:KEY}` was meant.
   Either way, today neither form actually resolves through strata.
 - **Design completed 2026-09-28** (see
-  [docs/design/value-token-resolution.md](design/value-token-resolution.md)'s
+  [docs/design/value-token-resolution.md](value-token-resolution.md)'s
   "unify gaps #8/#9/#10" section): extend `resolve_value_tokens_in_mapping()`
   (already field-agnostic) to `configuration`/`custom` call sites too — not
   a new algorithm, just new call sites, decided in favor of option (a) from
@@ -420,7 +426,7 @@ durable, reviewable record.
   would wrongly reject that already-working document — a real regression,
   not hypothetical. Generalizing Phase 1 therefore needs an escape/skip
   syntax first, designed in
-  [docs/design/value-token-resolution.md](design/value-token-resolution.md)'s
+  [docs/design/value-token-resolution.md](value-token-resolution.md)'s
   new "Escape syntax" section — not implemented yet, design only.
 - **Phase 1 implemented 2026-09-28** (design validated against source
   first, then built — see the design doc's "Full Solution" Phase 0/1):
@@ -476,7 +482,7 @@ durable, reviewable record.
   not a token-resolution one). Full design (decision: broadcast-only,
   `${output:}` rejected outright, one new `build_configuration_payloads()`
   function) lives in
-  [docs/design/value-token-resolution.md](design/value-token-resolution.md)'s
+  [docs/design/value-token-resolution.md](value-token-resolution.md)'s
   Phase 6 — **implemented 2026-09-28**, same day as the design: new
   `build_configuration_payloads()` (`terraform_projection.py`) delivers
   all five as `TF_VAR_resx_<type>`/`TF_VAR_topologies`/`TF_VAR_properties`/
@@ -488,9 +494,9 @@ durable, reviewable record.
 
 ### 9. ~~The deploy-time Value-token resolver is designed for every kind, but only implemented for one field~~ — RESOLVED
 
-- **Found in:** [docs/design/value-token-resolution.md](design/value-token-resolution.md)
+- **Found in:** [docs/design/value-token-resolution.md](value-token-resolution.md)
   itself, cross-checked against `deploy_controller.py` and
-  [docs/design/deploy-command.md](design/deploy-command.md) — not found via
+  [docs/design/deploy-command.md](deploy-command.md) — not found via
   a haven document, but the underlying reason gaps #1 and #8 can't actually
   be closed by a schema-correct rewrite alone.
 - **Status:** implemented (2026-09-28) — every kind now resolves at
@@ -523,14 +529,14 @@ durable, reviewable record.
     defaults; nothing reads `os.environ`. That is why the mechanism below
     is a CLI argument, not an env var — it's the only "don't touch the
     file" option Helm's own CLI offers.
-  - **Helm** ([helm.py](../src/strata/integrations/helm.py) `prepare_namespace()`):
+  - **Helm** ([helm.py](../../src/strata/integrations/helm.py) `prepare_namespace()`):
     secrets are meant to go in via `helm upgrade --set-string KEY=<value>`
     — never rewritten into the `values.yaml` `build run` already wrote.
     Caveat: a CLI arg is visible via `ps`/`/proc/<pid>/cmdline` to any
     local process with sufficient privilege — a real, if smaller, exposure
     than an env var. This is Helm's own best available mechanism, not a
     strata design compromise.
-  - **Compose** ([compose.py](../src/strata/integrations/compose.py)
+  - **Compose** ([compose.py](../../src/strata/integrations/compose.py)
     `prepare_namespace()`): the rendered file is meant to use a bare
     `${KEY}` (Compose's own native interpolation, not strata's typed
     token), satisfied straight from the **process environment** at
@@ -546,7 +552,7 @@ durable, reviewable record.
   haven-migration mistake; every real solution hits this today for any
   module secret.
 - **Design completed 2026-09-28** (see
-  [docs/design/value-token-resolution.md](design/value-token-resolution.md)'s
+  [docs/design/value-token-resolution.md](value-token-resolution.md)'s
   "unify gaps #8/#9/#10" section): concrete per-integration delivery
   (Terraform `TF_VAR_<name>=<json>` for the whole `dns`/`networks`/
   `firewalls` payload; Helm `values.yaml` rewrite + `--set-string` for
@@ -613,7 +619,7 @@ durable, reviewable record.
   never actually resolve here" — the one signal that would have caught every
   gap #8 module at authoring time, before it ever reached a real deployment.
 - **Design completed 2026-09-28** (see
-  [docs/design/value-token-resolution.md](design/value-token-resolution.md)'s
+  [docs/design/value-token-resolution.md](value-token-resolution.md)'s
   "unify gaps #8/#9/#10" section): once gap #9's resolver covers every
   string in a document instead of a fixed field allowlist, this gap's
   false-green-light failure mode disappears by construction — no code
@@ -852,7 +858,7 @@ durable, reviewable record.
   orchestrator will consume, rather than blocking on this larger,
   separate gap.
 - **Design completed and corrected twice 2026-09-28, implemented same day**
-  (see [docs/design/deploy-command.md](design/deploy-command.md)'s
+  (see [docs/design/deploy-command.md](deploy-command.md)'s
   "Helm/Compose orchestration" section for the full design history), per
   direct request to design this the way v1 avoided tool-type branching,
   not around it, then per direct pushback that got the mechanism right.
@@ -960,7 +966,7 @@ durable, reviewable record.
   own "Remaining Work / Open Questions" section already tracks this
   ("Terraform input validation against `variables.tf` — v1 fails the build
   on a declared-input/schema mismatch before `apply` would.
-  [provisioning-injection-model.md](design/provisioning-injection-model.md)
+  [provisioning-injection-model.md](provisioning-injection-model.md)
   mentions parsing `variables.tf` as a capability lookup, but not as a
   build-time gate."). Cross-referenced into this file's numbered gap list
   for the first time while migrating `.v2-cfg`'s spoke stack (2026-09-29):
@@ -1002,7 +1008,7 @@ durable, reviewable record.
   where in `build run`'s flow the check runs and how strict it is (error
   vs. warning, and whether backend-referenced keys are excluded the same
   way v1's real exclusion rule works).
-- **Related:** [docs/design/terraform-tfvars-parity.md](design/terraform-tfvars-parity.md)
+- **Related:** [docs/design/terraform-tfvars-parity.md](terraform-tfvars-parity.md)
   (2026-09-30, **fixed** the same day) is a distinct but adjacent gap —
   that doc audited (and then fixed) whether v2 even *produced* the right
   tfvars variable names/shapes a real Terraform root expects (found via a
@@ -1111,7 +1117,7 @@ durable, reviewable record.
   consequentially, `workspace`/`namespaces`/`flags`/`variables`, none of
   which realistically carry a token) was simply never on that list.
   Recorded as a formal decision in
-  [value-token-resolution.md](design/value-token-resolution.md)'s
+  [value-token-resolution.md](value-token-resolution.md)'s
   "Decision (2026-09-29)" section: resolution reach must match validation
   reach — no curated allowlist, ever, for exactly this reason.
 - **Status: closed (2026-09-29).** `_build_providers_payload()` now
@@ -1171,11 +1177,11 @@ and the provider/providerconfig/topologyconfig registry split.
   it's actually new, not just re-triggering the logged ones. Re-run
   validate after any model change touching provider/resource/firewall/
   module/namespace/workspace/topology/deployment/environment.
-- [docs/decisions/0011-topology-and-provisioning-decoupling.md](decisions/0011-topology-and-provisioning-decoupling.md)
-- [docs/decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md](decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md)
-- [docs/decisions/0015-solution-manifest-and-document-discovery.md](decisions/0015-solution-manifest-and-document-discovery.md)
-- [docs/design/deploy-command.md](design/deploy-command.md)
-- [docs/design/value-token-resolution.md](design/value-token-resolution.md) — the
+- [docs/decisions/0011-topology-and-provisioning-decoupling.md](../decisions/0011-topology-and-provisioning-decoupling.md)
+- [docs/decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md](../decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md)
+- [docs/decisions/0015-solution-manifest-and-document-discovery.md](../decisions/0015-solution-manifest-and-document-discovery.md)
+- [docs/design/deploy-command.md](deploy-command.md)
+- [docs/design/value-token-resolution.md](value-token-resolution.md) — the
   Per-Kind Status table and Remaining Work section gaps #1/#8/#9/#10 are all
   grounded in
 - `src/strata/controllers/semantic_checks.py`'s `unresolved_value_tokens()`
@@ -1577,7 +1583,7 @@ and the provider/providerconfig/topologyconfig registry split.
   remaining steps.
 - 2026-09-29: **Found and resolved gap #17** ("design, plan, and implement
   phase 1" — Phase 1 of
-  [cross-document-value-references.md](design/cross-document-value-references.md)'s
+  [cross-document-value-references.md](cross-document-value-references.md)'s
   Implementation Plan). Confirmed the real gap directly against source
   before changing anything: `_build_providers_payload()`
   (`terraform_projection.py`) never read `ProviderSpecModel.configuration`/
@@ -1629,7 +1635,7 @@ and the provider/providerconfig/topologyconfig registry split.
 - 2026-09-29: **Resolved gap #7's `paths` sub-item**, per request ("lets
   look at paths, lets create the design first" -> "design, plan, and
   implement"). Full design written first
-  ([docs/design/path-conventions.md](design/path-conventions.md)), all 3
+  ([docs/design/path-conventions.md](path-conventions.md)), all 3
   open questions resolved before implementing. Grounded in the real,
   current `cfg-int-deployment/config/paths.yaml` and a real deep leaf
   deployment's actual `layers:` usage. Found v1's generic `validate:`
