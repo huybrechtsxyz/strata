@@ -14,12 +14,15 @@ directory `build run` already wrote to (ADR-0022 D4's render-vs-execute
 split).
 """
 
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 import click
 
 from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
+from strata.controllers.audit_run import finalize_and_distribute_deploy_audit
 from strata.controllers.deploy_controller import deploy_run
 from strata.controllers.solution_context import open_solution
 from strata.utils.layout import build_dir
@@ -111,6 +114,9 @@ def deploy_run_command(
             build_path=target,
         )
 
+        execution_id = str(uuid.uuid4())
+        started_at = datetime.now(timezone.utc)
+
         diagnostics = deploy_run(
             context,
             deployment,
@@ -121,6 +127,21 @@ def deploy_run_command(
             scope=scope,
             on_step=run.step,
         )
+
+        # Audit trail — finalize + write locally + distribute (docs/design/
+        # audit-trail.md's Layer 2). Never affects which deploy stages ran or
+        # their recorded outcome; a required sink's push failure can still
+        # fail this command's own exit code, merged in below.
+        audit_diagnostics = finalize_and_distribute_deploy_audit(
+            context,
+            deployment,
+            target,
+            execution_id=execution_id,
+            started_at=started_at,
+            run_diagnostics=diagnostics,
+            dry_run=dry_run,
+        )
+        diagnostics.extend(audit_diagnostics)
 
         run.report(diagnostics, root=context.root)
         run.ok = diagnostics.ok

@@ -1,8 +1,11 @@
 # Audit Trail — v1 Capability Catalog and v2 Design Questions
 
-- Status: draft — real-usage scoping done, Layer 1 shipped, and the
-  remaining open questions resolved (2026-09-30); ready for a Layer 2
-  Implementation Plan next
+- Status: draft — real-usage scoping done, Layer 1 shipped, the design
+  fully walked end-to-end with a worked example, and the full 5-phase
+  Layer 2 Implementation Plan implemented (2026-09-30). `deploy run` now
+  writes a real, local audit manifest + metrics record on every
+  invocation, and distributes them to configured `git` sinks. Layer 2 is
+  live.
 - Last updated: 2026-09-30
 
 ## Overview
@@ -635,9 +638,13 @@ class AuditGitSinkTargetModel(PlatformBaseModel):
 class AuditSinkModel(PlatformBaseModel):
     name: PlatformName
     enabled: bool = True
-    events: list[str] | None = None          # filter — None means every policy-admitted event type
+    events: list[str] | None = None          # filter — None means every gate-admitted event type
 
-    integration: PlatformName | None = None  # arm 1 — siem/webhook/syslog, unchanged from v1
+    # Annotated with References(PlatformKind.INTEGRATION) — same as every other
+    # "names an Integration document" field in v2 (artifact_model.py,
+    # provisioning_model.py) — so the generic reference-walker (ADR-0015)
+    # structurally checks this resolves, instead of only failing at dispatch time.
+    integration: Annotated[PlatformName, References(PlatformKind.INTEGRATION)] | None = None  # arm 1
     git: AuditGitSinkTargetModel | None = None  # arm 2 — durable git push
 
     @model_validator(mode="after")
@@ -647,13 +654,32 @@ class AuditSinkModel(PlatformBaseModel):
         return self
 ```
 
+**Sink names must be unique, same discipline as every other named list on
+`ConfigurationSpecModel`.** `providers`/`topologies`/`paths` each get a
+`check_unique_names()` model validator (`configuration_model.py`) — two
+sinks sharing a name is the same class of silent footgun, and matters more
+once something like `audit resend --sink <name>` exists. `AuditConfigModel`
+gains the identical validator over `sinks`, not a new pattern.
+
+**`events: list[str] | None` stays a plain string list — not upgraded to
+an enum, despite the vocabulary being closed.** Considered matching
+`Capability`'s own `StrEnum` typo-safety rationale, but the two cases
+differ: `Capability` gates a static, in-code dispatch site
+(`if Capability.X in ...`) where a typo is a silent no-op forever. An
+event *name* here is checked against the runtime event gate's own known
+vocabulary at validation time regardless, so a typo surfaces immediately
+as a validation error either way — an enum would add a second place event
+names must be kept in sync (the model and the gate) for no extra
+safety. Revisit only if event names start being referenced from more than
+one place the way `Capability` is.
+
 ```yaml
 spec:
   audit:
     sinks:
       - name: prod-siem
         integration: splunk-prod          # arm 1
-        events: [deployment.completed, policy.violated]
+        events: [deployment.completed, deployment.measured]
       - name: config-repo
         git:                                # arm 2
           remote: xyz-configuration
@@ -663,7 +689,7 @@ spec:
 ```
 
 **Admission mechanics are unchanged, and now apply identically to both
-arms** — the same three-condition rule v1 already has (global policy gate
+arms** — the same three-condition rule v1 already has (global event gate
 admits the event type → sink `enabled` → sink's own `events` filter is
 `None` or names the type exactly) needs no modification to cover `git`;
 it was already sink-shape-agnostic.
@@ -677,7 +703,7 @@ is written (see "The audit files" above). A **git** sink instead copies
 whichever per-execution files exist (`_manifest.json`, `_metrics.json`)
 into the resolved path and pushes — a durable byte-for-byte replication
 of what was already written locally, not a notification. Treating both as
-"a sink" is about sharing *admission* (policy/enabled/events) and
+"a sink" is about sharing *admission* (gate/enabled/events) and
 *sequencing* (one loop, end of run), not about pretending they do the
 same thing on the wire.
 
@@ -691,68 +717,181 @@ than reading a persisted file, there's no asymmetry left to resolve
 between the two event types — both go through the identical
 render-then-forward path, just from a different source record.
 
-**Capability gating, reusing v2's existing mechanism rather than
-inventing one.** v2's `Capability` enum (`models/integration_model.py`) is
-a deliberately closed, minimal vocabulary, extended only when a concrete
-feature needs a member (ADR-0021 D9) — no audit-forwarding capability
-exists yet. Adding one (e.g. `Capability.AUDIT`) and requiring
-`sink.integration` to resolve to an `Integration` declaring it is the same
-mechanism every other capability-gated reference in v2 already uses, not
-new plumbing — this resolves the "Reuse v2's own integration layer for
-sinks" open question in Remaining Work below.
+**Capability gating — deferred alongside the integration arm's dispatch,
+not added in this first pass.** An earlier draft of this section proposed
+adding `Capability.AUDIT` now, gating `sink.integration` the same way every
+other capability-gated reference in v2 works. Caught on review: that would
+be dead on arrival — `Capability` (`models/integration_model.py`) is a
+deliberately closed, minimal vocabulary, its own docstring stating it is
+"extended only when a concrete v2 feature needs it" (ADR-0021 D9), and
+nothing dispatches through `Capability.AUDIT` in this pass, since the
+"Does v2 need all four layers, or fewer?" decision above explicitly defers
+the `integration` arm's *dispatch* to a later pass. Adding the enum member
+now, before any code checks it, is exactly the "declared-but-unread
+machinery" this doc's own "Lessons from v1's own defects" #1 warns
+against — so `Capability.AUDIT` is added together with the integration
+arm's dispatch itself, not before. `AuditSinkModel.integration` is still
+annotated with `References(PlatformKind.INTEGRATION)` today (see above) —
+that only checks the name resolves to *some* `Integration` document, which
+is correct and cheap in either case; the capability check is the part
+that's deferred.
 
-### Streamlining the configuration surface — `spec.audit` is fully optional
+### Dispatch failure — a `required` flag, not a binary silent-vs-fail choice
+
+Raised by the user, walking the full end-to-end loop: a `git` push (or,
+later, an integration send) can fail — network down, a non-fast-forward
+conflict, bad credentials. Neither extreme is right: always failing
+`deploy run` over a durability push means an infrastructure change that
+already succeeded gets reported as a failure; always swallowing it
+silently reintroduces exactly the "declared real, but doesn't actually
+work" problem this whole Layer 2 effort exists to fix (the real,
+load-bearing `env-int-deployment` push).
+
+**Resolution — reuse `Diagnostics`' existing three-tier `Severity`, plus
+one field v2 already has a name and default for.** `Integration.required:
+bool = False` ("whether this integration is required for platform
+operation", `integration_model.py`) is the same shape this needs, so
+`AuditSinkModel` gains an identically-named field rather than inventing
+new vocabulary:
+
+```python
+class AuditSinkModel(PlatformBaseModel):
+    ...
+    required: bool = False  # same name/default as Integration.required
+```
+
+A dispatch failure **always** produces a `Severity.WARNING` diagnostic —
+visible in `deploy run`'s report every time, never truly silent. Only when
+`required: true` does that same failure escalate to `Severity.ERROR`,
+which fails `require_valid()`'s downstream check and blocks the command
+at exit code 3 (`command_run`'s existing `ValidationError` mapping —
+nothing new needed there). Default `False` matches the common case; an
+operator who has decided durable audit is non-negotiable (a compliance
+sink, say) opts in per-sink. Composes cleanly across multiple sinks too —
+a SIEM sink can be `required: true` while a `git` durability sink stays
+`required: false`, or the reverse; not an all-or-nothing switch.
+
+### Streamlining the configuration surface — `spec.audit` is fully optional, and `path`/`structure`/`journal` are dropped, not just defaulted
 
 Raised by the user, reviewing `path`/`structure`/`metrics_path`/`journal`
-together rather than one at a time: **the entire `spec.audit` block should
-be omittable**, with `.strata/audit` as the default and every other
-location derived from it — not four independent things a config author
-has to learn before getting a working local audit trail.
+together rather than one at a time — then revisited once more on a second
+pass (2026-09-30): three of those turned out not to be configuration at
+all, once checked against `layout.py`'s own rule and real usage evidence.
 
-**One base path, not three.** An earlier draft of the example below had
-`path`, `journal.path`, and `metrics_path` as three independently
-configurable locations. Streamlined to one — `spec.audit.path` (default
-`.strata/audit`) — with everything else a fixed, derived sub-path under
-it unless explicitly overridden:
+**`path` is dropped outright — `.strata/audit` is a layout fact, not a
+choice.** `layout.py`'s own docstring: *"Every derived path belongs here.
+Nothing outside this module should join a path segment, hardcode a
+directory name, or decide where something lands on disk."* `.strata/audit`
+is the same tier as `REMOTES_DIRNAME` — a new `layout.audit_dir(root)`
+(`root / STRATA_DIR / "audit"`) replaces `spec.audit.path` entirely; a
+config author never declares it, the same way `.strata/remotes` is never
+declared either.
 
-| Artifact                                                             | Path (derived from `spec.audit.path`)   | Separately configurable?                                                                                                                                                                                |
-| -------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Journal (CLI invocations)                                            | `{path}/journal.ndjson`                 | Yes — `journal.path` remains an override, matching v1's existing "machine-local escape hatch" precedent (a developer wanting logs elsewhere without touching committed config)                          |
-| Metrics append series                                                | `{path}/deployments.ndjson`             | **No longer** — dropped as its own top-level key (`metrics_path`); its whole value was being one well-known, always-the-same-relative-location path, which "derived, not configured" already guarantees |
-| Per-execution files (`_manifest.json`/`_event.json`/`_metrics.json`) | `{path}/{structure}/{yyyymmdd-hhmmss}/` | Yes — `structure`, see next                                                                                                                                                                             |
+**`structure` is dropped too — derived from `DeploymentLayersModel.segments`
+when a deployment already has one, not a second templating mechanism.**
+The original proposal was a plain Jinja2 `structure` string (default
+`"{{ workspace }}/{{ deployment }}"`). Caught on review:
+`path_conventions.py` is match-only (a real path against a pattern, never
+the reverse), so that field would have been a disconnected second way to
+describe a directory shape the config may already declare once, via
+`spec.paths` + a deployment's own `layers` block. Where a deployment
+declares `layers.follows`/`layers.segments` (already validated against a
+`spec.paths` convention by `semantic_checks.py`), the audit directory is
+built by joining those *resolved* segment values, in the order that
+convention's own `PathConventionModel.segments[]` list declares them —
+e.g. `layers.segments == {hub: z00, spoke: s01, customer: c0224, ring:
+dev}` under a convention ordering `[hub, spoke, customer, ring]` produces
+`z00/s01/c0224/dev`, matching the deployment's real hierarchy for free.
+Where no `layers` block exists, fall back to a fixed `f"{workspace}/
+{deployment}"`. No template engine, no config field, either way.
 
-**`structure` simplified from an 8-name enum to one optional Jinja2
-string.** v1's `flat`/`by-stage`/`by-execution`/`by-date`/
-`by-environment`/`by-workspace`/`by-tenant`/`full` were a lookup table of
-named templates a config author had to pick from — real complexity partly
-inherited from the fact that several of those names existed *only* to
-smuggle a timestamp into the path (`by-execution`, `by-date`), which the
-now-mandatory `yyyymmdd-hhmmss` leaf (see "Path resolution" below) makes
-redundant. Streamlined to: `structure` accepts a plain Jinja2 template
-string directly (default `{{ workspace }}/{{ deployment }}` — no name
-lookup, no built-in table). Override it for `{{ tenant }}/{{ deployment
-}}` or anything else, or omit it and get the default. One field, one
-mechanism, no menu.
+**`journal` is deferred out of this pass entirely — no evidenced
+consumer.** Checked against the same real-usage bar that justified
+building Layer 2 next: in `cfg-int-deployment` it runs "always on, local,
+gitignored," but nothing reads it, nothing forwards it, and it played no
+part in the finding that justified this work (deploy-log + manifest
+git-push durability). Same "declared-but-unread machinery" caution this
+doc already applied to `Capability.AUDIT` above — designed and added in
+its own pass once something needs it, not bundled into Layer 2 by
+default. Dropped from `AuditConfigModel` for now, not merely optional.
 
-**`journal` stays optional with the same defaults v1 already had** (path
-derived as above, `rotation: size`, `max_bytes: 5_000_000`,
-`backup_count: 3`) — nothing to streamline here beyond making the whole
-block omittable, which it already effectively was (every sub-field was
-already `Optional` in v1's own model).
-
-**`policy` and `sinks` were already zero-config.** Class-aware defaults
-(`AUDIT_EVENT_DEFAULTS`) apply when `policy` is omitted; `sinks` defaults
-to an empty list (fully local, nothing forwarded) when omitted. No change
-needed — stating it here so "is `spec.audit` really all-optional" has one
-answer covering all five fields, not four separate ones scattered across
-this doc.
+**`policy`/event-overrides resolved — see "Event admission" below,
+immediately after this section.** `sinks` needed no further changes.
 
 **Net result:** `spec.audit` can be omitted from `configuration.yaml`
-entirely. A deploy still writes `.strata/audit/{{ workspace }}/{{
-deployment }}/<yyyymmdd-hhmmss>/{_manifest,_event,_metrics}.json`, appends
-to `.strata/audit/deployments.ndjson` and `.strata/audit/journal.ndjson`,
-applies the built-in policy defaults, and forwards to nothing — a complete
-local audit trail with zero YAML.
+entirely. A deploy still writes to `.strata/audit/<resolved
+structure>/<yyyymmdd-hhmmss>/{_manifest,_metrics}.json` and forwards to
+nothing — a complete local audit trail with zero YAML. (No
+`deployments.ndjson` — dropped, see "A third file" below.)
+
+### Event admission — a closed set gate, not a policy framework
+
+Raised by the user ("do we need policies (a place/framework first?)") —
+checked directly against v1's real `models/audit_config_model.py`, not
+just the earlier prose catalog. Once distilled to what's actually used,
+it is a lookup table with a validator, not the deny/warn/multi-type
+engine `PathConventionModel.enforcement` deliberately declined to port —
+no separate framework needs to exist first.
+
+**What v1 really has, stripped of what's unused:** a closed set of event
+types, each with a class-aware default (set by measuring an 18,853-entry
+real audit.log sample, not guessed — `command.executed` defaulting off
+alone removed ~95% of volume); a flat per-type bool override merged over
+those defaults; a cross-check that a sink can't filter on an event type
+the gate has disabled or one outside the closed set (`ValueError`, exit
+code 3 — not a silent no-op); and a fail-open rule for any event type a
+future producer emits that isn't in the closed set at all (never gated
+off by a model that doesn't know about it yet).
+
+**Two simplifications from v1's real shape, not a straight port:**
+
+1. **Drop the `Union[bool, AuditEventPolicyModel]` object shape.** v1's
+   own comment on the reserved `severity`/`sample`/`retention_days` fields:
+   "not read by any producer yet" — deliberately commented out to keep the
+   surface honest rather than aspirational. Same instinct, one step
+   further: don't port the wrapper object at all. Flatten to `dict[str,
+   bool] | None` directly.
+2. **Scope the closed set to what v2 actually produces, not v1's 20
+   types.** v1's set includes `workitem.*`, `policy.violated`,
+   `secret.accessed`, `lock.*`, `drift.*`, `cost.*` — none of which have a
+   producer anywhere in v2 yet (no workitem controller, no policy engine,
+   no lock/drift/cost tracking). Importing that whole list now would be
+   the same "declared-but-unread machinery" this doc already flagged for
+   `Capability.AUDIT`, seventeen times over. v2's closed set for this pass
+   is exactly the three events Layer 2 itself emits, all defaulting
+   enabled (matches v1's own real defaults for these three): `deployment.
+   completed`, `deployment.destroyed`, `deployment.measured`. Grows only
+   when a new producer lands, same discipline as `Capability`.
+
+**Real-usage tension, named rather than hidden:** `cfg-int-deployment`'s
+actual overrides are `secret.accessed`/`policy.violated`/
+`workitem.rejected` — all three **outside** this scoped set. Expected,
+not a problem: none of those producers exist in v2 yet, so that config
+simply wouldn't carry those overrides until the corresponding producer is
+built — the same incremental-porting story as every other gap closed so
+far.
+
+**Also dropped: the word "policy" itself.** No field or model is named
+`policy`/`AuditPolicyModel` — v2 has no other "policy" concept, and the
+word implies the multi-type engine this isn't.
+
+```python
+# Directly on AuditConfigModel, no nested model:
+event_overrides: dict[str, bool] | None = None  # overrides over the built-in per-type defaults
+
+# Module-level, not configurable — grows only when a new producer lands:
+_EVENT_DEFAULTS: dict[str, bool] = {
+    "deployment.completed": True,
+    "deployment.destroyed": True,
+    "deployment.measured": True,
+}
+```
+
+Both of v1's real validators are kept, ported against this smaller table:
+an unknown key in `event_overrides` is a `ValueError`; and
+`AuditSinkModel.events` entries must be in the closed set *and* resolve
+enabled — the same cross-check `AuditConfigModel.
+validate_sink_filters_against_gate` already does in v1, just scoped down.
 
 ### Example configuration
 
@@ -804,24 +943,19 @@ meta:
   name: prod-config
 spec:
   audit:
-    path: .strata/audit           # optional — this is already the default
-    structure: "{{ tenant }}/{{ deployment }}"   # optional override of the default "{{ workspace }}/{{ deployment }}"
-                                    # yyyymmdd-hhmmss leaf always appended, never part of this string
-                                    # metrics/journal paths are derived from `path`, not separately configurable
+    # no `path`, no `structure` — .strata/audit is a fixed layout location
+    # (layout.audit_dir()), and the per-execution directory shape is
+    # derived from this deployment's own `layers.segments` when declared,
+    # falling back to workspace/deployment otherwise (see above). Neither
+    # is a field on this model.
 
-    policy:
-      events:
-        secret.accessed: true
-        policy.violated: true
-        command.executed: false   # matches the class-aware default; explicit here for clarity
-
-    journal:
-      max_bytes: 5242880           # only overriding what differs from the default; path/rotation/backup_count omitted
+    event_overrides:                 # flat, no nested "policy" model — see "Event admission" above
+      deployment.measured: false     # example override; all three default to true otherwise
 
     sinks:
       - name: prod-siem
         integration: splunk-prod   # arm 1 — integration reference, no transport fields here
-        events: [deployment.completed, deployment.destroyed, deployment.measured, policy.violated]
+        events: [deployment.completed, deployment.destroyed]
 
       - name: config-repo
         git:                        # arm 2 — durable push, no Integration reference at all
@@ -831,18 +965,23 @@ spec:
         events: [deployment.completed, deployment.destroyed]
 ```
 
-Reading the two sinks: `prod-siem` receives a CloudEvent rendered on the
-fly from `_manifest.json` (and, since it also admits
-`deployment.measured`, a second rendering from `_metrics.json`) sent to
-Splunk over HEC, using credentials that live entirely on the
-`splunk-prod` integration document — nothing sink-specific to leak, and
-no envelope file ever touches disk. `config-repo` instead pushes copies
-of whichever per-execution files exist (`_manifest.json`,
-`_metrics.json`) under `audit/<tenant>/<deployment>/<yyyymmdd-hhmmss>/`
-in the `xyz-configuration` repo's `main` branch, authenticated via
-whatever `github-deploy-key` (the remote's own `integration`) provides —
-two structurally different operations, admitted by the identical
-policy/enabled/events rule, dispatched from the same end-of-run loop.
+Reading the config: `event_overrides` disables `deployment.measured`
+entirely for this landscape (no `_metrics.json` dispatch anywhere, though
+the file is still written locally — the override gates *forwarding*, not
+local persistence), so neither sink lists it. `prod-siem` receives a
+CloudEvent rendered on the fly from `_manifest.json` for
+`deployment.completed`/`destroyed`, sent to Splunk over HEC using
+credentials that live entirely on the `splunk-prod` integration document
+— nothing sink-specific to leak, and no envelope file ever touches disk.
+`config-repo` instead pushes copies of whichever per-execution files
+exist (`_manifest.json`, `_metrics.json` — the metrics file is still
+written and still pushed here, since the git sink replicates files
+wholesale rather than rendering individual event types) under
+`audit/<tenant>/<deployment>/<yyyymmdd-hhmmss>/` in the
+`xyz-configuration` repo's `main` branch, authenticated via whatever
+`github-deploy-key` (the remote's own `integration`) provides — two
+structurally different operations, admitted by the identical
+gate/enabled/events rule, dispatched from the same end-of-run loop.
 
 ### Path resolution — shared by the local write and every push destination
 
@@ -850,28 +989,35 @@ One resolution function, reused everywhere a destination needs to know
 "where do these two files go":
 
 ```
-relative_path = render(structure, {deployment, workspace, environment, tenant, ...})
-                 / "{yyyymmdd-hhmmss}"        # concrete leaf, always appended
+if deployment.spec.layers and deployment.spec.layers.segments:
+    convention = lookup(configuration.spec.paths, deployment.spec.layers.follows)
+    ordered_values = [deployment.spec.layers.segments[s.name] for s in convention.segments]
+    relative_path = Path(*ordered_values)
+else:
+    relative_path = Path(workspace, deployment)
 
-# structure defaults to "{{ workspace }}/{{ deployment }}" — a plain Jinja2 string,
-# not a named-template lookup (see "Streamlining the configuration surface" above)
+relative_path = relative_path / "{yyyymmdd-hhmmss}"   # concrete leaf, always appended
+
+# No template string, no `structure` field — this is a plain function of
+# already-resolved model data (see "Streamlining the configuration
+# surface" above).
 ```
 
-- **Local write:** `local_base_path / relative_path / _manifest.json` (and `_metrics.json`) — `local_base_path` defaults to `.strata/audit` (`spec.audit.path`)
+- **Local write:** `local_base_path / relative_path / _manifest.json` (and `_metrics.json`) — `local_base_path` is `layout.audit_dir(root)` (`.strata/audit`, fixed — see "Streamlining the configuration surface" above)
 - **`git` sink:** `checked_out_repo_root / sink.git.path / relative_path / _manifest.json` (and `_metrics.json`) — the *same* `relative_path`, rooted under the sink's own `path` instead of the local base
 - **`integration` sink:** no filesystem path at all — the CloudEvent is rendered fresh from the manifest/metrics content at dispatch time (see "The audit files" above); `relative_path` still travels as a field on the rendered payload (alongside `execution_id`), so a SIEM record and its on-disk/git counterpart can be correlated without a lookup
 
 **The `yyyymmdd-hhmmss` leaf is unconditional — appended regardless of
-what the structure template itself contains.** This is a deliberate fix,
-not just a formatting choice. v1's own built-in structures include `flat:
-"{{ deployment }}"` and `by-stage: "{{ deployment }}/{{ stage }}"` —
-*neither has a timestamp component at all* — so under those two
+what the derived directory shape itself contains.** This is a deliberate
+fix, not just a formatting choice. v1's own built-in structures include
+`flat: "{{ deployment }}"` and `by-stage: "{{ deployment }}/{{ stage }}"`
+— *neither has a timestamp component at all* — so under those two
 structures, every subsequent run for the same deployment/stage **silently
 overwrote** the previous `_execution.json`; picking the "wrong" structure
 name was enough to lose audit history with no error. Making the timestamp
-leaf mandatory and separate from the configurable structure closes that
-class of bug structurally: the collision-avoiding segment is no longer
-inside the part a config author can omit.
+leaf mandatory and separate from the derived directory shape closes that
+class of bug structurally: the collision-avoiding segment is never
+something a config author's `layers.segments` (or its absence) can omit.
 
 `yyyymmdd-hhmmss` (not ISO-8601 with colons) matches v1's own filesystem
 sanitization (`fs_timestamp = payload.timestamp.replace(":", "-")` in
@@ -957,19 +1103,25 @@ configured sink, git included; an integration sink renders its
 `deployment.measured` CloudEvent from this file's content on the fly —
 see "The audit files" above).
 
-**Also worth adopting — a durable local append series.** v1's own
-observation: per-execution build directories get cleaned, so without an
-append-only series a future aggregation consumer has no offline corpus to
-read at all. Alongside every per-execution `_metrics.json`, also append
-one line to a fixed, never-cleaned path — `{spec.audit.path}/
-deployments.ndjson`, **not its own separately configurable key** (see
-"Streamlining the configuration surface" above; v1 had this as an
-independent `metrics_path` setting, dropped here) — orthogonal to the
-per-execution `structure`/`yyyymmdd-hhmmss` path resolution, since its
-whole value is being one well-known path a bulk reader can open without
-traversing a directory tree. Feeds a deferred future `strata metrics`/
-`audit trends`-style command (Phase B in v1's own phasing) — not building
-the command now, same reasoning already applied elsewhere in this doc.
+**Dropped — the durable local append series, per real-usage evidence
+(2026-09-30).** Originally proposed: alongside every per-execution
+`_metrics.json`, also append one line to a fixed, never-cleaned local path
+so a future aggregation consumer has an offline corpus to read, since
+per-execution build directories get cleaned. Caught on review, walking the
+full end-to-end loop with real usage in mind: **~90% of real deploys run
+in ephemeral CI** (`cfg-int-deployment`'s own is Azure Pipelines) — a
+runner checks out fresh, writes exactly one line to a local-only file,
+then the runner and that file are both destroyed. The series would never
+actually accumulate where most runs happen, which is backwards from its
+own stated purpose. A local-only append series is real value only for the
+minority long-lived/manual-run case — not enough to justify building it
+now, especially since nothing reads it yet either (`strata metrics`/
+`audit trends` doesn't exist). Dropped entirely from this pass, same
+treatment as `journal` — revisit properly (the real fix is having the
+`git` sink also append to a *remote*-tracked series inside its existing
+push transaction, so it's durable exactly where the majority of runs
+happen) once `strata metrics` is actually being designed, not bundled in
+here speculatively.
 
 **Deliberately excluded, per v1's ADR (still applies):**
 `time_since_previous_deploy_seconds` (violates the self-containment
@@ -978,6 +1130,215 @@ instead), output *values* (counts and key names only — outputs already
 track `sensitive_keys` for exactly this reason), inline SBOM (a reference
 by digest, not the content — same discipline already applied to
 `artifacts.platform`/`sbom` in the manifest).
+
+## Implementation Plan
+
+Everything below is settled design (this whole "v2 Design Notes" section,
+its open questions resolved, the full end-to-end loop walked once with a
+worked example). Phased the same way [solution-scaffolding.md](solution-scaffolding.md)
+was — one phase, one focused change, full check suite, then the next.
+
+**Explicitly out of scope for every phase below** (already decided
+above, restated here so a phase reviewer doesn't have to re-derive it):
+the `integration` sink arm's dispatch and `Capability.AUDIT` (modeled,
+never called); the CLI-invocation `journal`; the local
+`deployments.ndjson` append series; Layer 3 CLI reporting
+(`audit changes`/`diff`/`resend`/`status`); the generic policy engine.
+
+### Phase 1 — Config models — ~~IMPLEMENTED (2026-09-30)~~
+
+- New `src/strata/models/audit_model.py`: `AuditGitSinkTargetModel`
+  (`remote`/`branch`/`path`), `AuditSinkModel` (`name`, `enabled`,
+  `required`, `events`, `integration` w/ `References(PlatformKind.
+  INTEGRATION)`, `git`, exactly-one-arm validator), `AuditConfigModel`
+  (`event_overrides: dict[str, bool] | None`, `sinks: list[AuditSinkModel]
+  | None`, unique-sink-names validator via `check_unique_names()`).
+  `EVENT_DEFAULTS` is the module-level closed set (named plainly, not
+  `_EVENT_DEFAULTS` — it's read by tests and will be read by Phase 5).
+- `ConfigurationSpecModel.audit: AuditConfigModel | None` field added in
+  `configuration_model.py`, matching `security`/`paths`'s exact style.
+- `layout.audit_dir(root) -> Path` added in `utils/layout.py` (`root /
+  STRATA_DIR / "audit"`) — no `path` field anywhere, per "Streamlining
+  the configuration surface".
+- The unknown-key validator and the sink-filters-against-gate cross-check
+  are both ported from v1's real `AuditConfigModel`/`AuditPolicyModel`,
+  scoped down to the 3-entry closed set — see "Event admission".
+- Tests (`tests/strata/models/test_models_audit.py`, 17 new): exactly-one-
+  arm validator (both directions), `required` defaults `False`, unknown
+  event type on a sink filter, `spec.audit` fully optional end-to-end,
+  unknown `event_overrides` key rejected, unique sink names, sink
+  filtering on a gate-disabled event rejected, `ConfigurationSpecModel.
+  audit` wiring, and reference discoverability confirmed directly via
+  `extract_references()` — both in isolation (`AuditSinkModel.integration`,
+  `AuditGitSinkTargetModel.remote`) and transitively from the root
+  `ConfigurationModel` (`spec.audit.sinks[].integration`/`.git.remote`).
+  Full check suite green: mypy (113 files), ruff, import-linter (1 kept,
+  0 broken), pytest (1403 passed — same pre-existing, unrelated `config/`
+  example-solution drift as the sole failure).
+
+### Phase 2 — Manifest and metrics models — ~~IMPLEMENTED (2026-09-30)~~
+
+- New `src/strata/models/audit_manifest_model.py`: the merged manifest
+  shape from "The audit files" table — identity, timing, outcome (tri-
+  state `status`), flags, actor + git context, PR/change-reference
+  evidence (`ChangeReferenceModel`, `ManifestPullRequestModel`),
+  `artifacts.platform` as hash+path reference (not embedded), `stages[]`
+  (deploy-log's richer per-step shape via `ManifestStepModel`), satellite
+  references (`sbom`/`outputs`/`signatures`/`policy_results`/`lock`),
+  catch-alls. No `apiVersion`/`kind`/`meta` envelope — a written artifact
+  under `.strata/`, never a discoverable `(kind, name)` document.
+- New `src/strata/models/audit_metrics_model.py`: `MetricsDimensionsModel`/
+  `MetricsMeasuresModel`/`MetricsSectionModel` split, `ErrorCategory`
+  `StrEnum`, `label_safe` defaulting to the bounded dimension subset
+  (`outcome`/`action`/`environment`/`tenant`), a validator confirming
+  `error_category` is only set alongside a `failed` outcome.
+- New `src/strata/controllers/audit_event_rendering.py`:
+  `render_manifest_event()`/`render_metrics_event()` (CloudEvents 1.0 +
+  ECS shape) — modeled and unit-tested now even though nothing calls it
+  yet in this pass (only the `integration` arm would call it, and that's
+  deferred). Lives in `controllers/`, not `utils/`, since it depends on
+  concrete model types (ADR-0003 — `utils/` never depends on `models/`).
+- Tests (23 new — 10 manifest, 8 metrics, 5 event-rendering): tri-state `status` values, `artifacts.platform` rejects
+  an embedded `content` field outright (`extra="forbid"`), stage
+  steps/outputs-artifact shapes, `error_category`/`outcome` cross-
+  validation, `label_safe` excludes unbounded fields by default, rendered
+  envelope matches the documented JSON shape field-for-field (including
+  the destroy→`deployment.destroyed` type switch, ECS `duration` in
+  nanoseconds, a fresh `id` on every call, and no wholesale payload dump
+  in `data`). Full check suite green: mypy (116 files), ruff,
+  import-linter (1 kept, 0 broken), pytest (1426 passed — same
+  pre-existing, unrelated `config/` example-solution drift as the sole
+  failure).
+
+### Phase 3 — Resolution helpers — ~~IMPLEMENTED (2026-09-30)~~
+
+- `utils/actor.py::resolve_actor() -> str` — pure function, no
+  dependency on other layers: `BUILD_REQUESTEDFOR` ->
+  `BUILD_REQUESTEDFOREMAIL` -> `getpass.getuser()` -> `"unknown"`, never
+  raises. Lives in `utils/` (not `controllers/`), matching
+  `path_conventions.py`'s own placement rationale — pure, no
+  cross-document lookups.
+- `controllers/audit_path_resolution.py::resolve_audit_relative_path(...)
+  -> Path` — the derivation from "Streamlining the configuration
+  surface"/"Path resolution": join a deployment's `layers.segments` in
+  its convention's declared segment order when present, else fall back to
+  `Path(workspace, deployment)`; always appends the mandatory
+  `yyyymmdd-hhmmss` leaf from the run's `started_at`. Lives in
+  `controllers/` (not `utils/`) because it needs the resolved
+  `PathConventionModel` alongside the `DeploymentModel` — a
+  cross-document lookup, same tier as `semantic_checks.py`. Reuses the
+  identical `{c.name: c for c in configuration.spec.paths}` lookup
+  `semantic_checks.py::_check_deployment_layers()` already uses, rather
+  than inventing a second convention-lookup shape — never raises on a
+  missing/mismatched declaration, since reporting that mismatch is
+  `semantic_checks.py`'s job, not this function's; it just falls back.
+- Tests (18 new — 5 actor, 13 path resolution): CI-env-var precedence
+  order, OS-user fallback, `getpass` failure still resolves to
+  `"unknown"`, never raises; segment-order-derived path for a fixture
+  `layers` block, fallback path when no `layers` block/no configuration/
+  unknown convention name/incomplete segments, `yyyymmdd-hhmmss` leaf
+  always present and colon-free in every case. Full check suite green
+  (mypy 118 files, ruff, import-linter, pytest 1439 passed — same
+  pre-existing, unrelated `config/` example-solution drift as the sole
+  failure).
+
+### Phase 4 — Git push destination — ~~IMPLEMENTED (2026-09-30)~~
+
+- New `controllers/audit_push.py::push_audit_files(root, sink, solution,
+  files, relative_path, actor) -> PushResult` — resolution keyed by
+  `(remote, branch)` via new `layout.audit_push_checkout_path()`, not
+  `(remote, reference)` like `resolve_remote()`; always fetch + reset
+  before writing (never trusts an existing checkout indefinitely, unlike
+  `resolve_remote()`'s read-path caching); copies the given files in,
+  configures a local (not global) git identity from the resolved `actor`
+  so `git commit` never fails on a CI runner with no identity configured,
+  then `git add`/`commit`/`push` using the `HEAD:<branch>` refspec trick.
+  Reuses `utils.transport.run_command` and the established
+  `{remote.name: remote for remote in solution.spec.remotes}` lookup
+  pattern (`deploy_controller.py`/`build_controller.py`/`version_pins.py`
+  all already do this inline; matched rather than inventing a shared
+  helper). `PushResult(success, detail)` never raises for an ordinary
+  push failure — Phase 5 decides `required`/`Severity` from it.
+  Deliberately not resolving `remote.integration` for real credentials —
+  matches `remote_resolution.py`'s own current, documented state (relies
+  on git's own ambient auth; no `SourceIntegration` ABC exists yet).
+- **Real-testing found and fixed a genuine edge case not in the original
+  plan**: resetting to `origin/HEAD` unconditionally fails outright
+  against a brand-new, completely empty remote (`fatal: ambiguous
+  argument 'origin/HEAD'` — no commits exist upstream yet, so there is no
+  default branch to point to). Fixed by falling back further: target
+  branch exists upstream → reset to it; else the remote has *some*
+  default branch → reset to that; else (a genuinely empty remote) nothing
+  to reset to at all — proceed from the fresh, empty clone as-is. Found
+  by a real end-to-end test against a real empty bare repo, not assumed
+  from reading git's docs.
+- Tests (11 new): 6 with a mocked `run_command` (matching
+  `test_remote_resolution.py`'s own established style — unknown remote,
+  non-git remote type, no solution, identity configured before commit,
+  clone failure short-circuits, the full clone→fetch→reset→push command
+  sequence); 3 real end-to-end round trips against a real local bare git
+  repository (first push to a brand-new empty remote; a second push
+  reusing the same checkout directory, confirming fetch+reset against a
+  now-real `origin/<branch>`; the checkout path matches
+  `layout.audit_push_checkout_path()`). Full check suite green (mypy 119
+  files, ruff, import-linter, pytest 1447 passed — same pre-existing,
+  unrelated `config/` example-solution drift as the sole failure).
+
+### Phase 5 — Wiring into the run — ~~IMPLEMENTED (2026-09-30)~~
+
+- **Scope correction found by checking real code, not assumed**: no
+  `destroy` command exists in v2 yet — "and the equivalent destroy path"
+  in the original plan had nothing to wire. Deploy-only for this phase;
+  extend when `deploy destroy` is built.
+- **New module `controllers/audit_run.py::finalize_and_distribute_deploy_audit()`,
+  not a change to `deploy_controller.py::deploy_run()` itself** — a
+  deliberate departure from the original plan. That function's existing
+  fail-fast, single-return-diagnostics shape is complex, heavily tested,
+  and load-bearing; it does not expose per-step stage/timing data today.
+  Wrapping its *result* was chosen over restructuring its internals to
+  fabricate that granularity — `stages[]` is therefore omitted from the
+  manifest in this pass (coarser than "The audit files"' full design),
+  revisited only if/when `deploy_run()` itself is refactored to expose
+  that data (separate, larger work).
+- **`artifacts.platform` references `build_path/resolved.yaml`**
+  (`build_controller.write_resolved_manifest()`) — v2's closest real
+  equivalent to v1's `platform.json`; v2 does not produce that exact file
+  today. An honest adaptation, found by checking what `build_run()`
+  actually writes rather than assuming a `platform.json` exists.
+  `deploy_command.py::deploy_run_command` now generates `execution_id`/
+  `started_at` once, before calling `deploy_run()`, and calls this new
+  function after, merging its findings into the same `Diagnostics` the
+  command already reports.
+- One loop over `spec.audit.sinks` (empty/omitted is a no-op): admission
+  (`EVENT_DEFAULTS` merged with `event_overrides` → sink `enabled` →
+  sink's own `events` filter); `git` arm dispatches via Phase 4;
+  `integration` arm is **not dispatched** — produces one `Severity.INFO`
+  finding per configured integration sink instead, naming it explicitly.
+  Dispatch failure escalates to `Severity.WARNING` by default, or
+  `Severity.ERROR` (failing the command at exit 3) when `sink.required`
+  is `true` — exactly as designed.
+- Tests (13 new): zero-config writes both files locally with no dispatch
+  attempted; the manifest reflects a failed run's `status`; a dry run
+  writes nothing at all; a missing `resolved.yaml` warns (not errors) and
+  skips cleanly; `event_overrides` disabling `deployment.measured`
+  suppresses only that file's *dispatch*, never its local write; a
+  configured `git` sink pushes to a real local bare repository; a forced
+  push failure warns without failing when `required: false`, and fails
+  the command when `required: true`; a configured `integration` sink
+  produces the expected info finding and calls `push_audit_files` zero
+  times. **A real test-isolation bug found and fixed along the way**: a
+  fixture borrowed from `test_deploy_controller.py` patched the shared
+  `shutil` module's `which` globally (to fake `terraform`), which broke
+  this file's *real* `git` subprocess calls too, since both modules
+  import the same `shutil` object — every push silently "succeeded" with
+  0 files landed until the test asserted on `diagnostics.warnings`
+  explicitly rather than trusting `.ok` alone (a warning never affects
+  `.ok`). Fixed by making the fake `which` pass through to the real one
+  for anything other than `terraform`. Full check suite green (mypy 121
+  files, ruff, import-linter, pytest 1484 passed — same pre-existing,
+  unrelated `config/` example-solution drift as the sole failure).
+
+**Layer 2 Implementation Plan complete — all 5 phases shipped.**
 
 ## Related Decisions
 
@@ -1075,6 +1436,21 @@ a v2 ADR/implementation:
   actor is strictly better than `commit_author` silently standing in for
   one, and a real identity model is a separate, larger, not-yet-started
   effort (v1's own ADR-0067 was out of scope there too).
+  Verified directly against v1's real `actor_controller.py::resolve_actor()`
+  (ADR-0066/ADR-0067): its full chain has two steps *above* the two
+  adopted here — a control-plane session (`IdentityController`, gated on
+  a whole OIDC login/RBAC server v2 doesn't have) and the signed-in cloud
+  CLI identity (az/aws/gcloud, whichever is configured — checked in that
+  fixed order). The cloud-CLI step is a **future enhancement, not a gap**:
+  `cfg-int-deployment` runs on Azure (every provider declares
+  `authentication.method: managed_identity`) but authenticates through
+  Azure Pipelines' own service connection, not a strata-owned `azure_cli`
+  integration — v2 has no `azure_cli`/`aws_cli`/`gcloud_cli` integrations
+  at all yet, and no real consumer configures the identity-provider/
+  control-plane layer either. Revisit this step only once v2 grows its
+  own cloud-CLI integrations for other reasons (e.g. deployer auth); it
+  slots into the same precedence chain above the CI-env-var step without
+  changing anything already decided here.
 - **Where does config live? — Decided (2026-09-30): `ConfigurationSpecModel.audit`,
   matching v1 exactly, not Environment or Deployment.** v1's own
   rationale is sound and directly reusable: audit configuration living
@@ -1134,20 +1510,28 @@ a v2 ADR/implementation:
   file" above:** answers the user's follow-up ask for runtime/success/
   failure/error content, adapting v1's own never-built ADR-0064
   (dimensions/measures/sections split, `error_category` enum instead of
-  raw errors, `label_safe` cardinality list, deploy/destroy-only scope,
-  plus a durable append series, now derived from `spec.audit.path` rather
-  than its own config key — see "Streamlining the configuration
-  surface"). Still open: whether non-outcome event types
-  (`policy.violated`, etc.) have a manifest to render from at all, and
-  how future satellite kinds (sbom already modeled; SBOM scan results,
-  cost/drift snapshots, etc.) register as new reference fields.
-- **Configuration surface streamlined 2026-09-30 — see "Streamlining the
-  configuration surface" above.** `spec.audit` is fully optional
-  end-to-end; `path`/`journal.path`/`metrics_path` (three independent
-  keys) collapsed to one (`spec.audit.path`, default `.strata/audit`)
-  with journal/metrics paths derived from it; `structure` simplified from
-  v1's 8-name built-in template lookup to one plain, optional Jinja2
-  string (default `{{ workspace }}/{{ deployment }}`).
+  raw errors, `label_safe` cardinality list, deploy/destroy-only scope —
+  a local durable append series was considered but dropped, see "A third
+  file"). Still open: whether non-outcome event types (`policy.violated`,
+  etc.) have a manifest to render from at all, and how future satellite
+  kinds (sbom already modeled; SBOM scan results, cost/drift snapshots,
+  etc.) register as new reference fields.
+- **Configuration surface streamlined 2026-09-30, then simplified further
+  2026-09-30 — see "Streamlining the configuration surface" above.**
+  `spec.audit` is fully optional end-to-end. `path` is dropped outright
+  (`.strata/audit` is a fixed `layout.py` location, not a config field, same
+  tier as `REMOTES_DIRNAME`). `structure` is dropped too — no Jinja2
+  field at all — derived instead from a deployment's own
+  `layers.follows`/`layers.segments` (already validated against
+  `spec.paths` by `semantic_checks.py`) when present, falling back to a
+  fixed `workspace/deployment` otherwise. `journal` is deferred out of
+  this pass entirely (no evidenced consumer, same discipline already
+  applied to `Capability.AUDIT`). `policy` is resolved too — see "Event
+  admission — a closed set gate, not a policy framework": no framework,
+  no nested model, no word "policy" at all — a flat `event_overrides:
+  dict[str, bool] | None`, validated against a closed set scoped to only
+  the three events v2 actually produces (`deployment.completed`/
+  `destroyed`/`measured`), not v1's full 20-type list.
 
 ## Changelog
 
@@ -1304,6 +1688,222 @@ a v2 ADR/implementation:
   forwarding, matching this doc's own "Lessons from v1's own defects" #1
   (declared-but-unread machinery). All open questions are now resolved;
   ready for a Layer 2 Implementation Plan.
+- 2026-09-30: Investigated v1's real `azure`/`aws`/`gcloud`/generic-OIDC
+  identity system, per request ("lets look at the v1 auth model first").
+  Found two distinct systems: `AuthenticationModel` (declarative
+  per-integration credential shape — already ported to v2, unrelated to
+  actor identity) and a much larger identity-provider/OIDC control-plane
+  login system (ADR-0067, `IdentityController` + `server/auth/*` —
+  sessions, RBAC, M2M) gated on a control-plane server v2 doesn't have.
+  Confirmed via v1's real `actor_controller.py::resolve_actor()` that the
+  already-adopted CI-env-var/OS-user chain is exactly v1's own bottom two
+  precedence steps, not a gap — the two steps above it (control-plane
+  session; signed-in cloud CLI identity) need infrastructure v2 lacks.
+  Verified no real consumer need: `cfg-int-deployment` runs on Azure
+  (`authentication.method: managed_identity` on every provider) but
+  authenticates via Azure Pipelines' own service connection, not a
+  strata-owned `azure_cli` integration, and configures no identity-
+  provider/control-plane integration at all. Added a note to "Actor/
+  identity" recording the cloud-CLI step as a future enhancement once v2
+  grows its own `azure_cli`/`aws_cli`/`gcloud_cli` integrations for other
+  reasons — not a blocker for Layer 2.
+- 2026-09-30: Reviewed the "v2 Design Notes" section against real v2 code,
+  per request ("lets look further into the design and see if it matches
+  the v2 spirit/redesign"). Confirmed several sketches already match real
+  precedent exactly (`RemoteReference()` on `AuditGitSinkTargetModel.remote`
+  matches `common_models.py`'s real `SourceModel.remote`; new git-push
+  logic belonging in `controllers/` over `utils.transport.run_command()`
+  matches `remote_resolution.py`'s real shape; `ConfigurationSpecModel.audit`
+  matches `security`/`paths`'s exact field style). Found and fixed four
+  gaps in "The endpoints": (1) `AuditSinkModel.integration` was a bare
+  `PlatformName`, not annotated `References(PlatformKind.INTEGRATION)` like
+  every other "names an Integration" field in v2 (`artifact_model.py`,
+  `provisioning_model.py`) — fixed. (2) No uniqueness validator was
+  sketched for `sinks[].name`, unlike every other named list on
+  `ConfigurationSpecModel` — added, matching `check_unique_names()`. (3)
+  Adding `Capability.AUDIT` now was a real inconsistency with this doc's
+  own already-settled "Layer scope" decision (the `integration` arm's
+  dispatch is deferred) — the exact "declared-but-unread machinery"
+  pattern this doc calls out elsewhere; deferred `Capability.AUDIT` to
+  land together with that dispatch instead. (4) Considered, and kept,
+  `events: list[str] | None` as a plain string list rather than an enum —
+  unlike `Capability`, it has only one consulting site (the runtime policy
+  gate), so an enum would add a sync burden with no added typo-safety.
+- 2026-09-30: Began an implementation walkthrough ("lets go over the
+  design step by step"), Step 1 (config models) — surfaced three fields
+  that turned out not to be configuration at all, per the user's own
+  challenge ("`path`... is fixed. `.strata` is our folder we choose in
+  there what and where", plus questioning `structure`/`journal`/`policy`
+  before any code was written. Resolved: (1) `path` dropped outright —
+  `.strata/audit` becomes a fixed `layout.audit_dir(root)` location, same
+  tier as `REMOTES_DIRNAME`, never a config field. (2) `structure`
+  dropped too, replaced by deriving the per-execution directory from a
+  deployment's own `layers.follows`/`layers.segments` when declared
+  (already validated against `spec.paths` by `semantic_checks.py`) —
+  found by checking `path_conventions.py` is match-only, so a Jinja
+  `structure` field would have been a disconnected second way to
+  describe a directory shape `spec.paths` may already declare once —
+  falls back to a fixed `workspace/deployment` when no `layers` block
+  exists. (3) `journal` deferred out of this pass entirely — checked
+  against real usage and found no evidenced consumer (`cfg-int-deployment`
+  runs it "always on, local, gitignored" but nothing reads or forwards
+  it), the same "declared-but-unread machinery" caution already applied
+  to `Capability.AUDIT`. (4) `policy`/event-overrides intentionally left
+  unresolved — flagged by the user as "a big one" needing its own
+  discussion (is this a policy framework, or a plain override table?) —
+  to be picked up next, separately from this update. Updated
+  "Streamlining the configuration surface", "Path resolution", "A third
+  file", and the Remaining Work summary bullets to match.
+- 2026-09-30: Resolved "policy" ("lets dig into the policies"), checked
+  directly against v1's real `models/audit_config_model.py` rather than
+  the earlier prose catalog. Verdict: a closed-set event gate with a
+  validator, not the deny/warn/multi-type engine
+  `PathConventionModel.enforcement` already declined to port — no
+  framework needed first. Two simplifications from v1's real shape:
+  dropped the `Union[bool, AuditEventPolicyModel]` object wrapper (its
+  extra fields were v1's own "reserved, not read by any producer yet")
+  for a flat `event_overrides: dict[str, bool] | None`; and scoped the
+  closed set to only the three events v2 actually produces
+  (`deployment.completed`/`destroyed`/`measured`), not v1's full 20-type
+  list spanning workitem/lock/drift/cost/secret producers v2 doesn't have
+  — named explicitly that `cfg-int-deployment`'s real overrides
+  (`secret.accessed`/`policy.violated`/`workitem.rejected`) all fall
+  outside this scoped set, expected given none of those producers exist
+  in v2 yet. Also dropped the word "policy" itself — no field or model
+  is named that. Added "Event admission — a closed set gate, not a policy
+  framework"; updated the sink code comment, its `events` YAML example,
+  and "Example configuration"'s `policy:` block (now `event_overrides:`)
+  to match.
+- 2026-09-30: Walked the full end-to-end loop with a worked example
+  ("give the full design example loop again"), which surfaced two real
+  gaps rather than just confirming the design. (1) **Dropped the durable
+  local append series (`deployments.ndjson`) entirely**, per direct
+  challenge ("90 percent deployed in CI/CD so will be not saved") — a
+  local-only file in an ephemeral CI runner gets one line appended then
+  destroyed, never accumulating where most real runs happen; the real fix
+  (the `git` sink also appending to a *remote*-tracked series) is real
+  work belonging to a future `strata metrics` design, not bundled in here
+  speculatively. Updated "A third file", the "Net result" paragraph, and
+  the Remaining Work summary bullet to match. (2) **Added `AuditSinkModel.
+  required: bool = False`** for dispatch-failure semantics, per direct
+  challenge that "fail silently or failure" was a false binary — reused
+  `Integration.required`'s existing name/default rather than inventing new
+  vocabulary, and `Diagnostics`' existing `Severity.WARNING`/`ERROR` tiers
+  rather than a new mechanism: a dispatch failure always warns (visible,
+  never silent), escalating to a hard failure (blocking `deploy run` at
+  exit 3) only when the sink opts in via `required: true`. New "Dispatch
+  failure — a `required` flag, not a binary silent-vs-fail choice"
+  section.
+- 2026-09-30: Added a 5-phase Layer 2 Implementation Plan ("create the
+  implementation plan"), phased like [solution-scaffolding.md](solution-scaffolding.md)'s
+  own Phase 1/2/3 structure: (1) config models (`audit_model.py`,
+  `ConfigurationSpecModel.audit`, `layout.audit_dir()`); (2) manifest +
+  metrics models (`audit_manifest_model.py`/`audit_metrics_model.py`,
+  `render_event()`); (3) resolution helpers (`utils/actor.py`,
+  `controllers/audit_path_resolution.py`); (4) the git push destination
+  (`controllers/audit_push.py`, fetch+reset before every write, the
+  `HEAD:<branch>` refspec trick); (5) wiring into `deploy_controller.
+  deploy_run()`'s end-of-run sequencing, including the `integration` arm's
+  explicit `Severity.INFO` "not dispatched yet" finding (chosen so a
+  configured-but-inert sink is visibly known, not silently doing nothing)
+  and the `required`/`Severity` dispatch-failure handling. Restated what's
+  explicitly out of scope for every phase (integration dispatch +
+  `Capability.AUDIT`, `journal`, `deployments.ndjson`, Layer 3 CLI
+  reporting, the generic policy engine) once, at the top of the plan,
+  rather than repeating it per phase. Updated the doc's top status line.
+- 2026-09-30: **Phase 1 (config models) implemented** ("design, plan,
+  show, and implement phase 1"). New `src/strata/models/audit_model.py`
+  (`AuditGitSinkTargetModel`, `AuditSinkModel`, `AuditConfigModel`,
+  `EVENT_DEFAULTS`); `ConfigurationSpecModel.audit` wired in
+  `configuration_model.py`; `layout.audit_dir()` added. Ported both real
+  v1 validators (unknown event-type key, sink-filters-against-gate),
+  scoped to the 3-entry closed set. 17 new tests, including reference
+  discoverability confirmed directly via `extract_references()` rather
+  than assumed. Full check suite green (mypy 113 files, ruff,
+  import-linter, pytest 1403 passed — same pre-existing unrelated
+  `config/` drift as the sole failure). Sphinx rebuilt clean. Updated
+  Phase 1's own checklist and the top status line.
+- 2026-09-30: **Phase 2 (manifest + metrics models) implemented**
+  ("design, plan, show, and implement phase 2"). New
+  `src/strata/models/audit_manifest_model.py` (`DeploymentManifestModel`
+  and its satellite sub-models — `ChangeReferenceModel`,
+  `ManifestPullRequestModel`, `ManifestArtifactsModel`, `ManifestStageModel`/
+  `ManifestStepModel`, `ManifestSbomReferenceModel`,
+  `ManifestOutputsReferenceModel`, `ManifestPolicyResultModel`,
+  `ManifestLockReferenceModel`); new
+  `src/strata/models/audit_metrics_model.py` (`DeploymentMetricsModel`,
+  `MetricsDimensionsModel`/`MetricsMeasuresModel`/`MetricsSectionModel`,
+  `ErrorCategory`); new `src/strata/controllers/audit_event_rendering.py`
+  (`render_manifest_event()`/`render_metrics_event()`). Grounded the exact
+  field shapes in v1's real `models/deployment_manifest_model.py`/
+  `change_reference_model.py` (read directly, not re-derived from prose)
+  where the design doc's own table didn't spell out a sub-model shape —
+  e.g. `ManifestPullRequestModel`'s exact field set came from "Layer 1"'s
+  own `enrich_with_pr_data()` description (`number`/`title`/`url`/
+  `author`/`merged_by`/`merged_at`/`labels`/`files_changed`/`approvers`),
+  not invented fresh. 23 new tests. Full check suite green (mypy 116
+  files, ruff, import-linter, pytest 1426 passed — same pre-existing
+  unrelated `config/` drift as the sole failure). Sphinx rebuilt clean.
+  Updated Phase 2's own checklist and the top status line.
+- 2026-09-30: **Phase 3 (resolution helpers) implemented** ("design,
+  plan, show, and implement phase 3"). New `src/strata/utils/actor.py`
+  (`resolve_actor()`) and new `src/strata/controllers/
+  audit_path_resolution.py` (`resolve_audit_relative_path()`). The path
+  resolver reuses `semantic_checks.py::_check_deployment_layers()`'s own
+  `{c.name: c for c in configuration.spec.paths}` lookup pattern rather
+  than inventing a second one, and never raises on a missing/mismatched
+  `layers` declaration — falls back to `workspace/deployment` instead,
+  since reporting that mismatch is `semantic_checks.py`'s job. 18 new
+  tests (5 actor, 13 path resolution — including convention-order
+  derivation, every fallback branch, and Windows-safe timestamp
+  formatting). Full check suite green (mypy 118 files, ruff,
+  import-linter, pytest 1439 passed — same pre-existing unrelated
+  `config/` drift as the sole failure). Sphinx rebuilt clean. Updated
+  Phase 3's own checklist and the top status line.
+- 2026-09-30: **Phase 4 (git push destination) implemented** ("design,
+  plan, show, and implement phase 4"). New
+  `src/strata/controllers/audit_push.py` (`push_audit_files()`,
+  `PushResult`) and new `layout.audit_push_checkout_path()`. Found and
+  fixed a real edge case via a real end-to-end test (not assumed): reset
+  falls back through target-branch → remote's default branch → nothing-
+  to-reset-to-at-all, since a brand-new empty remote has no `origin/HEAD`
+  either — `git`'s own error, not a guess. 11 new tests (6 mocked,
+  matching `test_remote_resolution.py`'s established style; 3 real,
+  against a real local bare git repository, including a second push
+  reusing the same checkout to confirm fetch+reset against a now-real
+  branch). Full check suite green (mypy 119 files, ruff, import-linter,
+  pytest 1447 passed — same pre-existing unrelated `config/` drift as the
+  sole failure). Sphinx rebuilt clean. Updated Phase 4's own checklist
+  and the top status line.
+- 2026-09-30: **Phase 5 (wiring into the run) implemented — Layer 2
+  Implementation Plan complete** ("design, plan, show, and implement
+  phase 5"). New `src/strata/controllers/audit_run.py`
+  (`finalize_and_distribute_deploy_audit()`), wired into
+  `commands/deploy_command.py::deploy_run_command`. Two scope
+  corrections found by checking real code rather than the original
+  plan text: (1) no `destroy` command exists in v2 yet, so this phase is
+  deploy-only. (2) `deploy_run()`'s own internals were left untouched —
+  wrapping its result was chosen over restructuring its complex,
+  heavily-tested fail-fast shape to expose per-step stage timing it
+  doesn't have today, so the manifest's `stages[]` is omitted in this
+  pass (coarser than the full design), revisited only alongside a
+  separate, larger `deploy_run()` refactor. `artifacts.platform`
+  references `build_path/resolved.yaml` — checked what `build_run()`
+  actually writes rather than assuming a `platform.json` exists; v2 has
+  no such file. 13 new tests, including a real local bare git repository
+  for the sink-dispatch tests. **Found and fixed a real test-isolation
+  bug along the way**: a fixture pattern borrowed from
+  `test_deploy_controller.py` patched the shared `shutil` module's
+  `which` globally to fake `terraform`, which silently broke this file's
+  *real* `git` subprocess calls too (both modules import the same
+  `shutil` object) — every push "succeeded" with 0 files actually landed,
+  caught only once the test asserted on `diagnostics.warnings` directly
+  instead of trusting `.ok` alone (a warning never affects `.ok`). Fixed
+  by making the fake `which` pass through to the real one for anything
+  other than `terraform`. Full check suite green (mypy 121 files, ruff,
+  import-linter, pytest 1484 passed — same pre-existing unrelated
+  `config/` drift as the sole failure). Sphinx rebuilt clean. Updated
+  Phase 5's own checklist and the top status line — Layer 2 is live.
 
 
 

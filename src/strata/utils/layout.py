@@ -79,6 +79,16 @@ def remotes_dir(root: Path) -> Path:
     return strata_dir(root) / REMOTES_DIRNAME
 
 
+def audit_dir(root: Path) -> Path:
+    """Return the audit trail directory for `root` (docs/design/audit-trail.md).
+
+    Fixed, never configurable — `spec.audit` has no `path` field, the same
+    way remotes have no configurable location either (see this module's own
+    docstring).
+    """
+    return strata_dir(root) / "audit"
+
+
 def remote_checkout_path(root: Path, remote: str, reference: str | None) -> Path:
     """Return where a remote materialises on disk, keyed by resolved ref.
 
@@ -102,6 +112,20 @@ def remote_checkout_path(root: Path, remote: str, reference: str | None) -> Path
         The checkout directory. Not created — this function is pure.
     """
     return remotes_dir(root) / remote / (reference or "_unpinned")
+
+
+def audit_push_checkout_path(root: Path, remote: str, branch: str) -> Path:
+    """Return where an audit git-sink's push destination materialises on disk.
+
+    Keyed by `(remote, branch)`, not `(remote, reference)` like
+    `remote_checkout_path()` — a push destination is a mutable branch tip,
+    refreshed (fetch + reset) before every write, never a pinned read
+    source. Kept in its own `audit-push/` subdirectory rather than reusing
+    `remotes_dir()` so the two checkout populations (pinned read sources vs.
+    mutable push destinations) can never collide even if the same remote
+    name is used for both purposes.
+    """
+    return strata_dir(root) / "audit-push" / remote / branch
 
 
 def build_dir(root: Path, deployment: str) -> Path:
@@ -153,4 +177,3 @@ def display_path(value: str | None, root: Path | None) -> str:
         return Path(value).resolve().relative_to(root.resolve()).as_posix()
     except (ValueError, OSError):
         return value
-

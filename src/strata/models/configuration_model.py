@@ -5,14 +5,17 @@ This is a deliberately minimal slice of v1's `configuration_model.py` — v1's
 real ConfigurationModel also covers logging, manifest/output shaping, cost
 and drift tracking, and change tracking. Those are ported only when the
 corresponding v2 kind/feature that needs them is built (see ADR-0003).
-`spec.security`/`spec.paths` (below) are exceptions ported ahead of a
-specific consuming feature — real usage (docs/_gap_v1.md gap #7) had no
-equivalent to derive them from elsewhere, unlike `zones` (superseded by
-`TenantSpecModel.geographies` + `ProviderConfigRegionModel.geography`)
+`spec.security`/`spec.paths`/`spec.audit` (below) are exceptions ported
+ahead of a specific consuming feature — real usage (docs/_gap_v1.md gap #7)
+had no equivalent to derive them from elsewhere, unlike `zones` (superseded
+by `TenantSpecModel.geographies` + `ProviderConfigRegionModel.geography`)
 or `integrations`/`remotes` (already their own standalone kind/the solution
 manifest, respectively). `spec.paths` is narrower than v1's own version —
 see docs/design/path-conventions.md for what's deliberately not ported
-(the generic `validate:` sub-block, the full policy engine).
+(the generic `validate:` sub-block, the full policy engine). `spec.audit`
+is narrower still — see docs/design/audit-trail.md's "v2 Design Notes" for
+what's deliberately not ported (the CLI-invocation journal, a durable local
+append series, the full v1 event-type vocabulary).
 
 `spec.providers`/`spec.topologies` are plain lists of ProviderConfig/
 TopologyConfig document **names**, resolved by discovery against the
@@ -41,6 +44,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 
+from strata.models.audit_model import AuditConfigModel
 from strata.models.common_models import (
     PlatformBaseModel,
     PlatformKind,
@@ -175,8 +179,9 @@ class PathConventionModel(PlatformBaseModel):
 class ConfigurationSpecModel(PlatformBaseModel):
     """Configuration specification.
 
-    Only `providers`/`topologies`/`security`/`paths` are modeled so far —
-    see module docstring for what v1 has that v2 is deliberately deferring.
+    Only `providers`/`topologies`/`security`/`paths`/`audit` are modeled so
+    far — see module docstring for what v1 has that v2 is deliberately
+    deferring.
     """
 
     properties: dict[str, Any] | None = Field(None, description="Optional additional properties for the configuration.")
@@ -195,6 +200,9 @@ class ConfigurationSpecModel(PlatformBaseModel):
     )
     paths: list[PathConventionModel] | None = Field(
         None, description="Directory-family naming conventions, checked structurally against real file paths."
+    )
+    audit: AuditConfigModel | None = Field(
+        None, description="Deployment audit trail: local manifest/metrics + optional git/SIEM distribution."
     )
 
     @model_validator(mode="after")

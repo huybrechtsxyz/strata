@@ -20,6 +20,7 @@ needs all three distinguished, since "not declared" and "failed" call for
 different fixes.
 """
 
+from dataclasses import dataclass
 from typing import Any, cast
 
 from strata.controllers.deployment_resolution import resolve_deployment_chains
@@ -48,6 +49,7 @@ from strata.models.tenant_model import TenantModel
 from strata.models.version_model import VersionModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
+from strata.utils.diagnostics import Diagnostics
 from strata.utils.dict_merge import deep_merge
 from strata.utils.errors import UsageError
 
@@ -469,3 +471,109 @@ def _resolve_store_value(
         # v1 precedent: a feature always renders as a lowercase true/false/none string.
         value = "none" if value is None else str(value).lower()
     return value
+
+
+#: `values list --type` choices — matches v1's `--type variables|secrets|features`.
+VALUE_TYPE_FILTERS = ("variables", "secrets", "features")
+
+
+@dataclass(frozen=True)
+class DeclaredValueRow:
+    """One declared variable/secret/feature, with no store I/O performed
+    (`values list --declared-only`, docs/design/values-secrets-command.md
+    Phase 2).
+
+    `generate`/`rotate` are only ever set for a secret (the only kind with
+    those spec fields, `store_model.SecretStoreModel`) — always `None` for a
+    variable/feature row.
+    """
+
+    key: str
+    kind: str
+    """One of "variable"/"secret"/"feature"."""
+    store: str
+    value_ref: str | None
+    generate: str | None = None
+    """`"{type}/{length}"` when the secret has a `generate:` spec, else `None`."""
+    rotate: str | None = None
+    """`"{max_age}d/{policy}"` when the secret has a `rotate:` spec, else `None`."""
+
+
+def _declared_variable_row(item: VariableStoreModel) -> DeclaredValueRow:
+    return DeclaredValueRow(
+        key=item.key, kind="variable", store=item.store.value, value_ref=None if item.value is None else str(item.value)
+    )
+
+
+def _declared_secret_row(item: SecretStoreModel) -> DeclaredValueRow:
+    return DeclaredValueRow(
+        key=item.key,
+        kind="secret",
+        store=item.store.value,
+        value_ref=None if item.value is None else str(item.value),
+        generate=f"{item.generate.type.value}/{item.generate.length}" if item.generate else None,
+        rotate=f"{item.rotate.max_age}d/{item.rotate.policy.value}" if item.rotate else None,
+    )
+
+
+def _declared_feature_row(item: FeatureStoreModel) -> DeclaredValueRow:
+    return DeclaredValueRow(
+        key=item.key, kind="feature", store=item.store.value, value_ref=None if item.value is None else str(item.value)
+    )
+
+
+def list_values(
+    context: SolutionContext,
+    deployment_name: str,
+    *,
+    type_filter: str | None = None,
+    declared_only: bool = False,
+) -> tuple[list[DeclaredValueRow], Diagnostics]:
+    """List every variable/secret/feature reachable from `deployment_name`.
+
+    Phase 2 of docs/design/values-secrets-command.md's Implementation Plan:
+    only the offline, no-store-I/O listing (`declared_only=True`,
+    generalizing v1's secret-only `secret list` to all three kinds) is
+    built. The live-resolve default mode (masking secrets, reusing
+    `_resolve_store_value()` per declared key — v1's `values list`) is
+    Phase 4 — `declared_only=False` raises `UsageError` for now rather than
+    silently returning an incomplete result.
+
+    Args:
+        context: An already-`require_valid()`-ed solution.
+        deployment_name: `meta.name` of the deployment to list values for.
+        type_filter: Restrict to one of `VALUE_TYPE_FILTERS`, or `None` for
+            all three kinds.
+        declared_only: Must be `True` today (see above).
+
+    Returns:
+        `(rows, Diagnostics)`, sorted by `(kind, key)` for stable output.
+        `Diagnostics` is always empty in the declared-only path — nothing
+        is resolved, so nothing can fail to resolve.
+
+    Raises:
+        UsageError: `deployment_name` does not name a real deployment
+            (via `resolve_deployment()`), or `declared_only` is `False`.
+    """
+    if not declared_only:
+        raise UsageError(
+            "`values list` without --declared-only is not built yet "
+            "(docs/design/values-secrets-command.md's Implementation Plan, Phase 4). "
+            "Pass --declared-only for the offline listing, or use `values get KEY...` "
+            "to resolve specific keys today."
+        )
+
+    deployment = resolve_deployment(context, deployment_name)
+    environments = reachable_environments(context, deployment)
+    variables, secrets, features = merge_environment_models(environments)
+
+    rows: list[DeclaredValueRow] = []
+    if type_filter in (None, "variables"):
+        rows.extend(_declared_variable_row(item) for item in variables.values())
+    if type_filter in (None, "secrets"):
+        rows.extend(_declared_secret_row(item) for item in secrets.values())
+    if type_filter in (None, "features"):
+        rows.extend(_declared_feature_row(item) for item in features.values())
+    rows.sort(key=lambda row: (row.kind, row.key))
+
+    return rows, Diagnostics()
