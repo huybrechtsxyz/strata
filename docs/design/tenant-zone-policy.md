@@ -6,7 +6,7 @@
   v1-faithful check (Terraform plan-JSON parsing, resource-level location
   extraction) remains deliberately deferred — sized, not built.
 - Date: 2026-09-30
-- Related: [docs/design/gap_fit_v1.md](../design/gap_fit_v1.md) gap #7 (`policies`/`promotions`
+- Related: [docs/design/gap_fit_v1.md](gap_fit_v1.md) gap #7 (`policies`/`promotions`
   still fully open), [docs/design/path-conventions.md](path-conventions.md)
   (the sibling policy type, `path_convention`, already resolved — same
   "don't port the generic engine, model the one real check directly"

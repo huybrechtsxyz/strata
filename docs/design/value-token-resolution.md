@@ -931,7 +931,7 @@ real, working, live example in the repo's own coverage-check fixture.
 - [ADR-0002](../decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md) — token syntax decision, resolver design, rationale for rejecting `ValueSourceModel`/Jinja
 - [ADR-0005](../decisions/0005-dns-model-design-decisions.md), [ADR-0007](../decisions/0007-network-model-design-decisions.md), [ADR-0008](../decisions/0008-firewall-model-design-decisions.md), [ADR-0009](../decisions/0009-module-model-design-decisions.md) — per-kind adoption
 - [ADR-0006](../decisions/0006-context-shared-stage-runtime-store.md) — Context, the `${step:}` token this doc doesn't cover yet
-- [docs/design/gap_fit_v1.md](../design/gap_fit_v1.md) gaps #8, #9, #10 — the real-world evidence (`.v2-haven`) that triggered this section
+- [docs/design/gap_fit_v1.md](gap_fit_v1.md) gaps #8, #9, #10 — the real-world evidence (`.v2-haven`) that triggered this section
 
 ## Remaining Work / Open Questions
 

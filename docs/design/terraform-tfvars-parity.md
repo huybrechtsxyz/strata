@@ -5,7 +5,7 @@
   doc). The category-by-category catalog above the fold is kept as-is,
   unmodified, as the evidence record the fix was built from.
 - Date: 2026-09-30 (catalog), 2026-09-30 (fix)
-- Related: [docs/design/gap_fit_v1.md](../design/gap_fit_v1.md) gap #15 (Terraform
+- Related: [docs/design/gap_fit_v1.md](gap_fit_v1.md) gap #15 (Terraform
   `variables.tf` input validation — a related but distinct gap: that one
   is about *checking* declared inputs against a module's real
   `variables.tf`; this one is about whether v2 even *produces* the

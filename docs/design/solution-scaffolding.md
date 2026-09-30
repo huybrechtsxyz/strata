@@ -11,7 +11,7 @@
   template + extraction — is this design's motivating, first real
   consumer), [ADR-0015](../decisions/0015-solution-manifest-and-document-discovery.md)
   (`strata.yaml` — v2's own, different bootstrap document from v1's
-  `.strata/solution.json`), [docs/design/gap_fit_v1.md](../design/gap_fit_v1.md) (ADR-0020's
+  `.strata/solution.json`), [docs/design/gap_fit_v1.md](gap_fit_v1.md) (ADR-0020's
   Tier 2 classification of `init`/etc. as "local interactive bootstrap
   only... does not block either consumer's redeploy path" — still true
   here, this is deliberately not a CI-critical-path feature)

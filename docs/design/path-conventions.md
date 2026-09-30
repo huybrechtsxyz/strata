@@ -5,7 +5,7 @@
   the 2026-09-29 first pass). All 4 phases done: model, structural path
   matching, `DeploymentLayersModel` cross-check, documentation.
 - Date: 2026-09-29 (redesigned and re-implemented 2026-09-30)
-- Related: [docs/design/gap_fit_v1.md](../design/gap_fit_v1.md) gap #7 (the `paths` remainder —
+- Related: [docs/design/gap_fit_v1.md](gap_fit_v1.md) gap #7 (the `paths` remainder —
   `security`/`zones`/`remotes`/`integrations` already resolved),
   `deployment_model.py`'s `DeploymentLayersModel` (now cross-checked, was
   **inert in v2** before this design), `tenant_model.py` (already solved
