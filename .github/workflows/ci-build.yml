@@ -40,7 +40,7 @@ on:
 
 jobs:
   build:
-    name: Build and Test (Python ${{ env.PYTHON_VERSION }})
+    name: Build and Test
     runs-on: ubuntu-latest
 
     steps:
