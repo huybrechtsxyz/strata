@@ -28,11 +28,11 @@ PyPI/GHCR/Docker Hub, a shared-system action, not a local/reversible one).
 
 ## Current Design (as of 2026-09-30)
 
-- **`VERSION.txt`** = `2.0.0-Alpha1` at the repo root (was `2.0.0-Alpha`) —
-  the single source [`tool.setuptools.dynamic`](../../pyproject.toml) reads
+- **`VERSION.txt`** = `2.0.0-Alpha2` at the repo root (was `2.0.0-Alpha1`,
+  originally `2.0.0-Alpha`) — the single source [`tool.setuptools.dynamic`](../../pyproject.toml) reads
   for the package version. `packaging` normalizes this to canonical PEP 440
-  `2.0.0a1` at runtime (confirmed: `strata version` → `2.0.0a1`, and a real
-  `uv build` produces `xyz_strata-2.0.0a1-py3-none-any.whl`).
+  `2.0.0a2` at runtime (confirmed: `strata version` → `2.0.0a2`, and a real
+  `uv build` produces `xyz_strata-2.0.0a2-py3-none-any.whl`).
 - **`pyproject.toml`**: `name = "xyz-strata"` (was `strata-v2`) — per
   [`strata/utils/version.py`](../../src/strata/utils/version.py)'s own
   docstring, the distribution name was always meant to be a temporary,
@@ -285,3 +285,10 @@ Execution order (each its own small, checked phase per repo convention —
   trusted-publisher settings for `xyz-strata` before that push), and
   porting `scripts/Release.ps1` — all deliberately deferred as separate,
   later, harder-to-reverse steps.
+- 2026-10-01: **Built alpha2** — bumped `VERSION.txt` to `2.0.0-Alpha2`
+  (normalizes to `2.0.0a2`). `uv build --index-strategy unsafe-best-match`
+  produced `xyz_strata-2.0.0a2-py3-none-any.whl`; installed into a fresh
+  isolated `uv venv`, confirmed `strata version` → `2.0.0a2` and `strata
+  --help` lists all six commands. Local/reversible only — no tag pushed, no
+  CI triggered, no publish; Decisions 1/3 and `scripts/Release.ps1` remain
+  the same still-open items as before.
