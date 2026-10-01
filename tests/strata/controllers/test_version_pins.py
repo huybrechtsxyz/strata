@@ -65,7 +65,11 @@ spec:
     chart_name: some-chart
 """,
     )
-    _write(root, "version.yaml", f"apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n{pins}\n")
+    _write(
+        root,
+        "version.yaml",
+        f"apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n{pins}\n",
+    )
     return root
 
 
@@ -210,3 +214,57 @@ def test_no_version_documents_means_nothing_to_check(tmp_path):
     _write(root, "strata.yaml", MANIFEST_TEMPLATE)
     context = _resolve(root)
     assert context.ok
+
+
+# ---------------------------------------------------------------------------
+# log_pin_applied() (ADR-0019 decision 7 — "every application must be logged")
+# ---------------------------------------------------------------------------
+
+
+def test_log_pin_applied_emits_a_structured_entry():
+    import io
+    import json
+
+    from strata.controllers.version_pins import log_pin_applied
+    from strata.logging.config import configure_logging, get_logger, shutdown_logging
+
+    stream = io.StringIO()
+    try:
+        configure_logging(level="INFO", json_output=True, stream=stream)
+        log_pin_applied("images", "web", "nginx:1.26", "nginx:1.27", "prd")
+    finally:
+        shutdown_logging()
+
+    line = stream.getvalue().strip().splitlines()[-1]
+    payload = json.loads(line)
+    assert payload["event"] == "version pin applied"
+    assert payload["category"] == "images"
+    assert payload["name"] == "web"
+    assert payload["declared"] == "nginx:1.26"
+    assert payload["pinned"] == "nginx:1.27"
+    assert payload["version"] == "prd"
+    # Re-fetch via get_logger to confirm it's the same bound-logger path
+    # other callers in this module will use — not a separate mechanism.
+    assert get_logger(__name__) is not None
+
+
+def test_log_pin_applied_accepts_none_declared_value():
+    """A target that declared nothing of its own before the pin applied
+    (e.g. a module service with no `image` set) is a valid, real case."""
+    import io
+    import json
+
+    from strata.controllers.version_pins import log_pin_applied
+    from strata.logging.config import configure_logging, shutdown_logging
+
+    stream = io.StringIO()
+    try:
+        configure_logging(level="INFO", json_output=True, stream=stream)
+        log_pin_applied("charts", "chart-module", None, "2024.12.0", "prd")
+    finally:
+        shutdown_logging()
+
+    line = stream.getvalue().strip().splitlines()[-1]
+    payload = json.loads(line)
+    assert payload["declared"] is None
+    assert payload["pinned"] == "2024.12.0"

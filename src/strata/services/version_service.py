@@ -27,7 +27,7 @@ class VersionService(BaseService[VersionModel]):
         """Return the pin for `name` in `category`, or None when unpinned.
 
         Args:
-            category: One of `PIN_CATEGORIES` ('images', 'charts', 'remotes', 'tools').
+            category: One of `PIN_CATEGORIES` ('images', 'charts', 'remotes', 'artifacts').
             name: The target's own name.
 
         Returns:

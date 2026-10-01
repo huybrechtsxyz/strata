@@ -10,6 +10,7 @@ import yaml
 
 from strata.controllers.build_controller import (
     BuildCleanError,
+    _apply_remote_version_pins,
     build_resolved_workspace_graph,
     build_run,
     find_provisioner,
@@ -20,6 +21,8 @@ from strata.controllers.solution_controller import DocumentIndex, DocumentRef, I
 from strata.models.common_models import PlatformKind, SourceModel
 from strata.models.provider_model import ProviderMetaModel, ProviderModel, ProviderPropertiesModel, ProviderSpecModel
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel
+from strata.models.solution_model import RemoteFetch, RemoteType, SolutionRemoteModel
+from strata.models.version_model import VersionMetaModel, VersionModel, VersionSpecModel
 from strata.models.workspace_model import WorkspaceMetaModel, WorkspaceModel, WorkspaceSpecModel
 from strata.utils.errors import UsageError
 
@@ -101,6 +104,77 @@ def test_find_provisioner_raises_for_an_unknown_name():
     )
     with pytest.raises(UsageError, match="ghost"):
         find_provisioner(workspace, "ghost")
+
+
+# ---------------------------------------------------------------------------
+# _apply_remote_version_pins() (docs/design/version-pin-overlay.md Phase 3)
+# ---------------------------------------------------------------------------
+
+
+def _remote(name: str = "infra-remote", *, reference: str | None = "main") -> SolutionRemoteModel:
+    return SolutionRemoteModel(
+        name=name,
+        type=RemoteType.GIT,
+        url="https://example.com/org/infra.git",
+        reference=reference,
+        fetch=RemoteFetch.STRATA,
+    )
+
+
+def _version(name: str = "prd", *, remote_pins: dict[str, str] | None = None) -> VersionModel:
+    return VersionModel(
+        meta=VersionMetaModel(name=name),
+        spec=VersionSpecModel(pins={"remotes": remote_pins} if remote_pins else {}),
+    )
+
+
+def test_apply_remote_version_pins_returns_same_dict_when_version_is_none():
+    remotes = {"infra-remote": _remote()}
+    assert _apply_remote_version_pins(remotes, None) is remotes
+
+
+def test_apply_remote_version_pins_returns_same_dict_when_no_pin_matches():
+    remotes = {"infra-remote": _remote()}
+    version = _version(remote_pins={"other-remote": "v9.9.9"})
+    assert _apply_remote_version_pins(remotes, version) is remotes
+
+
+def test_apply_remote_version_pins_overrides_reference_when_pinned():
+    remotes = {"infra-remote": _remote(reference="main"), "untouched": _remote("untouched", reference="v1.0.0")}
+    version = _version(remote_pins={"infra-remote": "v2.0.0"})
+
+    overlaid = _apply_remote_version_pins(remotes, version)
+
+    assert overlaid is not remotes
+    assert overlaid["infra-remote"].reference == "v2.0.0"
+    assert overlaid["untouched"] is remotes["untouched"]
+    assert remotes["infra-remote"].reference == "main"  # original dict/model untouched
+
+
+def test_apply_remote_version_pins_logs_each_application():
+    import io
+    import json
+
+    from strata.logging.config import configure_logging, shutdown_logging
+
+    remotes = {"infra-remote": _remote(reference="main")}
+    version = _version(remote_pins={"infra-remote": "v2.0.0"})
+
+    stream = io.StringIO()
+    try:
+        configure_logging(level="INFO", json_output=True, stream=stream)
+        _apply_remote_version_pins(remotes, version)
+    finally:
+        shutdown_logging()
+
+    line = stream.getvalue().strip().splitlines()[-1]
+    payload = json.loads(line)
+    assert payload["event"] == "version pin applied"
+    assert payload["category"] == "remotes"
+    assert payload["name"] == "infra-remote"
+    assert payload["declared"] == "main"
+    assert payload["pinned"] == "v2.0.0"
+    assert payload["version"] == "prd"
 
 
 # ---------------------------------------------------------------------------
@@ -192,6 +266,116 @@ def test_build_run_materialises_source_and_writes_terraform_output(tmp_path: Pat
     assert (materialised / "workspace.auto.tfvars.json").exists()
     assert (materialised / "providers.auto.tfvars.json").exists()
     assert (materialised / "resx_server.auto.tfvars.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# build_run() + the `remotes` pin overlay (docs/design/version-pin-overlay.md Phase 3)
+# ---------------------------------------------------------------------------
+
+
+def _terraform_solution_with_remote(tmp_path: Path, *, version_doc: str = "") -> Path:
+    """Like `_terraform_solution()`, but the provisioner's source comes from
+    a declared `fetch: strata` git remote instead of a bare local path."""
+    root = _solution(tmp_path)
+    _write(
+        root,
+        "strata.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: solution\nmeta:\n  name: test-solution\nspec:\n"
+        "  remotes:\n    - name: infra-remote\n      type: git\n"
+        "      url: https://example.com/org/infra.git\n      reference: main\n",
+    )
+    _write(
+        root,
+        "provider.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
+        "  properties:\n    type: local\n    region: local\n",
+    )
+    _write(
+        root,
+        "resource.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
+        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  default_tags:\n    managed-by: strata\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n"
+        "        remote: infra-remote\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec: {}\n",
+    )
+    version_line = "  version: prd\n" if version_doc else ""
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        f"  workspace: main\n  environments:\n    - prd\n{version_line}",
+    )
+    if version_doc:
+        _write(root, "version.yaml", version_doc)
+    return root
+
+
+def _fake_clone_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+    """Fakes `git clone`'s real filesystem side effect (creates `infra/main.tf`
+    at the clone destination) so `sync_source()`'s `origin.exists()` check
+    passes without a real network call — same technique `test_remote_resolution.py`
+    uses, extended to also materialise the files `sync_source()` needs."""
+    from strata.utils.transport import CommandResult
+
+    if args[:2] == ["git", "clone"]:
+        dest = Path(args[-1])
+        (dest / "infra").mkdir(parents=True, exist_ok=True)
+        (dest / "infra" / "main.tf").write_text("# root module\n", encoding="utf-8")
+    return CommandResult(returncode=0, stdout="", stderr="")
+
+
+def test_build_run_remote_pin_overrides_the_materialised_checkout_path(tmp_path: Path, monkeypatch):
+    from strata.controllers import remote_resolution as remote_resolution_module
+    from strata.utils import layout
+
+    root = _terraform_solution_with_remote(
+        tmp_path,
+        version_doc=(
+            "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n"
+            "  pins:\n    remotes:\n      infra-remote: v2.0.0\n"
+        ),
+    )
+    monkeypatch.setattr(remote_resolution_module, "run_command", _fake_clone_run_command)
+
+    build_path = tmp_path / "build"
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok
+    # Checked out at the PIN's ref, not the manifest's declared "main".
+    pinned_checkout = layout.remote_checkout_path(root, "infra-remote", "v2.0.0")
+    assert pinned_checkout.exists()
+    declared_checkout = layout.remote_checkout_path(root, "infra-remote", "main")
+    assert not declared_checkout.exists()
+    assert (build_path / "infra" / "main.tf").exists()
+
+
+def test_build_run_without_version_uses_the_manifests_declared_reference(tmp_path: Path, monkeypatch):
+    from strata.controllers import remote_resolution as remote_resolution_module
+    from strata.utils import layout
+
+    root = _terraform_solution_with_remote(tmp_path)  # no version_doc -> no pin
+    monkeypatch.setattr(remote_resolution_module, "run_command", _fake_clone_run_command)
+
+    build_path = tmp_path / "build"
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok
+    declared_checkout = layout.remote_checkout_path(root, "infra-remote", "main")
+    assert declared_checkout.exists()
 
 
 def test_build_run_writes_tenant_output_when_deployment_references_one(tmp_path: Path):
@@ -402,6 +586,89 @@ def test_build_run_renders_helm_workload_modules(tmp_path: Path):
     assert (module_dir / "values.yaml").exists()
     meta = yaml.safe_load((module_dir / "meta.yaml").read_text())
     assert meta == {"releaseName": "auth", "namespace": "apps"}
+
+
+# ---------------------------------------------------------------------------
+# build_run() with all 3 newly-wired pin categories at once
+# (docs/design/version-pin-overlay.md Phase 5)
+# ---------------------------------------------------------------------------
+
+
+def test_build_run_applies_remotes_charts_and_images_pins_simultaneously(tmp_path: Path, monkeypatch):
+    """One `Version` document pinning `remotes`, `charts`, and `images` at
+    once, exercised through a real `build_run()` — catches an
+    ordering/interaction bug a per-category unit test could miss (e.g. one
+    category's overlay accidentally undoing or short-circuiting another's).
+
+    Combines the `remotes`-pin provisioner-source fixture
+    (`_terraform_solution_with_remote`) with a namespace carrying both a
+    chart-based (helm) and an image-based (compose) module."""
+    from strata.controllers import remote_resolution as remote_resolution_module
+    from strata.utils import layout
+
+    root = _terraform_solution_with_remote(
+        tmp_path,
+        version_doc=(
+            "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n"
+            "  pins:\n"
+            "    remotes:\n      infra-remote: v2.0.0\n"
+            "    charts:\n      authentik: 2024.2.0\n"
+            "    images:\n      redis: redis:7.2\n"
+        ),
+    )
+    _write(root, "charts/authentik/Chart.yaml", "name: authentik\n")
+    _write(root, "services/redis/docker-compose.yml", "# stand-in\n")
+    _write(
+        root,
+        "module.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: module\nmeta:\n  name: authentik\nspec:\n"
+        "  source:\n    remote: infra-remote\n    chart_name: authentik\n    chart_version: 2024.1.0\n"
+        "  type: helm\n  default_labels:\n    app: authentik\n  services:\n    - name: server\n",
+    )
+    _write(
+        root,
+        "module-redis.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: module\nmeta:\n  name: redis\nspec:\n"
+        "  source:\n    source_path: services/redis\n  type: compose\n"
+        "  default_labels:\n    app: redis\n  services:\n    - name: redis\n      image: redis:7\n",
+    )
+    _write(
+        root,
+        "namespace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: namespace\nmeta:\n  name: apps\nspec:\n"
+        "  default_labels:\n    app: apps\n"
+        "  modules:\n    - name: auth\n      module: authentik\n    - name: redis\n      module: redis\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  namespaces:\n    - apps\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n"
+        "        remote: infra-remote\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+
+    monkeypatch.setattr(remote_resolution_module, "run_command", _fake_clone_run_command)
+
+    build_path = tmp_path / "build"
+    diagnostics = build_run(_context(root), "app", build_path)
+    assert diagnostics.ok, diagnostics.messages()
+
+    # remotes: provisioner source checked out at the PINNED ref, not "main".
+    assert layout.remote_checkout_path(root, "infra-remote", "v2.0.0").exists()
+    assert not layout.remote_checkout_path(root, "infra-remote", "main").exists()
+    assert (build_path / "infra" / "main.tf").exists()
+
+    # charts: the pinned chart version reached the rendered meta.yaml.
+    helm_meta = yaml.safe_load((build_path / "apps" / "auth" / "meta.yaml").read_text())
+    assert helm_meta["chartVersion"] == "2024.2.0"
+
+    # images: the pinned image reached the rendered docker-compose.yml.
+    compose = yaml.safe_load((build_path / "apps" / "docker-compose.yml").read_text())
+    assert compose["services"]["redis"]["image"] == "redis:7.2"
 
 
 # ---------------------------------------------------------------------------

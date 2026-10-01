@@ -31,6 +31,7 @@ from strata.controllers.integration_resolution import bind_integration_config
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.value_references import resolve_document_value_references
+from strata.controllers.version_pins import log_pin_applied
 from strata.integrations.capabilities import StoreIntegration
 from strata.integrations.errors import IntegrationError, ValueResolutionError
 from strata.integrations.registry import IntegrationNotFoundError
@@ -52,6 +53,7 @@ from strata.models.tenant_model import TenantModel
 from strata.models.version_model import VersionModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
+from strata.services.version_service import VersionService
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.dict_merge import deep_merge
 from strata.utils.errors import UsageError
@@ -164,6 +166,22 @@ def resolve_tenant(context: SolutionContext, deployment: DeploymentModel) -> Ten
     return cast(TenantModel, entry.model)
 
 
+def resolve_version(context: SolutionContext, deployment: DeploymentModel) -> VersionModel | None:
+    """The `VersionModel` `deployment.spec.version` names, or `None` if unset
+    or unresolvable (docs/design/version-pin-overlay.md).
+
+    Same "silently return None" treatment as `resolve_tenant()` immediately
+    above — `validate_references` is the layer that reports a bad
+    `spec.version`, not this function.
+    """
+    if not deployment.spec.version:
+        return None
+    entry = context.controller.index.get(PlatformKind.VERSION, deployment.spec.version)
+    if entry is None:
+        return None
+    return cast(VersionModel, entry.model)
+
+
 def resolve_artifact(context: SolutionContext, artifact_name: str) -> ArtifactModel | None:
     """The `ArtifactModel` named `artifact_name`, or `None` if unresolvable
     (docs/design/artifact-references.md).
@@ -190,8 +208,11 @@ def resolve_artifact_field(
       never pin-overlaid (matches `chart_name`'s treatment — a pin never
       changes what's being pinned, only its version).
     - `image_tag` consults `deployment.spec.version` -> `VersionModel.spec.
-      pins.artifacts[artifact_name]` first; falls back to the artifact's
-      own declared `image_tag` when unset or no pin exists.
+      pins.artifacts[artifact_name]` first (via `VersionService.resolve()`,
+      the single shared pin lookup every overlay category uses,
+      docs/design/version-pin-overlay.md); falls back to the artifact's
+      own declared `image_tag` when unset or no pin exists. Every
+      application is logged (ADR-0019 decision 7).
     - `image_ref` synthesises `"{image_name}:{image_tag}"` (or bare
       `image_name` when the tag is blank/unset) — adminapp's real combined
       Terraform variable shape (docs/design/artifact-references.md).
@@ -210,8 +231,9 @@ def resolve_artifact_field(
         version_entry = context.controller.index.get(PlatformKind.VERSION, deployment.spec.version)
         if version_entry is not None:
             version = cast(VersionModel, version_entry.model)
-            pin = (version.spec.pins.artifacts or {}).get(artifact_name)
+            pin = VersionService.from_model(version).resolve("artifacts", artifact_name)
             if pin is not None:
+                log_pin_applied("artifacts", artifact_name, image_tag, pin.version, version.meta.name)
                 image_tag = pin.version
 
     if field == "image_tag":

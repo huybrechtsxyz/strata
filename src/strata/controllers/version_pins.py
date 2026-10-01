@@ -28,11 +28,44 @@ Two severities, both decided in ADR-0019:
 from typing import cast
 
 from strata.controllers.solution_controller import DocumentIndex
+from strata.logging.config import get_logger
 from strata.models.common_models import PlatformKind
 from strata.models.module_model import ModuleModel
 from strata.models.solution_model import RemoteFetch, SolutionModel
 from strata.models.version_model import VersionModel
 from strata.utils.diagnostics import Diagnostics
+
+log = get_logger(__name__)
+
+
+def log_pin_applied(category: str, name: str, declared: str | None, pinned: str, version_name: str) -> None:
+    """Log one version pin actually taking effect (ADR-0019 decision 7: "every
+    application must be logged").
+
+    Called from each overlay point (`build_controller.py`'s `remotes`
+    override, `workload_controller.py`'s `images`/`charts` override,
+    `value_controller.py`'s `artifacts` lookup) whenever a pin's value wins
+    over whatever the target itself declared — never for a pin that matched
+    nothing (that case is `check_version_pins()`'s own "stale pin" warning,
+    a schema-validation concern, not a build-time event).
+
+    Args:
+        category: One of `PIN_CATEGORIES` ('images', 'charts', 'remotes', 'artifacts').
+        name: The pinned target's own name (service/module/remote/artifact name).
+        declared: The value the target itself declared before the pin overrode
+            it, or `None` when the target declared nothing at all (e.g. a
+            module service with no `image` set of its own).
+        pinned: The pin's own value — what the target now resolves to.
+        version_name: The `Version` document's own `meta.name` the pin came from.
+    """
+    log.info(
+        "version pin applied",
+        category=category,
+        name=name,
+        declared=declared,
+        pinned=pinned,
+        version=version_name,
+    )
 
 
 def check_version_pins(index: DocumentIndex, solution: SolutionModel | None) -> Diagnostics:

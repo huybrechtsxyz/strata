@@ -61,7 +61,11 @@ def _build_workspace_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     """`workspace_name`/`workspace_version`/`deployment_name`/`environment`/
     `platform_version`/`labels`/`metadata` — six independent, flat
     Terraform variables (docs/design/terraform-tfvars-parity.md), matching
-    v1's real `_build_workspace_vars()` exactly (confirmed directly):
+    v1's real `_build_workspace_vars()` exactly (confirmed directly), plus
+    `configuration`/`custom`/`default_tags` — `WorkspaceSpecModel`'s own
+    passthrough fields, previously validated but never read anywhere in this
+    module (same silent-data-loss gap as `_build_dns_payload()`'s zone fields,
+    found and fixed alongside it).
 
     - `workspace_version` — `workspace.meta.labels["version"]`, default
       `"1.0.0"` (v1's own default, not a v2 invention).
@@ -111,6 +115,7 @@ def _build_workspace_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
         deployment_description = ""
         deployment_tags = []
 
+    spec = graph.workspace.spec
     return {
         "workspace_name": meta.name,
         "workspace_version": workspace_version,
@@ -118,6 +123,9 @@ def _build_workspace_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
         "environment": environment,
         "platform_version": platform_version,
         "labels": workspace_labels,
+        "configuration": spec.configuration or {},
+        "custom": spec.custom or {},
+        "default_tags": spec.default_tags or {},
         "metadata": {
             "deployment_version": deployment_version,
             "workspace_description": (meta.annotations or {}).get("description", ""),
@@ -130,8 +138,13 @@ def _build_workspace_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
 
 def _build_providers_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     """name -> {type, region, display_name, description, labels, tags,
-    configuration, custom} per `ProviderPropertiesModel`/`ProviderSpecModel`/
-    `ProviderMetaModel`.
+    configuration, custom, default_tags} per `ProviderPropertiesModel`/
+    `ProviderSpecModel`/`ProviderMetaModel`.
+
+    `default_tags` added alongside the DNS zone passthrough fix — same gap:
+    `ProviderSpecModel.default_tags` was validated but never read anywhere
+    in the codebase; gap #17 only fixed `configuration`/`custom` here, not
+    this sibling field.
 
     `configuration`/`custom` added docs/design/value-token-resolution.md's
     "Decision (2026-09-29)" fix (docs/design/gap_fit_v1.md gap #17) — previously
@@ -165,6 +178,7 @@ def _build_providers_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
             "tags": meta.tags or [],
             "configuration": provider.spec.configuration or {},
             "custom": provider.spec.custom or {},
+            "default_tags": provider.spec.default_tags or {},
         }
     return payload
 
@@ -253,11 +267,18 @@ def _build_resources_payload(graph: ResolvedWorkspaceGraph) -> dict[str, dict[st
 
 
 def _build_namespaces_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
-    """name -> {description, labels, tags, modules: [module names]} (Phase 2a).
+    """name -> {description, labels, tags, modules: [module names],
+    configuration, custom, default_labels, custom_labels} (Phase 2a).
 
     Matches v1's real `_build_namespace_vars()` shape (confirmed directly).
     `description` falls back to `""` when `meta.annotations` has none set,
     same as v1's own `namespace.annotations.get("description", "")`.
+
+    `configuration`/`custom`/`default_labels`/`custom_labels` added alongside
+    the DNS zone passthrough fix — confirmed by grep that `NamespaceSpecModel`'s
+    own fields of the same names were validated but never read anywhere,
+    including by `helm.py`/`compose.py`'s `prepare_namespace()` (the only other
+    candidate consumer).
     """
     payload: dict[str, Any] = {}
     for name in graph.workspace.spec.namespaces or []:
@@ -268,16 +289,26 @@ def _build_namespaces_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
             "labels": meta.labels or {},
             "tags": meta.tags or [],
             "modules": [str(m.module) for m in namespace.spec.modules or []],
+            "configuration": namespace.spec.configuration or {},
+            "custom": namespace.spec.custom or {},
+            "default_labels": namespace.spec.default_labels or {},
+            "custom_labels": namespace.spec.custom_labels or {},
         }
     return payload
 
 
 def _build_firewalls_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
-    """name -> {description, labels, tags, rules: {reset, defaults, deny, allow}}
-    (Phase 2a). Matches v1's real `_build_firewall_vars()` shape (confirmed
-    directly). `by_alias=True` on the rule dumps so `from_` serialises back
-    to `from` (the schema's real field name, aliased for the `from`/Python
-    keyword clash) - matches v1's own `model_dump(..., by_alias=True)`.
+    """name -> {description, labels, tags, rules: {reset, defaults, deny, allow},
+    configuration, custom, default_tags, custom_tags} (Phase 2a). Matches v1's
+    real `_build_firewall_vars()` shape (confirmed directly). `by_alias=True`
+    on the rule dumps so `from_` serialises back to `from` (the schema's real
+    field name, aliased for the `from`/Python keyword clash) - matches v1's
+    own `model_dump(..., by_alias=True)`.
+
+    `configuration`/`custom`/`default_tags`/`custom_tags` added alongside the
+    DNS zone passthrough fix — `FirewallSpecModel`'s own fields of the same
+    names were validated but never read anywhere in this module at all
+    (unlike DNS/providers, not even partially fixed by gap #17).
     """
     payload: dict[str, Any] = {}
     for name in graph.workspace.spec.firewalls or []:
@@ -294,6 +325,10 @@ def _build_firewalls_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
                 "deny": [r.model_dump(mode="json", exclude_none=True, by_alias=True) for r in spec.deny or []],
                 "allow": [r.model_dump(mode="json", exclude_none=True, by_alias=True) for r in spec.allow or []],
             },
+            "configuration": spec.configuration or {},
+            "custom": spec.custom or {},
+            "default_tags": spec.default_tags or {},
+            "custom_tags": spec.custom_tags or {},
         }
     return payload
 
@@ -339,6 +374,10 @@ def _build_dns_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
                         }
                         for record in zone.records or []
                     ],
+                    "configuration": zone.configuration or {},
+                    "custom": zone.custom or {},
+                    "default_tags": zone.default_tags or {},
+                    "custom_tags": zone.custom_tags or {},
                 }
                 for zone in spec.zones
             },
@@ -348,7 +387,12 @@ def _build_dns_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
 
 def _build_networks_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     """name -> {description, labels, tags, networks: {network_name:
-    {address_space, subnets, peerings}}} (Phase 2c).
+    {address_space, subnets, peerings, configuration, custom, default_tags,
+    custom_tags}}} (Phase 2c).
+
+    `configuration`/`custom`/`default_tags`/`custom_tags` added alongside the
+    DNS zone passthrough fix — `NetworkDefinitionModel`'s own fields of the
+    same names were validated but never read anywhere in this module.
 
     Adapted from v1's real `_build_network_vars()`. `address_space`/
     `subnet.cidr` may themselves contain `${var:}`/`${secret:}`/`${feature:}`
@@ -371,6 +415,10 @@ def _build_networks_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
                         subnet.name: {"cidr": subnet.cidr, "description": subnet.description} for subnet in net.subnets
                     },
                     "peerings": {p.name: {"target": p.target} for p in net.peerings or []},
+                    "configuration": net.configuration or {},
+                    "custom": net.custom or {},
+                    "default_tags": net.default_tags or {},
+                    "custom_tags": net.custom_tags or {},
                 }
                 for net in network_doc.spec.networks
             },

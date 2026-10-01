@@ -21,17 +21,20 @@ remote directly.
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from strata.controllers.integration_resolution import resolve_module_integration
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.source_sync import describe_source, sync_module_source
+from strata.controllers.version_pins import log_pin_applied
 from strata.integrations.errors import IntegrationError
 from strata.integrations.resolved_context import ResolvedModule, ValueResolution
 from strata.models.common_models import ModuleReferenceModel, PlatformKind
 from strata.models.module_model import ModuleModel
 from strata.models.namespace_model import NamespaceModel
 from strata.models.solution_model import SolutionRemoteModel
+from strata.models.version_model import VersionModel
+from strata.services.version_service import VersionService
 from strata.utils.errors import UsageError
 
 
@@ -52,6 +55,63 @@ def resolve_module(index: DocumentIndex, reference: ModuleReferenceModel) -> Mod
     return cast(ModuleModel, entry.model)
 
 
+def _apply_version_pins(module: ModuleModel, version: VersionModel | None) -> ModuleModel:
+    """Overlay `version.spec.pins.charts`/`.images` onto `module` (docs/design/
+    version-pin-overlay.md Phase 4).
+
+    Returns `module` unchanged (same object) when `version` is `None` or
+    neither category pins anything reachable from this module — avoids an
+    unconditional copy on the common no-pin path.
+
+    Deliberately conservative about *where* each pin applies, since neither
+    category has a Phase-2 check guaranteeing its target is always
+    overlay-safe:
+
+    - `charts` only overrides `spec.source.chart_version` when the module
+      is already chart-based (`chart_name` set) — mirrors
+      `check_version_pins()`'s own `pin_not_applicable` check for this
+      exact case.
+    - `images` only overrides a service's `.image` when that service
+      already declares one — a service may instead use `.artifact`
+      (mutually exclusive with `.image`, docs/design/artifact-references.md,
+      itself pinned via the `artifacts` category through a different
+      path), and a pin changes a version, never which field is in use.
+
+    Logs every application (ADR-0019 decision 7).
+    """
+    if version is None:
+        return module
+
+    version_service = VersionService.from_model(version)
+    spec_updates: dict[str, Any] = {}
+
+    if module.spec.source.chart_name is not None:
+        chart_pin = version_service.resolve("charts", module.meta.name)
+        if chart_pin is not None:
+            log_pin_applied(
+                "charts", module.meta.name, module.spec.source.chart_version, chart_pin.version, version.meta.name
+            )
+            spec_updates["source"] = module.spec.source.model_copy(update={"chart_version": chart_pin.version})
+
+    services = module.spec.services or []
+    service_overrides: dict[str, Any] = {}
+    for service in services:
+        if service.image is None:
+            continue
+        image_pin = version_service.resolve("images", service.name)
+        if image_pin is not None:
+            log_pin_applied("images", service.name, service.image, image_pin.version, version.meta.name)
+            service_overrides[service.name] = service.model_copy(update={"image": image_pin.version})
+
+    if service_overrides:
+        spec_updates["services"] = [service_overrides.get(s.name, s) for s in services]
+
+    if not spec_updates:
+        return module
+
+    return module.model_copy(update={"spec": module.spec.model_copy(update=spec_updates)})
+
+
 def build_workload_modules(
     index: DocumentIndex,
     root: Path,
@@ -60,6 +120,7 @@ def build_workload_modules(
     resolved: ValueResolution,
     build_path: Path,
     *,
+    version: VersionModel | None = None,
     dry_run: bool = False,
     on_step: Callable[[str], None] | None = None,
 ) -> None:
@@ -101,6 +162,11 @@ def build_workload_modules(
             signature symmetry and for a future Compose value-substitution
             phase that may need it (ADR-0023 Remaining Work).
         build_path: The build output root for this `build run` invocation.
+        version: The deployment's resolved `Version` document, or `None`
+            (docs/design/version-pin-overlay.md Phase 4) — overlays any
+            `pins.charts`/`pins.images` reachable from each module before
+            it's rendered. `None` is the default and the common case
+            (a deployment with no `spec.version`).
         dry_run: Report what would happen instead of doing it — skips
             materialising a module's source and skips `prepare_namespace()`.
             `resolve_module()`/`resolve_module_integration()` still run, so
@@ -127,6 +193,7 @@ def build_workload_modules(
             continue
 
         module = resolve_module(index, reference)
+        module = _apply_version_pins(module, version)
         if module.spec.type is None:
             raise UsageError(
                 f"Namespace '{namespace.meta.name}', module '{reference.name}': "

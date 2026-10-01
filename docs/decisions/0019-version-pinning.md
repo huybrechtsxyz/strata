@@ -1,6 +1,10 @@
 # Version Pinning — One Kind, Rationale as Schema, Pin Only What Strata Materialises
 
-- Status: partially-implemented — model, service and binding built; pin overlay and resolution-time checks not wired
+- Status: implemented — model, service, binding, Phase 2 existence/
+  applicability checks (`check_version_pins()`), and the pin **overlay**
+  (all 4 categories — `artifacts`, `remotes`, `images`, `charts` — now have
+  real, logged effect on a `build run`) are all built and wired — see
+  [docs/design/version-pin-overlay.md](../design/version-pin-overlay.md)
 - Date: 2026-09-22
 - Related: [ADR-0015](0015-solution-manifest-and-document-discovery.md)
   (discovery is local-only, which is why there is no bootstrap cycle here;
@@ -29,11 +33,11 @@ and `resolved`/`resolved_at`/`resolved_sha` callbacks.
 A census of every repository on disk (`alderwyn`, `haven`, `loom`, `strata`,
 case-sensitive, build artifacts excluded) found:
 
-| artifact | documents |
-| --- | --- |
-| `kind: version` | **1** (`haven/versions/prd.yaml`, 2.7 KB) |
-| `kind: version-lock` | **0** |
-| `kind: version-manifest` | **0** |
+| artifact                 | documents                                 |
+| ------------------------ | ----------------------------------------- |
+| `kind: version`          | **1** (`haven/versions/prd.yaml`, 2.7 KB) |
+| `kind: version-lock`     | **0**                                     |
+| `kind: version-manifest` | **0**                                     |
 
 and **zero** uses of `track: latest`, `scope_selector`, `wave`, `previous`,
 `resolved_sha` or `pins.tools`.
@@ -98,15 +102,15 @@ never branch on shape.
 disk before strata's process starts, so a pin could only misreport it. From
 haven's 11 real workflows:
 
-| target | materialised by | pinnable |
-| --- | --- | --- |
-| strata CLI | CI (`setup-strata@v1.9.3`, 10 uses) | no |
-| solution repo checkout | CI (`actions/checkout@v6`, 14 uses) | no |
-| terraform / helm binaries | CI (`setup-terraform@v4`, `setup-helm@v5`) | no |
-| remote with `fetch: external` | CI | no |
-| remote with `fetch: strata` | **strata** | **yes** |
-| container images | **strata** (renders into compose/values) | **yes** |
-| chart versions | **strata** (fetches the chart) | **yes** |
+| target                        | materialised by                            | pinnable |
+| ----------------------------- | ------------------------------------------ | -------- |
+| strata CLI                    | CI (`setup-strata@v1.9.3`, 10 uses)        | no       |
+| solution repo checkout        | CI (`actions/checkout@v6`, 14 uses)        | no       |
+| terraform / helm binaries     | CI (`setup-terraform@v4`, `setup-helm@v5`) | no       |
+| remote with `fetch: external` | CI                                         | no       |
+| remote with `fetch: strata`   | **strata**                                 | **yes**  |
+| container images              | **strata** (renders into compose/values)   | **yes**  |
+| chart versions                | **strata** (fetches the chart)             | **yes**  |
 
 So the categories are `images`, `charts`, `remotes` — and for remotes, the
 already-existing `fetch` field is the discriminator, not a judgement call.

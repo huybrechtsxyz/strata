@@ -44,7 +44,9 @@ from strata.controllers.value_controller import (
     resolve_deployment,
     resolve_tenant,
     resolve_values,
+    resolve_version,
 )
+from strata.controllers.version_pins import log_pin_applied
 from strata.controllers.workload_controller import build_workload_modules
 from strata.integrations.errors import IntegrationError
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph, ValueReference, ValueResolution
@@ -59,8 +61,10 @@ from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepM
 from strata.models.resource_model import ResourceModel
 from strata.models.solution_model import SolutionRemoteModel
 from strata.models.tenant_model import TenantModel
+from strata.models.version_model import VersionModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
+from strata.services.version_service import VersionService
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.env_file import load_env_file
 from strata.utils.errors import SystemError, UsageError
@@ -68,6 +72,37 @@ from strata.utils.errors import SystemError, UsageError
 
 class BuildCleanError(SystemError):
     """`build_path` could not be wiped before rendering (`clean=True`)."""
+
+
+def _apply_remote_version_pins(
+    remotes: dict[str, SolutionRemoteModel], version: VersionModel | None
+) -> dict[str, SolutionRemoteModel]:
+    """Overlay `version.spec.pins.remotes` onto `remotes` (docs/design/
+    version-pin-overlay.md Phase 3).
+
+    Returns `remotes` unchanged (same object, not a copy) when `version` is
+    `None` or pins nothing here — avoids an unconditional dict-copy on the
+    common no-version/no-pin path. A remote with a matching pin gets a new
+    `SolutionRemoteModel` (`model_copy(update={"reference": ...})`) in its
+    place; every other remote's entry is untouched. Logs each application
+    (ADR-0019 decision 7).
+
+    Trusts `check_version_pins()` (Phase 2) already rejected a `fetch:
+    external` pin before this ever runs — no re-check here.
+    """
+    if version is None:
+        return remotes
+    version_service = VersionService.from_model(version)
+    overlaid: dict[str, SolutionRemoteModel] | None = None
+    for name, remote in remotes.items():
+        pin = version_service.resolve("remotes", name)
+        if pin is None:
+            continue
+        if overlaid is None:
+            overlaid = dict(remotes)
+        log_pin_applied("remotes", name, remote.reference, pin.version, version.meta.name)
+        overlaid[name] = remote.model_copy(update={"reference": pin.version})
+    return overlaid if overlaid is not None else remotes
 
 
 def _lookup_all(index: DocumentIndex, kind: PlatformKind, names: list[str] | None) -> dict[str, Any]:
@@ -314,6 +349,7 @@ def build_run(
     properties = merge_workspace_environment_deployment_properties(workspace, environments, deployment, "properties")
     custom = merge_workspace_environment_deployment_properties(workspace, environments, deployment, "custom")
     tenant = resolve_tenant(context, deployment)
+    version = resolve_version(context, deployment)
 
     diagnostics = Diagnostics()
     resolved = ValueResolution(deployment=deployment_name)
@@ -354,6 +390,7 @@ def build_run(
         if context.controller.solution is not None
         else {}
     )
+    remotes = _apply_remote_version_pins(remotes, version)
 
     for step in ordered_by_depends_on(workspace.spec.execution or []):
         provisioner = find_provisioner(workspace, step.provisioner)
@@ -422,7 +459,15 @@ def build_run(
     # (build_resolved_workspace_graph()), so no extra index walk is needed.
     for namespace in graph.namespaces.values():
         build_workload_modules(
-            index, context.root, remotes, namespace, resolved, build_path, dry_run=dry_run, on_step=on_step
+            index,
+            context.root,
+            remotes,
+            namespace,
+            resolved,
+            build_path,
+            version=version,
+            dry_run=dry_run,
+            on_step=on_step,
         )
 
     return diagnostics

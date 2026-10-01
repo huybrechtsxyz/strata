@@ -109,7 +109,10 @@ def _dns(name: str = "huybrechts_xyz") -> DnsModel:
             zones=[
                 DnsZoneModel(
                     name="huybrechts.xyz",
+                    configuration={"foo": "bar"},
+                    custom={"team": "platform"},
                     default_tags={"managed-by": "strata"},
+                    custom_tags={"cost-center": "eng"},
                     records=[DnsRecordModel(name="@", type="A", value="1.2.3.4")],
                 )
             ],
@@ -230,6 +233,9 @@ def test_workspace_category_present():
         "environment": "production",
         "platform_version": "",
         "labels": {},
+        "configuration": {},
+        "custom": {},
+        "default_tags": {},
         "metadata": {
             "deployment_version": "1.0.0",
             "workspace_description": "",
@@ -263,6 +269,19 @@ def test_workspace_category_uses_deployment_labels_when_present():
     assert payload["workspace"]["metadata"]["deployment_tags"] == ["spoke"]
 
 
+def test_workspace_category_includes_configuration_custom_and_default_tags_when_set():
+    """`WorkspaceSpecModel.configuration`/`.custom`/`.default_tags` — same
+    silently-dropped passthrough gap as DNS zones, now projected."""
+    graph = _graph()
+    graph.workspace.spec.configuration = {"foo": "bar"}
+    graph.workspace.spec.custom = {"team": "platform"}
+    graph.workspace.spec.default_tags = {"managed-by": "strata"}
+    payload = build_platform_projection(graph, _provisioner())
+    assert payload["workspace"]["configuration"] == {"foo": "bar"}
+    assert payload["workspace"]["custom"] == {"team": "platform"}
+    assert payload["workspace"]["default_tags"] == {"managed-by": "strata"}
+
+
 def test_providers_category_present():
     payload = build_platform_projection(_graph(), _provisioner())
     assert payload["providers"] == {
@@ -275,6 +294,7 @@ def test_providers_category_present():
             "tags": [],
             "configuration": {},
             "custom": {},
+            "default_tags": {},
         }
     }
 
@@ -320,6 +340,21 @@ def test_providers_category_includes_configuration_and_custom_when_set():
     assert payload["providers"]["hetzner_dc_eu_de"]["custom"] == {"cost_center": "platform"}
 
 
+def test_providers_category_includes_default_tags_when_set():
+    """`ProviderSpecModel.default_tags` — validated but never read anywhere
+    before this fix, unlike its `configuration`/`custom` siblings (gap #17)."""
+    graph = _graph()
+    graph.providers["hetzner_dc_eu_de"] = ProviderModel(
+        meta=ProviderMetaModel(name="hetzner_dc_eu_de"),
+        spec=ProviderSpecModel(
+            properties=ProviderPropertiesModel(type="hetzner", region="nbg1", display_name="Nuremberg"),
+            default_tags={"managed-by": "strata"},
+        ),
+    )
+    payload = build_platform_projection(graph, _provisioner())
+    assert payload["providers"]["hetzner_dc_eu_de"]["default_tags"] == {"managed-by": "strata"}
+
+
 def test_topologies_category_present():
     payload = build_platform_projection(_graph(), _provisioner())
     topology = payload["topologies"]["hetzner_hearth"]
@@ -339,6 +374,23 @@ def test_namespaces_category_present():
     assert namespace["description"] == "Hearth namespace"
     assert namespace["tags"] == ["hearth"]
     assert namespace["modules"] == ["vaultwarden"]
+    assert namespace["configuration"] == {}
+    assert namespace["custom"] == {}
+    assert namespace["default_labels"] == {"environment": "production"}
+    assert namespace["custom_labels"] == {}
+
+
+def test_namespaces_category_includes_configuration_and_custom_when_set():
+    """`NamespaceSpecModel.configuration`/`.custom` — validated but never read
+    anywhere (not here, not by `helm.py`/`compose.py`'s `prepare_namespace()`)
+    before this fix."""
+    graph = _graph(namespace_names=["hearth"])
+    graph.namespaces["hearth"].spec.configuration = {"foo": "bar"}
+    graph.namespaces["hearth"].spec.custom = {"team": "platform"}
+    payload = build_platform_projection(graph, _provisioner())
+    namespace = payload["namespaces"]["hearth"]
+    assert namespace["configuration"] == {"foo": "bar"}
+    assert namespace["custom"] == {"team": "platform"}
 
 
 def test_namespaces_category_empty_when_workspace_has_no_namespaces():
@@ -357,6 +409,23 @@ def test_firewalls_category_present():
     assert allow_rule["direction"] == "in"
     assert allow_rule["port"] == 443
     assert allow_rule["from"] == "0.0.0.0/0"  # by_alias=True - not "from_"
+    assert firewall["configuration"] == {}
+    assert firewall["custom"] == {}
+    assert firewall["default_tags"] == {"managed-by": "strata"}
+    assert firewall["custom_tags"] == {}
+
+
+def test_firewalls_category_includes_configuration_and_custom_when_set():
+    """`FirewallSpecModel.configuration`/`.custom` — validated but never read
+    anywhere in this module before this fix (unlike DNS/providers, not even
+    partially addressed by gap #17)."""
+    graph = _graph(firewall_names=["haven_fw_hetzner_hearth"])
+    graph.firewalls["haven_fw_hetzner_hearth"].spec.configuration = {"foo": "bar"}
+    graph.firewalls["haven_fw_hetzner_hearth"].spec.custom = {"team": "platform"}
+    payload = build_platform_projection(graph, _provisioner())
+    firewall = payload["firewalls"]["haven_fw_hetzner_hearth"]
+    assert firewall["configuration"] == {"foo": "bar"}
+    assert firewall["custom"] == {"team": "platform"}
 
 
 def test_firewalls_category_empty_when_workspace_has_no_firewalls():
@@ -372,6 +441,10 @@ def test_dns_category_present():
     zone = dns["zones"]["huybrechts.xyz"]
     assert zone["ttl"] == 3600
     assert zone["records"] == [{"name": "@", "type": "A", "value": "1.2.3.4", "ttl": None, "priority": None}]
+    assert zone["configuration"] == {"foo": "bar"}
+    assert zone["custom"] == {"team": "platform"}
+    assert zone["default_tags"] == {"managed-by": "strata"}
+    assert zone["custom_tags"] == {"cost-center": "eng"}
 
 
 def test_dns_category_empty_when_workspace_has_no_dns_zones():
@@ -387,6 +460,22 @@ def test_networks_category_present():
     assert network["address_space"] == ["10.0.0.0/16"]
     assert network["subnets"] == {"aks": {"cidr": "10.0.1.0/24", "description": None}}
     assert network["peerings"] == {}
+    assert network["configuration"] == {}
+    assert network["custom"] == {}
+    assert network["default_tags"] == {"managed-by": "strata"}
+    assert network["custom_tags"] == {}
+
+
+def test_networks_category_includes_configuration_and_custom_when_set():
+    """`NetworkDefinitionModel.configuration`/`.custom` — validated but never
+    read anywhere in this module before this fix."""
+    graph = _graph(network_names=["product_estate"])
+    graph.networks["product_estate"].spec.networks[0].configuration = {"foo": "bar"}
+    graph.networks["product_estate"].spec.networks[0].custom = {"team": "platform"}
+    payload = build_platform_projection(graph, _provisioner())
+    network = payload["networks"]["product_estate"]["networks"]["vnet_main"]
+    assert network["configuration"] == {"foo": "bar"}
+    assert network["custom"] == {"team": "platform"}
 
 
 def test_networks_category_empty_when_workspace_has_no_networks():

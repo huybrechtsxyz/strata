@@ -20,6 +20,7 @@ from strata.controllers.value_controller import (
     resolve_document_value_references,
     resolve_tenant,
     resolve_values,
+    resolve_version,
     rotate_secret,
     secret_status,
     set_value,
@@ -219,6 +220,55 @@ def test_resolve_tenant_returns_none_when_deployment_has_no_tenant(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# resolve_version() (docs/design/version-pin-overlay.md)
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_version_returns_version_model_when_deployment_references_one(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _write(
+        root,
+        "version.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n"
+        "  pins:\n    images:\n      web: nginx:1.27\n",
+    )
+    _deployment(root, "app", version="prd", environments=["prd"])
+
+    context = _context(root)
+    deployment = resolve_deployment(context, "app")
+    version = resolve_version(context, deployment)
+
+    assert version is not None
+    assert version.meta.name == "prd"
+    assert version.spec.pins.images["web"].version == "nginx:1.27"
+
+
+def test_resolve_version_returns_none_when_deployment_has_no_version(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", environments=["prd"])
+
+    context = _context(root)
+    deployment = resolve_deployment(context, "app")
+
+    assert resolve_version(context, deployment) is None
+
+
+def test_resolve_version_returns_none_when_reference_does_not_resolve(tmp_path):
+    """Mirrors `resolve_tenant()`'s own treatment — `validate_references` reports
+    a bad `spec.version`, not this function."""
+    root = _solution(tmp_path)
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", version="ghost", environments=["prd"])
+
+    context = _context(root)
+    deployment = resolve_deployment(context, "app")
+
+    assert resolve_version(context, deployment) is None
+
+
+# ---------------------------------------------------------------------------
 # resolve_artifact() / resolve_artifact_field() (docs/design/artifact-references.md)
 # ---------------------------------------------------------------------------
 
@@ -301,6 +351,41 @@ def test_resolve_artifact_field_image_tag_uses_version_pin_when_present(tmp_path
     deployment = resolve_deployment(context, "app")
 
     assert resolve_artifact_field(context, deployment, "dspapi_container", "image_tag") == "2.0.0"
+
+
+def test_resolve_artifact_field_image_tag_pin_application_is_logged(tmp_path):
+    """ADR-0019 decision 7 — consolidated onto `VersionService.resolve()`
+    (docs/design/version-pin-overlay.md Phase 2), every application logged."""
+    import io
+    import json
+
+    from strata.logging.config import configure_logging, shutdown_logging
+
+    root = _solution(tmp_path)
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.0.0")
+    _version_doc(root, "prd", artifact_pins={"dspapi_container": "2.0.0"})
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", version="prd", environments=["prd"])
+
+    context = _context(root)
+    deployment = resolve_deployment(context, "app")
+
+    stream = io.StringIO()
+    try:
+        configure_logging(level="INFO", json_output=True, stream=stream)
+        result = resolve_artifact_field(context, deployment, "dspapi_container", "image_tag")
+    finally:
+        shutdown_logging()
+
+    assert result == "2.0.0"
+    line = stream.getvalue().strip().splitlines()[-1]
+    payload = json.loads(line)
+    assert payload["event"] == "version pin applied"
+    assert payload["category"] == "artifacts"
+    assert payload["name"] == "dspapi_container"
+    assert payload["declared"] == "1.0.0"
+    assert payload["pinned"] == "2.0.0"
+    assert payload["version"] == "prd"
 
 
 def test_resolve_artifact_field_image_ref_synthesises_name_and_tag(tmp_path):

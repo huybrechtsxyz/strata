@@ -44,3 +44,6 @@ spec:
 - v1 also had an `output_key` field, binding a record's value to a preceding deployment stage's
   provisioner output. Not ported yet — it needs a shared runtime "Context" store that doesn't
   exist in v2 (see ADR-0006).
+- Azure-style private DNS zones (VNet links, writing records into a pre-existing/externally-owned
+  zone) are deliberately modeled via `configuration`, not dedicated fields — see
+  [How To: Model Azure Private DNS Zones](../how-to/azure-private-dns-zones.md).

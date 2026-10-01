@@ -7,11 +7,12 @@ import pytest
 import yaml
 
 from strata.controllers.solution_controller import DocumentIndex, DocumentRef, IndexEntry
-from strata.controllers.workload_controller import build_workload_modules, resolve_module
+from strata.controllers.workload_controller import _apply_version_pins, build_workload_modules, resolve_module
 from strata.integrations.resolved_context import ValueResolution
 from strata.models.common_models import ModuleReferenceModel, PlatformKind, SourceModel
 from strata.models.module_model import ModuleMetaModel, ModuleModel, ModuleServiceModel, ModuleSpecModel
 from strata.models.namespace_model import NamespaceMetaModel, NamespaceModel, NamespaceSpecModel
+from strata.models.version_model import VersionMetaModel, VersionModel, VersionSpecModel
 from strata.utils.errors import UsageError
 
 
@@ -68,6 +69,121 @@ def test_resolve_module_raises_for_an_unknown_name():
 
 
 # ---------------------------------------------------------------------------
+# _apply_version_pins() (docs/design/version-pin-overlay.md Phase 4)
+# ---------------------------------------------------------------------------
+
+
+def _version(
+    name: str = "prd", *, chart_pins: dict[str, str] | None = None, image_pins: dict[str, str] | None = None
+) -> VersionModel:
+    pins: dict[str, dict[str, str]] = {}
+    if chart_pins:
+        pins["charts"] = chart_pins
+    if image_pins:
+        pins["images"] = image_pins
+    return VersionModel(meta=VersionMetaModel(name=name), spec=VersionSpecModel(pins=pins))
+
+
+def test_apply_version_pins_returns_same_module_when_version_is_none():
+    module = _module("authentik")
+    assert _apply_version_pins(module, None) is module
+
+
+def test_apply_version_pins_returns_same_module_when_no_pin_matches():
+    module = _module("authentik")
+    version = _version(chart_pins={"other-module": "9.9.9"}, image_pins={"other-service": "9.9.9"})
+    assert _apply_version_pins(module, version) is module
+
+
+def test_apply_version_pins_overrides_chart_version_when_chart_based():
+    module = _module(
+        "authentik", source=SourceModel(remote="goauthentik", chart_name="authentik", chart_version="2024.1.0")
+    )
+    version = _version(chart_pins={"authentik": "2024.2.0"})
+
+    overlaid = _apply_version_pins(module, version)
+
+    assert overlaid is not module
+    assert overlaid.spec.source.chart_version == "2024.2.0"
+    assert module.spec.source.chart_version == "2024.1.0"  # original untouched
+
+
+def test_apply_version_pins_ignores_chart_pin_when_module_is_not_chart_based():
+    """A `charts` pin on a non-chart (git/local-path) module has nothing to
+    apply to — `check_version_pins()` already warns about this separately."""
+    module = _module("authentik")  # default source has no chart_name
+    version = _version(chart_pins={"authentik": "2024.2.0"})
+
+    assert _apply_version_pins(module, version) is module
+
+
+def test_apply_version_pins_overrides_matching_service_image():
+    module = ModuleModel(
+        meta=ModuleMetaModel(name="redis"),
+        spec=ModuleSpecModel(
+            source=SourceModel(source_path="services/redis"),
+            type="compose",
+            services=[ModuleServiceModel(name="redis", image="redis:7"), ModuleServiceModel(name="sidecar")],
+            default_labels={},
+        ),
+    )
+    version = _version(image_pins={"redis": "redis:7.2"})
+
+    overlaid = _apply_version_pins(module, version)
+
+    assert overlaid is not module
+    assert overlaid.spec.services[0].image == "redis:7.2"
+    assert overlaid.spec.services[1] is module.spec.services[1]  # untouched sibling, same object
+    assert module.spec.services[0].image == "redis:7"  # original untouched
+
+
+def test_apply_version_pins_ignores_image_pin_when_service_has_no_image_of_its_own():
+    """A service using `.artifact` instead of `.image` has nothing to
+    overlay \u2014 a pin changes a version, never which field is in use."""
+    module = ModuleModel(
+        meta=ModuleMetaModel(name="app"),
+        spec=ModuleSpecModel(
+            source=SourceModel(source_path="services/app"),
+            type="compose",
+            services=[ModuleServiceModel(name="app", artifact="dspapi_container")],
+            default_labels={},
+        ),
+    )
+    version = _version(image_pins={"app": "ignored:1.0"})
+
+    assert _apply_version_pins(module, version) is module
+
+
+def test_apply_version_pins_logs_each_application():
+    import io
+    import json
+
+    from strata.logging.config import configure_logging, shutdown_logging
+
+    module = ModuleModel(
+        meta=ModuleMetaModel(name="redis"),
+        spec=ModuleSpecModel(
+            source=SourceModel(remote="goauthentik", chart_name="authentik", chart_version="2024.1.0"),
+            type="helm",
+            services=[ModuleServiceModel(name="redis", image="redis:7")],
+            default_labels={},
+        ),
+    )
+    version = _version(chart_pins={"redis": "2024.2.0"}, image_pins={"redis": "redis:7.2"})
+
+    stream = io.StringIO()
+    try:
+        configure_logging(level="INFO", json_output=True, stream=stream)
+        _apply_version_pins(module, version)
+    finally:
+        shutdown_logging()
+
+    lines = [json.loads(line) for line in stream.getvalue().strip().splitlines()]
+    categories = {entry["category"] for entry in lines}
+    assert categories == {"charts", "images"}
+
+
+# ---------------------------------------------------------------------------
 # build_workload_modules() — end to end
 # ---------------------------------------------------------------------------
 
@@ -101,8 +217,13 @@ def test_build_workload_modules_dry_run_writes_nothing(tmp_path: Path):
     build_path = tmp_path / "build"
 
     build_workload_modules(
-        index, root, remotes={}, namespace=namespace, resolved=ValueResolution(deployment="app"),
-        build_path=build_path, dry_run=True,
+        index,
+        root,
+        remotes={},
+        namespace=namespace,
+        resolved=ValueResolution(deployment="app"),
+        build_path=build_path,
+        dry_run=True,
     )
 
     assert not build_path.exists()
@@ -113,8 +234,13 @@ def test_build_workload_modules_dry_run_still_validates_module_resolution(tmp_pa
 
     with pytest.raises(UsageError, match="ghost"):
         build_workload_modules(
-            _index(), tmp_path, remotes={}, namespace=namespace,
-            resolved=ValueResolution(deployment="app"), build_path=tmp_path / "build", dry_run=True,
+            _index(),
+            tmp_path,
+            remotes={},
+            namespace=namespace,
+            resolved=ValueResolution(deployment="app"),
+            build_path=tmp_path / "build",
+            dry_run=True,
         )
 
 
@@ -126,8 +252,14 @@ def test_build_workload_modules_dry_run_reports_planned_steps(tmp_path: Path):
     steps: list[str] = []
 
     build_workload_modules(
-        index, root, remotes={}, namespace=namespace, resolved=ValueResolution(deployment="app"),
-        build_path=tmp_path / "build", dry_run=True, on_step=steps.append,
+        index,
+        root,
+        remotes={},
+        namespace=namespace,
+        resolved=ValueResolution(deployment="app"),
+        build_path=tmp_path / "build",
+        dry_run=True,
+        on_step=steps.append,
     )
 
     assert any("would materialise module 'auth'" in s for s in steps)
@@ -144,8 +276,13 @@ def test_build_workload_modules_real_run_reports_steps_too(tmp_path: Path):
     steps: list[str] = []
 
     build_workload_modules(
-        index, root, remotes={}, namespace=namespace, resolved=ValueResolution(deployment="app"),
-        build_path=tmp_path / "build", on_step=steps.append,
+        index,
+        root,
+        remotes={},
+        namespace=namespace,
+        resolved=ValueResolution(deployment="app"),
+        build_path=tmp_path / "build",
+        on_step=steps.append,
     )
 
     assert any(s.startswith("materialised module 'auth' for namespace 'apps' at") for s in steps)
@@ -171,6 +308,65 @@ def test_build_workload_modules_writes_helm_output_for_a_registry_chart_module(t
     assert (module_dir / "values.yaml").exists()
     meta = yaml.safe_load((module_dir / "meta.yaml").read_text())
     assert meta["chartName"] == "authentik"
+
+
+def test_build_workload_modules_applies_chart_version_pin_end_to_end(tmp_path: Path):
+    """The pinned chart version reaches the real rendered `meta.yaml` —
+    deploy-time Helm reads it back from this file, never re-derives it
+    (docs/design/version-pin-overlay.md Phase 4)."""
+    root = tmp_path / "sln"
+    module = _module(
+        "authentik", source=SourceModel(remote="goauthentik", chart_name="authentik", chart_version="2024.1.0")
+    )
+    index = _index(module)
+    namespace = _namespace(ModuleReferenceModel(name="auth", module="authentik"))
+    build_path = tmp_path / "build"
+    version = _version(chart_pins={"authentik": "2024.2.0"})
+
+    build_workload_modules(
+        index,
+        root,
+        remotes={},
+        namespace=namespace,
+        resolved=ValueResolution(deployment="app"),
+        build_path=build_path,
+        version=version,
+    )
+
+    meta = yaml.safe_load((build_path / "apps" / "auth" / "meta.yaml").read_text())
+    assert meta["chartVersion"] == "2024.2.0"
+
+
+def test_build_workload_modules_applies_image_pin_end_to_end(tmp_path: Path):
+    """The pinned image reaches the real rendered `docker-compose.yml`."""
+    root = tmp_path / "sln"
+    _write(root / "services" / "redis" / "docker-compose.yml", "# stand-in\n")
+    module = ModuleModel(
+        meta=ModuleMetaModel(name="redis"),
+        spec=ModuleSpecModel(
+            source=SourceModel(source_path="services/redis"),
+            type="compose",
+            services=[ModuleServiceModel(name="redis", image="redis:7")],
+            default_labels={},
+        ),
+    )
+    index = _index(module)
+    namespace = _namespace(ModuleReferenceModel(name="redis", module="redis"))
+    build_path = tmp_path / "build"
+    version = _version(image_pins={"redis": "redis:7.2"})
+
+    build_workload_modules(
+        index,
+        root,
+        remotes={},
+        namespace=namespace,
+        resolved=ValueResolution(deployment="app"),
+        build_path=build_path,
+        version=version,
+    )
+
+    merged = yaml.safe_load((build_path / "apps" / "docker-compose.yml").read_text())
+    assert merged["services"]["redis"]["image"] == "redis:7.2"
 
 
 def test_build_workload_modules_keys_directories_by_reference_name_not_module_name(tmp_path: Path):
@@ -199,8 +395,12 @@ def test_build_workload_modules_raises_for_an_unresolvable_reference(tmp_path: P
 
     with pytest.raises(UsageError, match="ghost"):
         build_workload_modules(
-            _index(), tmp_path, remotes={}, namespace=namespace,
-            resolved=ValueResolution(deployment="app"), build_path=tmp_path / "build",
+            _index(),
+            tmp_path,
+            remotes={},
+            namespace=namespace,
+            resolved=ValueResolution(deployment="app"),
+            build_path=tmp_path / "build",
         )
 
 
@@ -211,8 +411,12 @@ def test_build_workload_modules_raises_when_module_type_is_unset(tmp_path: Path)
 
     with pytest.raises(UsageError, match="spec.type is required"):
         build_workload_modules(
-            index, tmp_path, remotes={}, namespace=namespace,
-            resolved=ValueResolution(deployment="app"), build_path=tmp_path / "build",
+            index,
+            tmp_path,
+            remotes={},
+            namespace=namespace,
+            resolved=ValueResolution(deployment="app"),
+            build_path=tmp_path / "build",
         )
 
 
@@ -223,10 +427,14 @@ def test_build_workload_modules_renders_a_merged_compose_namespace(tmp_path: Pat
     _write(root / "services" / "caddy" / "docker-compose.yml", "# stand-in\n")
     _write(root / "services" / "portainer" / "docker-compose.yml", "# stand-in\n")
     caddy = _module(
-        "caddy", type="compose", source=SourceModel(source_path="services/caddy"),
+        "caddy",
+        type="compose",
+        source=SourceModel(source_path="services/caddy"),
     )
     portainer = _module(
-        "portainer", type="compose", source=SourceModel(source_path="services/portainer"),
+        "portainer",
+        type="compose",
+        source=SourceModel(source_path="services/portainer"),
     )
     index = _index(caddy, portainer)
     namespace = _namespace(
@@ -257,8 +465,12 @@ def test_build_workload_modules_raises_usage_error_for_an_unregistered_type(tmp_
 
     with pytest.raises(UsageError, match="argocd"):
         build_workload_modules(
-            index, tmp_path, remotes={}, namespace=namespace,
-            resolved=ValueResolution(deployment="app"), build_path=tmp_path / "build",
+            index,
+            tmp_path,
+            remotes={},
+            namespace=namespace,
+            resolved=ValueResolution(deployment="app"),
+            build_path=tmp_path / "build",
         )
 
 
@@ -309,8 +521,12 @@ def test_build_workload_modules_disabled_reference_does_not_need_to_resolve(tmp_
     namespace = _namespace(ModuleReferenceModel(name="ghost", module="does-not-exist", enabled=False))
 
     build_workload_modules(
-        _index(), tmp_path, remotes={}, namespace=namespace,
-        resolved=ValueResolution(deployment="app"), build_path=tmp_path / "build",
+        _index(),
+        tmp_path,
+        remotes={},
+        namespace=namespace,
+        resolved=ValueResolution(deployment="app"),
+        build_path=tmp_path / "build",
     )
 
 
@@ -330,8 +546,12 @@ def test_build_workload_modules_namespace_with_no_enabled_modules_is_a_graceful_
     build_path = tmp_path / "build"
 
     build_workload_modules(
-        index, tmp_path, remotes={}, namespace=namespace,
-        resolved=ValueResolution(deployment="app"), build_path=build_path,
+        index,
+        tmp_path,
+        remotes={},
+        namespace=namespace,
+        resolved=ValueResolution(deployment="app"),
+        build_path=build_path,
     )
 
     assert not build_path.exists()
