@@ -17,6 +17,7 @@ strata-v2
    how-to/azure-certificates
    how-to/azure-private-dns-zones
    how-to/migrate-v1-workspace-topology-provisioning
+   how-to/sbom-generation
 
 .. toctree::
    :maxdepth: 1
