@@ -38,7 +38,7 @@ meta:
     description: "Example production environment"
 spec:
   properties:
-    tier: production
+    deploy_tier: production
   variables:
     - key: PUBLIC_IP
       store: constant

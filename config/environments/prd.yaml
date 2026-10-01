@@ -7,7 +7,7 @@ meta:
   tags: ["example", "production"]
 spec:
   properties:
-    tier: production
+    deploy_tier: production
 
   # What '${var:KEY}' tokens resolve against.
   variables:

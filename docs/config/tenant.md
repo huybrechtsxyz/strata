@@ -33,7 +33,7 @@ spec:
     - europe
   onboarded: 2026-03-15
   properties:
-    tier: standard
+    deploy_tier: standard
   configuration:
     crm_id: "42"
 ```

@@ -27,7 +27,7 @@ spec:
   #   - c0062-env
 
   properties:
-    tier: standard
+    deploy_tier: standard
 
   configuration:
     crm_id: "42"
