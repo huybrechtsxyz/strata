@@ -95,6 +95,11 @@ jobs:
           name: "Release ${{ github.ref_name }}"
           generate_release_notes: true
           files: dist/*
+          # A pre-release tag (v2.0.0-alpha1, -beta1, -rc1, ...) contains a
+          # '-' per SemVer; a stable tag (v2.0.0) does not. Auto-detected so
+          # cutting an alpha/beta/rc tag never marks it "Latest" alongside
+          # v1's existing stable releases.
+          prerelease: ${{ contains(github.ref_name, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -140,7 +145,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Generate OCI-compliant tags and labels from the git tag
+      # Generate OCI-compliant tags and labels from the git tag. 'latest' is
+      # gated to stable (non-pre-release) tags only — a '-' in the tag name
+      # (v2.0.0-alpha1, -beta1, -rc1, ...) means pre-release, per SemVer, and
+      # must never overwrite the 'latest' image real consumers pull.
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v6
@@ -149,7 +157,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
 
       # Build multi-stage CLI image and push; pass the tag as VERSION build arg
       - name: Build and push image
@@ -194,7 +202,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
 
       - name: Build and push CLI image
         uses: docker/build-push-action@v7

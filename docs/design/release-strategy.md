@@ -1,6 +1,7 @@
 # v2 Release Strategy — Design
 
-- Status: draft
+- Status: draft — Decisions 2, 4, 5, 6 executed (2026-09-30); Decisions 1, 3
+  and the actual tag push remain outstanding
 - Last updated: 2026-09-30
 
 ## Overview
@@ -9,55 +10,66 @@ strata-v2 lives in the **same repository** as v1 (`huybrechtsxyz/strata`): `main
 is v1's continuing line (tags `v0`…`v1.11.2`, still the moving major tags
 external GitHub Action consumers pin to), and `v2` is the long-lived branch
 where the from-scratch rewrite happens. This doc plans how v2 cuts its
-**first published pre-release, `v2.0.0-alpha`**, without disturbing v1's
+**first published pre-release, `v2.0.0-alpha1`**, without disturbing v1's
 existing release line, and captures the concrete decisions made so far so a
 later session can execute them in small, checked phases (per repo convention
 — small, tested, documented phases).
 
-Nothing in this doc has been executed yet — no file has been renamed, no
-workflow edited, no tag pushed. This is the plan only.
+**Executed so far (2026-09-30, local/reversible changes only — no tag
+pushed, no workflow run, no publish)**: `VERSION.txt` normalized,
+`pyproject.toml` renamed, `ci-release.yml`'s prerelease/`latest`-gating
+wired (Decisions 2/4/5/6 below). Verified with a real local build +
+isolated-venv install (`uv build` → fresh `uv venv` → install the wheel →
+`strata version`/`strata --help` both work). **Still not done**: Decision 1
+(actually tagging from `v2`), Decision 3 (verifying PyPI trusted-publisher
+settings), and porting `scripts/Release.ps1` — all deliberately left as
+separate, later steps (pushing a tag triggers real CI that publishes to
+PyPI/GHCR/Docker Hub, a shared-system action, not a local/reversible one).
 
 ## Current Design (as of 2026-09-30)
 
-- **`VERSION.txt`** = `2.0.0-Alpha` at the repo root — the single source
-  [`tool.setuptools.dynamic`](../../pyproject.toml) reads for the package
-  version. `packaging` normalizes this to canonical PEP 440 `2.0.0a0` at
-  runtime (confirmed: `strata version` → `2.0.0a0`) — the file itself is not
-  yet in canonical form.
-- **`pyproject.toml`**: `name = "strata-v2"` — per
+- **`VERSION.txt`** = `2.0.0-Alpha1` at the repo root (was `2.0.0-Alpha`) —
+  the single source [`tool.setuptools.dynamic`](../../pyproject.toml) reads
+  for the package version. `packaging` normalizes this to canonical PEP 440
+  `2.0.0a1` at runtime (confirmed: `strata version` → `2.0.0a1`, and a real
+  `uv build` produces `xyz_strata-2.0.0a1-py3-none-any.whl`).
+- **`pyproject.toml`**: `name = "xyz-strata"` (was `strata-v2`) — per
   [`strata/utils/version.py`](../../src/strata/utils/version.py)'s own
-  docstring, this is a **deliberate, temporary** placeholder distribution name
-  "so v2 can be developed alongside v1," distinct from the permanent import
-  package name (`strata`). The real, permanent PyPI name is `xyz-strata` —
-  same name v1 already publishes under (`strata` itself was unavailable on
+  docstring, the distribution name was always meant to be a temporary,
+  renameable placeholder, distinct from the permanent import package name
+  (`strata`) — confirmed by `test_version_survives_a_distribution_rename`
+  (`test_utils_version.py`), which passed with zero source changes needed.
+  Same name v1 already publishes under (`strata` itself was unavailable on
   public PyPI when v1 first published).
 - **`.github/workflows/ci-release.yml`** (as it exists on `v2`): triggers on
   any `v*.*.*` tag push, regardless of branch (tag refs aren't branch-scoped;
   the workflow definition used is whichever version exists at the tagged
   commit). Four jobs:
   1. `release` — downloads the `dist/` artifact from the matching `ci-build`
-     run, creates a GitHub Release via `softprops/action-gh-release` (no
-     `prerelease:` input wired yet — always a "Latest" release today).
+     run, creates a GitHub Release via `softprops/action-gh-release`, now
+     with `prerelease: ${{ contains(github.ref_name, '-') }}` wired — an
+     alpha/beta/rc tag (contains `-`) is correctly marked pre-release, a
+     stable `vX.Y.Z` tag is not.
   2. `publish-pypi` — `uv publish --trusted-publishing always` (OIDC trusted
      publishing; PyPI trusted-publisher bindings key on **org/repo + workflow
      file path**, not branch or package name at request time — since v1's
      `main` already publishes `xyz-strata` through a `ci-release.yml` at the
-     same path, this likely already works once `pyproject.toml`'s `name`
-     matches `xyz-strata`, but this must be verified against the real PyPI
-     project settings before the first tag push, not assumed).
+     same path, this likely already works now that `pyproject.toml`'s `name`
+     matches `xyz-strata`, but this must still be verified against the real
+     PyPI project settings before the first tag push, not assumed).
   3. `publish` (GHCR) — tags `ghcr.io/<owner>/strata` using
      `docker/metadata-action` with `type=semver,pattern={{version}}`,
-     `type=semver,pattern={{major}}.{{minor}}`, and **`type=raw,value=latest`
-     unconditionally** — this last one is the problem: an alpha build would
-     overwrite `latest` today.
-  4. `publish-hub-cli` (Docker Hub) — same `latest` problem, gated only on
-     `vars.REGISTRY_URL` being set.
+     `type=semver,pattern={{major}}.{{minor}}`, and now
+     `type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}` —
+     an alpha/beta/rc tag no longer overwrites `latest`.
+  4. `publish-hub-cli` (Docker Hub) — same `latest` gating now applied,
+     still gated on `vars.REGISTRY_URL` being set.
 - **v1's `scripts/Release.ps1`** (not yet ported to v2 — see
   [`scripts/README.md`](../../scripts/README.md) for what has been ported)
   hard-requires being on `main`, parses versions with .NET
   `[System.Version]` (cannot parse a `-alpha`/`a1` suffix at all — throws),
   and moves a floating major tag (`v0`) for external Action consumers. None
-  of this applies as-is to a `v2`-branch alpha.
+  of this applies as-is to a `v2`-branch alpha — still not ported.
 
 ## Decisions
 
@@ -66,11 +78,13 @@ workflow edited, no tag pushed. This is the plan only.
    replace v1 on `main`. (User: "design only, no code, no merge yet" — this
    remains an open execution step, not performed.)
 2. **Final distribution name: `xyz-strata`** (not `strata`, not
-   `strata-v2`). Matches v1's real, already-registered PyPI project — `strata`
-   was unavailable when v1 first published. `pyproject.toml`'s `name` field
-   needs to change from `strata-v2` → `xyz-strata` before the first real
-   publish. `strata.utils.version.PACKAGE_NAME` (the *import* package name)
-   stays `strata` — only the distribution name changes.
+   `strata-v2`) — **done (2026-09-30)**. Matches v1's real, already-registered
+   PyPI project — `strata` was unavailable when v1 first published.
+   `pyproject.toml`'s `name` field changed from `strata-v2` → `xyz-strata`;
+   `strata.utils.version.PACKAGE_NAME` (the *import* package name) stays
+   `strata` — only the distribution name changed, confirmed by a real
+   `uv build` producing `xyz_strata-2.0.0a1-*` artifacts and
+   `test_version_survives_a_distribution_rename` passing unchanged.
 3. **PyPI trusted publishing: assumed already configured** for `xyz-strata`
    (v1 already publishes there via a same-path `ci-release.yml`) — **must be
    verified against pypi.org's actual trusted-publisher settings for the
@@ -78,21 +92,31 @@ workflow edited, no tag pushed. This is the plan only.
    the trusted-publisher entry is scoped to a specific workflow filename that
    differs, or to `main` only, it will need a second entry added for
    publishing from `v2`.
-4. **Docker `latest` gating: needed.** `ci-release.yml`'s Docker metadata
-   step must stop applying `type=raw,value=latest` unconditionally — gate it
-   to stable (non-pre-release) semver tags only, so `v2.0.0-alpha` never
-   overwrites the `latest` image tag that real consumers pull. (Docker's
-   `metadata-action` supports this via `type=raw,value=latest,enable=...`
-   conditioned on `!contains(github.ref_name, '-')` or similar — exact
-   expression TBD at implementation time.)
-5. **GitHub Release prerelease flag: needed.** Wire
+4. **Docker `latest` gating: done (2026-09-30).** `ci-release.yml`'s Docker
+   metadata step no longer applies `type=raw,value=latest` unconditionally —
+   gated to stable (non-pre-release) semver tags only
+   (`type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}`,
+   applied to both the GHCR and Docker Hub jobs), so `v2.0.0-alpha1` cannot
+   overwrite the `latest` image tag real consumers pull.
+5. **GitHub Release prerelease flag: done (2026-09-30).** Wired
    `softprops/action-gh-release`'s `prerelease:` input, auto-detected from
-   the tag (contains `-alpha`, `-beta`, `-rc`, etc. → `true`).
-6. **`VERSION.txt` normalization: needed.** Change from `2.0.0-Alpha` to
-   canonical PEP 440 `2.0.0a1` (not `2.0.0a0` — `a0` is what `packaging`
-   defaults to for an *unnumbered* `-Alpha`; an explicit first alpha build
-   should read `a1`) so the file itself matches what `packaging`/`pip`
-   actually report, instead of relying on silent normalization.
+   the tag: `prerelease: ${{ contains(github.ref_name, '-') }}` — true for
+   `-alpha`/`-beta`/`-rc` tags, false for a stable `vX.Y.Z` tag.
+6. **`VERSION.txt` normalization: done (2026-09-30).** Changed from
+   `2.0.0-Alpha` to `2.0.0-Alpha1`, which `packaging` normalizes to
+   canonical PEP 440 `2.0.0a1` (confirmed directly:
+   `Version('2.0.0-Alpha1') == Version('2.0.0a1')`, and `strata version`/
+   a real `uv build` both now report `2.0.0a1`, not the unnumbered `a0`
+   default). **Caveat found while verifying this**: the dev venv's
+   editable-install metadata does not update just from editing
+   `VERSION.txt` — needs an actual reinstall/resync
+   (`strata.utils.version`'s own documented "sharp edge"). Also found and
+   cleaned up two genuinely stale `src/*.egg-info` directories (leftover
+   from a pre-uv install, under the old `strata_v2` name) that were
+   causing `importlib.metadata.packages_distributions()` to return
+   multiple, ambiguously-ordered entries for the same import package —
+   not a new problem this change created, but one this change's own
+   verification step surfaced and fixed.
 7. **Merge-to-`main` criterion: v2 reaches beta.** `v2` merges into `main`
    (becoming the real, released line — superseding v1) the moment v2 can
    stand in for v1 against both real consumers tracked in
@@ -237,3 +261,27 @@ Execution order (each its own small, checked phase per repo convention —
   a real git constraint found while writing it: the `v2` branch must be
   deleted before a `v2` moving major tag can exist (branches/tags share a
   namespace) — sequencing note for the eventual beta cutover.
+- 2026-09-30: **Executed Decisions 2, 4, 5, 6**, per direct request
+  ("normalize version and prepare for a v2 alpha release") — all local,
+  reversible file edits, no tag pushed, no CI triggered, no publish. Changed
+  `VERSION.txt` to `2.0.0-Alpha1` (normalizes to `2.0.0a1`, confirmed via
+  `packaging.version.Version` directly before committing to it) and
+  `pyproject.toml`'s `name` to `xyz-strata`. Wired `ci-release.yml`'s
+  `prerelease:` input and both Docker jobs' `latest` gating, both keyed off
+  `contains(github.ref_name, '-')`. Verified end-to-end: `uv build` (with
+  `--index-strategy unsafe-best-match`, the known OMP-feed quirk) produces
+  `xyz_strata-2.0.0a1-py3-none-any.whl`; installed into a fresh, isolated
+  `uv venv` and confirmed `strata version` → `2.0.0a1` and `strata --help`
+  lists all six commands. Found and fixed an unrelated pre-existing
+  environment issue while verifying `VERSION.txt`'s change against the dev
+  venv: two stale `src/*.egg-info` directories (leftover from an old,
+  pre-uv `strata_v2`-named install) made `importlib.metadata.
+  packages_distributions()` return multiple, ambiguously-ordered entries
+  for the `strata` import package, which could non-deterministically
+  resolve to a stale cached version — removed both; full check suite green
+  after (mypy 121 files, ruff, import-linter, pytest 1645 passed, same one
+  pre-existing unrelated failure as every prior run this session).
+  Still open: Decision 1 (tag push itself), Decision 3 (verify PyPI
+  trusted-publisher settings for `xyz-strata` before that push), and
+  porting `scripts/Release.ps1` — all deliberately deferred as separate,
+  later, harder-to-reverse steps.
