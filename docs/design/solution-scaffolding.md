@@ -445,5 +445,26 @@ tree. Untested today because nothing ships non-`.py` package data yet.
   (`Implemented — first command group in v2; not on the CI-critical path
   (ADR-0020 Tier 2)`), plus a changelog entry there. This design is now
   fully implemented, all 3 phases done.
+- 2026-10-01: Added `.vscode/` scaffolding, reversing this doc's own
+  "Deliberately out of scope" call ("not evidenced as needed by this
+  design's motivating problem") now that evidence exists: the new
+  `src/vscode` VS Code extension. Scoped narrowly to that one motivation
+  — `dot.vscode/extensions.json` recommends the extension
+  (`huybrechts-xyz.strata`) plus a `README.md` explaining the directory,
+  nothing else. Deliberately did **not** port v1's
+  `dot.vscode/settings.json`/`tasks.json`/`launch.json`/`mcp.json` —
+  read directly, v1's `settings.json` turned out to be a copy of v1's
+  own *dev-repo* editor settings (ruff/pytest/python formatter config)
+  rather than content meant for an end-user solution repo, and its
+  `extensions.json` never actually recommended v1's own Strata
+  extension at all. Classified as user-owned under the existing
+  directory-level rule (`is_package_owned()` already returns `False` for
+  anything outside `.strata/` — no code change needed, confirmed with a
+  new `test_vscode_is_user_owned_like_github` test). `pyproject.toml`'s
+  `templates/**/*` package-data glob already covers the new subfolder.
+  2 new controller/CLI test assertions plus the one dedicated ownership
+  test; full check suite green (mypy, ruff, import-linter, the 13
+  scaffold/sln tests). Confirmed live against `strata sln init` in a
+  scratch directory.
 
 

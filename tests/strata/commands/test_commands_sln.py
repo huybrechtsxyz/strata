@@ -32,6 +32,7 @@ def test_init_creates_the_scaffolded_files(runner, tmp_path):
     assert (tmp_path / ".strata" / "README.md").is_file()
     assert (tmp_path / ".github" / "pull_request_template.md").is_file()
     assert (tmp_path / ".github" / "ISSUE_TEMPLATE" / "deployment-change-request.yml").is_file()
+    assert (tmp_path / ".vscode" / "extensions.json").is_file()
 
 
 def test_init_is_safe_to_re_run(runner, tmp_path):
