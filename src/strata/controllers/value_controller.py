@@ -56,6 +56,7 @@ from strata.utils.diagnostics import Diagnostics
 from strata.utils.dict_merge import deep_merge
 from strata.utils.errors import UsageError
 from strata.utils.secret_generator import generate_secret, mask_secret
+from strata.utils.value_tokens import has_value_tokens, resolve_value_tokens
 
 #: Store types resolved without any integration — read directly.
 _CONSTANT_TYPES = {VariableStoreType.CONSTANT, SecretStoreType.CONSTANT, FeatureStoreType.CONSTANT}
@@ -441,7 +442,7 @@ def resolve_values(context: SolutionContext, deployment_name: str, keys: list[st
             result.values[key] = artifact_value
             continue
         try:
-            value = _resolve_store_value(store, resolvers)
+            value = _resolve_store_value(store, resolvers, value_reference_values)
         except ValueResolutionError as exc:
             result.diagnostics.error(str(exc), location=key, code="value_resolution_failed")
             continue
@@ -451,12 +452,31 @@ def resolve_values(context: SolutionContext, deployment_name: str, keys: list[st
 
 
 def _resolve_store_value(
-    store: VariableStoreModel | SecretStoreModel | FeatureStoreModel, resolvers: _Resolvers
+    store: VariableStoreModel | SecretStoreModel | FeatureStoreModel,
+    resolvers: _Resolvers,
+    value_reference_values: dict[str, str],
 ) -> str:
-    """Dispatch to the right backend for `store.store`, and return its value."""
+    """Dispatch to the right backend for `store.store`, and return its value.
+
+    `value_reference_values` is `resolve_document_value_references()`'s own
+    output (docs/design/cross-document-value-references.md) — already
+    fully resolved, with no `${...}` token of its own by construction (that
+    design's own "cycles are impossible" guarantee), so it's always safe to
+    resolve a `store: constant` value against regardless of which order
+    `keys` happens to be processed in. Fixes a real, previously-documented
+    gap: a constant's own `value` field was never checked for `${value:...}`
+    (or any token) at all — it passed `strata validate` cleanly (the
+    generic whole-document walk already saw it) but then reached every
+    consumer as the literal, unresolved token string.
+    """
     store_type = store.store
     if store_type in _CONSTANT_TYPES:
         value = str(store.value)
+        if has_value_tokens(value):
+            try:
+                value = resolve_value_tokens(value, value_reference_values)
+            except ValueError as exc:
+                raise ValueResolutionError(str(exc)) from exc
     elif store_type in _ENVIRONMENT_TYPES or store_type == SecretStoreType.GITHUB:
         from os import environ
 
@@ -648,6 +668,7 @@ def _list_values_live(
     """
     resolvers = _Resolvers(context.controller.index)
     diagnostics = Diagnostics()
+    value_reference_values, _ = resolve_document_value_references(context.controller.index)
 
     items: list[tuple[str, str, VariableStoreModel | SecretStoreModel | FeatureStoreModel]] = []
     if type_filter in (None, "variables"):
@@ -673,7 +694,7 @@ def _list_values_live(
             continue
 
         try:
-            value = _resolve_store_value(store, resolvers)
+            value = _resolve_store_value(store, resolvers, value_reference_values)
         except ValueResolutionError as exc:
             diagnostics.error(f"'{key}': {exc}", location=key, code="value_resolution_failed")
             rows.append(

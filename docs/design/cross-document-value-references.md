@@ -8,6 +8,11 @@
   Live-migrated into `.v2-cfg`'s real `environments/c0062-env.yaml` as
   proof (see Phase 6 below) — `strata validate .v2-cfg` passes clean,
   12/12, with a real `${value:tenant.c0062.meta.name}` reference in place.
+  **2026-10-01: the one real limitation Phase 6 found and documented — a
+  `${value:...}` token inside a `store: constant` variable/secret/feature's
+  own `value` field was never resolved — is now fixed** (see the new
+  entry below); `.v2-cfg`'s own `variables[].value` occurrence, left as a
+  literal at the time for exactly this reason, can now be migrated too.
 - Date: 2026-09-29
 - Related: [value-token-resolution.md](value-token-resolution.md) (the
   existing `${var:}`/`${secret:}`/`${feature:}`/`${output:}` mechanism this
@@ -725,7 +730,8 @@ staleness:
   directly on this function, only indirectly via `resolve_values()`'s own
   tests).
 - **A real, confirmed limitation found and documented, not silently
-  worked around**: a `${value:...}` (or any other kind's) token embedded
+  worked around** — ~~**RESOLVED 2026-10-01**~~ (see the dedicated entry
+  below): a `${value:...}` (or any other kind's) token embedded
   inside a `store: constant` variable/secret/feature's own `value` field
   is never resolved — confirmed directly in `value_controller.py`:
   neither `_resolve_store_value()` nor `build_value_references()`'s
@@ -960,3 +966,34 @@ Original Phase 6 bullet list (for reference — all done):
   3) accordingly. Full check suite green: mypy (108 files), ruff,
   import-linter (1 kept, 0 broken), pytest (1286 passed). **All 7 phases
   of this design are now implemented.**
+- 2026-10-01: **Resolved the one real limitation Phase 6 found** — a
+  `${value:...}` token inside a `store: constant` variable/secret/
+  feature's own `value` was never resolved — per direct request
+  ("we could just use store: CONSTANT and then allow for
+  ${value:path-to-value}"), considered against a dedicated new `store:
+  value` enum member and chosen against it: a constant's `value` field
+  already accepts an arbitrary string, so teaching `_resolve_store_value()`
+  to resolve a `${value:...}` token already present in it reuses the
+  existing mechanism rather than adding a parallel one. Implementation:
+  `_resolve_store_value()` (`value_controller.py`) gained a
+  `value_reference_values: dict[str, str]` parameter — the exact,
+  already-computed `resolve_document_value_references()` output, safe to
+  resolve against regardless of `keys` iteration order since that
+  design's own "cycles are impossible by construction" guarantee means
+  none of its targets can themselves contain a token. A `CONSTANT`-type
+  store's value is now checked with `has_value_tokens()` and, if present,
+  resolved via `resolve_value_tokens()` before being returned — both of
+  `_resolve_store_value()`'s call sites (`resolve_values()`,
+  `_list_values_live()`) updated to pass it through. `build_value_references()`
+  (the build-time path) deliberately left unchanged — matches the
+  existing "build renders literally, deploy resolves" split
+  (ADR-0022 D4) already established for `properties`/`configuration`
+  tokens, so the on-disk `*.auto.tfvars.json` stays literal and the real
+  substitution happens the same way it already does for every other
+  category, via deploy-time `TF_VAR_<name>` delivery. 3 new tests
+  (resolves correctly, a plain literal is unaffected, an unresolvable
+  reference reports a clean diagnostic instead of raising). Full check
+  suite green: mypy (123 files), ruff, import-linter (1 kept, 0 broken),
+  pytest (1663 passed, same one pre-existing unrelated failure). Not yet
+  done: migrating `.v2-cfg`'s own `variables[].value` occurrence (left as
+  a literal specifically because of this limitation) — now safe to do.

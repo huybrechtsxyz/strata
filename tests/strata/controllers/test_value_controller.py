@@ -883,6 +883,73 @@ def test_resolve_values_reports_an_unresolvable_value_reference_without_raising(
     assert "does not exist" in message
 
 
+def test_resolve_values_resolves_value_reference_token_inside_a_constant_store(tmp_path):
+    """Real, previously-documented gap (docs/design/cross-document-value-
+    references.md Phase 6): a `store: constant` variable/secret/feature's
+    own `value` was never checked for a `${value:...}` token at all — it
+    passed `strata validate` cleanly, then reached every consumer as the
+    literal, unresolved string. `CUSTOMER_CODE` here is the exact case
+    that doc's own worked example (`.v2-cfg`'s real duplication) could not
+    yet fix."""
+    root = _solution(tmp_path)
+    _tenant_doc(root, "c0062")
+    _write(
+        root,
+        "environments/prd.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  variables:\n    - key: CUSTOMER_CODE\n      store: constant\n"
+        '      value: "${value:tenant.c0062.meta.name}"\n',
+    )
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+
+    result = resolve_values(context, "app", ["CUSTOMER_CODE"])
+
+    assert result.diagnostics.ok, result.diagnostics.messages()
+    assert result.values["CUSTOMER_CODE"] == "c0062"
+
+
+def test_resolve_values_constant_store_literal_with_no_tokens_is_unaffected(tmp_path):
+    """A plain literal constant (the overwhelming common case) must not
+    regress — `has_value_tokens()` short-circuits before any resolution
+    attempt, so it never even looks at `value_reference_values`."""
+    root = _solution(tmp_path)
+    _write(
+        root,
+        "environments/prd.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  variables:\n    - key: REGION\n      store: constant\n      value: westeurope\n",
+    )
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+
+    result = resolve_values(context, "app", ["REGION"])
+
+    assert result.diagnostics.ok, result.diagnostics.messages()
+    assert result.values["REGION"] == "westeurope"
+
+
+def test_resolve_values_constant_store_unresolvable_value_reference_reports_diagnostic(tmp_path):
+    """An unresolvable `${value:...}` inside a constant's value fails that
+    one key with a clear diagnostic, matching the existing unresolvable-
+    key treatment — it does not raise, and does not block other keys."""
+    root = _solution(tmp_path)
+    _write(
+        root,
+        "environments/prd.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  variables:\n    - key: CUSTOMER_CODE\n      store: constant\n"
+        '      value: "${value:tenant.doesnotexist.meta.name}"\n',
+    )
+    _deployment(root, "app", environments=["prd"])
+    context = _context(root)
+
+    result = resolve_values(context, "app", ["CUSTOMER_CODE"])
+
+    assert not result.diagnostics.ok
+    assert "CUSTOMER_CODE" not in result.values
+
+
 # ---------------------------------------------------------------------------
 # Store resolution binds a real `kind: integration` document by type —
 # docs/design/store-integration-configuration.md's Phase 1.
