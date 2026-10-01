@@ -1,0 +1,116 @@
+{
+  "name": "strata",
+  "displayName": "Strata",
+  "description": "Strata infrastructure workspace integration — validate the solution and explore its cross-document reference graph.",
+  "version": "0.0.1",
+  "publisher": "huybrechts-xyz",
+  "license": "AGPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/huybrechtsxyz/strata-v2"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other",
+    "Linters"
+  ],
+  "keywords": [
+    "strata",
+    "infrastructure",
+    "yaml",
+    "platform"
+  ],
+  "activationEvents": [
+    "workspaceContains:strata.yaml"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "strata.validate",
+        "title": "Strata: Validate Solution",
+        "icon": "$(check)"
+      },
+      {
+        "command": "strata.refreshGraph",
+        "title": "Strata: Refresh Graph",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "strata.openGraphLocation",
+        "title": "Strata: Open Reference Location"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "strata.refreshGraph",
+          "when": "view == strataGraph",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "strata.openGraphLocation",
+          "when": "false"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "strata",
+          "title": "Strata",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "strata": [
+        {
+          "id": "strataGraph",
+          "name": "Graph"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "strataGraph",
+        "contents": "No reference graph loaded yet.\n[Refresh Graph](command:strata.refreshGraph)\n\nRequires the `strata` CLI and a solution (`strata.yaml`) in this workspace."
+      }
+    ],
+    "configuration": {
+      "title": "Strata",
+      "properties": {
+        "strata.cliPath": {
+          "type": "string",
+          "default": "strata",
+          "description": "Path to the strata CLI. Use 'uv run strata' for uv-managed projects."
+        },
+        "strata.validateOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Re-validate the whole solution when a YAML file is saved."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.90.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "@vscode/test-cli": "^0.0.9",
+    "@vscode/test-electron": "^2.4.0",
+    "typescript": "^5.4.0"
+  }
+}

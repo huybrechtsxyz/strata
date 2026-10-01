@@ -8,5 +8,11 @@ __pycache__/
 .coverage
 docs/_build/
 
+# VS Code extension (src/vscode) — self-contained npm project
+src/vscode/node_modules/
+src/vscode/out/
+src/vscode/.vscode-test/
+src/vscode/*.vsix
+
 # Temporary until uv.lock is cleaned of internal ProGet URLs (dev-machine only)
 uv.lock

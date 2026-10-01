@@ -1,8 +1,11 @@
 # scripts/
 
 PowerShell helper scripts for local development. Ported from strata v1's
-`scripts/` folder, trimmed to what applies to v2 (no VS Code extension, no
-state-service/dashboard, no ADR-0030-style migration guards).
+`scripts/` folder, trimmed to what applies to v2 (no state-service/dashboard,
+no ADR-0030-style migration guards). The VS Code extension (`src/vscode/`)
+is a separate, self-contained npm project with its own build/test commands
+(see [src/vscode/DEVELOPMENT.md](../src/vscode/DEVELOPMENT.md)) — none of
+these scripts touch it.
 
 | Script      | Purpose                                                                                          |
 | ----------- | ------------------------------------------------------------------------------------------------ |

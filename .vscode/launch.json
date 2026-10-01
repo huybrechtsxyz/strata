@@ -1,0 +1,17 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run VS Code Extension",
+            "type": "extensionHost",
+            "request": "launch",
+            "args": [
+                "--extensionDevelopmentPath=${workspaceFolder}/src/vscode"
+            ],
+            "outFiles": [
+                "${workspaceFolder}/src/vscode/out/**/*.js"
+            ],
+            "preLaunchTask": "VS Code Extension: watch"
+        }
+    ]
+}
