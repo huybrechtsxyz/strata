@@ -173,16 +173,16 @@ def _build_topologies_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     """name -> {type, components: [...], volumes: [...]}.
 
     `workspace.spec.topology` is optional (a workspace may have no grouping
-    concept at all) — an empty dict, not an error, when it is unset.
+    concept at all) — an empty dict, not an error, when it is unset. Entries
+    are inline `TopologySpecModel` blocks (ADR-0028), read directly off the
+    workspace — no separate document lookup.
     """
     payload: dict[str, Any] = {}
-    for name in graph.workspace.spec.topology or []:
-        topology = graph.topologies[name]
-        spec = topology.spec
-        payload[name] = {
-            "type": spec.type,
-            "components": [c.model_dump(mode="json", exclude_none=True) for c in spec.components],
-            "volumes": [v.model_dump(mode="json", exclude_none=True) for v in (spec.volumes or [])],
+    for topology in graph.workspace.spec.topology or []:
+        payload[topology.name] = {
+            "type": topology.type,
+            "components": [c.model_dump(mode="json", exclude_none=True) for c in topology.components],
+            "volumes": [v.model_dump(mode="json", exclude_none=True) for v in (topology.volumes or [])],
         }
     return payload
 

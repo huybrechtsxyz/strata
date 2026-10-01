@@ -29,6 +29,7 @@ from pydantic import Field, field_validator, model_validator
 
 from strata.models.common_models import (
     CommonLifecycleModel,
+    ModuleReferenceModel,
     PlatformBaseModel,
     PlatformKind,
     PlatformName,
@@ -137,6 +138,132 @@ class WorkspaceResourceModel(PlatformBaseModel):
         return self
 
 
+class TopologyComponentModel(PlatformBaseModel):
+    """A resource reference belonging to a topology, optionally with modules attached.
+
+    ``modules`` attaches application code directly to this resource (e.g. an
+    Azure Function App's function code onto its Function App resource) —
+    no container-orchestration namespace involved. Uses the same
+    `ModuleReferenceModel` as `Namespace.spec.modules`: both are ultimately
+    "a pointer to a Module document plus placement metadata," just attached
+    at different levels (namespace grouping vs. a single resource).
+    """
+
+    resource: PlatformName = Field(
+        ..., description="Resource name reference (must exist in this workspace's spec.resources)"
+    )
+    modules: list[ModuleReferenceModel] | None = Field(
+        None, description="Modules (application code) attached directly to this resource"
+    )
+
+    @model_validator(mode="after")
+    def validate_unique_module_names(self) -> "TopologyComponentModel":
+        """Validate that module names are unique within this component."""
+        if self.modules:
+            check_unique_names([m.name for m in self.modules], f"module names on resource '{self.resource}'")
+        return self
+
+    @model_validator(mode="after")
+    def validate_single_main_slot(self) -> "TopologyComponentModel":
+        """When multiple modules are enabled on one resource, exactly one must be 'main'."""
+        if not self.modules or len(self.modules) <= 1:
+            return self
+        enabled = [m for m in self.modules if m.enabled]
+        if not enabled:
+            return self
+        main_slots = [m for m in enabled if m.slot_type == "main"]
+        if not main_slots:
+            raise ValueError(f"Resource '{self.resource}' has multiple enabled modules but no 'main' slot defined")
+        if len(main_slots) > 1:
+            raise ValueError(
+                f"Resource '{self.resource}' has multiple modules marked as 'main' slot: {[m.name for m in main_slots]}"
+            )
+        return self
+
+
+class TopologyNamespaceReferenceModel(PlatformBaseModel):
+    """A namespace reference belonging to a topology."""
+
+    namespace: PlatformName = Field(
+        ..., description="Namespace name reference (must exist in this workspace's spec.namespaces)"
+    )
+
+
+class TopologyVolumeModel(PlatformBaseModel):
+    """Model for a topology volume."""
+
+    name: PlatformName = Field(description="Unique volume name within the topology")
+    type: str = Field(
+        default="local", description="Volume storage type (e.g., local, replicated, distributed, nfs, iscsi, etc.)"
+    )
+    size: str | None = Field(None, description="Volume capacity (e.g., '10Gi', '500Mi', '1Ti')")
+    mount_path: str | None = Field(None, description="Mount path for the volume (e.g., '/data', '/mnt/shared')")
+    access_mode: str | None = Field(
+        None,
+        description="Volume access mode - concurrency pattern at container level "
+        "(e.g., 'ReadWriteOnce', 'ReadWriteMany', 'ReadOnlyMany')",
+    )
+    mode: str | None = Field(
+        None, description="Filesystem permissions within the volume (e.g., '0755' octal, 'rw', 'ro')"
+    )
+    driver: str | None = Field(None, description="Storage driver or CSI plugin (e.g., 'nfs.csi.k8s.io', 'local-path')")
+    configuration: dict[str, Any] | None = Field(
+        None, description="Driver-specific configuration (e.g., server, share, secretRef)"
+    )
+
+
+class TopologySpecModel(PlatformBaseModel):
+    """A named grouping of resources and namespaces that conceptually belong
+    together (e.g. "the AKS cluster + its blob store + its key vault"), for
+    documentation, diagramming, and workload placement. It deliberately has
+    **no** `provider`/`provisioner` field: which tool builds/deploys these
+    resources, and in what order, is a separate concern
+    (`ProvisionerModel`/`ProvisioningStepModel`) — a topology can be built
+    and configured by several different provisioners acting on different
+    subsets of it, or a single provisioner can span several topologies.
+    Binding "grouping" and "tooling" together was v1's design; see ADR-0011.
+
+    Inline on `WorkspaceSpecModel.topology` (ADR-0028, reverted from a
+    standalone `kind: topology` document, ADR-0011) — `components[].resource`/
+    `namespaces[].namespace` only ever resolve against *this* workspace's own
+    `spec.resources`/`spec.namespaces`, one workspace at a time, so a
+    standalone document could never validate its own references in
+    isolation; see ADR-0028 for the full evidence.
+    """
+
+    name: PlatformName = Field(description="Unique topology name within this workspace")
+    type: PlatformName = Field(..., description="Topology type (e.g., dockerswarm, kubernetes, azure-native)")
+    components: list[TopologyComponentModel] = Field(
+        ..., min_length=1, description="Resource references that belong to this topology"
+    )
+    namespaces: list[TopologyNamespaceReferenceModel] | None = Field(
+        None, description="Namespace references deployed on this topology"
+    )
+    volumes: list[TopologyVolumeModel] | None = Field(None, description="Topology volumes")
+
+    @model_validator(mode="after")
+    def validate_unique_component_resources(self) -> "TopologySpecModel":
+        """Validate that resource references are unique within this topology."""
+        check_unique_names([c.resource for c in self.components], f"resource references in topology '{self.name}'")
+        return self
+
+    @model_validator(mode="after")
+    def validate_unique_namespace_refs(self) -> "TopologySpecModel":
+        """Validate that namespace references are unique within this topology."""
+        if self.namespaces:
+            check_unique_names(
+                [n.namespace for n in self.namespaces], f"namespace references in topology '{self.name}'"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_unique_volume_names(self) -> "TopologySpecModel":
+        """Validate that volume names are unique within this topology."""
+        if self.volumes:
+            check_unique_names([v.name for v in self.volumes], f"volume names in topology '{self.name}'")
+        return self
+
+
 class WorkspaceMetaModel(PlatformBaseModel):
     """Workspace metadata (name, annotations, labels, tags)."""
 
@@ -154,20 +281,23 @@ class WorkspaceSpecModel(PlatformBaseModel):
     """Workspace specification: the static declaration of everything a solution needs.
 
     No `references` field (ADR-0002). No `WorkspaceIacModel`-style embedded
-    provisioner-topology binding (ADR-0011) — `topology` is a list of plain
-    Topology names (unlike v1, deliberately **optional**, since a workspace
-    may have resources with no grouping concept at all), and the actual
-    build/deploy recipe is `execution: list[ProvisioningStepModel]`,
-    fully decoupled from `topology`.
+    provisioner-topology binding (ADR-0011) — `topology` is a list of inline
+    `TopologySpecModel` groupings (unlike v1, deliberately **optional**,
+    since a workspace may have resources with no grouping concept at all;
+    unlike ADR-0011's original design, inline rather than a standalone-kind
+    reference — see ADR-0028), and the actual build/deploy recipe is
+    `execution: list[ProvisioningStepModel]`, fully decoupled from
+    `topology`.
 
     The three sibling keys are deliberately distinct words, since they answer
     different questions: `providers` (**where** — target platform/account),
     `provisioners` (**with what** — tool definitions), `execution` (**what
     runs, in what order**).
 
-    Every reference below is a document **name**, resolved by discovery
-    against the `(kind, meta.name)` index — not a file path (see the note
-    above `WorkspaceResourceSubnetModel`).
+    Every reference below (other than `topology`, inline since ADR-0028) is
+    a document **name**, resolved by discovery against the `(kind,
+    meta.name)` index — not a file path (see the note above
+    `WorkspaceResourceSubnetModel`).
     """
 
     lifecycle: CommonLifecycleModel | None = Field(None, description="Workspace lifecycle phases")
@@ -192,8 +322,11 @@ class WorkspaceSpecModel(PlatformBaseModel):
         "rather than 'provisioning' so it cannot be confused with the sibling 'provisioners' (tool "
         "definitions) or with the 'deployment' kind.",
     )
-    topology: list[Annotated[PlatformName, References(PlatformKind.TOPOLOGY)]] | None = Field(
-        None, description="Topology document names (pure grouping)"
+    topology: list[TopologySpecModel] | None = Field(
+        None,
+        description="Inline topology groupings (type, components, namespaces, volumes) — pure grouping, no "
+        "provider/provisioner field (ADR-0011). Inline rather than a standalone-document reference "
+        "(ADR-0028, reverted from the original standalone-kind design of ADR-0011).",
     )
     resources: list[WorkspaceResourceModel] | None = Field(None, description="Workspace resource definitions")
     namespaces: list[Annotated[PlatformName, References(PlatformKind.NAMESPACE)]] | None = Field(
@@ -215,7 +348,7 @@ class WorkspaceSpecModel(PlatformBaseModel):
         check_unique_names(self.providers, "provider names")
         check_unique_names([p.name for p in self.provisioners], "provisioner names")
         if self.topology:
-            check_unique_names(self.topology, "topology names")
+            check_unique_names([t.name for t in self.topology], "topology names")
         if self.resources:
             check_unique_names([r.name for r in self.resources], "resource names")
         if self.namespaces:
@@ -226,6 +359,45 @@ class WorkspaceSpecModel(PlatformBaseModel):
             check_unique_names(self.dns_zones, "DNS zone names")
         if self.networks:
             check_unique_names(self.networks, "network names")
+        return self
+
+    @model_validator(mode="after")
+    def validate_topology_component_resource_references(self) -> "WorkspaceSpecModel":
+        """Validate that each topology's component resource references exist in this
+        workspace's own `spec.resources` (ADR-0011/ADR-0028).
+
+        A same-document Phase 1 check — possible only because topology is now
+        inline; see `TopologySpecModel`'s docstring and ADR-0028 for why this
+        could never be checked from a standalone Topology document alone.
+        """
+        if not self.topology:
+            return self
+        resource_names = {r.name for r in (self.resources or [])}
+        errors = []
+        for topo in self.topology:
+            for component in topo.components:
+                if component.resource not in resource_names:
+                    errors.append(
+                        f"Topology '{topo.name}': component references undefined resource '{component.resource}'"
+                    )
+        if errors:
+            raise ValueError("; ".join(errors))
+        return self
+
+    @model_validator(mode="after")
+    def validate_topology_namespace_references(self) -> "WorkspaceSpecModel":
+        """Validate that each topology's namespace references exist in this
+        workspace's own `spec.namespaces` (ADR-0011/ADR-0028)."""
+        if not self.topology:
+            return self
+        namespace_names = set(self.namespaces or [])
+        errors = []
+        for topo in self.topology:
+            for ns_ref in topo.namespaces or []:
+                if ns_ref.namespace not in namespace_names:
+                    errors.append(f"Topology '{topo.name}': references undefined namespace '{ns_ref.namespace}'")
+        if errors:
+            raise ValueError("; ".join(errors))
         return self
 
     @model_validator(mode="after")

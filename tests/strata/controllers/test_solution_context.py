@@ -16,14 +16,12 @@ meta:
 spec: {}
 """
 
-TOPOLOGY = """apiVersion: strata.huybrechts.xyz/v2
-kind: topology
+NAMESPACE_DOC = """apiVersion: strata.huybrechts.xyz/v2
+kind: namespace
 meta:
-  name: main-topology
+  name: main-ns
 spec:
-  type: kubernetes
-  components:
-    - resource: web
+  lifecycle: {}
 """
 
 
@@ -31,14 +29,14 @@ def _solution(tmp_path: Path) -> Path:
     root = tmp_path / "solution"
     root.mkdir()
     (root / "strata.yaml").write_text(MANIFEST, encoding="utf-8")
-    (root / "topology.yaml").write_text(TOPOLOGY, encoding="utf-8")
+    (root / "namespace.yaml").write_text(NAMESPACE_DOC, encoding="utf-8")
     return root
 
 
 def _broken_solution(tmp_path: Path) -> Path:
     root = _solution(tmp_path)
     (root / "bad.yaml").write_text(
-        "apiVersion: strata.huybrechts.xyz/v2\nkind: topology\nmeta:\n  name: broken\nspec:\n  type: kubernetes\n",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: namespace\nmeta:\n  name: broken\nspec:\n  type: kubernetes\n",
         encoding="utf-8",
     )
     return root

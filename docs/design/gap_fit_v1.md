@@ -1,8 +1,8 @@
 # v1 -> v2 Coverage Gaps
 
 - Status: living — update in place as gaps are closed or new ones are found
-- Last updated: 2026-09-30 (gap #7's `paths` sub-item re-resolved after a
-  `pattern`/`filename_pattern` redesign — docs/design/path-conventions.md)
+- Last updated: 2026-10-01 (gap #5 revised for ADR-0028's topology-inline
+  reversion)
 
 ## Overview
 
@@ -223,26 +223,40 @@ durable, reviewable record.
   `{managed-by: strata}`/`{app: <name>}`) is optional polish, not required
   to pass validation.
 
-### 5. Workspace/Topology/Provisioning decoupling (ADR-0011) is the biggest structural rewrite
+### 5. Workspace/Topology/Provisioning decoupling (ADR-0011, revised ADR-0028)
 
 - **Found in:** haven's single monolithic `config/stack/workspace.yaml` —
   topology + resources + namespaces + firewalls + provisioners all nested
   together, with `provisioner`/`topology` bound per-stage in
   `deployment.yaml`.
-- **Status:** deliberate (ADR-0011) — not an open gap, converts cleanly, but
-  is real, non-mechanical work: one v1 document becomes 4 v2 documents
-  (`Workspace` + 2 standalone `Topology` documents + an explicit
-  `execution:` step recipe replacing v1's per-stage `topology:`/
-  `provisioner:` binding).
-- **Migration action:** no shortcut — a migration guide/tool needs to spend
-  real explanation budget here; this is the one part of the migration that
-  isn't a mechanical field rename.
-- **Migration guide written 2026-09-30**:
+- **Status:** deliberate (ADR-0011) — not an open gap, converts cleanly.
+  **Revised 2026-10-01 (ADR-0028):** originally documented as "one v1
+  document becomes 4 v2 documents" (`Workspace` + 2 standalone `Topology`
+  documents + an explicit `execution:` step recipe) — ADR-0028 reverted the
+  standalone-`Topology`-document half of ADR-0011 (zero real cross-workspace
+  reuse found; the inverted reference direction `TopologyComponentModel.resource`
+  always had was a real structural cost with no offsetting payoff). Topology
+  grouping is back to being inline on `Workspace.spec.topology[]`, same
+  place v1 had it — so this is now genuinely **less** work than first
+  documented: one v1 document becomes 1 v2 document (`Workspace`, topology
+  inline) plus the still-real `execution:` step recipe replacing v1's
+  per-stage `topology:`/`provisioner:` binding. The provisioning-decoupling
+  half of ADR-0011 (grouping independent of tooling) is unaffected and still
+  the real, non-mechanical part of this migration.
+- **Migration action:** no shortcut on the provisioner/execution-recipe
+  half — a migration guide/tool still needs to spend real explanation
+  budget there. The topology-splitting half that used to need its own
+  explanation no longer exists as a step at all.
+- **Migration guide written 2026-09-30, updated in place 2026-10-01**:
   [docs/how-to/migrate-v1-workspace-topology-provisioning.md](../how-to/migrate-v1-workspace-topology-provisioning.md)
-  — step-by-step, using the real, already-migrated
-  `.v2-cfg/workspaces/spoke.yaml`/`topologies/spoke-cluster.yaml` pair as
-  the worked example, plus a checklist for migrating any other real v1
-  workspace through the same split.
+  — step-by-step, built from the real `.v2-cfg/workspaces/spoke.yaml`
+  example (that fixture itself still uses the pre-ADR-0028 standalone
+  `topologies/spoke-cluster.yaml` split on disk — not migrated inline,
+  since `.v2-cfg` is a local, gitignored, not-test-covered fixture and
+  Phase 5 of the ADR-0028 reversal deliberately skipped it; the guide's own
+  YAML shown inline is the authoritative, up-to-date shape), plus a
+  checklist for migrating any other real v1 workspace through the same
+  split.
 
 ### 6. ~~Deployment stage `scope: infra|apps` has no v2 field~~ — WAS ALREADY WRONG, RESOLVED
 
@@ -1160,11 +1174,19 @@ and the provider/providerconfig/topologyconfig registry split.
   template), deliberately not a full migration. Chosen because the spoke
   stack is v1's real, most concrete example of gap #5's exact structural
   change (v1's `workspace.yaml` binds `provider`/`provisioner` directly
-  onto a `topology[].components` entry). **Passes `strata validate` clean
-  (12/12 documents, zero findings)** as of 2026-09-29 — gap #14 (now
+  onto a `topology[].components` entry). **Passed `strata validate` clean
+  (12/12 documents, zero findings) as of 2026-09-29** — gap #14 (now
   resolved) and gap #15 (cross-linked from `docs/design/build-command.md`'s
   existing Remaining Work) were both found/logged while building it; no
-  other new schema/feature gap surfaced.
+  other new schema/feature gap surfaced. **Stale as of 2026-10-01
+  (ADR-0028):** this fixture still uses the pre-ADR-0028 standalone
+  `kind: topology` document for `spoke-cluster` — `WorkspaceModel` no
+  longer parses that shape (`spec.topology[]` is now inline blocks, not
+  name references), so `strata validate` against `.v2-cfg/` as-is will now
+  fail until someone hand-migrates it inline. Deliberately left unfixed
+  (Phase 5 of the ADR-0028 reversal, skipped — `.v2-cfg` is gitignored, not
+  exercised by the automated test suite); see
+  [docs/design/topology-standalone-kind-reconsideration.md](topology-standalone-kind-reconsideration.md).
 - `.v2-haven/` at the workspace root — a full 52-document hand-migration of
   every real document in `e:\SourcesXYZ\haven\config`, kept as a live
   fixture. **Currently failing `strata validate` (44 errors, 17 module
@@ -1704,3 +1726,16 @@ and the provider/providerconfig/topologyconfig registry split.
   drift as the sole failure). `strata validate .v2-cfg` re-confirmed
   clean (12/12), zero new findings. `policies`/`audit`/`promotions`
   remain open.
+- 2026-10-01: **Revised gap #5** for [ADR-0028](../decisions/0028-topology-inline-reversion.md)
+  (reverted Topology from a standalone `kind: topology` document back to
+  an inline `Workspace.spec.topology[]` field — zero real cross-workspace
+  reuse found, and the inverted component-reference direction was a real,
+  self-admitted structural cost). Gap #5 is now genuinely *less* migration
+  work than previously documented (1 v2 document instead of 3-4) — the
+  provisioning-decoupling half of ADR-0011 is unaffected and still the real
+  non-mechanical part. Updated the migration guide in place (not
+  retracted — the provisioner/execution-recipe half it documents is still
+  fully accurate) and flagged `.v2-cfg/`'s own fixture as now stale
+  (still on-disk in the pre-ADR-0028 standalone shape; `WorkspaceModel` no
+  longer parses it; left unfixed deliberately, Phase 5 of the ADR-0028
+  reversal — see [docs/design/topology-standalone-kind-reconsideration.md](topology-standalone-kind-reconsideration.md)).

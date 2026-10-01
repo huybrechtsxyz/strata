@@ -59,7 +59,6 @@ from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepM
 from strata.models.resource_model import ResourceModel
 from strata.models.solution_model import SolutionRemoteModel
 from strata.models.tenant_model import TenantModel
-from strata.models.topology_model import TopologyModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
 from strata.utils.diagnostics import Diagnostics
@@ -113,7 +112,6 @@ def build_resolved_workspace_graph(
     return ResolvedWorkspaceGraph(
         workspace=workspace,
         providers=cast(dict[str, ProviderModel], _lookup_all(index, PlatformKind.PROVIDER, workspace.spec.providers)),
-        topologies=cast(dict[str, TopologyModel], _lookup_all(index, PlatformKind.TOPOLOGY, workspace.spec.topology)),
         resources=cast(dict[str, ResourceModel], _lookup_all(index, PlatformKind.RESOURCE, resource_names)),
         namespaces=cast(
             dict[str, NamespaceModel], _lookup_all(index, PlatformKind.NAMESPACE, workspace.spec.namespaces)

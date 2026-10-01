@@ -58,7 +58,6 @@ from strata.services.resource_service import ResourceService
 from strata.services.solution_service import SolutionService
 from strata.services.tenant_service import TenantService
 from strata.services.topology_config_service import TopologyConfigService
-from strata.services.topology_service import TopologyService
 from strata.services.version_service import VersionService
 from strata.services.workspace_service import WorkspaceService
 from strata.utils.diagnostics import Diagnostics
@@ -87,7 +86,6 @@ SERVICE_BY_KIND: dict[PlatformKind, type[BaseService[Any]]] = {
     PlatformKind.FIREWALL: FirewallService,
     PlatformKind.MODULE: ModuleService,
     PlatformKind.NAMESPACE: NamespaceService,
-    PlatformKind.TOPOLOGY: TopologyService,
     PlatformKind.WORKSPACE: WorkspaceService,
     PlatformKind.INTEGRATION: IntegrationService,
     PlatformKind.TENANT: TenantService,
@@ -134,9 +132,7 @@ class DocumentIndex:
         """Add an entry. Callers must check `get()` first — duplicates raise."""
         if entry.ref in self._entries:
             existing = self._entries[entry.ref]
-            raise ValueError(
-                f"Duplicate {entry.ref}: defined in both '{existing.source}' and '{entry.source}'"
-            )
+            raise ValueError(f"Duplicate {entry.ref}: defined in both '{existing.source}' and '{entry.source}'")
         self._entries[entry.ref] = entry
 
     def get(self, kind: PlatformKind, name: str, remote: str | None = None) -> IndexEntry | None:

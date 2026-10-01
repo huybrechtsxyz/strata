@@ -26,7 +26,6 @@ see [docs/design/v2-schema-overview.md](../design/v2-schema-overview.md).
 - [network.md](network.md) — VPCs/VNets, subnets, peerings
 - [firewall.md](firewall.md) — security rules
 - [dns.md](dns.md) — DNS zones and records
-- [topology.md](topology.md) — a named grouping of resources/namespaces
 - [workspace.md](workspace.md) — the composed "image": providers, resources, topologies, provisioning recipe
 
 **Workloads:**

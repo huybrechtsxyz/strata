@@ -50,6 +50,12 @@ spec:
         - security-kv
         - edge-waf
   topology:
-    - main-topology
+    - name: main-topology
+      type: kubernetes
+      components:
+        - resource: web-storage
+        - resource: web-vm
+        - resource: security-kv
+        - resource: edge-waf
   default_tags:
     managed-by: strata

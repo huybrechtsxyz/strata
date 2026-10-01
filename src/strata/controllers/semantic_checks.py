@@ -43,7 +43,6 @@ from strata.models.resource_model import ResourceModel
 from strata.models.solution_model import RemoteType, SolutionModel
 from strata.models.tenant_model import TenantModel
 from strata.models.topology_config_model import TopologyConfigModel
-from strata.models.topology_model import TopologyModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.deployment_service import DeploymentService
 from strata.services.environment_service import EnvironmentService, unresolved_value_tokens
@@ -320,32 +319,24 @@ def _check_workspaces(index: DocumentIndex) -> Diagnostics:
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.WORKSPACE):
         workspace = cast(WorkspaceModel, entry.model)
-        topology_models: dict[str, TopologyModel] = {}
-        for name in workspace.spec.topology or []:
-            found = index.get(PlatformKind.TOPOLOGY, name)
-            if found is not None:
-                topology_models[name] = cast(TopologyModel, found.model)
-        if not topology_models:
+        if not workspace.spec.topology:
             continue
 
-        service = WorkspaceService.from_model(workspace)
-        diagnostics.extend(service.validate_topology_references(topology_models), source=str(entry.source))
-        diagnostics.extend(
-            _check_workspace_topology_components(index, workspace, topology_models), source=str(entry.source)
-        )
+        diagnostics.extend(_check_workspace_topology_components(index, workspace), source=str(entry.source))
 
     return diagnostics
 
 
-def _check_workspace_topology_components(
-    index: DocumentIndex, workspace: WorkspaceModel, topology_models: dict[str, TopologyModel]
-) -> Diagnostics:
+def _check_workspace_topology_components(index: DocumentIndex, workspace: WorkspaceModel) -> Diagnostics:
     """The registry-backed half of the workspace/topology check.
 
     Needs `spec.topologies` from the loaded Configuration registry —
     `validate_topology_components`'s signature requires it (no Optional
     fallback), so this is skipped entirely when no Configuration document
-    exists, rather than guessing a policy that was never declared.
+    exists, rather than guessing a policy that was never declared. Topology
+    itself is inline on `workspace.spec.topology` now (ADR-0028) — its own
+    internal reference checks already ran at Phase 1 (model validators on
+    `WorkspaceSpecModel`), so this is only the registry cross-check.
     """
     configuration_entries = index.all_of(PlatformKind.CONFIGURATION)
     if len(configuration_entries) != 1:
@@ -360,7 +351,7 @@ def _check_workspace_topology_components(
             topology_config_models[config.meta.name] = config
 
     service = WorkspaceService.from_model(workspace)
-    return service.validate_topology_components(configuration, topology_config_models, topology_models)
+    return service.validate_topology_components(configuration, topology_config_models)
 
 
 # ---------------------------------------------------------------------------
@@ -560,13 +551,8 @@ def _documents_reachable_from_workspace(
         if resource_entry is not None:
             documents.append((resource_entry.model, False))
 
-    for name in spec.topology or []:
-        topology_entry = index.get(PlatformKind.TOPOLOGY, name)
-        if topology_entry is None:
-            continue
-        documents.append((topology_entry.model, False))
-        topology = cast(TopologyModel, topology_entry.model)
-        for component in topology.spec.components:
+    for topo in spec.topology or []:
+        for component in topo.components:
             for module_ref in component.modules or []:
                 module_entry = index.get(PlatformKind.MODULE, module_ref.module)
                 if module_entry is not None:

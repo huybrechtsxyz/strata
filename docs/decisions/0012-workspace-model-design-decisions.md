@@ -1,12 +1,15 @@
 # Workspace Model — v2 Design Decisions
 
-- Status: partially-implemented — model and thin service built; Phase 2
-  Topology cross-checking and `Deployment` (the "container instance") not
-  started (see Remaining Work)
+- Status: partially-implemented — model and thin service built; the Phase 2
+  Topology cross-checking described below is being collapsed to Phase 1 per
+  [ADR-0028](0028-topology-inline-reversion.md) (Topology moving inline);
+  `Deployment` (the "container instance") not started (see Remaining Work)
 - Date: 2026-09-21
 - Related: [ADR-0011](0011-topology-and-provisioning-decoupling.md) (the
   whole conceptual design this model implements — image/container framing,
   Topology/Provisioning decoupling, `ProvisionerModel`/`ProvisioningStepModel`),
+  [ADR-0028](0028-topology-inline-reversion.md) (Topology reverted to an
+  inline field; supersedes this doc's Phase 2 Topology cross-check description),
   [ADR-0015](0015-solution-manifest-and-document-discovery.md) (**supersedes
   the reference shape below**: the `{name, file}` wrapper models are deleted
   and `spec.providers`/`namespaces`/`firewalls`/`dns_zones`/`networks`/

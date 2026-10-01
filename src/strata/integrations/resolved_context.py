@@ -33,7 +33,6 @@ from strata.models.provider_model import ProviderModel
 from strata.models.resource_model import ResourceModel
 from strata.models.store_model import VariableValueType
 from strata.models.tenant_model import TenantModel
-from strata.models.topology_model import TopologyModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.utils.diagnostics import Diagnostics
 
@@ -101,11 +100,12 @@ class ResolvedWorkspaceGraph:
     consumer; a future deploy-manifest feature is expected to reuse this
     same type rather than a parallel one (ADR-0023 Consequences).
 
-    `providers`/`topologies`/`resources`/`namespaces`/`firewalls`/`dns`/
-    `networks` are keyed by document name (the same names
-    `WorkspaceSpecModel.providers`/`.topology`/`.resources[].resource`/
-    `.namespaces`/`.firewalls`/`.dns_zones`/`.networks` reference), so a
-    consumer never re-does its own name lookup.
+    `providers`/`resources`/`namespaces`/`firewalls`/`dns`/`networks` are
+    keyed by document name (the same names `WorkspaceSpecModel.providers`/
+    `.resources[].resource`/`.namespaces`/`.firewalls`/`.dns_zones`/
+    `.networks` reference), so a consumer never re-does its own name
+    lookup. `workspace.spec.topology` itself is already inline
+    (`TopologySpecModel`, ADR-0028) — no separate resolution needed.
 
     `variable_refs`/`feature_refs`/`secret_refs`/`properties`/`custom`
     (docs/design/build-time-value-categories.md, Q3/Q4) are computed once
@@ -129,7 +129,6 @@ class ResolvedWorkspaceGraph:
 
     workspace: WorkspaceModel
     providers: dict[str, ProviderModel] = field(default_factory=dict)
-    topologies: dict[str, TopologyModel] = field(default_factory=dict)
     resources: dict[str, ResourceModel] = field(default_factory=dict)
     namespaces: dict[str, NamespaceModel] = field(default_factory=dict)
     firewalls: dict[str, FirewallModel] = field(default_factory=dict)

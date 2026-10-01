@@ -163,19 +163,6 @@ spec:
     )
     _write(
         root,
-        "topology.yaml",
-        """apiVersion: strata.huybrechts.xyz/v2
-kind: topology
-meta:
-  name: main-topology
-spec:
-  type: kubernetes
-  components:
-    - resource: storage-account
-""",
-    )
-    _write(
-        root,
         "workspace.yaml",
         """apiVersion: strata.huybrechts.xyz/v2
 kind: workspace
@@ -195,7 +182,11 @@ spec:
     - name: storage-account
       resource: storage-account
       role: control-plane
-  topology: [main-topology]
+  topology:
+    - name: main-topology
+      type: kubernetes
+      components:
+        - resource: storage-account
   namespaces: [apps]
   dns_zones: [example]
 """,
@@ -438,16 +429,11 @@ def test_unregistered_provider_type_skips_rather_than_crashes(tmp_path):
 # ---------------------------------------------------------------------------
 # Workspace -> Topology (+ TopologyConfig)
 # ---------------------------------------------------------------------------
-
-
-def test_topology_component_references_undefined_resource_is_caught(tmp_path):
-    root = _base_solution(tmp_path)
-    path = root / "topology.yaml"
-    path.write_text(path.read_text(encoding="utf-8").replace("storage-account", "ghost-resource"), encoding="utf-8")
-
-    context = _resolve(root)
-    assert not context.ok
-    assert any("ghost-resource" in m for m in context.diagnostics.messages())
+#
+# Component/namespace resource-existence checks moved to Phase 1 model
+# validators on WorkspaceSpecModel now that topology is inline (ADR-0028) —
+# see test_models_workspace.py for those. Only the TopologyConfig registry
+# cross-check (ADR-0013/ADR-0014) remains a Phase 2 concern, tested below.
 
 
 def test_missing_required_component_role_is_caught(tmp_path):
@@ -575,7 +561,11 @@ spec:
     - name: storage-account
       resource: storage-account
       role: control-plane
-  topology: [main-topology]
+  topology:
+    - name: main-topology
+      type: kubernetes
+      components:
+        - resource: storage-account
   namespaces: [apps]
   dns_zones: [example]
 """,
@@ -644,7 +634,11 @@ spec:
     - name: storage-account
       resource: storage-account
       role: control-plane
-  topology: [main-topology]
+  topology:
+    - name: main-topology
+      type: kubernetes
+      components:
+        - resource: storage-account
   namespaces: [apps]
   dns_zones: [example]
 """,
@@ -755,18 +749,17 @@ def test_deployment_custom_token_not_declared_is_caught(tmp_path):
     assert any("GHOST_DEPLOYMENT_VAR" in m for m in context.diagnostics.messages())
 
 
-def test_topology_document_itself_is_now_checked_for_tokens(tmp_path):
-    """The topology document itself (not just modules reached through it)
-    is now part of the reachable set - proven directly against
-    `_documents_reachable_from_workspace()` rather than a full end-to-end
-    fixture, since the base solution's topology has no string field handy
-    to embed a token in without extra fixture plumbing."""
+def test_topology_is_reachable_as_part_of_the_workspace_document(tmp_path):
+    """Topology is inline on `WorkspaceModel.spec.topology` now (ADR-0028) —
+    there is no separate Topology document to add to the reachable set;
+    its fields (and any tokens in them) are already covered by the
+    `(workspace, False)` entry `_documents_reachable_from_workspace()`
+    always includes first."""
     from strata.controllers.semantic_checks import _documents_reachable_from_workspace
 
     context = _resolve(_base_solution(tmp_path))
     documents = _documents_reachable_from_workspace(context.controller.index, "main")
     kinds = {type(document).__name__ for document, _claimed in documents}
-    assert "TopologyModel" in kinds
     assert "WorkspaceModel" in kinds
     assert "ProviderModel" in kinds
     assert "ResourceModel" in kinds

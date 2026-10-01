@@ -18,14 +18,12 @@ meta:
 spec: {}
 """
 
-TOPOLOGY = """apiVersion: strata.huybrechts.xyz/v2
-kind: topology
+NAMESPACE_DOC = """apiVersion: strata.huybrechts.xyz/v2
+kind: namespace
 meta:
-  name: main-topology
+  name: main-ns
 spec:
-  type: kubernetes
-  components:
-    - resource: web
+  lifecycle: {}
 """
 
 BROKEN = """apiVersion: strata.huybrechts.xyz/v2
@@ -47,7 +45,7 @@ def solution(tmp_path):
     root = tmp_path / "sln"
     root.mkdir()
     (root / "strata.yaml").write_text(MANIFEST, encoding="utf-8")
-    (root / "topology.yaml").write_text(TOPOLOGY, encoding="utf-8")
+    (root / "namespace.yaml").write_text(NAMESPACE_DOC, encoding="utf-8")
     return root
 
 
@@ -201,9 +199,7 @@ def test_strata_work_path_env_var_locates_the_solution_without_a_path_argument(r
 def test_explicit_path_argument_overrides_strata_work_path_env_var(runner, solution, tmp_path):
     other = tmp_path / "elsewhere"
     other.mkdir()
-    result = runner.invoke(
-        cli, ["validate", str(solution), "--output", "json"], env={"STRATA_WORK_PATH": str(other)}
-    )
+    result = runner.invoke(cli, ["validate", str(solution), "--output", "json"], env={"STRATA_WORK_PATH": str(other)})
     payload = json.loads(result.output)
     assert payload["ok"] is True
 

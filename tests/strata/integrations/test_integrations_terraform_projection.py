@@ -44,13 +44,9 @@ from strata.models.resource_model import (
     ResourceSpecModel,
 )
 from strata.models.tenant_model import TenantMetaModel, TenantModel, TenantSpecModel
-from strata.models.topology_model import (
-    TopologyComponentModel,
-    TopologyMetaModel,
-    TopologyModel,
-    TopologySpecModel,
-)
 from strata.models.workspace_model import (
+    TopologyComponentModel,
+    TopologySpecModel,
     WorkspaceMetaModel,
     WorkspaceModel,
     WorkspaceResourceModel,
@@ -67,11 +63,8 @@ def _provider(name: str = "hetzner_dc_eu_de") -> ProviderModel:
     )
 
 
-def _topology(name: str = "hetzner_hearth", resource: str = "haven_vm_hetzner_hearth") -> TopologyModel:
-    return TopologyModel(
-        meta=TopologyMetaModel(name=name),
-        spec=TopologySpecModel(type="single_node", components=[TopologyComponentModel(resource=resource)]),
-    )
+def _topology(name: str = "hetzner_hearth", resource: str = "haven_vm_hetzner_hearth") -> TopologySpecModel:
+    return TopologySpecModel(name=name, type="single_node", components=[TopologyComponentModel(resource=resource)])
 
 
 def _resource(name: str = "haven_vm_hetzner_hearth", category: str = "compute") -> ResourceModel:
@@ -152,6 +145,13 @@ def _workspace(
 ) -> WorkspaceModel:
     if resources is None:
         resources = [WorkspaceResourceModel(name="haven_vm_hetzner_hearth", resource="haven_vm_hetzner_hearth")]
+    topology = None
+    if topology_name:
+        # Inline now (ADR-0028) — reference whichever resource is actually in
+        # scope, so a test overriding `resources` with a differently-named
+        # entry doesn't trip the new Phase 1 component-existence validator.
+        component_resource = resources[0].name if resources else "haven_vm_hetzner_hearth"
+        topology = [_topology(name=topology_name, resource=component_resource)]
     return WorkspaceModel(
         meta=WorkspaceMetaModel(name="haven_platform", tags=["haven", "hetzner"]),
         spec=WorkspaceSpecModel(
@@ -163,7 +163,7 @@ def _workspace(
                     source=SourceModel(source_path="deploy/terraform"),
                 )
             ],
-            topology=[topology_name] if topology_name else None,
+            topology=topology,
             resources=resources,
             namespaces=namespace_names,
             firewalls=firewall_names,
@@ -197,7 +197,6 @@ def _graph(
     return ResolvedWorkspaceGraph(
         workspace=workspace,
         providers={"hetzner_dc_eu_de": _provider()},
-        topologies={"hetzner_hearth": _topology()},
         resources={"haven_vm_hetzner_hearth": _resource()},
         namespaces={name: _namespace(name) for name in (namespace_names or [])},
         firewalls={name: _firewall(name) for name in (firewall_names or [])},

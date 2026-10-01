@@ -30,15 +30,13 @@ spec:
   providers: [azure]
 """
 
-TOPOLOGY = """\
+NAMESPACE_DOC = """\
 apiVersion: strata.huybrechts.xyz/v2
-kind: topology
+kind: namespace
 meta:
-  name: main-topology
+  name: main-ns
 spec:
-  type: kubernetes
-  components:
-    - resource: web-vm
+  lifecycle: {}
 """
 
 
@@ -48,7 +46,7 @@ def _solution(tmp_path: Path) -> Path:
     (tmp_path / "configuration.yaml").write_text(CONFIGURATION, encoding="utf-8")
     nested = tmp_path / "deep" / "nested"
     nested.mkdir(parents=True)
-    (nested / "topology.yaml").write_text(TOPOLOGY, encoding="utf-8")
+    (nested / "namespace.yaml").write_text(NAMESPACE_DOC, encoding="utf-8")
     return tmp_path
 
 
@@ -86,7 +84,7 @@ def test_load_indexes_documents_regardless_of_folder_layout(tmp_path):
     assert controller.solution is not None
     assert controller.solution.meta.name == "test-solution"
     assert controller.index.names_of(PlatformKind.CONFIGURATION) == {"test-config"}
-    assert controller.index.names_of(PlatformKind.TOPOLOGY) == {"main-topology"}
+    assert controller.index.names_of(PlatformKind.NAMESPACE) == {"main-ns"}
 
 
 def test_load_reports_missing_manifest(tmp_path):
@@ -121,26 +119,26 @@ def test_load_errors_on_strata_document_with_unknown_kind(tmp_path):
 def test_load_indexes_multi_document_files(tmp_path):
     """A single file may hold several documents separated by '---'."""
     root = _solution(tmp_path)
-    second = TOPOLOGY.replace("main-topology", "other-topology")
-    (root / "both.yaml").write_text(TOPOLOGY.replace("main-topology", "a-topology") + "---\n" + second, encoding="utf-8")
+    second = NAMESPACE_DOC.replace("main-ns", "other-ns")
+    (root / "both.yaml").write_text(NAMESPACE_DOC.replace("main-ns", "a-ns") + "---\n" + second, encoding="utf-8")
 
     controller = SolutionController(root)
     result = controller.load()
     assert result.ok, result.messages()
-    assert controller.index.names_of(PlatformKind.TOPOLOGY) == {"a-topology", "other-topology", "main-topology"}
+    assert controller.index.names_of(PlatformKind.NAMESPACE) == {"a-ns", "other-ns", "main-ns"}
 
 
 def test_load_rejects_duplicate_identity_naming_both_files(tmp_path):
     """Duplicate (kind, name) is a hard error — and must say where both are."""
     root = _solution(tmp_path)
-    (root / "copy.yaml").write_text(TOPOLOGY, encoding="utf-8")
+    (root / "copy.yaml").write_text(NAMESPACE_DOC, encoding="utf-8")
 
     result = SolutionController(root).load()
     assert not result.ok
     duplicate = [m for m in result.messages() if "Duplicate" in m]
     assert duplicate
     assert "copy.yaml" in duplicate[0]
-    assert "topology.yaml" in duplicate[0]
+    assert "namespace.yaml" in duplicate[0]
 
 
 def test_load_stops_at_a_nested_solution_boundary(tmp_path):
@@ -149,12 +147,12 @@ def test_load_stops_at_a_nested_solution_boundary(tmp_path):
     vendor = root / "vendor" / "other"
     vendor.mkdir(parents=True)
     (vendor / "strata.yaml").write_text(MANIFEST.replace("test-solution", "other-solution"), encoding="utf-8")
-    (vendor / "leak.yaml").write_text(TOPOLOGY.replace("main-topology", "should-not-appear"), encoding="utf-8")
+    (vendor / "leak.yaml").write_text(NAMESPACE_DOC.replace("main-ns", "should-not-appear"), encoding="utf-8")
 
     controller = SolutionController(root)
     result = controller.load()
     assert result.ok, result.messages()
-    assert "should-not-appear" not in controller.index.names_of(PlatformKind.TOPOLOGY)
+    assert "should-not-appear" not in controller.index.names_of(PlatformKind.NAMESPACE)
 
 
 def test_load_skips_ignored_directories(tmp_path):
@@ -163,12 +161,12 @@ def test_load_skips_ignored_directories(tmp_path):
     for ignored in (".git", "build", ".strata"):
         directory = root / ignored
         directory.mkdir()
-        (directory / "stray.yaml").write_text(TOPOLOGY.replace("main-topology", f"in-{ignored}"), encoding="utf-8")
+        (directory / "stray.yaml").write_text(NAMESPACE_DOC.replace("main-ns", f"in-{ignored}"), encoding="utf-8")
 
     controller = SolutionController(root)
     controller.load()
-    names = controller.index.names_of(PlatformKind.TOPOLOGY)
-    assert names == {"main-topology"}
+    names = controller.index.names_of(PlatformKind.NAMESPACE)
+    assert names == {"main-ns"}
 
 
 # ---------------------------------------------------------------------------
@@ -180,9 +178,7 @@ def _solution_excluding(tmp_path: Path, *patterns: str) -> Path:
     """A solution whose manifest declares extra exclude patterns."""
     root = _solution(tmp_path)
     rendered = "\n".join(f"      - {p!r}" for p in patterns)
-    (root / "strata.yaml").write_text(
-        MANIFEST + f"  discovery:\n    exclude:\n{rendered}\n", encoding="utf-8"
-    )
+    (root / "strata.yaml").write_text(MANIFEST + f"  discovery:\n    exclude:\n{rendered}\n", encoding="utf-8")
     return root
 
 
@@ -191,12 +187,12 @@ def test_exclude_skips_a_matching_directory(tmp_path):
     root = _solution_excluding(tmp_path, "templates/**")
     templates = root / "templates"
     templates.mkdir()
-    (templates / "scaffold.yaml").write_text(TOPOLOGY.replace("main-topology", "scaffolded"), encoding="utf-8")
+    (templates / "scaffold.yaml").write_text(NAMESPACE_DOC.replace("main-ns", "scaffolded"), encoding="utf-8")
 
     controller = SolutionController(root)
     result = controller.load()
     assert result.ok, result.messages()
-    assert controller.index.names_of(PlatformKind.TOPOLOGY) == {"main-topology"}
+    assert controller.index.names_of(PlatformKind.NAMESPACE) == {"main-ns"}
 
 
 def test_exclude_matches_the_bare_directory_name_too(tmp_path):
@@ -204,21 +200,21 @@ def test_exclude_matches_the_bare_directory_name_too(tmp_path):
     root = _solution_excluding(tmp_path, "templates")
     templates = root / "templates"
     templates.mkdir()
-    (templates / "scaffold.yaml").write_text(TOPOLOGY.replace("main-topology", "scaffolded"), encoding="utf-8")
+    (templates / "scaffold.yaml").write_text(NAMESPACE_DOC.replace("main-ns", "scaffolded"), encoding="utf-8")
 
     controller = SolutionController(root)
     controller.load()
-    assert controller.index.names_of(PlatformKind.TOPOLOGY) == {"main-topology"}
+    assert controller.index.names_of(PlatformKind.NAMESPACE) == {"main-ns"}
 
 
 def test_exclude_skips_an_individual_file(tmp_path):
     """Patterns match files, not just directories."""
     root = _solution_excluding(tmp_path, "*.generated.yaml")
-    (root / "thing.generated.yaml").write_text(TOPOLOGY.replace("main-topology", "generated"), encoding="utf-8")
+    (root / "thing.generated.yaml").write_text(NAMESPACE_DOC.replace("main-ns", "generated"), encoding="utf-8")
 
     controller = SolutionController(root)
     controller.load()
-    assert controller.index.names_of(PlatformKind.TOPOLOGY) == {"main-topology"}
+    assert controller.index.names_of(PlatformKind.NAMESPACE) == {"main-ns"}
 
 
 def test_exclude_cannot_re_enable_built_in_ignores(tmp_path):
@@ -226,11 +222,11 @@ def test_exclude_cannot_re_enable_built_in_ignores(tmp_path):
     root = _solution_excluding(tmp_path, "nothing-matching/**")
     git_dir = root / ".git"
     git_dir.mkdir()
-    (git_dir / "stray.yaml").write_text(TOPOLOGY.replace("main-topology", "in-git"), encoding="utf-8")
+    (git_dir / "stray.yaml").write_text(NAMESPACE_DOC.replace("main-ns", "in-git"), encoding="utf-8")
 
     controller = SolutionController(root)
     controller.load()
-    assert "in-git" not in controller.index.names_of(PlatformKind.TOPOLOGY)
+    assert "in-git" not in controller.index.names_of(PlatformKind.NAMESPACE)
 
 
 def test_no_discovery_block_means_no_extra_exclusions(tmp_path):
@@ -238,11 +234,11 @@ def test_no_discovery_block_means_no_extra_exclusions(tmp_path):
     root = _solution(tmp_path)
     extra = root / "templates"
     extra.mkdir()
-    (extra / "scaffold.yaml").write_text(TOPOLOGY.replace("main-topology", "scaffolded"), encoding="utf-8")
+    (extra / "scaffold.yaml").write_text(NAMESPACE_DOC.replace("main-ns", "scaffolded"), encoding="utf-8")
 
     controller = SolutionController(root)
     controller.load()
-    assert controller.index.names_of(PlatformKind.TOPOLOGY) == {"main-topology", "scaffolded"}
+    assert controller.index.names_of(PlatformKind.NAMESPACE) == {"main-ns", "scaffolded"}
 
 
 def test_load_rejects_nested_solution_document_in_the_tree(tmp_path):
@@ -259,7 +255,7 @@ def test_load_reports_invalid_document_with_its_path(tmp_path):
     """Schema errors carry the file they came from — provenance replaces `file:`."""
     root = _solution(tmp_path)
     (root / "bad.yaml").write_text(
-        "apiVersion: strata.huybrechts.xyz/v2\nkind: topology\nmeta:\n  name: broken\nspec:\n  type: kubernetes\n",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: namespace\nmeta:\n  name: broken\nspec:\n  type: kubernetes\n",
         encoding="utf-8",
     )
 
@@ -277,7 +273,7 @@ def test_index_get_returns_none_for_unknown_name(tmp_path):
     """A miss is a None, not an exception."""
     controller = SolutionController(_solution(tmp_path))
     controller.load()
-    assert controller.index.get(PlatformKind.TOPOLOGY, "nope") is None
+    assert controller.index.get(PlatformKind.NAMESPACE, "nope") is None
 
 
 def test_index_entry_carries_its_source_path(tmp_path):
@@ -285,15 +281,15 @@ def test_index_entry_carries_its_source_path(tmp_path):
     root = _solution(tmp_path)
     controller = SolutionController(root)
     controller.load()
-    entry = controller.index.get(PlatformKind.TOPOLOGY, "main-topology")
+    entry = controller.index.get(PlatformKind.NAMESPACE, "main-ns")
     assert entry is not None
-    assert entry.source.name == "topology.yaml"
+    assert entry.source.name == "namespace.yaml"
 
 
 def test_document_ref_str_includes_remote_when_set():
     """The remote slot is unused today but renders when present (ADR-0015)."""
-    assert str(DocumentRef(kind=PlatformKind.TOPOLOGY, name="main")) == "topology/main"
-    assert str(DocumentRef(kind=PlatformKind.TOPOLOGY, name="main", remote="shared")) == "@shared/topology/main"
+    assert str(DocumentRef(kind=PlatformKind.NAMESPACE, name="main")) == "namespace/main"
+    assert str(DocumentRef(kind=PlatformKind.NAMESPACE, name="main", remote="shared")) == "@shared/namespace/main"
 
 
 # ---------------------------------------------------------------------------

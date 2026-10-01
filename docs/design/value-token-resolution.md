@@ -451,7 +451,8 @@ real problems, both now fixed above:
    is `dict[str, Any] | None` on 18 different models (`resource_model.py`,
    `module_model.py`, `dns_model.py`, `firewall_model.py`,
    `network_model.py`, `namespace_model.py`, `workspace_model.py`,
-   `topology_model.py`, `provider_model.py`, and more — confirmed by grep,
+   `topology_model.py` [merged into `workspace_model.py` 2026-10-01,
+   ADR-0028], `provider_model.py`, and more — confirmed by grep,
    not assumed). Pydantic never recurses into an `Any`-typed dict's
    contents on its own, so a `model_validator(mode="after")` on
    `PlatformBaseModel` would still need its own manual recursive walk for

@@ -1,16 +1,22 @@
 # Solution-Wide Document Loading & Deferred Phase 2 Validation — Design
 
-- Status: implemented for the loader and four of seven cross-document
-  checks; three validators remain unbuilt (see below)
-- Last updated: 2026-09-24 (superseding the 2026-09-24 "proposed, nothing
-  built" version of this doc, written before the loader existed)
+- Status: implemented for the loader and three of five remaining
+  cross-document checks; two validators remain unbuilt (see below) — two
+  others (`validate_topology_references()`, `TopologyService._validate_dynamic()`)
+  were deleted outright, not just moved, when Topology was reverted to an
+  inline `Workspace` field (ADR-0028); their job is now a same-document
+  Phase 1 model validator, not a Phase 2 concern
+- Last updated: 2026-10-01 (ADR-0028's topology-inline reversion)
 
 ## Overview
 
-Every kind that references another kind by name (Workspace→Topology,
-Workspace→Network, Provider/Resource→ProviderConfig, Topology→Resource/
-Namespace, Namespace→Module) needs a Phase 2 check once the referenced
-document is actually loaded. This is now built:
+Every kind that references another kind by name (Workspace→Network,
+Provider/Resource→ProviderConfig, Namespace→Module) needs a Phase 2 check
+once the referenced document is actually loaded. (Workspace's own inline
+topology groupings → Resource/Namespace used to be in this list too, back
+when Topology was a standalone kind — ADR-0028 reverted that, so those
+checks are now same-document Phase 1 `WorkspaceSpecModel` model validators,
+not a Phase 2 concern at all.) This is now built:
 [ADR-0015](../decisions/0015-solution-manifest-and-document-discovery.md)'s
 discovery loader is `strata/controllers/solution_controller.py`
 (`SolutionController`/`find_solution_root`) plus
@@ -33,20 +39,18 @@ This doc's job now is just to track the three that still aren't built.
 
 ## Validators built, tested, and wired
 
-| Validator | Referencing kind | Checks against | Called from |
-| --- | --- | --- | --- |
-| `WorkspaceService.validate_topology_references()` | Workspace | loaded `Topology` docs | `semantic_checks._check_workspaces()` |
-| `WorkspaceService.validate_topology_components()` | Workspace | loaded `Topology` + `TopologyConfigModel` | `semantic_checks._check_workspace_topology_components()` |
-| `ProviderService.validate_against_provider_config()` | Provider | loaded `ProviderConfigModel` | `semantic_checks._check_providers()` |
-| `ResourceService.validate_against_provider_config()` | Resource | loaded `ProviderConfigModel` | `semantic_checks._check_resources()` |
+| Validator                                            | Referencing kind                     | Checks against                        | Called from                                              |
+| ---------------------------------------------------- | ------------------------------------ | ------------------------------------- | -------------------------------------------------------- |
+| `WorkspaceService.validate_topology_components()`    | Workspace (inline `spec.topology[]`) | loaded `TopologyConfigModel` registry | `semantic_checks._check_workspace_topology_components()` |
+| `ProviderService.validate_against_provider_config()` | Provider                             | loaded `ProviderConfigModel`          | `semantic_checks._check_providers()`                     |
+| `ResourceService.validate_against_provider_config()` | Resource                             | loaded `ProviderConfigModel`          | `semantic_checks._check_resources()`                     |
 
 ## Validators not yet built at all
 
-| Validator | Referencing kind | Checks against | ADR |
-| --- | --- | --- | --- |
-| Workspace subnet cross-check | Workspace (`resource.subnet.subnet`) | loaded `Network` doc's real subnets | [ADR-0012](../decisions/0012-workspace-model-design-decisions.md) |
-| `TopologyService._validate_dynamic()` | Topology (`components`/`namespaces`) | loaded `Resource`/`Namespace` docs | [ADR-0011](../decisions/0011-topology-and-provisioning-decoupling.md) |
-| `NamespaceService._validate_dynamic()` | Namespace (`modules[].file`) | real filesystem path + repo map | [ADR-0010](../decisions/0010-namespace-model-design-decisions.md) |
+| Validator                              | Referencing kind                     | Checks against                      | ADR                                                               |
+| -------------------------------------- | ------------------------------------ | ----------------------------------- | ----------------------------------------------------------------- |
+| Workspace subnet cross-check           | Workspace (`resource.subnet.subnet`) | loaded `Network` doc's real subnets | [ADR-0012](../decisions/0012-workspace-model-design-decisions.md) |
+| `NamespaceService._validate_dynamic()` | Namespace (`modules[].file`)         | real filesystem path + repo map     | [ADR-0010](../decisions/0010-namespace-model-design-decisions.md) |
 
 ## The loader itself
 
@@ -59,14 +63,12 @@ the full flow.
 
 ## Related Decisions
 
-- [ADR-0010](../decisions/0010-namespace-model-design-decisions.md), [ADR-0011](../decisions/0011-topology-and-provisioning-decoupling.md), [ADR-0012](../decisions/0012-workspace-model-design-decisions.md), [ADR-0013](../decisions/0013-configuration-topology-registry.md), [ADR-0014](../decisions/0014-provider-topology-config-standalone-kinds.md), [ADR-0015](../decisions/0015-solution-manifest-and-document-discovery.md)
+- [ADR-0010](../decisions/0010-namespace-model-design-decisions.md), [ADR-0011](../decisions/0011-topology-and-provisioning-decoupling.md), [ADR-0012](../decisions/0012-workspace-model-design-decisions.md), [ADR-0013](../decisions/0013-configuration-topology-registry.md), [ADR-0014](../decisions/0014-provider-topology-config-standalone-kinds.md), [ADR-0015](../decisions/0015-solution-manifest-and-document-discovery.md), [ADR-0028](../decisions/0028-topology-inline-reversion.md)
 
 ## Remaining Work / Open Questions
 
 - Workspace subnet cross-check (`resource.subnet.subnet` against a real
   `Network` document's subnets) — still not built.
-- `TopologyService._validate_dynamic()` (`components`/`namespaces` against
-  real `Resource`/`Namespace` docs) — still not built.
 - `NamespaceService._validate_dynamic()` (`modules[].file` against a real
   filesystem path + repo map) — still not built.
 

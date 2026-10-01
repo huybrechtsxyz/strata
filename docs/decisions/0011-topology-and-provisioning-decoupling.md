@@ -1,6 +1,10 @@
 # Topology and Provisioning — Decoupling Infrastructure Grouping from Execution
 
-- Status: partially-implemented — `Topology` promoted to its own kind;
+- Status: partially-implemented — the standalone-kind promotion of
+  `Topology` described below is **superseded by
+  [ADR-0028](0028-topology-inline-reversion.md)** (reverting it to an inline
+  `Workspace` field); this ADR's core decision — decoupling topology
+  grouping from provisioning tooling — stands unchanged.
   `ProvisionerModel`/`ProvisioningStepModel` built as Workspace sub-models
   (`provisioning_model.py`); the `Workspace` root/glue kind itself not yet
   built (see Remaining Work)

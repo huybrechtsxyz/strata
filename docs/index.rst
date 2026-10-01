@@ -30,7 +30,6 @@ strata-v2
    config/network
    config/firewall
    config/dns
-   config/topology
    config/topologyconfig
    config/workspace
    config/module

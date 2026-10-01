@@ -58,7 +58,6 @@ class PlatformKind(str, Enum):
     FIREWALL = "firewall"
     MODULE = "module"
     NAMESPACE = "namespace"
-    TOPOLOGY = "topology"
     WORKSPACE = "workspace"
     INTEGRATION = "integration"
     TENANT = "tenant"
@@ -292,7 +291,7 @@ class ModuleReferenceModel(PlatformBaseModel):
 
     Shared by `namespace_model.py` (`NamespaceSpecModel.modules` — modules
     grouped under a container-orchestration namespace) and
-    `topology_model.py` (`TopologyComponentModel.modules` — a module attached
+    `workspace_model.py` (`TopologyComponentModel.modules` — a module attached
     directly to one resource, e.g. Function App code onto its Function App,
     no orchestration namespace involved). Both are ultimately "a pointer to a
     Module document plus placement metadata" — one shared shape rather than

@@ -3,7 +3,6 @@
 
 from strata.models.configuration_model import ConfigurationModel
 from strata.models.topology_config_model import TopologyConfigModel
-from strata.models.topology_model import TopologyModel
 from strata.services.workspace_service import WorkspaceService
 
 
@@ -30,7 +29,19 @@ def test_workspace_service_validates_from_data():
     assert service.model.spec.providers[0] == "azure-main"
 
 
-def _workspace_with_topology() -> dict:
+def _workspace_with_topology(**topology_overrides) -> dict:
+    """A workspace with an inline topology block (ADR-0028). `components`'
+    internal reference checks (`component.resource` must be in
+    `spec.resources`) now run as Phase 1 `WorkspaceSpecModel` model
+    validators — see `test_models_workspace.py` for those; this file only
+    tests `WorkspaceService.validate_topology_components()`, the remaining
+    Phase 2 registry (`TopologyConfigModel`) cross-check.
+    """
+    components = topology_overrides.pop(
+        "components",
+        [{"resource": "control-vm"}, {"resource": "worker-vm"}],
+    )
+    topology_type = topology_overrides.pop("type", "kubernetes")
     return {
         "meta": {"name": "myapp-workspace"},
         "spec": {
@@ -46,53 +57,11 @@ def _workspace_with_topology() -> dict:
                 {"name": "control-vm", "resource": "control-vm-class", "role": "control-plane"},
                 {"name": "worker-vm", "resource": "worker-vm-class", "role": "worker"},
             ],
-            "topology": ["main-topology"],
+            "topology": [
+                {"name": "main-topology", "type": topology_type, "components": components, **topology_overrides}
+            ],
         },
     }
-
-
-def _topology_model(**component_overrides) -> TopologyModel:
-    components = component_overrides.pop(
-        "components",
-        [{"resource": "control-vm"}, {"resource": "worker-vm"}],
-    )
-    return TopologyModel.model_validate(
-        {
-            "meta": {"name": "main-topology"},
-            "spec": {"type": "kubernetes", "components": components, **component_overrides},
-        }
-    )
-
-
-def test_validate_topology_references_accepts_valid_component_refs():
-    """A loaded Topology whose components/namespaces all resolve to real workspace entries passes."""
-    service = WorkspaceService(data=_workspace_with_topology())
-    assert service.validate().ok
-
-    result = service.validate_topology_references({"main-topology": _topology_model()})
-    assert result.ok
-    assert result.messages() == []
-
-
-def test_validate_topology_references_rejects_undefined_resource():
-    """A Topology component referencing an unknown resource is rejected."""
-    service = WorkspaceService(data=_workspace_with_topology())
-    service.validate()
-
-    topology = _topology_model(components=[{"resource": "control-vm"}, {"resource": "ghost-vm"}])
-    result = service.validate_topology_references({"main-topology": topology})
-    assert not result.ok
-    assert any("ghost-vm" in m for m in result.messages())
-
-
-def test_validate_topology_references_rejects_missing_loaded_topology():
-    """A declared spec.topology[] reference with no corresponding loaded TopologyModel is an error."""
-    service = WorkspaceService(data=_workspace_with_topology())
-    service.validate()
-
-    result = service.validate_topology_references({})
-    assert not result.ok
-    assert any("main-topology" in m for m in result.messages())
 
 
 def _topology_config_models(**overrides) -> dict:
@@ -114,94 +83,70 @@ def _configuration(**overrides) -> ConfigurationModel:
 
 
 def test_validate_topology_components_accepts_matching_registry():
-    """A Topology whose resolved resource roles satisfy the registry's constraints passes."""
+    """A topology whose resource roles satisfy the registry's constraints passes."""
     service = WorkspaceService(data=_workspace_with_topology())
     service.validate()
 
-    result = service.validate_topology_components(
-        _configuration(), _topology_config_models(), {"main-topology": _topology_model()}
-    )
+    result = service.validate_topology_components(_configuration(), _topology_config_models())
     assert result.ok
     assert result.messages() == []
 
 
 def test_validate_topology_components_rejects_missing_required_role():
     """A registry-required component role with zero matching resources is rejected."""
-    service = WorkspaceService(data=_workspace_with_topology())
+    data = _workspace_with_topology(components=[{"resource": "worker-vm"}])
+    service = WorkspaceService(data=data)
     service.validate()
 
-    topology = _topology_model(components=[{"resource": "worker-vm"}])
-    result = service.validate_topology_components(
-        _configuration(), _topology_config_models(), {"main-topology": topology}
-    )
+    result = service.validate_topology_components(_configuration(), _topology_config_models())
     assert not result.ok
     assert any("control-plane" in m for m in result.messages())
 
 
 def test_validate_topology_components_rejects_max_count_exceeded():
     """Exceeding a component role's registered max_count is rejected."""
-    data = _workspace_with_topology()
+    data = _workspace_with_topology(components=[{"resource": "control-vm"}, {"resource": "control-vm-2"}])
     data["spec"]["resources"].append({"name": "control-vm-2", "resource": "control-vm-class", "role": "control-plane"})
     service = WorkspaceService(data=data)
     service.validate()
 
-    topology = _topology_model(components=[{"resource": "control-vm"}, {"resource": "control-vm-2"}])
-    result = service.validate_topology_components(
-        _configuration(), _topology_config_models(), {"main-topology": topology}
-    )
+    result = service.validate_topology_components(_configuration(), _topology_config_models())
     assert not result.ok
     assert any("max" in m.lower() for m in result.messages())
 
 
 def test_validate_topology_components_rejects_unregistered_type():
-    """A Topology type not in the registry is rejected unless additional_topologies is True."""
-    service = WorkspaceService(data=_workspace_with_topology())
+    """A topology type not in the registry is rejected unless additional_topologies is True."""
+    data = _workspace_with_topology(type="dockerswarm", components=[{"resource": "control-vm"}])
+    service = WorkspaceService(data=data)
     service.validate()
 
-    topology = TopologyModel.model_validate(
-        {
-            "meta": {"name": "main-topology"},
-            "spec": {"type": "dockerswarm", "components": [{"resource": "control-vm"}]},
-        }
-    )
-    result = service.validate_topology_components(
-        _configuration(), _topology_config_models(), {"main-topology": topology}
-    )
+    result = service.validate_topology_components(_configuration(), _topology_config_models())
     assert not result.ok
     assert any("dockerswarm" in m for m in result.messages())
 
 
 def test_validate_topology_components_allows_unregistered_type_when_additional_topologies_true():
     """additional_topologies: True allows a topology type absent from the registry."""
-    service = WorkspaceService(data=_workspace_with_topology())
+    data = _workspace_with_topology(type="dockerswarm", components=[{"resource": "control-vm"}])
+    service = WorkspaceService(data=data)
     service.validate()
 
-    topology = TopologyModel.model_validate(
-        {
-            "meta": {"name": "main-topology"},
-            "spec": {"type": "dockerswarm", "components": [{"resource": "control-vm"}]},
-        }
-    )
-    result = service.validate_topology_components(
-        _configuration(additional_topologies=True), _topology_config_models(), {"main-topology": topology}
-    )
+    result = service.validate_topology_components(_configuration(additional_topologies=True), _topology_config_models())
     assert result.ok
     assert result.messages() == []
 
 
 def test_validate_topology_components_rejects_unregistered_role_without_additional_components():
     """A component role not in the topology type's registry entry is rejected when additional_components is False."""
-    data = _workspace_with_topology()
+    data = _workspace_with_topology(
+        components=[{"resource": "control-vm"}, {"resource": "worker-vm"}, {"resource": "cache-vm"}]
+    )
     data["spec"]["resources"].append({"name": "cache-vm", "resource": "cache-vm-class", "role": "cache"})
     service = WorkspaceService(data=data)
     service.validate()
 
-    topology = _topology_model(
-        components=[{"resource": "control-vm"}, {"resource": "worker-vm"}, {"resource": "cache-vm"}]
-    )
-    result = service.validate_topology_components(
-        _configuration(), _topology_config_models(), {"main-topology": topology}
-    )
+    result = service.validate_topology_components(_configuration(), _topology_config_models())
     assert not result.ok
     assert any("cache" in m for m in result.messages())
 

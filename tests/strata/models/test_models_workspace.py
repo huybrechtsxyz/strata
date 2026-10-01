@@ -4,7 +4,7 @@
 import pytest
 from pydantic import ValidationError
 
-from strata.models.workspace_model import WorkspaceModel
+from strata.models.workspace_model import TopologySpecModel, WorkspaceModel
 
 
 def _minimal_workspace() -> dict:
@@ -55,12 +55,17 @@ def test_workspace_topology_is_optional():
     assert model.spec.topology is None
 
 
-def test_workspace_accepts_topology_reference():
-    """spec.topology accepts a plain Topology document name, resolved by discovery."""
+def test_workspace_accepts_inline_topology():
+    """spec.topology accepts an inline topology block (ADR-0028, reverted from
+    a standalone-document name reference, ADR-0011)."""
     data = _minimal_workspace()
-    data["spec"]["topology"] = ["aks-platform"]
+    data["spec"]["resources"] = [{"name": "aks_cluster", "resource": "aks-cluster-class"}]
+    data["spec"]["topology"] = [
+        {"name": "aks-platform", "type": "kubernetes", "components": [{"resource": "aks_cluster"}]}
+    ]
     model = WorkspaceModel.model_validate(data)
-    assert model.spec.topology[0] == "aks-platform"
+    assert model.spec.topology[0].name == "aks-platform"
+    assert model.spec.topology[0].components[0].resource == "aks_cluster"
 
 
 def test_workspace_rejects_duplicate_provider_names():
@@ -215,9 +220,7 @@ def test_workspace_execution_step_can_target_a_namespace():
     """An execution step may target a namespace, not just a resource."""
     data = _minimal_workspace()
     data["spec"]["namespaces"] = ["myapp"]
-    data["spec"]["execution"] = [
-        {"name": "deploy-app", "provisioner": "terraform-main", "targets": ["myapp"]}
-    ]
+    data["spec"]["execution"] = [{"name": "deploy-app", "provisioner": "terraform-main", "targets": ["myapp"]}]
     model = WorkspaceModel.model_validate(data)
     assert model.spec.execution[0].targets == ["myapp"]
 
@@ -264,5 +267,240 @@ def test_workspace_rejects_unknown_fields():
     """Extra/unknown fields are rejected (extra='forbid')."""
     data = _minimal_workspace()
     data["spec"]["unknown_field"] = "oops"
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+# ---------------------------------------------------------------------------
+# TopologySpecModel (inline on WorkspaceSpecModel.topology, ADR-0028)
+# ---------------------------------------------------------------------------
+
+
+def _minimal_topology() -> dict:
+    return {
+        "name": "aks-platform",
+        "type": "kubernetes",
+        "components": [{"resource": "aks_cluster"}, {"resource": "blobstore"}, {"resource": "keyvault"}],
+    }
+
+
+def test_topology_minimal_is_valid():
+    """A minimal inline topology block (only required fields) validates successfully."""
+    model = TopologySpecModel.model_validate(_minimal_topology())
+    assert model.name == "aks-platform"
+    assert model.type == "kubernetes"
+    assert len(model.components) == 3
+
+
+def test_topology_accepts_namespaces_and_volumes():
+    """A topology may declare namespaces and volumes alongside components."""
+    data = _minimal_topology()
+    data["namespaces"] = [{"namespace": "myapp"}]
+    data["volumes"] = [{"name": "cache", "size": "10Gi"}]
+    model = TopologySpecModel.model_validate(data)
+    assert model.namespaces[0].namespace == "myapp"
+    assert model.volumes[0].name == "cache"
+
+
+def test_topology_rejects_duplicate_component_resources():
+    """Duplicate resource references within a topology are rejected."""
+    data = _minimal_topology()
+    data["components"].append({"resource": "aks_cluster"})
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_component_accepts_attached_module():
+    """A resource may have a module attached directly (e.g. Function App code)."""
+    data = _minimal_topology()
+    data["components"][0]["modules"] = [{"name": "deployinfo", "module": "deployinfo"}]
+    model = TopologySpecModel.model_validate(data)
+    assert model.components[0].modules[0].name == "deployinfo"
+    assert model.components[0].modules[0].slot_type == "main"
+
+
+def test_topology_component_rejects_duplicate_module_names():
+    """Duplicate module names attached to the same resource are rejected."""
+    data = _minimal_topology()
+    data["components"][0]["modules"] = [
+        {"name": "deployinfo", "module": "mod-a"},
+        {"name": "deployinfo", "module": "mod-b"},
+    ]
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_component_requires_one_main_slot_among_multiple_enabled_modules():
+    """Multiple enabled modules on one resource with no 'main' slot are rejected."""
+    data = _minimal_topology()
+    data["components"][0]["modules"] = [
+        {"name": "a", "module": "mod-a", "slot_type": "canary"},
+        {"name": "b", "module": "mod-b", "slot_type": "canary"},
+    ]
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_component_rejects_multiple_main_slots():
+    """Multiple enabled modules both marked 'main' on the same resource are rejected."""
+    data = _minimal_topology()
+    data["components"][0]["modules"] = [
+        {"name": "a", "module": "mod-a", "slot_type": "main"},
+        {"name": "b", "module": "mod-b", "slot_type": "main"},
+    ]
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_component_allows_multiple_modules_when_one_is_main():
+    """Multiple enabled modules are fine as long as exactly one is 'main'."""
+    data = _minimal_topology()
+    data["components"][0]["modules"] = [
+        {"name": "a", "module": "mod-a", "slot_type": "main"},
+        {"name": "b", "module": "mod-b", "slot_type": "canary"},
+    ]
+    model = TopologySpecModel.model_validate(data)
+    assert len(model.components[0].modules) == 2
+
+
+def test_topology_component_ignores_disabled_modules_for_main_slot_rule():
+    """A disabled module doesn't count toward the 'must have exactly one main' rule."""
+    data = _minimal_topology()
+    data["components"][0]["modules"] = [
+        {"name": "a", "module": "mod-a", "slot_type": "canary", "enabled": False},
+        {"name": "b", "module": "mod-b", "slot_type": "main"},
+    ]
+    model = TopologySpecModel.model_validate(data)
+    assert model.components[0].modules[0].enabled is False
+
+
+def test_topology_component_module_rejects_path_like_name():
+    """A module reference names a document, not a path — '../' shapes fail PlatformName."""
+    data = _minimal_topology()
+    data["components"][0]["modules"] = [{"name": "a", "module": "../../etc/passwd"}]
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_rejects_duplicate_namespace_refs():
+    """Duplicate namespace references within a topology are rejected."""
+    data = _minimal_topology()
+    data["namespaces"] = [{"namespace": "myapp"}, {"namespace": "myapp"}]
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_rejects_duplicate_volume_names():
+    """Duplicate volume names within a topology are rejected."""
+    data = _minimal_topology()
+    data["volumes"] = [{"name": "cache"}, {"name": "cache"}]
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_rejects_empty_components():
+    """An empty components list is rejected (min_length=1)."""
+    data = _minimal_topology()
+    data["components"] = []
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_rejects_invalid_component_resource_syntax():
+    """A resource reference that isn't a valid PlatformName (e.g. uppercase) is rejected.
+
+    This only catches syntactically malformed names — existence-checking
+    against the workspace's own `spec.resources` is a `WorkspaceSpecModel`
+    cross-field validator now that topology is inline (see
+    `test_workspace_rejects_topology_component_undefined_resource` below,
+    ADR-0028).
+    """
+    data = _minimal_topology()
+    data["components"][0]["resource"] = "AksCluster"
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_rejects_invalid_namespace_ref_syntax():
+    """A namespace reference that isn't a valid PlatformName is rejected."""
+    data = _minimal_topology()
+    data["namespaces"] = [{"namespace": "My App"}]
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_rejects_provider_field():
+    """provider is rejected — Topology is pure grouping, tool binding is a separate concern (ADR-0011)."""
+    data = _minimal_topology()
+    data["provider"] = "azure"
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_rejects_provisioner_field():
+    """provisioner is rejected — Topology is pure grouping, tool binding is a separate concern (ADR-0011)."""
+    data = _minimal_topology()
+    data["provisioner"] = "terraform-main"
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+def test_topology_rejects_unknown_fields():
+    """Extra/unknown fields are rejected (extra='forbid')."""
+    data = _minimal_topology()
+    data["unknown_field"] = "oops"
+    with pytest.raises(ValidationError):
+        TopologySpecModel.model_validate(data)
+
+
+# ---------------------------------------------------------------------------
+# WorkspaceSpecModel <-> inline topology cross-references (ADR-0028's Phase 1
+# model validators, replacing WorkspaceService.validate_topology_references())
+# ---------------------------------------------------------------------------
+
+
+def _workspace_with_topology(**topology_overrides) -> dict:
+    data = _minimal_workspace()
+    data["spec"]["resources"] = [
+        {"name": "aks_cluster", "resource": "aks-cluster-class"},
+        {"name": "blobstore", "resource": "storage-account"},
+    ]
+    topology = _minimal_topology()
+    topology["components"] = [{"resource": "aks_cluster"}, {"resource": "blobstore"}]
+    topology.update(topology_overrides)
+    data["spec"]["topology"] = [topology]
+    return data
+
+
+def test_workspace_rejects_topology_component_undefined_resource():
+    """A topology component referencing a resource not in spec.resources is rejected
+    (Phase 1, same-document — possible only because topology is inline, ADR-0028)."""
+    data = _workspace_with_topology()
+    data["spec"]["topology"][0]["components"].append({"resource": "ghost-vm"})
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_rejects_topology_namespace_undefined():
+    """A topology namespace reference not in spec.namespaces is rejected (Phase 1, ADR-0028)."""
+    data = _workspace_with_topology()
+    data["spec"]["topology"][0]["namespaces"] = [{"namespace": "ghost-ns"}]
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_accepts_topology_namespace_reference():
+    """A topology namespace reference that does exist in spec.namespaces is accepted."""
+    data = _workspace_with_topology()
+    data["spec"]["namespaces"] = ["ghost-ns"]
+    data["spec"]["topology"][0]["namespaces"] = [{"namespace": "ghost-ns"}]
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.topology[0].namespaces[0].namespace == "ghost-ns"
+
+
+def test_workspace_rejects_duplicate_topology_names():
+    """Duplicate topology names within a workspace are rejected."""
+    data = _workspace_with_topology()
+    data["spec"]["topology"].append(dict(data["spec"]["topology"][0]))
     with pytest.raises(ValidationError):
         WorkspaceModel.model_validate(data)

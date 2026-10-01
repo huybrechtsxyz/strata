@@ -129,7 +129,6 @@ def test_build_resolved_workspace_graph_walks_providers():
     graph = build_resolved_workspace_graph(index, workspace)
 
     assert graph.providers == {"p1": provider}
-    assert graph.topologies == {}
     assert graph.resources == {}
 
 

@@ -18,7 +18,9 @@ parameters.
   - `depends_on[]`, `firewalls[]`, `subnet` — workspace-specific gluing
   - `enabled` — whether this instance is included in the built artifact (default `true`)
 - `spec.namespaces[]` — names of [`namespace`](namespace.md) documents
-- `spec.topology[]` — names of [`topology`](topology.md) documents
+- `spec.topology[]` — inline topology groupings (type/components/namespaces/volumes) — see
+  "Topology grouping" below. Inline since ADR-0028 (reverted from a standalone `kind: topology`
+  document, ADR-0011) — not a list of names.
 - `spec.provisioners[]` — tool definitions (`ProvisionerModel`): `name`, `tool` (terraform, ansible,
   helm, compose, ...), `source`, `backend` (terraform only), `properties` (ansible only),
   `integration` (which [`integration`](integration.md) document supplies version/auth), `output`
@@ -64,10 +66,37 @@ spec:
         - web-storage
         - web-vm
   topology:
-    - main-topology
+    - name: main-topology
+      type: kubernetes
+      components:
+        - resource: web-storage
+        - resource: web-vm
   default_tags:
     managed-by: strata
 ```
+
+## Topology grouping
+
+Each `spec.topology[]` entry is a named grouping of resources and namespaces that conceptually
+belong together (e.g. "the AKS cluster + its blob store + its key vault") — for documentation,
+diagramming, and workload placement. It deliberately carries no provider/provisioner binding —
+which tool builds/deploys these resources is a separate concern (`spec.execution`/`provisioners`
+above): a single provisioner can span several groupings, and a single grouping can be built by
+several different provisioners acting on different subsets of it (ADR-0011).
+
+- `name` — unique grouping name within this workspace
+- `type` — the topology type (must match a [topologyconfig.md](topologyconfig.md) document's
+  `meta.name`)
+- `components[]` — each `{resource, modules}`: a reference to this workspace's own
+  `spec.resources[].name` (checked at Phase 1 — only possible because the grouping is inline now,
+  ADR-0028), optionally with application code (`modules[]`, same shape as
+  [namespace.md](namespace.md)'s module references) attached directly to that resource (e.g. an
+  Azure Function App's code onto its Function App resource)
+- `namespaces[]` — each `{namespace}`: a reference to this workspace's own `spec.namespaces[]`
+- `volumes[]` — topology-level storage volumes
+
+When multiple modules are attached to one component and more than one is enabled, exactly one
+must be marked as the `main` slot.
 
 ## Notes
 

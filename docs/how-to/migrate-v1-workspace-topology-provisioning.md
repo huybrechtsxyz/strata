@@ -1,31 +1,49 @@
 # How To: Migrate a v1 `workspace.yaml` (Topology/Provisioning Decoupling)
 
+> **Update (2026-10-01, ADR-0028):** the step that used to be the hard part
+> of this guide — splitting the topology entry into a standalone
+> `kind: topology` document — no longer applies. [ADR-0028](../decisions/0028-topology-inline-reversion.md)
+> reverted that part of ADR-0011: a topology grouping stays inline on
+> `workspace.yaml`'s own `spec.topology[]`, same place v1 had it. The
+> remaining, still-fully-accurate part of this guide is the
+> provider/provisioner decoupling: those two fields still move off the
+> topology entry and onto an explicit `spec.execution[]` step. This guide
+> is updated in place rather than retracted, since that part of the
+> migration is real, non-mechanical work regardless of where the grouping
+> itself lives.
+
 You have a real v1 `workspace.yaml` whose `spec.topology[]` entries carry
 `provider`/`provisioner` fields directly, and a `deployment.yaml` whose
 `stages[]` re-declare `topology`/`provisioner` bindings per stage. This is
 the one part of a v1 → v2 migration that isn't a mechanical field rename
-([docs/design/gap_fit_v1.md](../design/gap_fit_v1.md) gap #5) — one v1 document becomes several
-v2 documents, and the *binding* between "what infrastructure" and "which
-tool builds it" moves to a new place entirely. This guide walks through
-converting one real example end to end.
+([docs/design/gap_fit_v1.md](../design/gap_fit_v1.md) gap #5) — the
+*binding* between "what infrastructure" and "which tool builds it" moves to
+a new place entirely, even though the grouping itself stays exactly where
+v1 had it. This guide walks through converting one real example end to end.
 
 See also: [ADR-0011](../decisions/0011-topology-and-provisioning-decoupling.md)
 (the full from-first-principles reasoning this migration follows),
-[docs/design/gap_fit_v1.md](../design/gap_fit_v1.md) gap #5 (where this migration effort is
-tracked), and the real worked example this guide is built from:
-[`.v2-cfg/workspaces/spoke.yaml`](../../.v2-cfg/workspaces/spoke.yaml) /
-[`.v2-cfg/topologies/spoke-cluster.yaml`](../../.v2-cfg/topologies/spoke-cluster.yaml)
+[ADR-0028](../decisions/0028-topology-inline-reversion.md) (why the
+grouping itself reverted to inline), [docs/design/gap_fit_v1.md](../design/gap_fit_v1.md) gap #5
+(where this migration effort is tracked), and the real worked example this
+guide is built from:
+[`.v2-cfg/workspaces/spoke.yaml`](../../.v2-cfg/workspaces/spoke.yaml)
 — a real, hand-migrated `config-deploy` stack, chosen for that ADR's
 own coverage-check pass specifically because it exercises this exact gap.
+(Note: `.v2-cfg`'s own fixture still uses the pre-ADR-0028 standalone-document
+shape as of this update — it was not migrated to inline when Topology
+reverted, since `.v2-cfg` is a local, gitignored, not-test-covered
+dogfooding checkout; treat the YAML shown inline in this guide, not that
+file's current on-disk content, as authoritative.)
 
 ## The short answer
 
-**v1 mixed three separate concepts into one `topology[]` entry. v2 splits
-them into three separate places:**
+**v1 mixed three separate concepts into one `topology[]` entry. v2 keeps
+the grouping where it was and splits out just the binding:**
 
 | Concept                                                       | v1                                                                                                                                                  | v2                                                                                                                                    |
 | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| "What belongs together" (grouping)                            | `workspace.yaml`'s `spec.topology[]` entry                                                                                                          | A standalone `kind: topology` document — pure grouping, no provider/provisioner field at all                                          |
+| "What belongs together" (grouping)                            | `workspace.yaml`'s `spec.topology[]` entry                                                                                                          | Still `workspace.yaml`'s `spec.topology[]` entry — same place, just without a `provider`/`provisioner` field (ADR-0028)               |
 | "What tool builds it, and where's its code"                   | `workspace.yaml`'s `spec.workspace.provisioners[]` (already mostly independent in v1)                                                               | `workspace.yaml`'s `spec.provisioners[]` — same idea, now the *only* place tool bindings live                                         |
 | "Run this tool, targeting this infrastructure, in this order" | `workspace.yaml`'s `topology[].provider`/`.provisioner` **and** `deployment.yaml`'s per-stage `topology`/`provisioner` (re-declared at deploy time) | `workspace.yaml`'s `spec.execution[]` — one explicit, ordered recipe, baked into the workspace once, never re-declared per deployment |
 
@@ -55,31 +73,25 @@ spec:
 survive the move — everything else on this entry (`type`, `components`)
 does.
 
-### 2. Split the topology entry into a standalone `kind: topology` document
+### 2. Drop the `provider`/`provisioner` fields — the entry stays inline
 
-Everything **except** `provider`/`provisioner` becomes the new document's
-`spec` — same field names, same values:
-
-```yaml
-# topologies/spoke-cluster.yaml
-apiVersion: strata.huybrechts.xyz/v2
-kind: topology
-meta:
-  name: spoke-cluster
-spec:
-  type: standalone
-  components:
-    - resource: spoke_resx
-```
-
-The workspace now references it by name, not by embedding it:
+Everything **except** `provider`/`provisioner` stays exactly where it was,
+on the workspace's own `spec.topology[]` entry — same field names, same
+values, same file:
 
 ```yaml
 # workspaces/spoke.yaml
 spec:
   topology:
-    - spoke-cluster
+    - name: spoke-cluster
+      type: standalone
+      components:
+        - resource: spoke_resx
 ```
+
+No new document, no new reference to resolve — `components[].resource` is
+checked against this same workspace's own `spec.resources` at Phase 1
+(ADR-0028), the same way v1 could.
 
 ### 3. Confirm the provisioner already exists (it almost always does)
 
@@ -145,27 +157,28 @@ its `Workspace` already declares. If your v1 `deployment.yaml`'s stages
 carried nothing else useful (no per-stage timeout/lifecycle override), the
 whole `stages[]` block may disappear entirely.
 
-## Why the topology entry and the execution step are two separate documents, not one
+## Why the execution step is independent of the topology entry, not bound to it
 
 Worth understanding before migrating a second, more complex workspace: v1's
 1:1 `topology.provisioner` binding doesn't survive contact with a real
 multi-tool pipeline. A real deployment routinely has Terraform provision a
 cluster, then Ansible configure part of it, then Helm deploy workloads onto
-it — three provisioners, one topology, none of them "the" provisioner for
-it. ADR-0011 resolves this with a **many-to-many relationship, never
-declared directly**: a `Topology` and a `ProvisioningStep` independently
-reference the same underlying pool of `Resource`/`Namespace` names; "this
-step realizes topology X" is *derived* (intersect the step's `targets` with
-the topology's resources), never a field on either document. The spoke
-example above is the simple 1:1 case (one topology, one step) — it still
-goes through the same split, since a workspace's *second* topology or
-*second* tool is exactly the case v1's shape couldn't represent at all.
+it — three provisioners, one topology grouping, none of them "the"
+provisioner for it. ADR-0011 resolves this with a **many-to-many
+relationship, never declared directly**: a topology entry and a
+`ProvisioningStep` independently reference the same underlying pool of
+`Resource`/`Namespace` names on the same workspace; "this step realizes
+topology X" is *derived* (intersect the step's `targets` with the
+topology's resources), never a field on either one. The spoke example above
+is the simple 1:1 case (one topology, one step) — it still goes through the
+same split, since a workspace's *second* topology grouping or *second* tool
+is exactly the case v1's shape couldn't represent at all.
 
 ## Checklist for your own workspace
 
 1. For every `topology[]` entry with a `provider`/`provisioner` field:
-   create a standalone `topologies/<name>.yaml` document carrying
-   everything **except** those two fields.
+   delete just those two fields — the entry itself stays inline, right
+   where it already is.
 2. Confirm every provisioner referenced this way is already declared under
    the workspace's own `spec.provisioners[]` (it will be, in every real v1
    workspace — the topology entry was always a second reference to it, not
@@ -181,9 +194,8 @@ goes through the same split, since a workspace's *second* topology or
 6. Delete the now-empty `topology`/`provisioner` fields from every
    `deployment.yaml` stage that referenced this workspace — nothing
    replaces them at the deployment level.
-7. Run `strata validate` — `WorkspaceService`'s dynamic validation
-   cross-checks `execution[].targets` against real resource/namespace names
-   the same way v1 cross-checked `topology[].components[].resource`, just
-   moved to Phase 2 (ADR-0011's own "syntax-checked, not existence-checked"
-   note — `Topology` alone can no longer confirm a resource exists, since
-   it's no longer nested inside the same file as the resource list).
+7. Run `strata validate` — `WorkspaceSpecModel`'s own Phase 1 model
+   validators cross-check `spec.execution[].targets` and the topology
+   entry's `components[].resource`/`namespaces[].namespace` against real
+   resource/namespace names declared in the same document (ADR-0028) —
+   same-file, same-phase, the same way v1 could.

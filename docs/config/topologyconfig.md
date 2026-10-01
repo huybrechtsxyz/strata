@@ -2,7 +2,7 @@
 
 The registry entry for one topology *type* (kubernetes, dockerswarm, azure-native, ...): its
 expected component roles. `meta.name` is the type key itself — matched against a real
-[`topology`](topology.md) document's `spec.type`.
+[`workspace`](workspace.md) document's inline `spec.topology[].type`.
 
 Promoted to its own kind (rather than a bare list on [`configuration`](configuration.md)) for the
 same reason as [`providerconfig`](providerconfig.md) — each topology type gets its own file.

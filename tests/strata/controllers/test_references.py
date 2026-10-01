@@ -52,9 +52,7 @@ def _solution(tmp_path: Path, *, provider: str = "azure-main", remote: str = "in
     root.mkdir()
     (root / "strata.yaml").write_text(MANIFEST, encoding="utf-8")
     (root / "provider.yaml").write_text(PROVIDER, encoding="utf-8")
-    (root / "workspace.yaml").write_text(
-        WORKSPACE.format(provider=provider, remote=remote), encoding="utf-8"
-    )
+    (root / "workspace.yaml").write_text(WORKSPACE.format(provider=provider, remote=remote), encoding="utf-8")
     return root
 
 
@@ -185,14 +183,15 @@ def test_topology_internals_are_not_index_references():
     """`components[].resource`/`.namespace` name workspace-local instances,
     not documents. An instance `web-storage` may be built from a Resource
     document called `storage-account`; checking it here would invent
-    failures. `WorkspaceService.validate_topology_references` checks it in
-    scope. `components[].modules[].module` IS a document reference (Module)
-    and must still be found — this only excludes the instance fields.
+    failures. `WorkspaceSpecModel`'s Phase 1 model validators check it in
+    scope (ADR-0028). `components[].modules[].module` IS a document
+    reference (Module) and must still be found — this only excludes the
+    instance fields.
     """
     from strata.models.reference_fields import extract_references
-    from strata.models.topology_model import TopologyModel
+    from strata.models.workspace_model import TopologySpecModel
 
-    paths = {rule.path for rule in extract_references(TopologyModel)}
+    paths = {rule.path for rule in extract_references(TopologySpecModel)}
     assert not any(path.endswith(("components[].resource", "components[].namespace")) for path in paths)
     assert any(path.endswith("module") for path in paths)
 
@@ -216,7 +215,7 @@ def test_workspace_references_are_discovered_from_its_own_fields():
     paths = {rule.path for rule in extract_references(WorkspaceModel)}
     assert paths == {
         "spec.providers[]",
-        "spec.topology[]",
+        "spec.topology[].components[].modules[].module",
         "spec.namespaces[]",
         "spec.firewalls[]",
         "spec.dns_zones[]",
@@ -228,14 +227,17 @@ def test_workspace_references_are_discovered_from_its_own_fields():
 
 
 def test_module_reference_is_found_wherever_it_is_embedded():
-    """The gap the old table had: neither Topology nor Namespace was a key in it."""
+    """The gap the old table had: neither Topology nor Namespace was a key in it.
+
+    Topology is no longer a standalone kind (ADR-0028) — its module
+    reference is reached through `WorkspaceModel.spec.topology[]` now.
+    """
     from strata.models.namespace_model import NamespaceModel
     from strata.models.reference_fields import extract_references
-    from strata.models.topology_model import TopologyModel
+    from strata.models.workspace_model import WorkspaceModel
 
     assert any(r.path.endswith("module") for r in extract_references(NamespaceModel))
-    assert any(r.path.endswith("module") for r in extract_references(TopologyModel))
-
+    assert any(r.path.endswith("module") for r in extract_references(WorkspaceModel))
 
 
 # ---------------------------------------------------------------------------
