@@ -3,6 +3,7 @@
 
 Commands:
     validate   : Check every document in the solution.
+    graph      : Show every cross-document reference in the solution.
     values     : Resolve deployment values (variables, secrets, feature flags).
     build      : Render a deployment's workspace into on-disk artifacts.
     deploy     : Execute a deployment's workspace provisioners (plan/apply).
@@ -18,6 +19,7 @@ import click
 from strata.commands.build_command import build_command
 from strata.commands.deploy_command import deploy_command
 from strata.commands.exit_codes import EXIT_SUCCESS, EXIT_USAGE  # noqa: F401  (re-exported for callers)
+from strata.commands.graph_command import graph_command
 from strata.commands.sln_command import sln_command
 from strata.commands.validate_command import validate_command
 from strata.commands.values_command import values_command
@@ -31,6 +33,7 @@ def cli() -> None:
 
 
 cli.add_command(validate_command)
+cli.add_command(graph_command)
 cli.add_command(values_command)
 cli.add_command(build_command)
 cli.add_command(deploy_command)
