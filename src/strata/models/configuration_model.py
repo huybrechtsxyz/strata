@@ -61,7 +61,7 @@ class ConfigurationSecurityModel(PlatformBaseModel):
     may declare, platform-wide.
 
     Ported from v1's real, active usage (`config/stores.yaml`'s
-    `spec.security`, cfg-int-deployment) — ADR-0020/gap #7 originally
+    `spec.security`, config-deploy) — ADR-0020/gap #7 originally
     deferred this alongside `zones`/`remotes`/`policies`/`audit`/`paths`, but
     unlike those, `security` has no v2 equivalent elsewhere to derive it
     from (compare `zones`, superseded by `TenantSpecModel.geographies`).
@@ -113,7 +113,7 @@ class PathConventionModel(PlatformBaseModel):
     docs/design/gap_fit_v1.md gap #7).
 
     Ported from v1's real, active `enforce-path-conventions` policy
-    (`config/paths.yaml`, cfg-int-deployment) — structural shape only
+    (`config/paths.yaml`, config-deploy) — structural shape only
     (does a document's real file path match `pattern`/`filename_pattern`,
     under `scope`). `pattern` and `filename_pattern` are independently
     optional matches against two different substrings of a document's real

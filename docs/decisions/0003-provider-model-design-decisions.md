@@ -18,7 +18,7 @@
 - Revised: 2026-09-22 — replaced the loose `regions: list[str | dict[str, Any]]`
   shape with a real `ProviderConfigRegionModel` (`name` + optional `geography`/
   `description`), and corrected Decision 7's naming call: a real production
-  strata v1 config repo (`cfg-int-deployment`) already uses **`zone`**, not
+  strata v1 config repo (`config-deploy`) already uses **`zone`**, not
   `geography`, for exactly this "group of regions sharing a deployment/data-
   residency boundary" concept (`config/zones.yaml`, `Tenant.spec.zones`) —
   the DNS-zone collision flagged in Decision 7 hasn't been a problem in
@@ -120,11 +120,11 @@ was nowhere for such values to go.
 v2 adds a third field, `configuration: dict[str, Any] | None`, for exactly this
 purpose, distinct from the other two:
 
-| Field | Validated by strata? | Purpose | Consumer |
-|---|---|---|---|
-| `properties` | Yes (`ProviderPropertiesModel`) | Common, cross-provisioner fields (type, region, …) | builders (once built) |
-| `configuration` | No — raw passthrough | Provisioner-specific extras not worth modeling | builders (once built) — **must be explicitly wired**, not automatic |
-| `custom` | No — free-form | Automation/bookkeeping metadata (cost center, etc.) | external tooling/docs only — **not** guaranteed to reach any builder |
+| Field           | Validated by strata?            | Purpose                                             | Consumer                                                             |
+| --------------- | ------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------- |
+| `properties`    | Yes (`ProviderPropertiesModel`) | Common, cross-provisioner fields (type, region, …)  | builders (once built)                                                |
+| `configuration` | No — raw passthrough            | Provisioner-specific extras not worth modeling      | builders (once built) — **must be explicitly wired**, not automatic  |
+| `custom`        | No — free-form                  | Automation/bookkeeping metadata (cost center, etc.) | external tooling/docs only — **not** guaranteed to reach any builder |
 
 `custom` is kept (not dropped) per decision, but its docstring now explicitly
 warns that it is inert until a builder/service layer explicitly consumes it —

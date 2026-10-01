@@ -18,7 +18,7 @@ Two problems that turned out to be the same problem.
 v1's `.gitignore` lists `**/.strata/solution.json`, so it is machine-local
 state that never survives a clone. Everything durable therefore had to be
 duplicated into a committed `config/remotes.yaml`, and in the real
-`cfg-int-deployment` repo the two have already drifted: the same `env-int`
+`config-deploy` repo the two have already drifted: the same `env-int`
 remote is `type: bundled` in `remotes.yaml` and `type: gitops` in
 `solution.json`, with its location recorded in both (`deploy_path` vs
 `path`). `remotes.yaml`'s own comment concedes the coupling — *"These values
@@ -87,7 +87,7 @@ ADR-0019.)
 
 **4. `type` and `fetch` are separate fields on a remote.** v1 conflated
 "what kind of source is this" with "who materialises it", and production
-paid for it: `cfg-int-deployment` declares a git repository as
+paid for it: `config-deploy` declares a git repository as
 `type: bundled` purely so strata skips its own fetch (Azure Pipelines
 already checked it out; strata has no git credentials there). The comment
 records the cost — ref pinning and dirty-tree gating both silently stopped

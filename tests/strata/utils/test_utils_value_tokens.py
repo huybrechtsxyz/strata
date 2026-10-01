@@ -37,7 +37,7 @@ def test_resolve_value_tokens_ignores_kind_prefix_only_key_matters():
 
 
 def test_resolve_value_tokens_plain_literal_passes_through_unchanged():
-    assert resolve_value_tokens("cdn-feeds.omp.com", {}) == "cdn-feeds.omp.com"
+    assert resolve_value_tokens("cdn-feeds.acme.com", {}) == "cdn-feeds.acme.com"
 
 
 def test_resolve_value_tokens_raises_on_unresolved_key():
@@ -54,7 +54,7 @@ def test_resolve_value_tokens_matches_extract_value_tokens_keys():
 
 
 def test_resolve_value_tokens_in_mapping_resolves_flat_string_values():
-    """Real shape: provisioner.backend.configuration's real values (cfg-int-deployment)."""
+    """Real shape: provisioner.backend.configuration's real values (config-deploy)."""
     data = {
         "resource_group_name": "${var:tf_state_resource_group}",
         "storage_account_name": "${var:tf_state_storage_account}",
@@ -110,7 +110,7 @@ def test_strip_escaped_value_tokens_leaves_surrounding_text_and_real_tokens_alon
 
 
 def test_strip_escaped_value_tokens_plain_literal_passes_through_unchanged():
-    assert strip_escaped_value_tokens("cdn-feeds.omp.com") == "cdn-feeds.omp.com"
+    assert strip_escaped_value_tokens("cdn-feeds.acme.com") == "cdn-feeds.acme.com"
 
 
 def test_find_malformed_value_tokens_ignores_escaped_candidates():

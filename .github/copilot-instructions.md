@@ -3,7 +3,7 @@
 `strata-v2` is a ground-up rebuild of the `strata` CLI (an infrastructure-as-code
 platform layered over Terraform/Helm/Compose). It is **not** a straight port of
 v1 — every feature is rebuilt only after being justified by real evidence (v1's
-own source, and real consumer CI in `haven`/`cfg-int-deployment`), not by
+own source, and real consumer CI in `haven`/`config-deploy`), not by
 assumption. Read [docs/design/v2-schema-overview.md](../docs/design/v2-schema-overview.md)
 for the current one-page status of every kind/feature.
 
@@ -46,7 +46,7 @@ uv sync                                                          # install (crea
 Run all four after every change, in that order — this is the same sequence CI
 runs (`nox -s lint` / `nox -s test`). A change isn't done until all four are clean.
 
-**`uv sync`/`uv run` may fail with `No solution found... setuptools`** — an OMP
+**`uv sync`/`uv run` may fail with `No solution found... setuptools`** — an Acme
 private-feed quirk, not a real dependency conflict. Add
 `--index-strategy unsafe-best-match` to the command and retry.
 

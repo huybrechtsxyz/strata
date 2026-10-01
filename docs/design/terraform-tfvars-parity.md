@@ -23,7 +23,7 @@ output and diffed it against **real**, committed v1 output for the exact
 same repository:
 
 1. `.v2-cfg` (this workspace's own hand-migrated slice of
-   `cfg-int-deployment`) has no local checkout of `iac-int-deployment`
+   `config-deploy`) has no local checkout of `iac-int-deployment`
    (the real Terraform source repo, `fetch: external`, a private GHE
    remote). Created a minimal placeholder checkout at the exact path
    `layout.remote_checkout_path()` expects (`spoke/terraform/main.tf`,
@@ -34,7 +34,7 @@ same repository:
    .v2-cfg --build-path .v2-cfg\build\deploy-spoke`. Succeeded, produced 8
    real `*.auto.tfvars.json` files.
 3. Diffed those files' actual JSON content against
-   `e:\sources\cfg-int-deployment\build\deploy-hub-z00-spoke-s01-customer-c0224-1.0.0\core\terraform\*.auto.tfvars.json`
+   `e:\sources\config-deploy\build\deploy-hub-z00-spoke-s01-customer-c0224-1.0.0\core\terraform\*.auto.tfvars.json`
    — v1's real, committed output for a real deployment in the same repo
    (a different deployment level — customer-scoped vs. `.v2-cfg`'s
    spoke-scoped — so exact values differ, but every *category's shape
@@ -178,7 +178,7 @@ Resolution" below for exactly what shipped.
 None yet — no v2 ADR exists for Terraform tfvars projection shape.
 Source material: v1's real `builders/terraform_builder.py` (external, not
 part of this workspace, read in full this pass) and
-`e:\sources\cfg-int-deployment`'s real, committed build output (also
+`e:\sources\config-deploy`'s real, committed build output (also
 external).
 
 ## Fix Design and Resolution — build-time file wrapping
@@ -305,7 +305,7 @@ categories, not just the eight the build-time file fix covered.
   terraform output and make a design gap doc we need to fix. then we can
   plan"). Empirically generated real v2 build output against `.v2-cfg`
   (a minimal placeholder external-repo checkout, since `build run` never
-  invokes Terraform itself) and diffed it against `cfg-int-deployment`'s
+  invokes Terraform itself) and diffed it against `config-deploy`'s
   real, committed v1 build output for the same repository, cross-checked
   against v1's real `terraform_builder.py` source in full. Found v1
   actually follows three distinct shape conventions (wrapped collections,

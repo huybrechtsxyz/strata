@@ -21,6 +21,13 @@ satisfied by *code-path* identity, not *byte* identity — see the design
 doc). `time` is the event's own occurrence time (`completed_at`/
 `timestamp`), not the render call's wall-clock, so two renderings of the
 same manifest describe the same moment.
+
+The `type`'s reverse-domain prefix tracks the *deployment document's own*
+`apiVersion` (`PlatformVersion`), not a single hardcoded constant — an OMP
+deployment (`strata.omp.com/v2`) must never emit a `huybrechts.xyz`-branded
+event type, and vice versa. Callers (the future `integration` sink
+dispatch) pass the deployment's `apiVersion` straight through; it defaults
+to `CANONICAL_API_VERSION` for callers that don't have one handy.
 """
 
 import uuid
@@ -28,13 +35,24 @@ from typing import Any
 
 from strata.models.audit_manifest_model import DeploymentManifestModel
 from strata.models.audit_metrics_model import DeploymentMetricsModel
+from strata.models.common_models import CANONICAL_API_VERSION, PlatformVersion
 
 _EVENT_SOURCE_PREFIX = "/strata"
-_CLOUDEVENTS_TYPE_PREFIX = "xyz.huybrechts.strata"
+
+# Reverse-domain CloudEvents `type` prefix, keyed by the deployment document's
+# own `apiVersion` — an OMP deployment must emit `com.omp.strata.*` types, a
+# huybrechts.xyz one `xyz.huybrechts.strata.*`. Kept exhaustive over
+# `PlatformVersion` on purpose: a future third api version would fail this
+# lookup loudly (KeyError) rather than silently mislabeling its events.
+_CLOUDEVENTS_TYPE_PREFIXES: dict[PlatformVersion, str] = {
+    PlatformVersion.v2: "xyz.huybrechts.strata",
+    PlatformVersion.v2_omp: "com.omp.strata",
+}
 
 
 def _render_event(
     *,
+    api_version: PlatformVersion,
     event_type: str,
     ecs_action: str,
     outcome: str,
@@ -57,9 +75,10 @@ def _render_event(
     `artifacts.platform` inside the manifest itself.
     """
     duration_nanos = int(duration_seconds * 1_000_000_000) if duration_seconds is not None else None
+    type_prefix = _CLOUDEVENTS_TYPE_PREFIXES[api_version]
     return {
         "specversion": "1.0",
-        "type": f"{_CLOUDEVENTS_TYPE_PREFIX}.{event_type}",
+        "type": f"{type_prefix}.{event_type}",
         "source": f"{_EVENT_SOURCE_PREFIX}/{workspace}/{deployment}",
         "id": str(uuid.uuid4()),
         "time": time,
@@ -90,10 +109,17 @@ def render_manifest_event(
     *,
     relative_path: str,
     file_sha256: str,
+    api_version: PlatformVersion = CANONICAL_API_VERSION,
 ) -> dict[str, Any]:
-    """Render `deployment.completed`/`deployment.destroyed` from `_manifest.json`'s content."""
+    """Render `deployment.completed`/`deployment.destroyed` from `_manifest.json`'s content.
+
+    `api_version` should be the originating deployment document's own
+    `apiVersion` (`DeploymentModel.apiVersion`) — it decides the event
+    `type`'s reverse-domain prefix, not just a cosmetic default.
+    """
     suffix = "destroyed" if manifest.action == "destroy" else "completed"
     return _render_event(
+        api_version=api_version,
         event_type=f"deployment.{suffix}",
         ecs_action=f"deployment-{suffix}",
         outcome=manifest.status,
@@ -114,9 +140,16 @@ def render_metrics_event(
     *,
     relative_path: str,
     file_sha256: str,
+    api_version: PlatformVersion = CANONICAL_API_VERSION,
 ) -> dict[str, Any]:
-    """Render `deployment.measured` from `_metrics.json`'s content."""
+    """Render `deployment.measured` from `_metrics.json`'s content.
+
+    `api_version` should be the originating deployment document's own
+    `apiVersion` (`DeploymentModel.apiVersion`) — it decides the event
+    `type`'s reverse-domain prefix, not just a cosmetic default.
+    """
     return _render_event(
+        api_version=api_version,
         event_type="deployment.measured",
         ecs_action="deployment-measured",
         outcome=metrics.dimensions.outcome,

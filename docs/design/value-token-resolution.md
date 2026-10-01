@@ -291,7 +291,7 @@ string mixing a `${var:}` and a `${secret:}` token (e.g. a connection
 string) is secret-shaped as a whole and must go through the CLI-arg/env-var
 path in full, never partially rewritten into a file. No real example found
 yet of a non-scalar secret leaf (every real secret-shaped value checked —
-haven, cfg-int-deployment — is a plain scalar string), so a non-scalar
+haven, config-deploy — is a plain scalar string), so a non-scalar
 `--set-string` target is out of scope until evidenced.
 
 ### This also substantially resolves gap #10

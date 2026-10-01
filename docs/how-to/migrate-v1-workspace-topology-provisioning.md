@@ -15,7 +15,7 @@ See also: [ADR-0011](../decisions/0011-topology-and-provisioning-decoupling.md)
 tracked), and the real worked example this guide is built from:
 [`.v2-cfg/workspaces/spoke.yaml`](../../.v2-cfg/workspaces/spoke.yaml) /
 [`.v2-cfg/topologies/spoke-cluster.yaml`](../../.v2-cfg/topologies/spoke-cluster.yaml)
-— a real, hand-migrated `cfg-int-deployment` stack, chosen for that ADR's
+— a real, hand-migrated `config-deploy` stack, chosen for that ADR's
 own coverage-check pass specifically because it exercises this exact gap.
 
 ## The short answer

@@ -9,7 +9,7 @@ module only answers "is this relative path in scope, and if so, does its
 directory/filename match?".
 
 `scope` is deliberately restricted to `"<relative-dir>/**"` — every real
-`cfg-int-deployment` convention is this shape (`"customers/**"`,
+`config-deploy` convention is this shape (`"customers/**"`,
 `"providers/**"`, `"deploy/control/**"`, `"deploy/hubs/**"`), so a plain
 string-prefix check covers it without a general glob engine (see the
 design doc's Open Question #3, resolved: keep it simple until a real

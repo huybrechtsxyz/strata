@@ -26,7 +26,7 @@ is the living record)
 on-disk artifacts but never executes anything — by design (ADR-0022 D4).
 Nothing in v2 called `InfraIntegration.plan()`/`.deploy()`/`.destroy()`,
 even though all three were fully implemented, real, working code with zero
-callers. Both real reference repos' CI (haven, cfg-int-deployment)
+callers. Both real reference repos' CI (haven, config-deploy)
 universally follow `build run` with `strata deploy run --file <file>
 --force [--dry-run] [--stage X] [--scope infra|apps]` — the execution half
 of the same pipeline, with no v2 equivalent at all.

@@ -20,7 +20,7 @@
 
 [audit-trail.md](audit-trail.md)'s real-usage scoping (2026-09-30) found
 Layer 1 (PR template + issue template scaffolding) is real and active in
-`cfg-int-deployment` today — `.github/pull_request_template.md` and
+`config-deploy` today — `.github/pull_request_template.md` and
 `.github/ISSUE_TEMPLATE/deployment-change-request.yml` both exist,
 matching v1's design exactly. v2 has **no scaffolding command at all**
 today — `src/strata/commands/` is 4 flat command files (`validate`/
@@ -304,7 +304,7 @@ tree. Untested today because nothing ships non-`.py` package data yet.
   `dot.github/pull_request_template.md` +
   `dot.github/ISSUE_TEMPLATE/deployment-change-request.yml` — the first
   ported from the real v1 templates (already confirmed real/active in
-  `cfg-int-deployment`), with any strata-v1-specific wording (`strata
+  `config-deploy`), with any strata-v1-specific wording (`strata
   deploy run -f <file>` still applies to v2 unchanged; `strata validate
   run` -> v2's real `strata validate`) adjusted to v2's actual CLI
   surface; `.strata/README.md` new content, explaining what `.strata/`
@@ -341,7 +341,7 @@ tree. Untested today because nothing ships non-`.py` package data yet.
 - 2026-09-30: Created, per request ("lets then first look at strata
   sln(solution) init command... lets start there"), as the implementation
   vehicle for [audit-trail.md](audit-trail.md)'s Layer 1 finding (PR
-  template scaffolding is real and active in `cfg-int-deployment`, and
+  template scaffolding is real and active in `config-deploy`, and
   the one piece with no v2 equivalent at all — no command surface exists
   yet). Grounded directly in v1's real, current source
   (`e:\SourcesXYZ\strata\src\strata\controllers\solution_controller.py`,
@@ -392,7 +392,7 @@ tree. Untested today because nothing ships non-`.py` package data yet.
   `dot.github/ISSUE_TEMPLATE/deployment-change-request.yml` (ported from
   v1's real, canonical package templates
   `e:\SourcesXYZ\strata\src\strata\templates\solution\dot.github\`, not
-  `cfg-int-deployment`'s own copy — CLI wording adjusted to v2's actual
+  `config-deploy`'s own copy — CLI wording adjusted to v2's actual
   surface: `strata deploy run <deployment-name>`/`strata validate`, no
   `-f`/`run`/`--deep`, and no `deploy health` reference since v2 doesn't
   have that command); `strata/utils/scaffold_templates.py`

@@ -47,7 +47,7 @@ class ArtifactSpecModel(PlatformBaseModel):
 
     image_name: str = Field(
         min_length=1,
-        description="Container image path (e.g. 'int-docker-test/src/omp.dispatcher.api'). Identity — "
+        description="Container image path (e.g. 'int-docker-test/src/acme.dispatcher.api'). Identity — "
         "never overridden by a kind: version pin, only image_tag is.",
     )
     image_tag: str | None = Field(
@@ -57,7 +57,7 @@ class ArtifactSpecModel(PlatformBaseModel):
     )
     registry: str | None = Field(
         None,
-        description="Registry host, free text for documentation only (e.g. 'cdn-feeds.omp.com') — NOT a "
+        description="Registry host, free text for documentation only (e.g. 'cdn-feeds.acme.com') — NOT a "
         "SolutionRemoteModel reference, since strata never fetches an image (it stays in the registry and "
         "is pulled by the runtime at deploy time, not materialised by strata at build time).",
     )
@@ -96,7 +96,9 @@ class ArtifactModel(PlatformBaseModel):
     apiVersion: PlatformVersion = Field(
         default=PlatformVersion.v2, frozen=True, description="API version for artifact configuration"
     )
-    kind: PlatformKind = Field(default=PlatformKind.ARTIFACT, frozen=True, description="Platform kind (always 'artifact')")
+    kind: PlatformKind = Field(
+        default=PlatformKind.ARTIFACT, frozen=True, description="Platform kind (always 'artifact')"
+    )
     meta: ArtifactMetaModel = Field(description="Artifact metadata (name, annotations, labels, tags)")
     spec: ArtifactSpecModel = Field(description="Artifact specification (image reference, optional passthrough data)")
 

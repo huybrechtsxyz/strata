@@ -247,13 +247,13 @@ def _version_doc(root: Path, name: str, *, artifact_pins: dict[str, str] | None 
 
 def test_resolve_artifact_returns_model_when_it_exists(tmp_path):
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/omp.dispatcher.api")
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api")
 
     context = _context(root)
     artifact = resolve_artifact(context, "dspapi_container")
 
     assert artifact is not None
-    assert artifact.spec.image_name == "int-docker-test/src/omp.dispatcher.api"
+    assert artifact.spec.image_name == "int-docker-test/src/acme.dispatcher.api"
 
 
 def test_resolve_artifact_returns_none_when_missing(tmp_path):
@@ -265,7 +265,7 @@ def test_resolve_artifact_returns_none_when_missing(tmp_path):
 
 def test_resolve_artifact_field_image_name_is_never_pin_overlaid(tmp_path):
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/omp.dispatcher.api")
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api")
     _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
     _deployment(root, "app", environments=["prd"])
 
@@ -274,13 +274,13 @@ def test_resolve_artifact_field_image_name_is_never_pin_overlaid(tmp_path):
 
     assert (
         resolve_artifact_field(context, deployment, "dspapi_container", "image_name")
-        == "int-docker-test/src/omp.dispatcher.api"
+        == "int-docker-test/src/acme.dispatcher.api"
     )
 
 
 def test_resolve_artifact_field_image_tag_falls_back_to_declared_value(tmp_path):
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/omp.dispatcher.api", image_tag="1.0.0")
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.0.0")
     _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
     _deployment(root, "app", environments=["prd"])
 
@@ -292,7 +292,7 @@ def test_resolve_artifact_field_image_tag_falls_back_to_declared_value(tmp_path)
 
 def test_resolve_artifact_field_image_tag_uses_version_pin_when_present(tmp_path):
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/omp.dispatcher.api", image_tag="1.0.0")
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.0.0")
     _version_doc(root, "prd", artifact_pins={"dspapi_container": "2.0.0"})
     _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
     _deployment(root, "app", version="prd", environments=["prd"])
@@ -305,7 +305,7 @@ def test_resolve_artifact_field_image_tag_uses_version_pin_when_present(tmp_path
 
 def test_resolve_artifact_field_image_ref_synthesises_name_and_tag(tmp_path):
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/omp.dispatcher.api", image_tag="1.0.0")
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.0.0")
     _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
     _deployment(root, "app", environments=["prd"])
 
@@ -314,13 +314,13 @@ def test_resolve_artifact_field_image_ref_synthesises_name_and_tag(tmp_path):
 
     assert (
         resolve_artifact_field(context, deployment, "dspapi_container", "image_ref")
-        == "int-docker-test/src/omp.dispatcher.api:1.0.0"
+        == "int-docker-test/src/acme.dispatcher.api:1.0.0"
     )
 
 
 def test_resolve_artifact_field_image_ref_is_bare_name_when_tag_blank(tmp_path):
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/omp.dispatcher.api")
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api")
     _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
     _deployment(root, "app", environments=["prd"])
 
@@ -329,7 +329,7 @@ def test_resolve_artifact_field_image_ref_is_bare_name_when_tag_blank(tmp_path):
 
     assert (
         resolve_artifact_field(context, deployment, "dspapi_container", "image_ref")
-        == "int-docker-test/src/omp.dispatcher.api"
+        == "int-docker-test/src/acme.dispatcher.api"
     )
 
 
@@ -346,7 +346,7 @@ def test_resolve_artifact_field_returns_none_when_artifact_missing(tmp_path):
 
 def test_build_value_references_artifact_store_resolves_with_context_and_deployment(tmp_path):
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/omp.dispatcher.api", image_tag="1.0.0")
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.0.0")
     _write(
         root,
         "environments/prd.yaml",
@@ -368,7 +368,7 @@ def test_build_value_references_artifact_store_resolves_with_context_and_deploym
 
 def test_build_value_references_artifact_store_is_none_without_context(tmp_path):
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/omp.dispatcher.api", image_tag="1.0.0")
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.0.0")
     _write(
         root,
         "environments/prd.yaml",
@@ -406,7 +406,7 @@ def test_resolve_values_resolves_artifact_store_directly_not_via_a_store_integra
     directly against the real ArtifactModel + kind: version pins, same
     mechanism `build_value_references()` already uses at build time."""
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/omp.dispatcher.api", image_tag="1.0.0")
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.0.0")
     _write(
         root,
         "environments/prd.yaml",
@@ -1318,7 +1318,7 @@ def test_resolve_diagnostic_never_reveals_a_value(tmp_path, monkeypatch):
 
 def test_resolve_diagnostic_artifact_store_found_is_ok(tmp_path):
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/omp.dispatcher.api", image_tag="1.0.0")
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.0.0")
     _write(
         root,
         "environments/prd.yaml",
@@ -1707,7 +1707,7 @@ def test_set_value_rejects_a_github_secret_store(tmp_path):
 
 def test_set_value_rejects_an_artifact_store(tmp_path):
     root = _solution(tmp_path)
-    _artifact(root, "dspapi_container", image_name="int-docker-test/src/omp.dispatcher.api", image_tag="1.0.0")
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.0.0")
     _write(
         root,
         "environments/prd.yaml",

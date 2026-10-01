@@ -10,6 +10,7 @@ import uuid
 from strata.controllers.audit_event_rendering import render_manifest_event, render_metrics_event
 from strata.models.audit_manifest_model import DeploymentManifestModel
 from strata.models.audit_metrics_model import DeploymentMetricsModel
+from strata.models.common_models import PlatformVersion
 
 
 def _manifest(**overrides) -> DeploymentManifestModel:
@@ -74,6 +75,13 @@ def test_render_manifest_event_destroy_action_uses_destroyed_type():
     assert event["data"]["event"]["action"] == "deployment-destroyed"
 
 
+def test_render_manifest_event_omp_api_version_uses_omp_type_prefix():
+    """A deployment document declared with `strata.omp.com/v2` must emit
+    `com.omp.strata.*` event types, never the huybrechts.xyz-branded default."""
+    event = render_manifest_event(_manifest(), relative_path="p", file_sha256="h", api_version=PlatformVersion.v2_omp)
+    assert event["type"] == "com.omp.strata.deployment.completed"
+
+
 def test_render_manifest_event_id_is_fresh_uuid4_each_call():
     """The same manifest rendered twice (e.g. initial send + a later resend) gets a
     different id both times — CloudEvents' own id/delivery-attempt uniqueness rule."""
@@ -99,3 +107,8 @@ def test_render_metrics_event_shape():
     assert event["data"]["event"]["action"] == "deployment-measured"
     assert event["data"]["event"]["outcome"] == "success"
     assert event["data"]["user"]["name"] == "ci-runner"
+
+
+def test_render_metrics_event_omp_api_version_uses_omp_type_prefix():
+    event = render_metrics_event(_metrics(), relative_path="p", file_sha256="h", api_version=PlatformVersion.v2_omp)
+    assert event["type"] == "com.omp.strata.deployment.measured"

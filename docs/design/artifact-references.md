@@ -153,9 +153,9 @@ kind: artifact
 meta:
   name: dspapi_container
 spec:
-  image_name: "int-docker-test/src/omp.dispatcher.api"
+  image_name: "int-docker-test/src/acme.dispatcher.api"
   image_tag: ""                    # blank until known, same pattern as today's variable
-  registry: "cdn-feeds.omp.com"    # free text, documentation only
+  registry: "cdn-feeds.acme.com"    # free text, documentation only
   integration: null                # optional Integration (capability: sources) for registry auth
   description: "Dispatcher API container image (ADR-0013)"
   properties: null                 # free-form descriptive data (e.g. owning team, cost center) — never merged anywhere
@@ -202,9 +202,9 @@ kind: artifact
 meta:
   name: dspapi_container
 spec:
-  image_name: "int-docker-test/src/omp.dispatcher.api"
+  image_name: "int-docker-test/src/acme.dispatcher.api"
   image_tag: "env_sbx11006400201_20260907.10"
-  registry: "cdn-feeds.omp.com"
+  registry: "cdn-feeds.acme.com"
   description: "Dispatcher API container image (ADR-0013)"
 ```
 

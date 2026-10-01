@@ -4,7 +4,7 @@
 **Destination mirrors the source's own internal repo-relative path, not the
 provisioner/step name.** This is the one real gap ADR-0022 D3 found while
 checking cross-repo evidence: a real workspace
-(`cfg-int-deployment`'s `stacks/spoke/workspace.yaml`) declares a
+(`config-deploy`'s `stacks/spoke/workspace.yaml`) declares a
 "copy-only" provisioner (`core_modules`) that stages a shared Terraform
 module library so the real provisioner's `.tf` code can compose it via a
 relative path (`source = "../../core/terraform/components/aks"`). That only

@@ -29,14 +29,14 @@ item to slip into build work.
 
 Seven kinds carry a lifecycle field. All verified present in `models/`:
 
-| Kind | Field | Model |
-| --- | --- | --- |
-| `deployment` | `spec.lifecycle` | `CommonLifecycleModel` |
-| `workspace` | `spec.lifecycle` | `CommonLifecycleModel` |
-| `namespace` | `spec.lifecycle` | `CommonLifecycleModel` |
-| `module` | `spec.lifecycle` | `CommonLifecycleModel` |
-| `resource` | `spec.lifecycle` | `CommonLifecycleModel` |
-| `provider` | `spec.lifecycle` | `CommonLifecycleModel` |
+| Kind          | Field            | Model                                                  |
+| ------------- | ---------------- | ------------------------------------------------------ |
+| `deployment`  | `spec.lifecycle` | `CommonLifecycleModel`                                 |
+| `workspace`   | `spec.lifecycle` | `CommonLifecycleModel`                                 |
+| `namespace`   | `spec.lifecycle` | `CommonLifecycleModel`                                 |
+| `module`      | `spec.lifecycle` | `CommonLifecycleModel`                                 |
+| `resource`    | `spec.lifecycle` | `CommonLifecycleModel`                                 |
+| `provider`    | `spec.lifecycle` | `CommonLifecycleModel`                                 |
 | `integration` | `spec.lifecycle` | `IntegrationLifecycleModel` (ADR-0021 D11, `.py`-only) |
 
 Plus `DeploymentStageModel.scripts: ScriptsModel` — a bare script list, not a
@@ -163,7 +163,7 @@ others.
    are an arbitrary-code-execution surface by construction, and no
    consumer-usage evidence has been gathered for them the way
    [ADR-0020](../decisions/0020-v1-consumer-feature-priority.md) did for
-   commands. Check what haven and `cfg-int-deployment` actually declare
+   commands. Check what haven and `config-deploy` actually declare
    before designing anything. A "no, or only for phase X" answer is a
    legitimate outcome and would close most of what follows.
 2. **Hierarchy and precedence (schema-parity Issue 5).** Seven kinds can each

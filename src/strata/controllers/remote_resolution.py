@@ -64,7 +64,7 @@ def resolve_remote(root: Path, remote: SolutionRemoteModel | None) -> Path:
     if remote.type == RemoteType.LOCAL:
         # A 'local' remote is never materialised under .strata/remotes/ —
         # its `url` already *is* the solution-relative location (matches the
-        # real `config` remote in cfg-int-deployment's remotes.yaml: `type:
+        # real `config` remote in config-deploy's remotes.yaml: `type:
         # bundled` in v1 terms, `url: "."`).
         return (root / remote.url).resolve()
 
@@ -113,7 +113,6 @@ def _git_clone(remote: SolutionRemoteModel, checkout_path: Path) -> Path:
         )
         if not checkout_result.is_successful:
             raise RemoteResolutionError(
-                f"Remote '{remote.name}': 'git checkout {remote.reference}' failed: "
-                f"{checkout_result.stderr.strip()}"
+                f"Remote '{remote.name}': 'git checkout {remote.reference}' failed: {checkout_result.stderr.strip()}"
             )
     return checkout_path

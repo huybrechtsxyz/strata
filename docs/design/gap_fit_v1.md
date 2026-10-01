@@ -279,7 +279,7 @@ durable, reviewable record.
 - **Found in:** haven's real `config/configuration.yaml` (`spec.integrations`
   — git/terraform/infisical tool declarations with capabilities/validation/
   authentication — plus `spec.deployment.properties` schema).
-- **Status:** split apart 2026-09-29 after reading `cfg-int-deployment`'s
+- **Status:** split apart 2026-09-29 after reading `config-deploy`'s
   real, current `config/*.yaml` directly (7 files: `base`/`stores`/`zones`/
   `policies`/`audit`/`paths`/`promotions`/`remotes`) — this entry's original
   blanket "all deferred" framing was too coarse. Per-field status now:
@@ -928,7 +928,7 @@ durable, reviewable record.
 
 ### 14. ~~`TenantService`'s own docstring says `spec.environments` cross-checking is deferred — it already isn't~~ — RESOLVED
 
-- **Found in:** not a haven/cfg-int-deployment document itself — found
+- **Found in:** not a haven/config-deploy document itself — found
   while migrating `.v2-cfg`'s tenant (`customers/c0062/tenant.yaml`,
   2026-09-29), reading `TenantService`'s docstring to check whether
   `Tenant.spec.environments` needed a manual existence check the same way
@@ -1020,7 +1020,7 @@ durable, reviewable record.
 
 ### 16. ~~`strata validate` rejected every `${output:...}` token unconditionally, even ones gap #12 already made work~~ — RESOLVED
 
-- **Found in:** not a haven/cfg-int-deployment document — found while
+- **Found in:** not a haven/config-deploy document — found while
   designing `docs/design/deploy-command.md`'s "Cross-invocation output
   access" section (2026-09-29): reviewing that design against real code
   before writing new checks on top of it, `unresolved_value_tokens()`
@@ -1093,7 +1093,7 @@ durable, reviewable record.
 
 ### 17. ~~Provider's `configuration`/`custom` passed `strata validate` cleanly but was never projected into any Terraform artifact~~ — RESOLVED
 
-- **Found in:** not a haven/cfg-int-deployment document originally — found
+- **Found in:** not a haven/config-deploy document originally — found
   while designing `docs/design/cross-document-value-references.md`'s new
   `${value:kind.name.path}` kind (2026-09-29), whose own "universal
   resolution reach" requirement was checked against every kind's real
@@ -1154,7 +1154,7 @@ and the provider/providerconfig/topologyconfig registry split.
 ## Related
 
 - `.v2-cfg/` at the workspace root — a small hand-migrated slice of the
-  real `cfg-int-deployment` repo (`e:\sources\cfg-int-deployment`): one
+  real `config-deploy` repo (`e:\sources\config-deploy`): one
   tenant (`c0062`), one provider (`westeurope`), and the spoke stack
   (`stacks/spoke/*` — the reusable hub x spoke shared-AKS-cluster
   template), deliberately not a full migration. Chosen because the spoke
@@ -1511,7 +1511,7 @@ and the provider/providerconfig/topologyconfig registry split.
   unmodified branch.
 - 2026-09-29: **Built `.v2-cfg`**, per request to start the same
   coverage-check migration exercise `.v2-haven` already does against a
-  second, differently-shaped real repo (`e:\sources\cfg-int-deployment` —
+  second, differently-shaped real repo (`e:\sources\config-deploy` —
   multi-tenant Azure platform, vs. haven's single-operator homelab).
   Scoped to one tenant (`c0062`), one provider (`westeurope`) and the spoke
   stack (`stacks/spoke/*`), per request, not a full migration. Chose the
@@ -1603,8 +1603,8 @@ and the provider/providerconfig/topologyconfig registry split.
 - 2026-09-29: **Split gap #7, resolved its `security` piece**, per request
   ("lets find the next prio so we can deploy the cfg-int-deployemtns" ->
   narrowed via `vscode_askQuestions` to "resolve remotes placement + model
-  security/zones"). Read `cfg-int-deployment`'s real, current `config/`
-  directory directly (`e:\sources\cfg-int-deployment`, 7 files) rather than
+  security/zones"). Read `config-deploy`'s real, current `config/`
+  directory directly (`e:\sources\config-deploy`, 7 files) rather than
   relying on ADR-0020's older workflow-only survey — found gap #7's
   blanket "all deferred" framing was too coarse: `zones` and `remotes` are
   both already resolved by existing, deliberate v2 design (`TenantSpecModel.
@@ -1637,7 +1637,7 @@ and the provider/providerconfig/topologyconfig registry split.
   implement"). Full design written first
   ([docs/design/path-conventions.md](path-conventions.md)), all 3
   open questions resolved before implementing. Grounded in the real,
-  current `cfg-int-deployment/config/paths.yaml` and a real deep leaf
+  current `config-deploy/config/paths.yaml` and a real deep leaf
   deployment's actual `layers:` usage. Found v1's generic `validate:`
   sub-block isn't worth porting (both real instances already covered by
   more precise v2 checks elsewhere), and caught a real discrepancy while

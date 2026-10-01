@@ -324,7 +324,7 @@ def test_no_artifacts_declared_anywhere_still_reports_the_reference():
 
 # ---------------------------------------------------------------------------
 # validate_allowed_stores() (docs/design/gap_fit_v1.md gap #7 — Configuration's
-# spec.security allow-lists, real usage: cfg-int-deployment's
+# spec.security allow-lists, real usage: config-deploy's
 # config/stores.yaml)
 # ---------------------------------------------------------------------------
 

@@ -12,7 +12,7 @@ model (that is a separate, much larger, not-yet-started effort — v1's own
 ADR-0067 was out of scope there too). Resolution order:
 
 1. `BUILD_REQUESTEDFOR` / `BUILD_REQUESTEDFOREMAIL` — Azure Pipelines' own
-   CI identity vars (`cfg-int-deployment`'s actual, real CI). A future
+   CI identity vars (`config-deploy`'s actual, real CI). A future
    GitHub Actions consumer would add `GITHUB_ACTOR` to this same chain.
 2. `getpass.getuser()` — the OS login, for a local/manual run.
 3. The literal string `"unknown"` — never an exception; a missing actor

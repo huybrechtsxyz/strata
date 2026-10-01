@@ -34,7 +34,7 @@ now fills this in for `local` and `git` remotes.
 - **`type`/`fetch` are two orthogonal fields on purpose, already grounded in
   real evidence** — checked `RemoteFetch`'s own docstring, which quotes the
   exact production case this doc separately found in
-  `cfg-int-deployment`'s real `config/remotes.yaml`: a git repository
+  `config-deploy`'s real `config/remotes.yaml`: a git repository
   declared `type: bundled` (v1's single conflated enum) purely so v1 would
   skip its own fetch in a CI environment with no git credentials — silently
   losing ref-pinning and dirty-tree gating as a side effect of the type
@@ -70,7 +70,7 @@ now fills this in for `local` and `git` remotes.
     ADR-0018).
   - `type: local` → `(root / remote.url).resolve()` directly, never
     materialised under `.strata/remotes/` (matches the real `config`
-    remote in `cfg-int-deployment`'s `remotes.yaml`: `url: "."`, no fetch).
+    remote in `config-deploy`'s `remotes.yaml`: `url: "."`, no fetch).
   - `type: git`, checkout already exists at `remote_checkout_path(...)` →
     reused as-is. Ref-keyed path means it can never be stale — a different
     ref gets a different directory automatically, so there is no
@@ -179,11 +179,11 @@ not a scheduled phase; update it as each numbered item above lands.
   designing one from scratch; (2) `RemoteType`'s git/oci/helm/local split
   (vs. v1's bundled/gitops/container) did not need reconciling —
   `RemoteFetch`'s own docstring already cites the exact real
-  `cfg-int-deployment` evidence this doc separately found, and the v2
+  `config-deploy` evidence this doc separately found, and the v2
   design is the deliberately-corrected version of it.
 - 2026-09-24: `sync_source()` (ADR-0022 D3) built on top of `resolve_remote()`
   — see [build-command.md](build-command.md). Item 4 (`SourceIntegration`
   credentials) deliberately skipped for now: real evidence shows the one
-  production pattern that needs private-repo auth (`cfg-int-deployment`'s
+  production pattern that needs private-repo auth (`config-deploy`'s
   GHE remotes) already avoids strata-managed credentials entirely via
   `fetch: external`, so there is no real consumer for this yet.

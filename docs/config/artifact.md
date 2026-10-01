@@ -7,7 +7,7 @@ service's image (once that binding is wired up).
 
 ## Schema
 
-- `spec.image_name` — the container image path (e.g. `int-docker-test/src/omp.dispatcher.api`) —
+- `spec.image_name` — the container image path (e.g. `int-docker-test/src/acme.dispatcher.api`) —
   identity, never overridden by a [`version`](version.md) pin
 - `spec.image_tag` — the tag/digest to deploy; may be blank until a real image exists. Overridden
   by `kind: version`'s `spec.pins.artifacts[name]` when set
@@ -25,9 +25,9 @@ kind: artifact
 meta:
   name: dispatcher-api
 spec:
-  image_name: int-docker-test/src/omp.dispatcher.api
+  image_name: int-docker-test/src/acme.dispatcher.api
   image_tag: "1.4.2"
-  registry: cdn-feeds.omp.com
+  registry: cdn-feeds.acme.com
 ```
 
 Referenced from an environment's `variables`:

@@ -18,7 +18,7 @@ strata itself deploys via Compose/Helm), `SourceModel.chart_version`, or a
 `fetch: strata` remote's `reference`. A variable holding a raw image string
 is invisible to it.
 
-Real evidence (`cfg-int-deployment`'s `stacks/ring/environment-dispatcher.
+Real evidence (`config-deploy`'s `stacks/ring/environment-dispatcher.
 yaml`/`environment-datahub.yaml`/`environment-sci.yaml`) shows at least 7
 distinct real image references declared this way, several explicitly
 meant to share one pin value, flowing into external Terraform provisioners

@@ -61,7 +61,7 @@ def test_configuration_rejects_duplicate_topology_names():
 
 
 # ---------------------------------------------------------------------------
-# spec.security (docs/design/gap_fit_v1.md gap #7 — real usage: cfg-int-deployment's
+# spec.security (docs/design/gap_fit_v1.md gap #7 — real usage: config-deploy's
 # config/stores.yaml)
 # ---------------------------------------------------------------------------
 
@@ -104,7 +104,7 @@ def test_configuration_security_rejects_unknown_fields():
 
 # ---------------------------------------------------------------------------
 # spec.paths (docs/design/path-conventions.md, docs/design/gap_fit_v1.md gap #7 —
-# real usage: cfg-int-deployment's config/paths.yaml)
+# real usage: config-deploy's config/paths.yaml)
 # ---------------------------------------------------------------------------
 
 

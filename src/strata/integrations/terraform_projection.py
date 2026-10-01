@@ -46,7 +46,7 @@ assumed):
   to reach Terraform's tfvars it goes in `configuration`, never `custom`.
 - A `WorkspaceResourceModel` with `enabled=False` is skipped entirely, and
   one with `managed_by="provisioner"` (no backing `Resource` document —
-  the real `spoke_resx`/`env_resx` case in `cfg-int-deployment`) has
+  the real `spoke_resx`/`env_resx` case in `config-deploy`) has
   nothing to categorise and is skipped too.
 """
 

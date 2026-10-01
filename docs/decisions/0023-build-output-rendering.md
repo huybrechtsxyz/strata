@@ -216,11 +216,11 @@ already-resolved documents (`workspace`/`providers`/`topologies`/`resources`)
 Each integration overrides only the one hook it needs a different answer
 for - nothing else about `prepare()` is theirs to touch:
 
-| Integration | overrides `default_output()`? |
-| --- | --- |
-| `TerraformIntegration` | yes - `planned_files(build_platform_projection(resolved, provisioner))` (D1) |
-| `AnsibleIntegration` | yes - `{"extra-vars.json": json.dumps(...)}` |
-| `BicepIntegration` | no - inherits the empty-dict base default, which *is* its correct "copy only" behaviour from v1's real `bicep_builder.py` |
+| Integration            | overrides `default_output()`?                                                                                             |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `TerraformIntegration` | yes - `planned_files(build_platform_projection(resolved, provisioner))` (D1)                                              |
+| `AnsibleIntegration`   | yes - `{"extra-vars.json": json.dumps(...)}`                                                                              |
+| `BicepIntegration`     | no - inherits the empty-dict base default, which *is* its correct "copy only" behaviour from v1's real `bicep_builder.py` |
 
 This also means Bicep's "generate nothing" finding stops being a fact this
 ADR has to separately remember to apply correctly per tool - it is simply
@@ -312,11 +312,11 @@ Confirmed by reading the actual token shapes each builder emits, not
 assumed:
 
 
-| output | token shape | resolved when |
-| --- | --- | --- |
-| Terraform `.tfvars.json` | none - real values written directly | build time (non-secret only) |
-| Compose `docker-compose.yml` | bare `${KEY}` | deploy time, via a `.env` file |
-| Helm `values.yaml` | typed `${var:KEY}`/`${secret:KEY}`/`${feature:KEY}` (v1 ADR-0075) | deploy time - secrets via `--set-string` (never on disk), vars/features via a rewritten file |
+| output                       | token shape                                                       | resolved when                                                                                |
+| ---------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Terraform `.tfvars.json`     | none - real values written directly                               | build time (non-secret only)                                                                 |
+| Compose `docker-compose.yml` | bare `${KEY}`                                                     | deploy time, via a `.env` file                                                               |
+| Helm `values.yaml`           | typed `${var:KEY}`/`${secret:KEY}`/`${feature:KEY}` (v1 ADR-0075) | deploy time - secrets via `--set-string` (never on disk), vars/features via a rewritten file |
 
 None of this typed-expression resolution is designed here (see Remaining
 Work) - the walkthrough above only covers writing `resolved.values`
@@ -332,7 +332,7 @@ emission and deploy-time substitution still need their own design pass.
   actually checking - corrected once real usage was checked.
 - **Correction (found while grounding Phase 2, not at D2's original
   writing):** the "zero usage" check above was incomplete - it only
-  covered `spoke`/`instance`, not `cfg-int-deployment`'s `control/workspace.yaml`,
+  covered `spoke`/`instance`, not `config-deploy`'s `control/workspace.yaml`,
   which has a real, load-bearing `output: {format: custom, emits: [features,
   variables, properties]}` block, complete with a real strata bug it hit and
   the fix that shipped for it (PR #309, "track written files by provisioner
@@ -415,7 +415,7 @@ from v1):
   `firewalls`, `subnet`) merged on top - matches v1's real merge behaviour
   (workspace-level overrides win) rather than inventing a new precedence
   rule. **Deliberately excludes `custom`** - checked both real workspaces
-  (haven, `cfg-int-deployment`) and found zero use of `custom` anywhere,
+  (haven, `config-deploy`) and found zero use of `custom` anywhere,
   same zero-usage pattern as `OutputProfileModel` (D2). `configuration` and
   `custom` are documented as separate channels for a reason (`configuration`:
   *"merged verbatim"* into the deployer's own structures; `custom`: *"for
@@ -613,7 +613,7 @@ Graded by real evidence, not built as one even batch of six — checked v1's
 real `terraform_builder.py` directly (`_build_namespace_vars()`/
 `_build_firewall_vars()`/`_build_module_vars()`/`_build_dns_vars()`/
 `_build_network_vars()`/`_build_tenant_vars()`) for the true shape of each,
-then graded each against real usage in haven/`cfg-int-deployment` before
+then graded each against real usage in haven/`config-deploy` before
 scheduling it.
 
 **2a - `namespaces`, `firewalls` - proven real usage, build these first.**
@@ -665,7 +665,7 @@ check suite green: 871/871 tests passing.
 real modules (`vaultwarden`, `caddy`, `authentik`, `portainer`, `wud`, plus
 Forge's Helm-deployed set), but exclusively via `Namespace.spec.modules` -
 never `TopologyComponentModel.modules`. Checked all six real workspaces
-available for this ADR (haven, and `cfg-int-deployment`'s `control`/
+available for this ADR (haven, and `config-deploy`'s `control`/
 `customer`/`ring`/`spoke`/`instance`): every single real topology component
 is bare `{resource: <name>}` - zero use of `TopologyComponentModel.modules`
 anywhere. Since ADR-0022 D5-D7 already established Compose/Helm modules
@@ -686,8 +686,8 @@ found attaching a module directly to a `TopologyComponentModel`.
 **2c - `dns`, `networks` - built despite no proven Terraform-consuming
 usage yet, on explicit request; `tenant` still deferred (no fixture data
 to ground it against at all).** No `dns_zones`/`tenant` in any workspace
-checked (haven or any of `cfg-int-deployment`'s five stacks).
-`cfg-int-deployment`'s own `spoke/network.yaml` header is explicit that
+checked (haven or any of `config-deploy`'s five stacks).
+`config-deploy`'s own `spoke/network.yaml` header is explicit that
 networks validate CIDR syntax/uniqueness but do **not** currently feed the
 Terraform root (`spoke_resx` stays one opaque `managed_by: provisioner`
 resource, no per-subnet `subnet:` reference attached to anything) - built
@@ -786,7 +786,7 @@ the same "copy this and customize" comment convention.
   those `Integration` classes to exist at all (no evidence of demand yet -
   Ansible is Tier 2 per `/memories/repo/v1-consumer-usage.md`).
 - **D2 (`OutputProfileModel`) needs a real revisit** - real, load-bearing
-  usage found in `cfg-int-deployment`'s `control/workspace.yaml`
+  usage found in `config-deploy`'s `control/workspace.yaml`
   (`output: {format: custom, emits: [...]}`), contradicting the "zero
   usage" evidence D2 was decided on. Not redesigned yet - flagged here so
   it isn't silently reintroduced piecemeal while building Phase 2's

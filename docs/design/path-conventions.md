@@ -13,9 +13,9 @@
   applies here), [solution-loading-and-phase2-validation.md](solution-loading-and-phase2-validation.md)
   (the Phase 2 check registry this adds one more entry to)
 
-## Problem — real, concrete evidence from `cfg-int-deployment`
+## Problem — real, concrete evidence from `config-deploy`
 
-Read directly (`e:\sources\cfg-int-deployment\config\paths.yaml`, 2026-09-29):
+Read directly (`e:\sources\config-deploy\config\paths.yaml`, 2026-09-29):
 v1 declares one "path convention" per real directory family —
 `tenant-path`, `provider-path`, `control-path`, `hub-path` — each a
 `pattern` template (`"deploy/hubs/{hub}/{spoke}/{customer}/{ring}/{environment}"`)
@@ -193,7 +193,7 @@ there is no "closed universe" concept here the way there is for
 
 ### Worked examples — one per `resolves` value
 
-All three converted directly from the real `cfg-int-deployment/config/
+All three converted directly from the real `config-deploy/config/
 paths.yaml` entries (minus the dropped `validate:` sub-block).
 
 **`resolves: tenant`** — one directory capture, cross-checked against the
@@ -242,7 +242,7 @@ this convention. No `filename_pattern` — matches v1's own real
   segments:
     - name: hub
       pattern: "^[a-z][a-z0-9-]*$"
-      description: "OMP hub — one physical/logical infrastructure hub"
+      description: "Acme hub — one physical/logical infrastructure hub"
     - name: spoke
       pattern: "^[a-z][a-z0-9-]*$"
     - name: customer
@@ -530,7 +530,7 @@ Each phase below says exactly what changes vs. what already exists.
    error, never silently ignored.
 3. **Is a plain string-prefix `scope` (`"<dir>/**"` only) too narrow long
    term?** **Decided: keep it.** No real counter-example exists in either
-   `.v2-haven` or `.v2-cfg`/the real `cfg-int-deployment` repo today;
+   `.v2-haven` or `.v2-cfg`/the real `config-deploy` repo today;
    revisit only if one appears.
 4. **Should the same `{name}` appearing in both `pattern` and
    `filename_pattern` be rejected (Pydantic-level), or left as an
@@ -550,7 +550,7 @@ Each phase below says exactly what changes vs. what already exists.
 - 2026-09-29: Created, per request ("lets look at paths, lets create the
   design first"), continuing docs/design/gap_fit_v1.md gap #7's remaining items
   after `security` (previous session). Grounded directly in the real,
-  current `cfg-int-deployment/config/paths.yaml` and a real deep leaf
+  current `config-deploy/config/paths.yaml` and a real deep leaf
   deployment (`deploy/hubs/z00/s01/c0224/dev/deployment.yaml`)'s actual
   `layers:` usage, plus `deployment_model.py`'s own "inert in v2" docstring
   admission. Found the generic `validate:` sub-block is not worth porting
@@ -561,7 +561,7 @@ Each phase below says exactly what changes vs. what already exists.
   implemented yet.
 - 2026-09-29: Added a worked example for each `resolves` value
   (`tenant`/`layers`/omitted), per request ("add examples"), converted
-  directly from the same real `cfg-int-deployment` entries this design is
+  directly from the same real `config-deploy` entries this design is
   already grounded in. The `layers` example also spells out concretely
   what the model-level check (`PathSegmentModel.pattern`) catches versus
   what only the path-vs-declared-`segments` cross-check (Phase 3) catches

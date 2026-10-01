@@ -774,7 +774,7 @@ def test_topology_document_itself_is_now_checked_for_tokens(tmp_path):
 
 # ---------------------------------------------------------------------------
 # Environment -> Configuration.spec.security (docs/design/gap_fit_v1.md gap #7 —
-# real usage: cfg-int-deployment's config/stores.yaml)
+# real usage: config-deploy's config/stores.yaml)
 # ---------------------------------------------------------------------------
 
 
@@ -826,7 +826,7 @@ def test_security_with_no_fields_set_restricts_nothing(tmp_path):
 
 # ---------------------------------------------------------------------------
 # Configuration.spec.paths (docs/design/path-conventions.md, docs/design/gap_fit_v1.md
-# gap #7 — real usage: cfg-int-deployment's config/paths.yaml)
+# gap #7 — real usage: config-deploy's config/paths.yaml)
 # ---------------------------------------------------------------------------
 
 TENANT_PATH_CONVENTION = """  paths:
@@ -1143,7 +1143,7 @@ kind: artifact
 meta:
   name: dspapi_container
 spec:
-  image_name: int-docker-test/src/omp.dispatcher.api
+  image_name: int-docker-test/src/acme.dispatcher.api
   image_tag: "1.0.0"
 """,
     )

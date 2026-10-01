@@ -1,4 +1,4 @@
-# v1 Feature Priority — What haven and cfg-int-deployment Actually Depend On
+# v1 Feature Priority — What haven and config-deploy Actually Depend On
 
 - Status: partially-implemented — every Tier 1 item is done (`values
   get`/`validate`/`build run`/`deploy run`/`STRATA_OUTPUT`/
@@ -19,7 +19,7 @@ CLI surface is large (13 command groups, ~40 subcommands per
 `.github/strata.instructions.md`). Building all of it before any real
 consumer can cut over is the wrong order if most of that surface is never
 exercised. The two production consumers of v1 —
-`haven` (Hetzner Hearth/Forge platform) and `cfg-int-deployment` (Azure
+`haven` (Hetzner Hearth/Forge platform) and `config-deploy` (Azure
 integration landscape) — already have a large body of real, working CI that
 shows exactly which commands, flags, config schema fields, and provisioner
 behaviors are load-bearing today.
@@ -33,7 +33,7 @@ Read the REAL CI workflows (not just documentation) in both repos:
 
 - `haven/.github/workflows/*.yml` (11 workflows: infra, hearth init/config/
   deploy/restore, forge init/config/deploy/maintenance/restore, ci-build)
-- `cfg-int-deployment/.github/workflows/*.yml` (deploy.yml — a
+- `config-deploy/.github/workflows/*.yml` (deploy.yml — a
   `strata new pipeline`-generated template — and deploy-spoke-z01-s01.yml,
   its one real wired instance)
 - Both repos' `.strata/{cli.yaml,configuration.yaml,logging.yaml,solution.json}`
@@ -48,16 +48,16 @@ not the same thing, and only usage should drive build order.
 
 ### Tier 1 — proven critical path (every real deploy workflow in both repos uses these)
 
-| Feature | Evidence |
-| --- | --- |
-| `strata validate -f <file> --deep` | First step of every deploy/CI workflow in both repos. |
-| `strata build run --file <file>` | Renders **both** Terraform and Helm artifacts (haven's Forge deploy depends on Helm rendering, its Hearth/infra workflows on Terraform). |
-| `strata deploy run --file <file> --force [--dry-run] [--stage X] [--scope infra\|apps] [--verbose]` | `--scope infra` isolates haven's API-only `deploy-infra.yml` from Helm/app stages; `--stage applications_forge` targets Forge's Helm apps specifically. Terraform provisioner auto-injects resolved secrets as `TF_VAR_<KEY>` (confirmed by an inline comment in `deploy-infra.yml`). |
-| `strata values get KEY1 KEY2 ... -f <file> --output json` | Used in 4 of haven's workflows to pull Infisical-resolved secrets into Ansible `extra-vars` files. Response envelope: `{success, data:{results:{KEY:val}}, errors, messages}`; non-zero exit + `errors[]` on failure (every call site checks `$?` and reads `.errors[]?`). |
-| `.strata/` auto-discovery + `STRATA_OUTPUT`/`STRATA_WORK_PATH` env vars | State dir (`cli.yaml`, `configuration.yaml`, `solution.json`, `audit.log`, `cache/`, `logs/`, `integrations/`, `schemas/`, `templates/`) is committed to git in both repos; every workflow sets `STRATA_OUTPUT: json`. |
-| Config schema (`kind: configuration`) fields used in production but **not modeled in v2** | `integrations` (git/terraform/infisical/azure-keyvault/azure-appconfig/elk types; `capabilities`; `required`/`enabled`; `validation.command`/`min_version`; `authentication.method` — cli/managed_identity/oauth2), `security.allowed_secret_stores`/`allowed_variable_stores`/`allowed_feature_stores`, `zones` (region groupings), `remotes` (bundled cross-repo sources), `audit` (`policy.events`, `sinks`, `journal` path/rotation, `repository.push`), `deployment.manifest`/`deployment.outputs`, `policies` (zone-isolation, path-convention enforcement), `paths` (path-convention resolution, e.g. `customers/{code}/tenant.yaml`). Confirmed absent by v2's own `ConfigurationSpecModel` docstring, which explicitly defers all of these ("ported only when the corresponding v2 kind/feature that needs them is built"). |
-| Secret/value store backends actually resolved at runtime | Infisical (OAuth2 client-credentials via `INFISICAL_CLIENT_ID`/`CLIENT_SECRET`/`PROJECT_ID`), Azure Key Vault + Azure App Config (managed identity), GitHub secrets (passthrough, no strata involvement). Bitwarden appears only inside a generated pipeline **template** (`deploy.yml`'s commented-out sections) — not proven used by any real workflow. |
-| Helm provisioner (Forge/k3s) | OCI `chart_repository` support; `${KEY}` secret substitution in **any** nested `env:` dict (not just one level deep — a real bug fixed in v1 1.8.2 per a workflow comment); must **not** Jinja2-render a local chart's own `templates/` dir (Go-template syntax collision, also an 1.8.2 fix). `strata deploy run` for Helm expects `KUBECONFIG` already set by the caller (haven tunnels it via SSH port-forward itself — strata does not manage the tunnel). |
+| Feature                                                                                             | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `strata validate -f <file> --deep`                                                                  | First step of every deploy/CI workflow in both repos.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `strata build run --file <file>`                                                                    | Renders **both** Terraform and Helm artifacts (haven's Forge deploy depends on Helm rendering, its Hearth/infra workflows on Terraform).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `strata deploy run --file <file> --force [--dry-run] [--stage X] [--scope infra\|apps] [--verbose]` | `--scope infra` isolates haven's API-only `deploy-infra.yml` from Helm/app stages; `--stage applications_forge` targets Forge's Helm apps specifically. Terraform provisioner auto-injects resolved secrets as `TF_VAR_<KEY>` (confirmed by an inline comment in `deploy-infra.yml`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `strata values get KEY1 KEY2 ... -f <file> --output json`                                           | Used in 4 of haven's workflows to pull Infisical-resolved secrets into Ansible `extra-vars` files. Response envelope: `{success, data:{results:{KEY:val}}, errors, messages}`; non-zero exit + `errors[]` on failure (every call site checks `$?` and reads `.errors[]?`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `.strata/` auto-discovery + `STRATA_OUTPUT`/`STRATA_WORK_PATH` env vars                             | State dir (`cli.yaml`, `configuration.yaml`, `solution.json`, `audit.log`, `cache/`, `logs/`, `integrations/`, `schemas/`, `templates/`) is committed to git in both repos; every workflow sets `STRATA_OUTPUT: json`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Config schema (`kind: configuration`) fields used in production but **not modeled in v2**           | `integrations` (git/terraform/infisical/azure-keyvault/azure-appconfig/elk types; `capabilities`; `required`/`enabled`; `validation.command`/`min_version`; `authentication.method` — cli/managed_identity/oauth2), `security.allowed_secret_stores`/`allowed_variable_stores`/`allowed_feature_stores`, `zones` (region groupings), `remotes` (bundled cross-repo sources), `audit` (`policy.events`, `sinks`, `journal` path/rotation, `repository.push`), `deployment.manifest`/`deployment.outputs`, `policies` (zone-isolation, path-convention enforcement), `paths` (path-convention resolution, e.g. `customers/{code}/tenant.yaml`). Confirmed absent by v2's own `ConfigurationSpecModel` docstring, which explicitly defers all of these ("ported only when the corresponding v2 kind/feature that needs them is built"). |
+| Secret/value store backends actually resolved at runtime                                            | Infisical (OAuth2 client-credentials via `INFISICAL_CLIENT_ID`/`CLIENT_SECRET`/`PROJECT_ID`), Azure Key Vault + Azure App Config (managed identity), GitHub secrets (passthrough, no strata involvement). Bitwarden appears only inside a generated pipeline **template** (`deploy.yml`'s commented-out sections) — not proven used by any real workflow.                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Helm provisioner (Forge/k3s)                                                                        | OCI `chart_repository` support; `${KEY}` secret substitution in **any** nested `env:` dict (not just one level deep — a real bug fixed in v1 1.8.2 per a workflow comment); must **not** Jinja2-render a local chart's own `templates/` dir (Go-template syntax collision, also an 1.8.2 fix). `strata deploy run` for Helm expects `KUBECONFIG` already set by the caller (haven tunnels it via SSH port-forward itself — strata does not manage the tunnel).                                                                                                                                                                                                                                                                                                                                                                       |
 
 ### Tier 2 — documented in `strata.instructions.md` but not proven used by any real workflow
 
@@ -78,7 +78,7 @@ of routing through `strata deploy run`. Not proven depended upon by either
 consumer.
 
 `ref env/config/data/secret` (`@repo_name/path` cross-repo file notation) —
-implied by cfg-int-deployment's `spec.remotes` block (`env-int`, `iac-int`
+implied by config-deploy's `spec.remotes` block (`env-int`, `iac-int`
 repositories) but no direct invocation of the `ref` command group was found
 in either repo's workflows.
 
@@ -95,9 +95,9 @@ all yet.
 ### Open discrepancy (unresolved, flagged for whoever builds `build run`)
 
 Build output path differs between the two repos: haven uses `build/` at the
-repo root; cfg-int-deployment uses `.strata/build/`. Likely a strata version
+repo root; config-deploy uses `.strata/build/`. Likely a strata version
 drift — haven pins `strata-version: "==1.9.3"` explicitly via the
-`setup-strata` action everywhere; cfg-int-deployment's workflows just
+`setup-strata` action everywhere; config-deploy's workflows just
 `pip install xyz-strata` unpinned. Needs a decision (not just a port) once
 `build run` is designed: v2 should pick one, not silently inherit whichever
 version happened to produce the observed behavior.
@@ -113,7 +113,7 @@ above:
 2. **`validate --deep`** — Phase 2 dynamic validation wired to controllers
    (Phase 1 pydantic validation already exists for every kind).
 3. **`build run`** — Terraform provisioner first (used by more of haven's
-   workflows and by cfg-int-deployment), then the Helm provisioner (Forge
+   workflows and by config-deploy), then the Helm provisioner (Forge
    only, with the two 1.8.2 substitution/rendering fixes carried forward as
    requirements, not optional polish).
 4. **`deploy run`** — Terraform (`plan`/`apply`, `--scope`/`--stage`
@@ -186,7 +186,7 @@ as each consuming feature is built, per that model's own existing convention
   be a real gap.** `.strata/`'s own `.gitignore` in both repos (and
   `git ls-files` ground truth) shows most of it is local-only runtime
   state, never committed: `cli.yaml`, `audit.log`, `cache/`, `logs/`
-  are ignored everywhere; cfg-int-deployment ignores `configuration.
+  are ignored everywhere; config-deploy ignores `configuration.
   yaml`/`solution.json` too, with its own gitignore comment giving away
   why: *"Generated merge of the hand-written `config/*.yaml` sources —
   rewritten by the CLI on every run... derived output."*

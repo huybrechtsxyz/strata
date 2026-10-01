@@ -70,7 +70,7 @@ Read directly from `.github/workflows/*.yml` in both reference repos
     (`TERRAFORM_API_TOKEN`, Infisical machine identity) flows through
     plain env vars set by the workflow itself — a **different**
     channel from strata-resolved secrets, never confused with them.
-  - cfg-int-deployment's real (non-template) `deploy-spoke-z01-s01.yml`
+  - config-deploy's real (non-template) `deploy-spoke-z01-s01.yml`
     has **zero** manual `TF_VAR_*`/secret wiring at all — Azure OIDC
     login (`azure/login@v2`) authenticates the process, then `strata
     deploy run` alone must be resolving and injecting every
@@ -80,7 +80,7 @@ Read directly from `.github/workflows/*.yml` in both reference repos
     plain GitHub secrets — presumably scaffolding for repos without a
     supported store backend configured yet, not evidence against
     auto-injection.)
-- **`--scope` is real but haven-specific** — cfg-int-deployment's two
+- **`--scope` is real but haven-specific** — config-deploy's two
   real workflows use `--stage` and `--dry-run`/`--force` only, never
   `--scope` (pure-Terraform workspace, no Helm/apps stage to separate
   from infra). Both flags are real; `--scope` just has a narrower real
@@ -1152,7 +1152,7 @@ this is implemented, separate from the (1)-(3) extension.
    out of scope for this phase. Don't build locking/SIEM now — just
    don't paint the loop into a shape that can't hold them later.
 3. **`TF_VAR_<KEY>` secret injection** — confirmed real (haven's own
-   comment) and confirmed universally relied upon (cfg-int-deployment's
+   comment) and confirmed universally relied upon (config-deploy's
    real workflow has no manual alternative). Needs a real, named
    function (mirrors ADR-0022 D1a's own call for a named
    `build_time_keys()`-style function, never inline) that maps a

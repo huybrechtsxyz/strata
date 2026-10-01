@@ -807,7 +807,7 @@ Where no `layers` block exists, fall back to a fixed `f"{workspace}/
 
 **`journal` is deferred out of this pass entirely — no evidenced
 consumer.** Checked against the same real-usage bar that justified
-building Layer 2 next: in `cfg-int-deployment` it runs "always on, local,
+building Layer 2 next: in `config-deploy` it runs "always on, local,
 gitignored," but nothing reads it, nothing forwards it, and it played no
 part in the finding that justified this work (deploy-log + manifest
 git-push durability). Same "declared-but-unread machinery" caution this
@@ -863,7 +863,7 @@ off by a model that doesn't know about it yet).
    completed`, `deployment.destroyed`, `deployment.measured`. Grows only
    when a new producer lands, same discipline as `Capability`.
 
-**Real-usage tension, named rather than hidden:** `cfg-int-deployment`'s
+**Real-usage tension, named rather than hidden:** `config-deploy`'s
 actual overrides are `secret.accessed`/`policy.violated`/
 `workitem.rejected` — all three **outside** this scoped set. Expected,
 not a problem: none of those producers exist in v2 yet, so that config
@@ -1109,7 +1109,7 @@ see "The audit files" above).
 so a future aggregation consumer has an offline corpus to read, since
 per-execution build directories get cleaned. Caught on review, walking the
 full end-to-end loop with real usage in mind: **~90% of real deploys run
-in ephemeral CI** (`cfg-int-deployment`'s own is Azure Pipelines) — a
+in ephemeral CI** (`config-deploy`'s own is Azure Pipelines) — a
 runner checks out fresh, writes exactly one line to a local-only file,
 then the runner and that file are both destroyed. The series would never
 actually accumulate where most runs happen, which is backwards from its
@@ -1363,9 +1363,9 @@ This doc is capability catalog only — no v2 decisions are made here. Before
 a v2 ADR/implementation:
 
 - **Scope to real usage first, same as v1 should have.** **Answered
-  2026-09-30**, per direct request ("lets look at what cfg-int-deployment
+  2026-09-30**, per direct request ("lets look at what config-deploy
   actually needs from v2") — read the real, current
-  `e:\sources\cfg-int-deployment\config\audit.yaml` and `.github/` directly:
+  `e:\sources\config-deploy\config\audit.yaml` and `.github/` directly:
   - **Layer 1 (PR template + extraction) — REAL, active.**
     `.github/pull_request_template.md` (before/after table, business
     justification, risk level, rollback plan, author/reviewer checklists)
@@ -1400,14 +1400,14 @@ a v2 ADR/implementation:
   scaffolding) is cheap and real, a reasonable close second — **and is
   now done** (2026-09-30, see [solution-scaffolding.md](solution-scaffolding.md)):
   `strata sln init`/`update` scaffold both files, matching real
-  `cfg-int-deployment` usage exactly; only the `gh`-based PR-extraction
+  `config-deploy` usage exactly; only the `gh`-based PR-extraction
   half remains unbuilt (needs Layer 2's deploy-log/manifest to exist
   first). Layers 3 and 4 have no CI evidence of use and should wait for
   a concrete need.
 - **Does v2 need all four layers, or fewer? — Decided (2026-09-30).**
   Build Layer 1 (done) and Layer 2 (next) fully. Layer 2 itself only
   needs the **`git` sink arm** (durable push — the one real, active
-  need `cfg-int-deployment` already exercises); the **`integration` sink
+  need `config-deploy` already exercises); the **`integration` sink
   arm** (siem/webhook/syslog, CloudEvents+ECS rendering) is modeled
   (cheap — the `AuditSinkModel` shape already supports it) but its
   dispatch is **not implemented in this first pass** — building a full
@@ -1424,7 +1424,7 @@ a v2 ADR/implementation:
   a bare `user.name` string; v2 has no identity/AuthN model at all.
   Waiting for one would block Layer 2 entirely for a dependency with no
   committed timeline. Resolution order, each a plain env-var/OS read, no
-  new plumbing: real CI's own identity var first (`cfg-int-deployment`'s
+  new plumbing: real CI's own identity var first (`config-deploy`'s
   actual pipeline is Azure Pipelines — `BUILD_REQUESTEDFOR`, falling back
   to `BUILD_REQUESTEDFOREMAIL`; a future GitHub Actions consumer would
   add `GITHUB_ACTOR` to the same chain), then the OS user
@@ -1442,7 +1442,7 @@ a v2 ADR/implementation:
   a whole OIDC login/RBAC server v2 doesn't have) and the signed-in cloud
   CLI identity (az/aws/gcloud, whichever is configured — checked in that
   fixed order). The cloud-CLI step is a **future enhancement, not a gap**:
-  `cfg-int-deployment` runs on Azure (every provider declares
+  `config-deploy` runs on Azure (every provider declares
   `authentication.method: managed_identity`) but authenticates through
   Azure Pipelines' own service connection, not a strata-owned `azure_cli`
   integration — v2 has no `azure_cli`/`aws_cli`/`gcloud_cli` integrations
@@ -1541,7 +1541,7 @@ a v2 ADR/implementation:
   as the evidence base for a future v2 audit-trail ADR. No v2 decisions
   made in this doc.
 - 2026-09-30: Resolved Open Question #1, per request ("lets look at what
-  cfg-int-deployment actually needs from v2"). Read the real, current
+  config-deploy actually needs from v2"). Read the real, current
   `config/audit.yaml` and `.github/` directly: Layer 1 (PR template +
   extraction) and Layer 2 (deploy-log + manifest) are both real and
   actively load-bearing — Layer 2 specifically git-pushes to a real
@@ -1674,7 +1674,7 @@ a v2 ADR/implementation:
 - 2026-09-30: Resolved the remaining open questions, per request ("lets
   get back to the previous topic" -> "resolve remaining open questions
   first"). (1) Actor/identity: ship a weak, best-effort actor now (real
-  CI identity env var — `BUILD_REQUESTEDFOR` for `cfg-int-deployment`'s
+  CI identity env var — `BUILD_REQUESTEDFOR` for `config-deploy`'s
   actual Azure Pipelines CI — falling back to the OS user, falling back
   to `"unknown"`; never an exception), revisit once v2 has a real
   identity model. (2) Config location: `ConfigurationSpecModel.audit`,
@@ -1699,7 +1699,7 @@ a v2 ADR/implementation:
   already-adopted CI-env-var/OS-user chain is exactly v1's own bottom two
   precedence steps, not a gap — the two steps above it (control-plane
   session; signed-in cloud CLI identity) need infrastructure v2 lacks.
-  Verified no real consumer need: `cfg-int-deployment` runs on Azure
+  Verified no real consumer need: `config-deploy` runs on Azure
   (`authentication.method: managed_identity` on every provider) but
   authenticates via Azure Pipelines' own service connection, not a
   strata-owned `azure_cli` integration, and configures no identity-
@@ -1745,7 +1745,7 @@ a v2 ADR/implementation:
   describe a directory shape `spec.paths` may already declare once —
   falls back to a fixed `workspace/deployment` when no `layers` block
   exists. (3) `journal` deferred out of this pass entirely — checked
-  against real usage and found no evidenced consumer (`cfg-int-deployment`
+  against real usage and found no evidenced consumer (`config-deploy`
   runs it "always on, local, gitignored" but nothing reads or forwards
   it), the same "declared-but-unread machinery" caution already applied
   to `Capability.AUDIT`. (4) `policy`/event-overrides intentionally left
@@ -1766,7 +1766,7 @@ a v2 ADR/implementation:
   closed set to only the three events v2 actually produces
   (`deployment.completed`/`destroyed`/`measured`), not v1's full 20-type
   list spanning workitem/lock/drift/cost/secret producers v2 doesn't have
-  — named explicitly that `cfg-int-deployment`'s real overrides
+  — named explicitly that `config-deploy`'s real overrides
   (`secret.accessed`/`policy.violated`/`workitem.rejected`) all fall
   outside this scoped set, expected given none of those producers exist
   in v2 yet. Also dropped the word "policy" itself — no field or model

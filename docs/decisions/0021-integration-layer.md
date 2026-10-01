@@ -198,11 +198,11 @@ declared rather than guessed on every call.
 
 Capability → contract is a fixed, small mapping (no 16-Protocol registry):
 
-| capability string | ABC | contract |
-| --- | --- | --- |
-| `variables`, `secrets`, `features` | `StoreIntegration` | `resolve()` |
-| `infrastructure`, `container` | `InfraIntegration` | `plan()`, `deploy()`, `destroy()` |
-| `sources` | *(none yet)* | remote fetching is not built |
+| capability string                  | ABC                | contract                          |
+| ---------------------------------- | ------------------ | --------------------------------- |
+| `variables`, `secrets`, `features` | `StoreIntegration` | `resolve()`                       |
+| `infrastructure`, `container`      | `InfraIntegration` | `plan()`, `deploy()`, `destroy()` |
+| `sources`                          | *(none yet)*       | remote fetching is not built      |
 
 A class declaring a capability whose ABC it does not implement is a
 programming error, caught by a test that walks `_KNOWN` and asserts the
@@ -549,11 +549,11 @@ declared, and `value_controller.py`'s ad hoc `_Resolvers` is replaced by
 Their transports differ, which is itself the evidence for D1's open
 vocabulary:
 
-| resolver | `TRANSPORTS` | what changes |
-| --- | --- | --- |
-| `InfisicalResolver` | `{"http"}` | hand-rolled `urllib` moves to `http_request` (D5) |
-| `AzureKeyVaultResolver` | `{"sdk"}` | keeps `SecretClient`; **no** transport change |
-| `AzureAppConfigResolver` | `{"sdk"}` | keeps `AzureAppConfigurationClient`; **no** transport change |
+| resolver                 | `TRANSPORTS` | what changes                                                 |
+| ------------------------ | ------------ | ------------------------------------------------------------ |
+| `InfisicalResolver`      | `{"http"}`   | hand-rolled `urllib` moves to `http_request` (D5)            |
+| `AzureKeyVaultResolver`  | `{"sdk"}`    | keeps `SecretClient`; **no** transport change                |
+| `AzureAppConfigResolver` | `{"sdk"}`    | keeps `AzureAppConfigurationClient`; **no** transport change |
 
 An earlier draft asserted all three moved to `http_request`. That was
 simply wrong: only Infisical calls `urllib`: the two Azure resolvers use
@@ -573,14 +573,14 @@ Provider is arguably just a specialization of an Integration?* The overlap
 is real and larger than it first looks - four of roughly seven fields are
 the same:
 
-| field | `ProviderModel` | `IntegrationModel` |
-| --- | --- | --- |
-| `type` | yes (`properties.type`) | yes |
-| `authentication` | yes | yes |
-| `configuration` (untyped passthrough) | yes | yes |
-| `custom` | yes | yes |
-| `properties.region`, `default_tags`, `lifecycle` | yes | no |
-| `capabilities`, `required`, `enabled` | no | yes |
+| field                                            | `ProviderModel`         | `IntegrationModel` |
+| ------------------------------------------------ | ----------------------- | ------------------ |
+| `type`                                           | yes (`properties.type`) | yes                |
+| `authentication`                                 | yes                     | yes                |
+| `configuration` (untyped passthrough)            | yes                     | yes                |
+| `custom`                                         | yes                     | yes                |
+| `properties.region`, `default_tags`, `lifecycle` | yes                     | no                 |
+| `capabilities`, `required`, `enabled`            | no                      | yes                |
 
 **Decision: keep both.** The distinguishing test is *does it end up in the
 artifact, or does it produce the artifact?* A Provider renders into output
@@ -1245,12 +1245,12 @@ at Phase 6 - every phase specified here is done.
 
 These are decided, not pending decisions. None should be built speculatively.
 
-| item | unblocked by |
-| --- | --- |
-| `provider.spec.integration`, retiring inline `ProviderModel.authentication` (D8) | a build/deploy layer that consumes provider credentials |
-| Consul/Vault as the first `TRANSPORTS = {"cli", "http"}` class (D1) | real demand - neither is proven used by `haven`/`cfg-int-deployment` |
-| `transport: script` (D11) | deciding its process contract (stdout? JSON? exit codes?) |
-| Widening `lifecycle` beyond `.py` (D11) | an extension -> interpreter map in `transport.py` |
-| `SourceIntegration`, `AuditIntegration`, identity/cost/scan/render (D9) | each capability's own first consumer |
-| `LockIntegration` (D9) | `DeploymentLockingModel` gaining an executor - the nearest of these |
-| Capability-based lookup, `strata tools status` (Consequences) | something needing "any store" rather than a named one |
+| item                                                                             | unblocked by                                                        |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `provider.spec.integration`, retiring inline `ProviderModel.authentication` (D8) | a build/deploy layer that consumes provider credentials             |
+| Consul/Vault as the first `TRANSPORTS = {"cli", "http"}` class (D1)              | real demand - neither is proven used by `haven`/`config-deploy`     |
+| `transport: script` (D11)                                                        | deciding its process contract (stdout? JSON? exit codes?)           |
+| Widening `lifecycle` beyond `.py` (D11)                                          | an extension -> interpreter map in `transport.py`                   |
+| `SourceIntegration`, `AuditIntegration`, identity/cost/scan/render (D9)          | each capability's own first consumer                                |
+| `LockIntegration` (D9)                                                           | `DeploymentLockingModel` gaining an executor - the nearest of these |
+| Capability-based lookup, `strata tools status` (Consequences)                    | something needing "any store" rather than a named one               |
