@@ -159,6 +159,13 @@ no decision recorded anywhere. Listed here rather than in an ADR because
 each is small enough to be ordinary remaining work, not a decision needing
 its own document — except where noted.
 
+**Correction (2026-10-01):** ADR-0022's "SBOM" cut above was re-examined
+after reading v1's real source directly — SBOM generation is actually an
+*unconditional* phase of every v1 `build run` (not opt-in, not
+low-confidence), only its downstream consumption was ever unconfirmed. See
+[sbom-generation.md](sbom-generation.md) for the corrected finding and a
+scoped v2 design (proposed, not yet implemented).
+
 1. **~~No stale-output cleaning before a build (correctness).~~ Fixed.** v1's
    `PlatformBuilder` wipes `build/<deployment>/` on pre-build precisely so
    a removed resource type's `resx_*.auto.tfvars.json` cannot survive into

@@ -1,8 +1,8 @@
 # v1 -> v2 Coverage Gaps
 
 - Status: living — update in place as gaps are closed or new ones are found
-- Last updated: 2026-10-01 (gap #5 revised for ADR-0028's topology-inline
-  reversion)
+- Last updated: 2026-10-01 (gap #18 Phase 1 implemented — CycloneDX SBOM
+  generation)
 
 ## Overview
 
@@ -1158,7 +1158,30 @@ durable, reviewable record.
   that value actually delivered to Terraform at deploy time, where before
   it was silently absent from every artifact.
 
-## Not gaps (converted cleanly)
+### 18. ~~CycloneDX SBOM generation (`build run`'s `sbom` phase) has no v2 equivalent~~ — PHASE 1 RESOLVED
+
+- **Found in:** not a haven/config-deploy document — found by reading v1's
+  real source directly (`e:\SourcesXYZ\strata\src\strata\commands\builders\
+  run_build_command.py`/`builders\sbom_builder.py`/`builders\sbom\*.py`,
+  2026-10-01), after ADR-0022's original framing ("SBOM ... no confirmed
+  `build run` consumer in either real repo") was challenged directly.
+- **Status:** Phase 1 implemented (2026-10-01) — **corrects ADR-0022's
+  cut, doesn't just confirm it.** SBOM generation is actually an
+  *unconditional* phase of every real v1 `build run` (`platform →
+  terraform → ansible → bicep → compose → helm → sync → sbom`, no flag
+  gates `sbom`) — not the low-confidence, no-real-usage feature
+  ADR-0022's phrasing implied. `build run` now writes a real,
+  schema-validated `sbom.json` covering 4 of v1's 8 collectors
+  (`image`/`compose`/`helm`/`terraform`) via a new, pluggable
+  `strata.sbom_collectors` registry — see
+  [docs/design/sbom-generation.md](sbom-generation.md). `ansible`/`deps`
+  remain deferred; CVE scanning/policies/manifest embedding are separate,
+  already-tracked concerns.
+- **Migration action:** none — `strata build run` now produces `sbom.json`
+  automatically, same as v1, for the 4 covered component types. A
+  migrated solution regains this artifact with zero manifest changes.
+
+
 
 Confirmed during the same migration to have zero loss of expressiveness:
 namespace grouping, firewall rules (`from`/`to`/`port`/`proto`/`interface`),

@@ -34,6 +34,7 @@ import yaml
 
 from strata.controllers.integration_resolution import resolve_integration
 from strata.controllers.remote_resolution import resolve_remote  # noqa: F401  (re-exported for callers)
+from strata.controllers.sbom_controller import write_sbom
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.source_sync import describe_source, sync_source
@@ -469,5 +470,16 @@ def build_run(
             dry_run=dry_run,
             on_step=on_step,
         )
+
+    # SBOM generation (docs/design/sbom-generation.md Phase 1) — runs dead
+    # last, after every provisioner/workload module is materialised and
+    # rendered, matching v1's own unconditional "sbom runs last" ordering.
+    # Skipped in a dry run: nothing has actually been rendered to scan yet.
+    if not dry_run:
+        sbom_diagnostics = write_sbom(build_path, graph, index)
+        diagnostics.extend(sbom_diagnostics)
+        _step(f"wrote {build_path / 'sbom.json'}")
+    else:
+        _step(f"would write {build_path / 'sbom.json'}")
 
     return diagnostics
