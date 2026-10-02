@@ -1,8 +1,8 @@
 # v1 -> v2 Coverage Gaps
 
 - Status: living — update in place as gaps are closed or new ones are found
-- Last updated: 2026-10-01 (gap #18 Phase 1 implemented — CycloneDX SBOM
-  generation)
+- Last updated: 2026-10-02 (gap #19 added — composite/mergeable variable
+  values, Azure Application Gateway + WAF multi-customer composition)
 
 ## Overview
 
@@ -1180,6 +1180,53 @@ durable, reviewable record.
 - **Migration action:** none — `strata build run` now produces `sbom.json`
   automatically, same as v1, for the 4 covered component types. A
   migrated solution regains this artifact with zero manifest changes.
+
+### 19. No mechanism for multiple documents to each contribute a fragment of the same variable value
+
+- **Found in:** direct real-world report (2026-10-02) — Azure Application
+  Gateway + WAF, where the real hand-vendored Terraform module
+  (`iac_aks_core`'s `agw.tf`) expresses every listener/path-rule/backend-pool
+  as a `dynamic` block driven entirely by one input variable,
+  `appgateway_config` (a deeply nested map, keyed by customer/domain).
+  Confirmed directly in the real `cfg-int-deployment/deploy/hubs/z00/s01/
+  environment.yaml`: that whole nested structure is today one `store:
+  constant` variable's literal `value:`, in one file, with exactly one
+  customer (`unisonplanning`) live as of 2026-09-30 ("WAF/AGW first real
+  test"). Adding a second customer means editing that same shared value —
+  "all customer paths on agw are in one block... not really a manageable
+  solution" (direct quote).
+- **Status:** **Resolved (2026-10-02), no new schema** — see
+  [docs/design/composite-variable-merge.md](composite-variable-merge.md)'s
+  Decision. `spec.properties`/`.custom` (existing `EnvironmentSpecModel`
+  fields) already run through a real, generic, recursive `deep_merge()`
+  (`strata/utils/dict_merge.py`, already proven at two other call sites —
+  `merge_deployment_specs()`, `merge_workspace_environment_deployment_
+  properties()`) and are already delivered to Terraform via
+  `properties.auto.tfvars.json`. Experimentally confirmed end to end:
+  three real `EnvironmentModel` documents, one per customer plus a second
+  document adding a new ring to an existing customer, correctly combined
+  with nothing dropped. A second real "nested-by-key" variable
+  (`ring_subnet_cidrs`, same repo, same file, keyed by ring instead of
+  customer) confirms this is a recurring shape, not AGW-specific. v1 had
+  two narrower precedents, neither generalized nor ported to v2:
+  `merge_networks`/`merge_firewalls` (document-level merge by name,
+  Network/Firewall kinds only — ADR-0007 §5/ADR-0008 §4 already deferred
+  porting this) and `EnvironmentIncludeModel`/`TerraformLoader.
+  concatenate()` (raw `.tf` text merging — traced its `strategy: merge`
+  option too; it wouldn't have solved the real AGW case either, duplicate
+  resource declaration not a merge). ADR-0025 ("strata supplies input,
+  never rewrites IaC source") is satisfied: `properties`'s value stays
+  fully opaque to strata either way.
+- **Migration action:** author the shared value (e.g. `appgateway_config`)
+  under `spec.properties` instead of `spec.variables`/`store: constant`,
+  split across one Environment document per owner (customer/ring/team) —
+  see [docs/how-to/composite-variable-fragments.md](../how-to/composite-variable-fragments.md).
+  No strata change required. If the composed value also needs to generate
+  repeated static Terraform blocks (e.g. one `provider`/`module` pair per
+  customer — Terraform's own `providers` meta-argument can't vary per
+  `for_each`/`count` instance), see
+  [docs/how-to/generate-per-instance-terraform-blocks.md](../how-to/generate-per-instance-terraform-blocks.md)
+  for looping `output.template` over the same merged value.
 
 
 
