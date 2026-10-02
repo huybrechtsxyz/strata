@@ -1,0 +1,8 @@
+{
+    "yaml.schemas": {
+        ".strata/schemas/strata.json": [
+            "**/*.yaml",
+            "**/*.yml"
+        ]
+    }
+}

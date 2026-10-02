@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Tests for ScaffoldController (docs/design/solution-scaffolding.md)."""
 
+import json
+
 import pytest
 
 from strata.controllers.scaffold_controller import ScaffoldController
+from strata.controllers.solution_controller import SERVICE_BY_KIND
 from strata.utils.errors import UsageError
 
 
@@ -97,3 +100,50 @@ def test_worked_example_update_refreshes_strata_but_preserves_github_customizati
     assert issue_template.read_text(encoding="utf-8") == issue_template_before
     assert pr_template.read_text(encoding="utf-8") == customized
     assert "SOC2 control reference" in pr_template.read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# JSON Schema export (.strata/schemas/)
+# ---------------------------------------------------------------------------
+
+
+def test_init_exports_one_schema_file_per_registered_kind(tmp_path):
+    ScaffoldController(tmp_path).init("acme-platform")
+
+    schemas_dir = tmp_path / ".strata" / "schemas"
+    for kind in SERVICE_BY_KIND:
+        schema_file = schemas_dir / f"{kind.value}.json"
+        assert schema_file.is_file(), f"missing schema for kind '{kind.value}'"
+        schema = json.loads(schema_file.read_text(encoding="utf-8"))
+        assert "properties" in schema
+
+
+def test_init_exports_an_umbrella_schema_dispatching_on_kind(tmp_path):
+    ScaffoldController(tmp_path).init("acme-platform")
+
+    umbrella = json.loads((tmp_path / ".strata" / "schemas" / "strata.json").read_text(encoding="utf-8"))
+    assert umbrella["properties"]["kind"] == {"type": "string"}
+    branches = umbrella["allOf"]
+    assert len(branches) == len(SERVICE_BY_KIND)
+    environment_branch = next(b for b in branches if b["if"]["properties"]["kind"]["const"] == "environment")
+    assert environment_branch["then"] == {"$ref": "environment.json"}
+
+
+def test_update_regenerates_schemas_even_if_hand_edited(tmp_path):
+    """schemas/ is package-owned — unlike .vscode/.github, it's always refreshed."""
+    ScaffoldController(tmp_path).init("acme-platform")
+    schema_file = tmp_path / ".strata" / "schemas" / "environment.json"
+    schema_file.write_text('{"this is": "stale"}', encoding="utf-8")
+
+    ScaffoldController(tmp_path).update()
+
+    schema = json.loads(schema_file.read_text(encoding="utf-8"))
+    assert "this is" not in schema
+    assert "properties" in schema
+
+
+def test_init_wires_vscode_yaml_schemas_setting(tmp_path):
+    ScaffoldController(tmp_path).init("acme-platform")
+
+    settings = json.loads((tmp_path / ".vscode" / "settings.json").read_text(encoding="utf-8"))
+    assert settings["yaml.schemas"][".strata/schemas/strata.json"] == ["**/*.yaml", "**/*.yml"]

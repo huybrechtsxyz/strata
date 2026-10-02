@@ -17,13 +17,23 @@ is written once and never touched again (user-owned — a PR/issue template
 is exactly the kind of file a repo commonly tailors per-org).
 """
 
+import json
 from pathlib import Path
+from typing import Any
 
 import yaml
 
+from strata.controllers.solution_controller import SERVICE_BY_KIND
 from strata.models.common_models import PlatformVersion
 from strata.utils.errors import UsageError
-from strata.utils.layout import MANIFEST_FILENAME, manifest_path
+from strata.utils.layout import (
+    MANIFEST_FILENAME,
+    SCHEMAS_DIRNAME,
+    STRATA_DIR,
+    UMBRELLA_SCHEMA_FILENAME,
+    manifest_path,
+    schemas_dir,
+)
 from strata.utils.scaffold_templates import dest_relative_path, is_package_owned, render_scaffold
 from strata.utils.version import get_version
 
@@ -98,6 +108,57 @@ class ScaffoldController:
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(content, encoding="utf-8")
             self.messages.append(f"{'Updated' if owned else 'Created'}: {relative}")
+        self._export_schemas()
+
+    def _export_schemas(self) -> None:
+        """Write one JSON Schema per registered kind, plus a `kind:`-dispatching
+        umbrella schema, to `.strata/schemas/` — derived artifacts, always
+        regenerated (same "package-owned, always refreshed" rule as the rest
+        of `.strata/`), never hand-edited.
+
+        Reuses `SERVICE_BY_KIND` (`solution_controller.py`) as the one
+        source of truth for "every registered kind" — deliberately not a
+        second, separately-maintained kind list (v1 had two independent
+        lists for this exact feature that silently drifted apart).
+
+        Each per-kind file is `model_cls.model_json_schema()` unmodified —
+        no field stripping, no added `$schema`/`$id`. The umbrella
+        (`strata.json`) is the only synthesized schema: an `if`/`then` chain
+        keyed on the document's own `kind:` value, `$ref`-ing the matching
+        per-kind file, so one `yaml.schemas` mapping covers every kind at
+        once instead of one entry per kind/directory glob.
+        """
+        schemas_directory = schemas_dir(self.root)
+        schemas_directory.mkdir(parents=True, exist_ok=True)
+        branches: list[dict[str, Any]] = []
+        for kind, service_cls in SERVICE_BY_KIND.items():
+            # Every service exposes its own model class this way; a throwaway
+            # instance (never validated against any real data) is the
+            # cheapest way to reach it without a second kind->model registry.
+            model_cls = service_cls(data={})._get_model_class()
+            filename = f"{kind.value}.json"
+            (schemas_directory / filename).write_text(
+                json.dumps(model_cls.model_json_schema(), indent=2) + "\n", encoding="utf-8"
+            )
+            branches.append(
+                {
+                    "if": {"properties": {"kind": {"const": kind.value}}, "required": ["kind"]},
+                    "then": {"$ref": filename},
+                }
+            )
+        umbrella = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Strata Platform Configuration",
+            "description": "Dispatches to the matching per-kind schema in this same directory, based on "
+            "the document's own 'kind:' field.",
+            "type": "object",
+            "properties": {"apiVersion": {"type": "string"}, "kind": {"type": "string"}},
+            "allOf": branches,
+        }
+        (schemas_directory / UMBRELLA_SCHEMA_FILENAME).write_text(
+            json.dumps(umbrella, indent=2) + "\n", encoding="utf-8"
+        )
+        self.messages.append(f"Updated: {STRATA_DIR}/{SCHEMAS_DIRNAME}/ ({len(branches)} kinds + umbrella)")
 
     def _solution_name(self) -> str:
         """The manifest's `meta.name`, for template substitution — read back
