@@ -127,7 +127,97 @@ jobs:
         run: uv publish --trusted-publishing always
 
   # ---------------------------------------------------------------------------
-  # Job 3: Build and push the CLI Docker image to GHCR
+  # Job 3: Publish VS Code extension to the Marketplace
+  #
+  # Ported from v1 (e:\SourcesXYZ\strata's ci-release.yml), with one
+  # deliberate addition: v1 has NO version-format gating at all — it
+  # publishes to the Marketplace's stable Release channel on any tag
+  # matching 'v*.*.*', including pre-release-suffixed ones (confirmed by
+  # direct read, 2026-10-02). The `if:` below is new here: only an exact
+  # 'vX.Y.Z' tag (no '-alpha'/'-beta'/'-rc' suffix) ever runs this job, so
+  # an alpha/beta tag (like v2.0.0-alpha5) publishes to PyPI (above) but
+  # never touches the VS Code Marketplace.
+  # ---------------------------------------------------------------------------
+  publish-vscode:
+    name: Publish VS Code Extension
+    runs-on: ubuntu-latest
+    needs: release
+    timeout-minutes: 20
+    if: ${{ !contains(github.ref_name, '-') }}
+
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+
+      - name: Download vsix artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: vsix
+          path: dist/
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ needs.release.outputs.run_id }}
+
+      # The Marketplace gallery API (/_apis/gallery) intermittently fails to
+      # respond, and vsce gives up after a 180s request timeout — which
+      # would otherwise fail the whole release job for a transient blip.
+      #
+      # A timeout means the CLIENT gave up, not that the server rejected the
+      # request: the publish may well have succeeded server-side. So a retry
+      # must treat "version already exists" as success, or the retry itself
+      # fails spuriously after a publish that actually worked.
+      - name: Publish to VS Code Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          set -uo pipefail
+          VSIX=$(ls dist/*.vsix | head -n1)
+          if [ -z "$VSIX" ]; then
+            echo "::error::No .vsix found in dist/"
+            exit 1
+          fi
+          echo "Publishing $VSIX"
+
+          for attempt in 1 2 3; do
+            echo "::group::Publish attempt $attempt of 3"
+            set +e
+            output=$(npx @vscode/vsce publish --packagePath "$VSIX" 2>&1)
+            status=$?
+            set -e
+            echo "$output"
+            echo "::endgroup::"
+
+            if [ "$status" -eq 0 ]; then
+              echo "Published successfully on attempt $attempt."
+              exit 0
+            fi
+
+            # A prior attempt (or a timed-out request that succeeded server-side)
+            # already landed this version — nothing left to do.
+            if echo "$output" | grep -qiE 'already exists|already published'; then
+              echo "Version is already present on the Marketplace — treating as success."
+              exit 0
+            fi
+
+            # Auth/validation errors will never succeed on retry — fail fast.
+            if echo "$output" | grep -qiE 'unauthorized|access denied|401|invalid publisher'; then
+              echo "::error::Authentication or publisher error — not retrying. Check the VSCE_PAT secret."
+              exit 1
+            fi
+
+            if [ "$attempt" -lt 3 ]; then
+              delay=$((attempt * 60))
+              echo "Attempt $attempt failed (exit $status). Retrying in ${delay}s..."
+              sleep "$delay"
+            fi
+          done
+
+          echo "::error::vsce publish failed after 3 attempts."
+          exit 1
+
+  # ---------------------------------------------------------------------------
+  # Job 4: Build and push the CLI Docker image to GHCR
   # ---------------------------------------------------------------------------
   publish:
     name: Build and push Docker image
@@ -172,7 +262,7 @@ jobs:
             VERSION=${{ github.ref_name }}
 
   # ---------------------------------------------------------------------------
-  # Job 4: Build and push CLI Docker image to Docker Hub (only if registry secrets are set)
+  # Job 5: Build and push CLI Docker image to Docker Hub (only if registry secrets are set)
   # ---------------------------------------------------------------------------
   publish-hub-cli:
     name: Publish CLI image to Docker Hub

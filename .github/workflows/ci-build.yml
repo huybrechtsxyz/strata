@@ -10,7 +10,9 @@
 #                 the v2 development branch without touching main, which
 #                 remains the real v1 production release line). Builds the
 #                 Python package with uv and uploads dist/ as a GitHub artifact
-#                 for ci-release.
+#                 for ci-release. Also builds the VS Code extension .vsix
+#                 (same artifact-as-store pattern) for ci-release's
+#                 publish-vscode job.
 # ===============================================================================
 
 name: "CI Build"
@@ -96,3 +98,51 @@ jobs:
       # Treat warnings as errors (-W) so broken refs / missing modules fail fast
       - name: Build Sphinx docs
         run: uv run sphinx-build -b html docs/ /tmp/html_out -W --keep-going
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Build VS Code extension .vsix (runs in parallel with build/docs)
+  #
+  # Ported from v1 (e:\SourcesXYZ\strata's ci-build.yml) with one deliberate
+  # drop: v1's "Sync help files for extension" step (copies docs/help/*.md
+  # into resources/help/) has no v2 equivalent to sync from yet (v2 has no
+  # docs/help/ directory) — omitted rather than left as a step that would
+  # fail on every run; re-add once v2 has that content.
+  # ---------------------------------------------------------------------------
+  vscode-extension:
+    name: Build VS Code Extension
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: src/vscode/package-lock.json
+
+      - name: Install Node dependencies
+        working-directory: src/vscode
+        run: npm ci
+
+      - name: Compile TypeScript
+        working-directory: src/vscode
+        run: npx tsc -p tsconfig.json --noEmit false
+
+      - name: Copy LICENSE into extension directory
+        run: cp LICENSE src/vscode/LICENSE
+
+      - name: Package extension (.vsix)
+        working-directory: src/vscode
+        run: |
+          mkdir -p ${{ github.workspace }}/dist
+          npx @vscode/vsce package --no-dependencies --out ${{ github.workspace }}/dist/
+
+      - name: Upload vsix artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: vsix
+          path: dist/*.vsix
+          retention-days: 7
