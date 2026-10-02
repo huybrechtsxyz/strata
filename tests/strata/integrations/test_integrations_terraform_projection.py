@@ -433,6 +433,21 @@ def test_firewalls_category_empty_when_workspace_has_no_firewalls():
     assert payload["firewalls"] == {}
 
 
+def test_firewall_rules_include_name_priority_and_custom_when_set():
+    """`FirewallRuleModel.name`/`.priority`/`.custom` flow through automatically
+    via the existing per-rule `model_dump()` — no projection change needed."""
+    graph = _graph(firewall_names=["haven_fw_hetzner_hearth"])
+    rule = graph.firewalls["haven_fw_hetzner_hearth"].spec.allow[0]
+    rule.name = "allow-https"
+    rule.priority = 100
+    rule.custom = {"asg": "web-tier"}
+    payload = build_platform_projection(graph, _provisioner())
+    allow_rule = payload["firewalls"]["haven_fw_hetzner_hearth"]["rules"]["allow"][0]
+    assert allow_rule["name"] == "allow-https"
+    assert allow_rule["priority"] == 100
+    assert allow_rule["custom"] == {"asg": "web-tier"}
+
+
 def test_dns_category_present():
     payload = build_platform_projection(_graph(dns_names=["huybrechts_xyz"]), _provisioner())
     dns = payload["dns"]["huybrechts_xyz"]
@@ -440,7 +455,9 @@ def test_dns_category_present():
     assert dns["provider"] == "cloudflare"
     zone = dns["zones"]["huybrechts.xyz"]
     assert zone["ttl"] == 3600
-    assert zone["records"] == [{"name": "@", "type": "A", "value": "1.2.3.4", "ttl": None, "priority": None}]
+    assert zone["records"] == [
+        {"name": "@", "type": "A", "value": "1.2.3.4", "ttl": None, "priority": None, "custom": {}}
+    ]
     assert zone["configuration"] == {"foo": "bar"}
     assert zone["custom"] == {"team": "platform"}
     assert zone["default_tags"] == {"managed-by": "strata"}
@@ -452,13 +469,27 @@ def test_dns_category_empty_when_workspace_has_no_dns_zones():
     assert payload["dns"] == {}
 
 
+def test_dns_records_include_custom_when_set():
+    """`DnsRecordModel.custom` — had no passthrough field at all until this
+    fix (flagged, not acted on, during the Subnet/FirewallRuleModel
+    escape-hatch audit)."""
+    graph = _graph(dns_names=["huybrechts_xyz"])
+    record = graph.dns["huybrechts_xyz"].spec.zones[0].records[0]
+    record.custom = {"proxied": True}
+    payload = build_platform_projection(graph, _provisioner())
+    records = payload["dns"]["huybrechts_xyz"]["zones"]["huybrechts.xyz"]["records"]
+    assert records[0]["custom"] == {"proxied": True}
+
+
 def test_networks_category_present():
     payload = build_platform_projection(_graph(network_names=["product_estate"]), _provisioner())
     attachment = payload["networks"]["product_estate"]
     assert attachment["description"] == "Product estate"
     network = attachment["networks"]["vnet_main"]
     assert network["address_space"] == ["10.0.0.0/16"]
-    assert network["subnets"] == {"aks": {"cidr": "10.0.1.0/24", "description": None}}
+    assert network["subnets"] == {
+        "aks": {"cidr": "10.0.1.0/24", "description": None, "configuration": {}, "custom": {}}
+    }
     assert network["peerings"] == {}
     assert network["configuration"] == {}
     assert network["custom"] == {}
@@ -476,6 +507,19 @@ def test_networks_category_includes_configuration_and_custom_when_set():
     network = payload["networks"]["product_estate"]["networks"]["vnet_main"]
     assert network["configuration"] == {"foo": "bar"}
     assert network["custom"] == {"team": "platform"}
+
+
+def test_subnets_include_configuration_and_custom_when_set():
+    """`SubnetModel.configuration`/`.custom` — had no passthrough fields at
+    all until this fix, unlike every other per-item model in this category."""
+    graph = _graph(network_names=["product_estate"])
+    subnet = graph.networks["product_estate"].spec.networks[0].subnets[0]
+    subnet.configuration = {"service_endpoints": ["Microsoft.Storage"]}
+    subnet.custom = {"team": "platform"}
+    payload = build_platform_projection(graph, _provisioner())
+    subnets = payload["networks"]["product_estate"]["networks"]["vnet_main"]["subnets"]
+    assert subnets["aks"]["configuration"] == {"service_endpoints": ["Microsoft.Storage"]}
+    assert subnets["aks"]["custom"] == {"team": "platform"}
 
 
 def test_networks_category_empty_when_workspace_has_no_networks():

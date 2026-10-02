@@ -309,6 +309,12 @@ def _build_firewalls_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     DNS zone passthrough fix — `FirewallSpecModel`'s own fields of the same
     names were validated but never read anywhere in this module at all
     (unlike DNS/providers, not even partially fixed by gap #17).
+
+    `FirewallRuleModel.name`/`.priority`/`.custom` need no change here at
+    all — already flow through automatically via the existing per-rule
+    `model_dump(..., exclude_none=True)` calls below, unlike every other
+    passthrough fix in this module (those all needed an explicit new dict
+    key since their payload entries are built field-by-field, not dumped).
     """
     payload: dict[str, Any] = {}
     for name in graph.workspace.spec.firewalls or []:
@@ -350,6 +356,12 @@ def _build_dns_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     (docs/design/value-token-resolution.md's "Full Solution" Phase 2,
     `deploy_controller.py`), delivered as `TF_VAR_dns`, never rewriting the
     file this function produced.
+
+    Per-record `custom` added separately — `DnsRecordModel` had no passthrough
+    field at all until then (flagged, not acted on, during the Subnet/
+    FirewallRuleModel escape-hatch audit: Azure alias records, Cloudflare's
+    `proxied` flag, Route53 weighted/health-check routing all need a
+    record-level extension point with no cross-provider equivalent).
     """
     payload: dict[str, Any] = {}
     for name in graph.workspace.spec.dns_zones or []:
@@ -371,6 +383,7 @@ def _build_dns_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
                             "value": record.value,
                             "ttl": record.ttl,
                             "priority": record.priority,
+                            "custom": record.custom or {},
                         }
                         for record in zone.records or []
                     ],
@@ -394,6 +407,11 @@ def _build_networks_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     DNS zone passthrough fix — `NetworkDefinitionModel`'s own fields of the
     same names were validated but never read anywhere in this module.
 
+    Per-subnet `configuration`/`custom` added separately — `SubnetModel` had
+    no passthrough fields at all until then (delegations, service endpoints,
+    NSG association, etc. had no escape hatch, unlike every other per-item
+    model in this category).
+
     Adapted from v1's real `_build_network_vars()`. `address_space`/
     `subnet.cidr` may themselves contain `${var:}`/`${secret:}`/`${feature:}`
     tokens (ADR-0002) - written as-is here, same build-time-never-resolves
@@ -412,7 +430,13 @@ def _build_networks_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
                 net.name: {
                     "address_space": list(net.address_space),
                     "subnets": {
-                        subnet.name: {"cidr": subnet.cidr, "description": subnet.description} for subnet in net.subnets
+                        subnet.name: {
+                            "cidr": subnet.cidr,
+                            "description": subnet.description,
+                            "configuration": subnet.configuration or {},
+                            "custom": subnet.custom or {},
+                        }
+                        for subnet in net.subnets
                     },
                     "peerings": {p.name: {"target": p.target} for p in net.peerings or []},
                     "configuration": net.configuration or {},

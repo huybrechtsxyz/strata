@@ -64,6 +64,9 @@ class DnsRecordModel(PlatformBaseModel):
         None, min_length=1, description="Description of the DNS record, optionally for provider"
     )
     notes: str | None = Field(None, min_length=1, description="Additional notes for the DNS record, not for provider")
+    custom: dict[str, Any] | None = Field(
+        None, description="Custom user-defined data for scripts or extensions (e.g. becomes env vars)"
+    )
 
     @field_validator("value")
     @classmethod

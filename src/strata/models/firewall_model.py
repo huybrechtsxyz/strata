@@ -14,6 +14,7 @@ from strata.models.common_models import (
     PlatformVersion,
     validate_kind_matches,
 )
+from strata.utils.names import check_unique_names
 from strata.utils.value_tokens import validate_cidr_or_token
 
 
@@ -54,6 +55,22 @@ class FirewallRuleModel(PlatformBaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
+    name: str | None = Field(
+        None,
+        description="Optional rule identifier, unique within the ruleset (across both allow and deny) when "
+        "set. Required by most real implementations (e.g. Azure NSG, GCP firewall rules) but optional here "
+        "to stay non-breaking for existing documents that predate this field.",
+    )
+    priority: int | None = Field(
+        None,
+        description="Optional explicit evaluation order (lower evaluated first, matching Azure NSG/GCP "
+        "firewall semantics) — not universal (AWS Security Groups have no such concept at all), so left "
+        "optional rather than required. Makes ordering intent part of the reviewable YAML source instead of "
+        "an emergent property of list position plus whatever the consuming provisioner's translation layer "
+        "invents. Does not by itself guarantee precedence over a cloud provider's own injected default rules "
+        "(e.g. Azure's non-removable AllowAzureLoadBalancerInBound) — those live at cloud-reserved priority "
+        "numbers strata's schema has no knowledge of; the author still has to pick a safe value.",
+    )
     direction: FirewallDirection = Field(..., description="Direction of traffic: 'in' for inbound, 'out' for outbound.")
     proto: FirewallProtocol | None = Field(
         None, description="Protocol for the rule: 'tcp', 'udp', or 'icmp'. Optional."
@@ -76,6 +93,12 @@ class FirewallRuleModel(PlatformBaseModel):
         "'${var:KEY}'/'${secret:KEY}'/'${feature:KEY}' tokens. Optional.",
     )
     comment: str | None = Field(None, description="Optional comment or documentation for the rule.")
+    custom: dict[str, Any] | None = Field(
+        None,
+        description="Raw provider-specific passthrough for this rule (e.g. Azure's 'destination is an "
+        "Application Security Group, not an address' pattern, which has no cross-cloud equivalent). Not "
+        "validated by strata, passed through as-is to the provisioner.",
+    )
 
     @field_validator("from_", "to")
     @classmethod
@@ -198,6 +221,19 @@ class FirewallSpecModel(PlatformBaseModel):
             conflicts = allow_signatures.intersection(deny_signatures)
             if conflicts:
                 raise ValueError(f"Conflicting rules found between allow and deny: {conflicts}")
+        return self
+
+    @model_validator(mode="after")
+    def validate_unique_rule_names(self) -> "FirewallSpecModel":
+        """Validate that every rule *that sets a name* is unique across both allow and deny.
+
+        `name` is optional (non-breaking for documents that predate it) — an
+        unnamed rule is simply not checked, same "check only what's present"
+        discipline as every other optional-uniqueness check in this codebase.
+        """
+        named = [rule.name for rule in (*(self.allow or []), *(self.deny or [])) if rule.name is not None]
+        if named:
+            check_unique_names(named, "firewall rule names")
         return self
 
 

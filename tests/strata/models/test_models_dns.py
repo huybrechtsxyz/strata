@@ -34,6 +34,18 @@ def test_dns_minimal_is_valid():
     assert model.kind.value == "dns"
 
 
+def test_dns_record_custom_is_optional():
+    model = DnsModel.model_validate(_minimal_dns())
+    assert model.spec.zones[0].records[0].custom is None
+
+
+def test_dns_record_accepts_custom_when_set():
+    data = _minimal_dns()
+    data["spec"]["zones"][0]["records"][0]["custom"] = {"proxied": True}
+    model = DnsModel.model_validate(data)
+    assert model.spec.zones[0].records[0].custom == {"proxied": True}
+
+
 def test_dns_record_accepts_value_tokens():
     """A record value may embed '${var:}'/'${secret:}' tokens instead of a literal."""
     data = _minimal_dns()

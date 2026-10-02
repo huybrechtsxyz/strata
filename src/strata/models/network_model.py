@@ -33,6 +33,14 @@ class SubnetModel(PlatformBaseModel):
         description="Literal CIDR (e.g. '10.0.1.0/24'), or a string containing "
         "'${var:KEY}'/'${secret:KEY}'/'${feature:KEY}' tokens.",
     )
+    configuration: dict[str, Any] | None = Field(
+        None,
+        description="Raw provisioner-specific passthrough configuration for this subnet (e.g. delegations, "
+        "service endpoints, NSG association). Not validated by strata, passed through as-is to the provisioner.",
+    )
+    custom: dict[str, Any] | None = Field(
+        None, description="Custom user-defined data for scripts or extensions (e.g. becomes env vars)"
+    )
 
     @field_validator("cidr")
     @classmethod

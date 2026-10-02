@@ -77,6 +77,45 @@ def test_firewall_rule_accepts_port_range_string():
     assert model.spec.allow[0].port == "80:90"
 
 
+def test_firewall_rule_name_priority_and_custom_are_optional():
+    """A rule without name/priority/custom still validates (non-breaking)."""
+    model = FirewallModel.model_validate(_minimal_firewall())
+    rule = model.spec.allow[0]
+    assert rule.name is None
+    assert rule.priority is None
+    assert rule.custom is None
+
+
+def test_firewall_rule_accepts_name_priority_and_custom_when_set():
+    data = _minimal_firewall()
+    data["spec"]["allow"][0]["name"] = "allow-https"
+    data["spec"]["allow"][0]["priority"] = 100
+    data["spec"]["allow"][0]["custom"] = {"asg": "web-tier"}
+    model = FirewallModel.model_validate(data)
+    rule = model.spec.allow[0]
+    assert rule.name == "allow-https"
+    assert rule.priority == 100
+    assert rule.custom == {"asg": "web-tier"}
+
+
+def test_firewall_rejects_duplicate_rule_names_across_allow_and_deny():
+    data = _minimal_firewall()
+    data["spec"]["allow"][0]["name"] = "ssh"
+    data["spec"]["deny"] = [
+        {"direction": "in", "proto": "tcp", "port": 22, "name": "ssh"},
+    ]
+    with pytest.raises(ValidationError, match="Duplicate firewall rule names"):
+        FirewallModel.model_validate(data)
+
+
+def test_firewall_allows_duplicate_unnamed_rules():
+    """Unnamed rules (the common case today) are never checked for uniqueness."""
+    data = _minimal_firewall()
+    data["spec"]["allow"].append({"direction": "in", "proto": "tcp", "port": 443, "from": "0.0.0.0/0"})
+    model = FirewallModel.model_validate(data)
+    assert len(model.spec.allow) == 2
+
+
 def test_firewall_rule_rejects_invalid_port_range():
     """A malformed port range is rejected."""
     data = _minimal_firewall()
