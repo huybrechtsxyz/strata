@@ -77,9 +77,7 @@ def test_structured_pin_keeps_its_rationale():
 
 def test_both_forms_produce_the_same_shape():
     """Consumers never have to branch on how a pin was written."""
-    model = VersionModel.model_validate(
-        _version({"charts": {"a": "1.0.0", "b": {"version": "1.0.0"}}})
-    )
+    model = VersionModel.model_validate(_version({"charts": {"a": "1.0.0", "b": {"version": "1.0.0"}}}))
     assert model.spec.pins.charts["a"] == model.spec.pins.charts["b"]
 
 
@@ -153,9 +151,7 @@ def test_version_rejects_tools_pins():
 
 def test_iter_pins_reports_every_pin_once():
     """Resolution and logging share one traversal so they cannot drift."""
-    model = VersionModel.model_validate(
-        _version({"images": {"a": "1", "b": "2"}, "charts": {"c": "3"}})
-    )
+    model = VersionModel.model_validate(_version({"images": {"a": "1", "b": "2"}, "charts": {"c": "3"}}))
     assert sorted((cat, name) for cat, name, _ in model.spec.pins.iter_pins()) == [
         ("charts", "c"),
         ("images", "a"),

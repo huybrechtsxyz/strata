@@ -70,4 +70,3 @@ def test_geographies_skipped_when_no_provider_declares_any():
     result = service.validate_geographies_against_provider_configs(configs)
     assert result.ok
     assert result.messages() == []
-

@@ -88,9 +88,7 @@ class ResourceService(BaseService[ResourceModel]):
                 return diagnostics
 
         if self.model.spec.configuration:
-            diagnostics.extend(
-                self._validate_configuration_schema(spec, resource_type, self.model.spec.configuration)
-            )
+            diagnostics.extend(self._validate_configuration_schema(spec, resource_type, self.model.spec.configuration))
 
         return diagnostics
 

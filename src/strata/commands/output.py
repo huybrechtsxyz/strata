@@ -113,10 +113,7 @@ def _styled(text: str, colour: str, *, enabled: bool) -> str:
     return click.style(text, fg=colour) if enabled else text
 
 
-
-def group_by_source(
-    diagnostics: Diagnostics, root: Path | None = None
-) -> "OrderedDict[str, list[Diagnostic]]":
+def group_by_source(diagnostics: Diagnostics, root: Path | None = None) -> "OrderedDict[str, list[Diagnostic]]":
     """Group findings by their rendered source, preserving discovery order.
 
     Findings with no source collect under `""`, which the renderer prints
@@ -339,4 +336,3 @@ class ConsoleReporter:
         self._echo()
         self._echo(self._rule())
         self._echo(f"  {coloured}  {summary}".rstrip() + f"  ({elapsed})")
-

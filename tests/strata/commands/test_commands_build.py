@@ -258,7 +258,9 @@ def test_without_resolve_an_integration_backed_secret_is_never_touched(runner, s
     _write(
         solution,
         "environment.yaml",
-        ENVIRONMENT.replace("spec: {}", "spec:\n  secrets:\n    - key: VAULT_SECRET\n      store: vault\n      value: kv/x\n"),
+        ENVIRONMENT.replace(
+            "spec: {}", "spec:\n  secrets:\n    - key: VAULT_SECRET\n      store: vault\n      value: kv/x\n"
+        ),
     )
     result = _run(runner, "app", "--path", solution)
     assert result.exit_code == EXIT_SUCCESS, result.output
@@ -268,7 +270,9 @@ def test_resolve_flag_reports_a_failed_integration_backed_secret(runner, solutio
     _write(
         solution,
         "environment.yaml",
-        ENVIRONMENT.replace("spec: {}", "spec:\n  secrets:\n    - key: VAULT_SECRET\n      store: vault\n      value: kv/x\n"),
+        ENVIRONMENT.replace(
+            "spec: {}", "spec:\n  secrets:\n    - key: VAULT_SECRET\n      store: vault\n      value: kv/x\n"
+        ),
     )
     result = _run(runner, "app", "--path", solution, "--resolve")
     assert result.exit_code == EXIT_VALIDATION
@@ -286,7 +290,8 @@ def test_env_file_supplies_an_environment_store_variable(runner, solution, monke
         solution,
         "environment.yaml",
         ENVIRONMENT.replace(
-            "spec: {}", "spec:\n  variables:\n    - key: GREETING\n      store: environment\n      value: BUILD_CLI_PROBE_VAR\n"
+            "spec: {}",
+            "spec:\n  variables:\n    - key: GREETING\n      store: environment\n      value: BUILD_CLI_PROBE_VAR\n",
         ),
     )
     env_file = solution / ".env"
@@ -297,4 +302,3 @@ def test_env_file_supplies_an_environment_store_variable(runner, solution, monke
     assert result.exit_code == EXIT_SUCCESS, result.output
     manifest = (solution / "build" / "app" / "resolved.yaml").read_text()
     assert "hello-from-cli-test" in manifest
-

@@ -40,9 +40,7 @@ from strata.utils.diagnostics import Diagnostics
     default=False,
     help="Treat warnings as errors. For release pipelines that must not ship a stale pin.",
 )
-def validate_command(
-    path: Path | None, output: str, quiet: bool, verbose: bool, strict: bool
-) -> None:
+def validate_command(path: Path | None, output: str, quiet: bool, verbose: bool, strict: bool) -> None:
     """Validate every document in the solution.
 
     Walks up from PATH (default: the current directory) to find the solution

@@ -105,9 +105,7 @@ class Diagnostics:
         code: str | None = None,
     ) -> None:
         """Record one finding."""
-        self.items.append(
-            Diagnostic(severity=severity, message=message, source=source, location=location, code=code)
-        )
+        self.items.append(Diagnostic(severity=severity, message=message, source=source, location=location, code=code))
 
     def error(self, message: str, **kwargs: Any) -> None:
         """Record an error — the run must fail."""

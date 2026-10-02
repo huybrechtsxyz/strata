@@ -245,7 +245,9 @@ def test_tenant_properties_and_custom_merge_in_as_a_base_layer():
 def test_tenant_environments_are_prepended_before_the_deployments_own():
     index = _index(
         _deployment("leaf", {"workspace": "main", "environments": ["prd"], "tenant": "acme"}),
-        tenants=(_tenant("acme", {"display_name": "Acme Corp", "geographies": ["europe"], "environments": ["shared"]}),),
+        tenants=(
+            _tenant("acme", {"display_name": "Acme Corp", "geographies": ["europe"], "environments": ["shared"]}),
+        ),
     )
     resolved, _ = resolve_deployment_chains(index)
     assert resolved["leaf"].spec.environments == ["shared", "prd"]
@@ -272,7 +274,9 @@ def test_tenant_merge_applies_after_extends_resolution():
     index = _index(
         _deployment("base", {"partial": True, "workspace": "main", "tenant": "acme"}),
         _deployment("leaf", {"extends": "base", "environments": ["prd"]}),
-        tenants=(_tenant("acme", {"display_name": "Acme Corp", "geographies": ["europe"], "environments": ["shared"]}),),
+        tenants=(
+            _tenant("acme", {"display_name": "Acme Corp", "geographies": ["europe"], "environments": ["shared"]}),
+        ),
     )
     resolved, diagnostics = resolve_deployment_chains(index)
     assert diagnostics.ok

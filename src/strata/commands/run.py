@@ -105,9 +105,7 @@ class CommandRun:
     ) -> None:
         """Report findings. Does not decide the outcome — the command does."""
         self._ensure_header()
-        self._summary = self.reporter.diagnostics(
-            diagnostics, root=root, document_count=document_count
-        )
+        self._summary = self.reporter.diagnostics(diagnostics, root=root, document_count=document_count)
 
     # -- completion -------------------------------------------------------
 

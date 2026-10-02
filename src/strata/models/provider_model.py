@@ -68,6 +68,7 @@ class ProviderSpecModel(PlatformBaseModel):
     """
     Provider specification containing properties and lifecycle configuration.
     """
+
     lifecycle: CommonLifecycleModel | None = Field(
         None,
         description="IaC workflow lifecycle phases, keyed by phase name "

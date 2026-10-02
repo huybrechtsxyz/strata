@@ -197,4 +197,3 @@ def test_integration_lifecycle_supports_multiple_phases():
     }
     model = IntegrationModel.model_validate(data)
     assert set(model.spec.lifecycle.root.keys()) == {"connect_before", "teardown"}
-

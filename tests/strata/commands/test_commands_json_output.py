@@ -12,7 +12,9 @@ from strata.utils.diagnostics import Diagnostics
 
 def _findings() -> Diagnostics:
     diagnostics = Diagnostics()
-    diagnostics.error("Field required", source="/sln/workspaces/main.yaml", location="spec.provisioners", code="missing")
+    diagnostics.error(
+        "Field required", source="/sln/workspaces/main.yaml", location="spec.provisioners", code="missing"
+    )
     diagnostics.warning("pin matched no remote", source="/sln/versions/prd.yaml", code="stale_pin")
     return diagnostics
 

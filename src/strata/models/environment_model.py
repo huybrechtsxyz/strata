@@ -135,7 +135,9 @@ class EnvironmentModel(PlatformBaseModel):
         description="Platform kind (always 'environment')",
     )
     meta: EnvironmentMetaModel = Field(description="Environment metadata (name, annotations, labels, tags)")
-    spec: EnvironmentSpecModel = Field(description="Environment specification (properties, variables, secrets, features)")
+    spec: EnvironmentSpecModel = Field(
+        description="Environment specification (properties, variables, secrets, features)"
+    )
 
     @field_validator("kind")
     @classmethod

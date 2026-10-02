@@ -20,7 +20,7 @@ def test_skips_comments_and_blank_lines(tmp_path: Path):
 
 def test_strips_matching_quotes(tmp_path: Path):
     path = tmp_path / ".env"
-    path.write_text('SINGLE=\'quoted\'\nDOUBLE="quoted"\nMISMATCHED=\'not"closed\n')
+    path.write_text("SINGLE='quoted'\nDOUBLE=\"quoted\"\nMISMATCHED='not\"closed\n")
     result = load_env_file(path)
     assert result["SINGLE"] == "quoted"
     assert result["DOUBLE"] == "quoted"

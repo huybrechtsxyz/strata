@@ -10,9 +10,7 @@ def test_solution_service_validates_from_data():
         "meta": {"name": "integration"},
         "spec": {
             "configuration": "config",
-            "remotes": [
-                {"name": "infra", "type": "git", "url": "https://host/infra.git", "reference": "v2.1.0"}
-            ],
+            "remotes": [{"name": "infra", "type": "git", "url": "https://host/infra.git", "reference": "v2.1.0"}],
         },
     }
     service = SolutionService(data=data)

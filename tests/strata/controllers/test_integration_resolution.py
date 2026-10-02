@@ -16,9 +16,7 @@ from strata.utils.errors import UsageError
 
 
 def _provisioner(name: str = "prov", *, tool: str = "terraform", integration: str | None = None) -> ProvisionerModel:
-    return ProvisionerModel(
-        name=name, tool=tool, source=SourceModel(source_path="infra"), integration=integration
-    )
+    return ProvisionerModel(name=name, tool=tool, source=SourceModel(source_path="infra"), integration=integration)
 
 
 def _integration_doc(name: str, *, type: str = "terraform", enabled: bool = True) -> IntegrationModel:

@@ -17,9 +17,7 @@ def test_feature_store_constant_is_valid():
 
 def test_feature_store_environment_is_valid():
     """An environment-store feature flag reads its value from an env var name."""
-    model = FeatureStoreModel.model_validate(
-        {"key": "enable_new_ui", "store": "environment", "value": "ENABLE_NEW_UI"}
-    )
+    model = FeatureStoreModel.model_validate({"key": "enable_new_ui", "store": "environment", "value": "ENABLE_NEW_UI"})
     assert model.store.value == "environment"
 
 
@@ -86,16 +84,16 @@ def test_variable_store_integration_backed_is_valid():
 
 def test_variable_store_type_matches_constant_value():
     """A declared 'type' on a constant store must match the literal value's Python type."""
-    model = VariableStoreModel.model_validate(
-        {"key": "replicas", "store": "constant", "value": 3, "type": "number"}
-    )
+    model = VariableStoreModel.model_validate({"key": "replicas", "store": "constant", "value": 3, "type": "number"})
     assert model.type.value == "number"
 
 
 def test_variable_store_type_mismatch_on_constant_is_rejected():
     """A declared 'type' that doesn't match the constant value's Python type is rejected."""
     with pytest.raises(ValidationError, match="type=number requires a numeric value"):
-        VariableStoreModel.model_validate({"key": "replicas", "store": "constant", "value": "not-a-number", "type": "number"})
+        VariableStoreModel.model_validate(
+            {"key": "replicas", "store": "constant", "value": "not-a-number", "type": "number"}
+        )
 
 
 def test_variable_store_type_not_checked_for_non_constant_store():
@@ -230,9 +228,7 @@ def test_secret_store_rotate_policy_warn_does_not_require_generate():
 def test_secret_store_version_rejected_for_github():
     """'version' is rejected for github-store secrets (GitHub Secrets aren't versioned)."""
     with pytest.raises(ValidationError, match="not supported for store type 'github'"):
-        SecretStoreModel.model_validate(
-            {"key": "api_key", "store": "github", "value": "MY_API_KEY", "version": "1"}
-        )
+        SecretStoreModel.model_validate({"key": "api_key", "store": "github", "value": "MY_API_KEY", "version": "1"})
 
 
 def test_secret_store_rejects_unknown_store_type():
