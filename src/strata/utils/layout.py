@@ -128,6 +128,21 @@ def audit_push_checkout_path(root: Path, remote: str, branch: str) -> Path:
     return strata_dir(root) / "audit-push" / remote / branch
 
 
+def gitops_push_checkout_path(root: Path, remote: str, branch: str) -> Path:
+    """Return where a GitOps provisioner's push destination materialises on disk.
+
+    Same `(remote, branch)` keying and same reasoning as
+    `audit_push_checkout_path()` — a push destination is a mutable branch
+    tip, refreshed (fetch + reset) before every write, never a pinned read
+    source like `remote_checkout_path()`. Kept in its own `gitops-push/`
+    subdirectory so this checkout population can never collide with a read
+    checkout of the same remote (`remote_checkout_path()`) or with audit's
+    own push checkouts (`audit_push_checkout_path()`), even when the same
+    remote name is reused across all three.
+    """
+    return strata_dir(root) / "gitops-push" / remote / branch
+
+
 def build_dir(root: Path, deployment: str) -> Path:
     """Return where `build run` renders `deployment`'s artifacts.
 

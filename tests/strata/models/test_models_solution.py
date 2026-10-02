@@ -105,6 +105,33 @@ def test_solution_git_remote_requires_reference():
         SolutionModel.model_validate(data)
 
 
+@pytest.mark.parametrize("bad_reference", ["../../etc", "/etc/passwd", "C:\\Windows\\System32"])
+def test_solution_remote_rejects_path_traversal_in_reference(bad_reference):
+    """Regression test for the path-traversal gap found on code review
+    (2026-10-02): `reference` is used verbatim as a directory-path segment
+    by every remote-checkout function (`layout.remote_checkout_path()`,
+    `.audit_push_checkout_path()`, `.gitops_push_checkout_path()`) — an
+    absolute path or '..' segment must be rejected at the schema level."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [
+        {"name": "infra", "type": "git", "url": "https://host/infra.git", "reference": bad_reference}
+    ]
+    with pytest.raises(ValidationError, match="relative|absolute|parent directory"):
+        SolutionModel.model_validate(data)
+
+
+def test_solution_remote_accepts_reference_with_internal_slash():
+    """A real git branch name like 'feature/foo' is still accepted —
+    `validate_no_path_traversal()` only rejects a *leading* slash/drive
+    letter and '..', never an internal '/'."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [
+        {"name": "infra", "type": "git", "url": "https://host/infra.git", "reference": "feature/foo"}
+    ]
+    model = SolutionModel.model_validate(data)
+    assert model.spec.remotes[0].reference == "feature/foo"
+
+
 def test_solution_helm_remote_rejects_reference():
     """A helm remote serves many chart versions — a remote-level reference is rejected."""
     data = _minimal_solution()

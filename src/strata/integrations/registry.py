@@ -39,6 +39,8 @@ _KNOWN: dict[str, tuple[str, str]] = {
     "terraform": ("strata.integrations.terraform", "TerraformIntegration"),
     "compose": ("strata.integrations.compose", "ComposeIntegration"),
     "helm": ("strata.integrations.helm", "HelmIntegration"),
+    "argocd": ("strata.integrations.gitops", "ArgoCDIntegration"),
+    "flux": ("strata.integrations.gitops", "FluxIntegration"),
     # ansible/git/bicep/opentofu/vault/consul/etcd/bitwarden/flagsmith/cost/
     # cve/siem/identity as each gets a real v2 consumer (ADR-0021 Phase 7+).
 }

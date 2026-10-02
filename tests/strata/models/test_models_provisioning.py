@@ -216,6 +216,92 @@ def test_provisioner_integration_valid_for_any_tool():
 
 
 # ---------------------------------------------------------------------------
+# gitops (docs/design/gitops-integration.md Phase 1) — only valid for a sync
+# tool (argocd/flux); no `source` needed, same as those tools already allow.
+# ---------------------------------------------------------------------------
+
+
+def test_provisioner_gitops_accepted_for_argocd():
+    model = ProvisionerModel.model_validate(
+        {
+            "name": "forge_sync",
+            "tool": "argocd",
+            "gitops": {"remote": "gitops-config", "output_file": "apps/forge/values.yaml"},
+        }
+    )
+    assert model.gitops.remote == "gitops-config"
+    assert model.gitops.output_file == "apps/forge/values.yaml"
+    assert model.source is None
+
+
+def test_provisioner_gitops_accepted_for_flux():
+    model = ProvisionerModel.model_validate(
+        {
+            "name": "forge_sync",
+            "tool": "flux",
+            "gitops": {"remote": "gitops-config", "output_file": "apps/forge/values.yaml"},
+        }
+    )
+    assert model.gitops.remote == "gitops-config"
+
+
+def test_provisioner_gitops_requires_remote_and_output_file():
+    with pytest.raises(ValidationError):
+        ProvisionerModel.model_validate({"name": "forge_sync", "tool": "argocd", "gitops": {}})
+
+
+@pytest.mark.parametrize(
+    "bad_output_file",
+    [
+        "../../../../etc/cron.d/evil",
+        "apps/../../../etc/passwd",
+        "/etc/passwd",
+        "C:\\Windows\\System32\\evil.bat",
+    ],
+)
+def test_provisioner_gitops_rejects_path_traversal_in_output_file(bad_output_file):
+    """Regression test for the path-traversal gap found on code review
+    (2026-10-02): `output_file` is joined verbatim onto the GitOps checkout
+    directory and written to directly — an absolute path or '..' segment
+    must be rejected at the schema level, same guard `SourceModel.
+    source_path`/`.target_path` already use."""
+    with pytest.raises(ValidationError, match="relative|absolute|parent directory"):
+        ProvisionerModel.model_validate(
+            {
+                "name": "forge_sync",
+                "tool": "argocd",
+                "gitops": {"remote": "gitops-config", "output_file": bad_output_file},
+            }
+        )
+
+
+def test_provisioner_gitops_rejected_for_non_sync_known_tool():
+    """gitops is rejected for a known tool that isn't argocd/flux."""
+    data = _minimal_provisioner()
+    data["gitops"] = {"remote": "gitops-config", "output_file": "apps/forge/values.yaml"}
+    with pytest.raises(ValidationError):
+        ProvisionerModel.model_validate(data)
+
+
+def test_provisioner_gitops_allowed_for_unknown_tool():
+    """gitops isn't rejected for an unrecognized (custom plugin) tool — same
+    leniency `validate_source_required_unless_sync()` already applies."""
+    model = ProvisionerModel.model_validate(
+        {
+            "name": "custom-sync",
+            "tool": "pulumi-gitops",
+            "gitops": {"remote": "gitops-config", "output_file": "apps/forge/values.yaml"},
+        }
+    )
+    assert model.gitops.remote == "gitops-config"
+
+
+def test_provisioner_gitops_is_optional():
+    model = ProvisionerModel.model_validate({"name": "argocd-main", "tool": "argocd"})
+    assert model.gitops is None
+
+
+# ---------------------------------------------------------------------------
 # ProvisioningStepModel
 # ---------------------------------------------------------------------------
 
@@ -323,12 +409,8 @@ def test_validate_provisioning_steps_rejects_unknown_depends_on():
 def test_validate_provisioning_steps_rejects_cycle():
     """A cycle in depends_on is rejected."""
     steps = [
-        ProvisioningStepModel.model_validate(
-            {"name": "a", "provisioner": "tf", "targets": ["x"], "depends_on": ["b"]}
-        ),
-        ProvisioningStepModel.model_validate(
-            {"name": "b", "provisioner": "tf", "targets": ["y"], "depends_on": ["a"]}
-        ),
+        ProvisioningStepModel.model_validate({"name": "a", "provisioner": "tf", "targets": ["x"], "depends_on": ["b"]}),
+        ProvisioningStepModel.model_validate({"name": "b", "provisioner": "tf", "targets": ["y"], "depends_on": ["a"]}),
     ]
     with pytest.raises(ValueError, match="Circular dependency"):
         validate_provisioning_steps(steps)

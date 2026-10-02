@@ -53,3 +53,60 @@ def test_auth_unrelated_config_also_set_is_invalid():
                 "aws": {"access_key_id": "key", "secret_access_key": "secret"},
             }
         )
+
+
+# ---------------------------------------------------------------------------
+# ssh_key/token (docs/design/gitops-integration.md Phase 4) — the two real
+# git-native credential shapes, added to the same closed `method` vocabulary
+# rather than a separate git-only auth model.
+# ---------------------------------------------------------------------------
+
+
+def test_auth_ssh_key_is_valid():
+    model = AuthenticationModel.model_validate(
+        {"method": "ssh_key", "ssh_key": {"private_key": "github-deploy-key-private"}}
+    )
+    assert model.method == "ssh_key"
+    assert model.ssh_key.private_key == "github-deploy-key-private"
+    assert model.ssh_key.passphrase is None
+    assert model.ssh_key.known_hosts is None
+
+
+def test_auth_ssh_key_accepts_passphrase_and_known_hosts():
+    model = AuthenticationModel.model_validate(
+        {
+            "method": "ssh_key",
+            "ssh_key": {
+                "private_key": "github-deploy-key-private",
+                "passphrase": "github-deploy-key-passphrase",
+                "known_hosts": "github-known-hosts",
+            },
+        }
+    )
+    assert model.ssh_key.passphrase == "github-deploy-key-passphrase"
+    assert model.ssh_key.known_hosts == "github-known-hosts"
+
+
+def test_auth_token_is_valid():
+    model = AuthenticationModel.model_validate({"method": "token", "token": {"token": "github-pat"}})
+    assert model.method == "token"
+    assert model.token.token == "github-pat"
+    assert model.token.username is None
+
+
+def test_auth_token_accepts_username():
+    model = AuthenticationModel.model_validate(
+        {"method": "token", "token": {"token": "github-pat", "username": "x-access-token"}}
+    )
+    assert model.token.username == "x-access-token"
+
+
+def test_auth_ssh_key_missing_matching_config_is_invalid():
+    with pytest.raises(ValidationError, match="ssh_key.*configuration is not set"):
+        AuthenticationModel.model_validate({"method": "ssh_key"})
+
+
+def test_auth_token_mismatched_config_is_invalid():
+    """method='token' with ssh_key config set (instead of token) raises a ValidationError."""
+    with pytest.raises(ValidationError, match="configuration is not set"):
+        AuthenticationModel.model_validate({"method": "token", "ssh_key": {"private_key": "github-deploy-key-private"}})

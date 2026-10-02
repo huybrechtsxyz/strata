@@ -439,8 +439,19 @@ def build_run(
             _step(f"materialised provisioner '{step.name}' source at {source_path}")
 
         try:
+            # `remotes`/`root` are unused by every `prepare()` override except
+            # `BaseGitOpsIntegration`'s (docs/design/gitops-integration.md
+            # Phase 3) — accepted for free by the base `InfraIntegration.
+            # prepare()`'s own `**kwargs: Any`, so no other integration is
+            # affected.
             integration.prepare(
-                source_path, resolved=resolved, provisioner=provisioner, graph=graph, template_path=template_path
+                source_path,
+                resolved=resolved,
+                provisioner=provisioner,
+                graph=graph,
+                template_path=template_path,
+                remotes=remotes,
+                root=context.root,
             )
         except IntegrationError as exc:
             # See workload_controller.build_workload_modules()'s identical

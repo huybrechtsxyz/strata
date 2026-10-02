@@ -46,8 +46,9 @@ from strata.integrations.terraform_projection import (
     build_dns_networks_firewalls_payloads,
     real_variable_name,
 )
+from strata.models.auth_models import AuthenticationModel
 from strata.models.common_models import PlatformKind
-from strata.models.integration_model import Capability
+from strata.models.integration_model import Capability, IntegrationModel
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel
 from strata.models.solution_model import SolutionRemoteModel
 from strata.models.workspace_model import WorkspaceModel
@@ -96,7 +97,14 @@ def tf_var_env(resolved: ValueResolution, prefix: str | None) -> dict[str, str]:
     return {f"{prefix}{key}": value for key, value in resolved.values.items()}
 
 
-def collect_step_outputs(integration: InfraIntegration, path: Path, env: Mapping[str, str]) -> dict[str, str]:
+def collect_step_outputs(
+    integration: InfraIntegration,
+    path: Path,
+    env: Mapping[str, str],
+    *,
+    auth: AuthenticationModel | None = None,
+    resolved_values: Mapping[str, str] | None = None,
+) -> dict[str, str]:
     """Collect a just-deployed step's outputs (`terraform output -json`) for
     later, dependent steps to reference via `${output:step.key}` tokens
     (docs/design/deploy-command.md's "Cross-step output context").
@@ -109,12 +117,31 @@ def collect_step_outputs(integration: InfraIntegration, path: Path, env: Mapping
     any collection failure — a step already deployed successfully; losing
     its outputs should not fail the run, only leave later `${output:}`
     references for this step unresolved.
+
+    `auth`/`resolved_values` (docs/design/gitops-integration.md
+    Implementation Plan Phase 5) are **only** added to the `output()` call
+    when at least one is given — never unconditionally. Found on review:
+    `TerraformIntegration.output()` is the one real, currently-reachable
+    `output()` implementation this function calls in production (Helm has
+    none; Compose's is never reached here — `Capability.CONTAINER` steps
+    `continue` earlier in the caller's loop) and it has no `**kwargs: Any`
+    catch-all of its own — unconditionally passing these two kwargs for
+    every step, not just GitOps ones, would raise `TypeError` on every real
+    Terraform deploy, silently caught by this function's own `except
+    TypeError` below and degrading `${output:...}` resolution to
+    permanently empty. Callers pass both only for an actual GitOps step;
+    `None`/`None` for every other tool keeps this call textually identical
+    to before Phase 5.
     """
     output = getattr(integration, "output", None)
     if output is None:
         return {}
+    extra: dict[str, Any] = {}
+    if auth is not None or resolved_values is not None:
+        extra["auth"] = auth
+        extra["resolved_values"] = resolved_values
     try:
-        result = output(path, json_format=True, env=env)
+        result = output(path, json_format=True, env=env, **extra)
     except TypeError:
         # Some integrations expose an `output()` with an incompatible shape
         # (e.g. `ComposeIntegration.output()` is `docker stack services`,
@@ -608,17 +635,45 @@ def deploy_run(
         if validate is not None:
             validate(path, env=env)
 
-        plan_result = integration.plan(path, out_file=f"{step.name}.tfplan", env=env)
+        # Real credentials for a GitOps remote (docs/design/
+        # gitops-integration.md Implementation Plan Phase 5) — resolved
+        # fresh, here, at actual deploy time, never at `build run` (secrets
+        # are deploy-time-only, ADR-0022 D4). `auth`/`step_resolved_values`
+        # stay `None` for every non-GitOps step — not merely harmless but
+        # required: `collect_step_outputs()`'s own docstring explains why
+        # unconditionally passing them would silently break Terraform's
+        # real output collection. `remote.integration` is schema-declared
+        # but never existence-validated (unlike `provisioner.integration`,
+        # which Phase 1 validation guarantees resolves) — a missing/typo'd
+        # name here must resolve to `auth = None` (today's ambient
+        # behaviour), never raise.
+        auth: AuthenticationModel | None = None
+        step_resolved_values: Mapping[str, str] | None = None
+        if provisioner.gitops is not None:
+            step_resolved_values = resolved.values
+            gitops_remote = remotes.get(provisioner.gitops.remote)
+            if gitops_remote is not None and gitops_remote.integration:
+                integration_entry = index.get(PlatformKind.INTEGRATION, gitops_remote.integration)
+                if integration_entry is not None:
+                    auth = cast(IntegrationModel, integration_entry.model).spec.authentication
+
+        plan_result = integration.plan(
+            path, out_file=f"{step.name}.tfplan", env=env, auth=auth, resolved_values=step_resolved_values
+        )
         if not plan_result.is_successful:
             diagnostics.error(f"Step '{step.name}': plan failed — {plan_result.stderr}", location=step.name)
             return diagnostics
 
-        deploy_result = integration.deploy(path, plan_file=f"{step.name}.tfplan", env=env)
+        deploy_result = integration.deploy(
+            path, plan_file=f"{step.name}.tfplan", env=env, auth=auth, resolved_values=step_resolved_values
+        )
         if not deploy_result.is_successful:
             diagnostics.error(f"Step '{step.name}': deploy failed — {deploy_result.stderr}", location=step.name)
             return diagnostics
 
-        step_outputs[step.name] = collect_step_outputs(integration, path, env)
+        step_outputs[step.name] = collect_step_outputs(
+            integration, path, env, auth=auth, resolved_values=step_resolved_values
+        )
 
         _step(f"deployed step '{step.name}' via {integration_type}")
 

@@ -160,6 +160,40 @@ class ManagedIdentityAuthenticationModel(PlatformBaseModel):
     )
 
 
+class SSHKeyAuthenticationModel(PlatformBaseModel):
+    """
+    SSH private key authentication (git deploy keys) — docs/design/
+    gitops-integration.md's "Authentication" section: one of the two real
+    git-native credential shapes neither v1 nor v2's prior closed `method`
+    vocabulary modelled (confirmed by reading both directly).
+
+    All fields are key references resolved from environment declarations,
+    same convention as every other method here — never an inline secret.
+    """
+
+    private_key: str = Field(description="Key reference for the SSH private key (PEM/OpenSSH format)")
+    passphrase: str | None = Field(None, description="Key reference for the private key's passphrase, if encrypted")
+    known_hosts: str | None = Field(
+        None, description="Key reference for a known_hosts entry pinning the remote host's key"
+    )
+
+
+class TokenAuthenticationModel(PlatformBaseModel):
+    """
+    Bearer/PAT token authentication (git HTTPS remotes) — the other real
+    git-native credential shape (see `SSHKeyAuthenticationModel`'s docstring).
+
+    Not `api_key`/`certificate`: both exist already, but reusing either
+    would be modelling a new concept through an unrelated field (`api_key`'s
+    own `header_name` assumes HTTP-header delivery, not how git consumes a
+    PAT; `certificate`'s fields are TLS-flavored) — the same "validates
+    fine, silently wrong" risk this module's own docstring already names.
+    """
+
+    token: str = Field(description="Key reference for the token/PAT value")
+    username: str | None = Field(None, description="Literal username to pair with the token — not a key reference")
+
+
 class AuthenticationModel(PlatformBaseModel):
     """
     Authentication configuration for cloud provider or integration access.
@@ -177,6 +211,8 @@ class AuthenticationModel(PlatformBaseModel):
         "saml",
         "cli",
         "managed_identity",
+        "ssh_key",
+        "token",
     ] = Field(description="Authentication method to use")
 
     # Method-specific configurations (only one should be populated based on method)
@@ -192,6 +228,10 @@ class AuthenticationModel(PlatformBaseModel):
     managed_identity: ManagedIdentityAuthenticationModel | None = Field(
         None, description="Managed/Workload Identity authentication"
     )
+    ssh_key: SSHKeyAuthenticationModel | None = Field(
+        None, description="SSH private key authentication (git deploy keys)"
+    )
+    token: TokenAuthenticationModel | None = Field(None, description="Bearer/PAT token authentication (git HTTPS)")
 
     # Operator documentation field (not used by the runtime — for human reference only)
     description: str | None = Field(
@@ -216,6 +256,8 @@ class AuthenticationModel(PlatformBaseModel):
             "saml",
             "cli",
             "managed_identity",
+            "ssh_key",
+            "token",
         )
         populated = [name for name in method_fields if getattr(self, name) is not None]
 
@@ -224,8 +266,6 @@ class AuthenticationModel(PlatformBaseModel):
 
         extra = [name for name in populated if name != self.method]
         if extra:
-            raise ValueError(
-                f"method is '{self.method}' but unrelated configuration is also set: {', '.join(extra)}"
-            )
+            raise ValueError(f"method is '{self.method}' but unrelated configuration is also set: {', '.join(extra)}")
 
         return self

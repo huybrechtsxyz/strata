@@ -20,7 +20,7 @@ and the reasoning for which one won.
 
 from typing import Annotated, Any
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from strata.models.common_models import (
     PlatformBaseModel,
@@ -28,9 +28,10 @@ from strata.models.common_models import (
     PlatformName,
     SourceModel,
 )
-from strata.models.reference_fields import References
+from strata.models.reference_fields import References, RemoteReference
 from strata.utils.builtin_types import SYNC_PROVISIONER_TYPES, TERRAFORM_COMPATIBLE_TYPES, ProvisionerType
 from strata.utils.names import check_unique_names
+from strata.utils.path_safety import validate_relative_path
 
 
 class ProvisionerBackendModel(PlatformBaseModel):
@@ -57,6 +58,45 @@ class ProvisionerAnsiblePropertiesModel(PlatformBaseModel):
     extra_vars: dict[str, str] | None = Field(
         None, description="Extra variables passed to ansible-playbook via --extra-vars"
     )
+
+
+class ProvisionerGitOpsModel(PlatformBaseModel):
+    """Only valid when a Provisioner's `tool` is a `SYNC_PROVISIONER_TYPES` member
+    (argocd, flux) — docs/design/gitops-integration.md.
+
+    GitOps provisioners render a values/config file (via `output.template`,
+    already tool-agnostic — ADR-0023 D3) and push it to an already-declared
+    git remote, where the in-cluster ArgoCD Application/Flux Kustomization
+    (bootstrapped separately, entirely out of strata's scope) watches for
+    changes. This model carries only the push *destination* — not v1's
+    loose `stage.backend.integration`/`.remote` (that field is earmarked for
+    terraform state config in this schema; reusing it here would be the
+    exact "type lie" `RemoteFetch`'s own docstring already warns against
+    elsewhere).
+    """
+
+    remote: Annotated[PlatformName, RemoteReference()] = Field(
+        description="The already-declared git remote (strata.yaml spec.remotes) holding the GitOps config repo."
+    )
+    output_file: str = Field(
+        description="Path, relative to the remote's root, of the file this provisioner renders and pushes."
+    )
+
+    @field_validator("output_file")
+    @classmethod
+    def validate_output_file(cls, v: str) -> str:
+        """Reject an absolute path or a '..' segment (found on code review,
+        2026-10-02) — `git_push.py` joins this verbatim onto the GitOps
+        checkout directory (`checkout_path / output_file`) and writes there
+        directly, before `git add` ever runs. `pathlib`'s `/` operator does
+        not sanitise '..', and silently *discards* the left side entirely
+        when the right side is absolute — an unvalidated `output_file` could
+        write anywhere on disk the process can reach. Same guard
+        `SourceModel.source_path`/`.target_path` already use
+        (`strata.utils.path_safety.validate_relative_path`) — this field is
+        the same risk class and had no reason to be the one exception.
+        """
+        return validate_relative_path(v)
 
 
 class OutputModel(PlatformBaseModel):
@@ -112,6 +152,9 @@ class ProvisionerModel(PlatformBaseModel):
     )
     properties: ProvisionerAnsiblePropertiesModel | None = Field(
         None, description="Typed Ansible properties. Only valid when tool is 'ansible'."
+    )
+    gitops: ProvisionerGitOpsModel | None = Field(
+        None, description="GitOps push destination. Only valid when tool is a sync type ('argocd', 'flux')."
     )
     configuration: dict[str, Any] | None = Field(
         None, description="Tool-specific passthrough configuration, not validated by strata."
@@ -198,6 +241,24 @@ class ProvisionerModel(PlatformBaseModel):
                 return self
             if known != ProvisionerType.ANSIBLE:
                 raise ValueError(f"Provisioner '{self.name}': 'properties' is only valid for tool 'ansible'.")
+        return self
+
+    @model_validator(mode="after")
+    def validate_gitops_only_for_sync_tools(self) -> "ProvisionerModel":
+        """`gitops` is rejected only for a *recognized* non-sync built-in.
+
+        Same reasoning as `backend`/`properties` above: reject a known
+        mismatch, but allow an unrecognized/custom tool through — a custom
+        plugin could legitimately be its own sync/GitOps-style tool, same
+        leniency `validate_source_required_unless_sync()` already applies.
+        """
+        if self.gitops is not None:
+            try:
+                known = ProvisionerType(self.tool)
+            except ValueError:
+                return self
+            if known not in SYNC_PROVISIONER_TYPES:
+                raise ValueError(f"Provisioner '{self.name}': 'gitops' is only valid for tool 'argocd' or 'flux'.")
         return self
 
 

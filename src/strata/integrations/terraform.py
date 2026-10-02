@@ -105,8 +105,23 @@ class TerraformIntegration(InfraIntegration):
         raw: bool = False,
         timeout: int = 60,
         env: Mapping[str, str] | None = None,
+        **kwargs: Any,
     ) -> CommandResult:
-        """`terraform output`. v1's `output` step."""
+        """`terraform output`. v1's `output` step.
+
+        `**kwargs: Any` added (docs/design/gitops-integration.md
+        Implementation Plan Phase 5) purely as defense-in-depth, matching
+        this class's own `plan()`/`deploy()` siblings, which already have
+        it — found on review that this method was the one real,
+        currently-reachable `output()` implementation `deploy_controller.
+        collect_step_outputs()` calls in production with no catch-all,
+        which an unconditionally-passed extra kwarg would have silently
+        broken (caught by that function's own `except TypeError: return
+        {}`, degrading every Terraform deployment's `${output:...}`
+        resolution to empty). `collect_step_outputs()` itself is also
+        fixed to never pass such a kwarg unconditionally — this is
+        independent belt-and-suspenders, not the only fix.
+        """
         args = ["output"]
         if json_format:
             args.append("-json")

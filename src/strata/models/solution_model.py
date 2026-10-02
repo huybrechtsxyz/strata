@@ -53,7 +53,7 @@ from strata.models.common_models import (
     validate_kind_matches,
 )
 from strata.utils.names import check_unique_names
-from strata.utils.path_safety import validate_relative_path
+from strata.utils.path_safety import validate_no_path_traversal, validate_relative_path
 
 
 class RemoteType(str, Enum):
@@ -176,6 +176,24 @@ class SolutionRemoteModel(PlatformBaseModel):
         "are never inline here — Integration is strata's single credential mechanism.",
     )
     description: str | None = Field(None, description="Optional description for documentation purposes")
+
+    @field_validator("reference")
+    @classmethod
+    def validate_reference_no_traversal(cls, v: str | None) -> str | None:
+        """Reject an absolute-looking value or a '..' segment (found on
+        code review, 2026-10-02) — `reference` is used verbatim as a
+        directory-path segment by every remote-checkout function
+        (`layout.remote_checkout_path()`, `.audit_push_checkout_path()`,
+        `.gitops_push_checkout_path()`). Unlike `source_path`-style fields,
+        a git ref legitimately contains internal '/' (`feature/foo`), so
+        this uses `validate_no_path_traversal()` (rejects a leading slash/
+        drive letter and '..' only) rather than the normalizing
+        `validate_relative_path()`, which would also strip/rewrite
+        separators a real git ref needs to keep exactly as declared.
+        """
+        if v is not None:
+            validate_no_path_traversal(v)
+        return v
 
     @model_validator(mode="after")
     def validate_reference_for_type(self) -> "SolutionRemoteModel":

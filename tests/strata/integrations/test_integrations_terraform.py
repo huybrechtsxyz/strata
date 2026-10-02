@@ -145,6 +145,18 @@ def test_output_argv(monkeypatch):
     assert captured["args"] == ["terraform", "output", "-json", "endpoint"]
 
 
+def test_output_tolerates_extra_kwargs(monkeypatch):
+    """Regression test (docs/design/gitops-integration.md Implementation
+    Plan Phase 5): `output()` must accept arbitrary extra kwargs
+    (`auth`/`resolved_values`, as `deploy_controller.collect_step_outputs()`
+    passes for a GitOps step) without raising `TypeError` — found on review
+    that this method, unlike its own `plan()`/`deploy()` siblings, had no
+    `**kwargs: Any` catch-all at all."""
+    captured = _capture(monkeypatch)
+    TerraformIntegration().output(Path("/work"), json_format=True, auth=None, resolved_values={"k": "v"})
+    assert captured["args"] == ["terraform", "output", "-json"]
+
+
 def test_show_argv_defaults_to_json(monkeypatch):
     captured = _capture(monkeypatch)
     TerraformIntegration().show(Path("/work"), plan_file="prd.tfplan")

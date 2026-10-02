@@ -7,6 +7,7 @@ import pytest
 
 from strata.controllers import remote_resolution as remote_resolution_module
 from strata.controllers.remote_resolution import RemoteResolutionError, resolve_remote
+from strata.models.auth_models import AuthenticationModel, SSHKeyAuthenticationModel
 from strata.models.solution_model import RemoteFetch, RemoteType, SolutionRemoteModel
 from strata.utils import layout
 from strata.utils.transport import CommandResult
@@ -111,3 +112,61 @@ def test_unfetchable_type_raises_a_clear_error(tmp_path: Path):
     remote = _remote(type=RemoteType.OCI, url="oci://example.com/chart", reference="v1.0.0")
     with pytest.raises(RemoteResolutionError, match="cannot fetch yet"):
         resolve_remote(tmp_path, remote)
+
+
+# ---------------------------------------------------------------------------
+# Real credentials (docs/design/gitops-integration.md Phase 4) — resolve_remote()/
+# _git_clone() thread `auth`/`resolved_values` into every git call via
+# `git_push.prepare_git_credentials()`.
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_remote_without_auth_passes_no_credential_env(tmp_path: Path, monkeypatch):
+    """Default behaviour (no `auth`) is unchanged — every existing caller."""
+    seen_envs: list[dict | None] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        seen_envs.append(dict(env) if env is not None else None)
+        return CommandResult(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(remote_resolution_module, "run_command", _fake_run_command)
+    remote = _remote()
+
+    resolve_remote(tmp_path, remote)
+
+    assert seen_envs
+    assert all(e == {} for e in seen_envs)
+
+
+def test_resolve_remote_with_ssh_key_auth_threads_credentials_through(tmp_path: Path, monkeypatch):
+    seen_envs: list[dict | None] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        seen_envs.append(dict(env) if env is not None else None)
+        return CommandResult(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(remote_resolution_module, "run_command", _fake_run_command)
+    remote = _remote()
+    auth = AuthenticationModel(method="ssh_key", ssh_key=SSHKeyAuthenticationModel(private_key="deploy-key-ref"))
+
+    resolve_remote(tmp_path, remote, auth=auth, resolved_values={"deploy-key-ref": "key-material"})
+
+    assert seen_envs
+    assert all(e is not None and "GIT_SSH_COMMAND" in e for e in seen_envs)
+
+
+def test_resolve_remote_with_misconfigured_auth_raises_remote_resolution_error_not_a_crash(tmp_path: Path, monkeypatch):
+    """Regression test found on follow-up review (2026-10-02): a credential
+    reference that doesn't resolve raises `IntegrationError` from
+    `prepare_git_credentials()` — a plain `Exception`, not a `StrataError`,
+    that must be converted to this module's own `RemoteResolutionError`
+    rather than escaping uncaught (same fix applied to `gitops.py`'s
+    `plan`/`deploy`/`destroy`/`output`)."""
+    captured = _capture(monkeypatch)
+    remote = _remote()
+    auth = AuthenticationModel(method="ssh_key", ssh_key=SSHKeyAuthenticationModel(private_key="missing-ref"))
+
+    with pytest.raises(RemoteResolutionError, match="did not resolve to a value"):
+        resolve_remote(tmp_path, remote, auth=auth, resolved_values={})
+
+    assert captured == []  # fails before any git command ever runs

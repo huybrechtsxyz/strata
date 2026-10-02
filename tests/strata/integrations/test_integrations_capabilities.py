@@ -453,14 +453,27 @@ def test_every_infra_integration_declares_a_resolved_value_delivery_mechanism():
     deployment gets a literal '${var:X}' string instead of the resolved
     value.
 
-    Passes today against the three real registered integrations
-    (Terraform via ENV_VAR_PREFIX, Helm/Compose via Capability.CONTAINER) —
-    a pure safety net, zero behaviour change.
+    Passes today against the real registered integrations (Terraform via
+    ENV_VAR_PREFIX, Helm/Compose via Capability.CONTAINER) — a pure safety
+    net, zero behaviour change.
     """
+    #: GitOps (docs/design/gitops-integration.md Phase 3) is the one real,
+    #: deliberate exception: `BaseGitOpsIntegration.default_output()` raises
+    #: unless `provisioner.output.template` is set (there is no default
+    #: values/config projection for a git push), which makes `output.template`
+    #: itself — not ENV_VAR_PREFIX, not Capability.CONTAINER — this tool's
+    #: *only* resolved-value delivery mechanism, via the same Jinja context
+    #: (`variables`/`flags`/`secrets`/`properties`/`custom`/`graph`)
+    #: `render_output_template()` already builds for Terraform's own
+    #: `output.template` escape hatch (ADR-0023 D3 — tool-agnostic by design).
+    gitops_exception = {"BaseGitOpsIntegration", "ArgoCDIntegration", "FluxIntegration"}
+
     checked = _all_infra_integration_types()
     assert checked, "No real InfraIntegration subclasses found — the walk itself is broken."
 
     for cls in checked:
+        if cls.__name__ in gitops_exception:
+            continue
         has_env_var_delivery = cls.ENV_VAR_PREFIX is not None
         has_container_delivery = Capability.CONTAINER in cls.CAPABILITIES
         assert has_env_var_delivery or has_container_delivery, (
@@ -472,11 +485,22 @@ def test_every_infra_integration_declares_a_resolved_value_delivery_mechanism():
 
 
 def test_every_infra_integration_type_is_a_known_real_integration():
-    """Names the three integrations this guard currently covers explicitly,
-    so adding a fourth real one is visible in a diff here too, not just
-    implicitly covered by the generic walk above."""
+    """Names the integrations this guard currently covers explicitly, so
+    adding a new one is visible in a diff here too, not just implicitly
+    covered by the generic walk above. `BaseGitOpsIntegration` is itself a
+    real, shared base (not a test fixture — those are already excluded by
+    module, see `_all_infra_integration_types()`'s own docstring) providing
+    real `plan`/`deploy`/`destroy`/`output` behaviour both `ArgoCDIntegration`/
+    `FluxIntegration` inherit unchanged."""
     names = {cls.__name__ for cls in _all_infra_integration_types()}
-    assert names == {"TerraformIntegration", "HelmIntegration", "ComposeIntegration"}
+    assert names == {
+        "TerraformIntegration",
+        "HelmIntegration",
+        "ComposeIntegration",
+        "BaseGitOpsIntegration",
+        "ArgoCDIntegration",
+        "FluxIntegration",
+    }
 
 
 def test_render_output_template_raises_on_unresolvable_reference(tmp_path: Path):

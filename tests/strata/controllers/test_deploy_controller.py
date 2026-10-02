@@ -1200,6 +1200,111 @@ def test_collect_step_outputs_empty_on_failed_output_call():
     assert collect_step_outputs(integration, Path("/work"), {}) == {}
 
 
+# ---------------------------------------------------------------------------
+# collect_step_outputs() auth/resolved_values (docs/design/gitops-integration.md
+# Implementation Plan Phase 5) — must stay a no-op call shape for every tool
+# except an actual GitOps step, found on review: TerraformIntegration.output()
+# has no `**kwargs: Any` of its own, so unconditionally passing these two
+# kwargs would break every real Terraform deploy's output collection.
+# ---------------------------------------------------------------------------
+
+
+def test_collect_step_outputs_without_auth_calls_output_with_no_extra_kwargs():
+    from strata.controllers.deploy_controller import collect_step_outputs
+    from strata.integrations.terraform import TerraformIntegration
+
+    captured: dict[str, object] = {}
+
+    class _FakeResult:
+        is_successful = True
+        stdout = "{}"
+
+    def _fake_output(path, **kwargs):
+        captured.update(kwargs)
+        return _FakeResult()
+
+    integration = TerraformIntegration()
+    integration.output = _fake_output  # type: ignore[method-assign]
+
+    collect_step_outputs(integration, Path("/work"), {})
+
+    assert "auth" not in captured
+    assert "resolved_values" not in captured
+
+
+def test_collect_step_outputs_with_auth_forwards_both_kwargs():
+    from strata.controllers.deploy_controller import collect_step_outputs
+    from strata.integrations.gitops import ArgoCDIntegration
+    from strata.models.auth_models import AuthenticationModel, CLIAuthenticationModel
+
+    captured: dict[str, object] = {}
+
+    class _FakeResult:
+        is_successful = True
+        stdout = "{}"
+
+    def _fake_output(path, **kwargs):
+        captured.update(kwargs)
+        return _FakeResult()
+
+    integration = ArgoCDIntegration()
+    integration.output = _fake_output  # type: ignore[method-assign]
+    auth = AuthenticationModel(method="cli", cli=CLIAuthenticationModel())
+
+    collect_step_outputs(integration, Path("/work"), {}, auth=auth, resolved_values={"k": "v"})
+
+    assert captured["auth"] is auth
+    assert captured["resolved_values"] == {"k": "v"}
+
+
+def test_collect_step_outputs_resolved_values_alone_still_forwards_both():
+    """Only one of the two being set is enough to trigger forwarding —
+    matches `collect_step_outputs()`'s own `if auth is not None or
+    resolved_values is not None` condition."""
+    from strata.controllers.deploy_controller import collect_step_outputs
+    from strata.integrations.gitops import ArgoCDIntegration
+
+    captured: dict[str, object] = {}
+
+    class _FakeResult:
+        is_successful = True
+        stdout = "{}"
+
+    def _fake_output(path, **kwargs):
+        captured.update(kwargs)
+        return _FakeResult()
+
+    integration = ArgoCDIntegration()
+    integration.output = _fake_output  # type: ignore[method-assign]
+
+    collect_step_outputs(integration, Path("/work"), {}, resolved_values={"k": "v"})
+
+    assert captured["auth"] is None
+    assert captured["resolved_values"] == {"k": "v"}
+
+
+def test_collect_step_outputs_real_terraform_output_tolerates_auth_kwargs():
+    """Regression test for the exact bug found on review: real
+    `TerraformIntegration.output()` must not raise `TypeError` when `auth`/
+    `resolved_values` are passed (its own new `**kwargs: Any` absorbs them)
+    — this would have silently degraded to `{}` before that fix."""
+    from strata.controllers.deploy_controller import collect_step_outputs
+    from strata.integrations.terraform import TerraformIntegration
+    from strata.models.auth_models import AuthenticationModel, CLIAuthenticationModel
+
+    class _FakeResult:
+        is_successful = True
+        stdout = json.dumps({"vm_ip": {"value": "10.0.0.5"}})
+
+    integration = TerraformIntegration()
+    integration.output = lambda *a, **kw: _FakeResult()  # type: ignore[method-assign]
+    auth = AuthenticationModel(method="cli", cli=CLIAuthenticationModel())
+
+    result = collect_step_outputs(integration, Path("/work"), {}, auth=auth, resolved_values={"k": "v"})
+
+    assert result == {"vm_ip": "10.0.0.5"}
+
+
 def test_upstream_step_names_is_transitive():
     from strata.controllers.deploy_controller import _upstream_step_names
     from strata.models.provisioning_model import ProvisioningStepModel
