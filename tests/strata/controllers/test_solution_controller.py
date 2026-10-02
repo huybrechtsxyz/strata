@@ -308,4 +308,9 @@ def test_shipped_example_solution_loads_cleanly():
     result = controller.load()
     assert result.ok, result.messages()
     assert controller.index.names_of(PlatformKind.WORKSPACE) == {"main"}
-    assert controller.index.names_of(PlatformKind.RESOURCE) == {"storage-account", "linux-vm"}
+    assert controller.index.names_of(PlatformKind.RESOURCE) == {
+        "storage-account",
+        "linux-vm",
+        "key-vault",
+        "app-gateway-waf",
+    }
