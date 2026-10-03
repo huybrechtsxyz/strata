@@ -108,6 +108,11 @@ class Capability(StrEnum):
     # Helm chart indexes alike, so the narrower "repository" would be as
     # misleading here as `CONTAINER`/`GITOPS` were on `RemoteType`.
     SOURCES = "sources"  #: SolutionRemoteModel-backed artifact sources (git/oci/helm auth)
+    # Promoted from the `x-audit` extension tier (docs/design/audit-sink-dispatch.md
+    # change 1): an audit sink is dispatched on by `audit_run._dispatch_sink()`,
+    # and `capabilities.py`'s own contract is that an `x-`-prefixed capability
+    # "never reaches here — there is nothing to dispatch it to".
+    AUDIT = "audit"  #: AuditSinkModel-backed audit event destinations
 
 
 #: Capability vocabulary v2 currently has real consumers for. Closed/curated

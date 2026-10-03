@@ -19,6 +19,9 @@ from strata.controllers.audit_push import PushResult
 from strata.controllers.audit_run import finalize_and_distribute_deploy_audit
 from strata.controllers.build_controller import build_run
 from strata.controllers.solution_context import open_solution
+from strata.integrations.capabilities import AuditSinkIntegration
+from strata.integrations.errors import IntegrationError
+from strata.models.integration_model import Capability
 from strata.utils import layout
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.transport import CommandResult
@@ -339,28 +342,152 @@ def test_push_failure_fails_command_when_required(tmp_path: Path, _terraform_stu
 # ---------------------------------------------------------------------------
 
 
-def test_integration_sink_is_not_dispatched_but_produces_info_finding(tmp_path: Path, _terraform_stub, monkeypatch):
-    root = _solution_root(tmp_path)
+def _add_webhook_integration(root: Path, *, name: str = "audit-hook", integration_type: str = "webhook") -> None:
     _write(
         root,
-        "config/integrations/splunk.yaml",
-        "apiVersion: strata.huybrechts.xyz/v2\nkind: integration\nmeta:\n  name: splunk-prod\nspec:\n"
-        "  type: splunk\n  capabilities: [x-audit]\n  required: false\n  enabled: true\n",
+        f"config/integrations/{name}.yaml",
+        f"apiVersion: strata.huybrechts.xyz/v2\nkind: integration\nmeta:\n  name: {name}\nspec:\n"
+        f"  type: {integration_type}\n  capabilities: [audit]\n  required: false\n  enabled: true\n"
+        "  endpoints:\n    address: https://siem.example.com/collect\n",
     )
+
+
+class _FakeSink(AuditSinkIntegration):
+    """Records what it was asked to send; never touches the network."""
+
+    TYPE = "webhook"
+    CAPABILITIES = frozenset({Capability.AUDIT})
+    TRANSPORTS = frozenset({"http"})
+
+    sent: list[dict] = []
+    fail_with: str | None = None
+
+    def send(self, event: dict) -> None:
+        if type(self).fail_with is not None:
+            raise IntegrationError(type(self).fail_with)
+        type(self).sent.append(event)
+
+
+@pytest.fixture
+def _fake_sink(monkeypatch):
+    _FakeSink.sent = []
+    _FakeSink.fail_with = None
+    monkeypatch.setattr(audit_run_module.registry, "get", lambda t, c=None: _FakeSink(c))
+    return _FakeSink
+
+
+def test_integration_sink_dispatches_rendered_event(tmp_path: Path, _terraform_stub, _fake_sink):
+    root = _solution_root(tmp_path)
+    _add_webhook_integration(root)
     _add_configuration(
         root,
-        "  audit:\n    sinks:\n      - name: prod-siem\n        integration: splunk-prod\n"
+        "  audit:\n    sinks:\n      - name: prod-siem\n        integration: audit-hook\n"
         "        events: [deployment.completed]\n",
     )
     build_path = _run_deploy_and_build(root, tmp_path)
 
-    called = {"push": False}
-    monkeypatch.setattr(
-        audit_run_module, "push_audit_files", lambda *a, **k: called.update(push=True) or PushResult(True)
+    diagnostics = _finalize(root, build_path)
+
+    assert diagnostics.ok
+    assert len(_fake_sink.sent) == 1
+    event = _fake_sink.sent[0]
+    assert event["type"] == "xyz.huybrechts.strata.deployment.completed"
+    assert event["specversion"] == "1.0"
+    assert event["data"]["manifest"]["path"].endswith("_manifest.json")
+    assert event["data"]["manifest"]["sha256"].startswith("sha256:")
+
+
+def test_integration_sink_respects_event_filter(tmp_path: Path, _terraform_stub, _fake_sink):
+    """No `events` filter means every admitted type — both events dispatch."""
+    root = _solution_root(tmp_path)
+    _add_webhook_integration(root)
+    _add_configuration(root, "  audit:\n    sinks:\n      - name: prod-siem\n        integration: audit-hook\n")
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    _finalize(root, build_path)
+
+    sent_types = sorted(e["type"] for e in _fake_sink.sent)
+    assert sent_types == [
+        "xyz.huybrechts.strata.deployment.completed",
+        "xyz.huybrechts.strata.deployment.measured",
+    ]
+
+
+def test_integration_sink_send_failure_warns_when_not_required(tmp_path: Path, _terraform_stub, _fake_sink):
+    root = _solution_root(tmp_path)
+    _add_webhook_integration(root)
+    _add_configuration(
+        root,
+        "  audit:\n    sinks:\n      - name: prod-siem\n        integration: audit-hook\n"
+        "        events: [deployment.completed]\n",
     )
+    build_path = _run_deploy_and_build(root, tmp_path)
+    _fake_sink.fail_with = "endpoint refused the connection"
+
+    diagnostics = _finalize(root, build_path)
+
+    assert diagnostics.ok  # a warning never fails the run
+    assert any("endpoint refused" in w.message for w in diagnostics.warnings)
+
+
+def test_integration_sink_send_failure_fails_run_when_required(tmp_path: Path, _terraform_stub, _fake_sink):
+    root = _solution_root(tmp_path)
+    _add_webhook_integration(root)
+    _add_configuration(
+        root,
+        "  audit:\n    sinks:\n      - name: prod-siem\n        integration: audit-hook\n"
+        "        required: true\n        events: [deployment.completed]\n",
+    )
+    build_path = _run_deploy_and_build(root, tmp_path)
+    _fake_sink.fail_with = "endpoint refused the connection"
+
+    diagnostics = _finalize(root, build_path)
+
+    assert not diagnostics.ok
+    assert any("endpoint refused" in e.message for e in diagnostics.errors)
+
+
+def test_integration_sink_without_audit_capability_is_reported(tmp_path: Path, _terraform_stub, monkeypatch):
+    """A terraform Integration wired to an audit sink is a config error, not a crash."""
+    root = _solution_root(tmp_path)
+    _write(
+        root,
+        "config/integrations/tf.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: integration\nmeta:\n  name: tf-tool\nspec:\n"
+        "  type: terraform\n  capabilities: [infrastructure]\n  enabled: true\n",
+    )
+    _add_configuration(
+        root,
+        "  audit:\n    sinks:\n      - name: prod-siem\n        integration: tf-tool\n"
+        "        events: [deployment.completed]\n",
+    )
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    diagnostics = _finalize(root, build_path)
+
+    assert diagnostics.ok  # not required -> warning
+    assert any("does not provide" in w.message and "audit" in w.message for w in diagnostics.warnings)
+
+
+def test_disabled_integration_document_dispatches_nothing(tmp_path: Path, _terraform_stub, _fake_sink):
+    """`spec.enabled: false` on the Integration is a deliberate off-switch, not a failure."""
+    root = _solution_root(tmp_path)
+    _write(
+        root,
+        "config/integrations/audit-hook.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: integration\nmeta:\n  name: audit-hook\nspec:\n"
+        "  type: webhook\n  capabilities: [audit]\n  enabled: false\n"
+        "  endpoints:\n    address: https://siem.example.com/collect\n",
+    )
+    _add_configuration(
+        root,
+        "  audit:\n    sinks:\n      - name: prod-siem\n        integration: audit-hook\n"
+        "        events: [deployment.completed]\n",
+    )
+    build_path = _run_deploy_and_build(root, tmp_path)
 
     diagnostics = _finalize(root, build_path)
 
     assert diagnostics.ok
-    assert called["push"] is False
-    assert any("not implemented yet" in i.message and "prod-siem" in i.message for i in diagnostics.infos)
+    assert not diagnostics.warnings
+    assert _fake_sink.sent == []

@@ -41,6 +41,7 @@ _KNOWN: dict[str, tuple[str, str]] = {
     "helm": ("strata.integrations.helm", "HelmIntegration"),
     "argocd": ("strata.integrations.gitops", "ArgoCDIntegration"),
     "flux": ("strata.integrations.gitops", "FluxIntegration"),
+    "webhook": ("strata.integrations.webhook", "WebhookIntegration"),
     # ansible/git/bicep/opentofu/vault/consul/etcd/bitwarden/flagsmith/cost/
     # cve/siem/identity as each gets a real v2 consumer (ADR-0021 Phase 7+).
 }
@@ -71,7 +72,6 @@ _KNOWN_V1_TYPES = frozenset(
         "elk",
         "otel",
         "splunk",
-        "webhook",
         "syslog",
     }
 )

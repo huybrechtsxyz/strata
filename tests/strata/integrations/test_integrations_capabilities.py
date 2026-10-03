@@ -6,6 +6,7 @@ from pathlib import Path
 from strata.integrations.base import Integration
 from strata.integrations.capabilities import (
     CAPABILITY_ABCS,
+    AuditSinkIntegration,
     InfraIntegration,
     StoreIntegration,
     find_capability_mismatches,
@@ -185,13 +186,15 @@ def test_no_mismatch_for_a_capability_with_no_abc_yet():
 
 
 def test_capability_abcs_covers_every_core_capability_with_a_real_consumer():
-    """variables/secrets/features -> StoreIntegration; infrastructure/container -> InfraIntegration."""
+    """variables/secrets/features -> StoreIntegration; infrastructure/container ->
+    InfraIntegration; audit -> AuditSinkIntegration."""
     assert CAPABILITY_ABCS == {
         "variables": StoreIntegration,
         "secrets": StoreIntegration,
         "features": StoreIntegration,
         "infrastructure": InfraIntegration,
         "container": InfraIntegration,
+        "audit": AuditSinkIntegration,
     }
 
 

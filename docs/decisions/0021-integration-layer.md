@@ -7,7 +7,9 @@
 - Date: 2026-09-23
 - See also: [docs/design/build-pipeline-status.md](../design/build-pipeline-status.md)
   for cross-ADR status across the Integration layer / build run / output
-  rendering trio (ADR-0021/0022/0023).
+  rendering trio (ADR-0021/0022/0023), and
+  [docs/design/audit-sink-dispatch.md](../design/audit-sink-dispatch.md)
+  for the audit sink capability/class added within this ADR's structure.
 - Related: [ADR-0011](0011-topology-and-provisioning-decoupling.md)
   (`ProvisionerModel.tool`'s open-string vocabulary is reused here; this ADR
   **removes** that model's `.version` field and adds `.integration` - see

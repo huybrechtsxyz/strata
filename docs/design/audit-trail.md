@@ -6,7 +6,11 @@
   writes a real, local audit manifest + metrics record on every
   invocation, and distributes them to configured `git` sinks. Layer 2 is
   live. The manifest's `sbom` reference is now also wired to the real
-  build-time SBOM (2026-10-03).
+  build-time SBOM (2026-10-03). Layer 4's actual dispatch is designed and
+  implemented separately in
+  [audit-sink-dispatch.md](audit-sink-dispatch.md) (2026-10-03) — the
+  `integration` sink arm this doc left as a stub now really sends, via a
+  generic `webhook` integration.
 - Last updated: 2026-09-30
 
 ## Overview
@@ -1386,6 +1390,9 @@ Within this repo: [`docs/design/gap_fit_v1.md`](gap_fit_v1.md) gap #7 tracks
 `audit` as still fully open/unstarted, alongside `policies`/`promotions`.
 [`docs/design/v2-schema-overview.md`](v2-schema-overview.md) has no audit
 entry yet — add one once a v2 ADR exists.
+[`docs/design/audit-sink-dispatch.md`](audit-sink-dispatch.md) (2026-10-03)
+is the child design for Layer 4's actual dispatch — the `integration` sink
+arm this doc deliberately left as a stub, starting with a generic webhook.
 
 ## Remaining Work / Open Questions
 

@@ -314,6 +314,37 @@ class InfraIntegration(Integration):
         """Tear down what `path`'s code previously created."""
 
 
+class AuditSinkIntegration(Integration):
+    """Capability: `audit`. Delivers one rendered audit event to a destination.
+
+    The contract half of docs/design/audit-sink-dispatch.md's Layer 4
+    dispatch. Deliberately takes an already-rendered `dict`, not a manifest/
+    metrics model: `controllers/audit_event_rendering.py` owns the
+    CloudEvents 1.0 + ECS envelope for *every* sink, so a concrete class
+    never re-derives the wire shape and two sinks can never disagree about
+    what an event looks like.
+
+    One event per call, never a batch (that design's D5) — matches the
+    renderers' own one-event-per-call shape and the per-type `events`
+    filter already applied upstream in `_dispatch_sink()`.
+    """
+
+    @abstractmethod
+    def send(self, event: dict[str, Any]) -> None:
+        """Deliver one rendered audit event.
+
+        Args:
+            event: A rendered CloudEvents 1.0 + ECS envelope (see
+                `controllers/audit_event_rendering.py`).
+
+        Raises:
+            strata.integrations.errors.IntegrationError: The event could not
+                be delivered. The caller (`_dispatch_sink()`) decides whether
+                that warns or fails the run, from the sink's own `required`
+                flag — a concrete class never makes that call itself.
+        """
+
+
 #: Capability -> the ABC a class declaring it must implement. Keyed by
 #: `str`, not `Capability`, even though every key is a `Capability` member
 #: (`Capability <: str`, so this stays assignable) — `find_capability_
@@ -331,6 +362,7 @@ CAPABILITY_ABCS: dict[str, type[Integration]] = {
     Capability.FEATURES: StoreIntegration,
     Capability.INFRASTRUCTURE: InfraIntegration,
     Capability.CONTAINER: InfraIntegration,
+    Capability.AUDIT: AuditSinkIntegration,
 }
 
 

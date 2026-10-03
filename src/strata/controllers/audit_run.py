@@ -30,11 +30,13 @@ yet (the design doc's own Phase 5 checklist said "and the equivalent
 destroy path" before this was checked against real code; there is no such
 path to wire yet). Extend when `deploy destroy` is built.
 
-Never dispatches through the `integration` sink arm — produces one
-`Severity.INFO` finding per configured integration sink instead, naming it
-explicitly so a config author sees the sink is inert rather than silently
-assuming it forwards (see "Capability gating" and this module's own
-`_admit_sinks`).
+Both sink arms now really dispatch: `git` pushes the written files
+(Phase 4), and `integration` renders a CloudEvents+ECS envelope per
+admitted event type and sends it through an `AuditSinkIntegration`
+(docs/design/audit-sink-dispatch.md). Every integration-arm failure — a
+missing/incapable Integration document as much as a failed send — is
+reported through the sink's own `required` flag rather than raised, so a
+misconfigured audit sink never takes down a deploy that already succeeded.
 """
 
 import hashlib
@@ -44,11 +46,15 @@ from pathlib import Path
 from typing import Literal, cast
 
 from strata import __version__
+from strata.controllers.audit_event_rendering import render_manifest_event, render_metrics_event
 from strata.controllers.audit_path_resolution import resolve_audit_relative_path
 from strata.controllers.audit_push import push_audit_files
 from strata.controllers.sbom_controller import SBOM_FORMAT
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.value_controller import resolve_deployment
+from strata.integrations import registry
+from strata.integrations.capabilities import AuditSinkIntegration
+from strata.integrations.errors import IntegrationError
 from strata.models.audit_manifest_model import (
     DeploymentManifestModel,
     ManifestArtifactsModel,
@@ -57,9 +63,10 @@ from strata.models.audit_manifest_model import (
 )
 from strata.models.audit_metrics_model import DeploymentMetricsModel, MetricsDimensionsModel, MetricsMeasuresModel
 from strata.models.audit_model import EVENT_DEFAULTS, AuditSinkModel
-from strata.models.common_models import PlatformKind
+from strata.models.common_models import PlatformKind, PlatformVersion
 from strata.models.configuration_model import ConfigurationModel
 from strata.models.deployment_model import DeploymentModel
+from strata.models.integration_model import Capability, IntegrationModel
 from strata.utils import layout
 from strata.utils.actor import resolve_actor
 from strata.utils.diagnostics import Diagnostics, Severity
@@ -171,10 +178,13 @@ def finalize_and_distribute_deploy_audit(
             sink,
             admitted_types=admitted_types,
             context=context,
+            manifest=manifest,
+            metrics=metrics,
             manifest_path=manifest_path,
             metrics_path=metrics_path,
             relative_path=relative_path,
             actor=actor,
+            api_version=deployment.apiVersion,
             diagnostics=diagnostics,
         )
 
@@ -186,10 +196,13 @@ def _dispatch_sink(
     *,
     admitted_types: list[str],
     context: SolutionContext,
+    manifest: DeploymentManifestModel,
+    metrics: DeploymentMetricsModel,
     manifest_path: Path,
     metrics_path: Path,
     relative_path: Path,
     actor: str,
+    api_version: PlatformVersion,
     diagnostics: Diagnostics,
 ) -> None:
     """Admission + dispatch for one sink — appends findings to `diagnostics` in place."""
@@ -200,10 +213,17 @@ def _dispatch_sink(
         return
 
     if sink.integration is not None:
-        diagnostics.info(
-            f"sink '{sink.name}': integration dispatch is not implemented yet "
-            "(docs/design/audit-trail.md's Layer 2 Implementation Plan) — this sink is configured but inert.",
-            code="audit_integration_sink_not_dispatched",
+        _dispatch_integration_sink(
+            sink,
+            sink_events=sink_events,
+            context=context,
+            manifest=manifest,
+            metrics=metrics,
+            manifest_path=manifest_path,
+            metrics_path=metrics_path,
+            relative_path=relative_path,
+            api_version=api_version,
+            diagnostics=diagnostics,
         )
         return
 
@@ -215,11 +235,98 @@ def _dispatch_sink(
     result = push_audit_files(context.root, sink.git, context.controller.solution, files, relative_path, actor)
     if result.success:
         return
-    message = f"sink '{sink.name}': audit push failed — {result.detail}"
+    _record_sink_failure(
+        sink, f"sink '{sink.name}': audit push failed — {result.detail}", "audit_sink_push_failed", diagnostics
+    )
+
+
+def _dispatch_integration_sink(
+    sink: AuditSinkModel,
+    *,
+    sink_events: list[str],
+    context: SolutionContext,
+    manifest: DeploymentManifestModel,
+    metrics: DeploymentMetricsModel,
+    manifest_path: Path,
+    metrics_path: Path,
+    relative_path: Path,
+    api_version: PlatformVersion,
+    diagnostics: Diagnostics,
+) -> None:
+    """Render and send each admitted event through one `integration` sink
+    (docs/design/audit-sink-dispatch.md).
+
+    Every failure mode here is reported through the sink's own `required`
+    flag, never raised — a misconfigured audit sink must not take down a
+    deploy that already succeeded, unless the solution explicitly said it
+    should.
+    """
+    entry = context.controller.index.get(PlatformKind.INTEGRATION, sink.integration or "")
+    if entry is None:
+        _record_sink_failure(
+            sink,
+            f"sink '{sink.name}': references Integration '{sink.integration}', which does not exist.",
+            "audit_sink_integration_missing",
+            diagnostics,
+        )
+        return
+
+    integration_model = cast(IntegrationModel, entry.model)
+    if not integration_model.spec.enabled:
+        return  # an explicitly disabled integration is a deliberate off-switch, not a failure
+
+    try:
+        integration = registry.get(integration_model.spec.type, integration_model)
+    except IntegrationError as exc:
+        _record_sink_failure(sink, f"sink '{sink.name}': {exc}", "audit_sink_integration_unavailable", diagnostics)
+        return
+
+    if not isinstance(integration, AuditSinkIntegration):
+        _record_sink_failure(
+            sink,
+            f"sink '{sink.name}': Integration '{integration_model.meta.name}' (type "
+            f"'{integration_model.spec.type}') does not provide the '{Capability.AUDIT}' capability.",
+            "audit_sink_integration_not_capable",
+            diagnostics,
+        )
+        return
+
+    for event_type in sink_events:
+        if event_type == "deployment.measured":
+            event = render_metrics_event(
+                metrics,
+                relative_path=(relative_path / _METRICS_FILENAME).as_posix(),
+                file_sha256=_sha256_of(metrics_path),
+                api_version=api_version,
+            )
+        else:
+            event = render_manifest_event(
+                manifest,
+                relative_path=(relative_path / _MANIFEST_FILENAME).as_posix(),
+                file_sha256=_sha256_of(manifest_path),
+                api_version=api_version,
+            )
+        try:
+            integration.send(event)
+        except IntegrationError as exc:
+            _record_sink_failure(sink, f"sink '{sink.name}': {exc}", "audit_sink_dispatch_failed", diagnostics)
+
+
+def _record_sink_failure(sink: AuditSinkModel, message: str, code: str, diagnostics: Diagnostics) -> None:
+    """One place deciding warn-vs-fail, so both sink arms can never drift apart.
+
+    `required` is the whole decision (docs/design/audit-trail.md's "Dispatch
+    failure — a `required` flag, not a binary silent-vs-fail choice").
+    """
     if sink.required:
-        diagnostics.error(message, code="audit_sink_push_failed")
+        diagnostics.error(message, code=code)
     else:
-        diagnostics.warning(message, code="audit_sink_push_failed")
+        diagnostics.warning(message, code=code)
+
+
+def _sha256_of(path: Path) -> str:
+    """`sha256:`-prefixed digest of `path`, matching `_platform_reference()`'s own format."""
+    return f"sha256:{hashlib.sha256(path.read_bytes()).hexdigest()}"
 
 
 def _single_configuration(context: SolutionContext) -> ConfigurationModel | None:
