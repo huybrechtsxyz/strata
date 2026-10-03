@@ -1,10 +1,9 @@
 # Audit Sink Dispatch (Layer 4) — Design
 
-- Status: **partially implemented** — webhook sink shipped and live
-  (2026-10-03). OTel and Azure Sentinel sinks designed (2026-10-03), not
-  yet implemented. Jinja body templating and remaining vendor classes
-  (Splunk HEC, ELK-direct, syslog/CEF) deliberately deferred (see Remaining
-  Work).
+- Status: **implemented (2026-10-03)** — webhook, OTel, and Azure Sentinel
+  sinks all shipped and live. Jinja body templating and remaining vendor
+  classes (Splunk HEC, ELK-direct, syslog/CEF) deliberately deferred (see
+  Remaining Work).
 - Last updated: 2026-10-03
 
 ## Overview
@@ -81,37 +80,74 @@ same anticipation mistake this design exists to avoid.
 Worth recording explicitly, because it is easy to discover too late: **not
 every SIEM protocol is expressible as "POST a templated body."**
 
-| Target                                                   | Expressible as URL + headers + body?                                          |
-| -------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Generic webhook, Splunk HEC, ELK/Logstash, Loki, Datadog | Yes                                                                           |
-| **Azure Sentinel** (Log Analytics Data Collector API)    | **No** — needs a per-request HMAC-SHA256 signature over body+timestamp+length |
-| syslog / CEF                                             | No — not HTTP at all (UDP/TCP socket)                                         |
-| OTLP / protobuf                                          | No (OTLP-over-HTTP+JSON is borderline)                                        |
+| Target                                                     | Expressible as URL + headers + body?                                                                                              |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Generic webhook, Splunk HEC, ELK/Logstash, Loki, Datadog   | Yes                                                                                                                               |
+| OTLP/HTTP JSON (`/v1/logs`)                                | No as a flat template — needs a nested `resourceLogs[].scopeLogs[].logRecords[]` envelope built in code, not substituted into one |
+| **Azure Sentinel** (Monitor Logs Ingestion API, DCR-based) | No — **corrected 2026-10-03**, see below                                                                                          |
+| syslog / CEF                                               | No — not HTTP at all (UDP/TCP socket)                                                                                             |
 
-Sentinel is the uncomfortable case: the real consumers here are Azure
-landscapes, so it is plausibly the *first* vendor ask — and it is precisely
-the one a pure-template design silently cannot serve.
+**Correction, checked directly against v1's real source
+(`e:\SourcesXYZ\strata\src\strata\integrations\siem\sentinel_integration.py`):
+Sentinel does *not* need an HMAC-SHA256 signature.** That requirement
+belongs to the legacy, now-deprecated HTTP Data Collector API — v1's actual
+implementation targets the modern **Monitor Logs Ingestion API** (DCR-based):
+`POST {dce-endpoint}/dataCollectionRules/{dcr-id}/streams/{stream-name}
+?api-version=2023-01-01`, authenticated with a plain AAD bearer token via
+`azure.identity.DefaultAzureCredential` — no custom cryptography at all.
+`azure-identity` is already a strata dependency and already the established
+pattern for Azure auth here (`integrations/azure_keyvault_resolver.py`,
+`TRANSPORTS={"sdk"}`). The original claim in this doc was wrong; recorded
+as a correction, not silently fixed, since the conclusion it fed ("write a
+small dedicated class, don't grow the template language") still holds —
+Sentinel needs a DCR/stream URL plus a credential-chain token, which is
+still real code, just simpler real code than first thought.
+
+OTLP/HTTP is a similar case in the other direction: no cryptography, but
+still not template-shaped — the nested `resourceLogs` structure needs real
+code to assemble, the same reasoning D2 already applies to Sentinel.
 
 **Rejected: giving the template a mini-stdlib** (`hmac_sha256`,
-`now_rfc1123`, `base64`) to close that gap. That is inventing a
+`now_rfc1123`, `base64`) to close gaps like this. That is inventing a
 crypto-capable programming language in YAML, and this codebase already
 rejected the same shape of idea once:
 [path-conventions.md](path-conventions.md) declined to build "a small
 YAML-expression/JSONPath interpreter" and chose one small dedicated function
-per real check instead. The equivalent here is a ~30-line Sentinel class,
-written when somebody actually needs it.
+per real check instead. The equivalent here is one small dedicated class
+per target, written when somebody actually needs it — which, per D3's
+amendment below, two of them now do.
 
 ### D3 — Vendor classes are gated on evidence, docs carry vendor knowledge
 
-No Splunk/ELK/Sentinel/syslog class is written until a real consumer has one
-`enabled: true`. This matches the "two or more independently-written real
-consumers converging" bar already applied elsewhere in this repo.
+No Splunk/syslog class is written until a real consumer has one `enabled:
+true`. This matches the "two or more independently-written real consumers
+converging" bar already applied elsewhere in this repo.
 
 What prevents the "it feels lacking" failure mode is **not** shipping five
 classes — it is that one generic sink plus a documented config example per
-target lets a user send to Splunk HEC / ELK / any webhook *today*, with zero
-vendor code on our side. The vendor-specific knowledge lives in docs, not in
-unused Python.
+target lets a user send to Splunk HEC / any plain webhook *today*, with
+zero vendor code on our side. The vendor-specific knowledge lives in docs,
+not in unused Python.
+
+**Amendment (2026-10-03) — OTel and Sentinel meet the bar, on two different
+grounds, each real rather than speculative:**
+
+- **OTel** — a real, already-running consumer: "our ELK stack can handle
+  otel." Confirmed directly that modern Elastic accepts OTLP natively
+  (APM Server/Elastic Agent/Elastic Cloud), so this is not a bet on the
+  ecosystem, it is today's actual infrastructure. It is also structurally
+  different from "one more vendor class": an OTel Collector itself fans
+  out to Splunk/Elastic/Datadog/Sentinel/Loki as *its own* job, so
+  supporting the one OTLP protocol well is closer to "stop writing SIEM
+  classes" than to "write a fourth one."
+- **Sentinel** — a real, named, planned consumer: "will be part of the
+  control layer later." Not evidenced by an already-`enabled: true` sink
+  (the bar's literal wording), but a concrete, named future consumer is a
+  materially different thing from the anticipatory "might be nice" this
+  bar exists to filter out — treated as meeting it.
+
+Splunk HEC/ELK-direct/syslog-CEF remain deferred; no named consumer for any
+of them yet.
 
 ### D4 — Credentials come from the environment
 
@@ -277,8 +313,7 @@ Datadog, an OTel Collector that itself fans out further.
 
 ## Remaining Work / Open Questions
 
-- **OTel and Sentinel sinks** — designed above (2026-10-03), not yet
-  implemented.
+- **OTel and Sentinel sinks** — designed and implemented (2026-10-03).
 - **Jinja2 body template** (`configuration.body_template`) — deferred by D1.
   Dispatch happens at end-of-run when every value is already resolved, so
   unlike `output.template` this needs no build-validate/deploy-render split;
@@ -345,3 +380,16 @@ Datadog, an OTel Collector that itself fans out further.
   reproducing: it stamps every event with `time.time()` (send time) instead
   of the event's own occurrence time — v2's design uses the event's own
   `time` field instead. Not yet implemented.
+- 2026-10-03: **Implemented OTel and Sentinel.** `OtelIntegration`
+  (`integrations/otel.py`) and `SentinelIntegration`
+  (`integrations/sentinel.py`) added, matching the designs above exactly;
+  both moved from `registry._KNOWN_V1_TYPES` into `_KNOWN`.
+  `WebhookIntegration`'s own docstring, which had repeated the original
+  incorrect HMAC claim, corrected to match. 23 new tests (12 for OTel, 11
+  for Sentinel — token-caching, both required-configuration keys,
+  authentication failure, non-2xx/timeout, array-not-object body for
+  Sentinel, event-own-time-not-wall-clock for OTel). No new dependency:
+  `azure-core`'s `TokenCredential`/`ClientAuthenticationError` already
+  resolve transitively via the existing `azure-identity` dependency. Full
+  check suite green: mypy (136 files), ruff, ruff format, import-linter
+  1/0, pytest 1874 passed.

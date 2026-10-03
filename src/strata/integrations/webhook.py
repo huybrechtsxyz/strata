@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """Generic HTTP audit sink — `type: webhook` (docs/design/audit-sink-dispatch.md).
 
-The one concrete `AuditSinkIntegration` v2 ships, deliberately ahead of any
-vendor-specific (Splunk HEC / ELK / Sentinel) class: v1 shipped five SIEM
-backends and real usage was one, `enabled: false`. A generic POST plus a
-documented configuration example per target covers Splunk HEC, ELK/Logstash,
-Loki, Datadog and any plain webhook with zero vendor code here (that design's
-D1/D3). What it cannot cover is recorded there too, so the limit is decided
-rather than discovered: Azure Sentinel needs a per-request HMAC signature,
-and syslog/CEF is not HTTP at all — both need real code, written when a real
-consumer asks.
+The first concrete `AuditSinkIntegration` v2 shipped, deliberately ahead of
+any vendor-specific (Splunk HEC / OTel / Sentinel) class: v1 shipped five
+SIEM backends and real usage was one, `enabled: false`. A generic POST plus
+a documented configuration example per target covers Splunk HEC,
+ELK/Logstash, Loki, Datadog and any plain webhook with zero vendor code here
+(that design's D1/D3). What it cannot cover is recorded there too, so the
+limit is decided rather than discovered: OTel's nested `resourceLogs`
+envelope and Sentinel's DCR/stream URL plus AAD bearer token (`otel.py`/
+`sentinel.py`) both need real code, not a template, and syslog/CEF is not
+HTTP at all — none of the three is a per-request HMAC signature, an earlier
+claim about Sentinel this doc corrected once real source was checked (see
+that design's D2).
 
 The request body is the already-rendered CloudEvents 1.0 + ECS envelope,
 JSON-encoded. This class never shapes the payload itself — see

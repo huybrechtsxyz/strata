@@ -42,8 +42,11 @@ _KNOWN: dict[str, tuple[str, str]] = {
     "argocd": ("strata.integrations.gitops", "ArgoCDIntegration"),
     "flux": ("strata.integrations.gitops", "FluxIntegration"),
     "webhook": ("strata.integrations.webhook", "WebhookIntegration"),
+    "otel": ("strata.integrations.otel", "OtelIntegration"),
+    "sentinel": ("strata.integrations.sentinel", "SentinelIntegration"),
     # ansible/git/bicep/opentofu/vault/consul/etcd/bitwarden/flagsmith/cost/
-    # cve/siem/identity as each gets a real v2 consumer (ADR-0021 Phase 7+).
+    # cve/splunk/syslog/identity as each gets a real v2 consumer (ADR-0021
+    # Phase 7+).
 }
 
 #: v1 types not yet ported to v2. Only used so "not built yet" (a real, known
@@ -68,9 +71,7 @@ _KNOWN_V1_TYPES = frozenset(
         "azure-cli",
         "aws-cli",
         "gcloud-cli",
-        "sentinel",
         "elk",
-        "otel",
         "splunk",
         "syslog",
     }
