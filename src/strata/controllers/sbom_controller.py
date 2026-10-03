@@ -39,7 +39,11 @@ from strata.utils.diagnostics import Diagnostics
 log = get_logger(__name__)
 
 _SBOM_FILENAME = "sbom.json"
-_SBOM_FORMAT = "cyclonedx-1.6"
+
+#: Public — `audit_run.py`'s `_sbom_reference()` reuses this as the single
+#: source of truth rather than hardcoding a second copy of the format string
+#: when re-deriving the manifest's `sbom` reference at deploy time.
+SBOM_FORMAT = "cyclonedx-1.6"
 
 _TYPE_MAP: dict[str, ComponentType] = {
     "container": ComponentType.CONTAINER,
@@ -106,7 +110,7 @@ def write_sbom(build_path: Path, graph: ResolvedWorkspaceGraph, index: DocumentI
 
     reference = SbomReferenceModel(
         path=str(sbom_path),
-        format=_SBOM_FORMAT,
+        format=SBOM_FORMAT,
         sha256=f"sha256:{hashlib.sha256(sbom_bytes).hexdigest()}",
         component_count=len(components),
     )

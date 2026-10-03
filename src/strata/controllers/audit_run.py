@@ -19,6 +19,12 @@ therefore coarser than the full design in this pass: no `stages[]` at all
 equivalent to v1's `platform.json`; v2 does not produce that exact file
 today, so this is an honest adaptation, not a literal port.
 
+`sbom` references `build_path/sbom.json` (`sbom_controller.write_sbom()`,
+gap #18 Phase 1) the same way — re-hashed fresh here rather than threaded
+through from the earlier `build run` process, since the two are separate
+CLI invocations with no in-memory value to carry between them. Optional,
+unlike `artifacts.platform`: a missing SBOM raises no diagnostic.
+
 Only wired for `deploy` in this pass — no `destroy` command exists in v2
 yet (the design doc's own Phase 5 checklist said "and the equivalent
 destroy path" before this was checked against real code; there is no such
@@ -32,6 +38,7 @@ assuming it forwards (see "Capability gating" and this module's own
 """
 
 import hashlib
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, cast
@@ -39,12 +46,14 @@ from typing import Literal, cast
 from strata import __version__
 from strata.controllers.audit_path_resolution import resolve_audit_relative_path
 from strata.controllers.audit_push import push_audit_files
+from strata.controllers.sbom_controller import SBOM_FORMAT
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.value_controller import resolve_deployment
 from strata.models.audit_manifest_model import (
     DeploymentManifestModel,
     ManifestArtifactsModel,
     ManifestPlatformReferenceModel,
+    ManifestSbomReferenceModel,
 )
 from strata.models.audit_metrics_model import DeploymentMetricsModel, MetricsDimensionsModel, MetricsMeasuresModel
 from strata.models.audit_model import EVENT_DEFAULTS, AuditSinkModel
@@ -128,6 +137,7 @@ def finalize_and_distribute_deploy_audit(
         dry_run=False,
         deployed_by=actor,
         artifacts=ManifestArtifactsModel(platform=platform_ref),
+        sbom=_sbom_reference(build_path),
         errors=run_diagnostics.messages(Severity.ERROR) or None,
     )
     metrics = DeploymentMetricsModel(
@@ -244,3 +254,28 @@ def _platform_reference(build_path: Path) -> tuple[ManifestPlatformReferenceMode
         return None, diagnostics
     file_hash = hashlib.sha256(resolved_path.read_bytes()).hexdigest()
     return ManifestPlatformReferenceModel(hash=f"sha256:{file_hash}", path="resolved.yaml"), diagnostics
+
+
+def _sbom_reference(build_path: Path) -> ManifestSbomReferenceModel | None:
+    """Hash + reference `build_path/sbom.json`, re-derived fresh at deploy
+    time — same reasoning as `_platform_reference()` (build and deploy are
+    separate CLI invocations; there is no in-memory value to carry between
+    them, only what `write_sbom()` already wrote to disk earlier).
+
+    Unlike `_platform_reference()`, a missing SBOM is not an error and
+    raises no diagnostic — SBOM generation is itself optional (a workspace
+    with nothing SBOM-relevant produces none at all), and `deploy run`
+    without a preceding `build run` is a legitimate, if unusual, sequence.
+    """
+    sbom_path = build_path / "sbom.json"
+    if not sbom_path.exists():
+        return None
+    sbom_bytes = sbom_path.read_bytes()
+    file_hash = hashlib.sha256(sbom_bytes).hexdigest()
+    component_count = len(json.loads(sbom_bytes).get("components", []))
+    return ManifestSbomReferenceModel(
+        path="sbom.json",
+        format=SBOM_FORMAT,
+        sha256=f"sha256:{file_hash}",
+        component_count=component_count,
+    )

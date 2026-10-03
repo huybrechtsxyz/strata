@@ -5,7 +5,8 @@
   Layer 2 Implementation Plan implemented (2026-09-30). `deploy run` now
   writes a real, local audit manifest + metrics record on every
   invocation, and distributes them to configured `git` sinks. Layer 2 is
-  live.
+  live. The manifest's `sbom` reference is now also wired to the real
+  build-time SBOM (2026-10-03).
 - Last updated: 2026-09-30
 
 ## Overview
@@ -1339,6 +1340,35 @@ never called); the CLI-invocation `journal`; the local
   unrelated `config/` example-solution drift as the sole failure).
 
 **Layer 2 Implementation Plan complete — all 5 phases shipped.**
+
+### Follow-up — SBOM reference wired into the manifest (2026-10-03)
+
+- **Gap found while comparing v2's audit capabilities against v1
+  directly**: `DeploymentManifestModel.sbom` (`ManifestSbomReferenceModel`
+  — path/format/sha256/component_count) was already modeled, but
+  `finalize_and_distribute_deploy_audit()`'s `DeploymentManifestModel(...)`
+  construction never passed `sbom=` — always `None`. Separately,
+  `sbom_controller.write_sbom()` (gap #18 Phase 1) already computed this
+  exact reference shape internally, but only to log it before discarding
+  it — the real `sbom.json` and the deploy-time manifest were two
+  unconnected artifacts.
+- **Fixed by re-deriving, not threading through** — new
+  `audit_run._sbom_reference(build_path)`, mirroring the already-proven
+  `_platform_reference()` pattern exactly: re-hashes `build_path/sbom.json`
+  fresh at deploy time rather than trying to carry an in-memory value from
+  the earlier, separate `build run` process (the same reason
+  `_platform_reference()` re-hashes `resolved.yaml` instead of doing the
+  same). Unlike `_platform_reference()`, a missing SBOM raises no
+  diagnostic — SBOM generation is itself optional.
+- Promoted `sbom_controller.py`'s private `_SBOM_FORMAT` to a public
+  `SBOM_FORMAT` constant so `audit_run.py` reuses the one source of truth
+  instead of hardcoding a second copy of `"cyclonedx-1.6"`.
+- **Tests (2 new)**: the manifest's `sbom` reference is populated
+  correctly when `build run` already wrote a real `sbom.json` (using the
+  real `write_sbom()` via the existing fixture, not a hand-crafted file);
+  a missing SBOM produces a manifest with no `sbom` key and no warning.
+  Full check suite green (mypy 133 files, ruff, ruff format, import-linter
+  1/0, pytest 1836 passed).
 
 ## Related Decisions
 

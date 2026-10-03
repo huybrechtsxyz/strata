@@ -195,6 +195,37 @@ def test_missing_resolved_yaml_warns_and_skips(tmp_path: Path, _terraform_stub):
     assert not layout.audit_dir(root).exists()
 
 
+def test_manifest_includes_sbom_reference_when_present(tmp_path: Path, _terraform_stub):
+    """`build run` writes a real `sbom.json` unconditionally (gap #18 Phase 1)
+    — the manifest's `sbom` reference should pick it up, re-hashed fresh."""
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+    assert (build_path / "sbom.json").is_file()  # confirms the fixture actually exercises this path
+
+    _finalize(root, build_path)
+
+    manifest_path = next(layout.audit_dir(root).rglob("_manifest.json"))
+    manifest_text = manifest_path.read_text()
+    assert '"path": "sbom.json"' in manifest_text
+    assert '"format": "cyclonedx-1.6"' in manifest_text
+    assert '"sha256": "sha256:' in manifest_text
+
+
+def test_manifest_omits_sbom_reference_without_error_when_absent(tmp_path: Path, _terraform_stub):
+    """Unlike `resolved.yaml`, a missing SBOM is not an error — SBOM
+    generation is itself optional."""
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+    (build_path / "sbom.json").unlink()
+
+    diagnostics = _finalize(root, build_path)
+
+    assert diagnostics.ok
+    assert not diagnostics.warnings
+    manifest_path = next(layout.audit_dir(root).rglob("_manifest.json"))
+    assert '"sbom"' not in manifest_path.read_text()
+
+
 # ---------------------------------------------------------------------------
 # event_overrides gate
 # ---------------------------------------------------------------------------
