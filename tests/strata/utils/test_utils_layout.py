@@ -12,8 +12,11 @@ from strata.utils.layout import (
     REMOTES_DIRNAME,
     STRATA_DIR,
     YAML_SUFFIXES,
+    audit_push_checkout_path,
+    audit_read_checkout_path,
     build_dir,
     display_path,
+    gitops_push_checkout_path,
     manifest_path,
     remote_checkout_path,
     remotes_dir,
@@ -99,6 +102,54 @@ def test_unpinned_cannot_collide_with_a_real_ref_directory():
 def test_layout_functions_do_not_touch_the_filesystem(tmp_path):
     """Paths are computed for things that do not exist yet."""
     result = remote_checkout_path(tmp_path, "infra", "v1.0.0")
+    assert not result.exists()
+
+
+def test_audit_read_checkout_is_keyed_by_remote_and_branch():
+    """Two branches of one remote, or one branch of two remotes, must not share a directory."""
+    a = audit_read_checkout_path(Path("/s"), "audit-repo", "main")
+    b = audit_read_checkout_path(Path("/s"), "audit-repo", "audit")
+    c = audit_read_checkout_path(Path("/s"), "team-fork", "main")
+    assert a != b
+    assert a != c
+    assert a.name == "main"
+    assert a.parent.name == "audit-repo"
+
+
+def test_audit_read_checkout_lives_in_its_own_subdirectory():
+    """Distinct from every other checkout population under .strata/."""
+    result = audit_read_checkout_path(Path("/s"), "audit-repo", "main")
+    assert result.parent.parent.name == "audit-read"
+    assert result.parent.parent.parent.name == STRATA_DIR
+
+
+def test_audit_read_checkout_never_collides_with_audit_push_checkout():
+    """`audit status` and a concurrently running `deploy run` push must never
+    run git commands against the same working tree (docs/design/
+    audit-commands.md's "Why read from the exact git-sink destination,
+    not a second clone"), even for the identical (remote, branch)."""
+    read_path = audit_read_checkout_path(Path("/s"), "audit-repo", "main")
+    push_path = audit_push_checkout_path(Path("/s"), "audit-repo", "main")
+    assert read_path != push_path
+
+
+def test_audit_read_checkout_never_collides_with_gitops_push_checkout():
+    """Nor with the unrelated GitOps push population, same (remote, branch)."""
+    read_path = audit_read_checkout_path(Path("/s"), "audit-repo", "main")
+    gitops_path = gitops_push_checkout_path(Path("/s"), "audit-repo", "main")
+    assert read_path != gitops_path
+
+
+def test_audit_read_checkout_never_collides_with_a_pinned_remote_checkout():
+    """Nor with a pinned read checkout of the same remote name at a matching ref string."""
+    read_path = audit_read_checkout_path(Path("/s"), "audit-repo", "main")
+    pinned_path = remote_checkout_path(Path("/s"), "audit-repo", "main")
+    assert read_path != pinned_path
+
+
+def test_audit_read_checkout_path_does_not_touch_the_filesystem(tmp_path):
+    """Paths are computed for things that do not exist yet."""
+    result = audit_read_checkout_path(tmp_path, "audit-repo", "main")
     assert not result.exists()
 
 

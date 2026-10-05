@@ -7,6 +7,14 @@ Phase 4 of that doc's Layer 2 Implementation Plan. Most tests mock
 style); one true end-to-end test drives a real local bare git repository,
 confirming the whole clone/fetch/reset/add/commit/push chain actually
 works, not just that the right subprocess args were assembled.
+
+Clone/fetch/reset now happen inside `git_checkout.ensure_synced_checkout()`
+(docs/design/audit-commands.md's Phase 2 extraction, so `strata audit
+status` can reuse the same sync without duplicating it) rather than inside
+this module directly — `_capture()` patches `run_command` on both modules
+so the mocked tests below still see the whole command sequence in one
+captured list, dedicated `test_git_checkout.py` tests the extracted
+function in isolation.
 """
 
 import subprocess
@@ -15,6 +23,7 @@ from pathlib import Path
 import pytest
 
 from strata.controllers import audit_push as audit_push_module
+from strata.controllers import git_checkout as git_checkout_module
 from strata.controllers.audit_push import push_audit_files
 from strata.models.audit_model import AuditGitSinkTargetModel
 from strata.models.solution_model import RemoteType, SolutionModel, SolutionRemoteModel
@@ -50,7 +59,11 @@ def _capture(monkeypatch):
             return CommandResult(returncode=0, stdout=" M _manifest.json\n", stderr="")
         return CommandResult(returncode=0, stdout="", stderr="")
 
+    # Clone/fetch/reset now run through `git_checkout.ensure_synced_checkout()`
+    # (docs/design/audit-commands.md Phase 2), not this module directly — both
+    # need patching so one captured list still sees the whole command sequence.
     monkeypatch.setattr(audit_push_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(git_checkout_module, "run_command", _fake_run_command)
     return captured
 
 
@@ -120,6 +133,7 @@ def test_clone_failure_short_circuits(tmp_path: Path, monkeypatch):
         raise AssertionError("should not run further commands after a clone failure")
 
     monkeypatch.setattr(audit_push_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(git_checkout_module, "run_command", _fake_run_command)
     result = push_audit_files(tmp_path, _sink(), _solution([_git_remote()]), {}, Path("run1"), "actor")
     assert result.success is False
     assert "clone" in result.detail

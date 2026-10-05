@@ -7,6 +7,7 @@ Commands:
     values     : Resolve deployment values (variables, secrets, feature flags).
     build      : Render a deployment's workspace into on-disk artifacts.
     deploy     : Execute a deployment's workspace provisioners (plan/apply).
+    audit      : Read back audit trail records from a configured durable sink.
     sln        : Scaffold or refresh a solution's strata-owned files (init/update).
     version    : Show the strata version.
 
@@ -16,6 +17,7 @@ what each means.
 
 import click
 
+from strata.commands.audit_command import audit_command
 from strata.commands.build_command import build_command
 from strata.commands.deploy_command import deploy_command
 from strata.commands.exit_codes import EXIT_SUCCESS, EXIT_USAGE  # noqa: F401  (re-exported for callers)
@@ -37,6 +39,7 @@ cli.add_command(graph_command)
 cli.add_command(values_command)
 cli.add_command(build_command)
 cli.add_command(deploy_command)
+cli.add_command(audit_command)
 cli.add_command(sln_command)
 
 

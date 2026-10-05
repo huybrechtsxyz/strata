@@ -5,9 +5,11 @@
   Layer 2 Implementation Plan implemented (2026-09-30). `deploy run` now
   writes a real, local audit manifest + metrics record on every
   invocation, and distributes them to configured `git` sinks. Layer 2 is
-  live. The manifest's `sbom` reference is now also wired to the real
-  build-time SBOM (2026-10-03). Layer 4's actual dispatch is designed and
-  implemented separately in
+  live. `strata audit status` (Layer 3 reads) is also now implemented
+  (2026-10-05) — see [audit-commands.md](audit-commands.md). The manifest's
+  `sbom` reference is now also wired to the real build-time SBOM
+  (2026-10-03). Layer 4's actual dispatch is designed and implemented
+  separately in
   [audit-sink-dispatch.md](audit-sink-dispatch.md) (2026-10-03) — the
   `integration` sink arm this doc left as a stub now really sends, via a
   generic `webhook` integration. A NIS2/ISO 27001/ISAE 3402 compliance
@@ -32,7 +34,12 @@
   genuinely empty — see "Layer 3 deferred." **`change_reference` CLI
   wiring is now implemented (2026-10-05)**: six `deploy run --change-*`
   flags, closing Q2 ("why") for any deploy that supplies them — see the
-  Should-have list.
+  Should-have list. **`strata audit status` is now implemented
+  (2026-10-05)** — see [audit-commands.md](audit-commands.md)'s Phases
+  1-4; reads the configured `git` sink's latest record per deployment.
+  `strata audit changes` (range listing — the full ISAE 3402 "enumerable
+  sample over a period" ask) is a deliberate, recorded scope cut, not yet
+  built.
 - Last updated: 2026-10-05
 
 ## Overview
@@ -1638,10 +1645,16 @@ auditor actually tests them:
 
 **Must have**
 
-- *(none, as of 2026-10-05)* — the one candidate here, Layer 3 minimum
-  viable reporting, was deferred rather than promoted; see "Layer 3
-  deferred — local-file reporting is wrong for the real case" below. Not
-  papered over with a weaker substitute — recorded as genuinely empty.
+- **`strata audit status` implemented (2026-10-05)** — see
+  [audit-commands.md](audit-commands.md)'s Phases 1-4: reads the
+  configured `git` sink's latest record per deployment, failing fast
+  with a clear message before any network access if none (or more than
+  one) is configured. **Not yet fully satisfied:** the ISAE 3402 ask this
+  item exists for is *operating effectiveness over a period* — an
+  enumerable sample, not one good record — which needs `strata audit
+  changes` (range listing), a recorded, deliberate scope cut in
+  audit-commands.md, not built yet. Category stays Must-have until that
+  ships too.
 
 **Should have**
 
@@ -1656,10 +1669,11 @@ auditor actually tests them:
   flag combination never lets real infrastructure work happen first.
   `supplied_by`/`supplied_at` are never flags — auto-derived in
   `audit_run.py` (`resolve_actor()`/the run's own clock), the same pattern
-  `deployed_by`/`started_at` already use. Directly matches the ADO-gate
-  finding above: `--change-reason` fed from the approval's `comment` via
-  REST, `--change-id` fed from a queue-time pipeline parameter — no
-  further plumbing needed to bridge the two designs once this shipped.
+  `deployed_by`/`started_at` already use. Matches the ADO-gate finding
+  below: both `--change-reason` and `--change-id` end up fed from
+  queue-time pipeline parameters (not from the approval event itself —
+  see the 2026-10-05 correction in the addendum) — no further plumbing
+  needed to bridge the two designs once this shipped.
   New tests in `test_audit_run.py` (4 cases: absent by default, populated
   when all three required fields given, `supplied_by`/`supplied_at`
   presence without asserting environment-dependent literals) and
@@ -1704,13 +1718,14 @@ auditor actually tests them:
   filter — noise/volume control, not a compliance gap; per-sink filtering
   already exists.
 
-**Deferred — blocked on a real redesign, not merely deprioritized**
+**Resolved — no longer deferred (2026-10-05)**
 
-- **Layer 3 reporting** (`audit status`/`audit changes`) — **deferred
-  (2026-10-05)**, not Could-have: the only design produced so far read
-  local `.strata/audit/*.json` files, which is the wrong data source for
-  most real runs. See "Layer 3 deferred — local-file reporting is wrong
-  for the real case" below.
+- **Layer 3 reporting** (`audit status`/`audit changes`) — moved out of
+  this category entirely: `audit status` is implemented (see the
+  Must-have entry above), so this is no longer "not validly designed
+  yet," the reasoning that put it here. `audit changes` remains
+  unbuilt, tracked as a scope cut in
+  [audit-commands.md](audit-commands.md), not as a design gap.
 
 **Won't have (now)**
 
@@ -1787,12 +1802,20 @@ the sink being `git`-only vs. `integration`-only (an `integration`-only
 solution has no git destination to read back from at all — Layer 4's
 SIEM sinks are pure fire-and-forget, not queryable by strata itself).
 
-**Decision:** deferred, not demoted to Could-have — this is not "lower
-priority," it is "not validly designed yet." The Must-have category is
-genuinely empty as of this pass (recorded as such in the MoSCoW, not
-papered over with a weaker substitute). Revisit once a remote-read design
-exists; until then there is no remaining Must-have item to build from
-this analysis.
+**Decision (2026-10-05):** deferred, not demoted to Could-have — this was
+not "lower priority," it was "not validly designed yet." **Update,
+same day:** a remote-read design was produced, then **implemented** —
+see [audit-commands.md](audit-commands.md) for the full design and its
+Phases 1-4 (a dedicated `audit-read/` checkout namespace, glob-and-parse
+manifest discovery rather than reconstructing the write path, the
+`status` command, failure classification) — `strata audit status` is a
+real, working command as of 2026-10-05. Spun into its own doc rather than
+grown here further, the same way audit-sink-dispatch.md was split out
+once its own design got detailed enough. `strata audit changes` (range
+listing) remains a deliberate scope cut, tracked there, not here — this
+section stays as the record of *why* the first (local-file) attempt was
+wrong, which the new doc's own Overview links back to rather than
+re-deriving.
 
 ### What `commit_sha` can and can't claim (2026-10-04)
 
@@ -1939,13 +1962,58 @@ in two:
   way (`actualApprover`/`lastModifiedOn` on the real `ApprovalStep`
   schema), not from either input source.
 
+**Correction (2026-10-05) — the `comment`-based plan above doesn't work;
+verified two further real constraints that rule it out rather than just
+complicate it.**
+
+- **Only `jobs.deployment` has an `environment:` property — `jobs.job`
+  has none at all.** Confirmed by reading the real YAML schema reference
+  for both side by side: `jobs.job`'s full property list
+  (`job`/`displayName`/`dependsOn`/`condition`/`continueOnError`/
+  `timeoutInMinutes`/`variables`/`strategy`/`pool`/`container`/
+  `services`/`workspace`/`uses`/`steps`/`templateContext`) has no
+  `environment` field; `jobs.deployment` does, plus a different steps
+  shape (`strategy.runOnce.deploy.steps`, not a flat `steps:` list).
+  Environment approval checks can only gate deployment jobs. This makes
+  the "most of the work is outside strata's own repo" reservation below
+  concrete and larger than first scoped: adopting this gate means
+  restructuring whichever job currently calls `strata deploy run` into a
+  deployment job, a real pipeline-shape change in `cfg-int-deployment`,
+  not just adding a check to an existing job.
+- **There is no way for a script to correlate "the approval that just
+  passed" back to that approval's own `comment`.** Checked both real
+  candidate mechanisms and found neither exposes it: the documented
+  Deployment job variables are only `Environment.Name`/`Environment.Id`/
+  `Environment.ResourceName`/`Environment.ResourceId`/`Strategy.Name`/
+  `Strategy.CycleName` — no approval ID. The Approvals Query REST API
+  (`GET .../_apis/pipelines/approvals`) filters only by `approvalIds`
+  (a list you'd already need to know), `state`, `userIds`, `top` — no
+  run/build-ID filter exists. A step in the deployment job has no
+  documented way to ask "which approval record gated *this* run" —
+  the only fallback (`state=approved&top=1` sorted by recency) is a
+  race under any concurrent runs targeting the same environment, not a
+  real mechanism to build on.
+- **Revised recommendation: drop the `comment`-sourced `reason` entirely.
+  Make both `--change-id` and `--change-reason` queue-time pipeline
+  parameters**, typed by whoever queues the run — the same proven
+  mechanism, applied to both fields instead of split across two sources.
+  This sidesteps the correlation gap completely rather than working
+  around it. It also simplifies the gate's job down to what ADO actually
+  reliably provides: a stop-and-wait control, not a data-entry form.
+  `supplied_by`/`supplied_at` still auto-derive from the run itself
+  (`resolve_actor()`/the run's own clock) exactly as already implemented
+  for the CLI flags above — this correction only changes where `id` and
+  `reason` come from, not the rest of the already-shipped wiring.
+
 **Honest reservations, still worth recording even after the promotion:**
 
-- **Most of the work is outside strata's own repo**: creating the ADO
-  Environment and defining who's actually authorized to approve (a real
-  CAB-equivalent group, agreed with real humans) is a governance decision,
-  not code strata can produce on its own — confirmed as planned, but not
-  yet built on the ADO side either.
+- **Most of the work is outside strata's own repo, and is now known to
+  include a pipeline-shape change, not just a new check**: creating the
+  ADO Environment, restructuring the calling job into a deployment job,
+  and defining who's actually authorized to approve (a real
+  CAB-equivalent group, agreed with real humans) are governance and
+  pipeline-authoring decisions, not code strata can produce on its own —
+  confirmed as planned, but not yet built on the ADO side either.
 - **A technical ADO gate is not automatically an organizational CAB** —
   if an ISMS scope statement commits to a literal CAB with minutes/quorum,
   an automated approval click doesn't necessarily satisfy that; a question
@@ -1954,10 +2022,14 @@ in two:
 **Verdict:** promoted to Should-have (2026-10-04) — a confirmed, planned
 consumer, not a speculative one. Still behind M1 (commit identity) as the
 next concrete step, since M1 needs no external/operational buy-in and the
-ADO-side infrastructure (the Environment, the named approvers) isn't built
-yet either — but no longer gated on "needs a named owner to materialize"
-the way the Could-have framing implied; worth a proper design pass once
-the ADO approval step itself exists to integrate against.
+ADO-side infrastructure (the Environment, the named approvers, and now a
+deployment-job restructure) isn't built yet either — but no longer gated
+on "needs a named owner to materialize" the way the Could-have framing
+implied; worth a proper design pass once the ADO approval step itself
+exists to integrate against. Strata-side scope, once that exists, is now
+smaller than first designed: both `id` and `reason` arrive as queue-time
+parameters strata already knows how to accept (the six `--change-*`
+flags, shipped 2026-10-05) — no REST-polling script to write at all.
 
 ## Changelog
 
@@ -2479,6 +2551,70 @@ the ADO approval step itself exists to integrate against.
   `test_commands_deploy.py`, including a partial-combo case asserting
   `deploy_run()` is never reached). Full check suite green: mypy (136
   files), ruff, ruff format, import-linter 1/0, pytest 1879 passed.
+- 2026-10-05: **Corrected the ADO-gate addendum's `comment`-based
+  `reason` plan** after verifying two further real constraints against
+  Microsoft's docs rather than assuming the design was complete. (1)
+  Compared the real `jobs.job` and `jobs.deployment` YAML schema
+  references side by side: only `jobs.deployment` has an `environment:`
+  property at all, so Environment approval checks can only gate
+  deployment jobs — adopting this gate requires restructuring whichever
+  job in `cfg-int-deployment` currently calls `strata deploy run` into a
+  deployment job, a real pipeline-shape change, not just adding a check.
+  (2) Checked both candidate mechanisms for a script to read back "the
+  approval that just passed" and found neither exists: the documented
+  Deployment job variables (`Environment.Name`/`.Id`/`.ResourceName`/
+  `.ResourceId`, `Strategy.Name`/`.CycleName`) include no approval ID,
+  and the Approvals Query REST API filters only by `approvalIds`/
+  `state`/`userIds`/`top` — no run/build-ID filter. There is no reliable
+  way to correlate a run to its own approval's `comment`. Revised
+  recommendation: drop the `comment`-sourced `reason` entirely and make
+  both `--change-id` and `--change-reason` queue-time pipeline
+  parameters, sidestepping the correlation gap rather than working
+  around it — simpler than the prior split-source design, and the
+  strata-side flags to accept them already shipped (2026-10-05). No code
+  changed — doc correction only.
+- 2026-10-05: **Designed the Layer 3 read path, in a new dedicated doc**
+  ([audit-commands.md](audit-commands.md)), per a direct request to design
+  `strata audit` commands "for this purpose" (git as the read basis) and
+  keep the design in a separate file rather than growing this one further
+  — same split already done for audit-sink-dispatch.md. Grounded directly
+  in real code read first, not assumed: confirmed `spec.audit` actually
+  lives on `ConfigurationModel`, not the solution manifest
+  (`configuration_model.py`'s `ConfigurationSpecModel.audit`); confirmed
+  `audit_push.py`'s real `_ensure_checkout()`/`push_audit_files()` shape
+  (clone-if-absent, always fetch+reset before write); confirmed `layout.py`'s
+  established convention of a dedicated subdirectory per checkout
+  population (`audit_push_checkout_path()` vs `gitops_push_checkout_path()`)
+  and applied the same pattern to a new read-only checkout rather than
+  reusing the push destination (avoids a concurrent-git-command race with
+  an in-flight push); confirmed the `graph_command.py` precedent for
+  returning structured JSON data (`isinstance(run.reporter, JsonReporter)`
+  + `run.reporter.data = {...}`) rather than inventing a new output
+  convention. Core design decision: enumerate by recursively globbing for
+  `_manifest.json` and trusting each manifest's own fields for
+  filtering/sorting, rather than reconstructing `resolve_audit_relative_path()`'s
+  layers-dependent write-time directory shape from outside — confirmed
+  that function's real dependency on a deployment's own
+  `layers.segments`/`Configuration` state first, rather than assuming a
+  path-based reconstruction would be reliable. Updated this doc's Must-have
+  and "Layer 3 deferred" sections to point at the new doc instead of
+  restating the design here. No code changed — design only, nothing built.
+- 2026-10-05: **`strata audit status` implemented** (audit-commands.md's
+  Phases 1-4: `layout.audit_read_checkout_path()`, the shared
+  `git_checkout.ensure_synced_checkout()` extraction,
+  `controllers/audit_read.py`, `commands/audit_command.py`). Phase 5 of
+  that doc's own Implementation Plan — updating this doc's cross-references
+  from "a design exists" to "implemented": the Must-have entry, the
+  former "Deferred — blocked on a real redesign" MoSCoW category (removed;
+  no longer applies — `audit status` is built, so "not validly designed
+  yet" is no longer the reason anything here waits), the "Layer 3
+  deferred" section's own Decision paragraph, and the top status line.
+  `strata audit changes` (range listing — the full ISAE 3402 "enumerable
+  sample over a period" ask) remains a deliberate, tracked scope cut in
+  audit-commands.md, not a design gap — the Must-have category here stays
+  open until that ships too, not papered over as fully done. No code
+  changed in this pass — documentation cross-reference update only, per
+  audit-commands.md's own Phase 5.
 
 
 

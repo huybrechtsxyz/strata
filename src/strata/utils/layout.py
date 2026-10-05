@@ -143,6 +143,21 @@ def audit_push_checkout_path(root: Path, remote: str, branch: str) -> Path:
     return strata_dir(root) / "audit-push" / remote / branch
 
 
+def audit_read_checkout_path(root: Path, remote: str, branch: str) -> Path:
+    """Return where `strata audit status`'s own read checkout materialises on disk.
+
+    Same `(remote, branch)` keying as `audit_push_checkout_path()`, since
+    both populations target the same mutable branch tip — but kept in its
+    own `audit-read/` subdirectory rather than reusing the push checkout
+    (docs/design/audit-commands.md's "Why read from the exact git-sink
+    destination, not a second clone"): `audit status` and a concurrently
+    running `deploy run` push must never run git commands against the same
+    working tree. This checkout never writes anything back (no `git add`/
+    `commit`/`push`) — it only ever fetches and resets.
+    """
+    return strata_dir(root) / "audit-read" / remote / branch
+
+
 def gitops_push_checkout_path(root: Path, remote: str, branch: str) -> Path:
     """Return where a GitOps provisioner's push destination materialises on disk.
 
@@ -152,8 +167,9 @@ def gitops_push_checkout_path(root: Path, remote: str, branch: str) -> Path:
     source like `remote_checkout_path()`. Kept in its own `gitops-push/`
     subdirectory so this checkout population can never collide with a read
     checkout of the same remote (`remote_checkout_path()`) or with audit's
-    own push checkouts (`audit_push_checkout_path()`), even when the same
-    remote name is reused across all three.
+    own push and read checkouts (`audit_push_checkout_path()`,
+    `audit_read_checkout_path()`), even when the same remote name is reused
+    across all four.
     """
     return strata_dir(root) / "gitops-push" / remote / branch
 

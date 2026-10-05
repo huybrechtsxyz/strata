@@ -33,11 +33,19 @@ creating the branch on first push. Combined with always resetting to
 yet, or nothing at all for a genuinely brand-new empty remote — found by
 a real end-to-end test against a real empty bare repo, not assumed)
 immediately beforehand, this needs no local branch bookkeeping at all.
+
+The clone/fetch/reset sequence itself (`_ensure_checkout()`, originally
+private here) moved to `controllers/git_checkout.py::ensure_synced_checkout()`
+once `strata audit status`'s read-only checkout
+(docs/design/audit-commands.md) needed the identical behaviour with none
+of this module's write-specific steps (`_configure_identity()`, `git add`,
+`git commit`, `git push`) — shared, not duplicated.
 """
 
 from dataclasses import dataclass
 from pathlib import Path
 
+from strata.controllers.git_checkout import ensure_synced_checkout
 from strata.models.audit_model import AuditGitSinkTargetModel
 from strata.models.solution_model import RemoteType, SolutionModel
 from strata.utils import layout
@@ -80,9 +88,9 @@ def push_audit_files(
         )
 
     checkout_path = layout.audit_push_checkout_path(root, remote.name, sink.branch)
-    ensured = _ensure_checkout(remote.url, sink.branch, checkout_path)
+    ensured = ensure_synced_checkout(remote.url, sink.branch, checkout_path)
     if not ensured.success:
-        return ensured
+        return PushResult(False, ensured.detail)
 
     configured = _configure_identity(checkout_path, actor)
     if not configured.success:
@@ -111,43 +119,6 @@ def push_audit_files(
     if not push_result.is_successful:
         return PushResult(False, f"'git push' failed: {push_result.stderr.strip()}")
 
-    return PushResult(True)
-
-
-def _ensure_checkout(url: str, branch: str, checkout_path: Path) -> PushResult:
-    """Clone if absent, then always fetch + reset to a known-good remote ref —
-    `origin/<branch>` when it already exists, else the remote's default branch.
-
-    Never leaves stale local-only commits from a previous failed attempt
-    sitting on HEAD — every call starts from a ref the remote actually has.
-    """
-    if not checkout_path.exists():
-        checkout_path.parent.mkdir(parents=True, exist_ok=True)
-        clone_result = run_command(["git", "clone", url, str(checkout_path)], timeout=_GIT_TIMEOUT)
-        if not clone_result.is_successful:
-            return PushResult(False, f"'git clone {url}' failed: {clone_result.stderr.strip()}")
-
-    fetch_result = run_command(["git", "fetch", "origin"], cwd=checkout_path, timeout=_GIT_TIMEOUT)
-    if not fetch_result.is_successful:
-        return PushResult(False, f"'git fetch origin' failed: {fetch_result.stderr.strip()}")
-
-    reset_ref = f"origin/{branch}"
-    verify_result = run_command(["git", "rev-parse", "--verify", reset_ref], cwd=checkout_path, timeout=_GIT_TIMEOUT)
-    if not verify_result.is_successful:
-        # branch doesn't exist upstream yet — fall back to the remote's default branch
-        default_verify = run_command(
-            ["git", "rev-parse", "--verify", "origin/HEAD"], cwd=checkout_path, timeout=_GIT_TIMEOUT
-        )
-        if not default_verify.is_successful:
-            # a brand-new, completely empty remote (no commits at all) — nothing to
-            # reset to; the fresh clone/existing checkout is already the correct
-            # starting state.
-            return PushResult(True)
-        reset_ref = "origin/HEAD"
-
-    reset_result = run_command(["git", "reset", "--hard", reset_ref], cwd=checkout_path, timeout=_GIT_TIMEOUT)
-    if not reset_result.is_successful:
-        return PushResult(False, f"'git reset --hard {reset_ref}' failed: {reset_result.stderr.strip()}")
     return PushResult(True)
 
 

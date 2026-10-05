@@ -72,7 +72,9 @@ from strata.utils import layout
 from strata.utils.actor import resolve_actor
 from strata.utils.diagnostics import Diagnostics, Severity
 
-_MANIFEST_FILENAME = "_manifest.json"
+#: Public — `controllers/audit_read.py` (docs/design/audit-commands.md) reads
+#: this back and must glob for the exact same filename this module writes.
+MANIFEST_FILENAME = "_manifest.json"
 _METRICS_FILENAME = "_metrics.json"
 
 
@@ -189,7 +191,7 @@ def finalize_and_distribute_deploy_audit(
     relative_path = resolve_audit_relative_path(deployment, configuration, started_at.isoformat())
     local_dir = layout.audit_dir(context.root) / relative_path
     local_dir.mkdir(parents=True, exist_ok=True)
-    manifest_path = local_dir / _MANIFEST_FILENAME
+    manifest_path = local_dir / MANIFEST_FILENAME
     metrics_path = local_dir / _METRICS_FILENAME
     manifest_path.write_text(manifest.model_dump_json(indent=2, exclude_none=True), encoding="utf-8")
     metrics_path.write_text(metrics.model_dump_json(indent=2, exclude_none=True), encoding="utf-8")
@@ -256,7 +258,7 @@ def _dispatch_sink(
         return
 
     assert sink.git is not None  # AuditSinkModel's own exactly-one-arm validator guarantees this
-    files = {_MANIFEST_FILENAME: manifest_path}
+    files = {MANIFEST_FILENAME: manifest_path}
     if "deployment.measured" in sink_events:
         files[_METRICS_FILENAME] = metrics_path
 
@@ -330,7 +332,7 @@ def _dispatch_integration_sink(
         else:
             event = render_manifest_event(
                 manifest,
-                relative_path=(relative_path / _MANIFEST_FILENAME).as_posix(),
+                relative_path=(relative_path / MANIFEST_FILENAME).as_posix(),
                 file_sha256=_sha256_of(manifest_path),
                 api_version=api_version,
             )
