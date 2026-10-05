@@ -298,6 +298,20 @@ Execution order (each its own small, checked phase per repo convention —
   alpha3-5 were bumped in earlier sessions without a matching changelog
   entry here — not re-created retroactively, just flagged so the gap in
   this log isn't mistaken for alpha3-5 never having existed.
+- 2026-10-05: **Built alpha7** — bumped `VERSION.txt` to `2.0.0-Alpha7`
+  (normalizes to `2.0.0a7`; confirmed via `packaging.version.Version`
+  before committing to it). Full check suite green (mypy 139 files, ruff,
+  import-linter, pytest 1958 passed) after fixing one unrelated,
+  pre-existing `mypy` failure surfaced by this run —
+  `src/strata/logging/otel.py`'s `# type: ignore[no-any-return]` on
+  `attach_otlp()`'s return had gone stale (an installed dependency now
+  types `LoggingHandler` correctly) and tripped `warn_unused_ignores`;
+  removed the dead comment, no behavior change. `uv build
+  --index-strategy unsafe-best-match` produced
+  `xyz_strata-2.0.0a7-py3-none-any.whl`; installed into a fresh isolated
+  `uv venv`, confirmed `strata version` → `2.0.0a7` and `strata --help`
+  lists all eight commands. Local/reversible only — no tag pushed yet, no
+  CI triggered, no publish.
   **Caveat hit again, same "sharp edge" `version.py`'s own docstring
   documents:** a plain `uv sync` did not regenerate the editable install's
   `dist-info` (stayed `xyz_strata-2.0.0a5.dist-info` — confirmed by

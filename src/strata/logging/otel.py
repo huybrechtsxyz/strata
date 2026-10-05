@@ -93,7 +93,7 @@ def attach_otlp(
         handler = LoggingHandler(level=level, logger_provider=provider)
 
     handler.setFormatter(formatter)
-    return handler  # type: ignore[no-any-return]
+    return handler
 
 
 def shutdown_otlp() -> None:

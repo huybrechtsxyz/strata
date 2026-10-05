@@ -106,8 +106,15 @@ class InfraIntegration(Integration):
 
         Base-implemented, not abstract (ADR-0023 D5) — every subclass gets
         the same dispatch for free; only `default_output()` varies per
-        tool. The `provisioner.backend` token-substitution step (D2) is a
-        later phase and not implemented here yet.
+        tool. The `provisioner.backend` token-substitution step (D2) is
+        deliberately **not** done here — `prepare()` runs at build time,
+        before secrets/integration-backed values are available (ADR-0022
+        D4: build renders, deploy resolves), so resolving `backend.
+        configuration`'s tokens here would be premature. It happens at
+        deploy time instead, in `deploy_controller.py`'s own step loop
+        (`resolve_value_tokens_in_mapping()`), delivered straight into
+        `integration.init(path, backend_config=...)` — never written back
+        into this method's output.
 
         `provisioner.output.template` (D3, docs/design/
         value-token-resolution.md's Value Supply Mechanisms option C) is
@@ -115,12 +122,13 @@ class InfraIntegration(Integration):
         resolved (secrets, integration-backed variables/features are
         deploy-only), so a "final" render would be dishonest here. When set,
         `default_output()` is skipped entirely and nothing is written for
-        this provisioner — the actual render is deploy-time work, not yet
-        built. `template_path` is the already-resolved absolute path
-        (`build_controller.py`'s job, matching `sync_source()`'s own
-        "controller resolves paths, integration consumes already-resolved
-        ones" split, ADR-0021 D2) — required whenever
-        `provisioner.output.template` is set.
+        this provisioner — the actual render happens at deploy time instead,
+        via `render_output_template()` below, called from
+        `deploy_controller.py`. `template_path` is the already-resolved
+        absolute path (`build_controller.py`'s job, matching
+        `sync_source()`'s own "controller resolves paths, integration
+        consumes already-resolved ones" split, ADR-0021 D2) — required
+        whenever `provisioner.output.template` is set.
 
         Raises:
             IntegrationError: `provisioner.output.template` is set but its
