@@ -1,12 +1,7 @@
 # Network Model — v2 Design Decisions
 
-- Status: partially-implemented — model and thin service ported; multi-file
-  merge behavior deliberately not ported (see Remaining Work)
+- Status: accepted
 - Date: 2026-09-21
-- Revised: 2026-09-21 — extracted the local `_validate_cidr_string()` helper
-  into `common_models.py` as `validate_cidr_or_token()`, shared with
-  `firewall_model.py`'s `from`/`to` fields. No behavior change for Network.
-  See [ADR-0008](0008-firewall-model-design-decisions.md).
 - Related: [ADR-0001](0001-v1-schema-analysis-findings-for-v2.md) (v1 schema
   analysis — flags Network's nested `cidr: CidrSourceModel` shape as the
   outlier vs. DNS/Module's flat convention), [ADR-0002](0002-requirement-interface-injection-grant-lessons-from-v1.md)
@@ -94,10 +89,4 @@ here either.
 - Accepted cost (same as ADR-0005): a token-bearing `cidr`/`address_space`
   entry loses literal CIDR format checking until resolution.
 
-## Remaining Work
 
-- Environment cross-check and the token resolver are tracked centrally in
-  [docs/design/value-token-resolution.md](../design/value-token-resolution.md),
-  not duplicated here.
-- Multi-file network merging is not ported — revisit once a v2 workspace/
-  environment overlay concept exists to actually consume it.

@@ -6,16 +6,14 @@ using the [MADR](https://adr.github.io/madr/) format.
 An ADR captures **one** significant, point-in-time decision — the problem that
 forced it, the alternatives considered, and why one was chosen. It exists so
 the rationale survives beyond the author. An ADR is a historical record, not a
-progress tracker: once written, its Context/Decision/Consequences don't
-change. If reality later diverges (implementation status, follow-on work,
-"how this currently works day to day"), that lives in
-[`docs/design/`](../design/README.md), not by editing the ADR.
-
-**Existing files `0001`–`0023` predate this tightened convention** and mix
-several decisions, phase trackers, and in-place `- Revised:` notes into single
-files. They are grandfathered as-is — don't rewrite them retroactively. Follow
-the rules below for new ADRs; if you're touching an old one substantially,
-prefer splitting new decisions out into their own ADR rather than adding to it.
+progress tracker and not a design doc: once written, its Context/Decision/
+Consequences don't change, and it never describes implementation status,
+phase progress, or day-to-day "how this currently works." That content lives
+in [`docs/design/`](../design/README.md) (once finished) or
+[`docs/work/`](../work/README.md) (while in progress) — never in the ADR
+itself. Don't add a `- Revised:` line patching an old decision's narrative,
+and don't add a `## Remaining Work` tracker — see "Decisions don't get
+revised in place" and "No build-progress tracking" below.
 
 ## One decision per ADR
 
@@ -36,7 +34,23 @@ an earlier decision:
    one-line status edit is fine; do not rewrite its body).
 
 Don't add `- Revised:` lines that patch an old decision's narrative — that's
-what a new ADR is for.
+what a new ADR is for. If you're just narrating how a design evolved day to
+day (not a distinct new decision), that narrative belongs in a
+[`docs/work/`](../work/README.md) doc instead, not in the ADR at all.
+
+## No build-progress tracking in an ADR
+
+An ADR records that a decision was made, not whether it's been built yet.
+Never add a `## Remaining Work` section, a phase checklist, or an
+implementation-status narrative to an ADR. Track that in:
+
+- [`docs/design/`](../design/README.md), once the feature is fully built and
+  nothing is pending — a living doc describing how it works today.
+- [`docs/work/`](../work/README.md), while it's still being built, designed,
+  or debated — phases, open questions, in-progress narrative.
+
+An ADR with real follow-on work should link out via `Related:` to whichever
+of those two has it, instead of listing it itself.
 
 ## Index
 
@@ -56,39 +70,34 @@ the index:
 2. Fill in the sections. Remove optional sections you don't need.
 3. That's it — no index table to update.
 4. If the decision involves ongoing build-out, phases, or a component whose
-   design will keep evolving after this decision, also create/update a
-   matching doc in `docs/design/` (see [docs/design/README.md](../design/README.md))
-   and link it from this ADR's `Related:` line. Keep the ADR itself focused on
-   the decision, not the build progress.
+   design will keep evolving, create/update a matching doc in
+   [`docs/work/`](../work/README.md) (while it's in progress) and link it
+   from this ADR's `Related:` line. Once that build-out finishes with
+   nothing pending, the doc graduates to [`docs/design/`](../design/README.md)
+   instead. Keep the ADR itself focused on the decision, never the build
+   progress.
 
 ## Status values
 
 The `- Status:` line (always the first line under the title) must use exactly one
-of these values:
+of these decision-lifecycle values — never a build-progress value like
+"implemented" or "partially-implemented"; whether something has been built
+is tracked in `docs/design/`/`docs/work/`, not on the ADR:
 
-| Value                   | Meaning                                                                |
-| ----------------------- | ------------------------------------------------------------------------ |
-| `proposed`              | Decided in principle; no implementation started                        |
-| `accepted`              | Decision finalized; may not require code (e.g. a policy/inventory ADR) |
-| `in-progress`           | Actively being built, nothing usable shipped yet                       |
-| `partially-implemented` | Some of the decision is built and in use; some is not                  |
-| `implemented`           | Fully built — nothing pending                                          |
-| `deferred`              | Intentionally not being worked on right now                            |
-| `superseded`            | Replaced by another ADR — do not implement this one                    |
-| `rejected`              | Considered and declined                                                |
+| Value        | Meaning                                                                 |
+| ------------ | ----------------------------------------------------------------------- |
+| `proposed`   | Decided in principle, open for discussion; not yet final                |
+| `accepted`   | Decision finalized                                                      |
+| `rejected`   | Considered and declined                                                 |
+| `deprecated` | No longer in effect, but not replaced by a specific other ADR           |
+| `superseded` | Replaced by another ADR — see its `- Status: superseded — see ADR-NNNN` |
 
 A short clarifying note may follow after an em-dash, e.g.
-`- Status: partially-implemented — Phase 1 done, Phase 2 not started`.
+`- Status: accepted — see ADR-0031 for the follow-up extension`.
 
-**Any ADR whose status is `proposed`, `in-progress`, or `partially-implemented` must
-have a `## Remaining Work` section** listing what's left. `implemented`, `deferred`,
-`superseded`, and `rejected` ADRs don't need one.
-
-Keep `## Remaining Work` short (a handful of bullets). If the remaining work
-is substantial enough to need phases, a checklist that gets updated over
-several sessions, or its own status narrative, that's a sign it belongs in a
-`docs/design/` doc instead — link to it here rather than growing this section
-into a tracker.
+An ADR never has a `## Remaining Work` section. If there's follow-on work,
+link to the `docs/work/` (or, once finished, `docs/design/`) doc that tracks
+it via `Related:` instead.
 
 ### Minimal template
 
@@ -115,11 +124,4 @@ Chosen: **Option A**, because {one-line justification}.
 
 - Good: {positive effect}
 - Bad: {trade-off or cost}
-
-## Remaining Work
-
-<!-- Required while Status is proposed / in-progress / partially-implemented.
-     Remove this section once Status becomes implemented. -->
-
-- Not started — nothing in this ADR has been implemented yet.
 ```

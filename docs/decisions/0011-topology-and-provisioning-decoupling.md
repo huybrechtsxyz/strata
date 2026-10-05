@@ -1,13 +1,9 @@
 # Topology and Provisioning — Decoupling Infrastructure Grouping from Execution
 
-- Status: partially-implemented — the standalone-kind promotion of
-  `Topology` described below is **superseded by
-  [ADR-0028](0028-topology-inline-reversion.md)** (reverting it to an inline
-  `Workspace` field); this ADR's core decision — decoupling topology
-  grouping from provisioning tooling — stands unchanged.
-  `ProvisionerModel`/`ProvisioningStepModel` built as Workspace sub-models
-  (`provisioning_model.py`); the `Workspace` root/glue kind itself not yet
-  built (see Remaining Work)
+- Status: accepted — the standalone-kind promotion of `Topology` described
+  below is superseded by [ADR-0028](0028-topology-inline-reversion.md)
+  (reverting it to an inline `Workspace` field); this ADR's core decision —
+  decoupling topology grouping from provisioning tooling — stands unchanged.
 - Date: 2026-09-21
 - Related: [ADR-0002](0002-requirement-interface-injection-grant-lessons-from-v1.md)
   (Grant/Injection/Context — the deploy-time concepts Provisioning will need
@@ -357,31 +353,4 @@ have a `depends_on` edge (direct **or transitive**) between them.
   `integration`, was deferred here for the same reason but has since been
   added — see [ADR-0021](0021-integration-layer.md).
 
-## Remaining Work
 
-- ~~Build the actual `Workspace` root/glue model~~ — done, see
-  [ADR-0012](0012-workspace-model-design-decisions.md).
-- ~~Extend `ConfigurationModel` with `topologies`/`ConfigurationTopologyModel`~~
-  — registry schema done, see [ADR-0013](0013-configuration-topology-registry.md);
-  the actual Phase 2 cross-validation against a workspace's `Topology`
-  documents is still unbuilt (tracked there).
-- `TopologyService._validate_dynamic()` and every other deferred
-  cross-document check are tracked centrally, not here:
-  [docs/design/solution-loading-and-phase2-validation.md](../design/solution-loading-and-phase2-validation.md).
-- ~~`ProvisionerType`/`SYNC_PROVISIONER_TYPES`/`TERRAFORM_COMPATIBLE_TYPES`/
-  `WORKLOAD_DEPLOYER_TYPES` lived in `common_models.py`~~ — relocated to
-  `strata/utils/builtin_types.py`: these are pure code-classification facts
-  (which built-in deployer classes exist), not schema/model concerns, even
-  though `module_model.py`/`provisioning_model.py` consume them. `strata.utils`
-  sits below `strata.models` in the layered architecture (ADR-0003's own
-  import-linter contract already anticipated this layer) — models may import
-  utils, never the reverse.
-- The `Deployment` kind (the "container instance") — references a Workspace
-  + an Environment, executes the baked-in `ProvisioningStep` recipe via thin
-  `DeploymentStage` entries (approval gates, secrets scope/Grant) — not
-  started. `DeploymentStageModel.provisioner`/`.topology` must NOT be ported
-  from v1; that responsibility belongs entirely to Workspace's recipe.
-- Cross-repo reference convention inconsistency (`SourceModel.repository`
-  vs. `@reponame/path`) is tracked in
-  [docs/design/v1-schema-parity-tracking.md](../design/v1-schema-parity-tracking.md)
-  (Architectural Issue 7), not duplicated here.

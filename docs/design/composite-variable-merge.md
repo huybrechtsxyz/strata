@@ -15,7 +15,7 @@
   deferred a version of this exact problem — "revisit when a v2
   workspace/environment overlay concept is designed"), [ADR-0025](../decisions/0025-strata-supplies-input-not-source-rewriting.md)
   (constrains any fix: strata stays opaque to a value's internal shape),
-  [docs/design/gap_fit_v1.md](gap_fit_v1.md) gap #19
+  [docs/work/gap_fit_v1.md](../work/gap_fit_v1.md) gap #19
 
 ## Overview
 
@@ -329,38 +329,6 @@ same way `spec.variables` does — not checked, since the one real need
 (`appgateway_config`) is Terraform-only. Flagged in both how-to docs; not a
 blocker for the decision above.
 
-## Open Questions (resolved — kept for history)
-
-1. **(Updated) Does this need a new mechanism at all, or does
-   `spec.properties` (already deep-merged, already delivered) already
-   solve it** for a Terraform-only case like `appgateway_config`? If
-   `properties`/`custom` turn out not to reach Helm/Compose the same way,
-   or if giving up `VariableStoreModel`'s typed fields turns out to cost
-   something real elsewhere, the earlier options are still on the table:
-   a new field on the variable declaration (`merge_key`/`fragment_of`), a
-   dedicated new document kind (one per customer, each a small standalone
-   file), or the bigger "workspace/environment overlay" concept
-   ADR-0007/0008 were themselves waiting on.
-2. **(Updated) Does "adding a ring to a customer" mean a new key under
-   that customer's own `hosts:` map** (two levels down from the variable's
-   root — customer, then ring/host) **rather than a whole new top-level
-   customer key?** If so, a fixed two-level composite key (customer, ring)
-   is likely the right, evidence-sized granularity — not a whole-top-level
-   merge, and not a fully generic dotted-path mechanism either. Is there
-   ever a need for a third fragment to touch something *within* one
-   ring's own leaf config (vs. one fragment owning a whole ring, which is
-   what the real sample suggests)?
-3. **Is this specific to `appgateway_config`-shaped variables, or is there
-   a second real case** (another `store: constant` variable with a similar
-   "nested-by-customer" shape) that should shape the design alongside this
-   one, so the mechanism isn't accidentally AGW-specific in practice even
-   though it must stay AGW-agnostic in implementation?
-4. **Who authors a fragment, and where** — does each customer's config
-   already live in (or get moved to) its own file/folder under their own
-   ownership, with strata assembling the final merged variable at
-   build/deploy time? Or does the real ownership boundary look different
-   (e.g. per-environment, per-team, not per-customer)?
-
 ## Related Decisions
 
 - [ADR-0007](../decisions/0007-network-model-design-decisions.md) §5 —
@@ -371,7 +339,7 @@ blocker for the decision above.
   strata supplies input, never rewrites IaC source; any fix here must keep
   a fragment's internal shape (AGW/WAF or otherwise) fully opaque to
   strata.
-- [docs/design/gap_fit_v1.md](gap_fit_v1.md) gap #19 — the tracked-gap
+- [docs/work/gap_fit_v1.md](../work/gap_fit_v1.md) gap #19 — the tracked-gap
   entry for this problem.
 - [docs/how-to/composite-variable-fragments.md](../how-to/composite-variable-fragments.md) —
   the worked how-to for the `spec.properties` pattern above.
@@ -380,108 +348,11 @@ blocker for the decision above.
   value to generate one static `provider`/`module` block per entry, working around Terraform's
   own static-per-instance `providers` meta-argument constraint.
 
-## Changelog
 
-- 2026-10-02: Created, after direct real-world report ("with azure
-  waf/firewall you now sometimes have a lot [of] parts coming together...
-  all customer paths on agw are in one block, that is not really a
-  manageable solution"). Confirmed directly against the real
-  `iac_aks_core`/`iac-int-deployment` Terraform (`agw.tf`'s `dynamic`
-  blocks driven by one `appgateway_config` variable) and the real
-  `cfg-int-deployment` config (that variable's actual `value:`, live with
-  exactly one customer as of 2026-09-30). Checked v1's source directly for
-  any existing fragment-merge mechanism: found two narrower precedents
-  (`merge_networks`/`merge_firewalls` document-level merge;
-  `EnvironmentIncludeModel`/`TerraformLoader.concatenate()` raw-text
-  merge), neither generalized to arbitrary variables, neither ported to
-  v2, and the text-merge one wouldn't even correctly solve the real AGW
-  case (duplicate resource declaration, not a merge). Confirmed v2's only
-  existing variable-merge path (`merge_environment_models()`) is
-  whole-value override, not a combine. No schema shape decided yet —
-  deliberately left open pending the Open Questions above, matching this
-  project's "don't guess a shape with no real contract" discipline used
-  throughout every other design in this repo.
-- 2026-10-02: Direct follow-up question ("did v1 have a filemerge
-  somewhere defined in the schema?") traced `EnvironmentIncludeModel`'s
-  `strategy: merge` option all the way through to its real implementation,
-  not just its docstring. Found it does **not** do what the name suggests:
-  `TerraformLoader.merge()` → `_deep_merge_terraform()` is HCL-block-list
-  aware — `resource`/`variable`/`data`/etc. top-level keys get their
-  *lists concatenated*, never recursively combined, so two files each
-  declaring `resource "azurerm_application_gateway" "main"` would produce
-  two entries for the same resource address (a duplicate Terraform
-  rejects), not a merge. `TerraformLoader` separately defines
-  `merge_tfvars()`/`_deep_merge_values()`, which *does* correctly
-  recursively merge nested dicts (exactly the shape this problem needs)
-  — but confirmed by direct search across all of v1's source: **it has
-  zero callers anywhere.** Built, never wired to `includes:` or anything
-  else. Net effect on this design: strengthens, not weakens, the case that
-  nothing existing in either version actually solves this — v1's closest-
-  looking precedent would not have solved the real AGW case even if
-  ported as-is.
-- 2026-10-02: Follow-up on real-world rollout shape ("if we add a new ring
-  to a customer, a new path needs adding to the WAF") plus two directly-
-  checked questions: whether v2 already expects fragment-style files to
-  show up under `deploy/hubs/**` (confirmed `ring` is a real, already-used
-  path segment — `path-conventions.md`'s real `hub-path` pattern,
-  `DeploymentLayersModel.segments`), and whether a per-tenant/per-ring file
-  needs new discovery plumbing (confirmed it does not —
-  `SolutionController._walk()` already discovers every `.yaml` file
-  anywhere under the solution root by its own `kind:`, filename-agnostic).
-  Also confirmed the "support json/yaml/tf/.env output" idea is already
-  fully met today, per-integration, by existing code (`tf_var_env()`'s
-  `json.dumps()`, Helm's `yaml.safe_dump()` into `values.yaml`, Compose's
-  `.env`-shaped merged environment) — no new rendering work needed; the
-  merge feature only needs to produce one assembled Python value. Also
-  re-examined the real `appgateway_config` sample closely and found it may
-  need two-level (customer, ring) merge, not flat top-level-key merge as
-  first sketched — flagged as an update to Open Question 2, not yet
-  confirmed with the real author of that config.
-- 2026-10-02: Direct question ("what documents currently merge — only
-  Environments?"). Checked every real merge function in v2, not just
-  `merge_environment_models()`. Found two more:
-  `merge_deployment_specs()` (Deployment `extends:`/`partial:`) and
-  `merge_workspace_environment_deployment_properties()` (Workspace →
-  Environment(s) → Deployment `properties`/`custom`, three-way) — both
-  already built on a shared, generic, recursive `strata/utils/
-  dict_merge.py::deep_merge()` utility, proven at both real call sites.
-  `merge_environment_models()` turns out to be the odd one out (whole-
-  value override, not a deep combine). This means v2 already has, and
-  already trusts, the exact general-purpose recursive-merge primitive
-  v1's orphaned `merge_tfvars()` was for — reusing it directly for the
-  AGW fragment case is the smaller, more consistent change, and removes
-  the need to hand-roll a deliberately-restricted two-level-only merge
-  function. Folded into "Why this isn't solved already" and "Proposed
-  direction" above.- 2026-10-02: Two direct questions ("terraform will not do the merge but
-  the environments do?" / "as in `strata.kind.environment.spec.
-  configuration`?"). Confirmed from HashiCorp's own variable-precedence
-  docs that Terraform itself never merges — every precedence rule
-  describes override ("last value wins"/lexical-order file loading),
-  never combination; any merge has to happen in strata first. Confirmed
-  `spec.configuration` is not a real `kind: environment` field (it exists
-  only on the separate `kind: configuration`, itself not merged across
-  multiple referenced Configuration documents). But found
-  `EnvironmentSpecModel.properties`/`.custom` **already** run through
-  exactly the needed machinery today: `merge_workspace_environment_
-  deployment_properties()` already deep-merges them (Workspace → each
-  Environment → Deployment), and `_build_properties_payload()` is a
-  confirmed pure passthrough straight into `properties.auto.tfvars.json`
-  (Terraform auto-loads it, `properties` is a `FLAT_CATEGORIES` entry so
-  `appgateway_config` lands as its own real variable). This means
-  authoring `appgateway_config` under `spec.properties` instead of
-  `spec.variables` may already solve the real case today, with zero new
-  code — added as the new leading candidate for Open Question 1, pending
-  confirmation it doesn't cost anything real (the sample has no `type`/
-  `description` to lose) and that nothing besides Terraform needs this
-  value (Helm/Compose delivery of `properties`/`custom` not yet checked).
-- 2026-10-02: Returned to the original design question directly ("now
-  let's look at the original question of this design doc"). Searched the
-  real `cfg-int-deployment` repo for a second real "nested-by-key"
-  `store: constant` variable (Open Question 3) and found one in the same
-  file as `appgateway_config`: `ring_subnet_cidrs` (`type: object`, keyed
-  by ring name, each a nested CIDR object) — confirms the pattern recurs,
-  not AGW-specific. With all four Open Questions now answered (three
-  resolved outright, one answered as a deliberate convention rather than
-  new enforcement), recorded the final **Decision**: no new schema —
-  `spec.properties` + the two how-to docs is the complete answer for this
-  gap. Status promoted from "not yet decided" to "Decided."
+## History
+
+- Does this need a new mechanism at all, or does `spec.properties` (already deep-merged, already delivered) already solve it for a Terraform-only case like `appgateway_config`? Decided no new mechanism for now - if `properties`/`custom` ever turn out not to reach Helm/Compose the same way, the earlier alternatives (a `merge_key`/`fragment_of` field, a dedicated per-customer kind, a workspace/environment overlay concept) are still on the table.
+- Whether "adding a ring to a customer" means a new key under that customer's own `hosts:` map (two levels down from the variable's root) rather than a whole new top-level customer key is still open - a fixed two-level composite key (customer, ring) looks like the right evidence-sized granularity, not a whole-top-level merge or a fully generic dotted-path mechanism.
+- Whether this is specific to `appgateway_config`-shaped variables or there's a second real case with a similar nested-by-customer shape is still open - worth checking before assuming the mechanism generalizes.
+- Who authors a fragment and where (per-customer, per-environment, per-team ownership) is still open.
+- v1 has two narrower merge precedents (`merge_networks`/`merge_firewalls` document-level merge; `EnvironmentIncludeModel`/`TerraformLoader.concatenate()` raw-text merge) - neither generalizes to arbitrary variables, neither was ported to v2, and the text-merge one would not even correctly solve the real AGW case (duplicate resource declaration, not a merge).

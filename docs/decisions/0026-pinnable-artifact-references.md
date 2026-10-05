@@ -1,11 +1,9 @@
 # Pinnable artifact references — `kind: artifact`
 
-- Status: partially-implemented — Path 2 (`store: artifact`) fully built;
-  Path 1 (`ModuleServiceModel.artifact` → Compose/Helm rendering) deferred,
-  zero real evidence requires it yet
+- Status: accepted
 - Date: 2026-09-27
 
-Related: [docs/design/artifact-references.md](../design/artifact-references.md)
+Related: [docs/work/artifact-references.md](../work/artifact-references.md)
 (full design history, evidence, and rejected-alternative reasoning — this
 ADR summarizes the outcome, that doc is the living record)
 
@@ -92,24 +90,10 @@ confirmed in `haven/versions/prd.yaml`).
   independently carrying its own `status`/`reason`/`reviewed`).
 - Bad: `ModuleServiceModel.artifact` (Path 1) has no resolution wiring yet
   — it validates and round-trips, but nothing renders it into an actual
-  image in Compose/Helm output. Deliberate, not an oversight (see Remaining
-  Work).
+  image in Compose/Helm output. Deliberate, not an oversight — Path 1
+  resolution wiring is deferred until a real module sets `.artifact`
+  (checked directly: zero real haven module does today).
 - Bad: two ways to reference an artifact (Path 1 vs. Path 2) is more
   surface area than one — judged necessary rather than redundant, since
   each solves a structurally different problem (strata owns vs. does not
   own the target field).
-
-## Remaining Work
-
-- **Path 1 resolution wiring** — `ModuleServiceModel.artifact` needs
-  resolving in `workload_controller.py` (which already holds `index`,
-  would need `deployment` threaded in too) and a resolved image lookup
-  passed through `prepare_namespace()`'s signature on both
-  `ComposeIntegration` and `HelmIntegration`. Deferred until a real module
-  actually sets `.artifact` — checked directly, zero real haven module
-  does today (every real module still uses a plain `image:` literal).
-- **`spec.integration` cross-validation** — `ArtifactService` has no
-  Phase 2 check yet confirming a declared `integration` actually has the
-  `sources` capability. Deferred, same discipline as `TenantService`'s
-  still-parked `spec.environments` check — no real usage of
-  `ArtifactSpecModel.integration` exists yet either.

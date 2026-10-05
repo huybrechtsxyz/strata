@@ -3,7 +3,7 @@
 - Status: accepted — this is an audit/findings report, not itself a decision;
   it required no implementation of its own. Every finding below has since
   been resolved, deliberately deferred, or left open by a follow-up ADR — see
-  [docs/design/v1-schema-parity-tracking.md](../design/v1-schema-parity-tracking.md)
+  [docs/work/v1-schema-parity-tracking.md](../work/v1-schema-parity-tracking.md)
   for the live status of each item, rather than re-reading every ADR below.
 - Date: 2026-09-20
 - Related: [ADR-0002](0002-requirement-interface-injection-grant-lessons-from-v1.md)
@@ -245,16 +245,16 @@ Module declares `references: {secrets: [db_password]}`, but workspace.variables/
 
 ## Quick Reference: What Each Kind Does
 
-| Kind | Purpose | Has References | Unique Features |
-|------|---------|---|---|
-| Provider | Cloud credentials | ✓ | — |
-| Resource | VMs/compute | ✓ | subcategory field |
-| Network | VPCs/VNets | ✓ | Peerings, nested CidrSource |
-| DNS | Zones & records | ✓ | output_key, TTL, priority |
-| Firewall | Security rules | ✗ | — |
-| Namespace | App deployments | ✓ | Lifecycle scripts |
-| Module | Services & containers | ✓ | Complex (services, healthchecks, mounts, env vars) |
-| Workspace | Orchestration | (implicit) | Combines infra + apps |
+| Kind      | Purpose               | Has References | Unique Features                                    |
+| --------- | --------------------- | -------------- | -------------------------------------------------- |
+| Provider  | Cloud credentials     | ✓              | —                                                  |
+| Resource  | VMs/compute           | ✓              | subcategory field                                  |
+| Network   | VPCs/VNets            | ✓              | Peerings, nested CidrSource                        |
+| DNS       | Zones & records       | ✓              | output_key, TTL, priority                          |
+| Firewall  | Security rules        | ✗              | —                                                  |
+| Namespace | App deployments       | ✓              | Lifecycle scripts                                  |
+| Module    | Services & containers | ✓              | Complex (services, healthchecks, mounts, env vars) |
+| Workspace | Orchestration         | (implicit)     | Combines infra + apps                              |
 
 ## Decision Outcome
 
@@ -262,14 +262,5 @@ This ADR captures findings only — no decision was made here. Each of the 6
 discrepancies and 8 architectural issues above was later reviewed and
 resolved (or deliberately deferred) by its own follow-up ADR, rather than by
 editing this one. See
-[docs/design/v1-schema-parity-tracking.md](../design/v1-schema-parity-tracking.md)
+[docs/work/v1-schema-parity-tracking.md](../work/v1-schema-parity-tracking.md)
 for the current status and resolving ADR for every item.
-
-## Remaining Work
-
-See [docs/design/v1-schema-parity-tracking.md](../design/v1-schema-parity-tracking.md)
-for the full, currently-open item list (updated there, not here, as items
-resolve). As of this update, still genuinely open: lifecycle hierarchy
-precedence (Issue 5), the `SourceModel.repository` vs. `@reponame/path`
-convention split (Issue 7), and verifying whether Network peerings was ever
-ported (Discrepancy 4).

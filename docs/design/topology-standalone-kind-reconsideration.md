@@ -129,7 +129,7 @@ model level as `WorkspaceResourceModel` (instance-scoped, not a peer of
 - Update: `v2-schema-overview.md` (`topology` row — remove, fold into
   `workspace` row), `solution-loading-and-phase2-validation.md`,
   `terraform-tfvars-parity.md`, `docs/config/topology.md`.
-- `docs/design/gap_fit_v1.md` gap #5 reopens (currently closed as "deliberate,
+- `docs/work/gap_fit_v1.md` gap #5 reopens (currently closed as "deliberate,
   not an open gap").
 - `docs/how-to/migrate-v1-workspace-topology-provisioning.md` (written this
   session, premised entirely on the standalone-document shape) needs a full

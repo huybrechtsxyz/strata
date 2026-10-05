@@ -1,9 +1,8 @@
 # Workspace Model — v2 Design Decisions
 
-- Status: partially-implemented — model and thin service built; the Phase 2
-  Topology cross-checking described below is being collapsed to Phase 1 per
-  [ADR-0028](0028-topology-inline-reversion.md) (Topology moving inline);
-  `Deployment` (the "container instance") not started (see Remaining Work)
+- Status: accepted — the Phase 2 Topology cross-checking described below is
+  superseded by [ADR-0028](0028-topology-inline-reversion.md) (Topology
+  moving inline)
 - Date: 2026-09-21
 - Related: [ADR-0011](0011-topology-and-provisioning-decoupling.md) (the
   whole conceptual design this model implements — image/container framing,
@@ -143,21 +142,7 @@ real versus decorative:
   already-documented consequence of promoting `Topology` to a standalone kind
   (ADR-0011).
 
-## Remaining Work
 
-- ~~`WorkspaceService`: cross-check each referenced `Topology` document's
-  `components[].resource`/`namespaces[].namespace`...~~ — done as
-  `validate_topology_references()`/`validate_topology_components()`. Wiring
-  these (and the still-unbuilt Network/subnet cross-check) into an actual
-  loader is tracked centrally, not here:
-  [docs/design/solution-loading-and-phase2-validation.md](../design/solution-loading-and-phase2-validation.md).
-- ~~Extend `ConfigurationModel` with `topologies`/`ConfigurationTopologyModel`~~
-  — done, see [ADR-0013](0013-configuration-topology-registry.md)/
-  [ADR-0014](0014-provider-topology-config-standalone-kinds.md).
-- The `Deployment` kind (the "container instance") — references a Workspace
-  + an Environment, executes the baked-in `ProvisioningStep` recipe via thin
-  `DeploymentStage` entries (approval gates, secrets scope/Grant). Not
-  started; `DeploymentStageModel.provisioner`/`.topology` must not be
   ported from v1 (that responsibility belongs entirely here now).
 - Cross-repo reference convention inconsistency (`SourceModel.repository` vs.
   `@reponame/path`) is tracked in [ADR-0011](0011-topology-and-provisioning-decoupling.md)'s

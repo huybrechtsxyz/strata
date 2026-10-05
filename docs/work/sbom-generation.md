@@ -289,7 +289,7 @@ established.
 v1 embeds `SbomReferenceModel` into `manifest.json` (`DeploymentManifestModel.
 spec.sbom`). v2 has no equivalent manifest yet — `ConfigurationSpecModel`'s
 own docstring still lists `deployment.manifest`/`outputs` as unmodelled
-(gap #7), and `docs/design/audit-trail.md`'s own Layer 2 effort is the
+(gap #7), and `docs/work/audit-trail.md`'s own Layer 2 effort is the
 closest existing thing, deliberately scoped elsewhere. **This is exactly
 the shape of gap the user's recalled v1 defect ("the SBOM wasn't actually
 saved") warns against** — generating a reference nobody keeps is as good
@@ -383,13 +383,13 @@ have anywhere else.
   entry-point plugin precedent (`strata.integrations`) this doc's
   `strata.sbom_collectors` registry is structurally copied from, rather
   than inventing a second, different extensibility mechanism.
-- [docs/design/gap_fit_v1.md](gap_fit_v1.md) gap #7 — the still-open
+- [docs/work/gap_fit_v1.md](gap_fit_v1.md) gap #7 — the still-open
   `policies`/deployment-manifest subtree this doc deliberately does not
   reach into (SBOM policies, CVE scanning, manifest embedding).
-- [docs/design/tenant-zone-policy.md](tenant-zone-policy.md) — the "model
+- [docs/work/tenant-zone-policy.md](tenant-zone-policy.md) — the "model
   the one real check directly, don't port the generic 18-type policy
   framework" precedent any future `sbom_*` policy work should follow.
-- [docs/design/audit-trail.md](audit-trail.md) — the sibling "write the
+- [docs/work/audit-trail.md](audit-trail.md) — the sibling "write the
   artifact now, embed its reference in a manifest later" split this doc
   reaches the same conclusion as.
 

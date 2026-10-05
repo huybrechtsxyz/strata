@@ -499,7 +499,7 @@ pipeline works correctly with, same-repo case included.
     built on `run_command()`.
   - **Evidence found during implementation, not anticipated when this plan
     was written**: `controllers/audit_push.py` (Phase 4 of
-    docs/design/audit-trail.md, already shipped) had already solved this
+    docs/work/audit-trail.md, already shipped) had already solved this
     exact problem — a mutable branch tip that must be fetch+reset-fresh
     before every write — for the audit trail's own git sink. Not reused
     directly (`audit_push.py` lives in `controllers/`, a layer
@@ -577,7 +577,7 @@ pipeline works correctly with, same-repo case included.
     itself needed zero changes, since the sidecar travels via `path`
     instead of a new parameter there.
   - `default_output()` override raises `IntegrationError` when
-    `output.template` is unset (docs/design/gitops-integration.md's own
+    `output.template` is unset (docs/work/gitops-integration.md's own
     "Rendering" conclusion: no sensible default projection exists for a
     GitOps push) — the honest-default rule this Plan already called for.
   - `git_push.py` gained two Phase-3-driven additions: `remove_file()`
@@ -826,10 +826,10 @@ pipeline works correctly with, same-repo case included.
 - [ADR-0023](../decisions/0023-build-output-rendering.md) D3 — `output.
   template`/`default_output()`, already tool-agnostic and reused here
   unchanged.
-- [docs/design/remotes.md](remotes.md) — `resolve_remote()`'s current
+- [docs/work/remotes.md](remotes.md) — `resolve_remote()`'s current
   pull-only scope; this design's `push_file()` is the first push-direction
   primitive.
-- [docs/design/deploy-command.md](deploy-command.md) — Remaining Work item
+- [docs/work/deploy-command.md](deploy-command.md) — Remaining Work item
   2 (cross-step outputs), whose `collect_step_outputs()` this design's
   `output()` method needs to stay compatible with.
 - `src/strata/models/auth_models.py` — `AuthenticationModel`'s existing

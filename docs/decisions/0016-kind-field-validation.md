@@ -1,6 +1,6 @@
 # Enforcing `kind` Matches the Model It Is Validated As
 
-- Status: implemented
+- Status: accepted
 - Date: 2026-09-21
 - Related: [ADR-0001](0001-v1-schema-analysis-findings-for-v2.md) (the
   "validates fine, silently wrong" defect class this belongs to)

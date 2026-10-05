@@ -50,7 +50,7 @@
 
 v2 has no audit trail yet — `ConfigurationSpecModel` deliberately defers
 `spec.audit` alongside `zones`/`remotes`/`policies`/`paths` (see that model's
-own docstring, and gap #7 in [`docs/design/gap_fit_v1.md`](gap_fit_v1.md)). Before
+own docstring, and gap #7 in [`docs/work/gap_fit_v1.md`](gap_fit_v1.md)). Before
 designing v2's version, this doc catalogs what v1 actually built, across
 three rounds of iteration, so the v2 design starts from evidence rather than
 from v1's documentation alone — consistent with this repo's "evidence over
@@ -1419,7 +1419,7 @@ workspace): v1's `docs/decisions/0018-deployment-audit-traceability.md`
 (v1's own noted dependency for a real `actor`/identity model, out of scope
 there too).
 
-Within this repo: [`docs/design/gap_fit_v1.md`](gap_fit_v1.md) gap #7 tracks
+Within this repo: [`docs/work/gap_fit_v1.md`](gap_fit_v1.md) gap #7 tracks
 `audit` as still fully open/unstarted, alongside `policies`/`promotions`.
 [`docs/design/v2-schema-overview.md`](v2-schema-overview.md) has no audit
 entry yet — add one once a v2 ADR exists.

@@ -1,16 +1,7 @@
 # Module Model — v2 Design Decisions
 
-- Status: partially-implemented — model and thin service ported; v1's
-  service-layer "Phase 1.5" check folded into a model validator (see below)
+- Status: accepted
 - Date: 2026-09-21
-- Revised: 2026-09-21 — found and fixed a real path-traversal gap in
-  `ModuleFileModel.source`/`target` during review (present in v1 too, not a
-  new regression). See Decision 7 below.
-- Revised: 2026-09-21 — `ServiceDeployerType` replaced by the unified
-  `ProvisionerType` + `WORKLOAD_DEPLOYER_TYPES` (common_models.py), decided
-  while designing `Provisioner`/`ProvisioningStep`. See
-  [ADR-0011](0011-topology-and-provisioning-decoupling.md) and Decision 8
-  below.
 - Related: [ADR-0002](0002-requirement-interface-injection-grant-lessons-from-v1.md)
   (Requirement rejection, unified Value token syntax — both applied here),
   [ADR-0005](0005-dns-model-design-decisions.md)/[ADR-0007](0007-network-model-design-decisions.md)/
@@ -185,11 +176,4 @@ defer, don't reject" philosophy as Configuration's `additional_topologies`/
   than silently ported forward — `ModuleFileModel` now has the same
   protection `SourceModel` already had.
 
-## Remaining Work
 
-- Environment cross-check is tracked centrally in
-  [docs/design/value-token-resolution.md](../design/value-token-resolution.md),
-  not duplicated here.
-- Cross-module `@module/service` dependency resolution requires the
-  workspace/namespace layer (which modules are grouped under which
-  namespace) — not built in v2 yet.

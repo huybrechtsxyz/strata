@@ -6,13 +6,13 @@
   v1-faithful check (Terraform plan-JSON parsing, resource-level location
   extraction) remains deliberately deferred — sized, not built.
 - Date: 2026-09-30
-- Related: [docs/design/gap_fit_v1.md](gap_fit_v1.md) gap #7 (`policies`/`promotions`
+- Related: [docs/work/gap_fit_v1.md](gap_fit_v1.md) gap #7 (`policies`/`promotions`
   still fully open), [docs/design/path-conventions.md](path-conventions.md)
   (the sibling policy type, `path_convention`, already resolved — same
   "don't port the generic engine, model the one real check directly"
   precedent this doc follows), `tenant_model.py` (`TenantSpecModel.
   geographies` — the concept v1's `zones` config was superseded by),
-  `docs/design/audit-trail.md` (this doc is deliberately split out from
+  `docs/work/audit-trail.md` (this doc is deliberately split out from
   there — tenant-zone enforcement is unrelated to the audit trail; the two
   were never the same feature, they only shared gap #7's "still fully
   open" bucket)
@@ -398,8 +398,8 @@ this subsystem in the files read so far.
 
 ## Changelog
 
-- 2026-09-30: Created — split out from `docs/design/gap_fit_v1.md` gap #7's
-  `policies` bullet and `docs/design/audit-trail.md` (which this is
+- 2026-09-30: Created — split out from `docs/work/gap_fit_v1.md` gap #7's
+  `policies` bullet and `docs/work/audit-trail.md` (which this is
   explicitly *not* part of), per direct request ("create a new document
   for this, this is not really part of the audit"). Catalogs v1's real
   `tenant_zone` implementation (`policy_model.py`/`policy_engine.py`/

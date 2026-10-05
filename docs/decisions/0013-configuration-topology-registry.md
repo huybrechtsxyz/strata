@@ -1,8 +1,6 @@
 # Configuration Topology Registry (as far as Workspace needs it)
 
-- Status: superseded (structure) — the registry model (`ConfigurationTopologyModel`,
-  embedded on `ConfigurationSpecModel`) described below was promoted to a
-  standalone kind, `TopologyConfigModel`, by [ADR-0014](0014-provider-topology-config-standalone-kinds.md).
+- Status: superseded (structure) — see [ADR-0014](0014-provider-topology-config-standalone-kinds.md).
   Content/reasoning below is unchanged and still accurate; only the shape
   (embedded list vs. standalone kind + pointer) changed.
 - Date: 2026-09-21
@@ -79,15 +77,7 @@ schema alone:
 - Neutral: the registry has no effect yet — it's inert until
   `WorkspaceService`'s Phase 2 validation is built (tracked, not scheduled).
 
-## Remaining Work
 
-- ~~`WorkspaceService`: resolve each `Topology` reference's components' roles
-  (via `WorkspaceResourceModel.role`) and validate against
-  `ConfigurationModel.spec.topologies`~~ — done as
-  `validate_topology_components()` (plus `validate_topology_references()` for
-  the plain existence checks), direct ports of v1's
-  `_validate_component_constraints()`/`_get_component_role()`. Both are
-  self-contained public methods, not wired into `_validate_dynamic()` itself
   — that hook's signature only threads a `configuration_model`, not the
   actual loaded `TopologyModel` instances these checks also need. A future
   solution-loading layer (which resolves `spec.topology[].file` into real

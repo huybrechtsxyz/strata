@@ -1,12 +1,7 @@
 # Namespace Model — v2 Design Decisions
 
-- Status: partially-implemented — model and thin service ported; file-existence
-  Phase 2 checking deliberately not ported (see Remaining Work)
+- Status: accepted
 - Date: 2026-09-21
-- Revised: 2026-09-21 — `NamespaceModuleModel` replaced by the shared
-  `ModuleReferenceModel` (common_models.py), also used by
-  `TopologyComponentModel.modules`. See
-  [ADR-0011](0011-topology-and-provisioning-decoupling.md).
 - Related: [ADR-0002](0002-requirement-interface-injection-grant-lessons-from-v1.md)
   (Requirement rejection — applied here), [ADR-0009](0009-module-model-design-decisions.md)
   (Module — a namespace is a named collection of modules; also the source of
@@ -102,19 +97,4 @@ for namespace-grouped modules too), not a regression.
   file-existence check) until the repo-registration/work-path machinery
   exists — same trade-off already accepted for other deferred Phase 2 checks.
 
-## Remaining Work
 
-- `NamespaceService._validate_dynamic()` (resolving `modules[].file` against
-  a real work path + repo map) is deferred until repo registration/build
-  machinery exists in v2.
-- Cross-layer overlap validation implied by `NamespaceType.SHARED` vs.
-  `DEDICATED` (mentioned in the field's own description) **is** implemented in
-  v1, but as a separate solution-wide diagnostic (`OverlapController`,
-  `_check_namespace_overlap()`) — it scans *every* workspace file in a
-  solution, loads each one's referenced namespaces, and warns when the same
-  namespace name is claimed by manifests in different layers (unless
-  `type: shared`). This is a cross-file, cross-workspace lint tool, not
-  per-document Phase 1/2 validation — it needs a multi-file solution scanner
-  that doesn't exist in v2 yet (no `workspace`/`solution` kind, no
-  multi-manifest controller layer). Deferred until that tooling exists; not
-  a schema concern for `NamespaceModel` itself.

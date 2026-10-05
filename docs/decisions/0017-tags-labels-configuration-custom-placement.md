@@ -1,6 +1,6 @@
 # Tags, Labels, `configuration` and `custom` — Which Kind Gets What
 
-- Status: partially-implemented
+- Status: accepted
 - Date: 2026-09-22
 - Related: [ADR-0003](0003-provider-model-design-decisions.md) (found v1's
   `custom`/`default_tags` validated-then-silently-dropped, and introduced the
@@ -37,14 +37,14 @@ no way to express `metadata.labels` at all.
 
 **Four distinct concepts, named distinctly:**
 
-| Field | Shape | Meaning | Validated by strata? |
-|---|---|---|---|
-| `meta.tags` | `list[Any]` | strata-internal categorization/docs | no |
-| `default_tags` / `custom_tags` | `dict[str, str]` | real cloud provider tags | no |
-| `default_labels` / `custom_labels` | `dict[str, str]` | Kubernetes/Compose labels | no |
-| `properties` | typed model | strata-steering fields | **yes** |
-| `configuration` | `dict[str, Any]` | raw provisioner passthrough | no |
-| `custom` | `dict[str, Any]` | user data for scripts/extensions | no |
+| Field                              | Shape            | Meaning                             | Validated by strata? |
+| ---------------------------------- | ---------------- | ----------------------------------- | -------------------- |
+| `meta.tags`                        | `list[Any]`      | strata-internal categorization/docs | no                   |
+| `default_tags` / `custom_tags`     | `dict[str, str]` | real cloud provider tags            | no                   |
+| `default_labels` / `custom_labels` | `dict[str, str]` | Kubernetes/Compose labels           | no                   |
+| `properties`                       | typed model      | strata-steering fields              | **yes**              |
+| `configuration`                    | `dict[str, Any]` | raw provisioner passthrough         | no                   |
+| `custom`                           | `dict[str, Any]` | user data for scripts/extensions    | no                   |
 
 **Placement follows what the kind actually is:**
 
@@ -108,13 +108,4 @@ no way to express `metadata.labels` at all.
   is the same state ADR-0003 documented for `custom`, and the field
   descriptions say so rather than implying they work.
 
-## Remaining Work
 
-- `WorkspaceResourceModel.configuration`/`.custom`/`.labels`/`.tags` are
-  still present but were found to be dead in v1 — tracing
-  `platform_builder.py` shows only `firewalls`, `role` and `count` are
-  threaded from the workspace glue layer into
-  `PlatformResourceModel.from_resource_model()`; the artifact's
-  configuration/custom/labels/tags come exclusively from the `Resource`
-  document. Either they gain real merge semantics when a builder is written,
-  or they should be dropped. Not resolved here.

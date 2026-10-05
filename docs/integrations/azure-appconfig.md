@@ -14,7 +14,7 @@ the real Azure SDK (`azure-appconfiguration`), not the `az` CLI.
 
 Identical story to [Azure Key Vault](azure-keyvault.md#authentication-ambient-via-defaultazurecredential-never-spec-authentication) —
 `kind: integration`'s `spec.authentication` is not used here either, for the same reason (see
-[docs/design/store-integration-configuration.md](../design/store-integration-configuration.md#deliberately-out-of-scope)).
+[docs/work/store-integration-configuration.md](../work/store-integration-configuration.md#deliberately-out-of-scope)).
 `DefaultAzureCredential` chains through managed identity automatically, with nothing to declare in
 the common case.
 

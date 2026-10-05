@@ -5,7 +5,7 @@
   doc). The category-by-category catalog above the fold is kept as-is,
   unmodified, as the evidence record the fix was built from.
 - Date: 2026-09-30 (catalog), 2026-09-30 (fix)
-- Related: [docs/design/gap_fit_v1.md](gap_fit_v1.md) gap #15 (Terraform
+- Related: [docs/work/gap_fit_v1.md](../work/gap_fit_v1.md) gap #15 (Terraform
   `variables.tf` input validation — a related but distinct gap: that one
   is about *checking* declared inputs against a module's real
   `variables.tf`; this one is about whether v2 even *produces* the
@@ -123,55 +123,6 @@ existing, otherwise-correct payload under its real v1 variable name).
 `ResolvedWorkspaceGraph`; `providers` needed `description`/`labels`/
 `tags` restored from the provider's own `meta`. See "Fix Design and
 Resolution" below for exactly what shipped.
-
-## Open Questions — resolved
-
-1. ~~For `providers`: keep v2's `configuration`/`custom` additions...~~
-   **Resolved**: kept `configuration`/`custom`, restored `description`/
-   `labels`/`tags` (real, evidence-backed — the real committed output has
-   non-trivial values for all three). `version` deliberately **not**
-   restored — no v2 model field exists for it at all, and the one real
-   data point available shows it as `null` — no confirmed real usage to
-   justify adding a new model field for it. Tracked as its own, still-open,
-   much narrower question below.
-2. ~~For `workspace`: needs deployment identity threaded in...~~
-   **Resolved**: added `deployment: DeploymentModel | None` to
-   `ResolvedWorkspaceGraph` (same optional-with-None-default pattern as
-   its existing `tenant` field), threaded through
-   `build_resolved_workspace_graph()`'s two real call sites
-   (`build_controller.py`, `deploy_controller.py` — both already had a
-   resolved `DeploymentModel` in scope, just not passed through).
-3. ~~Is `modules` still a real category in v2's world...~~ **Resolved,
-   turned out to already be answered**: `terraform_projection.py`'s own
-   module docstring already states it was checked and deliberately
-   dropped (zero real usage across all six real workspaces available for
-   ADR-0023) — see the corrected table row above. No new work needed.
-4. Should this doc's findings feed into gap #15 (Terraform `variables.tf`
-   validation) as one combined effort, or ship independently? **Decided
-   in practice**: shipped independently, first — gap #15 remains open,
-   unstarted, tracked separately.
-5. Is there a real Terraform root (`iac-int-deployment`) available to
-   verify against directly? **Still open** — not needed for this fix
-   (v1's builder source plus the real committed output were sufficient,
-   confirmed consistent with each other everywhere checked), but would
-   remove all remaining doubt if it ever becomes available.
-
-### Newly opened by the fix itself
-
-1. **`ProviderPropertiesModel.version`** — v1 has this field
-   (`provider.properties.version`), v2 has no equivalent at all. Not
-   restored (see above) — would need a new, currently-unjustified model
-   field if real usage ever surfaces.
-2. ~~Deploy-time `TF_VAR_<name>` env var naming does not use the same
-   real-variable-name mapping the on-disk file now does.~~ **Fully
-   resolved** (see "Fix Design and Resolution — deploy-time env var
-   naming" below, both passes): `providers`/`dns`/`tenant` deliver as
-   `TF_VAR_platform_providers`/`TF_VAR_dns_zones`/`TF_VAR_strata_tenant`
-   (first pass); `workspace`/`flags`/`variables`/`properties`/`custom`
-   each deliver one `TF_VAR_<key>` per top-level key instead of one blob
-   per category, with a hard collision-detection error if two flat
-   categories ever declare the same key; every `resx_<type>` merges into
-   one `TF_VAR_resources` instead of colliding per type (second pass).
 
 ## Related Decisions
 
@@ -299,85 +250,11 @@ opened by the fix itself" #2 — deploy-time `TF_VAR_<name>` delivery now
 matches the real Terraform variable name (or shape) for all thirteen
 categories, not just the eight the build-time file fix covered.
 
-## Changelog
 
-- 2026-09-30: Created, per direct request ("lets look at the full
-  terraform output and make a design gap doc we need to fix. then we can
-  plan"). Empirically generated real v2 build output against `.v2-cfg`
-  (a minimal placeholder external-repo checkout, since `build run` never
-  invokes Terraform itself) and diffed it against `config-deploy`'s
-  real, committed v1 build output for the same repository, cross-checked
-  against v1's real `terraform_builder.py` source in full. Found v1
-  actually follows three distinct shape conventions (wrapped collections,
-  flat multi-variable bags, and pure unwrapped passthrough), not one, and
-  catalogued all ~13 categories against them. Six real gaps found are the
-  same one-line wrapper-key fix; `workspace` needs a signature change to
-  thread deployment context in; `providers` needs a field-set
-  reconciliation decision; `modules` has no v2 equivalent at all and
-  needs a real design decision, not a mechanical port. Confirmed several
-  suspected differences are actually deliberate, already-documented v2
-  architecture choices (topology's `provider`/`provisioner` removal,
-  ADR-0011; dns's secret/output-record split removal, ADR-0006) — not
-  gaps. No fixes made yet, no design decisions taken — catalog only, per
-  direct request to plan afterward.
-- 2026-09-30: **Fixed**, per direct request ("some differences are
-  allowed but it is v2... the v1 core layout was correct... design the
-  fit so the terraform output is back on track"). Corrected the
-  `modules` verdict from "undecided" to "deliberate, already-justified"
-  (found the real evidence already documented in
-  `terraform_projection.py`'s own module docstring — no new
-  investigation needed). Designed and implemented all 8 confirmed real
-  gaps: wrapper keys for topologies/namespaces/firewalls/networks/
-  providers/dns/tenant (via a new `planned_files()`-local
-  `_REAL_VARIABLE_NAME`/`_FLAT_CATEGORIES` lookup, deliberately not
-  inside the builder functions themselves, to avoid double-wrapping
-  `build_configuration_payloads()`'s deploy-time env-var delivery, which
-  reuses the same functions); `workspace`'s full v1 field set (via a new
-  `ResolvedWorkspaceGraph.deployment` field, threaded through both real
-  `build_resolved_workspace_graph()` call sites); `providers`'
-  `description`/`labels`/`tags` (from `ProviderMetaModel`, previously
-  unread). Deliberately scoped to build-time *file* parity only — found
-  and flagged, but did not fix, a related, deeper, v2-only gap: deploy-time
-  `TF_VAR_<name>` env var delivery still names variables after the file
-  category, not the real Terraform variable name the file-side fix now
-  uses, and needs its own separate design pass (workspace/flags/variables
-  have no single "real variable name" to map to at all). Full check
-  suite green (mypy 121 files, ruff, import-linter, pytest 1642 passed,
-  same one pre-existing unrelated failure as before this change).
-- 2026-09-30: **Fixed the deploy-time env var naming leftover**, per
-  direct request ("lets look at the tfvars parity leftover item"),
-  scoped to exactly the categories that have one real Terraform variable
-  name (`providers`/`dns`/`tenant`) — reused the build-time fix's own
-  `_REAL_VARIABLE_NAME` lookup via a new public `real_variable_name()`,
-  wired into both of `deploy_controller.py`'s `TF_VAR_<name>` delivery
-  loops. `workspace`/`flags`/`variables`/`properties`/`custom` (no single
-  real variable name each) and `resx_<type>` (every real file is
-  actually named `resources` regardless of type — a single env var per
-  type would collide if more than one type is active in one step) remain
-  deliberately out of scope, now precisely identified as needing a
-  materially different delivery shape, not a rename. Full check suite
-  green (mypy 121 files, ruff, import-linter, pytest 1642 passed, same
-  one pre-existing unrelated failure).
-- 2026-09-30: **Closed the remaining deploy-time env var naming gap**,
-  per direct request ("lets look into... the tfvars parity leftover
-  item... before the variables.tf validation"). `FLAT_CATEGORIES`
-  (`workspace`/`flags`/`variables`/`properties`/`custom`) promoted from
-  private to public in `terraform_projection.py`, now delivers one
-  `TF_VAR_<key>` per top-level key instead of one blob per category —
-  with a new hard collision-detection error (computed once,
-  step-invariant) if two flat categories ever declare the same key,
-  since an env var, unlike a separate on-disk file, can only hold one
-  value per name with no ordering guarantee. `resx_<type>` now merges
-  every active resource type's `resources` sub-dict into one combined
-  dict, delivered once as `TF_VAR_resources` (the one real Terraform
-  variable name every real file actually uses, confirmed against v1's
-  `_build_resources_by_category()`) instead of a made-up
-  `TF_VAR_resx_<type>` per type that would silently clobber across
-  types. Two existing tests updated, three new tests added covering the
-  merge, the per-key delivery, and the collision error. This closes out
-  every category this doc's "Newly opened by the fix itself" #2
-  flagged — deploy-time `TF_VAR_<name>` delivery now matches v1's real
-  Terraform variable contract for all thirteen categories, not just the
-  eight the first deploy-time pass covered. Full check suite green
-  (mypy 121 files, ruff, import-linter, pytest 1645 passed, same one
-  pre-existing unrelated failure).
+## History
+
+- `providers` keeps v2's `configuration`/`custom` additions and restores `description`/`labels`/`tags` (real, evidence-backed) from `ProviderMetaModel`; `version` deliberately not restored - no v2 model field exists for it and the one real data point available is `null`, so there is no evidence to justify adding one.
+- `workspace`'s full v1 field set needed deployment identity threaded in - `ResolvedWorkspaceGraph` gained a `deployment: DeploymentModel | None` field (mirrors its existing `tenant` field), passed through both real call sites (`build_controller.py`, `deploy_controller.py`).
+- `modules` has no v2 equivalent and needs none - `terraform_projection.py`'s own docstring already confirms it was checked and deliberately dropped (zero real usage across every real workspace checked).
+- Several suspected v1/v2 differences turned out to be deliberate, already-documented v2 architecture choices (Topology's `provider`/`provisioner` removal, ADR-0011; DNS's secret/output-record split removal, ADR-0006) rather than new gaps.
+- Not independently verified against a real standalone Terraform root (`iac-int-deployment`) - v1's builder source plus the real committed build output were sufficient and mutually consistent everywhere checked, but this would remove any remaining doubt if that repo ever becomes available.

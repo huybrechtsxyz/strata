@@ -6,7 +6,7 @@
   materialisation contract, which this decision constrains),
   [ADR-0023](0023-build-output-rendering.md) (the `output.template` escape
   hatch this decision deliberately does *not* remove),
-  [build-command.md](../design/build-command.md) /
+  [build-command.md](../work/build-command.md) /
   [workload-pipeline.md](../design/workload-pipeline.md) (where this shows up
   as "parity gap 4 — decided against")
 

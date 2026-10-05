@@ -1,6 +1,6 @@
 # Tenant Defaults Merge — `properties`/`custom`/`environments` as a Base Layer
 
-- Status: implemented
+- Status: accepted
 - Date: 2026-09-24
 - Related: [ADR-0023](0023-build-output-rendering.md) (`tenant.spec.configuration`
   is deliberately **not** part of this ADR - its real destination is

@@ -16,7 +16,7 @@ You have a real v1 `workspace.yaml` whose `spec.topology[]` entries carry
 `provider`/`provisioner` fields directly, and a `deployment.yaml` whose
 `stages[]` re-declare `topology`/`provisioner` bindings per stage. This is
 the one part of a v1 → v2 migration that isn't a mechanical field rename
-([docs/design/gap_fit_v1.md](../design/gap_fit_v1.md) gap #5) — the
+([docs/work/gap_fit_v1.md](../work/gap_fit_v1.md) gap #5) — the
 *binding* between "what infrastructure" and "which tool builds it" moves to
 a new place entirely, even though the grouping itself stays exactly where
 v1 had it. This guide walks through converting one real example end to end.
@@ -24,7 +24,7 @@ v1 had it. This guide walks through converting one real example end to end.
 See also: [ADR-0011](../decisions/0011-topology-and-provisioning-decoupling.md)
 (the full from-first-principles reasoning this migration follows),
 [ADR-0028](../decisions/0028-topology-inline-reversion.md) (why the
-grouping itself reverted to inline), [docs/design/gap_fit_v1.md](../design/gap_fit_v1.md) gap #5
+grouping itself reverted to inline), [docs/work/gap_fit_v1.md](../work/gap_fit_v1.md) gap #5
 (where this migration effort is tracked), and the real worked example this
 guide is built from:
 [`.v2-cfg/workspaces/spoke.yaml`](../../.v2-cfg/workspaces/spoke.yaml)
@@ -143,7 +143,7 @@ Field-by-field, translated from what v1 had:
   this binding (`infra`/`apps` is v1's own free-form vocabulary,
   unchanged) — not a new concept, just relocated from the deployment's
   stage onto the workspace's own step (see gap #6 in
-  [docs/design/gap_fit_v1.md](../design/gap_fit_v1.md), already resolved: `scope` was always
+  [docs/work/gap_fit_v1.md](../work/gap_fit_v1.md), already resolved: `scope` was always
   meant to live here, not on `DeploymentStageModel`).
 - **`depends_on`** — only needed if this step must run after another named
   step (v1 had no equivalent field here at all; if v1's real ordering came

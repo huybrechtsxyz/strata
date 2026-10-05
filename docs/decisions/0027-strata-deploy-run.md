@@ -1,10 +1,6 @@
 # `strata deploy run` — Execution Orchestrator
 
-- Status: partially-implemented — orchestrator, CLI, `TF_VAR_` injection,
-  cross-step output context, `output.template`'s actual render, and
-  `store: artifact` deploy-time resolution are all built and tested;
-  locking, SIEM/audit, whole-run timeout, and `--force`'s real
-  advisory-gate consumption are deliberately deferred (see Remaining Work)
+- Status: accepted
 - Date: 2026-09-27
 - Related: [ADR-0021](0021-integration-layer.md) (the integration layer
   this consumes — `InfraIntegration.plan()`/`.deploy()`/`.destroy()`,
@@ -15,7 +11,7 @@
   [ADR-0023](0023-build-output-rendering.md) (what `build run` already
   wrote to disk before this command executes against it)
 
-See also: [docs/design/deploy-command.md](../design/deploy-command.md)
+See also: [docs/work/deploy-command.md](../work/deploy-command.md)
 (full design history, real evidence from both reference repos, and every
 correction made along the way — this ADR summarizes the outcome, that doc
 is the living record)
@@ -145,29 +141,3 @@ Concrete decisions:
 - Bad: Compose/Helm's own outputs equivalent (if any) is unconfirmed by
   real evidence — neither reference repo's Helm/Compose stage shows a
   comparable pattern to design against yet.
-
-## Remaining Work
-
-- ~~`store: artifact` deploy-time resolution~~ — done 2026-09-27, same
-  session. `resolve_values()`'s loop now special-cases `store.store ==
-  VariableStoreType.ARTIFACT` before its generic `StoreIntegration`
-  dispatch, calling `resolve_artifact_field()` directly. 2 new tests in
-  `test_value_controller.py`.
-- **Locking** — no deployment-level locking exists yet. Terraform's own
-  remote backends (`azurerm`, S3+DynamoDB, Terraform Cloud) already
-  provide real state-locking independent of strata for the Terraform
-  case specifically; Helm/Compose have much weaker or no native
-  equivalent. A fact for whoever designs this next, not a decision made
-  here.
-- **SIEM/audit-trail logging** — real, working v1 machinery
-  (change-management/cost-history/audit) with no proven `deploy run`
-  critical-path dependency in either real repo (Tier 2, per
-  `/memories/repo/v1-consumer-usage.md`). The per-step before/after hook
-  the orchestrator's loop already carries is where it would plug in.
-- **Whole-run timeout** — v1 has a worker-thread + shutdown-coordinator
-  that kills subprocesses and releases the lock on a whole-run timeout;
-  v2 only has per-command timeouts (`plan()`/`.deploy()`'s own `timeout`
-  kwarg, default 1800s).
-- **`--force`'s real advisory-gate consumption** — AI plan review,
-  promotion-override guards. Neither gate exists in v2 yet; `force` is
-  plumbed through and documented as currently inert.

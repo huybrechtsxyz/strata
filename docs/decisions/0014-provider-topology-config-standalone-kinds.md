@@ -1,6 +1,6 @@
 # ProviderConfig / TopologyConfig — Promoting Configuration's Registries to Standalone Kinds
 
-- Status: implemented
+- Status: accepted
 - Date: 2026-09-21
 - Related: [ADR-0011](0011-topology-and-provisioning-decoupling.md) (Topology's own
   promotion out of Workspace — same reasoning applied here one level up),
@@ -106,8 +106,4 @@ Promote both registries to standalone kinds, same shape as everything else
   `test_services_workspace.py`, `test_models_configuration.py`) — expected,
   deliberate cost of the refactor, not a regression.
 
-## Remaining Work
 
-Tracked centrally in
-[docs/design/solution-loading-and-phase2-validation.md](../design/solution-loading-and-phase2-validation.md),
-not duplicated here.

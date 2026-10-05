@@ -1,7 +1,6 @@
 # Firewall Model — v2 Design Decisions
 
-- Status: partially-implemented — model and thin service ported; multi-file
-  merge behavior deliberately not ported (see Remaining Work)
+- Status: accepted
 - Date: 2026-09-21
 - Related: [ADR-0001](0001-v1-schema-analysis-findings-for-v2.md) (v1 schema
   analysis — "Firewall Lacks Parametrization" / "No References Support",
@@ -92,13 +91,4 @@ a Python keyword, same reason v1 needed the alias.
 - Accepted cost: `port` is not parametrizable — flagged, not solved,
   consistent with "don't solve a problem no one cited."
 
-## Remaining Work
 
-- Environment cross-check is tracked centrally in
-  [docs/design/value-token-resolution.md](../design/value-token-resolution.md),
-  not duplicated here.
-- Multi-file firewall merging (`merge_firewalls`) is not ported — revisit
-  once a v2 workspace/environment overlay concept exists (same as Network,
-  ADR-0007).
-- If a real need for a parametrizable `port` emerges, reconsider then —
-  not speculatively now.

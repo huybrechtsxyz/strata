@@ -227,7 +227,7 @@ even have noticed.
   in this update.
 - 2026-09-30: **Designed the Interface parse-failure policy**, per direct
   request, prompted by a real question about gap #15's
-  (`docs/design/gap_fit_v1.md`) `variables.tf` check: confirmed against
+  (`docs/work/gap_fit_v1.md`) `variables.tf` check: confirmed against
   v1's real `parse_variables_tf()` that it silently skips an unparseable
   `.tf` file, a real reliability gap (invisible declarations → false
   "undeclared" errors). Also confirmed, against v2's real `build_run()`/

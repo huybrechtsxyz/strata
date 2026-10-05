@@ -156,9 +156,4 @@ layers are designed:
   all (see ADR-0005) until Context is built — a real, if temporary,
   capability gap versus v1.
 
-## Remaining Work
 
-Tracked centrally in
-[docs/design/provisioning-injection-model.md](../design/provisioning-injection-model.md)
-(Context's concrete shape, the `step` token, and the open "Outputs
-declaration" problem), not duplicated here.

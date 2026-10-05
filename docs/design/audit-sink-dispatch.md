@@ -8,7 +8,7 @@
 
 ## Overview
 
-[audit-trail.md](audit-trail.md)'s Layer 4 is "send the audit evidence
+[audit-trail.md](../work/audit-trail.md)'s Layer 4 is "send the audit evidence
 somewhere durable and tamper-resistant." v2 ships Layer 2 (local
 manifest/metrics + `git` sink push) and the full CloudEvents+ECS *rendering*
 for Layer 4 — but nothing ever calls that renderer. A configured
@@ -25,7 +25,7 @@ v1 shipped **five** SIEM backends (`sentinel`, `elk`, `otel`, `splunk` HEC,
 `syslog`+CEF). Real usage, confirmed directly in `config-deploy`'s own
 `config/audit.yaml`: **one** declared sink (`elk`), `enabled: false` — zero
 actually active. That is the exact "declared-but-unread machinery" failure
-[audit-trail.md](audit-trail.md)'s own "Lessons from v1's own defects" #1
+[audit-trail.md](../work/audit-trail.md)'s own "Lessons from v1's own defects" #1
 describes, reproduced at the integration layer.
 
 The opposing risk is just as real, and was raised directly: *"if not
@@ -304,92 +304,18 @@ Datadog, an OTel Collector that itself fans out further.
   layer, capability ABCs, lazy registry, `x-` extension tier, and
   `http_request()`; this design adds one capability and one class within
   that existing structure rather than inventing a parallel one.
-- [audit-trail.md](audit-trail.md) — the parent design: the four-layer
+- [audit-trail.md](../work/audit-trail.md) — the parent design: the four-layer
   evidence model, the CloudEvents+ECS envelope, and the sink config surface
   this dispatch consumes.
 - [path-conventions.md](path-conventions.md) — precedent for D2's rejection
   of a generic expression/template language in favour of one small dedicated
   function per real case.
 
-## Remaining Work / Open Questions
 
-- **OTel and Sentinel sinks** — designed and implemented (2026-10-03).
-- **Jinja2 body template** (`configuration.body_template`) — deferred by D1.
-  Dispatch happens at end-of-run when every value is already resolved, so
-  unlike `output.template` this needs no build-validate/deploy-render split;
-  render-only with `StrictUndefined` would be enough. Build when a real
-  target needs a non-CloudEvents shape.
-- **Remaining vendor classes** (Splunk HEC, ELK-direct, syslog/CEF) —
-  deferred by D3, gated on a real consumer with one `enabled: true`.
-- **Retry/backoff on a failed send** — the `git` arm has none either; left
-  consistent for now rather than solved in one arm only.
-- **Batching** — D5 picked one-request-per-event; revisit if/when a batching
-  target (Splunk HEC, ELK bulk) is actually built.
-- **`Capability.AUDIT` preflight** — `audit-trail.md` notes capability
-  gating was deferred alongside the dispatch itself. Change 1 supplies the
-  capability; whether a *preflight* check (before the run, not at dispatch)
-  is also wanted is unresolved.
+## History
 
-## Changelog
-
-- 2026-10-03: Created. Design agreed after an explicit discussion of the
-  "unused integrations vs. feels lacking" tension: generic webhook first,
-  CloudEvents default body, Jinja template and all vendor classes
-  deliberately deferred. Records D2 (a generic template provably cannot
-  cover Sentinel/syslog) so that limit is a known, decided boundary rather
-  than a later surprise.
-- 2026-10-03: **Implemented, all five changes.** `Capability.AUDIT` added
-  to the closed core tier; `AuditSinkIntegration` ABC added and registered
-  in `CAPABILITY_ABCS` (so `find_capability_mismatches()` enforces the
-  contract); `WebhookIntegration` added (`integrations/webhook.py`);
-  `"webhook"` moved from `registry._KNOWN_V1_TYPES` into `_KNOWN`;
-  `_dispatch_sink()`'s info-finding stub replaced with real dispatch via a
-  new `_dispatch_integration_sink()`.
-  Two refinements made while implementing, neither in the original plan:
-  (1) the warn-vs-fail decision was factored into one shared
-  `_record_sink_failure()` so the `git` and `integration` arms cannot drift
-  apart on `required` handling; (2) **every** integration-arm failure mode
-  — a missing Integration document, an unresolvable type, a document
-  lacking `Capability.AUDIT`, and a failed send — routes through that same
-  flag rather than raising, so a misconfigured audit sink never takes down
-  a deploy that already succeeded. A disabled Integration document
-  (`spec.enabled: false`) dispatches nothing and reports nothing, treated
-  as a deliberate off-switch.
-  16 tests total (6 dispatch-level in `test_audit_run.py`, 10 unit-level in
-  `test_integrations_webhook.py`); the pre-existing
-  `test_capability_abcs_covers_every_core_capability_with_a_real_consumer`
-  exhaustive assertion was updated for the new entry. Full check suite
-  green: mypy (134 files), ruff, ruff format, import-linter 1/0, pytest
-  1851 passed.
-- 2026-10-03: **Designed OTel and Azure Sentinel sinks**, per two real,
-  named consumers ("our ELK stack can handle otel"; Sentinel "will be part
-  of the control layer later") — D3 amended to record why each meets the
-  evidence bar on different grounds (OTel: infrastructure that already
-  exists today; Sentinel: a concrete planned consumer, not anticipation).
-  **Corrected D2 while designing Sentinel**: checked v1's real
-  `sentinel_integration.py` directly and found no HMAC signature anywhere —
-  that requirement belongs to the legacy HTTP Data Collector API; v1's
-  actual target is the modern DCR-based Monitor Logs Ingestion API,
-  authenticated with a plain AAD bearer token via
-  `azure.identity.DefaultAzureCredential` (already a strata dependency, and
-  already the established pattern via `AzureKeyVaultResolver`). The
-  original claim was wrong and is recorded as a correction, not silently
-  fixed, since the conclusion it fed (one small dedicated class per target,
-  not a crypto-capable template language) still holds. Also found, while
-  reading v1's `otel_siem_integration.py` directly, a real bug worth not
-  reproducing: it stamps every event with `time.time()` (send time) instead
-  of the event's own occurrence time — v2's design uses the event's own
-  `time` field instead. Not yet implemented.
-- 2026-10-03: **Implemented OTel and Sentinel.** `OtelIntegration`
-  (`integrations/otel.py`) and `SentinelIntegration`
-  (`integrations/sentinel.py`) added, matching the designs above exactly;
-  both moved from `registry._KNOWN_V1_TYPES` into `_KNOWN`.
-  `WebhookIntegration`'s own docstring, which had repeated the original
-  incorrect HMAC claim, corrected to match. 23 new tests (12 for OTel, 11
-  for Sentinel — token-caching, both required-configuration keys,
-  authentication failure, non-2xx/timeout, array-not-object body for
-  Sentinel, event-own-time-not-wall-clock for OTel). No new dependency:
-  `azure-core`'s `TokenCredential`/`ClientAuthenticationError` already
-  resolve transitively via the existing `azure-identity` dependency. Full
-  check suite green: mypy (136 files), ruff, ruff format, import-linter
-  1/0, pytest 1874 passed.
+- Generic webhook ships first; a Jinja2 body template and per-vendor classes (Splunk HEC, ELK-direct, syslog/CEF) are deliberately deferred - confirmed that no generic template can cover Sentinel/syslog's real shape, so that is a known, decided boundary, not a later surprise.
+- OTel and Azure Sentinel sinks were added once real, named consumers existed (an already-running ELK/OTel stack; a planned Sentinel control-layer target) - not built ahead of evidence.
+- Corrected an earlier claim about Sentinel while designing it: v1's real `sentinel_integration.py` has no HMAC signature - that belongs to the legacy HTTP Data Collector API. The real target is the modern DCR-based Monitor Logs Ingestion API, authenticated with a plain AAD bearer token (`DefaultAzureCredential`, already an established pattern via `AzureKeyVaultResolver`).
+- Every integration-arm failure mode (missing Integration document, unresolvable type, missing `Capability.AUDIT`, failed send) routes through one shared `_record_sink_failure()` warn-vs-fail flag, matching the `git` arm - a misconfigured audit sink never takes down a deploy that already succeeded. A disabled Integration document is a deliberate off-switch, not an error.
+- Retry/backoff and batching are deliberately left unsolved for now - the `git` arm has neither either, and there is no real batching target (Splunk HEC/ELK bulk) yet.

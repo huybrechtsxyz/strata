@@ -1,8 +1,6 @@
 # `strata build run` — Rendering Artifacts from Integrations
 
-- Status: proposed - design written; `prepare()`'s signature/D1a types are
-  implemented (as ADR-0023 Phase 1), the `build_run()` orchestrator itself
-  is not
+- Status: accepted
 - Date: 2026-09-23
 - Related: [ADR-0021](0021-integration-layer.md) (Phases 1-6, all done - the
   integration layer this consumes: registry, `Integration`/`InfraIntegration`,
@@ -12,7 +10,7 @@
   [ADR-0023](0023-build-output-rendering.md) (split out of this document -
   what `prepare()`/`prepare_namespace()` actually write, and how a user can
   customise it)
-- See also: [docs/design/build-pipeline-status.md](../design/build-pipeline-status.md)
+- See also: [docs/work/build-pipeline-status.md](../work/build-pipeline-status.md)
   for cross-ADR status across ADR-0021/0022/0023
 
 ## Context and Problem Statement
@@ -330,31 +328,4 @@ behaviour; what ends up in the rendered file is a separate design.
   a small design surface, but this ADR only needs the two methods to exist
   with the signatures above; it does not need to resolve what ends up
   inside `path`.
-
-## Remaining Work
-
-- Implementation: `strata/controllers/build_controller.py` (the orchestrator
-  loop), `resolve_integration()` (D2), `sync_source()` (D3, including the
-  sibling-provisioner relative-path composition gap), `prepare()`/
-  `prepare_namespace()` existing on `InfraIntegration` (D1/D7) and each of
-  `TerraformIntegration`/`ComposeIntegration`/`HelmIntegration` (their
-  bodies are ADR-0023's scope, not this one's).
-- The workload pipeline (D5-D7): `build_workload_modules()`, the
-  namespace/module grouping-by-type logic (D6), and deciding where
-  `prepare_namespace()` formally lives (D7's open call - `InfraIntegration`
-  itself vs. a separate mixin ABC).
-- `strata build run` CLI command wiring (`strata/commands/build_command.py`),
-  matching `validate_command.py`'s established thin-glue-over-controller shape.
-- Everything about what gets rendered/how it can be customised -
-  `build_platform_projection()`/`planned_files()`, `resolve_expr_tokens()`,
-  `OutputModel`/`output.template`, shipped example templates, Compose/Helm's
-  own deploy-time value substitution - is tracked in
-  [ADR-0023](0023-build-output-rendering.md)'s own Remaining Work, not
-  duplicated here.
-- Helm's OCI `chart_repository` support and the "must not Jinja-render a
-  local chart's own `templates/` dir" rule - both real v1 1.8.2 bug fixes
-  (ADR-0020), requirements not discoveries to make again.
-- `TF_VAR_`/compose env injection at *deploy* time (v1's
-  `resolved_values.as_tf_vars()`/`as_compose_env()`) - out of scope for
-  `build run` (D4); belongs to `deploy run`'s own design.
 

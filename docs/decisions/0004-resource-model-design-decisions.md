@@ -1,12 +1,7 @@
 # Resource Model — v2 Design Decisions
 
-- Status: partially-implemented — model and service ported; ADR-0001's
-  `subcategory` discrepancy intentionally left unresolved (see Remaining Work)
+- Status: accepted
 - Date: 2026-09-20
-- Revised: 2026-09-21 — removed `ResourceReferencesModel`/`spec.references`
-  per [ADR-0002](0002-requirement-interface-injection-grant-lessons-from-v1.md)'s
-  conclusion that Requirement should not exist as a schema field (same
-  removal already applied to `ProviderModel` — see ADR-0003 Decision 6).
 - Related: [ADR-0001](0001-v1-schema-analysis-findings-for-v2.md) (v1 schema
   analysis — flags `subcategory` as Resource-only), [ADR-0002](0002-requirement-interface-injection-grant-lessons-from-v1.md)
   (references/injection lessons), [ADR-0003](0003-provider-model-design-decisions.md)
@@ -93,9 +88,4 @@ check against `Environment`, not a hand-authored list.
 - Good: `spec.references` is gone — same benefit recorded for Provider
   (ADR-0003): one less hand-maintained field to drift out of sync.
 
-## Remaining Work
 
-- `ResourcePropertiesModel.subcategory` remains unresolved (ADR-0001
-  discrepancy 5) — tracked centrally in
-  [docs/design/v1-schema-parity-tracking.md](../design/v1-schema-parity-tracking.md),
-  not duplicated here.

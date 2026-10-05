@@ -349,7 +349,7 @@ durable, reviewable record.
     cross-check, `Tenant` reference existence).
   - `policies`/`promotions` — still fully open, unstarted. `audit` —
     **RESOLVED 2026-09-30** (Layers 1+2 only — see
-    [docs/design/audit-trail.md](audit-trail.md)). `strata sln init`/
+    [docs/work/audit-trail.md](audit-trail.md)). `strata sln init`/
     `update` scaffold the real PR/issue templates (Layer 1), and `deploy
     run` now writes a durable `_manifest.json`/`_metrics.json` per
     execution with optional `git`-sink distribution (Layer 2's full
@@ -365,7 +365,7 @@ durable, reviewable record.
     without the generic phase/enforcement-dispatching policy framework
     around it); `promotions.yaml` declares a `progressions.standard` ring
     sequence but no active `strategies` entry. `policies` now has its own
-    catalog doc — [docs/design/tenant-zone-policy.md](tenant-zone-policy.md)
+    catalog doc — [docs/work/tenant-zone-policy.md](tenant-zone-policy.md)
     (2026-09-30) — scoped to `tenant_zone` (the one real, active-by-
     declaration remaining type), not the full 18-type documented catalog;
     catalog only so far, no v2 design decisions made yet. That doc also
@@ -510,7 +510,7 @@ durable, reviewable record.
 
 - **Found in:** [docs/design/value-token-resolution.md](value-token-resolution.md)
   itself, cross-checked against `deploy_controller.py` and
-  [docs/design/deploy-command.md](deploy-command.md) — not found via
+  [docs/work/deploy-command.md](deploy-command.md) — not found via
   a haven document, but the underlying reason gaps #1 and #8 can't actually
   be closed by a schema-correct rewrite alone.
 - **Status:** implemented (2026-09-28) — every kind now resolves at
@@ -840,7 +840,7 @@ durable, reviewable record.
   *found*, before Compose's own `deploy_namespace()` was implemented the
   same week (Full Solution Phase 5) — left as-is below as the historical
   record of what was actually broken; see gap #9's own final status and
-  `docs/design/deploy-command.md`'s "Helm/Compose orchestration" section
+  `docs/work/deploy-command.md`'s "Helm/Compose orchestration" section
   for the finished design. At the time this was found: `ProvisionerModel`
   (`provisioning_model.py`) has no
   release/chart/namespace field of any kind — `HelmIntegration.plan()`/
@@ -872,7 +872,7 @@ durable, reviewable record.
   orchestrator will consume, rather than blocking on this larger,
   separate gap.
 - **Design completed and corrected twice 2026-09-28, implemented same day**
-  (see [docs/design/deploy-command.md](deploy-command.md)'s
+  (see [docs/work/deploy-command.md](deploy-command.md)'s
   "Helm/Compose orchestration" section for the full design history), per
   direct request to design this the way v1 avoided tool-type branching,
   not around it, then per direct pushback that got the mechanism right.
@@ -976,7 +976,7 @@ durable, reviewable record.
 
 ### 15. Terraform input validation against `variables.tf` has no v2 equivalent
 
-- **Found in:** not a fresh discovery — `docs/design/build-command.md`'s
+- **Found in:** not a fresh discovery — `docs/work/build-command.md`'s
   own "Remaining Work / Open Questions" section already tracks this
   ("Terraform input validation against `variables.tf` — v1 fails the build
   on a declared-input/schema mismatch before `apply` would.
@@ -1016,7 +1016,7 @@ durable, reviewable record.
   emitted and only surfaces as a Terraform... warning").
 - **Migration action:** none available yet — no design exists. Would need,
   at minimum: locating the target Terraform root on disk (post-`sync_source()`,
-  `docs/design/remotes.md`'s own still-open prerequisite), parsing
+  `docs/work/remotes.md`'s own still-open prerequisite), parsing
   `variables.tf` (HCL, not YAML — a new parsing dependency `provisioning-injection-model.md`
   already flagged as a capability-lookup-only concern today), and deciding
   where in `build run`'s flow the check runs and how strict it is (error
@@ -1035,7 +1035,7 @@ durable, reviewable record.
 ### 16. ~~`strata validate` rejected every `${output:...}` token unconditionally, even ones gap #12 already made work~~ — RESOLVED
 
 - **Found in:** not a haven/config-deploy document — found while
-  designing `docs/design/deploy-command.md`'s "Cross-invocation output
+  designing `docs/work/deploy-command.md`'s "Cross-invocation output
   access" section (2026-09-29): reviewing that design against real code
   before writing new checks on top of it, `unresolved_value_tokens()`
   (`environment_service.py`, the function `strata validate`'s Phase 2 pass
@@ -1174,7 +1174,7 @@ durable, reviewable record.
   schema-validated `sbom.json` covering 4 of v1's 8 collectors
   (`image`/`compose`/`helm`/`terraform`) via a new, pluggable
   `strata.sbom_collectors` registry — see
-  [docs/design/sbom-generation.md](sbom-generation.md). `ansible`/`deps`
+  [docs/work/sbom-generation.md](sbom-generation.md). `ansible`/`deps`
   remain deferred; CVE scanning/policies/manifest embedding are separate,
   already-tracked concerns.
 - **Migration action:** none — `strata build run` now produces `sbom.json`
@@ -1246,7 +1246,7 @@ and the provider/providerconfig/topologyconfig registry split.
   change (v1's `workspace.yaml` binds `provider`/`provisioner` directly
   onto a `topology[].components` entry). **Passed `strata validate` clean
   (12/12 documents, zero findings) as of 2026-09-29** — gap #14 (now
-  resolved) and gap #15 (cross-linked from `docs/design/build-command.md`'s
+  resolved) and gap #15 (cross-linked from `docs/work/build-command.md`'s
   existing Remaining Work) were both found/logged while building it; no
   other new schema/feature gap surfaced. **Stale as of 2026-10-01
   (ADR-0028):** this fixture still uses the pre-ADR-0028 standalone
@@ -1272,7 +1272,7 @@ and the provider/providerconfig/topologyconfig registry split.
 - [docs/decisions/0011-topology-and-provisioning-decoupling.md](../decisions/0011-topology-and-provisioning-decoupling.md)
 - [docs/decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md](../decisions/0002-requirement-interface-injection-grant-lessons-from-v1.md)
 - [docs/decisions/0015-solution-manifest-and-document-discovery.md](../decisions/0015-solution-manifest-and-document-discovery.md)
-- [docs/design/deploy-command.md](deploy-command.md)
+- [docs/work/deploy-command.md](deploy-command.md)
 - [docs/design/value-token-resolution.md](value-token-resolution.md) — the
   Per-Kind Status table and Remaining Work section gaps #1/#8/#9/#10 are all
   grounded in
@@ -1524,7 +1524,7 @@ and the provider/providerconfig/topologyconfig registry split.
   type branching. Designed a `deploy_namespace()` deploy-time counterpart
   with the identical shape, consuming gap #9 Phase 4's
   `resolve_module_values()`. Full write-up in
-  `docs/design/deploy-command.md`'s new "Helm/Compose orchestration"
+  `docs/work/deploy-command.md`'s new "Helm/Compose orchestration"
   section. Design only — nothing implemented yet.
 - 2026-09-28: **Corrected gap #13's design twice more.** First, validated
   against literal-name coupling (per request) and found the pseudocode
@@ -1540,7 +1540,7 @@ and the provider/providerconfig/topologyconfig registry split.
   `integration.CAPABILITIES` (`"infrastructure"` vs `"container"`) instead
   — one integration resolution, shared by both branches, `step.provisioner`
   always meaningful (resolving the previous draft's own "unused field"
-  consequence). Full history kept visible in `docs/design/deploy-command.md`'s
+  consequence). Full history kept visible in `docs/work/deploy-command.md`'s
   new "Superseded" subsection rather than silently overwritten. Design
   only, still nothing implemented.
 - 2026-09-28: **Resolved gap #2**, per request ("good. design, plan,
@@ -1624,7 +1624,7 @@ and the provider/providerconfig/topologyconfig registry split.
   caught it, then reverted) that the docstring's claimed deferral is
   already false; no other new schema/feature gap surfaced by this pass.
   Separately (not a new finding, already documented in
-  `docs/design/build-command.md`'s Remaining Work): the real spoke
+  `docs/work/build-command.md`'s Remaining Work): the real spoke
   environment's own comment about `tf_state_*` variables being "excluded
   from strata's variable declaration check" is live evidence for that
   doc's already-tracked "Terraform input validation against `variables.tf`"
@@ -1637,7 +1637,7 @@ and the provider/providerconfig/topologyconfig registry split.
   (no per-kind opt-in needed) and dropped the stale "most authored kind
   missing from v2" characterization of `environment` — no behavior change,
   the check itself was already correct, only the docstring was wrong. Gap
-  #15: cross-referenced `docs/design/build-command.md`'s existing
+  #15: cross-referenced `docs/work/build-command.md`'s existing
   Remaining Work item ("Terraform input validation against `variables.tf`")
   into this file's numbered gap list for the first time, per request —
   explicitly framed as already-documented, not a fresh discovery here; the
@@ -1645,7 +1645,7 @@ and the provider/providerconfig/topologyconfig registry split.
   excluded from that check is the concrete evidence tying it to this
   migration pass.
 - 2026-09-29: **Found and resolved gap #16**, discovered while reviewing
-  the "Cross-invocation output access" design (`docs/design/deploy-command.md`)
+  the "Cross-invocation output access" design (`docs/work/deploy-command.md`)
   before implementing new checks on top of it, per request ("lets review
   the design first"). `unresolved_value_tokens()` still unconditionally
   rejected every `${output:...}` token — confirmed empirically against

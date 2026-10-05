@@ -4,7 +4,7 @@ Every `strata build run` now also generates a CycloneDX 1.6 Software Bill of Mat
 (SBOM) — automatically, with no flag to opt in or out. This guide covers what gets
 scanned, where the output lands, how to feed it into an external scanner/registry, and
 how to add a collector for a technology this doesn't cover yet. See
-[docs/design/sbom-generation.md](../design/sbom-generation.md) for the full design
+[docs/work/sbom-generation.md](../work/sbom-generation.md) for the full design
 rationale and evidence trail.
 
 ## The short answer
@@ -119,5 +119,5 @@ npm = "acme_strata_plugins.npm_collector:NpmLockfileCollector"
 
 Either way, `write_sbom()` picks it up automatically via
 `registry.list_collectors()` — see
-[docs/design/sbom-generation.md](../design/sbom-generation.md#extensibility--a-new-collector-is-one-small-class-zero-core-repo-changes-for-a-third-party)
+[docs/work/sbom-generation.md](../work/sbom-generation.md#extensibility--a-new-collector-is-one-small-class-zero-core-repo-changes-for-a-third-party)
 for the full extensibility design.

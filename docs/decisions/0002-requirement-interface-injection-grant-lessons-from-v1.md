@@ -1,111 +1,18 @@
 # Requirement, Interface, Injection, Grant, Value, and Translation — Lessons from v1's References Model
 
-- Status: partially-implemented — Requirement rejection and the Value token
-  syntax **and its full deploy-time resolver/delivery mechanism** are
-  implemented (see [docs/design/value-token-resolution.md](../design/value-token-resolution.md),
-  "Full Solution", all 7 phases done as of 2026-09-28); Interface/Injection/
-  Grant/Translation/Context are fully designed but not implemented (see
-  [docs/design/provisioning-injection-model.md](../design/provisioning-injection-model.md))
+- Status: accepted
 - Date: 2026-09-20
-- Revised: 2026-09-21 — added **Value** as a fifth, distinct concept (the
-  document-local `value`/`var`/`secret`/`feature` binding site), after
-  confirming in conversation that Value and Requirement are easily confused by
-  readers even though they answer different questions. Renamed from
-  "Requirement, Interface, Injection, and Grant" accordingly.
-- Revised: 2026-09-21 — added **Translation** as a sixth concept: v1 (per
-  ADR-0001's own "no renaming happens" principle) has no mechanism for a
-  pre-existing, team-owned provisioner module whose variable name for a
-  concept differs from the platform's canonical name (e.g. platform `region`
-  vs. a team's Terraform `location` for the same value). Confirmed as a real,
-  not hypothetical, gap in conversation.
-- Revised: 2026-09-21 — **decided Requirement (`spec.references`) will not
-  exist as a field in v2 kind models.** Working through Requirement in
-  isolation (see "V2 decision" section below) found both of its v1 jobs are
-  better solved without it: scoping is derivable as `Injection = Interface ∩
-  Environment`, and typo-catching is stronger when done as a direct Phase 2
-  check against `Environment` instead of against a hand-authored, driftable
-  list. This supersedes the "decide Job 1 vs Job 2 per kind" guidance below
-  for Requirement specifically — there is no per-kind decision to make because
-  the field itself is not being built.
-- Revised: 2026-09-21 — worked through **Interface** on its own. Unlike
-  Requirement, concluded Interface is **load-bearing, not optional** — the
-  `Injection = Interface ∩ Environment` formula this ADR now depends on
-  cannot work without it. Found a concrete v1 implementation bug (Interface is
-  parsed, then discarded before shaping delivery) that v2 must not repeat
-  structurally. See "V2 decision: Interface" below.
-- Revised: 2026-09-21 — worked through **Injection**. Confirmed it as its own,
-  third composition mode (intersection — neither union nor restriction),
-  scoped to the Environmental channel only, with a new required check (a
-  required-but-Environment-missing Interface variable must be a hard build
-  error, not a silent gap) and an explicit note that Grant layers on top of
-  Injection rather than replacing it. See "V2 decision: Injection" below.
-- Revised: 2026-09-21 — worked through **Grant**. Kept it (unlike Requirement)
-  as its own mechanism, on `stages[]` (invocation-scoped, not
-  provisioner-scoped — the right home). Concluded it should be
-  **derived-by-default from stage kind** (`plan` → deny secrets, `apply`/
-  `destroy` → allow secrets) with a narrow allow/deny override for exceptions,
-  not a mandatory hand-authored allowlist — and confirmed it is **deliberately
-  secrets-only**: variables/features have no confidentiality reason to
-  restrict, and withholding them would break `terraform plan` itself (which
-  needs a value for every declared variable, sensitive or not, to compute a
-  valid plan graph). Exact schema left for later — this records the
-  conceptual model only. See "V2 decision: Grant" below.
-- Revised: 2026-09-21 — worked through **Value**. Clarified it is a
-  schema-time union baked directly onto a specific field (not a runtime
-  path-targeting/overwrite mechanism). Found DNS's `output_key` is a third
-  input channel (a prior stage's execution output — later even than
-  Interface's build-time-only constraint), and deliberately deferred deciding
-  whether to generalize it beyond DNS until a second real consumer exists —
-  generalizing from one example would repeat Requirement's original mistake.
-  See "V2 decision: Value" below.
-- Revised: 2026-09-21 — recorded why universal Jinja templating was rejected
-  in favor of `ValueSourceModel`'s discriminated fields (grounded in v1
-  ADR-0073's own analysis of this exact question — static secret routing is
-  the decisive blocker), and a three-pattern framework (always-literal /
-  always-reference / either-or-union) for deciding, per field, whether it
-  needs `ValueSourceModel` at all — with an explicit decision **not** to
-  retrofit it speculatively onto existing fields (e.g. `Provider.spec.properties.region`,
-  which already has a competing whole-file-swap mechanism from v1 ADR-0036).
-- Revised: 2026-09-21 — reconnected **Translation** to the Injection formula
-  designed afterward: `Interface ∩ Environment` is a literal by-name
-  intersection, so an untranslated name mismatch (`location` vs `region`)
-  would incorrectly trigger Injection's own required-but-missing hard-fail
-  even when the value is genuinely satisfiable. Translation must run before
-  the intersection, making it load-bearing for Injection's correctness in
-  the team-owned-module case, not merely a convenience. Placement
-  (provisioner/topology declaration, not `stages[]`) reconfirmed against the
-  same provisioner-scoped-vs-invocation-scoped axis used for Grant.
-- Revised: 2026-09-21 — **superseded `ValueSourceModel`** with a single
-  unified Value syntax: v1's proven `${var:KEY}`/`${secret:KEY}`/
-  `${feature:KEY}` embedded-token substitution (ADR-0075), reused verbatim
-  rather than reinventing a new one. Triggered by a real need
-  `ValueSourceModel` couldn't express (combining multiple sources into one
-  string, e.g. a connection string). Surveyed real platform conventions
-  (GitHub Actions, CloudFormation, Azure DevOps, Kubernetes, Ansible) before
-  keeping v1's own syntax — chosen specifically because it never uses `{{`,
-  avoiding the Helm/Jinja collision risk every `{{`-based alternative shares.
 - Related: [v2 ADR-0001](0001-v1-schema-analysis-findings-for-v2.md), v1 ADR-0078
   (scoping-variables-and-features-to-provisioners), v1 ADR-0084
   (variables-secrets-features-delivery-model), v1 ADR-0063
   (team-owned-terraform-module-support), v1 ADR-0017
   (jinja2-template-engine), v1 ADR-0073
   (embedded-string-syntax-inventory-and-creep-prevention), v1 ADR-0075
-  (unify-terraform-helm-value-expression-syntax)
-- Revised: 2026-09-28 — **the Value token *resolver* (not just its syntax)
-  is now fully implemented**, closing the gap this ADR's original Decision
-  5 left open ("resolver design... but not implemented"). Built as
-  [docs/design/value-token-resolution.md](../design/value-token-resolution.md)'s
-  "Full Solution", 7 phases: an escape syntax (`$${...}`) for a
-  third-party tool's own colliding `${...}` syntax; per-integration
-  deploy-time delivery matching how each tool actually accepts input
-  (Terraform `TF_VAR_<name>=<json>`; Helm `--set-string <path>=<value>`;
-  Compose bare-`${KEY}` rename + subprocess env, never a fourth invented
-  convention — confirmed no single mechanism can serve all three, Helm
-  has no env-var substitution at all); extended to every `configuration`/
-  `custom`/`properties` passthrough field on every kind, not just the
-  four originally schema-validated ones; and `strata validate`'s own
-  cross-check extended to match. `docs/design/gap_fit_v1.md` gaps #1/#8/#9/#10/#12/#13
-  are all now closed as a consequence.
+  (unify-terraform-helm-value-expression-syntax),
+  [docs/design/value-token-resolution.md](../design/value-token-resolution.md)
+  (Value token resolver/delivery, built on this decision),
+  [docs/work/provisioning-injection-model.md](../work/provisioning-injection-model.md)
+  (Interface/Injection/Grant/Translation/Context, not yet built)
 
 ## Context and Problem Statement
 
@@ -908,16 +815,6 @@ is built:
    break correctness, not just be unnecessary). Exact schema (field names,
    how an override attaches to a stage) is deferred to when the deploy/stage
    layer is actually designed.
-
-## Remaining Work
-
-Detail is tracked centrally, not here:
-
-- Value token resolver/router, and per-kind Environment cross-check
-  rollout: [docs/design/value-token-resolution.md](../design/value-token-resolution.md)
-- Interface, Injection, Grant, and Translation implementation (all wait on
-  the provisioner/build layer, which doesn't exist yet):
-  [docs/design/provisioning-injection-model.md](../design/provisioning-injection-model.md)
 
 (The `ProviderReferencesModel`/`ResourceReferencesModel` removal this
 section originally called for is done — see ADR-0003/ADR-0004 Decision 6.

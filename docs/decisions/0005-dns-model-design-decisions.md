@@ -1,11 +1,7 @@
 # DNS Model — v2 Design Decisions
 
-- Status: implemented
+- Status: accepted
 - Date: 2026-09-21
-- Revised: 2026-09-21 — removed `output_key` entirely (was ported initially,
-  then pulled after finding v1 already has ≥2 more real consumers of the same
-  concept, which surfaced the need for a proper shared runtime store instead
-  of another ad hoc field). See [ADR-0006](0006-context-shared-stage-runtime-store.md).
 - Related: [ADR-0001](0001-v1-schema-analysis-findings-for-v2.md) (v1 schema
   analysis — flags DNS's flat `value`/`var`/`secret`/`output_key` shape as the
   convention to standardize on), [ADR-0002](0002-requirement-interface-injection-grant-lessons-from-v1.md)
@@ -107,11 +103,4 @@ either, to avoid inventing a concept v1 never needed for this kind.
   record's literal is a valid IP) until resolution happens at build time.
   Not checked for literal values either, in v1 or here — no regression.
 
-## Remaining Work
 
-- `output_key`-shaped record bindings, the Environment cross-check, and the
-  token resolver/router are tracked centrally, not duplicated here:
-  [docs/design/value-token-resolution.md](../design/value-token-resolution.md)
-  (resolver, Environment check) and
-  [docs/design/provisioning-injection-model.md](../design/provisioning-injection-model.md)
-  (Context/`${step:}`, for `output_key`'s eventual replacement).

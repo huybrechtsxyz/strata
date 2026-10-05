@@ -166,7 +166,7 @@ owners' files.
 - [docs/design/composite-variable-merge.md](../design/composite-variable-merge.md) — the full
   investigation (why `spec.variables` can't do this, what v1 had and didn't generalize, and the
   experiment that confirmed this pattern against real code).
-- [docs/design/gap_fit_v1.md](../design/gap_fit_v1.md) gap #19 — the tracked gap this closes.
+- [docs/work/gap_fit_v1.md](../work/gap_fit_v1.md) gap #19 — the tracked gap this closes.
 - [docs/design/build-time-value-categories.md](../design/build-time-value-categories.md) — how
   `spec.properties`/`.custom` are merged and delivered end to end.
 - [generate-per-instance-terraform-blocks.md](generate-per-instance-terraform-blocks.md) — once

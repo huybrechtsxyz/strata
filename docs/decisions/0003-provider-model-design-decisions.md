@@ -1,32 +1,7 @@
 # Provider Model — v2 Design Decisions
 
-- Status: implemented
+- Status: accepted
 - Date: 2026-09-20
-- Revised: 2026-09-21 — removed `ProviderReferencesModel`/`spec.references`
-  per [ADR-0002](0002-requirement-interface-injection-grant-lessons-from-v1.md)'s
-  conclusion that Requirement should not exist as a schema field (scoping is
-  derivable via `Interface ∩ Environment`; typo-catching is a direct Phase 2
-  check against `Environment`). See Decision 6 below, updated accordingly.
-- Revised: 2026-09-22 — reviewed `ProviderPropertiesModel` against what real
-  cloud provisioners (AWS/azurerm/google/kamatera) actually need at the
-  provider-instance level. Dropped `version` (duplicated `ProviderConfig.spec.version`,
-  a type-level concept), renamed `location`→`display_name` (was ambiguous
-  against `region`), and moved the "group of regions sharing a compliance/
-  deployment boundary" concept to an optional `geography` tag on
-  `ProviderConfig.spec.regions` entries rather than a new per-instance field.
-  See Decision 7 below.
-- Revised: 2026-09-22 — replaced the loose `regions: list[str | dict[str, Any]]`
-  shape with a real `ProviderConfigRegionModel` (`name` + optional `geography`/
-  `description`), and corrected Decision 7's naming call: a real production
-  strata v1 config repo (`config-deploy`) already uses **`zone`**, not
-  `geography`, for exactly this "group of regions sharing a deployment/data-
-  residency boundary" concept (`config/zones.yaml`, `Tenant.spec.zones`) —
-  the DNS-zone collision flagged in Decision 7 hasn't been a problem in
-  practice there. `geography` is kept as the *field name* for now (matches
-  Azure's own vocabulary and avoids a second, different meaning of "zone"
-  inside `ProviderConfig` specifically), but future work introducing a v2
-  `Zone`/tenant-boundary kind should reuse `region.geography` as its region
-  membership source rather than inventing a separate mapping. See Decision 8.
 - Related: [ADR-0001](0001-v1-schema-analysis-findings-for-v2.md) (v1 schema
   analysis), [ADR-0002](0002-requirement-interface-injection-grant-lessons-from-v1.md)
   (references/injection lessons)
@@ -231,13 +206,4 @@ and `ProviderService.validate_against_provider_config()` were updated to read
   establishes where the `geography` tag lives and that it's derived, not the
   validator that consumes it.
 
-## Remaining Work
 
-None for the current fields — this ADR is `implemented` for what exists today
-(the Provider/Auth models). Follow-up, when the builder/service layer is
-designed: confirm `configuration` and `custom` are each explicitly consumed (or
-consciously left inert with that decision recorded), rather than silently
-dropped the way v1's `custom` was. Also follow-up: build the actual
-cross-geography boundary check once a Topology/deployment-planning layer
-exists (Decision 7) — today `geography` is documented convention on
-`ProviderConfig.spec.regions` only, with no enforcement yet.

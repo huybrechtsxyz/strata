@@ -1,10 +1,6 @@
 # v1 Feature Priority — What haven and config-deploy Actually Depend On
 
-- Status: partially-implemented — every Tier 1 item is done (`values
-  get`/`validate`/`build run`/`deploy run`/`STRATA_OUTPUT`/
-  `STRATA_WORK_PATH`; `.strata/` auto-discovery investigated and found
-  not to be a real gap); only deferred `ConfigurationSpecModel` fields
-  and Tier 2 commands remain (see Remaining Work)
+- Status: accepted
 - Date: 2026-09-23
 - Related: [ADR-0001](0001-v1-schema-analysis-findings-for-v2.md) (v1 schema
   analysis — this ADR is the runtime/CLI-usage counterpart: what v1 *code
@@ -144,64 +140,3 @@ as each consuming feature is built, per that model's own existing convention
 - Neutral: the build-output-path discrepancy (`build/` vs `.strata/build/`)
   is left as an open question rather than resolved here — resolving it
   belongs to the ADR that designs `build run` itself.
-
-## Remaining Work
-
-- ~~`values get`~~ — done.
-- ~~`validate --deep`~~ — done (shipped as unconditional `validate`, no flag).
-- ~~`build run` (Terraform, then Helm)~~ — done.
-- ~~`deploy run` (Terraform, then Helm)~~ — done (ADR-0027).
-- ~~`STRATA_OUTPUT` env var~~ — done 2026-09-27, **with a caveat found
-  during a later review (2026-09-27)**: searching v1's real installed
-  source (`xyz-strata` v1.11.2 — newer than haven's pinned `1.9.3`)
-  directly turned up **no** actual read of `STRATA_OUTPUT` anywhere —
-  `click_output_format()` has no `envvar=`, there is no
-  `auto_envvar_prefix`/`default_map`, and `BaseCommand.__init__` just
-  does `self._output_format = output or "console"`. Real workflows do
-  set `STRATA_OUTPUT: json`, but every `strata values get` call also
-  passes `--output json` explicitly (redundant either way), and
-  `validate`/`build run`/`deploy run` calls never pass `--output` at
-  all — so either the env var is a no-op in v1 today, or its support
-  was added/removed somewhere between 1.9.3 and 1.11.2 (version drift,
-  not re-checked against the exact pinned version). v2's `envvar=`
-  addition is kept regardless — safe, forward-compatible, matches what
-  the workflows clearly intend — just not to be cited as "confirmed v1
-  behavior" without this caveat.
-- ~~`STRATA_WORK_PATH` env var~~ — done 2026-09-27, confirmed directly
-  in v1's real `strata/utils/system.py`'s `resolve_work_path()`
-  docstring ("`--work-path` or `STRATA_WORK_PATH` env var"), unlike
-  `STRATA_OUTPUT` above. **Refactored same-day** after tracing v1's own
-  real `cli.py` (`_resolve_work_path_early()`/`_load_workspace_defaults()`)
-  further: v1 resolves "where do we start" (explicit flag > env var >
-  cwd fallback) in one function, once, at the command layer, then passes
-  a concrete path down — it never scatters `os.environ.get()` calls
-  through deeper layers. v2 now mirrors this: `commands.options.
-  resolve_work_path(explicit)` is the *one* place that decision gets
-  made (always returns a concrete `Path`, folding in the cwd fallback
-  too); `solution_context.open_solution(path: Path)` takes a required,
-  already-decided path and carries no defaulting logic of its own —
-  it doesn't know or care whether `path` came from `--path`,
-  `STRATA_WORK_PATH`, or a cwd fallback three layers up.
-- ~~`.strata/` auto-discovery~~ — **investigated 2026-09-27, found NOT to
-  be a real gap.** `.strata/`'s own `.gitignore` in both repos (and
-  `git ls-files` ground truth) shows most of it is local-only runtime
-  state, never committed: `cli.yaml`, `audit.log`, `cache/`, `logs/`
-  are ignored everywhere; config-deploy ignores `configuration.
-  yaml`/`solution.json` too, with its own gitignore comment giving away
-  why: *"Generated merge of the hand-written `config/*.yaml` sources —
-  rewritten by the CLI on every run... derived output."*
-  `.strata/configuration.yaml` is v1's own internal cache, not a source
-  document — confirmed directly: haven's real, hand-authored `kind:
-  configuration` document lives at `config/configuration.yaml` (top
-  level, not under `.strata/`). v2's document discovery already finds
-  it there; `.strata/` is deliberately in `DEFAULT_IGNORED_DIRS`
-  (`layout.py`, ADR-0015: "runtime-only and never committed... always
-  excluded from discovery") — an already-correct decision, not a gap.
-  Genuinely Tier 2 (`cli.yaml`-persisted CLI defaults, `solution.json`
-  repo-discovery) as originally classified — no code change needed.
-- `ConfigurationSpecModel` extensions (`integrations`, `security`, `zones`,
-  `remotes`, `audit`, `deployment.manifest`/`outputs`, `policies`, `paths`) —
-  not started; port incrementally alongside the command that needs each.
-- Resolve the `build/` vs `.strata/build/` output-path discrepancy —
-  v2 picked `build/` at the solution root (`layout.py`'s `build_dir()`).
-- Tier 2 commands — not started, intentionally deferred.

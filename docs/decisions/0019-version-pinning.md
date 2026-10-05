@@ -1,10 +1,6 @@
 # Version Pinning — One Kind, Rationale as Schema, Pin Only What Strata Materialises
 
-- Status: implemented — model, service, binding, Phase 2 existence/
-  applicability checks (`check_version_pins()`), and the pin **overlay**
-  (all 4 categories — `artifacts`, `remotes`, `images`, `charts` — now have
-  real, logged effect on a `build run`) are all built and wired — see
-  [docs/design/version-pin-overlay.md](../design/version-pin-overlay.md)
+- Status: accepted
 - Date: 2026-09-22
 - Related: [ADR-0015](0015-solution-manifest-and-document-discovery.md)
   (discovery is local-only, which is why there is no bootstrap cycle here;
@@ -221,16 +217,4 @@ used only to parse `@name/path` strings), so discovery never needs a fetch:
   with *"Configuration itself can live in a remote"*, which contradicts that
   same ADR's Consequences.~~ Corrected 2026-09-23 — see ADR-0015 decision 3.
 
-## Remaining Work
 
-- Wire the pin overlay into the controller's resolution pass, with the
-  logging required by decision 7. `VersionService.resolve()` is the intended
-  single entry point and is currently unused.
-- Reject a `remotes` pin naming an unknown remote or one with
-  `fetch: external` (needs the loaded manifest — a Phase 2 check).
-- Ref-keyed remote checkout layout, before any fetch code is written.
-- Verify `spec.hash` against the canonical pins payload during resolution;
-  nothing computes or checks it yet.
-- `ProvisionerModel.version` preflight assertion (exe presence / env var /
-  endpoint reachability); currently declarative only.
-- Ring/promotion for rollout automation, layered around this model.

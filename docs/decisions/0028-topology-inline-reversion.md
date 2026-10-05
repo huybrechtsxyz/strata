@@ -1,9 +1,6 @@
 # Topology — Reverting from Standalone Kind to Inline Workspace Field
 
-- Status: implemented — Phases 0-4 and 6 of the rollout plan are done;
-  Phase 5 (migrating `.v2-cfg`/`.v2-haven` local fixtures) was deliberately
-  skipped, not left pending (see
-  [docs/design/topology-standalone-kind-reconsideration.md](../design/topology-standalone-kind-reconsideration.md))
+- Status: accepted
 - Date: 2026-10-01
 - Related: [ADR-0011](0011-topology-and-provisioning-decoupling.md) (the
   original decision — this ADR supersedes **only** its standalone-kind-promotion

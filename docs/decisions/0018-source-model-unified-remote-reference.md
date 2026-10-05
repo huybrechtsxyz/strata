@@ -1,6 +1,6 @@
 # `SourceModel` — One `remote` Field, Declaration-Only Refs
 
-- Status: implemented
+- Status: accepted
 - Date: 2026-09-22
 - Related: [ADR-0015](0015-solution-manifest-and-document-discovery.md)
   (introduced `spec.remotes`, which this reference points at),
