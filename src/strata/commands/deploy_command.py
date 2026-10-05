@@ -25,6 +25,7 @@ from strata.commands.run import command_run
 from strata.controllers.audit_run import finalize_and_distribute_deploy_audit
 from strata.controllers.deploy_controller import deploy_run
 from strata.controllers.solution_context import open_solution
+from strata.utils.errors import UsageError
 from strata.utils.layout import build_dir
 
 
@@ -75,6 +76,45 @@ def deploy_command() -> None:
     metavar="LABEL",
     help="Restrict to steps whose ProvisioningStepModel.scope matches LABEL.",
 )
+@click.option(
+    "--change-system",
+    default=None,
+    metavar="TEXT",
+    help="Change/ticket tracker, e.g. 'jira', 'azure_devops', 'servicenow', or an internal name. "
+    "Required together with --change-id/--change-reason, or omit all three — docs/design/"
+    "audit-trail.md's ChangeReferenceModel.",
+)
+@click.option(
+    "--change-id",
+    default=None,
+    metavar="TEXT",
+    help="Change/ticket identifier in the tracker, e.g. 'OPS-1234'. Required together with "
+    "--change-system/--change-reason.",
+)
+@click.option(
+    "--change-reason",
+    default=None,
+    metavar="TEXT",
+    help="Operator-supplied justification for this deployment. Required together with --change-system/--change-id.",
+)
+@click.option(
+    "--change-classification",
+    default=None,
+    metavar="TEXT",
+    help="Change classification, e.g. 'emergency'/'normal'. Optional.",
+)
+@click.option(
+    "--change-title",
+    default=None,
+    metavar="TEXT",
+    help="Snapshot of the change record's title at invocation time. Optional.",
+)
+@click.option(
+    "--change-url",
+    default=None,
+    metavar="TEXT",
+    help="Link to the change record. Optional.",
+)
 @output_option
 @quiet_option
 @verbose_option
@@ -86,6 +126,12 @@ def deploy_run_command(
     dry_run: bool,
     stage: str | None,
     scope: str | None,
+    change_system: str | None,
+    change_id: str | None,
+    change_reason: str | None,
+    change_classification: str | None,
+    change_title: str | None,
+    change_url: str | None,
     output: str,
     quiet: bool,
     verbose: bool,
@@ -103,6 +149,10 @@ def deploy_run_command(
     only executes what is already on disk at --build-path.
     """
     with command_run("deploy run", output=output, quiet=quiet, verbose=verbose) as run:
+        change_fields = (change_system, change_id, change_reason)
+        if any(change_fields) and not all(change_fields):
+            raise UsageError("--change-system/--change-id/--change-reason must be supplied together, or not at all.")
+
         context = open_solution(resolve_work_path(path)).require_valid()
         solution = context.controller.solution
         target = build_path or build_dir(context.root, deployment)
@@ -140,6 +190,12 @@ def deploy_run_command(
             started_at=started_at,
             run_diagnostics=diagnostics,
             dry_run=dry_run,
+            change_system=change_system,
+            change_id=change_id,
+            change_reason=change_reason,
+            change_classification=change_classification,
+            change_title=change_title,
+            change_url=change_url,
         )
         diagnostics.extend(audit_diagnostics)
 

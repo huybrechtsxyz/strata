@@ -129,7 +129,7 @@ def _run_deploy_and_build(root: Path, tmp_path: Path) -> Path:
     return build_path
 
 
-def _finalize(root: Path, build_path: Path, *, run_ok: bool = True, dry_run: bool = False):
+def _finalize(root: Path, build_path: Path, *, run_ok: bool = True, dry_run: bool = False, **change_kwargs):
     context = _context(root)
     started_at = datetime.now(timezone.utc) - timedelta(seconds=5)
     run_diagnostics = Diagnostics()
@@ -143,6 +143,7 @@ def _finalize(root: Path, build_path: Path, *, run_ok: bool = True, dry_run: boo
         started_at=started_at,
         run_diagnostics=run_diagnostics,
         dry_run=dry_run,
+        **change_kwargs,
     )
 
 
@@ -212,6 +213,59 @@ def test_manifest_includes_sbom_reference_when_present(tmp_path: Path, _terrafor
     assert '"path": "sbom.json"' in manifest_text
     assert '"format": "cyclonedx-1.6"' in manifest_text
     assert '"sha256": "sha256:' in manifest_text
+
+
+# ---------------------------------------------------------------------------
+# change_reference (docs/design/audit-trail.md's ChangeReferenceModel CLI wiring)
+# ---------------------------------------------------------------------------
+
+
+def test_change_reference_absent_by_default(tmp_path: Path, _terraform_stub):
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    _finalize(root, build_path)
+
+    manifest_path = next(layout.audit_dir(root).rglob("_manifest.json"))
+    assert "change_reference" not in manifest_path.read_text()
+
+
+def test_change_reference_populated_when_system_id_reason_all_given(tmp_path: Path, _terraform_stub):
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    _finalize(
+        root,
+        build_path,
+        change_system="jira",
+        change_id="OPS-1234",
+        change_reason="planned maintenance",
+        change_classification="normal",
+    )
+
+    manifest_path = next(layout.audit_dir(root).rglob("_manifest.json"))
+    manifest_text = manifest_path.read_text()
+    assert '"system": "jira"' in manifest_text
+    assert '"id": "OPS-1234"' in manifest_text
+    assert '"reason": "planned maintenance"' in manifest_text
+    assert '"classification": "normal"' in manifest_text
+
+
+def test_change_reference_supplied_by_and_at_are_auto_derived_not_accepted_as_input(tmp_path: Path, _terraform_stub):
+    """`supplied_by`/`supplied_at` are never CLI-supplied — always the run's
+    own actor/clock, same pattern `deployed_by`/`started_at` already use.
+    The actual value is environment-dependent (`resolve_actor()`'s own
+    chain) — only presence is asserted, matching how `deployed_by` itself
+    is never asserted against a literal elsewhere in this file."""
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    _finalize(root, build_path, change_system="jira", change_id="OPS-1234", change_reason="planned maintenance")
+
+    manifest_path = next(layout.audit_dir(root).rglob("_manifest.json"))
+    manifest_text = manifest_path.read_text()
+    assert '"supplied_by": "' in manifest_text
+    assert '"supplied_at": "' in manifest_text
 
 
 def test_manifest_omits_sbom_reference_without_error_when_absent(tmp_path: Path, _terraform_stub):

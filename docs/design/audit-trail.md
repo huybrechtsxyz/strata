@@ -10,8 +10,30 @@
   implemented separately in
   [audit-sink-dispatch.md](audit-sink-dispatch.md) (2026-10-03) — the
   `integration` sink arm this doc left as a stub now really sends, via a
-  generic `webhook` integration.
-- Last updated: 2026-09-30
+  generic `webhook` integration. A NIS2/ISO 27001/ISAE 3402 compliance
+  gap analysis + MoSCoW (2026-10-03) found Q2 ("why")/Q3 ("who approved")
+  fully unpopulated in the shipped manifest — see "Compliance Gap
+  Analysis" — not yet implemented. An ADO-approval-gate addendum
+  (2026-10-04) found v1 already designed this exact idea
+  (`DeploymentGateModel`'s `declare` mode), unused by any real consumer —
+  **promoted to Should-have (2026-10-04)**: pipeline development is in
+  progress and an ADO approval step will be created once this stack
+  reaches production. M1 (commit identity) was pressure-tested
+  (2026-10-04) and its scope corrected: it is a reproducibility anchor
+  ("exact repo state used"), not a claim about who authored the
+  meaningful change — see "What `commit_sha` can and can't claim." M1
+  was then re-prioritized from Must-have to Could-have (2026-10-05, no
+  confirmed demand, shrunk value). Its proposed replacement, Layer 3
+  reporting, was designed (new `strata audit` command group) then
+  **deferred (2026-10-05)** before any code was written — the design
+  read local `.strata/audit/` files, the wrong data source given ~90% of
+  real deploys are ephemeral CI (same reasoning that already removed
+  `deployments.ndjson` earlier in this doc). The Must-have category is
+  genuinely empty — see "Layer 3 deferred." **`change_reference` CLI
+  wiring is now implemented (2026-10-05)**: six `deploy run --change-*`
+  flags, closing Q2 ("why") for any deploy that supplies them — see the
+  Should-have list.
+- Last updated: 2026-10-05
 
 ## Overview
 
@@ -1570,6 +1592,373 @@ a v2 ADR/implementation:
   the three events v2 actually produces (`deployment.completed`/
   `destroyed`/`measured`), not v1's full 20-type list.
 
+## Compliance Gap Analysis (NIS2 / ISO 27001 / ISAE 3402) — 2026-10-03
+
+Prompted by a direct question ("PR extraction — useful? is there
+justification for this?") that led to checking, field by field, what the
+four compliance questions this whole doc opens with ("What changed", "Why",
+"Who approved", "How applied") actually have *populated* behind them today
+— not what's modeled, what's real. Checked directly against
+`DeploymentManifestModel`'s only construction site
+(`controllers/audit_run.py::finalize_and_distribute_deploy_audit()`), not
+assumed from the model's field list.
+
+### What's actually populated today, per question
+
+| Question                    | Modeled                                                                                           | Populated today                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Evidence                                                                                                                        |
+| --------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| **Q1 — What changed**       | `artifacts.{platform,repositories,images,providers}`, `sbom`                                      | **Partial.** `artifacts.platform` and `sbom` real (hash+path); `repositories`/`images`/`providers` have **zero construction call sites anywhere in `src/`** — modeled, never built. Full before/after value diffing is Layer 3's `audit diff`, not built.                                                                                                                                                                                                        | Grepped `ManifestRepositoryModel(`/`ManifestImageModel(`/`ManifestProviderModel(` — each matches only its own class definition. |
+| **Q2 — Why it changed**     | `ChangeReferenceModel` (`reason`/`classification`/ticket `id`/`system`/`url`)                     | **None.** Grepping the whole codebase for `change_reference` finds exactly one hit beyond the field definition itself — nothing ever constructs one. No CLI flag threads a ticket reference into `deploy run`. The PR template's own "business justification" text is real and human-populated, but lives only in GitHub, never linked into the manifest.                                                                                                        | `grep_search` for `change_reference` across `src/strata/**`.                                                                    |
+| **Q3 — Who approved**       | `ManifestPullRequestModel.approvers`                                                              | **None.** Confirmed by reading v1's real `enrich_with_pr_data()` directly: its `gh pr list --json` call requests `author`/`mergedBy`/`mergedAt`/`labels`/`files` — never `reviews`/`reviewDecision` — so even v1's own "finished" implementation never populated this field. v2 hasn't built the extraction step at all yet. `deployed_by` (real, populated) answers *who ran the deploy*, a different question from *who approved it*.                          | Read `e:\SourcesXYZ\strata\src\strata\controllers\audit_controller.py`'s real `enrich_with_pr_data()` body directly.            |
+| **Q4 — How it was applied** | `action`, `version`, timestamps, `commit_sha`/`commit_message`/`commit_author`, `force`/`dry_run` | **Mostly real.** `action`/`version`/`started_at`/`completed_at`/`duration_seconds` are genuinely populated. `commit_sha`/`commit_message`/`commit_author` have **zero construction call sites** despite `git rev-parse HEAD` already being a used pattern elsewhere in this codebase (`integrations/gitops.py`, `controllers/audit_push.py`) for an unrelated purpose. `force` isn't even threaded through `finalize_and_distribute_deploy_audit()`'s signature. | Read `audit_run.py`'s only `DeploymentManifestModel(...)` construction site directly.                                           |
+
+**Net:** only Q4's timing/version fields and the artifact-hash half of Q1
+have real, populated answers today. Q2 and Q3 are fully unanswered — not
+degraded-gracefully like a best-effort PR lookup would be, just never wired
+at all.
+
+### Reading this against NIS2 / ISO 27001 (A.12.1.2, A.12.4) / ISAE 3402 Type II
+
+The three frameworks converge on the same three asks, in the order an
+auditor actually tests them:
+
+1. **Accountability** — NIS2 Art. 20 holds management bodies accountable;
+   ISO 27001 A.12.1.2 requires authorization *before* implementation. The
+   first question is never "show me one record," it's "show me who could
+   change this, and prove someone with authority signed off."
+2. **Completeness over a period, not a sample of one** — ISAE 3402 Type II
+   tests *operating effectiveness over time*. A single well-formed
+   manifest proves nothing about *consistency* if there's no way to
+   enumerate every change in a period — that's Layer 3, not built.
+3. **Non-repudiation / tamper resistance** — already the explicit reason
+   Layer 4 exists (git is mutable by a repo admin). Solved
+   ([audit-sink-dispatch.md](audit-sink-dispatch.md)).
+
+### MoSCoW
+
+**Must have**
+
+- *(none, as of 2026-10-05)* — the one candidate here, Layer 3 minimum
+  viable reporting, was deferred rather than promoted; see "Layer 3
+  deferred — local-file reporting is wrong for the real case" below. Not
+  papered over with a weaker substitute — recorded as genuinely empty.
+
+**Should have**
+
+- **`change_reference` CLI wiring** — **implemented (2026-10-05)**. Six
+  flags on `deploy run` (`--change-system`/`--change-id`/`--change-reason`/
+  `--change-classification`/`--change-title`/`--change-url`), one per
+  `ChangeReferenceModel` field — not a single packed `--change-ticket
+  SYSTEM:ID`, matching this codebase's existing one-flag-per-field style.
+  `system`/`id`/`reason` (the model's required fields) must be supplied
+  together or not at all — a partial combo is a `UsageError` raised in
+  `deploy_command.py` **before** `deploy_run()` executes, so a malformed
+  flag combination never lets real infrastructure work happen first.
+  `supplied_by`/`supplied_at` are never flags — auto-derived in
+  `audit_run.py` (`resolve_actor()`/the run's own clock), the same pattern
+  `deployed_by`/`started_at` already use. Directly matches the ADO-gate
+  finding above: `--change-reason` fed from the approval's `comment` via
+  REST, `--change-id` fed from a queue-time pipeline parameter — no
+  further plumbing needed to bridge the two designs once this shipped.
+  New tests in `test_audit_run.py` (4 cases: absent by default, populated
+  when all three required fields given, `supplied_by`/`supplied_at`
+  presence without asserting environment-dependent literals) and
+  `test_commands_deploy.py` (2 cases: full flow via the real CLI reading
+  the written manifest, partial combo exits 2 before `deploy_run()` is
+  ever called). Full check suite green: mypy (136 files), ruff, ruff
+  format, import-linter 1/0, pytest 1879 passed.
+- **`audit diff`** (full before/after value diffing) — valuable for
+  incident root-cause and change-detail review; commit SHA already gives
+  a weaker "which version" substitute, so this is an enhancement, not a
+  blocker.
+- **`force` flag captured in the manifest** — cheap, and a deploy that
+  bypassed normal gates is exactly what a change-management auditor
+  flags, but low volume relative to the Must-haves.
+- **An ADO Environment approval gate feeding `ChangeReferenceModel`** —
+  **promoted from Could-have (2026-10-04)**: pipeline development is
+  actively in progress, and an ADO approval step will be created once
+  this stack reaches production — a confirmed, concrete, planned need,
+  not a speculative one (same evidence bar the OTel/Sentinel sinks were
+  held to in [audit-sink-dispatch.md](audit-sink-dispatch.md)). See
+  "Addendum — formalizing approval via an ADO gate" below for the
+  right-sized shape (populate the existing `ChangeReferenceModel`, don't
+  build a new document kind or re-implement enforcement).
+
+**Could have**
+
+- **Commit identity** (`commit_sha`/`commit_author`/`commit_message`) +
+  **PR number recovered from `commit_message`** — **demoted from
+  Must-have (2026-10-05)**, see "M1 re-prioritized to Could-have" below.
+  Design remains fully worked out and ready; just no longer the next
+  thing to build.
+- **Full `gh`-based PR *approver* extraction** (fixing v1's own
+  never-populated `approvers`) — only worth it once a real pipeline
+  actually has `gh` available (confirmed not true for `config-deploy`
+  today: zero evidence of `gh` CLI/`GITHUB_TOKEN` anywhere in its real
+  Azure Pipelines YAML). The commit-message PR-number recovery above
+  covers most of the compliance value at none of this cost.
+- **`artifacts.repositories`/`images`/`providers` full population** —
+  completeness nice-to-have; the platform+SBOM hash already anchors "what
+  was deployed" for audit purposes.
+- **A v1-style global policy gate** layered over the per-sink `events`
+  filter — noise/volume control, not a compliance gap; per-sink filtering
+  already exists.
+
+**Deferred — blocked on a real redesign, not merely deprioritized**
+
+- **Layer 3 reporting** (`audit status`/`audit changes`) — **deferred
+  (2026-10-05)**, not Could-have: the only design produced so far read
+  local `.strata/audit/*.json` files, which is the wrong data source for
+  most real runs. See "Layer 3 deferred — local-file reporting is wrong
+  for the real case" below.
+
+**Won't have (now)**
+
+- **Journal** (Layer 3b, `.strata/audit.log`) — v1's own measured defect
+  (95% noise, zero deploy events), no justification then or now.
+- **Full OIDC/cloud-CLI identity chain** for `deployed_by` — needs
+  infrastructure (login server, cloud-CLI integrations) that doesn't
+  exist and no real consumer configures yet, per `actor.py`'s own
+  documented scope cut.
+- **Porting v1's `DeploymentGateModel`/`mode: "enforce"` work-item
+  pause-and-resume mechanism** — duplicates what an ADO Environment
+  approval gate already does natively; see addendum below.
+
+### M1 re-prioritized to Could-have (2026-10-05)
+
+Asked directly for a short status check on M1, which surfaced the
+question plainly: "seems like something we skip?" Correct call, for
+reasons that didn't exist when M1 was first proposed:
+
+1. **Its value shrank once honestly scoped.** The previous section
+   ("What `commit_sha` can and can't claim") already walked this back to
+   a reproducibility anchor ("exact repo state used"), not an
+   authorship/"who caused this" claim — a more modest result than first
+   framed.
+2. **No concrete demand, unlike everything else promoted this session.**
+   OTel/Sentinel ([audit-sink-dispatch.md](audit-sink-dispatch.md)) and
+   the ADO gate below were promoted specifically because of a named real
+   signal ("our ELK stack," "pipeline development is in progress"). M1
+   was chosen because it was *cheap* (reuses an existing `git rev-parse`
+   pattern), not because any real consumer asked for it — a weaker
+   justification than this project's own evidence bar normally requires.
+3. **The free PR-number recovery is shakier than it first looked.** Given
+   deploys are manually queued with nothing pinning a ref/commit at queue
+   time (established earlier in this doc), HEAD is just as likely to be
+   an unrelated commit as a real merge commit — the same "typo fix"
+   problem that undermined the authorship claim also undermines the
+   regex's hit rate.
+
+**Decision:** demoted to Could-have. Design stays fully worked out and
+ready to implement later — nothing here invalidates the design itself,
+only its priority. Layer 3 (`audit status`/`audit changes`) was proposed
+as the next Must-have in its place — **since deferred, not built; see
+"Layer 3 deferred" immediately below.**
+
+### Layer 3 deferred — local-file reporting is wrong for the real case (2026-10-05)
+
+A full design for `audit status`/`audit changes` was produced (new
+`strata audit` command group, `controllers/audit_report.py`, both
+commands reading local `_manifest.json` files under
+`layout.audit_dir(root)`). Challenged directly before any code was
+written: *"no data will be local. all the data will be remote."*
+Correct, and this doc had already established exactly why, earlier,
+for a different piece — the `deployments.ndjson` removal recorded above
+in "Walked the full end-to-end loop": *"90 percent deployed in CI/CD so
+will be not saved"* — a local-only file in an ephemeral CI runner gets
+written once, then the runner (and the file with it) is destroyed. The
+exact same reasoning applies here: a command that walks local
+`.strata/audit/` would find real data only for the minority of runs that
+happen to execute somewhere persistent (a developer's own machine), and
+nothing at all for the ~90% real case — the command would *look* like it
+answers "is my audit trail working," and answer wrong, silently, for most
+real invocations. Shipping that would be worse than not shipping anything
+— a false negative dressed up as a working command.
+
+**What a correct version needs instead:** read from wherever the data
+actually survives — the `git` sink's pushed remote destination (the one
+real, durable mechanism already confirmed load-bearing for
+`cfg-int-deployment`), not the local filesystem. That is a materially
+bigger design than "walk a directory": it needs a fetch/checkout step
+(plausibly reusing `audit_push_checkout_path()`'s existing layout
+convention in reverse, as a pull instead of a push), a decision about
+which sink to read from when several are configured, and handling for
+the sink being `git`-only vs. `integration`-only (an `integration`-only
+solution has no git destination to read back from at all — Layer 4's
+SIEM sinks are pure fire-and-forget, not queryable by strata itself).
+
+**Decision:** deferred, not demoted to Could-have — this is not "lower
+priority," it is "not validly designed yet." The Must-have category is
+genuinely empty as of this pass (recorded as such in the MoSCoW, not
+papered over with a weaker substitute). Revisit once a remote-read design
+exists; until then there is no remaining Must-have item to build from
+this analysis.
+
+### What `commit_sha` can and can't claim (2026-10-04)
+
+Pressure-tested M1 directly: "what commit would we be looking at — the
+last commit could also just say 'fixed typo in workspace description'."
+Correct, and worth recording precisely rather than letting the earlier
+worked example's framing stand uncorrected.
+
+**The problem.** `git log -1` on `context.root` returns whichever commit
+is HEAD on whatever's checked out at that moment — nothing more. Given
+the confirmed reality one addendum up (every real pipeline is `trigger:
+none`/`pr: none`, manually queued, no ref/commit pinned at queue time),
+that HEAD commit can be **completely unrelated** to whatever motivated
+this deploy: a typo fix, a docs change, a different stack's commit in the
+same monorepo, landed by someone else, at any point before the queue
+action. The earlier worked example (two sections up) implicitly treated
+`commit_author` as "who wrote the infrastructure change" — that framing
+is wrong and is corrected here, not silently fixed.
+
+**What the field is honestly worth.** A reproducibility anchor: *"here is
+the exact repo state this deployment used — `git show <sha>` to see
+precisely what was checked out."* Genuinely valuable for incident
+root-cause (NIS2) even when the commit itself turns out to be unrelated
+to intent. **Not** a claim about who authored the meaningful change
+behind the deploy — that is a different question this field does not
+answer.
+
+**Considered and rejected: scoping the query to the deployment's own
+file** (`git log -1 -- <deployment.file>`, a field the manifest already
+tracks, also currently unpopulated). Better signal for the common case
+(someone edits the deployment YAML directly), but trades one blind spot
+for another — it misses a real, relevant change landed in a *different*
+file this deployment references (a module version bump in a separate
+file, a workspace-level change). Neither scope (whole-repo vs.
+single-file) is actually correct; **there is no git-log-based fix for
+this.** The only mechanism that genuinely answers "what changed" is
+Layer 3's `audit diff` (diffing two manifests' actual resolved content),
+already a Should-have — M1 cannot and should not try to substitute for
+it.
+
+**Decision:** ship M1 as originally scoped (unscoped `git log -1`), with
+the claim stated honestly in code/docstrings as a reproducibility anchor,
+not an authorship claim. No file-scoping added. One unplanned upside
+worth keeping in mind: once this ships, a manifest showing
+`commit_message: "Fixed typo in workspace description"` next to a real
+infra-affecting deploy is itself a visible, honest signal to a human
+reader that "the commit trail doesn't explain this deploy" — not a
+resolution, but better than the current silence.
+
+### Addendum — formalizing approval via an ADO gate (2026-10-04)
+
+Prompted by a direct proposal: OMP has a Change Advisory Board; could an
+Azure DevOps Environment approval gate stand in for it, with a script
+turning the approval event into a document pushed to the repo/manifest/
+SIEM? Investigated rather than assumed, including "did v1 already have a
+workflow/gate system" (yes).
+
+**v1 already designed this, unused.** `models/gate_model.py` (ADR-0057/
+ADR-0059) has `DeploymentGateModel` with `type: approval | cost_review |
+security_review | verify | scheduled | incident | cab` — `cab` is a
+literal gate type — and two modes: `enforce` (strata itself creates a
+`WorkItem`, pauses the deploy, exits code 5, requires `--resume`) and
+**`declare`**, whose own field description says, verbatim: *"strata only
+records this gate in the audit trail; it never blocks. Use 'declare' when
+enforcement already happens externally (e.g. Azure DevOps environment
+approvals, GitHub Actions protection rules)."* v1's authors had already
+reasoned through exactly this proposal.
+
+**Real-usage check, same discipline as every other feature in this doc:**
+grepped every real YAML in `cfg-int-deployment` for `gates:`/`type:
+cab`/`type: approval` — one hit, a different and unrelated field
+(`promotions.yaml`'s rollout-ordering `gates:`, itself commented out,
+"not adopted yet"). **Zero evidence this system is used anywhere.** Same
+"declared but unread machinery" pattern as the SIEM sinks, the journal,
+and PR extraction — a third instance of it.
+
+**Update (2026-10-04) — this is a real, planned need, not a dead idea.**
+Two things changed the read: (1) the likely reason v1's gate system went
+unused isn't lack of value — it wasn't obvious *how* to use it (a
+discoverability/UX problem with a 7-type, 2-mode, condition-expression
+configuration surface, not evidence nobody needed approval gating); (2)
+pipeline development for this stack is actively in progress, and an ADO
+approval step **will** be created once it reaches production — a
+confirmed, concrete, near-term consumer, the same evidence bar that
+promoted OTel/Sentinel in
+[audit-sink-dispatch.md](audit-sink-dispatch.md) from hypothetical to
+built. Promoted from Could-have to Should-have in the MoSCoW above. The
+discoverability lesson matters for the right-sized version too: whatever
+ships here should be small and obvious (populate one existing field from
+one REST call) rather than v1's broad, generalized gate-configuration
+surface — a plausible reason *that* went unused in the first place.
+
+**If this is ever built, the right-sized version is narrower than the
+original proposal:**
+
+- **No new `kind: changerequest/approval` document.** `ChangeReferenceModel`
+  (`system`/`id`/`reason`/`classification`/`supplied_by`/`supplied_at`)
+  already exists on the manifest, confirmed unpopulated in the Compliance
+  Gap Analysis above — the ADO approval event is data to populate a field
+  that already has a home, not reason to invent a new document kind with
+  its own discovery/reference-wiring/lifecycle.
+- **No porting v1's `mode: "enforce"` work-item pause-and-resume
+  mechanism.** It duplicates a stop-and-wait control ADO's own Environment
+  approval gate already provides natively. v1's own `declare` mode — record,
+  don't re-implement — is the right instinct and avoids reviving a
+  substantial (388-line `gate_controller.py`) but never-production-exercised
+  mechanism.
+- **"Push to SIEM" needs no new step.** Once `change_reference` is
+  populated, it rides inside the manifest, which Layer 2 (git) and Layer 4
+  (webhook/OTel/Sentinel) already push everywhere automatically.
+- The actual shape: a small script/step run after an ADO Environment
+  approval passes, calling ADO's REST API for the approval's
+  identity/timestamp/comment, feeding a populated `ChangeReferenceModel`
+  into `deploy run` (new flag, or a pre-supplied file) — not a new
+  enforcement engine.
+
+**Verified directly against Microsoft's real docs (2026-10-05) — what the
+approval step can and can't supply.** Asked plainly: can an ADO approval
+gate request parameters, like a ticket number? Checked the conceptual
+docs and the real `ApprovalUpdateParameters` REST schema rather than
+assuming. The answer is no, and it splits `ChangeReferenceModel` cleanly
+in two:
+
+- **`reason` → the approval's `comment` field.** `ApprovalUpdateParameters`
+  (what an approver actually submits: `approvalId`/`status`/`comment`/
+  `reassignTo`) has exactly one free-text field, filled in at the moment
+  of approve/reject. Clean 1:1 mapping, no parsing needed.
+- **`id`/`system`/`classification` have no equivalent in the approval
+  step at all.** The check's own `instructions` field is static (set once
+  by the resource owner, identical for every run) — not a per-run
+  parameter, and not approver-supplied either way. Recovering a
+  structured ticket reference by parsing free text out of `comment`
+  (e.g. expecting `"JIRA-1234: approved"`) would repeat the same
+  fragile-regex-over-prose pattern D2 already rejected once (and the
+  same honest limit already recorded against the PR-number regex above)
+  — not the right mechanism for structured data.
+- **The right mechanism for the structured half is a queue-time pipeline
+  parameter, not the approval step.** `cfg-int-deployment`'s real
+  pipelines already use YAML `parameters:` (confirmed: `stack`,
+  `deploymentPath`, `dryRun`, ...) — a `changeTicket` parameter, typed by
+  whoever *queues* the run, is a genuinely structured, already-proven ADO
+  mechanism, unlike squeezing structure out of an approver's prose.
+  `supplied_by`/`supplied_at` come from the approval event itself either
+  way (`actualApprover`/`lastModifiedOn` on the real `ApprovalStep`
+  schema), not from either input source.
+
+**Honest reservations, still worth recording even after the promotion:**
+
+- **Most of the work is outside strata's own repo**: creating the ADO
+  Environment and defining who's actually authorized to approve (a real
+  CAB-equivalent group, agreed with real humans) is a governance decision,
+  not code strata can produce on its own — confirmed as planned, but not
+  yet built on the ADO side either.
+- **A technical ADO gate is not automatically an organizational CAB** —
+  if an ISMS scope statement commits to a literal CAB with minutes/quorum,
+  an automated approval click doesn't necessarily satisfy that; a question
+  for whoever owns the ISMS scope, not something resolvable in this repo.
+
+**Verdict:** promoted to Should-have (2026-10-04) — a confirmed, planned
+consumer, not a speculative one. Still behind M1 (commit identity) as the
+next concrete step, since M1 needs no external/operational buy-in and the
+ADO-side infrastructure (the Environment, the named approvers) isn't built
+yet either — but no longer gated on "needs a named owner to materialize"
+the way the Could-have framing implied; worth a proper design pass once
+the ADO approval step itself exists to integrate against.
+
 ## Changelog
 
 - 2026-09-30: Created. Catalogs v1's post-ADR-0066 audit-trail design (three
@@ -1941,6 +2330,155 @@ a v2 ADR/implementation:
   import-linter, pytest 1484 passed — same pre-existing unrelated
   `config/` drift as the sole failure). Sphinx rebuilt clean. Updated
   Phase 5's own checklist and the top status line — Layer 2 is live.
+- 2026-10-03: Added "Compliance Gap Analysis (NIS2 / ISO 27001 / ISAE
+  3402)", prompted by a direct challenge to PR extraction's
+  justification ("useful? is there justification for this?"), followed
+  by "look at the questions it needs to answer and see what is currently
+  shipped," then a request to frame the findings from "the senior nis2
+  isae iso27k perspective" with a MoSCoW list. Checked field-by-field,
+  against `audit_run.py`'s only `DeploymentManifestModel(...)`
+  construction site (not the model's field list), what each of the four
+  compliance questions actually has populated today: Q4 (timestamps/
+  version) and half of Q1 (artifact/SBOM hashes) are real; Q2
+  (`change_reference`) and Q3 (`approvers`) are fully unpopulated, not
+  merely best-effort-degraded. Confirmed, by reading v1's real
+  `enrich_with_pr_data()` directly, that even v1's own implementation
+  never requested `reviews`/`reviewDecision` from `gh` — so `approvers`
+  was never populated there either, undermining a straight port as a fix.
+  MoSCoW'd the gaps: Must (commit identity via the `git rev-parse`
+  pattern already used elsewhere in this codebase; free PR-number
+  recovery from `commit_message`, no `gh` dependency; minimum-viable
+  Layer 3 reporting, since ISAE 3402 Type II needs an enumerable sample
+  set, not one good record); Should (`change_reference` CLI wiring,
+  `audit diff`, `force` capture); Could (full `gh`-based approver
+  extraction, once a real `gh`-capable pipeline exists; `artifacts.
+  {repositories,images,providers}` population); Won't (the journal;
+  full OIDC/cloud-CLI identity). No code changed in this pass — analysis
+  only, recorded ahead of implementation.
+- 2026-10-04: Added "Addendum — formalizing approval via an ADO gate",
+  prompted by a direct proposal to "fake" OMP's Change Advisory Board
+  using an Azure DevOps Environment approval gate, with a script turning
+  the approval event into a document pushed to repo/manifest/SIEM, plus
+  a direct question ("strata v1 had a workflow type system?"). Confirmed
+  v1 already designed exactly this: `models/gate_model.py`'s
+  `DeploymentGateModel` (ADR-0057/ADR-0059) has a literal `type: "cab"`
+  gate and a `mode: "declare"` whose own field description names "Azure
+  DevOps environment approvals" as the intended external-enforcement
+  case — record, don't re-implement. Checked real usage the same way as
+  every other feature in this doc: zero evidence anywhere in
+  `cfg-int-deployment` (`gates:` has exactly one unrelated, commented-out
+  hit in `promotions.yaml`) — a third "declared but unread machinery"
+  instance, alongside the SIEM sinks and the journal. Right-sized the
+  idea rather than taking it as proposed: no new `kind: changerequest`
+  document (`ChangeReferenceModel` already exists and is already
+  unpopulated, confirmed in the Compliance Gap Analysis above — this is
+  data to populate an existing field, not reason for a new document
+  kind); no porting v1's `mode: "enforce"` work-item pause/resume
+  mechanism (duplicates what an ADO Environment gate already does
+  natively); no new SIEM-push step (Layers 2/4 already push the whole
+  manifest once `change_reference` is populated). Recorded as a
+  Could-have, with honest reservations (zero confirmed real demand; most
+  of the work — ADO Environments, naming real approvers — is governance
+  work outside this repo; a technical gate isn't automatically an
+  organizational CAB for ISMS-scope purposes) rather than silently
+  promoted. No code changed — analysis only.
+- 2026-10-04: **Promoted the ADO-approval-gate item to Should-have**,
+  per new information: pipeline development for this stack is actively
+  in progress, and an ADO approval step will be created once it reaches
+  production — a confirmed, concrete, near-term consumer, not a
+  speculative one (same evidence bar that promoted the OTel/Sentinel
+  sinks from hypothetical to built in
+  [audit-sink-dispatch.md](audit-sink-dispatch.md)). Also recorded a
+  plausible diagnosis for *why* v1's gate system went unused: likely not
+  obvious how to use (a 7-type, 2-mode, condition-expression
+  configuration surface), not evidence nobody needed approval gating —
+  which argues for the right-sized version staying small and obvious
+  (populate one existing field from one REST call) rather than
+  reproducing v1's broad, generalized gate-configuration surface. No
+  code changed — analysis only; still behind M1 since the ADO-side
+  infrastructure (the Environment, the named approvers) isn't built yet
+  either.
+- 2026-10-04: Added "What `commit_sha` can and can't claim", per a
+  direct pressure-test of M1 ("what commit would we be looking at — the
+  last commit could also just say 'fixed typo in workspace
+  description'?"). Correct: `git log -1` on whatever's checked out
+  returns whatever HEAD happens to be, with no guarantee of relevance to
+  the actual change behind a deploy — confirmed especially sharp given
+  the earlier finding that every real pipeline is manually queued with
+  nothing pinning a ref/commit at queue time. Corrected the earlier
+  worked example's implicit framing (treating `commit_author` as "who
+  wrote the infrastructure change") rather than leaving it stand:
+  `commit_sha`/`commit_author`/`commit_message` are a reproducibility
+  anchor ("exact repo state used"), not an authorship claim. Considered
+  and rejected scoping the git query to the deployment's own file
+  (better for the common case, but trades one blind spot — misses
+  changes in separately-referenced files — for another, and is still not
+  actually correct); concluded the only real fix is Layer 3's `audit
+  diff`, already a Should-have, not something M1 can substitute for.
+  Decision: ship M1 as originally scoped, with the claim stated honestly
+  in code/docstrings. No code changed — analysis only, folded into the
+  MoSCoW's M1 bullet and a new dedicated section ahead of implementation.
+- 2026-10-05: **Re-prioritized M1 from Must-have to Could-have**, per a
+  direct status check ("status of m1 in short. seems like something we
+  skip?"). Agreed: its value shrank once honestly scoped (a
+  reproducibility anchor, not an authorship claim, per the section
+  above), it was never backed by a named real consumer the way
+  OTel/Sentinel and the ADO gate were, and the free PR-number recovery's
+  hit rate is undermined by the same "unrelated HEAD commit" problem.
+  Design stays fully worked out, just deprioritized — not invalidated.
+  Layer 3 (`audit status`/`audit changes`) is now the sole Must-have and
+  the active next design target. Added "M1 re-prioritized to Could-have"
+  recording the reasoning. No code changed.
+- 2026-10-05: **Designed, then deferred, Layer 3 reporting**, per a
+  request to look into the next Must-have, followed immediately by a
+  direct correction before any code was written: "no data will be local.
+  all the data will be remote." A full design was produced (new `strata
+  audit` command group with `status`/`changes` subcommands, a new
+  `controllers/audit_report.py` reading local `_manifest.json` files
+  under `layout.audit_dir(root)`) — then deferred on the correction,
+  since this doc had already established, for a different piece, exactly
+  why that data source is wrong: the `deployments.ndjson` removal
+  ("90 percent deployed in CI/CD so will be not saved") applies
+  identically here. A command reading local files would silently show
+  nothing for the ~90% real case rather than failing loudly — worse than
+  not shipping it. Recorded what a correct version actually needs (read
+  from the `git` sink's pushed remote, not local disk — a materially
+  bigger design involving a fetch/checkout step and a sink-selection
+  decision) and moved Layer 3 to a new "Deferred — blocked on a real
+  redesign" MoSCoW category, distinct from Could-have (lower priority)
+  and Won't-have (no value) — this is neither; it just isn't validly
+  designed yet. The Must-have category is now recorded as genuinely
+  empty rather than backfilled with a weaker substitute. No code
+  changed.
+- 2026-10-05: Verified, against Microsoft's real docs rather than
+  assumption, whether an ADO approval gate can request structured
+  parameters (e.g. a ticket number) from an approver. Checked the
+  conceptual approvals page and the real `ApprovalUpdateParameters` REST
+  schema directly: the answer is no — an approver can only submit
+  `status` + one free-text `comment`; the check's own `instructions`
+  field is static, set once by the resource owner, not a per-run input.
+  This splits `ChangeReferenceModel` cleanly: `reason` maps 1:1 onto
+  `comment`; `id`/`system`/`classification` have no equivalent in the
+  approval step and would need a queue-time pipeline `parameters:` entry
+  instead (confirmed as a real, already-used mechanism in
+  `cfg-int-deployment`'s actual pipelines) rather than parsing structure
+  out of an approver's free text. Folded into the ADO-gate addendum. No
+  code changed.
+- 2026-10-05: **Implemented `change_reference` CLI wiring.** Six new
+  `deploy run` flags (`--change-system`/`--change-id`/`--change-reason`/
+  `--change-classification`/`--change-title`/`--change-url`), one per
+  `ChangeReferenceModel` field, per direct confirmation ("we use CLI
+  params not a file, store those values, and then apply them to the
+  manifest"). `system`/`id`/`reason` validated as all-or-nothing in
+  `deploy_command.py` (`UsageError` before `deploy_run()` executes);
+  `audit_run.py`'s new `_build_change_reference()` helper builds the
+  model (or `None`) and auto-derives `supplied_by`/`supplied_at`, trusting
+  the CLI layer's validation rather than re-checking it — same "one place
+  owns the invariant" discipline as `AuditSinkModel`'s own exactly-one-arm
+  validator. 6 new tests total (4 in `test_audit_run.py`, 2 in
+  `test_commands_deploy.py`, including a partial-combo case asserting
+  `deploy_run()` is never reached). Full check suite green: mypy (136
+  files), ruff, ruff format, import-linter 1/0, pytest 1879 passed.
 
 
 

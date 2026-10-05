@@ -56,6 +56,7 @@ from strata.integrations import registry
 from strata.integrations.capabilities import AuditSinkIntegration
 from strata.integrations.errors import IntegrationError
 from strata.models.audit_manifest_model import (
+    ChangeReferenceModel,
     DeploymentManifestModel,
     ManifestArtifactsModel,
     ManifestPlatformReferenceModel,
@@ -84,6 +85,12 @@ def finalize_and_distribute_deploy_audit(
     started_at: datetime,
     run_diagnostics: Diagnostics,
     dry_run: bool = False,
+    change_system: str | None = None,
+    change_id: str | None = None,
+    change_reason: str | None = None,
+    change_classification: str | None = None,
+    change_title: str | None = None,
+    change_url: str | None = None,
 ) -> Diagnostics:
     """Finalize the manifest + metrics for a `deploy run` invocation, write
     them locally, then distribute to every configured sink.
@@ -104,6 +111,16 @@ def finalize_and_distribute_deploy_audit(
             never `datetime.now()` called from inside this function.
         run_diagnostics: What `deploy_run()` itself returned.
         dry_run: Same flag passed to `deploy_run()`.
+        change_system: `deploy run --change-system`, or `None` when the
+            caller supplied no change reference at all. Supplied together
+            with `change_id`/`change_reason` or not at all — enforced by
+            `deploy_command.py` as a `UsageError` before `deploy_run()` ever
+            executes, not re-validated here.
+        change_id: `deploy run --change-id`.
+        change_reason: `deploy run --change-reason`.
+        change_classification: `deploy run --change-classification`, optional.
+        change_title: `deploy run --change-title`, optional.
+        change_url: `deploy run --change-url`, optional.
 
     Returns:
         Findings from finalizing/writing/distributing only — never
@@ -129,6 +146,16 @@ def finalize_and_distribute_deploy_audit(
     status: Literal["success", "failed"] = "success" if run_diagnostics.ok else "failed"
     actor = resolve_actor()
     environment = _single_environment(deployment)
+    change_reference = _build_change_reference(
+        system=change_system,
+        change_id=change_id,
+        reason=change_reason,
+        classification=change_classification,
+        title=change_title,
+        url=change_url,
+        actor=actor,
+        supplied_at=completed_at.isoformat(),
+    )
 
     manifest = DeploymentManifestModel(
         execution_id=execution_id,
@@ -145,6 +172,7 @@ def finalize_and_distribute_deploy_audit(
         deployed_by=actor,
         artifacts=ManifestArtifactsModel(platform=platform_ref),
         sbom=_sbom_reference(build_path),
+        change_reference=change_reference,
         errors=run_diagnostics.messages(Severity.ERROR) or None,
     )
     metrics = DeploymentMetricsModel(
@@ -385,4 +413,40 @@ def _sbom_reference(build_path: Path) -> ManifestSbomReferenceModel | None:
         format=SBOM_FORMAT,
         sha256=f"sha256:{file_hash}",
         component_count=component_count,
+    )
+
+
+def _build_change_reference(
+    *,
+    system: str | None,
+    change_id: str | None,
+    reason: str | None,
+    classification: str | None,
+    title: str | None,
+    url: str | None,
+    actor: str,
+    supplied_at: str,
+) -> ChangeReferenceModel | None:
+    """Build a `ChangeReferenceModel` from `deploy run --change-*` values, or
+    `None` when none were supplied — fully optional, matching every other
+    `spec.audit`-adjacent surface in this design.
+
+    `system`/`id`/`reason` are `ChangeReferenceModel`'s own required fields;
+    `deploy_command.py` enforces they're supplied together (a `UsageError`
+    before `deploy_run()` executes otherwise) — trusted here, not
+    re-validated, the same way a sink's own exactly-one-arm validator is
+    trusted by `_dispatch_sink()` rather than re-checked.
+    """
+    if not system and not change_id and not reason:
+        return None
+    assert system and change_id and reason, "deploy_command.py must supply system/id/reason together or not at all"
+    return ChangeReferenceModel(
+        system=system,
+        id=change_id,
+        reason=reason,
+        classification=classification,
+        title=title,
+        url=url,
+        supplied_by=actor,
+        supplied_at=supplied_at,
     )

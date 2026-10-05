@@ -221,3 +221,41 @@ def test_force_flag_is_accepted_and_currently_inert(runner, solution, _stub_terr
     assert result.exit_code == EXIT_SUCCESS, result.output
     apply_call = next(call for call in _stub_terraform if call[1] == "apply")
     assert "-auto-approve" not in apply_call
+
+
+# ---------------------------------------------------------------------------
+# --change-* (docs/design/audit-trail.md's ChangeReferenceModel CLI wiring)
+# ---------------------------------------------------------------------------
+
+
+def test_change_reference_flags_populate_the_manifest(runner, solution, _stub_terraform):
+    from strata.utils import layout
+
+    _build(runner, solution)
+    result = _deploy(
+        runner,
+        "app",
+        "--path",
+        solution,
+        "--force",
+        "--change-system",
+        "jira",
+        "--change-id",
+        "OPS-1234",
+        "--change-reason",
+        "planned maintenance",
+    )
+    assert result.exit_code == EXIT_SUCCESS, result.output
+
+    manifest_path = next(layout.audit_dir(solution).rglob("_manifest.json"))
+    manifest_text = manifest_path.read_text()
+    assert '"system": "jira"' in manifest_text
+    assert '"id": "OPS-1234"' in manifest_text
+    assert '"reason": "planned maintenance"' in manifest_text
+
+
+def test_partial_change_reference_flags_exit_two_before_deploy_runs(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--force", "--change-system", "jira")
+    assert result.exit_code == EXIT_USAGE
+    assert _stub_terraform == []  # deploy_run() must never have been called
