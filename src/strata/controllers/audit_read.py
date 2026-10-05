@@ -19,7 +19,9 @@ naming exactly what to add, never after a slow, confusing clone/fetch
 attempt against nothing.
 """
 
+from collections.abc import Iterator
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from pydantic import ValidationError as PydanticValidationError
@@ -63,6 +65,24 @@ class DeploymentStatusRecord:
     change_reference: ChangeReferenceModel | None
 
 
+@dataclass(frozen=True)
+class DeploymentChangeRecord:
+    """One audit record, ungrouped — `strata audit changes`'s own result
+    shape, a sibling of `DeploymentStatusRecord` (status's group-keep-latest
+    view) rather than a reuse of it: `changes` needs `execution_id`/
+    `started_at` to distinguish multiple runs of the same deployment, which
+    status's one-row-per-deployment view has no use for."""
+
+    execution_id: str
+    deployment: str
+    status: str
+    started_at: str
+    completed_at: str
+    deployed_by: str
+    version: str
+    change_reference: ChangeReferenceModel | None
+
+
 def resolve_readable_sink(audit_config: AuditConfigModel | None) -> AuditGitSinkTargetModel:
     """Return the one enabled `git`-arm sink `strata audit status` reads from.
 
@@ -76,22 +96,28 @@ def resolve_readable_sink(audit_config: AuditConfigModel | None) -> AuditGitSink
             than one is — reading more than one is not supported yet
             (docs/design/audit-commands.md's "Sink selection"). Either way
             the message names exactly what's configured and what to do
-            about it, never a generic "ambiguous"/"not found".
+            about it, never a generic "ambiguous"/"not found". Shared by
+            both `audit_status()` and `audit_changes()`, so the message
+            deliberately names neither subcommand specifically — an
+            earlier draft said "'strata audit status' reads from..."
+            unconditionally, which was actively misleading when this same
+            check failed for `strata audit changes` instead.
     """
     sinks = audit_config.sinks if audit_config is not None else None
     git_sinks = [sink for sink in (sinks or []) if sink.enabled and sink.git is not None]
 
     if not git_sinks:
         raise UsageError(
-            "No audit git sink is configured for this solution. 'strata audit status' reads from a "
-            "configured 'git' audit sink, and none exists — add one under spec.audit.sinks in your "
-            "Configuration document. See docs/design/audit-trail.md and docs/design/audit-commands.md."
+            "No audit git sink is configured for this solution. Reading audit records ('strata audit "
+            "status'/'strata audit changes') requires a configured 'git' audit sink, and none exists — "
+            "add one under spec.audit.sinks in your Configuration document. See docs/design/audit-trail.md "
+            "and docs/design/audit-commands.md."
         )
     if len(git_sinks) > 1:
         names = ", ".join(f"'{sink.name}'" for sink in git_sinks)
         raise UsageError(
-            f"Multiple git audit sinks are configured ({names}) — strata audit status supports exactly "
-            "one for now. See docs/design/audit-commands.md."
+            f"Multiple git audit sinks are configured ({names}) — reading more than one is not supported "
+            "yet. See docs/design/audit-commands.md."
         )
 
     git_sink = git_sinks[0].git
@@ -131,6 +157,74 @@ def sync_read_checkout(root: Path, solution: SolutionModel | None, sink: AuditGi
     return checkout_path
 
 
+def _iter_manifests(search_root: Path, diagnostics: Diagnostics) -> Iterator[DeploymentManifestModel]:
+    """Glob for every `_manifest.json` under `search_root`, parse each, and
+    yield only the ones that parse successfully.
+
+    Extracted from `list_latest_per_deployment()`'s own inline loop once
+    `list_manifests_in_range()` needed the identical enumeration — shared,
+    not duplicated, the same discipline Phase 2 already applied to
+    `ensure_synced_checkout()`.
+
+    A manifest that fails to parse (corrupted file, a record written by an
+    incompatible strata version) is skipped with a warning, never aborts
+    the whole command — one bad record must not hide every good one.
+    """
+    for manifest_path in sorted(search_root.rglob(MANIFEST_FILENAME)):
+        try:
+            yield DeploymentManifestModel.model_validate_json(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, PydanticValidationError, ValueError) as exc:
+            diagnostics.warning(
+                f"could not read audit record: {exc}",
+                source=str(manifest_path),
+                code="audit_read_manifest_unparseable",
+            )
+
+
+def _parse_range_bound(value: str | None, flag_name: str, *, end_of_day: bool = False) -> datetime | None:
+    """Parse a `--since`/`--until` value into an aware UTC `datetime`, or
+    `None` when the flag was omitted.
+
+    Every real `started_at` this gets compared against is written as
+    `datetime.now(timezone.utc).isoformat()` (`audit_run.py`) — always
+    timezone-aware. `datetime.fromisoformat('2026-10-01')` (a bare date, the
+    common case for a human-typed `--since`) parses *naive* — comparing a
+    naive and an aware datetime raises `TypeError`, not a wrong-but-silent
+    answer, so a naive parse is explicitly promoted to UTC here rather than
+    left to crash later inside the comparison itself.
+
+    Args:
+        value: The raw `--since`/`--until` value, or `None`.
+        flag_name: `--since` or `--until`, named in the error message.
+        end_of_day: `True` for `--until` only. A bare date (no time
+            component) otherwise parses to that day's *midnight* —
+            `--until 2026-10-04` would then exclude every record later
+            that same day, contradicting the CLI help text's own
+            "inclusive" claim. When `True` and `value` has no time
+            component, the bound is pushed to the last microsecond of that
+            day instead, so a bare-date `--until` really does include the
+            whole day it names.
+
+    Raises:
+        UsageError: `value` isn't a valid ISO-8601 date or datetime at all.
+    """
+    if value is None:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise UsageError(
+            f"'{flag_name}' is not a valid ISO-8601 date or datetime: '{value}'. Examples: 2026-10-01, "
+            "2026-10-01T00:00:00+00:00."
+        ) from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    is_date_only = "T" not in value and ":" not in value
+    if end_of_day and is_date_only:
+        parsed = parsed.replace(hour=23, minute=59, second=59, microsecond=999999)
+    return parsed
+
+
 def list_latest_per_deployment(
     checkout_path: Path,
     sink: AuditGitSinkTargetModel,
@@ -146,25 +240,11 @@ def list_latest_per_deployment(
     shape (layers-dependent, deployment-specific) — the manifest's own
     fields are the only source of truth for identity, filtering and
     ordering (docs/design/audit-commands.md's "Enumeration").
-
-    A manifest that fails to parse (corrupted file, a record written by an
-    incompatible strata version) is skipped with a warning, never aborts
-    the whole command — one bad record must not hide every good one.
     """
     search_root = checkout_path / sink.path
     latest_by_deployment: dict[str, DeploymentManifestModel] = {}
 
-    for manifest_path in sorted(search_root.rglob(MANIFEST_FILENAME)):
-        try:
-            manifest = DeploymentManifestModel.model_validate_json(manifest_path.read_text(encoding="utf-8"))
-        except (OSError, PydanticValidationError, ValueError) as exc:
-            diagnostics.warning(
-                f"could not read audit record: {exc}",
-                source=str(manifest_path),
-                code="audit_read_manifest_unparseable",
-            )
-            continue
-
+    for manifest in _iter_manifests(search_root, diagnostics):
         if deployment is not None and manifest.deployment != deployment:
             continue
 
@@ -194,6 +274,71 @@ def list_latest_per_deployment(
     ]
 
 
+def list_manifests_in_range(
+    checkout_path: Path,
+    sink: AuditGitSinkTargetModel,
+    *,
+    deployment: str | None,
+    since: datetime | None,
+    until: datetime | None,
+    status: str | None,
+    diagnostics: Diagnostics,
+) -> list[DeploymentChangeRecord]:
+    """Every manifest matching all given filters, sorted oldest to newest by
+    `started_at` — no grouping, unlike `list_latest_per_deployment()`.
+
+    `since`/`until` are already-parsed, already-UTC-aware bounds (see
+    `_parse_range_bound()`) — this function does no date parsing of its
+    own, only comparison.
+    """
+    search_root = checkout_path / sink.path
+    matches: list[DeploymentManifestModel] = []
+
+    for manifest in _iter_manifests(search_root, diagnostics):
+        if deployment is not None and manifest.deployment != deployment:
+            continue
+        if status is not None and manifest.status != status:
+            continue
+        started_at = datetime.fromisoformat(manifest.started_at)
+        if since is not None and started_at < since:
+            continue
+        if until is not None and started_at > until:
+            continue
+        matches.append(manifest)
+
+    if not matches:
+        if deployment is not None:
+            diagnostics.info(
+                f"no audit records found for deployment '{deployment}'",
+                code="audit_read_no_records_for_deployment",
+            )
+        elif since is not None or until is not None or status is not None:
+            # Records may well exist in this sink — they just don't match the
+            # given since/until/status filters. Saying "nothing in this sink"
+            # here would be actively wrong, not merely vague, whenever the
+            # sink is non-empty but every record fell outside the range.
+            diagnostics.info(
+                "no audit records match the given filters",
+                code="audit_read_no_records_for_filters",
+            )
+        else:
+            diagnostics.info("no audit records found in this sink yet", code="audit_read_no_records")
+
+    return [
+        DeploymentChangeRecord(
+            execution_id=manifest.execution_id,
+            deployment=manifest.deployment,
+            status=manifest.status,
+            started_at=manifest.started_at,
+            completed_at=manifest.completed_at or manifest.started_at,
+            deployed_by=manifest.deployed_by or "unknown",
+            version=manifest.version or "unknown",
+            change_reference=manifest.change_reference,
+        )
+        for manifest in sorted(matches, key=lambda m: datetime.fromisoformat(m.started_at))
+    ]
+
+
 def audit_status(context: SolutionContext, deployment: str | None) -> tuple[list[DeploymentStatusRecord], Diagnostics]:
     """Top-level orchestration `commands/audit_command.py`'s `status`
     subcommand calls — resolve the sink, sync the checkout, enumerate
@@ -211,6 +356,50 @@ def audit_status(context: SolutionContext, deployment: str | None) -> tuple[list
 
     diagnostics = Diagnostics()
     records = list_latest_per_deployment(checkout_path, sink, deployment=deployment, diagnostics=diagnostics)
+    return records, diagnostics
+
+
+def audit_changes(
+    context: SolutionContext,
+    deployment: str | None,
+    *,
+    since: str | None,
+    until: str | None,
+    status: str | None,
+) -> tuple[list[DeploymentChangeRecord], Diagnostics]:
+    """Top-level orchestration `commands/audit_command.py`'s `changes`
+    subcommand calls.
+
+    Same fail-fast order as `audit_status()`, with one extra zero-I/O step
+    first: parsing `since`/`until` can fail on a malformed value, and that
+    must be caught before `resolve_readable_sink()` even runs, the same
+    "tell the user first" discipline applied to a second, independent
+    failure mode `status` never had.
+
+    Raises:
+        UsageError: A malformed `since`/`until` value, or no/multiple
+            readable sinks configured.
+        AuditReadError: The sink's remote can't be synced.
+    """
+    since_bound = _parse_range_bound(since, "--since")
+    until_bound = _parse_range_bound(until, "--until", end_of_day=True)
+
+    configuration = _single_configuration(context)
+    audit_config = configuration.spec.audit if configuration is not None else None
+
+    sink = resolve_readable_sink(audit_config)
+    checkout_path = sync_read_checkout(context.root, context.controller.solution, sink)
+
+    diagnostics = Diagnostics()
+    records = list_manifests_in_range(
+        checkout_path,
+        sink,
+        deployment=deployment,
+        since=since_bound,
+        until=until_bound,
+        status=status,
+        diagnostics=diagnostics,
+    )
     return records, diagnostics
 
 

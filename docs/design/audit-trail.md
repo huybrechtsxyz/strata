@@ -34,12 +34,16 @@
   genuinely empty — see "Layer 3 deferred." **`change_reference` CLI
   wiring is now implemented (2026-10-05)**: six `deploy run --change-*`
   flags, closing Q2 ("why") for any deploy that supplies them — see the
-  Should-have list. **`strata audit status` is now implemented
-  (2026-10-05)** — see [audit-commands.md](audit-commands.md)'s Phases
-  1-4; reads the configured `git` sink's latest record per deployment.
-  `strata audit changes` (range listing — the full ISAE 3402 "enumerable
-  sample over a period" ask) is a deliberate, recorded scope cut, not yet
-  built.
+  Should-have list. **`strata audit status` AND `strata audit changes`
+  are now both implemented (2026-10-05)** — see
+  [audit-commands.md](audit-commands.md)'s Phases 1-7, all complete:
+  `status` reads the configured `git` sink's latest record per
+  deployment, `changes` lists every record in a range — the full ISAE
+  3402 "enumerable sample over a period" ask this Must-have exists for.
+  A full review pass (2026-10-05) found and fixed three real bugs
+  (a command-name-specific error message, a non-inclusive `--until`
+  bound, a misleading empty-result message) — see audit-commands.md's
+  own changelog for the detail.
 - Last updated: 2026-10-05
 
 ## Overview
@@ -1645,16 +1649,16 @@ auditor actually tests them:
 
 **Must have**
 
-- **`strata audit status` implemented (2026-10-05)** — see
-  [audit-commands.md](audit-commands.md)'s Phases 1-4: reads the
-  configured `git` sink's latest record per deployment, failing fast
-  with a clear message before any network access if none (or more than
-  one) is configured. **Not yet fully satisfied:** the ISAE 3402 ask this
-  item exists for is *operating effectiveness over a period* — an
-  enumerable sample, not one good record — which needs `strata audit
-  changes` (range listing), a recorded, deliberate scope cut in
-  audit-commands.md, not built yet. Category stays Must-have until that
-  ships too.
+- **Implemented in full (2026-10-05)** — see
+  [audit-commands.md](audit-commands.md)'s Phases 1-7, all complete:
+  `strata audit status` reads the configured `git` sink's latest record
+  per deployment; `strata audit changes` lists every record in a
+  `--since`/`--until`/`--status`-filtered range, oldest to newest — the
+  ISAE 3402 "operating effectiveness over a period" ask this Must-have
+  existed for. Both fail fast, before any network access, if no (or more
+  than one) readable sink is configured. This is the one item this
+  entire MoSCoW ever marked Must-have, and it is now the only one fully
+  closed out — every other open item below is Should-have or lower.
 
 **Should have**
 
@@ -1804,18 +1808,17 @@ SIEM sinks are pure fire-and-forget, not queryable by strata itself).
 
 **Decision (2026-10-05):** deferred, not demoted to Could-have — this was
 not "lower priority," it was "not validly designed yet." **Update,
-same day:** a remote-read design was produced, then **implemented** —
-see [audit-commands.md](audit-commands.md) for the full design and its
-Phases 1-4 (a dedicated `audit-read/` checkout namespace, glob-and-parse
-manifest discovery rather than reconstructing the write path, the
-`status` command, failure classification) — `strata audit status` is a
-real, working command as of 2026-10-05. Spun into its own doc rather than
-grown here further, the same way audit-sink-dispatch.md was split out
-once its own design got detailed enough. `strata audit changes` (range
-listing) remains a deliberate scope cut, tracked there, not here — this
-section stays as the record of *why* the first (local-file) attempt was
-wrong, which the new doc's own Overview links back to rather than
-re-deriving.
+same day:** a remote-read design was produced, then **implemented in
+full** — see [audit-commands.md](audit-commands.md) for the full design
+and its Phases 1-7, all complete (a dedicated `audit-read/` checkout
+namespace, glob-and-parse manifest discovery rather than reconstructing
+the write path, both the `status` and `changes` commands, failure
+classification) — `strata audit status` and `strata audit changes` are
+both real, working commands as of 2026-10-05. Spun into its own doc
+rather than grown here further, the same way audit-sink-dispatch.md was
+split out once its own design got detailed enough. This section stays as
+the record of *why* the first (local-file) attempt was wrong, which the
+new doc's own Overview links back to rather than re-deriving.
 
 ### What `commit_sha` can and can't claim (2026-10-04)
 
@@ -2615,6 +2618,19 @@ flags, shipped 2026-10-05) — no REST-polling script to write at all.
   open until that ships too, not papered over as fully done. No code
   changed in this pass — documentation cross-reference update only, per
   audit-commands.md's own Phase 5.
+- 2026-10-05: **Caught this doc up to `strata audit changes` also
+  shipping** (audit-commands.md's Phases 6-7, implemented the same day
+  as the entry above but under separate design/plan/implement requests —
+  this doc's own cross-references had gone stale in the meantime, still
+  saying "a deliberate scope cut, not yet built"). Corrected, per a
+  direct "is this a valid first audit layer?" question that prompted
+  re-checking the current state rather than answering from memory: the
+  top status line, the Must-have MoSCoW entry (now closed out — this is
+  the one item this whole MoSCoW ever marked Must-have, and the only one
+  now fully done), and the "Layer 3 deferred" section's Decision
+  paragraph. Also noted audit-commands.md's own full-review pass (same
+  day) that found and fixed three real bugs in the shipped commands. No
+  code changed — doc catch-up only.
 
 
 

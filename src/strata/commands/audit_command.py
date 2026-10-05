@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
-"""`strata audit status` — read back the latest audit record per deployment
+"""`strata audit status`/`strata audit changes` — read back audit records
 from the solution's configured durable `git` sink (docs/design/
 audit-commands.md).
 
-Phase 4 of that doc's Implementation Plan — the command layer over
-`controllers/audit_read.py`'s `audit_status()`. Only `status` ships in this
-pass; `changes` (range listing, filters) is explicitly deferred — see that
-doc's "Deferred — not open questions, decided scope cuts for this phase".
+Phases 4 and 7 of that doc's Implementation Plan — the command layer over
+`controllers/audit_read.py`'s `audit_status()`/`audit_changes()`.
 
-No `try`/`except` around `audit_status()` on purpose: both `UsageError`
-(no/multiple readable sinks — the "tell the user first" check, which runs
-before any git/network operation) and `AuditReadError` (the sink's remote
-couldn't be synced) are `StrataError` subclasses, and `command_run()`'s own
-context manager (`commands/run.py`) already catches every `StrataError` and
-maps it to the right exit code.
+No `try`/`except` around either controller call on purpose: every error
+either can raise (`UsageError` for no/multiple readable sinks or a
+malformed `--since`/`--until`, `AuditReadError` for a sink that can't be
+synced) is a `StrataError` subclass, and `command_run()`'s own context
+manager (`commands/run.py`) already catches every `StrataError` and maps
+it to the right exit code.
 """
 
 from pathlib import Path
@@ -24,7 +22,12 @@ import click
 from strata.commands.json_output import JsonReporter
 from strata.commands.options import output_option, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
-from strata.controllers.audit_read import DeploymentStatusRecord, audit_status
+from strata.controllers.audit_read import (
+    DeploymentChangeRecord,
+    DeploymentStatusRecord,
+    audit_changes,
+    audit_status,
+)
 from strata.controllers.solution_context import open_solution
 
 
@@ -128,5 +131,139 @@ def _to_json(record: DeploymentStatusRecord) -> dict[str, Any]:
         "version": record.version,
         "deployed_by": record.deployed_by,
         "completed_at": record.completed_at,
+        "change_reference": record.change_reference.model_dump(exclude_none=True) if record.change_reference else None,
+    }
+
+
+@audit_command.command("changes")
+@click.argument("deployment", required=False)
+@click.option(
+    "--since",
+    default=None,
+    metavar="DATE",
+    help="ISO-8601 date/datetime lower bound (inclusive), compared against each record's started_at.",
+)
+@click.option(
+    "--until",
+    default=None,
+    metavar="DATE",
+    help="ISO-8601 date/datetime upper bound (inclusive), compared against each record's started_at. "
+    "A bare date (no time component) covers that whole day, through its last microsecond.",
+)
+@click.option(
+    "--status",
+    "status_filter",
+    type=click.Choice(["success", "partial", "failed"]),
+    default=None,
+    help="Filter by outcome.",
+)
+@click.option(
+    "--path",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="Where to start looking for the solution. Defaults to the current directory.",
+)
+@output_option
+@quiet_option
+@verbose_option
+def changes_command(
+    deployment: str | None,
+    since: str | None,
+    until: str | None,
+    status_filter: str | None,
+    path: Path | None,
+    output: str,
+    quiet: bool,
+    verbose: bool,
+) -> None:
+    """List every audit record in range, oldest to newest (or just DEPLOYMENT).
+
+    Reads from the solution's configured 'git' audit sink, same as
+    'audit status' — never local files, since most real deployments run in
+    ephemeral CI (docs/design/audit-trail.md's "Layer 3 deferred"). Fails
+    fast, before any network access, if --since/--until is malformed, or if
+    no/multiple readable audit sinks are configured.
+
+    Unlike 'audit status', every matching record is listed, not just the
+    latest per deployment — the ISAE 3402 "enumerable sample over a
+    period" ask this command exists for.
+
+    \b
+    Exit codes:
+      0  the sink was read successfully, even if nothing matches the given filters
+      2  bad arguments (including a malformed --since/--until), not inside a solution,
+         or no/multiple readable audit sinks configured
+      3  the solution itself is invalid
+      1  system failure — the sink's remote could not be reached
+    """
+    with command_run("audit changes", output=output, quiet=quiet, verbose=verbose) as run:
+        context = open_solution(resolve_work_path(path)).require_valid()
+        solution = context.controller.solution
+
+        run.describe(
+            solution=solution.meta.name if solution else "(unnamed)",
+            root=context.root,
+            deployment=deployment,
+            since=since,
+            until=until,
+            status=status_filter,
+        )
+
+        records, diagnostics = audit_changes(context, deployment, since=since, until=until, status=status_filter)
+
+        if output == "console":
+            _print_changes_table(records)
+
+        run.report(diagnostics, root=context.root)
+        if isinstance(run.reporter, JsonReporter):
+            run.reporter.data = {"changes": [_change_to_json(record) for record in records]}
+        run.ok = True
+
+
+def _print_changes_table(records: list[DeploymentChangeRecord]) -> None:
+    """Render one line per record, oldest to newest: deployment, status,
+    started_at, execution_id.
+
+    Deliberately narrower than `_print_status_table()`'s column set —
+    `version`/`deployed_by`/`change_reference` are JSON-only detail here,
+    to keep a potentially long oldest-to-newest list scannable. Same
+    dynamic-`ljust()` convention, same empty placeholder.
+    """
+    if not records:
+        click.echo("  (no audit records found)")
+        return
+
+    headers = ("DEPLOYMENT", "STATUS", "STARTED AT")
+    deployment_w = max(len(headers[0]), max(len(r.deployment) for r in records))
+    status_w = max(len(headers[1]), max(len(r.status) for r in records))
+    started_at_w = max(len(headers[2]), max(len(r.started_at) for r in records))
+
+    click.echo(
+        f"  {headers[0].ljust(deployment_w)}  {headers[1].ljust(status_w)}  "
+        f"{headers[2].ljust(started_at_w)}  EXECUTION ID"
+    )
+    for record in records:
+        click.echo(
+            f"  {record.deployment.ljust(deployment_w)}  {record.status.ljust(status_w)}  "
+            f"{record.started_at.ljust(started_at_w)}  {record.execution_id}"
+        )
+
+
+def _change_to_json(record: DeploymentChangeRecord) -> dict[str, Any]:
+    """`DeploymentChangeRecord` -> a plain, JSON-serialisable mapping.
+
+    Distinct name from `_to_json()` (not a reused/overloaded name in this
+    module) — same `change_reference` handling `_to_json()` already
+    established, plus `execution_id`/`started_at`, which `status`'s own
+    one-row-per-deployment view has no use for.
+    """
+    return {
+        "execution_id": record.execution_id,
+        "deployment": record.deployment,
+        "status": record.status,
+        "started_at": record.started_at,
+        "completed_at": record.completed_at,
+        "deployed_by": record.deployed_by,
+        "version": record.version,
         "change_reference": record.change_reference.model_dump(exclude_none=True) if record.change_reference else None,
     }

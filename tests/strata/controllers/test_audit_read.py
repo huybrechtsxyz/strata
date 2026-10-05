@@ -13,6 +13,7 @@ test driving a real local bare git repository to prove the whole
 
 import json
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -21,8 +22,11 @@ from strata.controllers.audit_push import push_audit_files
 from strata.controllers.audit_read import (
     AuditReadError,
     DeploymentStatusRecord,
+    _parse_range_bound,
+    audit_changes,
     audit_status,
     list_latest_per_deployment,
+    list_manifests_in_range,
     resolve_readable_sink,
     sync_read_checkout,
 )
@@ -38,7 +42,11 @@ def _git_sink(name: str = "compliance-archive", remote: str = "audit-repo", bran
 
 
 def _manifest_json(
-    *, deployment: str = "app", execution_id: str = "11111111-1111-1111-1111-111111111111", started_at: str
+    *,
+    deployment: str = "app",
+    execution_id: str = "11111111-1111-1111-1111-111111111111",
+    started_at: str,
+    status: str = "success",
 ) -> str:
     return json.dumps(
         {
@@ -48,7 +56,7 @@ def _manifest_json(
             "workspace": "main",
             "started_at": started_at,
             "completed_at": started_at,
-            "status": "success",
+            "status": status,
             "deployed_by": "ci-runner",
             "version": "2.4.1",
             "artifacts": {"platform": {"hash": "sha256:abc123", "path": "resolved.yaml"}},
@@ -64,6 +72,26 @@ def _manifest_json(
 def test_resolve_readable_sink_raises_when_audit_is_not_configured_at_all():
     with pytest.raises(UsageError, match="No audit git sink is configured"):
         resolve_readable_sink(None)
+
+
+def test_resolve_readable_sink_zero_sink_message_names_both_commands_not_just_status():
+    """Found during review: this check is shared by audit_status() AND
+    audit_changes() — an earlier message hardcoded 'strata audit status',
+    which was actively misleading when raised for 'strata audit changes'."""
+    with pytest.raises(UsageError) as exc_info:
+        resolve_readable_sink(None)
+    message = str(exc_info.value)
+    assert "strata audit status" in message
+    assert "strata audit changes" in message
+
+
+def test_resolve_readable_sink_multiple_sink_message_names_both_commands_not_just_status():
+    config = AuditConfigModel(sinks=[_git_sink(name="compliance-archive"), _git_sink(name="team-mirror")])
+    with pytest.raises(UsageError) as exc_info:
+        resolve_readable_sink(config)
+    message = str(exc_info.value)
+    assert "supports exactly" not in message  # the old, status-specific phrasing
+    assert "reading more than one is not supported yet" in message
 
 
 def test_resolve_readable_sink_raises_when_sinks_list_is_empty():
@@ -221,6 +249,267 @@ def test_list_latest_per_deployment_no_records_at_all_is_not_an_error(tmp_path: 
 
 
 # ---------------------------------------------------------------------------
+# _parse_range_bound — a third zero-I/O "tell the user first" check
+# ---------------------------------------------------------------------------
+
+
+def test_parse_range_bound_returns_none_for_an_omitted_flag():
+    assert _parse_range_bound(None, "--since") is None
+
+
+def test_parse_range_bound_keeps_an_already_aware_datetime():
+    result = _parse_range_bound("2026-10-01T00:00:00+00:00", "--since")
+    assert result == datetime(2026, 10, 1, tzinfo=timezone.utc)
+
+
+def test_parse_range_bound_promotes_a_naive_date_to_utc():
+    """The exact bug this design calls out: a bare '--since 2026-10-01'
+    parses naive, and must not be left to crash later when compared
+    against an aware `started_at`."""
+    result = _parse_range_bound("2026-10-01", "--since")
+    assert result == datetime(2026, 10, 1, tzinfo=timezone.utc)
+    assert result is not None
+    assert result.tzinfo is not None
+
+
+def test_parse_range_bound_raises_usage_error_for_a_malformed_value():
+    with pytest.raises(UsageError, match="'--since' is not a valid ISO-8601"):
+        _parse_range_bound("not-a-date", "--since")
+
+
+def test_parse_range_bound_names_the_flag_it_was_given():
+    with pytest.raises(UsageError, match="'--until' is not a valid"):
+        _parse_range_bound("not-a-date", "--until")
+
+
+def test_parse_range_bound_end_of_day_pushes_a_bare_date_to_the_last_microsecond():
+    """Found during review: '--until 2026-10-04' without end_of_day parses to
+    that day's *midnight*, silently excluding every record later that same
+    day — contradicting the CLI's own 'inclusive' claim. end_of_day=True
+    (what audit_changes() actually passes for --until) must push a bare date
+    to 23:59:59.999999, not leave it at 00:00:00."""
+    result = _parse_range_bound("2026-10-04", "--until", end_of_day=True)
+    assert result == datetime(2026, 10, 4, 23, 59, 59, 999999, tzinfo=timezone.utc)
+
+
+def test_parse_range_bound_end_of_day_does_not_affect_an_explicit_time():
+    """A user who already gave a specific time meant that exact moment —
+    end_of_day must not override an explicit, non-midnight time component."""
+    result = _parse_range_bound("2026-10-04T08:00:00+00:00", "--until", end_of_day=True)
+    assert result == datetime(2026, 10, 4, 8, 0, 0, tzinfo=timezone.utc)
+
+
+def test_parse_range_bound_without_end_of_day_keeps_midnight():
+    """--since has no equivalent bug — 'since the start of this day' is
+    already the intuitive, correct reading of a bare date, so end_of_day
+    defaults to False and must not be applied unless explicitly requested."""
+    result = _parse_range_bound("2026-10-04", "--since")
+    assert result == datetime(2026, 10, 4, tzinfo=timezone.utc)
+
+
+# ---------------------------------------------------------------------------
+# list_manifests_in_range — pure filesystem, mirrors list_latest_per_deployment's
+# own test group but with no grouping and three extra filters
+# ---------------------------------------------------------------------------
+
+
+def test_list_manifests_in_range_returns_every_record_not_just_the_latest(tmp_path: Path):
+    sink = _git_sink().git
+    assert sink is not None
+    _write_manifest(tmp_path / "records", "app/run1", deployment="app", started_at="2026-10-01T00:00:00+00:00")
+    _write_manifest(tmp_path / "records", "app/run2", deployment="app", started_at="2026-10-05T00:00:00+00:00")
+
+    records = list_manifests_in_range(
+        tmp_path, sink, deployment=None, since=None, until=None, status=None, diagnostics=Diagnostics()
+    )
+
+    assert len(records) == 2  # unlike list_latest_per_deployment, neither is dropped
+
+
+def test_list_manifests_in_range_sorts_oldest_to_newest(tmp_path: Path):
+    sink = _git_sink().git
+    assert sink is not None
+    _write_manifest(tmp_path / "records", "app/run1", deployment="app", started_at="2026-10-05T00:00:00+00:00")
+    _write_manifest(tmp_path / "records", "app/run2", deployment="app", started_at="2026-10-01T00:00:00+00:00")
+
+    records = list_manifests_in_range(
+        tmp_path, sink, deployment=None, since=None, until=None, status=None, diagnostics=Diagnostics()
+    )
+
+    assert [r.started_at for r in records] == ["2026-10-01T00:00:00+00:00", "2026-10-05T00:00:00+00:00"]
+
+
+def test_list_manifests_in_range_filters_by_since_and_until(tmp_path: Path):
+    sink = _git_sink().git
+    assert sink is not None
+    _write_manifest(tmp_path / "records", "app/run1", deployment="app", started_at="2026-10-01T00:00:00+00:00")
+    _write_manifest(tmp_path / "records", "app/run2", deployment="app", started_at="2026-10-03T00:00:00+00:00")
+    _write_manifest(tmp_path / "records", "app/run3", deployment="app", started_at="2026-10-05T00:00:00+00:00")
+
+    records = list_manifests_in_range(
+        tmp_path,
+        sink,
+        deployment=None,
+        since=datetime(2026, 10, 2, tzinfo=timezone.utc),
+        until=datetime(2026, 10, 4, tzinfo=timezone.utc),
+        status=None,
+        diagnostics=Diagnostics(),
+    )
+
+    assert [r.started_at for r in records] == ["2026-10-03T00:00:00+00:00"]
+
+
+def test_list_manifests_in_range_filters_by_status(tmp_path: Path):
+    sink = _git_sink().git
+    assert sink is not None
+    _write_manifest(
+        tmp_path / "records", "app/run1", deployment="app", started_at="2026-10-01T00:00:00+00:00", status="success"
+    )
+    _write_manifest(
+        tmp_path / "records", "app/run2", deployment="app", started_at="2026-10-02T00:00:00+00:00", status="failed"
+    )
+
+    records = list_manifests_in_range(
+        tmp_path, sink, deployment=None, since=None, until=None, status="failed", diagnostics=Diagnostics()
+    )
+
+    assert len(records) == 1
+    assert records[0].status == "failed"
+
+
+def test_list_manifests_in_range_filters_by_deployment_name(tmp_path: Path):
+    sink = _git_sink().git
+    assert sink is not None
+    _write_manifest(tmp_path / "records", "app/run1", deployment="app", started_at="2026-10-01T00:00:00+00:00")
+    _write_manifest(tmp_path / "records", "other/run1", deployment="other", started_at="2026-10-01T00:00:00+00:00")
+
+    records = list_manifests_in_range(
+        tmp_path, sink, deployment="app", since=None, until=None, status=None, diagnostics=Diagnostics()
+    )
+
+    assert [r.deployment for r in records] == ["app"]
+
+
+def test_list_manifests_in_range_combines_all_filters(tmp_path: Path):
+    sink = _git_sink().git
+    assert sink is not None
+    _write_manifest(
+        tmp_path / "records", "app/run1", deployment="app", started_at="2026-10-01T00:00:00+00:00", status="failed"
+    )
+    _write_manifest(
+        tmp_path / "records", "app/run2", deployment="app", started_at="2026-10-05T00:00:00+00:00", status="failed"
+    )
+    _write_manifest(
+        tmp_path / "records", "app/run3", deployment="app", started_at="2026-10-05T00:00:00+00:00", status="success"
+    )
+    _write_manifest(
+        tmp_path / "records", "other/run1", deployment="other", started_at="2026-10-05T00:00:00+00:00", status="failed"
+    )
+
+    records = list_manifests_in_range(
+        tmp_path,
+        sink,
+        deployment="app",
+        since=datetime(2026, 10, 3, tzinfo=timezone.utc),
+        until=None,
+        status="failed",
+        diagnostics=Diagnostics(),
+    )
+
+    assert len(records) == 1
+    assert records[0].deployment == "app"
+    assert records[0].started_at == "2026-10-05T00:00:00+00:00"
+    assert records[0].status == "failed"
+
+
+def test_list_manifests_in_range_skips_a_corrupted_manifest_with_a_warning(tmp_path: Path):
+    sink = _git_sink().git
+    assert sink is not None
+    _write_manifest(tmp_path / "records", "app/run1", deployment="app", started_at="2026-10-05T00:00:00+00:00")
+    corrupt = tmp_path / "records" / "app" / "run2" / "_manifest.json"
+    corrupt.parent.mkdir(parents=True, exist_ok=True)
+    corrupt.write_text("{not valid json", encoding="utf-8")
+
+    diagnostics = Diagnostics()
+    records = list_manifests_in_range(
+        tmp_path, sink, deployment=None, since=None, until=None, status=None, diagnostics=diagnostics
+    )
+
+    assert len(records) == 1
+    assert diagnostics.ok
+    assert any(d.code == "audit_read_manifest_unparseable" for d in diagnostics.items)
+
+
+def test_list_manifests_in_range_named_deployment_with_no_match_is_not_an_error(tmp_path: Path):
+    sink = _git_sink().git
+    assert sink is not None
+    _write_manifest(tmp_path / "records", "app/run1", deployment="app", started_at="2026-10-05T00:00:00+00:00")
+
+    diagnostics = Diagnostics()
+    records = list_manifests_in_range(
+        tmp_path, sink, deployment="never-deployed", since=None, until=None, status=None, diagnostics=diagnostics
+    )
+
+    assert records == []
+    assert diagnostics.ok
+    assert any(d.code == "audit_read_no_records_for_deployment" for d in diagnostics.items)
+
+
+def test_list_manifests_in_range_no_match_at_all_is_not_an_error(tmp_path: Path):
+    sink = _git_sink().git
+    assert sink is not None
+    (tmp_path / "records").mkdir()
+
+    diagnostics = Diagnostics()
+    records = list_manifests_in_range(
+        tmp_path, sink, deployment=None, since=None, until=None, status=None, diagnostics=diagnostics
+    )
+
+    assert records == []
+    assert diagnostics.ok
+    assert any(d.code == "audit_read_no_records" for d in diagnostics.items)
+
+
+def test_list_manifests_in_range_filters_excluding_everything_is_not_a_sink_is_empty_claim(tmp_path: Path):
+    """Found during review: the sink genuinely has a record — 'status=failed'
+    just excludes it. The message must say the filters matched nothing, not
+    claim there's nothing in the sink at all (actively misleading otherwise)."""
+    sink = _git_sink().git
+    assert sink is not None
+    _write_manifest(
+        tmp_path / "records", "app/run1", deployment="app", started_at="2026-10-05T00:00:00+00:00", status="success"
+    )
+
+    diagnostics = Diagnostics()
+    records = list_manifests_in_range(
+        tmp_path, sink, deployment=None, since=None, until=None, status="failed", diagnostics=diagnostics
+    )
+
+    assert records == []
+    assert diagnostics.ok
+    assert any(d.code == "audit_read_no_records_for_filters" for d in diagnostics.items)
+    assert not any(d.code == "audit_read_no_records" for d in diagnostics.items)
+
+
+# ---------------------------------------------------------------------------
+# audit_changes — the malformed-date check must run before any sink/I-O check
+# ---------------------------------------------------------------------------
+
+
+def test_audit_changes_malformed_since_raises_before_touching_the_context():
+    """`_parse_range_bound()` runs before `context` is touched at all — passing
+    `None` instead of a real `SolutionContext` and still getting the date
+    error (not an `AttributeError` on `context`) proves the ordering."""
+    with pytest.raises(UsageError, match="'--since' is not a valid"):
+        audit_changes(None, None, since="not-a-date", until=None, status=None)  # type: ignore[arg-type]
+
+
+def test_audit_changes_malformed_until_raises_before_touching_the_context():
+    with pytest.raises(UsageError, match="'--until' is not a valid"):
+        audit_changes(None, None, since=None, until="not-a-date", status=None)  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
 # Real end-to-end test — a real local bare git repository
 # ---------------------------------------------------------------------------
 
@@ -292,7 +581,7 @@ def test_real_audit_status_round_trip(tmp_path: Path):
     assert solution is not None
 
     older = tmp_path / "older.json"
-    older.write_text(_manifest_json(deployment="app", started_at="2026-10-01T00:00:00+00:00"))
+    older.write_text(_manifest_json(deployment="app", started_at="2026-10-01T00:00:00+00:00", status="failed"))
     newer = tmp_path / "newer.json"
     newer.write_text(_manifest_json(deployment="app", started_at="2026-10-05T00:00:00+00:00"))
     other = tmp_path / "other.json"
@@ -315,3 +604,32 @@ def test_real_audit_status_round_trip(tmp_path: Path):
     assert empty_records == []
     assert empty_diagnostics.ok
     assert any(d.code == "audit_read_no_records_for_deployment" for d in empty_diagnostics.items)
+
+    # audit_changes() against the exact same pushed data — same checkout,
+    # same three manifests, no second bare repo needed (docs/design/
+    # audit-commands.md's Phase 6 plan)
+    change_records, change_diagnostics = audit_changes(context, None, since=None, until=None, status=None)
+    assert change_diagnostics.ok
+    assert len(change_records) == 3  # unlike audit_status(), neither 'app' run is dropped
+    assert [r.started_at for r in change_records] == [
+        "2026-10-01T00:00:00+00:00",
+        "2026-10-03T00:00:00+00:00",
+        "2026-10-05T00:00:00+00:00",
+    ]  # oldest to newest, not grouped by deployment
+
+    failed_only, _ = audit_changes(context, None, since=None, until=None, status="failed")
+    assert [r.deployment for r in failed_only] == ["app"]
+    assert failed_only[0].started_at == "2026-10-01T00:00:00+00:00"
+
+    in_range, _ = audit_changes(context, None, since="2026-10-02", until="2026-10-04", status=None)
+    assert [r.deployment for r in in_range] == ["other"]
+
+    with pytest.raises(UsageError, match="'--since' is not a valid"):
+        audit_changes(context, None, since="not-a-date", until=None, status=None)
+
+    no_match, no_match_diagnostics = audit_changes(context, None, since="2030-01-01", until=None, status=None)
+    assert no_match == []
+    assert no_match_diagnostics.ok
+    # records DO exist in this sink — 'since' just excluded all of them, so the
+    # message must say "no match for the filters", not "nothing in this sink"
+    assert any(d.code == "audit_read_no_records_for_filters" for d in no_match_diagnostics.items)

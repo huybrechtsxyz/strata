@@ -1,7 +1,7 @@
 # Audit read commands (`strata audit status`/`strata audit changes`) — Design
 
-- Status: current — `strata audit status` implemented (2026-10-05, Phases
-  1-4); `strata audit changes` remains a deliberate, tracked scope cut.
+- Status: current — both `strata audit status` and `strata audit changes`
+  are implemented (2026-10-05, all 7 Implementation Plan phases complete).
 - Last updated: 2026-10-05
 
 ## Overview
@@ -61,13 +61,15 @@ rather than building both at once.
 - **`strata audit status [DEPLOYMENT]`** — **Phase 1, build first.** The
   latest record per deployment (or just the named one). The "is my last
   deploy healthy" question.
-- **`strata audit changes [DEPLOYMENT]`** — **deferred, not in the first
-  cut.** Every record in range, not just the latest — the ISAE 3402 Type
-  II ask specifically (operating effectiveness *over a period*, not one
-  good sample). Filters: `--since`/`--until` (ISO-8601 dates, compared
-  against each manifest's own `started_at`), `--status success|failed`.
-  Kept in this doc (not split out again) since it shares every mechanism
-  `status` builds — only the grouping step at the end differs.
+- **`strata audit changes [DEPLOYMENT]`** — **designed (2026-10-05),
+  not yet implemented** — see "`strata audit changes` — range
+  listing" below for the full design. Every record in range, not just
+  the latest — the ISAE 3402 Type II ask specifically (operating
+  effectiveness *over a period*, not one good sample). Filters:
+  `--since`/`--until` (ISO-8601 date/datetime, compared against each
+  manifest's own `started_at`), `--status success|partial|failed` (the
+  manifest's real tri-state outcome — corrected here from an earlier,
+  inaccurate success/failed-only note).
 
 `status` takes the same `--path`/`--output`/`--quiet`/`--verbose` options
 every other command does. **No `--sink` flag in this first cut** — see
@@ -87,9 +89,9 @@ DEPLOYMENT    STATUS   VERSION  DEPLOYED BY       COMPLETED AT          CHANGE R
 api-backend   failed   2.4.1    svc-pipeline-ado  2026-10-05T13:47:02Z  -
 ```
 
-`changes` is deferred, so its `--since`/`--status`-filtered example is no
-longer shown here as a near-term invocation — see "Deferred: `changes`"
-under Remaining Work for its (unchanged) design once it's built.
+`changes` is now fully designed (not merely deferred) — see "`strata audit
+changes` — range listing" below for its own command surface, filter
+validation, module contracts, and worked examples.
 
 ### Why read from the exact git-sink destination, not a second clone
 
@@ -187,16 +189,20 @@ thing `audit status` does after loading the solution is this check, before
 `sync_read_checkout()` (next section) ever runs a single git command — a
 misconfigured solution fails in milliseconds with a message naming exactly
 what to add, never after a slow, confusing clone/fetch attempt against
-nothing. Exact message text, `[new]`:
+nothing. Exact message text, `[new]` — **corrected 2026-10-05**, shared
+by both `status` and `changes` and no longer naming one of them
+specifically (an earlier draft said "'strata audit status' reads
+from..." unconditionally, actively misleading when raised for `strata
+audit changes` instead):
 
 - Zero readable sinks: *"No audit git sink is configured for this
-  solution. 'strata audit status' reads from a configured 'git' audit
-  sink, and none exists — add one under spec.audit.sinks in your
-  Configuration document. See docs/design/audit-trail.md and
-  docs/design/audit-commands.md."*
+  solution. Reading audit records ('strata audit status'/'strata audit
+  changes') requires a configured 'git' audit sink, and none exists —
+  add one under spec.audit.sinks in your Configuration document. See
+  docs/design/audit-trail.md and docs/design/audit-commands.md."*
 - More than one: *"Multiple git audit sinks are configured
-  ('compliance-archive', 'team-mirror') — strata audit status supports
-  exactly one for now. See docs/design/audit-commands.md."* — names the
+  ('compliance-archive', 'team-mirror') — reading more than one is not
+  supported yet. See docs/design/audit-commands.md."* — names the
   actual configured sinks, not a generic "ambiguous" message, so the fix
   is obvious without opening the config file.
 
@@ -204,9 +210,10 @@ nothing. Exact message text, `[new]`:
 
 ```console
 $ strata audit status
-error: No audit git sink is configured for this solution. 'strata audit status' reads from a
-configured 'git' audit sink, and none exists — add one under spec.audit.sinks in your
-Configuration document. See docs/design/audit-trail.md and docs/design/audit-commands.md.
+error: No audit git sink is configured for this solution. Reading audit records ('strata audit
+status'/'strata audit changes') requires a configured 'git' audit sink, and none exists — add one
+under spec.audit.sinks in your Configuration document. See docs/design/audit-trail.md and
+docs/design/audit-commands.md.
 $ echo $?
 2
 ```
@@ -436,6 +443,213 @@ the right exit code — the "tell the user first" requirement falls directly
 out of where `resolve_readable_sink()` is called in `audit_status()`, not
 out of anything the command body has to handle itself.
 
+### `strata audit changes` — range listing (designed 2026-10-05)
+
+Everything `status` already established (read from the exact git-sink
+destination, the single-sink assumption, glob-and-parse enumeration
+instead of reconstructing the write path, fail-fast-before-any-I/O) stays
+unchanged — `changes` is the same mechanism with a different final step
+(list every record in range, not just the latest per deployment) and one
+genuinely new failure mode (`--since`/`--until` can be malformed, which
+`status` has no equivalent of).
+
+**Command surface:**
+
+- **`strata audit changes [DEPLOYMENT]`** — every audit record in range,
+  sorted oldest to newest. DEPLOYMENT narrows to one, same as `status`.
+- **`--since TEXT`** / **`--until TEXT`** — ISO-8601 date or datetime,
+  inclusive bounds compared against each manifest's own `started_at`.
+  Both optional; omit either/both for an unbounded range on that side.
+- **`--status [success|partial|failed]`** — filters by the manifest's
+  real outcome field. `click.Choice` enforces this set directly, so an
+  invalid value is rejected by Click itself (its own usage error, exit 2)
+  before any of this command's own code runs at all — correcting an
+  earlier draft of this doc, written before `DeploymentManifestModel` was
+  checked directly: `status` is a **tri-state** `Literal["success",
+  "partial", "failed"]`, not a success/failed-only bool, and `partial` is
+  real, intentional signal (a deploy that got through some stages but not
+  all) a filter that only knew "success|failed" would silently misclassify.
+- Same `--path`/`--output`/`--quiet`/`--verbose` as `status`. No `--sink`
+  either, for the identical single-sink reasoning already decided above.
+
+**Example invocations:**
+
+```console
+$ strata audit changes --since 2026-10-01 --status failed
+DEPLOYMENT    STATUS   STARTED AT                 EXECUTION ID
+api-backend   failed   2026-10-03T08:15:40+00:00  7e2f1234-5678-4abc-9def-0123456789ab
+api-backend   failed   2026-10-05T13:44:50+00:00  a81d5678-1234-4abc-9def-0123456789cd
+
+$ strata audit changes web-frontend --since 2026-10-01 --until 2026-10-04
+  (no audit records found)
+```
+
+**Date-filter validation is a third zero-I/O "tell the user first" check,
+not an afterthought.** `status` only ever had one way to fail before
+touching git (`resolve_readable_sink()`); `changes` introduces a second,
+independent one — a malformed `--since`/`--until` value — and it must be
+checked at the exact same point in the sequence, before
+`sync_read_checkout()` runs, for the identical reason: a typo in a date
+flag should never cost a slow, confusing clone/fetch attempt before the
+user finds out it was rejected.
+
+```console
+$ strata audit changes --since not-a-date
+error: '--since' is not a valid ISO-8601 date or datetime: 'not-a-date'. Examples: 2026-10-01, 2026-10-01T00:00:00+00:00.
+$ echo $?
+2
+```
+
+**Parsing detail worth recording precisely, not glossed over:** every
+`started_at` this command compares against is written by `audit_run.py`
+as `datetime.now(timezone.utc).isoformat()` — always timezone-*aware*
+UTC. A user's `--since 2026-10-01` parses via `datetime.fromisoformat()`
+into a *naive* datetime (no `tzinfo`), and comparing a naive and an
+aware datetime raises `TypeError` in Python, not a wrong-but-silent
+answer — this would surface as an ugly crash, not a clean `UsageError`,
+if not handled explicitly. `[new]` `_parse_range_bound()`: parse via
+`datetime.fromisoformat()`, and if the result has no `tzinfo`, attach
+`timezone.utc` explicitly (matching the one timezone convention every
+real `started_at` in this system already uses) — raising `UsageError`
+with the exact message shown above when parsing itself fails outright.
+
+**Correction, found during a full review (2026-10-05): `--until` with a
+bare date wasn't actually inclusive of that whole day.** The help text
+claimed "inclusive", but `datetime.fromisoformat('2026-10-04')` parses to
+that day's *midnight* — a record at `2026-10-04T18:00:00` would have been
+silently excluded by `--until 2026-10-04`, the opposite of what "inclusive"
+promises. Fixed: `_parse_range_bound()` takes an `end_of_day: bool = False`
+parameter, passed `True` only for `--until` (never `--since`, where
+"since the start of this day" is already the correct, intuitive reading of
+a bare date) — when the given value has no time component, the bound is
+pushed to that day's last microsecond instead of its first. An explicit
+time component (`--until 2026-10-04T08:00:00`) is left untouched; the user
+already named the exact moment they meant.
+
+**Module contracts** (extending `controllers/audit_read.py` and
+`commands/audit_command.py` — signatures, not full bodies):
+
+```python
+# src/strata/controllers/audit_read.py (additions)
+
+@dataclass(frozen=True)
+class DeploymentChangeRecord:
+    """One audit record, ungrouped — `changes`'s own result shape, a
+    sibling of `DeploymentStatusRecord` (status's group-keep-latest view)
+    rather than a reuse of it: `changes` needs `execution_id`/`started_at`
+    to distinguish multiple runs of the same deployment, which `status`'s
+    one-row-per-deployment view has no use for."""
+
+    execution_id: str
+    deployment: str
+    status: str
+    started_at: str
+    completed_at: str
+    deployed_by: str
+    version: str
+    change_reference: ChangeReferenceModel | None
+
+
+def _iter_manifests(checkout_path: Path, sink: AuditGitSinkTargetModel, diagnostics: Diagnostics):
+    """The glob + parse + skip-corrupt-with-warning loop, extracted out of
+    `list_latest_per_deployment()`'s own inline version once a second
+    caller (`list_manifests_in_range()`) needed the identical enumeration
+    — shared, not duplicated, the same DRY instinct Phase 2 already
+    applied to `ensure_synced_checkout()`. Yields parsed
+    `DeploymentManifestModel`s only; grouping/filtering stays with each
+    caller."""
+
+
+def list_manifests_in_range(
+    checkout_path: Path,
+    sink: AuditGitSinkTargetModel,
+    *,
+    deployment: str | None,
+    since: datetime | None,
+    until: datetime | None,
+    status: str | None,
+    diagnostics: Diagnostics,
+) -> list[DeploymentChangeRecord]:
+    """Every manifest matching all given filters, sorted oldest to newest
+    by `started_at` — no grouping, unlike `list_latest_per_deployment()`."""
+
+
+def audit_changes(
+    context: SolutionContext,
+    deployment: str | None,
+    *,
+    since: str | None,
+    until: str | None,
+    status: str | None,
+) -> tuple[list[DeploymentChangeRecord], Diagnostics]:
+    """Same fail-fast order as `audit_status()`, with one extra zero-I/O
+    step first: parse/validate `since`/`until` (raises UsageError), then
+    resolve_readable_sink() (raises UsageError), then sync_read_checkout()
+    (raises AuditReadError), then list_manifests_in_range()."""
+```
+
+```python
+# src/strata/commands/audit_command.py (additions)
+
+@audit_command.command("changes")
+@click.argument("deployment", required=False)
+@click.option("--since", default=None, metavar="DATE", help="ISO-8601 date/datetime lower bound, inclusive.")
+@click.option("--until", default=None, metavar="DATE", help="ISO-8601 date/datetime upper bound, inclusive.")
+@click.option("--status", "status_filter", type=click.Choice(["success", "partial", "failed"]), default=None)
+@click.option("--path", type=click.Path(file_okay=False, path_type=Path), default=None, help="...")
+@output_option
+@quiet_option
+@verbose_option
+def changes_command(...) -> None:
+    """List every audit record in range, oldest to newest."""
+    with command_run("audit changes", output=output, quiet=quiet, verbose=verbose) as run:
+        context = open_solution(resolve_work_path(path)).require_valid()
+        run.describe(...)
+        records, diagnostics = audit_changes(context, deployment, since=since, until=until, status=status_filter)
+        if output == "console":
+            _print_changes_table(records)
+        run.report(diagnostics, root=context.root)
+        if isinstance(run.reporter, JsonReporter):
+            run.reporter.data = {"changes": [_change_to_json(r) for r in records]}
+        run.ok = True
+```
+
+**Failure classification — `changes`-specific additions** (everything
+`status` already has — no/multiple sinks, unreachable remote, corrupted
+manifest skipped with a warning, named-deployment-with-nothing-yet is not
+an error — applies identically):
+
+- A malformed `--since`/`--until` value → `UsageError` (exit 2), checked
+  before `resolve_readable_sink()` even runs — the first thing this
+  command checks, zero I/O, per "Date-filter validation" above.
+- `--status` given an unrecognised value → Click's own usage error
+  (exit 2), before this command's own code runs at all — not this
+  command's responsibility to validate, `click.Choice` already owns it.
+- A filter combination matching zero records (a real deployment, but
+  nothing in the given date range, or no record with the given status)
+  → **not an error**, same reasoning `status` already applies to a
+  named deployment with nothing recorded yet: the sink is configured and
+  reachable, there is just nothing matching. An info diagnostic, empty
+  list, exit 0.
+
+**Correction, found during a full review (2026-10-05): the empty-result
+message must not claim the sink is empty when filters, not an empty sink,
+are why nothing matched.** The first implementation reused
+`list_latest_per_deployment()`'s own "no audit records found in this sink
+yet" message unconditionally whenever `deployment` was `None` — but
+`changes` has three more filters (`since`/`until`/`status`) that can
+legitimately exclude every real record in a genuinely non-empty sink, and
+claiming "nothing in this sink" in that case is actively wrong, not merely
+vague (a real finding caught by actually checking message *content*, not
+only the diagnostic *code*, against a sink with real records in it).
+Fixed: `list_manifests_in_range()` now checks whether `since`/`until`/
+`status` were given before falling back to the sink-is-empty message —
+if any were, a new, distinct `audit_read_no_records_for_filters` code and
+"no audit records match the given filters" message is used instead. The
+true "nothing in this sink at all" message/code is now only reached when
+`deployment` and every other filter are `None`, where it is guaranteed
+accurate.
+
 ## Related Decisions
 
 No new ADR — this extends the existing Layer 2/4 design in
@@ -584,18 +798,163 @@ multi-sink disambiguation, the `changes` subcommand, retention/pruning,
   changelog entry. `strata audit changes` stays a tracked scope cut there
   too, not silently implied as done.
 
+### Phase 6 — `controllers/audit_read.py` additions for `changes` — ~~IMPLEMENTED (2026-10-05)~~
+
+Grounded directly against the real, currently-shipped `list_latest_per_deployment()`
+body (not re-derived from memory) — its inline loop is exactly:
+
+```python
+for manifest_path in sorted(search_root.rglob(MANIFEST_FILENAME)):
+    try:
+        manifest = DeploymentManifestModel.model_validate_json(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, PydanticValidationError, ValueError) as exc:
+        diagnostics.warning(f"could not read audit record: {exc}", source=str(manifest_path),
+                             code="audit_read_manifest_unparseable")
+        continue
+    ...
+```
+
+Concrete steps, in order:
+
+1. **Extract `_iter_manifests(search_root: Path, diagnostics: Diagnostics) -> Iterator[DeploymentManifestModel]`**
+   — the `sorted(search_root.rglob(...))` + try/except parse/warn/skip
+   block above, verbatim, yielding each successfully-parsed manifest.
+   Refactor of already-shipped, already-tested Phase 3 code — same
+   "extract once a second real caller needs it" discipline Phase 2
+   applied to `ensure_synced_checkout()`, not a speculative abstraction
+   built ahead of need.
+2. **Rewrite `list_latest_per_deployment()` to consume `_iter_manifests()`**
+   instead of its own inline loop — behaviour must stay byte-identical;
+   this is the step `test_audit_read.py`'s existing 15 tests (unchanged)
+   prove didn't regress.
+3. **Add `_parse_range_bound(value: str | None, flag_name: str) -> datetime | None`**
+   — `None` in, `None` out (an omitted `--since`/`--until`). Otherwise
+   `datetime.fromisoformat(value)`; if the result's `tzinfo is None`,
+   `.replace(tzinfo=timezone.utc)`. Catches `ValueError` from
+   `fromisoformat()` and re-raises as `UsageError` with the exact message
+   from "`strata audit changes` — range listing" above, naming
+   `flag_name` (`--since` or `--until`) so one function serves both
+   flags without duplicating the message text per-flag.
+4. **Add `DeploymentChangeRecord`** (frozen dataclass): `execution_id`,
+   `deployment`, `status`, `started_at`, `completed_at`, `deployed_by`,
+   `version`, `change_reference` — exactly the fields in the design's
+   module contract.
+5. **Add `list_manifests_in_range(checkout_path, sink, *, deployment, since, until, status, diagnostics) -> list[DeploymentChangeRecord]`**
+   — calls `_iter_manifests(checkout_path / sink.path, diagnostics)`,
+   applies (in order) the `deployment` name filter, the `since`/`until`
+   bounds against `manifest.started_at` (parsed once per manifest via
+   `datetime.fromisoformat()` — `started_at` is always aware UTC on a
+   real record, per `audit_run.py`, so no naive-handling needed on this
+   side, only on the user-supplied bound), the `status` filter: builds
+   one `DeploymentChangeRecord` per surviving manifest (same
+   `or "unknown"`/`or manifest.started_at` fallbacks
+   `list_latest_per_deployment()` already uses for optional fields), then
+   `sorted(..., key=lambda r: r.started_at)` (oldest to newest — the
+   opposite order from `status`'s alphabetical-by-deployment). Empty
+   result → reuse the exact same `diagnostics.info(...)` codes
+   `list_latest_per_deployment()` already emits
+   (`audit_read_no_records_for_deployment` / `audit_read_no_records`) —
+   one concept ("nothing matched"), one code, regardless of which
+   command asked, not a duplicate pair of near-identical codes.
+6. **Add `audit_changes(context, deployment, *, since, until, status) -> tuple[list[DeploymentChangeRecord], Diagnostics]`**
+   — `_parse_range_bound()` for both bounds first (zero I/O, raises
+   `UsageError` before anything else runs), then the identical
+   `_single_configuration()` → `resolve_readable_sink()` →
+   `sync_read_checkout()` sequence `audit_status()` already uses, then
+   `list_manifests_in_range()`.
+
+**Tests** (`tests/strata/controllers/test_audit_read.py`, extended, not a
+new file — 16 new, 31 total in the file): the existing 15 `status`-era
+tests pass completely unchanged, confirming the `_iter_manifests()`
+extraction really is behaviour-preserving; 5 direct `_parse_range_bound()`
+unit tests (omitted-flag, already-aware passthrough, naive-promoted-to-UTC
+— the exact bug this design calls out, asserted directly rather than
+"it works" — malformed value, and that the flag name appears in the
+message); 9 pure-filesystem `list_manifests_in_range()` tests
+(returns-every-record not just latest, oldest-to-newest sort,
+since/until/status/deployment filters individually and combined,
+corrupted-manifest-skipped, both zero-match cases); 2 zero-I/O
+`audit_changes()` ordering tests, each passing `None` as `context` itself
+and confirming the date error (not an `AttributeError` on `context`) is
+what surfaces — the starkest possible proof the parse genuinely runs
+before `context` is ever touched. Extended (not duplicated) the existing
+real end-to-end bare-repo test: reused the same three already-pushed
+manifests (gave the `older` one `status: failed` to make the status
+filter meaningful) and added `audit_changes()` assertions for the
+unfiltered list, a `status` filter, a combined `since`/`until` range, the
+malformed-date `UsageError`, and the zero-match case — no second bare
+repo stood up.
+Full check suite green: mypy (139 files), ruff check, ruff format,
+import-linter (1 kept, 0 broken), pytest (1934 passed, up from 1918).
+
+### Phase 7 — `commands/audit_command.py` additions for `changes` — ~~IMPLEMENTED (2026-10-05)~~
+
+Grounded against the real, currently-shipped `status_command`/
+`_print_status_table`/`_to_json` shapes — `changes` mirrors each one-for-one:
+
+1. **Add the `changes` subcommand**: `@audit_command.command("changes")`,
+   `deployment` positional (optional, same as `status`), `--since`/
+   `--until` (`default=None, metavar="DATE"`), `--status` as
+   `"status_filter"` (avoids shadowing the `click.option` name against
+   Python's own `status` — `type=click.Choice(["success", "partial",
+   "failed"])`, `default=None`), the same `--path`/`output_option`/
+   `quiet_option`/`verbose_option` as `status_command`. Body follows
+   `status_command`'s exact shape: `open_solution(...).require_valid()`,
+   `run.describe(...)`, call `audit_changes(context, deployment,
+   since=since, until=until, status=status_filter)`, console-print if
+   `output == "console"`, `run.report(diagnostics, root=context.root)`,
+   `isinstance(run.reporter, JsonReporter)` → `run.reporter.data =
+   {"changes": [...]}"`, `run.ok = True`. No `try`/`except` here either —
+   identical reasoning to `status_command`'s own (every raised error is a
+   `StrataError`, already caught by `command_run()`).
+2. **Add `_print_changes_table(records: list[DeploymentChangeRecord]) -> None`**
+   — same dynamic-`ljust()` convention as `_print_status_table()`, same
+   `"  (no audit records found)"` empty placeholder, columns `DEPLOYMENT`/
+   `STATUS`/`STARTED AT`/`EXECUTION ID` (per the worked example above —
+   deliberately narrower than `status`'s column set; `version`/
+   `deployed_by`/`change_reference` are JSON-only detail for `changes`,
+   not console columns, to keep an oldest-to-newest list of many rows
+   scannable).
+3. **Add `_change_to_json(record: DeploymentChangeRecord) -> dict[str, Any]`**
+   — distinct name from `status_command`'s own `_to_json()` (not a
+   reused/overloaded name in the same module): same
+   `change_reference.model_dump(exclude_none=True) if ... else None`
+   handling `_to_json()` already established, plus `execution_id` and
+   `started_at`.
+4. No change needed in `cli.py` — `audit_command` (the group) is already
+   registered; `changes` is a subcommand of it, same as `status`.
+
+**Tests** (`tests/strata/commands/test_commands_audit.py`, extended, not
+a new file — 16 total: 10 existing + 6 new): full CLI round-trip (console
+and JSON, oldest-to-newest ordering asserted on real output) using the
+same `_solution_with_sink()`/`_push_manifest()` helpers already in the
+file (both extended with an optional `status` kwarg, default `"success"`,
+so `changes`'s filter tests could push `failed`/`success` records without
+touching any existing call site); the malformed-`--since` case asserted
+end-to-end through the real CLI, exit code 2, with an explicit assertion
+that the "No audit git sink is configured" message does *not* appear —
+proof the date check really did run first, not just that the right code
+came back; the `--status` invalid-choice case (Click's own rejection,
+confirmed distinct from this command's own code); `DEPLOYMENT`/`--since`/
+`--until`/`--status` combined via the real CLI against three pushed
+manifests across two deployments; the zero-match case reports info not
+error, matching `status`'s own standard.
+Full check suite green: mypy (139 files), ruff check, ruff format,
+import-linter (1 kept, 0 broken), pytest (1940 passed, up from 1934).
+Smoke-tested the real installed `strata audit changes --help` output
+directly, matching Phase 4's own standard for `status`.
+
+`strata audit changes` is now a real, working command — both commands
+this doc designs are fully implemented.
+
 ## Remaining Work / Open Questions
 
-All 5 implementation phases above are complete — `strata audit status` is
-a real, working command as of 2026-10-05. What's left here is the
-deliberate scope cuts recorded during design, not a task list for
-`status` itself.
+All 7 implementation phases are complete — `strata audit status` and
+`strata audit changes` are both real, working commands as of 2026-10-05.
+What's left here is the deliberate scope cuts recorded during design, not
+a task list for either command's design itself.
 
 
-- **`changes`** (range listing, `--since`/`--until`/`--status` filters) —
-  shares every mechanism `status` builds (checkout sync, glob, parse);
-  only the final grouping step differs. Add once `status` is real and
-  tested, not before. Design above is unchanged and ready when picked up.
 - **Multi-sink reads** (a `--sink NAME` flag, merge + dedup by
   `execution_id` across more than one `git`-arm sink) — decided out of
   scope for now, not merely unconfirmed: neither real config (this repo's
@@ -613,13 +972,13 @@ deliberate scope cuts recorded during design, not a task list for
 **Still a genuinely open question:**
 
 - **Relationship to `audit diff`** (audit-trail.md's separate Should-have,
-  full before/after value diffing) — `changes` (once built) lists records;
-  it does not diff two of them against each other. Likely a natural
-  extension once `changes` ships (it already has every manifest in hand to
-  diff consecutive pairs), but deliberately not bundled into this design
-  to keep each phase's scope small and obvious, matching the
-  discoverability lesson already recorded against v1's gate system in
-  audit-trail.md.
+  full before/after value diffing) — `changes` lists records (design
+  complete, see above); it does not diff two of them against each other.
+  Likely a natural extension once `changes` ships (it already has every
+  manifest in hand to diff consecutive pairs), but deliberately not
+  bundled into this design to keep each phase's scope small and obvious,
+  matching the discoverability lesson already recorded against v1's gate
+  system in audit-trail.md.
 
 ## Changelog
 
@@ -740,4 +1099,118 @@ deliberate scope cuts recorded during design, not a task list for
   doc's top status line. Updated this doc's own header `Status:` from
   `draft` to `current` and closed out "Remaining Work" accordingly — all
   5 phases are now complete.
+- 2026-10-05: **Designed `strata audit changes` end to end**, per a
+  direct request, reusing every mechanism `status` already established
+  (single-sink resolution, glob-and-parse enumeration, fail-fast-before-
+  any-I/O) rather than redesigning from scratch. Corrected one inaccuracy
+  found while grounding the design in real code rather than the earlier
+  draft's assumption: `DeploymentManifestModel.status` is a **tri-state**
+  `Literal["success", "partial", "failed"]`, not success/failed-only —
+  `--status` uses `click.Choice` over the real three values, so `partial`
+  (a real, intentional outcome) can't be silently excluded by a filter
+  that only knew two. Identified and specified a genuinely new failure
+  mode `status` never had: a malformed `--since`/`--until` value, handled
+  as a third zero-I/O "tell the user first" check (parsed before
+  `resolve_readable_sink()`), plus the concrete naive-vs-aware-datetime
+  comparison bug this needs to avoid (`TypeError` if a user's
+  `--since 2026-10-01` parses naive while every real `started_at` is
+  timezone-aware UTC — `_parse_range_bound()` attaches UTC explicitly to
+  a naive parse rather than letting the comparison crash). Added module
+  contracts (`DeploymentChangeRecord`, a shared `_iter_manifests()`
+  generator extracted from `status`'s already-shipped
+  `list_latest_per_deployment()` rather than duplicated,
+  `list_manifests_in_range()`, `audit_changes()`, the `changes` CLI
+  subcommand) and two new Implementation Plan phases (6-7). Updated this
+  doc's header status line and Remaining Work to reflect "designed, not
+  yet implemented" rather than "deferred." No code changed — design only.
+- 2026-10-05: **Fleshed out Phases 6-7 into a concrete, ready-to-implement
+  checklist**, per a direct request for an implementation plan. Grounded
+  directly against the real, currently-shipped body of
+  `list_latest_per_deployment()` (quoted verbatim) rather than
+  re-describing the refactor from memory, so the `_iter_manifests()`
+  extraction step names the exact code being moved. Spelled out
+  `_parse_range_bound()`'s signature precisely (`flag_name` parameter, so
+  one function serves both `--since` and `--until` without duplicating
+  the error message per flag) and `list_manifests_in_range()`'s filter
+  order. Decided, rather than leaving implicit, that the empty-result
+  info diagnostics reuse `list_latest_per_deployment()`'s existing codes
+  (`audit_read_no_records_for_deployment`/`audit_read_no_records`) rather
+  than minting a near-duplicate pair for `changes` — one concept, one
+  code, regardless of which command asked. Specified that both phases
+  extend the existing `test_audit_read.py`/`test_commands_audit.py` files
+  rather than new ones, reusing already-established fixtures. No code
+  changed — plan only, ready for implementation.
+- 2026-10-05: **Implemented Phase 6**: `_iter_manifests()` extracted from
+  `list_latest_per_deployment()`'s own inline loop (its existing 15 tests
+  pass completely unchanged, confirming the extraction preserved
+  behaviour exactly); `_parse_range_bound()`, `DeploymentChangeRecord`,
+  `list_manifests_in_range()`, `audit_changes()` added as designed. 16
+  new tests in `test_audit_read.py` (31 total in the file): direct
+  `_parse_range_bound()` unit tests including the naive-promoted-to-UTC
+  case asserted explicitly; pure-filesystem `list_manifests_in_range()`
+  tests for every filter individually and combined, sort order, and both
+  empty-result cases; two zero-I/O `audit_changes()` tests that pass
+  `None` as `context` itself and still get the date error, not an
+  `AttributeError` — the starkest possible proof the parse runs before
+  `context` is ever touched; extended the existing real end-to-end
+  bare-repo test to also exercise `audit_changes()` against the same
+  three already-pushed manifests, rather than standing up a second bare
+  repo. Full check suite green: mypy (139 files), ruff check, ruff
+  format, import-linter (1 kept, 0 broken), pytest (1934 passed, up from
+  1918). Only Phase 7 (`commands/audit_command.py`'s `changes`
+  subcommand) remains before `strata audit changes` is a real, working
+  command.
+- 2026-10-05: **Implemented Phase 7** — the final phase. `commands/
+  audit_command.py`'s `changes` subcommand (mirroring `status_command`'s
+  exact shape one-for-one), `_print_changes_table()` (narrower console
+  columns than `status` by design — `version`/`deployed_by`/
+  `change_reference` are JSON-only), `_change_to_json()`. 6 new tests in
+  `test_commands_audit.py` (16 total: 10 existing + 6 new), extending
+  `_manifest_json()`/`_push_manifest()` with an optional `status` kwarg
+  (default `"success"`, no existing call site touched) so the new filter
+  tests could push `failed` records: the malformed-`--since` case
+  explicitly asserts the "No audit git sink is configured" message does
+  *not* appear, proving the date check ran first rather than merely
+  returning the right exit code; the `--status` invalid-choice case;
+  `DEPLOYMENT`/`--since`/`--until`/`--status` combined through the real
+  CLI; the zero-match case. Smoke-tested the real installed `strata audit
+  changes --help` output directly, matching Phase 4's own standard. Full
+  check suite green: mypy (139 files), ruff check, ruff format,
+  import-linter (1 kept, 0 broken), pytest (1940 passed, up from 1934).
+  All 7 Implementation Plan phases are now complete — `strata audit
+  status` and `strata audit changes` are both real, working commands.
+- 2026-10-05: **Full review of both commands, per a direct request** — a
+  line-by-line pass over `audit_read.py`/`audit_command.py` and every
+  test, not a re-read of the design. Found and fixed three real bugs,
+  none caught by the existing test suite because each needed checking
+  message *content* or a specific boundary case the original tests
+  happened not to exercise:
+  1. **`resolve_readable_sink()`'s error messages hardcoded "'strata
+     audit status' reads from..."** even though the function is shared
+     by `audit_changes()` too — misleading when the same check failed for
+     `strata audit changes`. Fixed to name both commands neutrally.
+  2. **`--until` with a bare date wasn't actually inclusive of that
+     whole day** — `--until 2026-10-04` parsed to midnight, silently
+     excluding anything later that day despite the help text's own
+     "inclusive" claim. Fixed via `_parse_range_bound(..., end_of_day=True)`
+     for `--until` only.
+  3. **`list_manifests_in_range()`'s empty-result message claimed "nothing
+     in this sink"** even when real records existed and `since`/`until`/
+     `status` filters were the actual reason nothing matched — found by
+     checking a real end-to-end test's diagnostic *message*, not just its
+     *code*. Fixed with a new, distinct `audit_read_no_records_for_filters`
+     code/message, reserving the "nothing in this sink" message for when
+     it's actually true.
+  Also minor: `changes` records now sort by the already-parsed `datetime`
+  rather than the raw `started_at` string (string-sort happened to agree
+  with datetime-sort for every real UTC-isoformatted record, but didn't
+  need to rely on that assumption once the parsed value was already in
+  hand). 8 new regression tests added across `test_audit_read.py` and
+  `test_commands_audit.py`, each named for the bug it guards against,
+  plus updated the one existing assertion the fix itself changed the
+  behaviour of. Updated this doc's documented exact message text and
+  added correction notes in both the "Sink selection" and `changes`
+  design sections rather than silently editing them. Full check suite
+  green: mypy (139 files), ruff check, ruff format, import-linter (1
+  kept, 0 broken), pytest (1948 passed, up from 1940).
 
