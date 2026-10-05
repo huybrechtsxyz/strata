@@ -1624,6 +1624,29 @@ assumed from the model's field list.
 | **Q4 — How it was applied** | `action`, `version`, timestamps, `commit_sha`/`commit_message`/`commit_author`, `force`/`dry_run` | **Mostly real.** `action`/`version`/`started_at`/`completed_at`/`duration_seconds` are genuinely populated. `commit_sha`/`commit_message`/`commit_author` have **zero construction call sites** despite `git rev-parse HEAD` already being a used pattern elsewhere in this codebase (`integrations/gitops.py`, `controllers/audit_push.py`) for an unrelated purpose. `force` isn't even threaded through `finalize_and_distribute_deploy_audit()`'s signature. | Read `audit_run.py`'s only `DeploymentManifestModel(...)` construction site directly.                                           |
 
 **Net:** only Q4's timing/version fields and the artifact-hash half of Q1
+had real, populated answers as of this table's own date (2026-10-03).
+
+**Update (2026-10-05) — Q2 and part of Q3 are no longer unpopulated.**
+This table is a historical snapshot, kept as-is rather than rewritten —
+what's changed since:
+
+- **Q2 ("why")**: `change_reference` CLI wiring shipped the same day this
+  table was written up as a gap — six `deploy run --change-*` flags,
+  opt-in (nothing forces a deploy to supply one). See the Should-have
+  list's `change_reference` entry.
+- **Q3 ("who approved")**: still **not** solved by PR-approver extraction
+  (that remains exactly as this table found it — v1 never requested
+  `reviews`/`reviewDecision`, v2 never built the extraction step, and it's
+  a Could-have, not pursued). Instead, `ChangeReferenceModel` grew
+  `approved_by`/`approved_at` (2026-10-05) — operator-supplied via
+  `deploy run --change-approved-by`/`--change-approved-at`, distinct from
+  `supplied_by` (whoever typed the reference) and `deployed_by` (whoever
+  ran the deploy). **Honest limit, stated directly:** this is
+  operator-attested, not independently verified against the tracker —
+  strictly better than conflating approver with executor, but not the
+  same as a real tracker-integration lookup (not built; no real
+  consumer's tracker integration exists yet to build it against). See
+  `audit_manifest_model.py`'s own docstring for the full reasoning.
 have real, populated answers today. Q2 and Q3 are fully unanswered — not
 degraded-gracefully like a best-effort PR lookup would be, just never wired
 at all.
@@ -2631,6 +2654,29 @@ flags, shipped 2026-10-05) — no REST-polling script to write at all.
   paragraph. Also noted audit-commands.md's own full-review pass (same
   day) that found and fixed three real bugs in the shipped commands. No
   code changed — doc catch-up only.
-
+- 2026-10-05: **Added `approved_by`/`approved_at` to `ChangeReferenceModel`**,
+  per a direct question ("differentiation between who executes and who
+  approves?"). Closes part of Q3 honestly, not fully: a third distinct
+  identity alongside `deployed_by` (who ran the deploy) and `supplied_by`
+  (who typed the change reference) — who *approved* it. Deliberately
+  **not** a replacement for PR-approver extraction (still not pursued,
+  per the update above) — a different, complementary mechanism. Design
+  decisions worth restating: both-or-neither validated on the model
+  itself (mirrors the existing `system`/`id`/`reason` discipline);
+  `deploy_command.py` additionally rejects `--change-approved-by`/`--at`
+  given without the base `--change-system`/`--change-id`/`--change-reason`
+  trio (an approval needs a change reference to approve — silently
+  dropping them would be worse than rejecting); `approved_at` deliberately
+  does **not** auto-derive from the run's own clock the way `supplied_at`
+  does, since the approval happened earlier, in the tracker. Stated
+  directly, not left implied: these fields are operator-supplied, not
+  independently verified — a future tracker-integration lookup would be
+  strictly stronger, not built since no real consumer's tracker
+  integration exists yet. Two new CLI flags on `deploy run`
+  (`--change-approved-by`/`--change-approved-at`), 15 new tests across
+  `test_models_audit_manifest.py`/`test_audit_run.py`/
+  `test_commands_deploy.py`. Full check suite green: mypy (139 files),
+  ruff check, ruff format, import-linter (1 kept, 0 broken), pytest
+  (1958 passed, up from 1948).
 
 

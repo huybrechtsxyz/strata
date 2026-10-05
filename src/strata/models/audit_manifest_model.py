@@ -25,7 +25,7 @@ shape, not just the docs:
 
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from strata.models.common_models import PlatformBaseModel, PlatformName
 
@@ -38,6 +38,24 @@ class ChangeReferenceModel(PlatformBaseModel):
     `models/change_reference_model.py`. `system` is an open string, not an
     enum: teams with internal/unsupported trackers must be able to use this
     without a strata release.
+
+    **Three separate identities, not two.** `deployed_by`
+    (`DeploymentManifestModel`, who *ran* the deploy) and `supplied_by`
+    (who *typed* this reference — usually the same actor, auto-derived
+    from `resolve_actor()`) both already existed; `approved_by`/
+    `approved_at` close the real gap docs/design/audit-trail.md's
+    compliance analysis flagged for Q3 ("who approved") — self-attestation
+    by the executor is not independent authorization under ISO 27001
+    A.12.1.2. **Honesty limit, stated directly rather than implied:**
+    `approved_by`/`approved_at` are operator-supplied (`deploy run
+    --change-approved-by`/`--change-approved-at`), the same as `reason` —
+    not independently verified against the tracker, and `approved_at`
+    deliberately does NOT auto-derive from the run's own clock the way
+    `supplied_at` does, since the approval happened earlier, in the
+    external system. A future tracker-integration lookup (fetching a real
+    approval record by `system`+`id`) would be a strictly stronger
+    replacement for operator-supplied values — not built here, since no
+    real consumer's tracker integration exists yet to build it against.
     """
 
     system: str = Field(
@@ -50,6 +68,26 @@ class ChangeReferenceModel(PlatformBaseModel):
     url: str | None = Field(default=None, description="Link to the change record")
     supplied_by: str = Field(description="Actor who supplied this reference")
     supplied_at: str = Field(description="ISO-8601 timestamp when this reference was supplied")
+    approved_by: str | None = Field(
+        default=None,
+        description="Who approved this change in the tracker — distinct from supplied_by (who typed this "
+        "reference) and deployed_by (who ran the deploy). Operator-supplied, not independently verified.",
+    )
+    approved_at: str | None = Field(
+        default=None,
+        description="ISO-8601 timestamp of the approval itself (in the tracker), not of this CLI invocation — "
+        "operator-supplied, never auto-derived from the run's own clock.",
+    )
+
+    @model_validator(mode="after")
+    def validate_approval_supplied_together(self) -> "ChangeReferenceModel":
+        """`approved_by`/`approved_at` are a pair — one without the other is
+        half an attestation, the same "supplied together or not at all"
+        discipline `deploy_command.py` already enforces for `system`/`id`/
+        `reason`."""
+        if (self.approved_by is None) != (self.approved_at is None):
+            raise ValueError("approved_by and approved_at must be supplied together, or not at all.")
+        return self
 
 
 class ManifestPullRequestModel(PlatformBaseModel):

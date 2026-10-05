@@ -268,6 +268,40 @@ def test_change_reference_supplied_by_and_at_are_auto_derived_not_accepted_as_in
     assert '"supplied_at": "' in manifest_text
 
 
+def test_change_reference_approved_by_and_at_are_populated_when_given(tmp_path: Path, _terraform_stub):
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    _finalize(
+        root,
+        build_path,
+        change_system="jira",
+        change_id="OPS-1234",
+        change_reason="planned maintenance",
+        change_approved_by="jsmith",
+        change_approved_at="2026-10-04T09:00:00+00:00",
+    )
+
+    manifest_path = next(layout.audit_dir(root).rglob("_manifest.json"))
+    manifest_text = manifest_path.read_text()
+    assert '"approved_by": "jsmith"' in manifest_text
+    assert '"approved_at": "2026-10-04T09:00:00+00:00"' in manifest_text
+
+
+def test_change_reference_approval_fields_absent_by_default(tmp_path: Path, _terraform_stub):
+    """Approval is opt-in — a change_reference with no approval info supplied
+    writes no approved_by/approved_at at all (exclude_none on write)."""
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    _finalize(root, build_path, change_system="jira", change_id="OPS-1234", change_reason="planned maintenance")
+
+    manifest_path = next(layout.audit_dir(root).rglob("_manifest.json"))
+    manifest_text = manifest_path.read_text()
+    assert "approved_by" not in manifest_text
+    assert "approved_at" not in manifest_text
+
+
 def test_manifest_omits_sbom_reference_without_error_when_absent(tmp_path: Path, _terraform_stub):
     """Unlike `resolved.yaml`, a missing SBOM is not an error — SBOM
     generation is itself optional."""

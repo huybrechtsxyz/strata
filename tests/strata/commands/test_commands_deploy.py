@@ -259,3 +259,73 @@ def test_partial_change_reference_flags_exit_two_before_deploy_runs(runner, solu
     result = _deploy(runner, "app", "--path", solution, "--force", "--change-system", "jira")
     assert result.exit_code == EXIT_USAGE
     assert _stub_terraform == []  # deploy_run() must never have been called
+
+
+def test_change_approval_flags_populate_the_manifest(runner, solution, _stub_terraform):
+    from strata.utils import layout
+
+    _build(runner, solution)
+    result = _deploy(
+        runner,
+        "app",
+        "--path",
+        solution,
+        "--force",
+        "--change-system",
+        "jira",
+        "--change-id",
+        "OPS-1234",
+        "--change-reason",
+        "planned maintenance",
+        "--change-approved-by",
+        "jsmith",
+        "--change-approved-at",
+        "2026-10-04T09:00:00+00:00",
+    )
+    assert result.exit_code == EXIT_SUCCESS, result.output
+
+    manifest_path = next(layout.audit_dir(solution).rglob("_manifest.json"))
+    manifest_text = manifest_path.read_text()
+    assert '"approved_by": "jsmith"' in manifest_text
+    assert '"approved_at": "2026-10-04T09:00:00+00:00"' in manifest_text
+
+
+def test_partial_change_approval_flags_exit_two_before_deploy_runs(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _deploy(
+        runner,
+        "app",
+        "--path",
+        solution,
+        "--force",
+        "--change-system",
+        "jira",
+        "--change-id",
+        "OPS-1234",
+        "--change-reason",
+        "planned maintenance",
+        "--change-approved-by",
+        "jsmith",
+    )
+    assert result.exit_code == EXIT_USAGE
+    assert _stub_terraform == []  # deploy_run() must never have been called
+
+
+def test_change_approval_flags_without_the_base_trio_exit_two(runner, solution, _stub_terraform):
+    """An approval needs a change reference to approve — --change-approved-by/
+    --change-approved-at alone (no --change-system/--change-id/--change-reason)
+    must not be silently dropped."""
+    _build(runner, solution)
+    result = _deploy(
+        runner,
+        "app",
+        "--path",
+        solution,
+        "--force",
+        "--change-approved-by",
+        "jsmith",
+        "--change-approved-at",
+        "2026-10-04T09:00:00+00:00",
+    )
+    assert result.exit_code == EXIT_USAGE
+    assert _stub_terraform == []

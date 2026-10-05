@@ -93,6 +93,8 @@ def finalize_and_distribute_deploy_audit(
     change_classification: str | None = None,
     change_title: str | None = None,
     change_url: str | None = None,
+    change_approved_by: str | None = None,
+    change_approved_at: str | None = None,
 ) -> Diagnostics:
     """Finalize the manifest + metrics for a `deploy run` invocation, write
     them locally, then distribute to every configured sink.
@@ -123,6 +125,15 @@ def finalize_and_distribute_deploy_audit(
         change_classification: `deploy run --change-classification`, optional.
         change_title: `deploy run --change-title`, optional.
         change_url: `deploy run --change-url`, optional.
+        change_approved_by: `deploy run --change-approved-by` — who approved
+            this change in the tracker, distinct from `supplied_by` (who
+            typed this reference) and `deployed_by` (who ran the deploy).
+            Supplied together with `change_approved_at` or not at all —
+            enforced by `ChangeReferenceModel`'s own validator, not
+            re-checked here. Operator-supplied, not independently verified.
+        change_approved_at: `deploy run --change-approved-at` — ISO-8601
+            timestamp of the approval itself (in the tracker), never
+            auto-derived from this run's own clock.
 
     Returns:
         Findings from finalizing/writing/distributing only — never
@@ -155,6 +166,8 @@ def finalize_and_distribute_deploy_audit(
         classification=change_classification,
         title=change_title,
         url=change_url,
+        approved_by=change_approved_by,
+        approved_at=change_approved_at,
         actor=actor,
         supplied_at=completed_at.isoformat(),
     )
@@ -426,6 +439,8 @@ def _build_change_reference(
     classification: str | None,
     title: str | None,
     url: str | None,
+    approved_by: str | None,
+    approved_at: str | None,
     actor: str,
     supplied_at: str,
 ) -> ChangeReferenceModel | None:
@@ -437,7 +452,10 @@ def _build_change_reference(
     `deploy_command.py` enforces they're supplied together (a `UsageError`
     before `deploy_run()` executes otherwise) — trusted here, not
     re-validated, the same way a sink's own exactly-one-arm validator is
-    trusted by `_dispatch_sink()` rather than re-checked.
+    trusted by `_dispatch_sink()` rather than re-checked. `approved_by`/
+    `approved_at` are similarly enforced supplied-together by
+    `deploy_command.py`, with `ChangeReferenceModel`'s own validator as a
+    second line of defense (same belt-and-suspenders pattern).
     """
     if not system and not change_id and not reason:
         return None
@@ -451,4 +469,6 @@ def _build_change_reference(
         url=url,
         supplied_by=actor,
         supplied_at=supplied_at,
+        approved_by=approved_by,
+        approved_at=approved_at,
     )

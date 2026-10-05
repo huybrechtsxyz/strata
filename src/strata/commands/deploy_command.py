@@ -115,6 +115,21 @@ def deploy_command() -> None:
     metavar="TEXT",
     help="Link to the change record. Optional.",
 )
+@click.option(
+    "--change-approved-by",
+    default=None,
+    metavar="TEXT",
+    help="Who approved this change in the tracker — distinct from whoever ran this deploy or supplied this "
+    "reference. Operator-supplied, not independently verified. Required together with --change-approved-at, "
+    "and only meaningful alongside --change-system/--change-id/--change-reason.",
+)
+@click.option(
+    "--change-approved-at",
+    default=None,
+    metavar="TEXT",
+    help="ISO-8601 timestamp of the approval itself (in the tracker), not of this invocation. Required "
+    "together with --change-approved-by.",
+)
 @output_option
 @quiet_option
 @verbose_option
@@ -132,6 +147,8 @@ def deploy_run_command(
     change_classification: str | None,
     change_title: str | None,
     change_url: str | None,
+    change_approved_by: str | None,
+    change_approved_at: str | None,
     output: str,
     quiet: bool,
     verbose: bool,
@@ -152,6 +169,15 @@ def deploy_run_command(
         change_fields = (change_system, change_id, change_reason)
         if any(change_fields) and not all(change_fields):
             raise UsageError("--change-system/--change-id/--change-reason must be supplied together, or not at all.")
+
+        approval_fields = (change_approved_by, change_approved_at)
+        if any(approval_fields) and not all(approval_fields):
+            raise UsageError("--change-approved-by/--change-approved-at must be supplied together, or not at all.")
+        if any(approval_fields) and not all(change_fields):
+            raise UsageError(
+                "--change-approved-by/--change-approved-at require --change-system/--change-id/--change-reason "
+                "to also be supplied — an approval needs a change reference to approve."
+            )
 
         context = open_solution(resolve_work_path(path)).require_valid()
         solution = context.controller.solution
@@ -196,6 +222,8 @@ def deploy_run_command(
             change_classification=change_classification,
             change_title=change_title,
             change_url=change_url,
+            change_approved_by=change_approved_by,
+            change_approved_at=change_approved_at,
         )
         diagnostics.extend(audit_diagnostics)
 

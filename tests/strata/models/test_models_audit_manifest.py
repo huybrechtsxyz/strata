@@ -121,3 +121,57 @@ def test_manifest_sub_models_importable_directly():
     assert ManifestStageModel is not None
     assert ManifestStepModel is not None
     assert ChangeReferenceModel is not None
+
+
+# ---------------------------------------------------------------------------
+# ChangeReferenceModel — approved_by/approved_at (who approved, distinct
+# from supplied_by/deployed_by)
+# ---------------------------------------------------------------------------
+
+
+def _minimal_change_reference(**overrides) -> dict:
+    data = {
+        "system": "azure_devops",
+        "id": "OPS-1234",
+        "reason": "scheduled maintenance window",
+        "supplied_by": "ci-runner",
+        "supplied_at": "2026-10-05T14:00:00+00:00",
+    }
+    data.update(overrides)
+    return data
+
+
+def test_change_reference_approval_fields_default_to_none():
+    model = ChangeReferenceModel.model_validate(_minimal_change_reference())
+    assert model.approved_by is None
+    assert model.approved_at is None
+
+
+def test_change_reference_accepts_both_approval_fields():
+    model = ChangeReferenceModel.model_validate(
+        _minimal_change_reference(approved_by="jsmith", approved_at="2026-10-04T09:00:00+00:00")
+    )
+    assert model.approved_by == "jsmith"
+    assert model.approved_at == "2026-10-04T09:00:00+00:00"
+
+
+def test_change_reference_rejects_approved_by_without_approved_at():
+    with pytest.raises(ValidationError, match="approved_by and approved_at must be supplied together"):
+        ChangeReferenceModel.model_validate(_minimal_change_reference(approved_by="jsmith"))
+
+
+def test_change_reference_rejects_approved_at_without_approved_by():
+    with pytest.raises(ValidationError, match="approved_by and approved_at must be supplied together"):
+        ChangeReferenceModel.model_validate(_minimal_change_reference(approved_at="2026-10-04T09:00:00+00:00"))
+
+
+def test_change_reference_approved_by_is_distinct_from_supplied_by():
+    """The whole point: an independent approver, not whoever typed the reference."""
+    model = ChangeReferenceModel.model_validate(
+        _minimal_change_reference(
+            supplied_by="ci-runner", approved_by="jsmith", approved_at="2026-10-04T09:00:00+00:00"
+        )
+    )
+    assert model.supplied_by == "ci-runner"
+    assert model.approved_by == "jsmith"
+    assert model.supplied_by != model.approved_by
