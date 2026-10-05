@@ -292,3 +292,30 @@ Execution order (each its own small, checked phase per repo convention —
   --help` lists all six commands. Local/reversible only — no tag pushed, no
   CI triggered, no publish; Decisions 1/3 and `scripts/Release.ps1` remain
   the same still-open items as before.
+- 2026-10-05: **Built alpha6** — bumped `VERSION.txt` to `2.0.0-Alpha6`
+  (normalizes to `2.0.0a6`; confirmed via `packaging.version.Version`
+  before committing to it, same verification as every prior bump). Note:
+  alpha3-5 were bumped in earlier sessions without a matching changelog
+  entry here — not re-created retroactively, just flagged so the gap in
+  this log isn't mistaken for alpha3-5 never having existed.
+  **Caveat hit again, same "sharp edge" `version.py`'s own docstring
+  documents:** a plain `uv sync` did not regenerate the editable install's
+  `dist-info` (stayed `xyz_strata-2.0.0a5.dist-info` — confirmed by
+  inspecting it directly, and by `get_version()` still reporting `2.0.0a5`
+  after the sync) — needed `uv sync --reinstall-package xyz-strata` to
+  force the rebuild; worth remembering for the next bump rather than
+  re-discovering. Also found that `uv sync` alone (no `--all-extras`)
+  silently drops the `docs` optional-dependency group from the dev venv —
+  restored with `uv sync --all-extras --index-strategy unsafe-best-match`
+  immediately after, an unrelated side-effect of running sync at all, not
+  of the version bump itself. Full check suite green post-bump: mypy (139
+  files), ruff check, ruff format, import-linter (1 kept, 0 broken),
+  pytest (1958 passed). `uv build --index-strategy unsafe-best-match`
+  produced `xyz_strata-2.0.0a6-py3-none-any.whl`; installed into a fresh
+  isolated `uv venv`, confirmed `strata version` → `2.0.0a6` and `strata
+  --help` now lists **seven** commands (`audit` added this session,
+  alongside the original six). Verification venv removed after; `dist/`
+  build artifacts left in place, git-ignored, nothing staged beyond
+  `VERSION.txt` itself (confirmed via `git status`). Local/reversible
+  only — no tag pushed, no CI triggered, no publish; Decisions 1/3 and
+  `scripts/Release.ps1` remain the same still-open items as before.
