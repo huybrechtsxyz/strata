@@ -934,456 +934,61 @@ real, working, live example in the repo's own coverage-check fixture.
 - [ADR-0006](../decisions/0006-context-shared-stage-runtime-store.md) — Context, the `${step:}` token this doc doesn't cover yet
 - [docs/work/gap_fit_v1.md](../work/gap_fit_v1.md) gaps #8, #9, #10 — the real-world evidence (`.v2-haven`) that triggered this section
 
-## Remaining Work / Open Questions
+## Deferred
 
-- ~~Build the `environment` kind~~ — **done**, this claim was stale:
-  `EnvironmentModel`/`PlatformKind.ENVIRONMENT` already exists and is used
-  extensively (`value_controller.py`, `build_value_references()`, etc.).
-  ~~What's still open: wire `_validate_dynamic(environment_model=...)` on
-  `DnsService`/`NetworkService`/`FirewallService`/`ModuleService` — one
-  shared pattern, four call sites (sketched already in ADR-0002's worked
-  example).~~ — **also done, 2026-09-28, via a different mechanism than
-  sketched**: that specific per-service `_validate_dynamic()` shape was
-  never built; the same outcome (every reachable document's tokens
-  checked against the deployment's resolved environment) is achieved by
-  `semantic_checks.py`'s `_check_deployment_value_tokens()` instead,
-  extended in Phase 7 to reach every kind, not just DNS/network/
-  firewall/module.
-- ~~Build the actual resolver/router (partial regex substitution + secret-
-  shaped-leaf routing) — **decided 2026-09-25: one shared implementation,
-  applied uniformly to every kind above, built at deploy time**; **design
-  completed 2026-09-28, see the new section above** (per-integration
-  delivery mechanisms, phased plan). Still not started — the phased plan
-  above is the concrete next step, no longer blocked on undesigned
-  questions.~~ — **done, 2026-09-28**: this was the entire subject of the
-  "Full Solution" Phases 0-7 above — Terraform/Helm/Compose delivery,
-  escape syntax, and the validate-time cross-check are all implemented
-  and tested.
 - `DnsRecordModel.name` has no Value-token union at all (only `.value`
-  does) — found 2026-09-25 via real evidence (`cfg-deployment/stacks/
-  spoke/dns.yaml`'s own comment). A schema change, not a resolution change;
-  logged here, not designed yet.
-- Add `${step:step_name.output_key}` as a fourth token kind once Context
-  ([ADR-0006](../decisions/0006-context-shared-stage-runtime-store.md)) is
-  built, and re-add an output-sourced binding to `DnsRecordModel`.
+  does) — a real, narrow, not-yet-designed schema gap, found via real
+  `cfg-deployment` evidence. Revisit if a real need to parametrize a
+  record's name shows up.
+- `${step:step_name.output_key}` (a fourth token kind, reading Context)
+  waits on Context itself ([ADR-0006](../decisions/0006-context-shared-stage-runtime-store.md))
+  being built — tracked there, not here.
+- A Value token embedded inside a `store: constant` field's own value is
+  never resolved by `_resolve_store_value()`/`build_value_references()` —
+  confirmed real during a live `.v2-cfg` migration, left as a literal with
+  an explanatory comment rather than worked around.
+- A bare, unescaped `${KEY}`-shaped token with no recognized kind prefix
+  has no lint hint yet — smaller and lower-priority than everything above,
+  not yet designed.
 
-## Changelog
+## History
 
-- 2026-09-28: **Designed (not yet implemented)** the concrete deploy-time
-  resolver closing `docs/work/gap_fit_v1.md` gaps #8/#9/#10, triggered by the
-  `.v2-haven` coverage-check migration. Key finding:
-  `resolve_value_tokens_in_mapping()` is already field-agnostic, so closing
-  gap #8 (`configuration`/`custom` dicts) needs new call sites, not a new
-  algorithm. Designed per-integration delivery (Terraform:
-  `TF_VAR_<name>=<json>` for the whole `dns`/`networks`/`firewalls`
-  payload, extending the same never-touches-disk pattern
-  `backend.configuration` already has; Helm: rewrite `values.yaml` for
-  non-secrets, `--set-string <dotted.path>=<value>` for secrets; Compose:
-  rewrite the file for non-secrets, bare `${KEY}` rename + `env:` kwarg for
-  secrets) and a 6-phase implementation plan. Also found this design
-  substantially resolves gap #10 as a side effect (no more field-allowlist
-  means no more false-green-light), leaving only the separate, smaller
-  bare-`${KEY}`-token lint hint open.
-- 2026-09-24: Created, consolidating the recurring "Environment cross-check
-  deferred until `environment` kind exists" remaining-work item duplicated
-  across ADR-0005/0007/0008/0009.
-- 2026-09-25: Investigated dns/networks token resolution as a candidate
-  `build run` feature (docs/work/build-command.md's gap table). Found
-  real evidence it's genuinely wanted (cfg-deployment's `network.yaml`/
-  `dns.yaml` comments) but confirmed v1 itself never resolves these at
-  build time — only at deploy, with fully-resolved values and a fail-loud
-  rule. Decided against a `build run`-scoped, `dns`/`network`-only fix;
-  recorded the one-shared-resolver-at-deploy-time decision above. Also
-  corrected the stale "`environment` kind not built" claim.
-- 2026-09-25: Investigated `output.template` (ADR-0023 D3) as a candidate
-  `build run` feature. Found the same flaw as the dns/networks finding
-  above: ADR-0023's Phase 4 sketch assumed full build-time rendering, but
-  `variables`/`flags` only carry `constant`/`environment`-backed values at
-  build time — any real template referencing a Vault/AppConfig-backed key
-  would raise unconditionally, every build. Split into build-time
-  validation (genuinely buildable, not yet implemented) and deploy-time
-  rendering (blocked on `deploy run`, same as (B) above). This led to
-  naming and documenting all three of strata's value-supply mechanisms
-  (A/B/C above) explicitly, since (B) and (C) were at risk of being
-  conflated or merged — they solve different problems and should stay
-  separate, but share one resolution primitive once deploy exists.
-- 2026-09-28: **Added the "Full Solution" section** — unified Phase 1
-  generalization, the escape syntax, and the gap #8/#9/#10 resolver into
-  one end-to-end pipeline (author -> validate -> build -> deploy), and
-  replaced the resolver-only phased plan with a full 9-phase
-  (0-8) implementation plan. Corrected one earlier framing while unifying:
-  unescaping (`$${` -> `${`) needs no resolved values, so it belongs at
-  **build time** in each projection writer, not deferred to the deploy-time
-  resolver as the escape-syntax section originally said — this makes an
-  escape-only field (no real secret involved, e.g. Gatus's) already correct
-  right after `build run`, with no dependency on `deploy run` or the
-  resolver's other phases. Design only, nothing implemented yet.
-- 2026-09-25: **Implemented the build-time-validation half of `output.template`.**
-  Added `jinja2` as a dependency; `OutputModel`/`ProvisionerModel.output`
-  (valid for any tool, unlike `backend`/`properties`); `strata/utils/templater.py`'s
-  `validate_template_references()` — static-only, no rendering, two tiers
-  (unknown root name via `jinja2.meta.find_undeclared_variables()`; unknown
-  `variables.KEY`/`flags.KEY`/`secrets.KEY` via an AST walk for `Getattr`/
-  `Getitem` nodes; `properties`/`custom` skipped, arbitrary shape). Wired
-  into `InfraIntegration.prepare()`: when `provisioner.output.template` is
-  set, `default_output()` is skipped entirely and nothing is written for
-  that provisioner — validated only, deploy renders later. `template_path`
-  is resolved by `build_controller.py` (workspace-relative, no `@repo/`
-  yet — no evidenced need) and passed through explicitly, matching
-  `sync_source()`'s "controller resolves paths, integration consumes
-  already-resolved ones" split (ADR-0021 D2) — `templater.py` itself has no
-  dependency on `ResolvedWorkspaceGraph`/`strata.integrations` (layering,
-  ADR-0003), callers build the `known_names` schema and pass plain
-  `dict`/`set` data in. 24 new tests (9 unit, 3 `prepare()`-level, 3
-  end-to-end through `build_run()`, plus model tests). Full check suite
-  green (1036 tests, mypy 103 files, 0 broken import-linter contracts).
-- 2026-09-25: **Review pass found a real gap**: `--dry-run` skipped
-  `output.template` validation entirely (it lived inside `sync_source()`'s
-  branch, past the `if dry_run: ...; continue` early exit) — contradicting
-  `build_run()`'s own documented rule that a dry run still catches what it
-  cheaply can (already true for `--resolve`'s validation). Fixed:
-  `template_path` resolution and the validation call now happen before the
-  `dry_run` branch, so a bad reference or a missing template file is
-  caught under `--dry-run` too, with zero filesystem mutation. 2 new tests
-  confirm this. Full check suite green (1038 tests).
-- 2026-09-28: **Validated the Full Solution design against real source
-  before implementing, per request** ("let's validate the design before we
-  implement it"). Found and fixed two real problems: (1) generalizing Phase
-  1 via a `model_validator` on `PlatformBaseModel` doesn't work — grep
-  confirmed `configuration`/`custom` is `dict[str, Any] | None` on 18
-  models, which Pydantic never recurses into on its own, so the validator
-  would need to reimplement `_iter_strings()` itself anyway; corrected to
-  extend Phase 2's existing `unresolved_value_tokens()` walk instead of
-  adding a second mechanism. (2) "unescape at build time, resolver needs no
-  escape-awareness" is disproven for Terraform — `deploy_controller.py:303`
-  proves `backend.configuration` resolves straight from the in-memory
-  model, never from the on-disk (never-rewritten) `.auto.tfvars.json`, so a
-  build-time unescape there would be invisible to deploy; also confirmed
-  `resolve_value_tokens()`'s unanchored regex would today mismatch an
-  escaped `$${var:x}` and produce a stray leading `$`. Corrected to fold
-  escape-handling into the resolver itself, deploy-time, uniform across all
-  three integrations — noting the real consequence that a Gatus-style
-  escape-only field will now need `deploy run` (not just `build run`) once
-  gap #8 wires resolution into `configuration`/`custom` at all. Full
-  Solution section and 8-phase implementation plan (0-7) updated in place
-  to reflect both corrections. Design only, still nothing implemented.
-- 2026-09-28: **Implemented Phases 0-1 of the plan** (escape primitives +
-  generalized malformed-token detection), per request ("design, plan, and
-  implement phase 1"). `value_tokens.py`: added
-  `strip_escaped_value_tokens()`/`find_malformed_value_tokens()`; refactored
-  `validate_value_tokens()` to reuse the latter; made `has_value_tokens()`/
-  `extract_value_tokens()` escape-aware (fixes the unanchored-match bug
-  found during design validation). `environment_service.py`:
-  `unresolved_value_tokens()` now also flags malformed candidates anywhere
-  in the document walk, closing gap #8's `configuration`/`custom` blind
-  spot without touching the four existing field-level validators. 17 new
-  tests; full check suite green (1152 tests). Did **not** make
-  `resolve_value_tokens()` itself escape-aware yet — no real resolution
-  call site needs it before Phases 2-5. Checked real impact against
-  `.v2-haven`: 44 new errors across 17 module files (`docs/work/gap_fit_v1.md`
-  gap #8 has the full breakdown) — left unfixed, per explicit request, as
-  its own dedicated follow-up rather than mass-editing 17 real files in
-  the same change.
-- 2026-09-28: **Implemented Phase 2** (Terraform `dns`/`networks`/
-  `firewalls` payload resolution), per request ("design, plan, and
-  implement phase 2"). Made `resolve_value_tokens()` itself escape-aware
-  first (a combined regex matches the escaped-literal shape before the
-  real-token shape, so an unanchored match can never reach inside an
-  escaped span — the exact bug flagged, not yet fixed, in the design
-  validation pass) — this was Phase 0's one deferred piece, needed now that
-  a real resolution call site exists. Added
-  `build_dns_networks_firewalls_payloads()` (`terraform_projection.py`),
-  wired into `deploy_controller.py`'s per-step loop: computed once per run,
-  re-resolved per step using the same `tokens` dict already built for
-  `backend.configuration` (dependency-scoped `${output:}` support falls out
-  for free, matching gap #11's own note that this call site needs zero
-  extra design work). Empty categories skipped, matching `planned_files()`'s
-  convention. Confirmed via a new test that the on-disk
-  `dns.auto.tfvars.json` `build run` wrote stays literal/unresolved —
-  only `TF_VAR_dns` carries the resolved payload. 4 new tests (1 resolver,
-  1 deploy_controller, 2 mapping-level); full check suite green (1156
-  tests); `.v2-haven` unaffected (same known 44 errors, deploy-time only).
-- 2026-09-28: **Found gap #13, implemented Phase 4 scoped down**, per
-  request ("design, plan, and implement phase 4"). Checked whether Helm's
-  secret delivery had a real invocation to wire into before building it —
-  it doesn't: `ProvisionerModel` has no release/chart/namespace field,
-  no test exercises a `tool: helm`/`tool: compose` step through
-  `deploy_run()`, and Helm's real granularity (one release per module,
-  many modules per namespace-targeting step) structurally doesn't fit the
-  current per-step loop shape either. Logged as gap #13
-  (`docs/work/gap_fit_v1.md`), separate from gap #9. Built the piece that doesn't
-  depend on it: new `resolve_module_values()` (`helm.py`) — pure,
-  disk-free, applies Phase 3's path-tracking to one module's rendered
-  `values.yaml`, mirroring `_render_values()`'s own testable convention.
-  4 new tests; full check suite green (1169 tests). Compose (Phase 5) is
-  blocked on gap #13 the same way — not attempted.
-- 2026-09-28: **Resolved gap #12** (`docs/work/gap_fit_v1.md`), per pushback that
-  the design's earlier "zero evidence" recommendation there was wrong, and
-  a direct question about whether DNS/firewall/network genuinely need
-  infra outputs (VM IPs, cluster data). Checked v1's real source (not the
-  fixture): `DnsRecordModel.output_key` is real, working v1 code — v1
-  defers resolution entirely to Terraform's own HCL (bucket coordinates,
-  inject a plain `TF_VAR_<output_key>`, module reads `var.X` itself).
-  Explicitly rejected switching v2 to that model — v2's Python-side
-  embedded-token substitution (this doc's own design, already built in
-  Phase 2) stays; only the missing step-ownership piece needed fixing.
-  `workspace_model.py`'s `target_names` now accepts `dns_zones`/
-  `networks`/`firewalls`, reusing `validate_provisioning_steps()`'s
-  existing shared-target ordering rule; `deploy_controller.py` delivers a
-  claimed document only to its owning step(s), resolved with that step's
-  own outputs, and raises one clear diagnostic for an unclaimed
-  `${output:}` document. 2 new tests; full check suite green (1158
-  tests); `.v2-haven` unaffected. Full gap #12 write-up lives in
-  `docs/work/gap_fit_v1.md`, not duplicated here.
-- 2026-09-28: **Implemented Phase 3** (secret path-tracking primitive), per
-  request ("design, plan phase 3" then "implement phase 3"). New
-  `resolve_value_tokens_tracking_secrets()` (`value_tokens.py`) — a
-  separate function from `resolve_value_tokens_in_mapping()` (Terraform's
-  Phase 2 use delivers the whole payload via `TF_VAR_<name>` either way
-  and never needed the split). A secret-shaped leaf's original,
-  unresolved literal is left untouched in the returned dict rather than
-  deleted — Helm's `--set-string`/Compose's `env:` both override whatever
-  a file already has at that path regardless. Verified against the real
-  `immich.yaml` nested-path shape and a mixed `${var:}`+`${secret:}`
-  connection string (secret-shaped as a whole, per this doc's own
-  existing rule, reported only in the secrets map). 7 new tests; full
-  check suite green (1165 tests). No `deploy_controller.py`/`helm.py`
-  wiring yet — that's Phase 4, which consumes this primitive's output.
-- 2026-09-28: **Completed Phase 4** (Helm delivery), by implementing gap
-  #13 (`docs/work/gap_fit_v1.md`) — the blocker this same day's earlier entry
-  scoped Phase 4 down around. `resolve_module_values()` (built earlier
-  today) now has a real caller: `HelmIntegration.deploy_namespace()`
-  rewrites `values.yaml` for non-secret leaves and delivers secret-shaped
-  ones via a new `--set-string` argv path. Full design/implementation
-  write-up lives in `docs/work/deploy-command.md`'s "Helm/Compose
-  orchestration" section, not duplicated here. Compose (Phase 5) remains
-  blocked — no `ComposeIntegration.deploy_namespace()` yet. 40 tests in
-  `test_integrations_helm.py`, 3 in `test_deploy_controller.py`; full
-  check suite green (mypy 107 files, ruff clean, import-linter 1/0,
-  pytest 1185 passed).
-- 2026-09-28: **Completed Phase 5** (Compose delivery), per direct request
-  ("so lets get back to phase 4. that should be complete, making phase 5
-  available?"). Confirmed Phase 4 was indeed complete, then built Phase 5's
-  own primitive: `resolve_value_tokens_renaming_secrets()` (`value_tokens.py`)
-  is genuinely new logic, not a Phase-3 reuse — checked v1's real
-  `ResolvedValues.as_compose_env()`/`inject_compose_env()` first (evidence
-  over assumption) and confirmed Compose has no whole-path override
-  mechanism the way Helm's `--set-string` does; it substitutes `${KEY}`
-  occurrences *within* a string from the subprocess's own environment, so
-  resolution must happen per-token, not per-leaf, and the returned secrets
-  map is keyed by the token's own `KEY` name (not a dotted path — matches
-  v1's real flat, deployment-wide `as_compose_env()` convention exactly).
-  `resolve_compose_values()` (`compose.py`) is the thin per-tool wrapper
-  (mirrors `resolve_module_values()`'s placement); `ComposeIntegration.
-  deploy_namespace()` reads the namespace's already-merged
-  `docker-compose.yml`, rewrites it, and delivers the renamed secrets via
-  `docker stack deploy`'s own subprocess environment — no `.env` file
-  needed, since `Integration.run()`'s `env` kwarg already merges per-call
-  onto `os.environ` (simpler than v1's `os.environ`-mutating context
-  manager). 11 new tests in `test_utils_value_tokens.py`, 6 in
-  `test_integrations_compose.py`, 1 in `test_deploy_controller.py`
-  (compose step dispatch end-to-end, mirroring the existing Helm one —
-  proves the orchestrator's container-capability branch is genuinely
-  tool-agnostic). Full check suite green: mypy 107 files, ruff clean,
-  import-linter 1/0, pytest 1203 passed.
-- 2026-09-28: **Designed Phase 6**, per direct request ("do the design and
-  plan for phase 6"). Checked every real `configuration`/`custom`-shaped
-  field against `terraform_projection.py`'s own `_build_*_payload()`
-  functions directly (evidence over assumption, not a re-read of the
-  phase's own one-line description) — found the phase's originally-stated
-  target (Helm/Compose module `configuration`) is already closed as a side
-  effect of Phases 4/5's generic payload walk, and a materially bigger,
-  previously undiscovered gap in its place: `resources_by_category`
-  (`ResourceSpecModel.configuration`/`WorkspaceResourceModel.configuration`),
-  `topologies` (`TopologyVolumeModel.configuration`), `properties`,
-  `custom`, and `tenant` (`TenantSpecModel.configuration`) are all
-  projected into a `*.auto.tfvars.json` file at build time but excluded
-  from Phase 2's `TF_VAR_` deploy-time delivery — the same shape dns/
-  networks/firewalls had *before* Phase 2 fixed them. Zero real
-  `.v2-haven` document uses a token in any of the five today (checked
-  directly) — a consistency gap, not a currently-broken real document,
-  same honesty Phase 2's own original discovery already modeled.
-  Confirmed `FirewallSpecModel.configuration` is a separate,
-  out-of-scope gap (never projected at all — a projection-completeness
-  question, not a token-resolution one). Decided broadcast-only delivery
-  (`${output:}` rejected outright, reusing `_contains_output_token()`
-  unchanged) rather than extending gap #12's per-name claiming scheme —
-  `properties`/`custom`/`tenant` are singletons with no name to claim by,
-  and extending ownership to `topologies`/`resources_by_category` (which
-  *do* have addressable names) is deferred pending real evidence, mirroring
-  gap #12's own precedent. Planned one new function,
-  `build_configuration_payloads()` (sibling to, not folded into,
-  `build_dns_networks_firewalls_payloads()` — the claiming semantics
-  genuinely differ), plus the matching `deploy_controller.py` wiring,
-  reusing `resolve_value_tokens_in_mapping()` unchanged (no new resolution
-  logic needed). Found and fixed two stale docstrings while gathering this
-  evidence (`_build_dns_payload()`/`_build_networks_payload()` still
-  claimed their tokens were "not yet wired" — true when written, false
-  since Phase 2 shipped). Design only — nothing implemented yet.
-- 2026-09-28: **Implemented Phase 6** exactly as designed, per direct
-  request ("do the implementation"). `build_configuration_payloads()`
-  (`terraform_projection.py`) returns `{tf_var_suffix: payload}` for every
-  non-empty `resx_<type>`/`topologies`/`properties`/`custom`/`tenant`
-  category; `deploy_controller.py` computes it once per run, pre-flight-
-  rejects any `${output:...}` found in it (reusing `_contains_output_token()`
-  unchanged), then delivers each as `TF_VAR_<name>` inside the existing
-  Terraform-shaped branch only, identical to dns/networks/firewalls' own
-  loop. One existing test needed a real update, not a workaround: a
-  resource is now always delivered as `TF_VAR_resx_<type>` even with no
-  explicit `configuration` set (harmless — `resolve_value_tokens_in_mapping()`
-  is a no-op on token-free data — but a real, correct behaviour change
-  the old exact-dict assertion hadn't anticipated). 8 new tests in
-  `test_integrations_terraform_projection.py`, 2 new end-to-end tests in
-  `test_deploy_controller.py`. Full check suite green: mypy 107 files,
-  ruff clean, import-linter 1/0, pytest 1212 passed.
-- 2026-09-28: **Verified and extended Phase 7**, per direct request ("ok
-  next phase was 7?" then "design, plan, and implement"). Phase 7's own
-  premise ("if 0-6 land completely, the false-green-light failure mode is
-  gone by construction — no code change needed") was checked against the
-  real code rather than assumed true: `unresolved_value_tokens()`'s one
-  real call site (`_check_deployment_value_tokens()`,
-  `semantic_checks.py`) only ever passed it DNS/network/firewall/module
-  documents — `_documents_reachable_from_workspace()`'s own scope, written
-  before Phase 6 existed. A token in `ResourceSpecModel.configuration`/
-  `ProviderSpecModel.configuration`/`TenantSpecModel.configuration`/
-  `WorkspaceSpecModel.configuration`/`.custom`/`.properties`/
-  `TopologyVolumeModel.configuration`/an `EnvironmentSpecModel`/
-  `DeploymentSpecModel`'s own `properties`/`custom` was never checked at
-  all by `strata validate` — a genuinely separate validate-time coverage
-  gap Phase 6 could never have fixed (Phase 6 only closed the deploy-time
-  delivery side for those same seven fields). Extended
-  `_documents_reachable_from_workspace()` to also return the workspace
-  document itself (covering `WorkspaceResourceModel.configuration` for
-  free via the same whole-document walk) plus every Resource/Provider/
-  Topology it references; extended `_check_deployment_value_tokens()` to
-  also check the deployment document, its resolved Tenant, and every
-  reachable Environment (new `_reachable_environment_names()` helper,
-  extracted from `_merged_declared_keys()` to avoid duplicating the
-  tenant-then-deployment merge-order logic). 7 new tests in
-  `test_semantic_checks.py`. Full check suite green: mypy 107 files, ruff
-  clean, import-linter 1/0, pytest 1221 passed; `.v2-haven` re-run
-  directly (not assumed) and confirmed unaffected — still the same known
-  44 errors. All 7 phases of this design are now implemented; only the
-  separate, lower-priority bare-`${KEY}`-token lint hint remains open.
-- 2026-09-29: **Implemented the `InfraIntegration.__subclasses__()`
-  guardrail test** (the "Guardrail" section above; tracked as Phase 0 of
-  [cross-document-value-references.md](cross-document-value-references.md)'s
-  Implementation Plan), per request ("design, plan, and implement phase
-  0"). Full details, including two real complications found and fixed
-  during implementation (test-fixture pollution, lazy-import blind spot),
-  are recorded in that doc's own changelog rather than duplicated here.
-  Full check suite green: mypy `src` clean, ruff `src tests` clean,
-  import-linter 1/0, pytest 1256 passed. Phase 1 (the Provider-gap
-  Terraform-delivery fix itself) remains design only.
-- 2026-09-29: **Implemented Phase 1** (the Provider-gap Terraform-delivery
-  genericization), per request ("design, plan, and implement phase 1").
-  Confirmed the real gap directly against source first:
-  `_build_providers_payload()` never read `ProviderSpecModel.
-  configuration`/`.custom`, and grep confirmed nothing else in the
-  codebase reads them either — live in `.v2-haven`'s real
-  `hetzner-eu-de.yaml`. Fixed that function to include both; extended
-  `build_configuration_payloads()` from its curated 5-category subset to
-  all 10 non-claimable categories. One deliberate deviation from the
-  original one-function sketch: kept `build_dns_networks_firewalls_
-  payloads()` and `build_configuration_payloads()` as two functions, not
-  one, to avoid rewriting an existing test suite's exact-category-set
-  assertions — `deploy_controller.py` needed zero logic changes either
-  way. One design assumption corrected during implementation: `workspace`/
-  `providers` turned out to be *unconditionally present* (not absent) in
-  every real solution once genericized — "no-op" means their values don't
-  change under resolution, not that they contribute nothing. 3 new tests,
-  4 existing tests updated for the wider category set. Full check suite
-  green: mypy (107 files), ruff, import-linter (1 kept, 0 broken), pytest
-  (1258 passed). Logged as `docs/work/gap_fit_v1.md` gap #17 (resolved). Phases
-  2-6 (the `${value:...}` kind itself) remain unimplemented.
-- 2026-09-29: **Implemented Phase 2** (`${value:...}` syntax recognition),
-  per request ("design, plan, and implement phase 2"). Added `"value"` to
-  `VALUE_TOKEN_KINDS` and both regex kind alternations in
-  `value_tokens.py`, exactly as designed. Confirmed and tested one real
-  interim consequence: `unresolved_value_tokens()` has no
-  `kind == "value"` skip branch yet (Phase 5's job), so a document
-  containing `${value:...}` today is honestly flagged
-  `unsupported_value_token_kind` — same interim shape `${output:}` had
-  before its own later phases. 6 new tests. Full check suite green: mypy
-  (107 files), ruff, import-linter (1 kept, 0 broken), pytest (1264
-  passed). Full writeup in
-  [cross-document-value-references.md](cross-document-value-references.md)'s
-  own changelog, not duplicated here. Phases 3-6 (existence/resolution/
-  validate-time wiring) remain unimplemented.
-- 2026-09-29: **Implemented Phase 3** (the `${value:...}` resolution
-  primitive), per request ("design, plan, and implement phase 3"). New
-  `resolve_document_value_references()` (`value_controller.py`, per Open
-  Question 1's leaning). One real refinement found while implementing,
-  against the design's own looser Phase 2 framing: a bare
-  `${value:onlyonesegment}` is now confirmed to surface as
-  `value_reference_unknown_kind` (the one segment genuinely isn't a real
-  `PlatformKind` value), not `value_reference_invalid_path` as that
-  earlier note loosely suggested — `value_reference_invalid_path` is
-  reserved for a *valid* kind with no name segment at all (e.g. a bare
-  `${value:tenant}`). 14 new tests, including the `kind: solution` edge
-  case and both a `${var:}`- and a `${value:}`-chained non-literal-target
-  rejection (proving the cycle-impossible-by-construction claim for a
-  same-kind chain too, not just a mixed one). Full check suite green:
-  mypy (107 files), ruff, import-linter (1 kept, 0 broken), pytest (1278
-  passed). Full writeup in
-  [cross-document-value-references.md](cross-document-value-references.md)'s
-  own changelog, not duplicated here. Phases 4-6 (wiring into
-  `resolve_values()`/`strata validate`, documentation) remain
-  unimplemented.
-- 2026-09-29: **Implemented Phase 4** (wiring `${value:...}` into
-  `resolve_values()`), per request ("design, plan, and implement phase
-  4"). Implemented exactly as designed, zero deviations:
-  `resolve_values()` now calls `resolve_document_value_references()`
-  unconditionally and merges into `ValueResolution.values`/`.diagnostics`.
-  Confirmed `deploy_controller.py` needed zero changes — its own
-  `resolved.values` consumption was already generic/blind to which
-  mechanism produced an entry. 3 new tests. Full check suite green: mypy
-  (107 files), ruff, import-linter (1 kept, 0 broken), pytest (1281
-  passed). `${value:...}` now resolves correctly end-to-end at deploy
-  time; only the `strata validate` check (Phase 5) and documentation
-  (Phase 6) remain unimplemented.
-- 2026-09-29: **Implemented Phase 5** (the `strata validate` check for
-  `${value:...}`), per request ("design, plan, and implement phase 5").
-  Found and fixed a real circular import, not anticipated by the design:
-  `semantic_checks.py` (imported by `solution_context.py`) importing
-  `resolve_document_value_references()` from `value_controller.py`
-  (which itself imports `solution_context.py` for the `SolutionContext`
-  type) closed a loop — `solution_context -> semantic_checks ->
-  value_controller -> solution_context`. Neither mypy nor ruff nor
-  `get_errors` caught it; only running `pytest` surfaced the real
-  `ImportError`. Fixed by extracting the function into a new sibling
-  module, `value_references.py`, which only needs `DocumentIndex` and has
-  no dependency on `solution_context.py` — both callers now import it
-  directly, no cycle. `unresolved_value_tokens()` gained the designed
-  `kind == "value"` skip branch; `semantic_checks.py`'s new
-  `_check_value_references()` reuses the (relocated) primitive as the 9th
-  check. 4 new end-to-end tests, 1 existing test rewritten to assert the
-  new correct behaviour instead of Phase 2's old interim one. Full check
-  suite green: mypy (108 files), ruff, import-linter (1 kept, 0 broken),
-  pytest (1285 passed). Full writeup, including the circular-import root
-  cause, in
-  [cross-document-value-references.md](cross-document-value-references.md)'s
-  own changelog. Only Phase 6 (documentation/final verification) remains.
-- 2026-09-29: **Implemented Phase 6 and did a full implementation
-  review** of the `value:` kind, per request ("design, plan, and
-  implement phase 6 and do a full review of the implementation"). Fixed
-  two stale docstrings in `value_tokens.py` (still described `${value:}`
-  resolution as unimplemented, stale since Phase 3/4) plus one stale test
-  docstring, adding a new positive-case test alongside. Found a real,
-  confirmed, pre-existing limitation while attempting the live migration
-  proof below: a Value token (any kind, not just `value:`) embedded in a
-  `store: constant` field's own value is never resolved by
-  `_resolve_store_value()`/`build_value_references()`. Live-migrated
-  `.v2-cfg`'s real duplicated `"c0062"` (`environments/c0062-env.yaml`) to
-  `${value:tenant.c0062.meta.name}` — only the `properties`-embedded
-  occurrence, per the limitation just found; the `store: constant`
-  variable occurrence was left a literal, with an explanatory comment.
-  `strata validate .v2-cfg` (run via the local dev source) confirmed
-  clean, 12/12; `.v2-haven` reconfirmed at its same known 44
-  pre-existing errors, zero new `value_reference_*` codes. Full check
-  suite green: mypy (108 files), ruff, import-linter (1 kept, 0 broken),
-  pytest (1286 passed). **All 7 phases of the `${value:...}` design are
-  now implemented and live-proven.** Full writeup in
-  [cross-document-value-references.md](cross-document-value-references.md)'s
-  own changelog.
+- The per-kind Environment cross-check (DNS/network/firewall/module) was
+  originally sketched as a `_validate_dynamic(environment_model=...)` method
+  on each service — built instead as one shared
+  `semantic_checks.py` check reaching every kind, not just those four.
+- The resolver is one shared implementation applied uniformly at deploy
+  time across every kind, not a build-time mechanism and not per-kind —
+  per-integration delivery differs by necessity: Terraform gets a whole
+  `TF_VAR_<name>=<json>` payload; Helm rewrites `values.yaml` for
+  non-secrets and uses `--set-string` for secret-shaped leaves; Compose
+  rewrites the compose file for non-secrets and renames `${KEY}` into the
+  subprocess environment for secrets — v1 had no single mechanism that
+  covered all three, so neither does v2.
+- The `$${...}` escape syntax has to be resolver-aware, not a build-time
+  unescape pass — `backend.configuration` resolves straight from the
+  in-memory model, never from the on-disk (never rewritten) tfvars file,
+  so a build-time-only unescape would be invisible to deploy.
+- Output-ownership (a `${output:}`-bearing document like a DNS zone or
+  firewall ruleset) is resolved by claiming: a document is delivered only
+  to the provisioning step(s) that target it, using that step's own
+  outputs; an unclaimed reference raises a diagnostic rather than
+  resolving against the wrong step's outputs. Deliberately not v1's model
+  (handing raw outputs to Terraform's own HCL to resolve) — v2 keeps
+  Python-side substitution.
+- The `configuration`/`custom`/`properties` passthrough fields on
+  resources, topologies, providers, tenant, and the workspace itself were
+  found to have the same deploy-time delivery gap dns/networks/firewalls
+  had before this design — fixed by generalizing delivery to all
+  non-claimable categories, not just the four originally schema-validated
+  ones.
+- `${value:...}` (a cross-document reference, a fourth token kind) lives in
+  its own module (`value_references.py`), split out specifically to avoid
+  a real circular import between `semantic_checks.py`, `value_controller.py`,
+  and `solution_context.py` — full design and rationale is in
+  [cross-document-value-references.md](cross-document-value-references.md),
+  not duplicated here.
+- All of this design's own phases are implemented and live-verified against
+  both real reference repos (`.v2-haven`, `.v2-cfg`) — see "Deferred" above
+  for what's intentionally left outside this design's scope.
 

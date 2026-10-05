@@ -1,7 +1,10 @@
 # Topology Standalone Kind — Reconsideration
 
-- Status: current — full reversion implemented (Phases 0-4, 6); Phase 5
-  skipped per user direction (see `## Implementation Plan`)
+- Status: current — full reversion implemented. Migrating `.v2-cfg`/
+  `.v2-haven` local checkout fixtures was deliberately skipped (both are
+  fully gitignored, not exercised by the automated suite, and not
+  committed — leaving them on the old standalone shape has no effect on
+  this repo's own correctness).
 - Last updated: 2026-10-01
 
 ## Overview
@@ -166,158 +169,27 @@ Edit: `test_services_workspace.py`, `test_solution_controller.py` (9+
   [ADR-0014](../decisions/0014-provider-topology-config-standalone-kinds.md) —
   `TopologyConfigModel`, unaffected, stays standalone
 
-## Implementation Plan
+## History
 
-Decision: proceeding with **full reversion** (not "support both") — per
-user direction 2026-10-01. The `cfg-int-deployment-v2` `control` migration
-breakage is accepted as a known, one-time cost; it is not yet ported back
-into this repo, so nothing here breaks a committed fixture until Phase 5.
+- The reversal needed a **new** ADR (0028) rather than editing ADR-0011 in
+  place, per this repo's immutable-ADR convention — ADR-0011/ADR-0012 only
+  got one-line Status pointers to it, bodies untouched. ADR-0013/ADR-0014
+  were deliberately left alone (`TopologyConfigModel` is a separate,
+  unaffected kind).
+- Schema/services/controllers/integrations and this repo's own shipped
+  `config/` fixture all had to land in one combined pass, not phase by
+  phase with a green suite in between — `PlatformKind.TOPOLOGY`/
+  `TopologyModel`/`TopologyService` were consumed across all of them
+  simultaneously (including the fixture, since discovery hard-errors on an
+  unrecognized `kind:`), so splitting the work would have meant committing
+  a deliberately broken intermediate state.
+- Migrating `.v2-cfg`/`.v2-haven` local checkout fixtures was skipped, not
+  deferred as an oversight — both are fully gitignored and untouched by
+  the automated suite, so the old standalone-reference shape there has no
+  effect on this repo's correctness; they'd need manual migration before
+  next use.
+- `cfg-int-deployment-v2`'s `control` stack had already independently
+  adopted the standalone-kind shape before this reversal — reverting
+  invalidates that real migration work. Accepted as a one-time cost that
+  doesn't shrink regardless of how the code-level work is sequenced.
 
-Each phase must leave the full check suite green
-(`mypy src` / `ruff check --fix src tests` / `lint-imports` / `pytest -q`)
-before the next phase starts — no phase hands off a red suite.
-
-- [x] **Phase 0 — New ADR.** Wrote `docs/decisions/0028-topology-inline-reversion.md`,
-  superseding ADR-0011's justification (2) only (cross-workspace reuse/
-  standalone-kind promotion); justification (1) — decoupling grouping from
-  provisioning tooling — is unaffected and stands. Per `docs/decisions/README.md`'s
-  immutable-ADR convention, old ADRs are **not** rewritten in place — only
-  their `- Status:` line gets a one-line pointer to the new ADR. Updated:
-  ADR-0011's and ADR-0012's Status lines. **Not** ADR-0013/ADR-0014 — those
-  describe `TopologyConfigModel` (`kind: topologyconfig`), a separate,
-  confirmed-unaffected kind (see `## Related Decisions` above).
-
-- [x] **Phase 1 — Schema.** In `src/strata/models/`:
-  - Move `TopologySpecModel`, `TopologyComponentModel`,
-    `TopologyNamespaceReferenceModel`, `TopologyVolumeModel` into
-    `workspace_model.py` (keep `topology_config_model.py`'s own imports of
-    these working — check for a circular-import risk before moving, since
-    `topology_config_model.py` currently sits below `topology_model.py`
-    in the layer order).
-  - Add `name: PlatformName` to `TopologySpecModel` (replaces
-    `TopologyMetaModel.name`); delete `TopologyMetaModel` and the
-    `TopologyModel` root wrapper; delete `topology_model.py` once empty.
-  - Delete `PlatformKind.TOPOLOGY` from `common_models.py`.
-  - Change `WorkspaceSpecModel.topology` from `list[PlatformName] | None`
-    to `list[TopologySpecModel] | None`.
-  - Add two `model_validator(mode="after")` methods on `WorkspaceSpecModel`
-    (same-document now, no index lookup needed) replacing the
-    component/namespace-existence half of
-    `WorkspaceService.validate_topology_references()`: each
-    `topology[].components[].resource` must be in `spec.resources`; each
-    `topology[].namespaces[].namespace` must be in `spec.namespaces`.
-  - Update/delete `test_models_topology.py` (move surviving cases into
-    `test_models_workspace.py`).
-
-- [x] **Phase 2 — Services.** In `src/strata/services/`:
-  - Delete `topology_service.py` and `test_services_topology.py`.
-  - In `workspace_service.py`: delete `validate_topology_references()`
-    (superseded by the Phase 1 model validators); keep
-    `validate_topology_components()` but simplify its signature — it no
-    longer needs a separate `topology_models` dict (reads
-    `self.model.spec.topology` directly), only `topology_config_models`
-    for the ADR-0013/0014 cross-check.
-  - Update `test_services_workspace.py` accordingly.
-
-- [x] **Phase 3 — Controllers and integrations.**
-  - `solution_controller.py`: remove `PlatformKind.TOPOLOGY: TopologyService`
-    from the model registry.
-  - `build_controller.py`: remove the `_lookup_all(index, PlatformKind.TOPOLOGY, ...)`
-    call; `resolved_context.py`: remove `ResolvedWorkspaceGraph.topologies`.
-  - `terraform_projection.py`: rewrite `_build_topologies_payload()` to
-    iterate `graph.workspace.spec.topology` directly instead of
-    `graph.topologies[name]`.
-  - `semantic_checks.py`: re-point the ~3 `PlatformKind.TOPOLOGY`/
-    `TopologyModel` call sites at the inline data.
-  - `reference_fields.py`/`references.py`: remove `PlatformKind.TOPOLOGY`
-    from the referenceable-kinds set.
-  - Update `test_solution_controller.py`, `test_solution_context.py`,
-    `test_build_controller.py`, `test_semantic_checks.py`,
-    `test_references.py`, `test_integrations_terraform_projection.py`,
-    `test_commands_validate.py`.
-
-- [x] **Phase 4 — This repo's own fixtures.** Merge
-  `config/workspaces/topology.yaml` + `config/templates/topology.template.yaml`
-  into their owning `workspace.yaml`/workspace template; delete the
-  standalone files. Confirm `test_shipped_example_solution_loads_cleanly`'s
-  pre-existing unrelated failure is unchanged (not newly broken, not
-  accidentally fixed in a way that masks the real issue).
-
-  **Note on phase boundaries**: Phases 1-4 necessarily landed together in
-  one pass, not sequentially with a green suite in between each — `PlatformKind.TOPOLOGY`/
-  `TopologyModel`/`TopologyService` are consumed across models, services,
-  controllers, integrations, *and* this repo's own shipped `config/`
-  fixture (discovery hard-errors on an unrecognized `kind:`, so the fixture
-  migration wasn't deferrable either). Splitting them would have meant
-  committing a deliberately broken intermediate state. The full check
-  suite (mypy/ruff/import-linter/pytest) is green after all four combined —
-  1662 passed, 1 known pre-existing unrelated failure
-  (`test_shipped_example_solution_loads_cleanly`'s `RESOURCE` set mismatch).
-
-- [x] ~~**Phase 5 — Local checkout fixtures.**~~ **Skipped per user direction
-  (2026-10-01).** Would have merged `.v2-cfg/topologies/spoke-cluster.yaml`
-  into `.v2-cfg/workspaces/spoke.yaml` and `.v2-haven/topologies/hetzner-hearth.yaml`/
-  `hetzner-forge.yaml` into `.v2-haven/workspaces/haven-platform.yaml`.
-  Confirmed both `.v2-cfg/` and `.v2-haven/` are fully gitignored (each has
-  its own `.gitignore` of `*`/`!.gitignore`) — neither is committed, neither
-  is exercised by the automated test suite, so leaving them on the old
-  standalone-reference shape has no effect on this repo's own correctness;
-  they'll simply keep using a form `WorkspaceModel` no longer parses if
-  anyone runs `strata validate`/`build run` against them until migrated by
-  hand later.
-
-- [x] **Phase 6 — Documentation.** Updated `v2-schema-overview.md` (removed
-  the `topology` kind row, folded its status into the `workspace` row),
-  `solution-loading-and-phase2-validation.md` (removed the deleted
-  `validate_topology_references()`/`TopologyService._validate_dynamic()`
-  rows, simplified `validate_topology_components()`'s description, updated
-  the Status line's now-smaller validator count), `docs/config/workspace.md`
-  (merged `docs/config/topology.md`'s schema in as a "Topology grouping"
-  section, updated the inline example), `docs/config/topologyconfig.md`/
-  `docs/config/readme.md`/`docs/index.rst` (fixed the now-dead link to the
-  deleted `topology.md`). Confirmed `terraform-tfvars-parity.md` needed no
-  change (its `TopologyComponentModel.modules` mentions are about ADR-0023's
-  unrelated deliberate-omission decision, not the standalone-vs-inline
-  question). Revised `gap_fit_v1.md` gap #5 (now genuinely less migration
-  work than first documented, not more) and flagged its `.v2-cfg` bullet as
-  stale. Updated `docs/how-to/migrate-v1-workspace-topology-provisioning.md`
-  in place (not retracted — the provisioner/execution-recipe half it
-  documents is unaffected and still accurate; only the topology-splitting
-  half, now unnecessary, was rewritten). `docs/config/topology.md` deleted.
-
-## Changelog
-
-- 2026-10-01: Created. Captures the evidence gathered (real `control` stack
-  migration, `.v2-haven` topology instances, `WorkspaceResourceModel`'s
-  type/instance split) and the full cost/design of reverting Topology to
-  inline, per user request to centralize this before any decision is made.
-- 2026-10-01: Decision made — proceeding with full reversion. Added phased
-  `## Implementation Plan` (Phase 0 ADR through Phase 6 documentation).
-- 2026-10-01: Phase 0 done — [ADR-0028](../decisions/0028-topology-inline-reversion.md)
-  written; ADR-0011/ADR-0012 Status lines updated to point at it (one-line
-  pointers only, per the repo's immutable-ADR convention — bodies untouched).
-  ADR-0013/ADR-0014 deliberately left alone (separate `TopologyConfigModel`
-  kind, unaffected).
-- 2026-10-01: Phases 1-4 done (schema, services, controllers/integrations,
-  this repo's shipped `config/` fixture) — landed together, see the note
-  under Phase 4 for why they couldn't be split. `TopologyComponentModel`/
-  `TopologySpecModel`/etc. now live in `workspace_model.py`;
-  `WorkspaceSpecModel` gained two Phase 1 model validators replacing
-  `WorkspaceService.validate_topology_references()` (deleted);
-  `validate_topology_components()` simplified (no longer needs a separate
-  `topology_models` dict). Full check suite green: mypy (121 files), ruff,
-  import-linter, pytest (1662 passed, 1 known pre-existing unrelated
-  failure). Phase 5 (`.v2-cfg`/`.v2-haven` local fixtures — not consumed by
-  any automated test) and Phase 6 (remaining documentation sweep) still open.
-- 2026-10-01: Phase 5 skipped per user direction — both `.v2-cfg/` and
-  `.v2-haven/` confirmed fully gitignored (not committed, not exercised by
-  the test suite), so left on the old standalone-reference shape rather
-  than migrated by hand. Corrected a wrong claim from an earlier session's
-  summary that `.v2-haven` was committed — it is not (see repo memory).
-- 2026-10-01: Phase 6 done — full documentation sweep (schema overview,
-  Phase 2 validation design doc, `docs/config/` merge + dead-link cleanup,
-  `gap_fit_v1.md` gap #5 revision, migration guide updated in place).
-  `Status` updated to `current` — all phases either implemented or
-  deliberately skipped with a recorded reason. This design doc's own job
-  is done; further changes to the inline-topology schema itself belong in
-  ADR-0028's own evolution or a fresh design doc, not here.

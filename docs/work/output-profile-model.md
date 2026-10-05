@@ -382,14 +382,37 @@ middle ground `emits` risks (example 6a), and never a surprise, since the
 missing-variable error in row 2 makes the opt-in requirement obvious rather
 than hiding it.
 
-**Unverified, and worth checking before choosing:** whether anything real
-depends on the files being *auto-loaded* specifically — e.g. a consumer
-running `terraform plan` by hand inside `build/<deployment>/` without
-strata, or haven's CI `upload-artifact` step expecting a particular
-filename. Option 1 preserves the files and their content, changing only the
-extension, so the exposure is narrow — but it is a real behaviour change
-for anyone doing that, and it has not been checked against the two real
-consumers yet.
+**Verified against both real consumers' actual CI — nothing depends on the
+auto-load convention.** Read `haven`'s real `.github/workflows/deploy-infra.yml`
+and `cfg-int-deployment`'s real `.github/workflows/deploy.yml` directly
+(not assumed). Both share the identical shape:
+
+```yaml
+- name: Build platform artifacts
+  run: strata build run --file $DEPLOYMENT_FILE
+- name: Upload build output
+  uses: actions/upload-artifact@v7
+  with: { name: platform-build, path: build/ }   # whole directory, no filename pattern
+# ...download-artifact in a later job, same shape...
+- name: Deploy infrastructure
+  run: strata deploy run --file $DEPLOYMENT_FILE --force --scope infra
+  # haven's own comment: "the terraform deployer auto-injects each resolved
+  # secret as TF_VAR_<key> before plan/apply/destroy — no manual TF_VAR_*
+  # wiring needed here"
+```
+
+Three things this confirms, each closing a different risk: (1)
+`upload-artifact`/`download-artifact` operate on the whole `build/`
+directory with no filename filtering — the rename is invisible to this
+step regardless of extension; (2) `deploy run` already injects `TF_VAR_*`
+as a direct Python subprocess env dict, confirmed by the pipeline author's
+own comment that this needs no pipeline-side wiring at all — nothing for
+CI to "set up" for the rename to work; (3) the only raw `terraform`
+invocation found in either pipeline is `terraform show` on an
+already-produced `.tfplan` binary, later in haven's workflow — it never
+reads `.tfvars`/`.auto.tfvars.json` at all. **Neither real consumer's CI
+depends on the auto-load convention anywhere** — the rename is safe for
+both without any pipeline change.
 
 **Relationship to `emits`:** option 1 solves the warning problem completely
 and makes `emits` unnecessary *for that purpose*. `emits` would then only
@@ -807,13 +830,15 @@ future design instead.
       (`emits: [flags, variables, properties]` — not `features`, see the
       confirmed naming-mismatch note above).
 - [ ] **Decide between `emits` and env-var-only delivery (see "Alternative"
-      above) BEFORE writing any schema.** This is now the blocking
-      decision, not an implementation detail: option 1 (rename files to
-      non-auto-loaded `<category>.tfvars.json`) reaches zero warnings with
-      no schema field at all, while `emits` reaches partial warnings
-      permanently. Check first whether either real consumer depends on the
-      files being auto-loaded (manual `terraform plan` in `build/`, CI
-      artifact expectations).
+      above).** Blocking decision, not an implementation detail: option 1
+      (rename files to non-auto-loaded `<category>.tfvars.json`) reaches
+      zero warnings with no schema field at all, while `emits` reaches
+      partial warnings permanently. The one prerequisite check (whether
+      either real consumer's CI depends on auto-loading) is now **done** —
+      verified against both `haven`'s and `cfg-int-deployment`'s real
+      workflows directly: neither depends on it, `upload-artifact` operates
+      on the whole `build/` directory, and `deploy run` already delivers via
+      `TF_VAR_*` regardless. Nothing left blocking this decision.
 - [ ] *(only if `emits` is still chosen)* Wire the `is_emitted()` gate into
       `deploy_controller.py`'s four env-var delivery call sites — now known
       to be **optional** (env vars never warn), justified on hygiene/
@@ -897,3 +922,15 @@ future design instead.
   automated path, reappearing only for a human deliberately loading the
   file by hand, which is the correct behaviour in that case. Added this
   verification to option 1's description.
+- 2026-10-05: Closed the remaining "Unverified" item blocking the
+  `emits`-vs-alternative decision — read `haven`'s real
+  `.github/workflows/deploy-infra.yml` and `cfg-int-deployment`'s real
+  `.github/workflows/deploy.yml` directly. Both pipelines: `strata build
+  run` → `upload-artifact`/`download-artifact` on the whole `build/`
+  directory (no filename pattern) → `strata deploy run` (already injects
+  `TF_VAR_*` as a direct subprocess env dict, confirmed by haven's own
+  pipeline comment that this needs no pipeline-side wiring). The only raw
+  `terraform` invocation in either pipeline is `terraform show` on an
+  already-produced `.tfplan` binary — never a `.tfvars` file. Neither real
+  consumer's CI depends on the auto-load convention anywhere. Updated the
+  Implementation Plan's blocking item to reflect this is now resolved.

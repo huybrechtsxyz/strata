@@ -29,15 +29,15 @@ first, and only add enforcement/history if real demand shows up.
 
 ### Why v1 was confusing — 7 concepts for one idea
 
-| Concept                                          | Problem                                                                                                               |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `ProgressionRingEnvironmentModel.wave: int`        | Two wave systems: intra-ring integer waves...                                                                          |
-| `PromotionWaveModel` (named, on strategy)          | ...and separately, named ordered waves on the strategy. Both schedule rollout.                                         |
-| `progression` + `strategy` as 2 kinds              | A pointer between them; strategy adds almost nothing once its other fields go.                                        |
-| `type: remote\|helm_chart\|image\|module`          | Duplicates what `pins.{images,charts,remotes,artifacts}` already says.                                                 |
-| `gates.require_progression_order: bool`            | Opt-in enforcement of the thing you just declared. Why declare an order and not enforce it?                           |
-| `scope: tenant`                                    | A third targeting axis, on top of ring + wave.                                                                         |
-| `versions_path` + `@repo/` syntax                  | Path indirection, separate from everything else's name-based addressing (ADR-0015 is identity-based, not path-based). |
+| Concept                                     | Problem                                                                                                               |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `ProgressionRingEnvironmentModel.wave: int` | Two wave systems: intra-ring integer waves...                                                                         |
+| `PromotionWaveModel` (named, on strategy)   | ...and separately, named ordered waves on the strategy. Both schedule rollout.                                        |
+| `progression` + `strategy` as 2 kinds       | A pointer between them; strategy adds almost nothing once its other fields go.                                        |
+| `type: remote\|helm_chart\|image\|module`   | Duplicates what `pins.{images,charts,remotes,artifacts}` already says.                                                |
+| `gates.require_progression_order: bool`     | Opt-in enforcement of the thing you just declared. Why declare an order and not enforce it?                           |
+| `scope: tenant`                             | A third targeting axis, on top of ring + wave.                                                                        |
+| `versions_path` + `@repo/` syntax           | Path indirection, separate from everything else's name-based addressing (ADR-0015 is identity-based, not path-based). |
 
 Plus a whole `promotion_record_model.py` + service just for history.
 
@@ -221,6 +221,109 @@ already rejects a `held` pin with no `reason`, so `--lock` without a reason
 string simply fails the same validation a hand-edit would. This fixes the
 flag's contract now; the actual `version pin`/`version set` command it
 attaches to is a separate, not-yet-designed effort.
+
+### Worked example: all four kinds, end to end
+
+One `workspace` (what runs), one `version` (which pins), one `deployment`
+per customer (where + with what values), and one `promotion` (the rollout
+order across them) — trimmed to only the fields this example touches.
+
+```yaml
+# workspaces/dispatcher.yaml — what runs, and in what order
+apiVersion: strata.huybrechts.xyz/v2
+kind: workspace
+meta:
+  name: dispatcher
+spec:
+  provisioners:
+    - name: dispatcher-helm
+      tool: helm
+      source: { remote: infra, source_path: charts/dispatcher }
+  execution:
+    - name: deploy-app
+      provisioner: dispatcher-helm
+      targets: [dispatcher]
+```
+
+```yaml
+# versions/dispatcher-prd.yaml — which pins this rollout uses
+apiVersion: strata.huybrechts.xyz/v2
+kind: version
+meta:
+  name: dispatcher-prd
+spec:
+  pins:
+    charts:
+      dispatcher: 1.1.0
+```
+
+```yaml
+# customers/c0224/tenant.yaml — the sandbox tenant, flagged to bake first
+apiVersion: strata.huybrechts.xyz/v2
+kind: tenant
+meta:
+  name: c0224
+spec:
+  display_name: "Sandbox"
+  wave: 1
+
+# customers/c0062/tenant.yaml — an ordinary tenant; no `wave` needed
+apiVersion: strata.huybrechts.xyz/v2
+kind: tenant
+meta:
+  name: c0062
+spec:
+  display_name: "Acme Corp"
+```
+
+```yaml
+# deployments/dispatcher-c0224-prd.yaml — one per customer, in the prd ring
+apiVersion: strata.huybrechts.xyz/v2
+kind: deployment
+meta:
+  name: dispatcher-c0224-prd
+spec:
+  workspace: dispatcher
+  environments: [prd]
+  tenant: c0224
+  version: dispatcher-prd
+
+# deployments/dispatcher-c0062-prd.yaml — same workspace, same ring, different tenant
+apiVersion: strata.huybrechts.xyz/v2
+kind: deployment
+meta:
+  name: dispatcher-c0062-prd
+spec:
+  workspace: dispatcher
+  environments: [prd]
+  tenant: c0062
+  version: dispatcher-prd
+```
+
+```yaml
+# promotions/dispatcher.yaml — the rollout order across all of the above
+apiVersion: strata.huybrechts.xyz/v2
+kind: promotion
+meta:
+  name: dispatcher
+spec:
+  workspace: dispatcher
+  rings:
+    - name: prd
+      require: all
+```
+
+What reads each document, and when:
+
+| Step                                   | Reads                                                                        | For                                                                                          |
+| --------------------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `strata build run`                      | `Workspace.spec.execution`/`provisioners`                                    | What to render (the Helm chart invocation itself).                                            |
+| `strata deploy run dispatcher-c0062-prd`| `Deployment.spec.version` -> `Version.spec.pins.charts.dispatcher`            | Which chart version this one customer's run actually deploys (the pin overlays the default).  |
+| `strata promote status dispatcher`      | `Promotion.spec.workspace`/`rings` to find matching `Deployment`s, each one's `spec.version` -> `Version` for its current pin, each one's `spec.tenant` -> `Tenant.spec.wave` for ordering | The rollout table — no document here is edited to produce it; it's all derived. |
+
+Adding customer #251 means writing one new `deployment` document (and a
+`tenant` document, which already has to exist). Nothing under `workspaces/`,
+`versions/`, or `promotions/` changes.
 
 ## Related Decisions
 
