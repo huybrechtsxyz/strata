@@ -1111,3 +1111,32 @@ doc's own Phase 1 can start.
   grep, and as a real test) that `audit_run.py` references nothing from
   this feature at all. 8 new tests. Full check suite clean, 2159 tests.
   **All six phases of this doc's Implementation Plan are now shipped.**
+- 2026-10-06: **Code review of all six shipped phases.** One real bug
+  found and fixed: `apply_promotion()`'s `_write_copied_pins()` wrote the
+  surgical `ruamel.yaml` edit without re-parsing the result through
+  `VersionModel` afterward — the exact safety net
+  `version_controller.set_version_pin()` already established for the
+  same category of edit ("a guarantee the write produced a still-valid
+  document, not a second read the caller has to remember to do").
+  `apply_promotion()`'s own docstring already claimed to reuse that
+  module's technique "for the same reason" but had silently dropped this
+  half of it; added the missing re-validation call. Two real test-
+  coverage gaps found and closed: `_select_source_wave()`'s own strict
+  branch (the *preceding* ring itself split, with none of its waves
+  matching the target's) and `_select_target_wave()`'s single-occupant
+  mismatch branch (a `--wave` given that doesn't match a ring's one,
+  waveless-or-not, document) were both real, reachable code paths with
+  zero test coverage — both now covered. Everything else reviewed clean:
+  traced every `order`/`wave` truthy-vs-`is not None` check (`wave`'s
+  schema-guaranteed non-emptiness makes both forms equivalent everywhere
+  they're used, confirmed rather than assumed), confirmed `deploy_
+  controller.py`'s own, separate `build_resolved_workspace_graph()` call
+  site correctly has no `version` to thread at all (it never resolves one
+  and never writes `resolved.yaml` — Phase 4's gap was build-run-scoped
+  by design, not a second call site silently missed), and confirmed
+  `promote view --output-path`'s overwrite-without-confirmation behaviour
+  is correct as designed (a regenerate-on-demand export, not an authored
+  document — `scaffold_version()`'s own "refuse to overwrite" precedent
+  does not apply here, since repeat runs into the same path are the
+  intended CI use case, not an accident to guard against). 2 new tests.
+  Full check suite clean, 2161 tests.
