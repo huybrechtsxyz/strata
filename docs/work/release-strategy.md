@@ -333,3 +333,33 @@ Execution order (each its own small, checked phase per repo convention —
   `VERSION.txt` itself (confirmed via `git status`). Local/reversible
   only — no tag pushed, no CI triggered, no publish; Decisions 1/3 and
   `scripts/Release.ps1` remain the same still-open items as before.
+- 2026-10-06: **Considered, then deferred, jumping straight to
+  `v2.0.0-beta1`** — user asked about it directly; checked this doc's own
+  Decision 7 entry bar first rather than assuming it was met. It is not:
+  `.v2-haven/` is only proven against `validate` (not `build run`/
+  `deploy run`), an equivalent `.v2-cfgint/` fixture for config-deploy
+  does not exist yet, build output rendering's remaining phases haven't
+  landed, and `deploy run`'s `store: artifact`-at-deploy-time gap is still
+  open — plus a beta tag requires actually merging `v2` into `main`
+  first, a real branch operation, not just a version-string edit. User
+  chose to bump the next alpha instead; the beta gate itself is
+  unchanged, still gated on the same four items above.
+- 2026-10-06: **Built alpha8** — bumped `VERSION.txt` to `2.0.0-Alpha8`
+  (normalizes to `2.0.0a8`; confirmed via `packaging.version.Version`
+  before committing to it). Forced the dev venv's editable-install
+  metadata to pick up the change with `uv sync --reinstall-package
+  xyz-strata --all-extras --index-strategy unsafe-best-match` in one
+  pass (both documented sharp edges at once — stale dist-info, and a
+  plain sync dropping the `docs` extras group) rather than discovering
+  either again. Full check suite green via `scripts/Check.ps1` (ruff
+  lint, ruff format, mypy 146 files, import-linter, pytest 2170 passed,
+  smoke test, Sphinx docs build). `uv build --index-strategy
+  unsafe-best-match` produced `xyz_strata-2.0.0a8-py3-none-any.whl`;
+  installed into a fresh isolated `uv venv`, confirmed `strata version` →
+  `2.0.0a8` and `strata --help` now lists **nine** commands (`promote`
+  added this session, alongside `audit` from alpha6). Verification venv
+  removed after; `dist/` build artifacts left in place, git-ignored,
+  nothing staged beyond `VERSION.txt` itself (confirmed via `git
+  status`). Local/reversible only — no tag pushed, no CI triggered, no
+  publish; Decisions 1/3 and `scripts/Release.ps1` remain the same
+  still-open items as before.
