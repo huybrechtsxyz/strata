@@ -15,7 +15,13 @@
   `docs/work/audit-trail.md` (this doc is deliberately split out from
   there — tenant-zone enforcement is unrelated to the audit trail; the two
   were never the same feature, they only shared gap #7's "still fully
-  open" bucket)
+  open" bucket), [policy-engine-architecture.md](policy-engine-architecture.md)
+  (**2026-10-06: broader policy-type work now tracked there** — the
+  umbrella catalog classifying all 19 real v1 policy types by data source;
+  `tenant_zone`'s full plan-time tier, sized below, is one of only two
+  types that actually need Terraform plan JSON the way this doc assumes —
+  check that doc before assuming any *other* policy type follows the same
+  shape)
 
 ## Why this is a separate document
 
@@ -487,3 +493,16 @@ this subsystem in the files read so far.
   uses). Full check suite green: mypy (121 files), ruff, import-linter,
   pytest (1620 passed — same pre-existing unrelated `config/` drift as the
   sole failure). Sphinx rebuilt clean.
+- 2026-10-06: Cross-linked [policy-engine-architecture.md](policy-engine-architecture.md) —
+  a new umbrella doc created after a direct question about whether a
+  strata document graph/export plus Terraform plan output would cover
+  *all* of v1's policy types (verified against v1's real source: no —
+  only 2 of 19 real types, including `tenant_zone`'s own full plan-time
+  tier, actually need Terraform plan JSON; most of the rest need an
+  entirely separate external tool — SBOM, a CVE scanner, Checkov,
+  Infracost, or an LLM). That analysis, plus new sibling catalog docs for
+  `checkov` and `cve_max_severity` (`checkov-integration.md`,
+  `cve-scanner-integration.md`), now live there instead of being
+  duplicated into this doc — this doc remains the one place `tenant_zone`
+  itself is tracked.
+
