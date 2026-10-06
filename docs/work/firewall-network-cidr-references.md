@@ -8,7 +8,11 @@
   real downstream consumer of that work, not just a parallel), [ADR-0008](../decisions/0008-firewall-model-design-decisions.md)
   (current `FirewallRuleModel` shape), [cross-document-value-references.md](../design/cross-document-value-references.md)
   (`${value:kind.name.path}` — status `implemented`, the mechanism this doc
-  proposes stressing further)
+  proposes stressing further), [solution-loading-and-phase2-validation.md](solution-loading-and-phase2-validation.md)
+  (a related but distinct concern, built 2026-10-06 — the Workspace subnet
+  cross-check resolves `WorkspaceResourceSubnetModel.subnet` by `.name`,
+  not by list position, so it doesn't share this doc's positional-addressing
+  footgun below, though both touch the same `Network`/subnet surface)
 
 ## Overview
 

@@ -37,6 +37,7 @@ from strata.models.deployment_model import DeploymentModel
 from strata.models.environment_model import EnvironmentModel
 from strata.models.module_model import ModuleModel
 from strata.models.namespace_model import NamespaceModel
+from strata.models.network_model import NetworkModel
 from strata.models.provider_config_model import ProviderConfigModel
 from strata.models.provider_model import ProviderModel
 from strata.models.resource_model import ResourceModel
@@ -379,10 +380,10 @@ def _check_workspaces(index: DocumentIndex) -> Diagnostics:
     diagnostics = Diagnostics()
     for entry in index.all_of(PlatformKind.WORKSPACE):
         workspace = cast(WorkspaceModel, entry.model)
-        if not workspace.spec.topology:
-            continue
+        if workspace.spec.topology:
+            diagnostics.extend(_check_workspace_topology_components(index, workspace), source=str(entry.source))
 
-        diagnostics.extend(_check_workspace_topology_components(index, workspace), source=str(entry.source))
+        diagnostics.extend(_check_workspace_subnets(index, workspace), source=str(entry.source))
 
     return diagnostics
 
@@ -412,6 +413,41 @@ def _check_workspace_topology_components(index: DocumentIndex, workspace: Worksp
 
     service = WorkspaceService.from_model(workspace)
     return service.validate_topology_components(configuration, topology_config_models)
+
+
+# ---------------------------------------------------------------------------
+# Workspace -> Network: resource subnet references name a real subnet
+# ---------------------------------------------------------------------------
+
+
+def _check_workspace_subnets(index: DocumentIndex, workspace: WorkspaceModel) -> Diagnostics:
+    """The registry-backed half of the workspace/subnet check
+    (docs/work/solution-loading-and-phase2-validation.md).
+
+    `WorkspaceResourceSubnetModel.network` (which Network *document*) is
+    already checked in Phase 1 (`validate_resource_subnet_references`)
+    against this workspace's own `spec.networks`. This is only the Phase 2
+    half: once that document is actually loaded, does its real
+    `NetworkDefinitionModel.subnets[]` contain the named subnet? Resolves
+    every network name this workspace's resources reference, so a resource
+    with no `subnet` set (the common case) costs one empty-dict lookup,
+    never a loaded-but-unused document.
+
+    An unresolved `.network` name produces no duplicate finding here —
+    `validate_references` already reported it (module docstring).
+    """
+    network_names = {r.subnet.network for r in (workspace.spec.resources or []) if r.subnet is not None}
+    if not network_names:
+        return Diagnostics()
+
+    network_models: dict[str, NetworkModel] = {}
+    for name in network_names:
+        found = index.get(PlatformKind.NETWORK, name)
+        if found is not None:
+            network_models[name] = cast(NetworkModel, found.model)
+
+    service = WorkspaceService.from_model(workspace)
+    return service.validate_resource_subnets(network_models)
 
 
 # ---------------------------------------------------------------------------

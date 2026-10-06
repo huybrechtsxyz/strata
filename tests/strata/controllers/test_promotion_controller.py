@@ -453,7 +453,11 @@ def _worked_example_b_for_apply(root: Path, *, general_pins: str) -> None:
             pins='  pins:\n    images:\n      dspapi: "1.1.0"\n',
         ),
     )
-    _write(root, "version-prd-general.yaml", _version("dspapi-prd", promotion="    ring: prd\n    order: 3\n    wave: general", pins=general_pins))
+    _write(
+        root,
+        "version-prd-general.yaml",
+        _version("dspapi-prd", promotion="    ring: prd\n    order: 3\n    wave: general", pins=general_pins),
+    )
     _write(root, "deployment-dev.yaml", _deployment("dev-dep", version="dspapi-dev"))
     _write(root, "deployment-qas.yaml", _deployment("qas-dep", version="dspapi-qas"))
     _write(root, "deployment-canary.yaml", _deployment("canary-dep", version="dspapi-prd-canary"))
@@ -498,7 +502,7 @@ def test_apply_only_copies_keys_common_to_both_documents(tmp_path):
     """A key only the source declares is never created on the target as a
     side effect — that's `version update`'s job, not apply's."""
     root = _base(tmp_path)
-    _worked_example_b_for_apply(root, general_pins="  pins:\n    charts:\n      unrelated: \"5.0.0\"\n")
+    _worked_example_b_for_apply(root, general_pins='  pins:\n    charts:\n      unrelated: "5.0.0"\n')
     context = _resolve(root)
     assert context.ok, context.diagnostics.messages()
 

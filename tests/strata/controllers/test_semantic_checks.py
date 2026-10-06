@@ -459,6 +459,114 @@ def test_topology_component_check_is_skipped_without_a_configuration_document(tm
 
 
 # ---------------------------------------------------------------------------
+# Workspace -> Network: resource subnet references name a real subnet
+# (docs/work/solution-loading-and-phase2-validation.md)
+# ---------------------------------------------------------------------------
+
+
+def _solution_with_subnet(tmp_path: Path, subnet_name: str = "app") -> Path:
+    """Base solution + a network.yaml and a workspace resource referencing
+    it via `subnet: {network, subnet}`."""
+    root = _base_solution(tmp_path)
+    _write(
+        root,
+        "network.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: network
+meta:
+  name: main-network
+spec:
+  networks:
+    - name: vnet-main
+      address_space: ["10.0.0.0/16"]
+      subnets:
+        - name: app
+          cidr: "10.0.1.0/24"
+""",
+    )
+    workspace_yaml = """apiVersion: strata.huybrechts.xyz/v2
+kind: workspace
+meta:
+  name: main
+spec:
+  providers: [azure-main]
+  provisioners:
+    - name: tf
+      tool: terraform
+      source: {source_path: terraform/main}
+  execution:
+    - name: provision-infra
+      provisioner: tf
+      targets: [storage-account]
+  networks: [main-network]
+  resources:
+    - name: storage-account
+      resource: storage-account
+      role: control-plane
+      subnet:
+        network: main-network
+        subnet: SUBNET_NAME
+  topology:
+    - name: main-topology
+      type: kubernetes
+      components:
+        - resource: storage-account
+  namespaces: [apps]
+  dns_zones: [example]
+"""
+    _write(root, "workspace.yaml", workspace_yaml.replace("SUBNET_NAME", subnet_name))
+    return root
+
+
+def test_workspace_resource_subnet_reference_is_accepted(tmp_path):
+    context = _resolve(_solution_with_subnet(tmp_path))
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_workspace_resource_subnet_not_found_in_network_is_caught(tmp_path):
+    root = _solution_with_subnet(tmp_path, subnet_name="ghost-subnet")
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any("ghost-subnet" in m for m in context.diagnostics.messages())
+
+
+def test_workspace_resource_subnet_check_is_skipped_without_a_network_document(tmp_path):
+    """An unresolved `subnet.network` reference is caught by `validate_references`,
+    not duplicated here — this only proves the subnet check itself does not
+    crash when the referenced document is missing."""
+    root = _solution_with_subnet(tmp_path)
+    (root / "network.yaml").unlink()
+
+    context = _resolve(root)
+    assert not context.ok
+    # validate_references already reports the dangling 'main-network' reference.
+    assert any("main-network" in m for m in context.diagnostics.messages())
+
+
+def test_workspace_resource_subnet_check_runs_without_a_topology_block(tmp_path):
+    """Regression guard: the subnet check is wired unconditionally in
+    `_check_workspaces()`, not gated on `workspace.spec.topology` like its
+    sibling topology-components check — a workspace with no `topology:` at
+    all must still have its subnet reference checked."""
+    root = _solution_with_subnet(tmp_path, subnet_name="ghost-subnet")
+    path = root / "workspace.yaml"
+    content = path.read_text(encoding="utf-8")
+    topology_block = """  topology:
+    - name: main-topology
+      type: kubernetes
+      components:
+        - resource: storage-account
+"""
+    assert topology_block in content
+    path.write_text(content.replace(topology_block, ""), encoding="utf-8")
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any("ghost-subnet" in m for m in context.diagnostics.messages())
+
+
+# ---------------------------------------------------------------------------
 # Deployment -> Environment/Tenant reachability: value tokens resolve
 # ---------------------------------------------------------------------------
 

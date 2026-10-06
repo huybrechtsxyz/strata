@@ -2,6 +2,7 @@
 """Tests for WorkspaceService loading and validation."""
 
 from strata.models.configuration_model import ConfigurationModel
+from strata.models.network_model import NetworkModel
 from strata.models.topology_config_model import TopologyConfigModel
 from strata.services.workspace_service import WorkspaceService
 
@@ -149,6 +150,116 @@ def test_validate_topology_components_rejects_unregistered_role_without_addition
     result = service.validate_topology_components(_configuration(), _topology_config_models())
     assert not result.ok
     assert any("cache" in m for m in result.messages())
+
+
+# ---------------------------------------------------------------------------
+# validate_resource_subnets() — WorkspaceResourceSubnetModel.subnet against a
+# real, loaded Network document's subnet names (docs/work/solution-loading-
+# and-phase2-validation.md). `.network` (which Network *document*) is
+# already checked in Phase 1 (`validate_resource_subnet_references`,
+# `workspace_model.py`); this is only the Phase 2 half.
+# ---------------------------------------------------------------------------
+
+
+def _workspace_with_subnet(network: str = "main-network", subnet: str = "app") -> dict:
+    return {
+        "meta": {"name": "myapp-workspace"},
+        "spec": {
+            "providers": ["azure-main"],
+            "provisioners": [
+                {
+                    "name": "terraform-main",
+                    "tool": "terraform",
+                    "source": {"remote": "infra-repo", "source_path": "terraform/main"},
+                }
+            ],
+            "networks": [network],
+            "resources": [
+                {
+                    "name": "app-vm",
+                    "resource": "app-vm-class",
+                    "subnet": {"network": network, "subnet": subnet},
+                },
+            ],
+        },
+    }
+
+
+def _network_model(**overrides) -> NetworkModel:
+    networks = overrides.pop(
+        "networks",
+        [
+            {
+                "name": "vnet-main",
+                "address_space": ["10.0.0.0/16"],
+                "subnets": [{"name": "app", "cidr": "10.0.1.0/24"}],
+            }
+        ],
+    )
+    return NetworkModel.model_validate({"meta": {"name": "main-network"}, "spec": {"networks": networks, **overrides}})
+
+
+def test_validate_resource_subnets_accepts_a_real_subnet():
+    service = WorkspaceService(data=_workspace_with_subnet())
+    service.validate()
+
+    result = service.validate_resource_subnets({"main-network": _network_model()})
+    assert result.ok
+    assert result.messages() == []
+
+
+def test_validate_resource_subnets_rejects_unknown_subnet_name():
+    service = WorkspaceService(data=_workspace_with_subnet(subnet="ghost-subnet"))
+    service.validate()
+
+    result = service.validate_resource_subnets({"main-network": _network_model()})
+    assert not result.ok
+    assert any("ghost-subnet" in m for m in result.messages())
+
+
+def test_validate_resource_subnets_checks_every_internal_network_in_the_document():
+    """A Network document can declare more than one independently-named
+    network (docs/config/network.md) — `subnet.network` names the document,
+    not which internal network, so a subnet declared under a *second*
+    internal network in the same document must still resolve."""
+    service = WorkspaceService(data=_workspace_with_subnet(subnet="db"))
+    service.validate()
+
+    network = _network_model(
+        networks=[
+            {
+                "name": "vnet-main",
+                "address_space": ["10.0.0.0/16"],
+                "subnets": [{"name": "app", "cidr": "10.0.1.0/24"}],
+            },
+            {"name": "vnet-data", "address_space": ["10.1.0.0/16"], "subnets": [{"name": "db", "cidr": "10.1.1.0/24"}]},
+        ]
+    )
+    result = service.validate_resource_subnets({"main-network": network})
+    assert result.ok
+    assert result.messages() == []
+
+
+def test_validate_resource_subnets_skips_an_unresolved_network_reference():
+    """A network name missing from the resolved dict (an unresolved
+    reference) is silently skipped — `validate_references` already reports
+    it; this method must not duplicate that finding or raise."""
+    service = WorkspaceService(data=_workspace_with_subnet())
+    service.validate()
+
+    result = service.validate_resource_subnets({})
+    assert result.ok
+    assert result.messages() == []
+
+
+def test_validate_resource_subnets_ignores_resources_with_no_subnet():
+    data = _workspace_with_subnet()
+    data["spec"]["resources"].append({"name": "other-vm", "resource": "other-vm-class"})
+    service = WorkspaceService(data=data)
+    service.validate()
+
+    result = service.validate_resource_subnets({"main-network": _network_model()})
+    assert result.ok
 
 
 # ---------------------------------------------------------------------------

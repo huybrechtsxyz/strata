@@ -278,9 +278,7 @@ def promote_view(
         run.report(diagnostics, root=context.root)
         if isinstance(run.reporter, JsonReporter):
             run.reporter.data = (
-                {"written_to": str(output_path), "rings": len(view.rings)}
-                if output_path is not None
-                else payload
+                {"written_to": str(output_path), "rings": len(view.rings)} if output_path is not None else payload
             )
         run.ok = True
 

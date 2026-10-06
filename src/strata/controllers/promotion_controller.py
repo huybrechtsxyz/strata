@@ -400,8 +400,7 @@ def _select_target_wave(ring_view: PromotionRingView, wave: str | None) -> Promo
         match = next((w for w in ring_view.waves if w.wave == wave), None)
         if match is None:
             raise UsageError(
-                f"Ring '{ring_view.ring}' (order {ring_view.order}) has no wave named '{wave}'. "
-                f"Available: {names}."
+                f"Ring '{ring_view.ring}' (order {ring_view.order}) has no wave named '{wave}'. Available: {names}."
             )
         return match
 

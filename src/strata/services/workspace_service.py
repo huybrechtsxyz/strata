@@ -2,6 +2,7 @@
 """Service for loading and validating workspace configuration."""
 
 from strata.models.configuration_model import ConfigurationModel
+from strata.models.network_model import NetworkModel
 from strata.models.topology_config_model import TopologyConfigModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.base_service import BaseService
@@ -22,10 +23,12 @@ class WorkspaceService(BaseService[WorkspaceModel]):
     workspace's `resources`/`namespaces`) are Phase 1 model validators on
     `WorkspaceSpecModel` itself.
 
-    Cross-checking each `WorkspaceResourceModel.subnet.subnet` against the
-    real subnet names inside the referenced Network document's
-    `NetworkDefinitionModel.subnets[]` is still fully deferred (not ported
-    yet) for the same file-loading reason.
+    `validate_resource_subnets()` below is the same shape, for
+    `WorkspaceResourceModel.subnet.subnet` against the real subnet names
+    inside the referenced Network document(s) — `.network` (which Network
+    *document*) is already checked in Phase 1
+    (`validate_resource_subnet_references`); this is the Phase 2 half, once
+    that document is actually loaded.
     """
 
     def _get_model_class(self) -> type[WorkspaceModel]:
@@ -165,5 +168,51 @@ class WorkspaceService(BaseService[WorkspaceModel]):
                         location="spec.resources",
                         code="role_missing_module",
                     )
+
+        return diagnostics
+
+    def validate_resource_subnets(self, network_models: dict[str, NetworkModel]) -> Diagnostics:
+        """Cross-check each resource's `subnet.subnet` against the real
+        subnet names inside its referenced Network document.
+
+        `subnet.network` already named a real, existing workspace network
+        in Phase 1 (`validate_resource_subnet_references`, `workspace_model.py`)
+        — this is the Phase 2 half, once that Network document is actually
+        loaded. A Network document's own `spec.networks[]` can declare more
+        than one independently-named network (`docs/config/network.md`),
+        and `WorkspaceResourceSubnetModel` has no field naming which
+        internal network a resource means — only the document as a whole —
+        so `subnet.subnet` is checked against the union of every internal
+        network's subnet names in that one document, not a single one of
+        them.
+
+        Args:
+            network_models: Already-loaded `NetworkModel` documents, keyed
+                by `meta.name`, for every network name this workspace's
+                resources reference via `subnet.network`. A name missing
+                from this dict (an unresolved reference) is silently
+                skipped — `validate_references` already reported it; this
+                method would otherwise duplicate that finding.
+        """
+        diagnostics = Diagnostics()
+        if self.model is None:
+            return diagnostics
+
+        for resource in self.model.spec.resources or []:
+            if resource.subnet is None:
+                continue
+
+            network_model = network_models.get(resource.subnet.network)
+            if network_model is None:
+                continue  # unresolved reference — validate_references already reported it
+
+            subnet_names = {subnet.name for definition in network_model.spec.networks for subnet in definition.subnets}
+            if resource.subnet.subnet not in subnet_names:
+                diagnostics.error(
+                    f"Resource '{resource.name}' subnet '{resource.subnet.subnet}' not found in network "
+                    f"'{resource.subnet.network}'. Available subnets: {sorted(subnet_names)}",
+                    location="spec.resources",
+                    code="unregistered_subnet",
+                )
 
         return diagnostics
