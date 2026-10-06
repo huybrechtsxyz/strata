@@ -55,7 +55,7 @@ def resolve_module(index: DocumentIndex, reference: ModuleReferenceModel) -> Mod
     return cast(ModuleModel, entry.model)
 
 
-def _apply_version_pins(module: ModuleModel, version: VersionModel | None) -> ModuleModel:
+def apply_version_pins(module: ModuleModel, version: VersionModel | None) -> ModuleModel:
     """Overlay `version.spec.pins.charts`/`.images` onto `module` (docs/design/
     version-pin-overlay.md Phase 4).
 
@@ -193,7 +193,7 @@ def build_workload_modules(
             continue
 
         module = resolve_module(index, reference)
-        module = _apply_version_pins(module, version)
+        module = apply_version_pins(module, version)
         if module.spec.type is None:
             raise UsageError(
                 f"Namespace '{namespace.meta.name}', module '{reference.name}': "

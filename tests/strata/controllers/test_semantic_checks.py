@@ -1366,3 +1366,151 @@ def test_value_reference_with_no_value_tokens_anywhere_is_a_no_op(tmp_path):
     context = _resolve(_base_solution(tmp_path))
     assert context.ok, context.diagnostics.messages()
     assert not any(e.code and e.code.startswith("value_reference_") for e in context.diagnostics.errors)
+
+
+# ---------------------------------------------------------------------------
+# Deployment <-> Version: workspace exclusivity (docs/work/version-lifecycle.md
+# Phase 1)
+# ---------------------------------------------------------------------------
+
+
+def _write_version(root: Path, *, name: str = "prd", workspace: str | None = None) -> None:
+    workspace_line = f"  workspace: {workspace}\n" if workspace is not None else ""
+    _write(
+        root,
+        "version.yaml",
+        f"""apiVersion: strata.huybrechts.xyz/v2
+kind: version
+meta:
+  name: {name}
+spec:
+{workspace_line}  pins: {{}}
+""",
+    )
+
+
+def _point_deployment_at_version(root: Path, version_name: str = "prd") -> None:
+    path = root / "deployment.yaml"
+    path.write_text(path.read_text(encoding="utf-8") + f"  version: {version_name}\n", encoding="utf-8")
+
+
+def test_version_with_declared_workspace_matching_deployment_passes(tmp_path):
+    root = _base_solution(tmp_path)
+    _write_version(root, workspace="main")
+    _point_deployment_at_version(root)
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_version_with_declared_workspace_mismatching_deployment_is_caught(tmp_path):
+    root = _base_solution(tmp_path)
+    _write_version(root, workspace="other")
+    _point_deployment_at_version(root)
+
+    context = _resolve(root)
+    assert not context.ok
+    messages = context.diagnostics.messages()
+    assert any(d.code == "version_workspace_mismatch" for d in context.diagnostics.errors)
+    assert any("'main'" in m and "'other'" in m for m in messages)
+
+
+def test_version_with_no_declared_workspace_is_established_by_first_referencing_deployment(tmp_path):
+    """Unset `spec.workspace` + one referencing deployment: nothing to
+    conflict with yet, so this passes cleanly — the deployment's workspace
+    becomes the expectation, not a declared value needing a match."""
+    root = _base_solution(tmp_path)
+    _write_version(root)
+    _point_deployment_at_version(root)
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_version_with_no_declared_workspace_catches_a_second_deployment_disagreeing(tmp_path):
+    """Two deployments referencing the same unset-workspace Version document,
+    naming two different workspaces — the second one disagrees with
+    whichever workspace the first one established."""
+    root = _base_solution(tmp_path)
+    _write_version(root)
+    _point_deployment_at_version(root)
+    _write(
+        root,
+        "workspace2.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: workspace
+meta:
+  name: secondary
+spec:
+  providers: [azure-main]
+  provisioners:
+    - name: tf
+      tool: terraform
+      source: {source_path: terraform/secondary}
+""",
+    )
+    _write(
+        root,
+        "deployment2.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: deployment
+meta:
+  name: secondary-deployment
+spec:
+  workspace: secondary
+  environments: [prd]
+  version: prd
+""",
+    )
+
+    context = _resolve(root)
+    assert not context.ok
+    assert any(d.code == "version_workspace_mismatch" for d in context.diagnostics.errors)
+
+
+def test_version_with_no_referencing_deployment_is_a_no_op(tmp_path):
+    """A Version document nothing references has nothing to check against."""
+    root = _base_solution(tmp_path)
+    _write_version(root, workspace="main")
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_deployment_with_no_workspace_skips_the_version_check(tmp_path):
+    """A partial (reusable-base) deployment referencing a Version document
+    but naming no workspace of its own has nothing to compare — skip,
+    don't guess (same 'partial: true' shape `_partial_layers_deployment()`
+    already uses for an analogous reason)."""
+    root = _base_solution(tmp_path)
+    _write(
+        root,
+        "workspace2.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: workspace
+meta:
+  name: secondary
+spec:
+  providers: [azure-main]
+  provisioners:
+    - name: tf
+      tool: terraform
+      source: {source_path: terraform/secondary}
+""",
+    )
+    _write_version(root, workspace="secondary")
+    _write(
+        root,
+        "deployment-base.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: deployment
+meta:
+  name: reusable-base
+spec:
+  partial: true
+  version: prd
+""",
+    )
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()

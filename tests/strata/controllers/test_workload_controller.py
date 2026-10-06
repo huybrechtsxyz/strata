@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from strata.controllers.solution_controller import DocumentIndex, DocumentRef, IndexEntry
-from strata.controllers.workload_controller import _apply_version_pins, build_workload_modules, resolve_module
+from strata.controllers.workload_controller import apply_version_pins, build_workload_modules, resolve_module
 from strata.integrations.resolved_context import ValueResolution
 from strata.models.common_models import ModuleReferenceModel, PlatformKind, SourceModel
 from strata.models.module_model import ModuleMetaModel, ModuleModel, ModuleServiceModel, ModuleSpecModel
@@ -86,13 +86,13 @@ def _version(
 
 def test_apply_version_pins_returns_same_module_when_version_is_none():
     module = _module("authentik")
-    assert _apply_version_pins(module, None) is module
+    assert apply_version_pins(module, None) is module
 
 
 def test_apply_version_pins_returns_same_module_when_no_pin_matches():
     module = _module("authentik")
     version = _version(chart_pins={"other-module": "9.9.9"}, image_pins={"other-service": "9.9.9"})
-    assert _apply_version_pins(module, version) is module
+    assert apply_version_pins(module, version) is module
 
 
 def test_apply_version_pins_overrides_chart_version_when_chart_based():
@@ -101,7 +101,7 @@ def test_apply_version_pins_overrides_chart_version_when_chart_based():
     )
     version = _version(chart_pins={"authentik": "2024.2.0"})
 
-    overlaid = _apply_version_pins(module, version)
+    overlaid = apply_version_pins(module, version)
 
     assert overlaid is not module
     assert overlaid.spec.source.chart_version == "2024.2.0"
@@ -114,7 +114,7 @@ def test_apply_version_pins_ignores_chart_pin_when_module_is_not_chart_based():
     module = _module("authentik")  # default source has no chart_name
     version = _version(chart_pins={"authentik": "2024.2.0"})
 
-    assert _apply_version_pins(module, version) is module
+    assert apply_version_pins(module, version) is module
 
 
 def test_apply_version_pins_overrides_matching_service_image():
@@ -129,7 +129,7 @@ def test_apply_version_pins_overrides_matching_service_image():
     )
     version = _version(image_pins={"redis": "redis:7.2"})
 
-    overlaid = _apply_version_pins(module, version)
+    overlaid = apply_version_pins(module, version)
 
     assert overlaid is not module
     assert overlaid.spec.services[0].image == "redis:7.2"
@@ -151,7 +151,7 @@ def test_apply_version_pins_ignores_image_pin_when_service_has_no_image_of_its_o
     )
     version = _version(image_pins={"app": "ignored:1.0"})
 
-    assert _apply_version_pins(module, version) is module
+    assert apply_version_pins(module, version) is module
 
 
 def test_apply_version_pins_logs_each_application():
@@ -174,7 +174,7 @@ def test_apply_version_pins_logs_each_application():
     stream = io.StringIO()
     try:
         configure_logging(level="INFO", json_output=True, stream=stream)
-        _apply_version_pins(module, version)
+        apply_version_pins(module, version)
     finally:
         shutdown_logging()
 

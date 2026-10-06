@@ -49,9 +49,11 @@ from strata import __version__
 from strata.controllers.audit_event_rendering import render_manifest_event, render_metrics_event
 from strata.controllers.audit_path_resolution import resolve_audit_relative_path
 from strata.controllers.audit_push import push_audit_files
+from strata.controllers.build_controller import apply_remote_version_pins
 from strata.controllers.sbom_controller import SBOM_FORMAT
 from strata.controllers.solution_context import SolutionContext
-from strata.controllers.value_controller import resolve_deployment
+from strata.controllers.value_controller import resolve_deployment, resolve_version
+from strata.controllers.workload_controller import apply_version_pins, resolve_module
 from strata.integrations import registry
 from strata.integrations.capabilities import AuditSinkIntegration
 from strata.integrations.errors import IntegrationError
@@ -59,7 +61,10 @@ from strata.models.audit_manifest_model import (
     ChangeReferenceModel,
     DeploymentManifestModel,
     ManifestArtifactsModel,
+    ManifestChartModel,
+    ManifestImageModel,
     ManifestPlatformReferenceModel,
+    ManifestRepositoryModel,
     ManifestSbomReferenceModel,
 )
 from strata.models.audit_metrics_model import DeploymentMetricsModel, MetricsDimensionsModel, MetricsMeasuresModel
@@ -68,6 +73,9 @@ from strata.models.common_models import PlatformKind, PlatformVersion
 from strata.models.configuration_model import ConfigurationModel
 from strata.models.deployment_model import DeploymentModel
 from strata.models.integration_model import Capability, IntegrationModel
+from strata.models.module_model import ModuleModel
+from strata.models.namespace_model import NamespaceModel
+from strata.models.workspace_model import WorkspaceModel
 from strata.utils import layout
 from strata.utils.actor import resolve_actor
 from strata.utils.diagnostics import Diagnostics, Severity
@@ -87,6 +95,7 @@ def finalize_and_distribute_deploy_audit(
     started_at: datetime,
     run_diagnostics: Diagnostics,
     dry_run: bool = False,
+    pin: str | None = None,
     change_system: str | None = None,
     change_id: str | None = None,
     change_reason: str | None = None,
@@ -115,6 +124,11 @@ def finalize_and_distribute_deploy_audit(
             never `datetime.now()` called from inside this function.
         run_diagnostics: What `deploy_run()` itself returned.
         dry_run: Same flag passed to `deploy_run()`.
+        pin: The same `--pin` passed to `deploy_run()` (docs/work/
+            version-lifecycle.md Phase 5) — forwarded to `resolve_deployment()`
+            here too, so the manifest's `artifacts.repositories`/`.images`/
+            `.charts` record what was *actually* deployed (the pinned
+            version), not whatever `spec.version` happens to say on disk.
         change_system: `deploy run --change-system`, or `None` when the
             caller supplied no change reference at all. Supplied together
             with `change_id`/`change_reason` or not at all — enforced by
@@ -144,7 +158,7 @@ def finalize_and_distribute_deploy_audit(
     if dry_run:
         return diagnostics
 
-    deployment = resolve_deployment(context, deployment_name)
+    deployment = resolve_deployment(context, deployment_name, version_pin=pin)
     if deployment.spec.workspace is None:
         return diagnostics  # deploy_run() already failed and reported this; nothing to finalize
 
@@ -171,6 +185,7 @@ def finalize_and_distribute_deploy_audit(
         actor=actor,
         supplied_at=completed_at.isoformat(),
     )
+    repositories, images, charts = _collect_artifacts_bom(context, deployment)
 
     manifest = DeploymentManifestModel(
         execution_id=execution_id,
@@ -185,7 +200,9 @@ def finalize_and_distribute_deploy_audit(
         status=status,
         dry_run=False,
         deployed_by=actor,
-        artifacts=ManifestArtifactsModel(platform=platform_ref),
+        artifacts=ManifestArtifactsModel(
+            platform=platform_ref, repositories=repositories, images=images, charts=charts
+        ),
         sbom=_sbom_reference(build_path),
         change_reference=change_reference,
         errors=run_diagnostics.messages(Severity.ERROR) or None,
@@ -388,6 +405,91 @@ def _single_environment(deployment: DeploymentModel) -> str | None:
     if environments and len(environments) == 1:
         return environments[0]
     return None
+
+
+def _collect_artifacts_bom(
+    context: SolutionContext, deployment: DeploymentModel
+) -> tuple[dict[str, ManifestRepositoryModel] | None, list[ManifestImageModel] | None, list[ManifestChartModel] | None]:
+    """The effective (pin-resolved) repositories/images/charts this
+    deployment's workspace actually reaches — the fix for ADR-0019's own
+    flagged gap (docs/work/version-lifecycle.md's "The audit gap").
+
+    Deliberately **not** sourced from `sbom.json`: `write_sbom()` resolves
+    every module straight off the `DocumentIndex` (`sbom_controller.
+    _resolve_all_modules()`), with no `kind: version` pin overlay applied
+    at all — accurate for *which* images/charts exist, silently wrong for
+    their *effective* version whenever a pin is active. Reuses the exact
+    same overlay functions `build_run()` itself calls instead —
+    `workload_controller.apply_version_pins()` and
+    `build_controller.apply_remote_version_pins()` — one resolution path,
+    not a second, independently-maintained copy of the same logic.
+
+    Scoped to what this deployment's own workspace reaches (its
+    provisioners' and workload modules' `source.remote`, its namespaces'
+    modules), never the whole solution's — a manifest records what this
+    deployment actually used, not everything merely declared somewhere.
+
+    Returns:
+        `(repositories, images, charts)`, each `None` when empty rather
+        than an empty collection — `DeploymentManifestModel`'s own
+        `exclude_none` serialisation then omits the key entirely, matching
+        `ManifestArtifactsModel`'s existing optional fields.
+    """
+    index = context.controller.index
+    solution = context.controller.solution
+    version = resolve_version(context, deployment)
+
+    if deployment.spec.workspace is None:
+        return None, None, None
+    workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
+    if workspace_entry is None:
+        return None, None, None
+    workspace = cast(WorkspaceModel, workspace_entry.model)
+
+    modules: list[ModuleModel] = []
+    for namespace_name in workspace.spec.namespaces or []:
+        namespace_entry = index.get(PlatformKind.NAMESPACE, namespace_name)
+        if namespace_entry is None:
+            continue
+        namespace = cast(NamespaceModel, namespace_entry.model)
+        for reference in namespace.spec.modules or []:
+            if not reference.enabled:
+                continue
+            modules.append(apply_version_pins(resolve_module(index, reference), version))
+
+    images: list[ManifestImageModel] = []
+    charts: list[ManifestChartModel] = []
+    seen_images: set[str] = set()
+    for module in modules:
+        if module.spec.source.chart_name is not None:
+            charts.append(
+                ManifestChartModel(
+                    name=module.meta.name,
+                    chart=module.spec.source.chart_name,
+                    version=module.spec.source.chart_version,
+                )
+            )
+        for service in module.spec.services or []:
+            if service.image and service.image not in seen_images:
+                seen_images.add(service.image)
+                images.append(ManifestImageModel(name=service.name, image=service.image))
+
+    remote_names: set[str] = set()
+    for provisioner in workspace.spec.provisioners:
+        if provisioner.source is not None and provisioner.source.remote is not None:
+            remote_names.add(provisioner.source.remote)
+    for module in modules:
+        if module.spec.source.remote is not None:
+            remote_names.add(module.spec.source.remote)
+
+    repositories: dict[str, ManifestRepositoryModel] = {}
+    if remote_names and solution is not None:
+        all_remotes = {remote.name: remote for remote in (solution.spec.remotes or [])}
+        scoped_remotes = {name: all_remotes[name] for name in remote_names if name in all_remotes}
+        for name, remote in apply_remote_version_pins(scoped_remotes, version).items():
+            repositories[name] = ManifestRepositoryModel(url=remote.url, ref=remote.reference, commit=None)
+
+    return (repositories or None, images or None, charts or None)
 
 
 def _platform_reference(build_path: Path) -> tuple[ManifestPlatformReferenceModel | None, Diagnostics]:

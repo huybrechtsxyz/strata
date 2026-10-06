@@ -11,7 +11,7 @@ import yaml
 
 from strata.controllers.build_controller import (
     BuildCleanError,
-    _apply_remote_version_pins,
+    apply_remote_version_pins,
     build_resolved_workspace_graph,
     build_run,
     find_provisioner,
@@ -131,20 +131,20 @@ def _version(name: str = "prd", *, remote_pins: dict[str, str] | None = None) ->
 
 def test_apply_remote_version_pins_returns_same_dict_when_version_is_none():
     remotes = {"infra-remote": _remote()}
-    assert _apply_remote_version_pins(remotes, None) is remotes
+    assert apply_remote_version_pins(remotes, None) is remotes
 
 
 def test_apply_remote_version_pins_returns_same_dict_when_no_pin_matches():
     remotes = {"infra-remote": _remote()}
     version = _version(remote_pins={"other-remote": "v9.9.9"})
-    assert _apply_remote_version_pins(remotes, version) is remotes
+    assert apply_remote_version_pins(remotes, version) is remotes
 
 
 def test_apply_remote_version_pins_overrides_reference_when_pinned():
     remotes = {"infra-remote": _remote(reference="main"), "untouched": _remote("untouched", reference="v1.0.0")}
     version = _version(remote_pins={"infra-remote": "v2.0.0"})
 
-    overlaid = _apply_remote_version_pins(remotes, version)
+    overlaid = apply_remote_version_pins(remotes, version)
 
     assert overlaid is not remotes
     assert overlaid["infra-remote"].reference == "v2.0.0"
@@ -164,7 +164,7 @@ def test_apply_remote_version_pins_logs_each_application():
     stream = io.StringIO()
     try:
         configure_logging(level="INFO", json_output=True, stream=stream)
-        _apply_remote_version_pins(remotes, version)
+        apply_remote_version_pins(remotes, version)
     finally:
         shutdown_logging()
 
@@ -274,7 +274,9 @@ def test_build_run_materialises_source_and_writes_terraform_output(tmp_path: Pat
 # ---------------------------------------------------------------------------
 
 
-def _terraform_solution_with_remote(tmp_path: Path, *, version_doc: str = "") -> Path:
+def _terraform_solution_with_remote(
+    tmp_path: Path, *, version_doc: str = "", reference_version_from_deployment: bool = True
+) -> Path:
     """Like `_terraform_solution()`, but the provisioner's source comes from
     a declared `fetch: strata` git remote instead of a bare local path."""
     root = _solution(tmp_path)
@@ -313,7 +315,7 @@ def _terraform_solution_with_remote(tmp_path: Path, *, version_doc: str = "") ->
         "environment.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec: {}\n",
     )
-    version_line = "  version: prd\n" if version_doc else ""
+    version_line = "  version: prd\n" if (version_doc and reference_version_from_deployment) else ""
     _write(
         root,
         "deployment.yaml",
@@ -781,6 +783,88 @@ def test_build_run_applies_remotes_charts_and_images_pins_simultaneously(tmp_pat
     # images: the pinned image reached the rendered docker-compose.yml.
     compose = yaml.safe_load((build_path / "apps" / "docker-compose.yml").read_text())
     assert compose["services"]["redis"]["image"] == "redis:7.2"
+
+
+# ---------------------------------------------------------------------------
+# build_run()'s --pin (docs/work/version-lifecycle.md Phase 5) — ephemeral,
+# per-invocation override of Deployment.spec.version, zero persisted mutation.
+# ---------------------------------------------------------------------------
+
+
+def test_build_run_pin_produces_identical_output_to_hand_editing_spec_version(tmp_path: Path, monkeypatch):
+    """The exact "Done when" criterion: a --pin'd build produces identical
+    output to hand-editing spec.version and building without the flag."""
+    from strata.controllers import remote_resolution as remote_resolution_module
+    from strata.utils import layout
+
+    version_doc = (
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n"
+        "  pins:\n    remotes:\n      infra-remote: v2.0.0\n"
+    )
+    monkeypatch.setattr(remote_resolution_module, "run_command", _fake_clone_run_command)
+
+    # Hand-edited: deployment.yaml declares spec.version: prd directly.
+    hand_edited_root = _terraform_solution_with_remote(tmp_path / "hand-edited", version_doc=version_doc)
+    hand_edited_build = tmp_path / "hand-edited-build"
+    diagnostics = build_run(_context(hand_edited_root), "app", hand_edited_build)
+    assert diagnostics.ok, diagnostics.messages()
+
+    # --pin: deployment.yaml never mentions "prd" at all.
+    pinned_root = _terraform_solution_with_remote(
+        tmp_path / "pinned", version_doc=version_doc, reference_version_from_deployment=False
+    )
+    assert "version" not in (pinned_root / "deployment.yaml").read_text(encoding="utf-8")
+    pinned_build = tmp_path / "pinned-build"
+    diagnostics = build_run(_context(pinned_root), "app", pinned_build, pin="prd")
+    assert diagnostics.ok, diagnostics.messages()
+
+    # Identical rendered output in both cases.
+    assert (hand_edited_build / "infra" / "main.tf").read_text() == (pinned_build / "infra" / "main.tf").read_text()
+    assert layout.remote_checkout_path(pinned_root, "infra-remote", "v2.0.0").exists()
+
+
+def test_build_run_pin_never_mutates_the_deployment_document_on_disk(tmp_path: Path, monkeypatch):
+    """The other half of the "Done when" criterion: the deployment document
+    itself is provably untouched on disk afterward."""
+    from strata.controllers import remote_resolution as remote_resolution_module
+
+    monkeypatch.setattr(remote_resolution_module, "run_command", _fake_clone_run_command)
+    root = _terraform_solution_with_remote(
+        tmp_path,
+        version_doc=(
+            "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n"
+            "  pins:\n    remotes:\n      infra-remote: v2.0.0\n"
+        ),
+        reference_version_from_deployment=False,
+    )
+    deployment_path = root / "deployment.yaml"
+    before = deployment_path.read_text(encoding="utf-8")
+
+    build_run(_context(root), "app", tmp_path / "build", pin="prd")
+
+    assert deployment_path.read_text(encoding="utf-8") == before
+
+
+def test_build_run_pin_raises_for_an_unknown_version(tmp_path: Path):
+    root = _terraform_solution(tmp_path)
+    with pytest.raises(UsageError, match="--pin names an unknown version document: 'ghost'"):
+        build_run(_context(root), "app", tmp_path / "build", pin="ghost")
+
+
+def test_build_run_without_pin_uses_the_deployments_own_declared_version(tmp_path: Path, monkeypatch):
+    """Control case: omitting --pin entirely behaves exactly as Phase 3/4's
+    existing tests already prove — no regression from threading the new
+    parameter through resolve_deployment()."""
+    from strata.controllers import remote_resolution as remote_resolution_module
+    from strata.utils import layout
+
+    monkeypatch.setattr(remote_resolution_module, "run_command", _fake_clone_run_command)
+    root = _terraform_solution_with_remote(tmp_path)  # no version_doc -> no pin at all
+
+    diagnostics = build_run(_context(root), "app", tmp_path / "build")
+
+    assert diagnostics.ok
+    assert layout.remote_checkout_path(root, "infra-remote", "main").exists()
 
 
 # ---------------------------------------------------------------------------

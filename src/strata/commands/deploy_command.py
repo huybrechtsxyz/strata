@@ -77,6 +77,15 @@ def deploy_command() -> None:
     help="Restrict to steps whose ProvisioningStepModel.scope matches LABEL.",
 )
 @click.option(
+    "--pin",
+    default=None,
+    metavar="VERSION",
+    help="Override spec.version with this kind: version document for this invocation only "
+    "(ADR-0019) — zero persisted mutation, the deployment document on disk is never touched. "
+    "Covers the artifacts pin category (the one that resolves live, at deploy time); pass the "
+    "same value to 'build run --pin' too so a deploy matches the build it is executing.",
+)
+@click.option(
     "--change-system",
     default=None,
     metavar="TEXT",
@@ -141,6 +150,7 @@ def deploy_run_command(
     dry_run: bool,
     stage: str | None,
     scope: str | None,
+    pin: str | None,
     change_system: str | None,
     change_id: str | None,
     change_reason: str | None,
@@ -158,7 +168,8 @@ def deploy_run_command(
     \b
     Exit codes:
       0  every filtered step deployed successfully
-      2  bad arguments, DEPLOYMENT does not exist, or not inside a solution
+      2  bad arguments, DEPLOYMENT does not exist, --pin names an unknown
+         version document, or not inside a solution
       3  a declared value failed to resolve, a filtered step's tool is not
          available on PATH, or a step's plan/deploy failed
 
@@ -202,6 +213,7 @@ def deploy_run_command(
             stage=stage,
             scope=scope,
             on_step=run.step,
+            pin=pin,
         )
 
         # Audit trail — finalize + write locally + distribute (docs/design/
@@ -216,6 +228,7 @@ def deploy_run_command(
             started_at=started_at,
             run_diagnostics=diagnostics,
             dry_run=dry_run,
+            pin=pin,
             change_system=change_system,
             change_id=change_id,
             change_reason=change_reason,

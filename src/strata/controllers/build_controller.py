@@ -75,7 +75,7 @@ class BuildCleanError(SystemError):
     """`build_path` could not be wiped before rendering (`clean=True`)."""
 
 
-def _apply_remote_version_pins(
+def apply_remote_version_pins(
     remotes: dict[str, SolutionRemoteModel], version: VersionModel | None
 ) -> dict[str, SolutionRemoteModel]:
     """Overlay `version.spec.pins.remotes` onto `remotes` (docs/design/
@@ -259,6 +259,7 @@ def build_run(
     on_step: Callable[[str], None] | None = None,
     resolve: bool = False,
     env_files: list[Path] | None = None,
+    pin: str | None = None,
 ) -> Diagnostics:
     """Render `deployment_name`'s workspace provisioners into `build_path`.
 
@@ -309,6 +310,18 @@ def build_run(
             value. Covers `environment`-store variables/features a local
             dev machine's shell doesn't already have, the way a CI
             pipeline's own exported env vars would.
+        pin: `--pin` (docs/work/version-lifecycle.md Phase 5, reviving
+            ADR-0019's own design) — resolves `pin` against `kind: version`
+            and overrides `deployment.spec.version` for this invocation
+            only; zero persisted mutation, the deployment document on disk
+            is never touched. Primary target for this flag: `images`/
+            `charts`/`remotes` pins only ever take effect at build time
+            (see the selection table in docs/work/version-lifecycle.md),
+            so `--pin` has to live here to affect 3 of the 4 pin
+            categories at all. Forwarded to `resolve_deployment()` (the
+            one place the override happens) and to `resolve_values()`
+            when `resolve=True`, so the `artifacts` category's `store:
+            artifact` resolution sees it too.
 
     Returns:
         Diagnostics accumulated while deriving build-time values and,
@@ -317,7 +330,8 @@ def build_run(
 
     Raises:
         UsageError: `deployment_name` does not exist, its `workspace` is
-            unset or does not resolve, or a provisioning step names an
+            unset or does not resolve, `pin` does not name an indexed
+            Version document, or a provisioning step names an
             integration/provisioner that cannot be resolved.
         BuildCleanError: `clean` is `True`, `dry_run` is `False`, and
             `build_path` could not be removed (permissions, a file in use).
@@ -333,7 +347,7 @@ def build_run(
 
     index = context.controller.index
 
-    deployment = resolve_deployment(context, deployment_name)
+    deployment = resolve_deployment(context, deployment_name, version_pin=pin)
     if deployment.spec.workspace is None:
         raise UsageError(f"Deployment '{deployment_name}' has no workspace to build.")
     workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
@@ -357,7 +371,7 @@ def build_run(
     if resolve:
         variables, secrets, features = merge_environment_models(environments)
         all_keys = sorted({**variables, **secrets, **features})
-        validation = resolve_values(context, deployment_name, all_keys)
+        validation = resolve_values(context, deployment_name, all_keys, version_pin=pin)
         diagnostics.extend(validation.diagnostics)
 
     if clean and build_path.exists():
@@ -391,7 +405,7 @@ def build_run(
         if context.controller.solution is not None
         else {}
     )
-    remotes = _apply_remote_version_pins(remotes, version)
+    remotes = apply_remote_version_pins(remotes, version)
 
     for step in ordered_by_depends_on(workspace.spec.execution or []):
         provisioner = find_provisioner(workspace, step.provisioner)

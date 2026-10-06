@@ -216,6 +216,184 @@ def test_manifest_includes_sbom_reference_when_present(tmp_path: Path, _terrafor
 
 
 # ---------------------------------------------------------------------------
+# artifacts.repositories/.images/.charts (docs/work/version-lifecycle.md
+# Phase 6 — the audit gap: effective, pin-resolved values, not the SBOM's
+# own index-sourced (never pin-overlaid) components).
+# ---------------------------------------------------------------------------
+
+
+def _solution_with_workload(
+    tmp_path: Path, *, version_doc: str = "", reference_version_from_deployment: bool = True
+) -> Path:
+    """Like `_solution_root()`, but the workspace also reaches a chart-based
+    (helm) module and an image-based (compose) module through one
+    namespace, plus a `fetch: strata` remote the chart-based module's
+    source names — enough surface to exercise all three new BOM fields at
+    once."""
+    root = tmp_path / "sln"
+    _write(
+        root,
+        "strata.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: solution\nmeta:\n  name: test-solution\nspec:\n"
+        "  remotes:\n    - name: infra-remote\n      type: git\n"
+        "      url: https://example.com/org/infra.git\n      reference: main\n",
+    )
+    _write(root, "infra/main.tf", "# root module\n")
+    _write(root, "charts/authentik/Chart.yaml", "name: authentik\n")
+    _write(root, "services/redis/docker-compose.yml", "# stand-in\n")
+    _write(
+        root,
+        "provider.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
+        "  properties:\n    type: local\n    region: local\n",
+    )
+    _write(
+        root,
+        "resource.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
+        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  default_tags:\n    managed-by: strata\n",
+    )
+    _write(
+        root,
+        "module-authentik.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: module\nmeta:\n  name: authentik\nspec:\n"
+        "  source:\n    remote: infra-remote\n    chart_name: authentik\n    chart_version: 2024.1.0\n"
+        "  type: helm\n  default_labels:\n    app: authentik\n  services:\n    - name: server\n",
+    )
+    _write(
+        root,
+        "module-redis.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: module\nmeta:\n  name: redis\nspec:\n"
+        "  source:\n    source_path: services/redis\n  type: compose\n"
+        "  default_labels:\n    app: redis\n  services:\n    - name: redis\n      image: redis:7\n",
+    )
+    _write(
+        root,
+        "namespace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: namespace\nmeta:\n  name: apps\nspec:\n"
+        "  default_labels:\n    app: apps\n"
+        "  modules:\n    - name: auth\n      module: authentik\n    - name: redis\n      module: redis\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  namespaces:\n    - apps\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n      scope: infra\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec: {}\n",
+    )
+    version_line = "  version: prd\n" if (version_doc and reference_version_from_deployment) else ""
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        f"  workspace: main\n{version_line}  environments:\n    - prd\n",
+    )
+    if version_doc:
+        _write(root, "version.yaml", version_doc)
+    return root
+
+
+_WORKLOAD_VERSION_DOC = (
+    "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n"
+    "  pins:\n"
+    "    remotes:\n      infra-remote: v2.0.0\n"
+    "    charts:\n      authentik: 2024.2.0\n"
+    "    images:\n      redis: redis:7.2\n"
+)
+
+
+def test_manifest_records_effective_repositories_images_and_charts(tmp_path: Path, _terraform_stub):
+    root = _solution_with_workload(tmp_path, version_doc=_WORKLOAD_VERSION_DOC)
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    _finalize(root, build_path)
+
+    manifest_path = next(layout.audit_dir(root).rglob("_manifest.json"))
+    import json as _json
+
+    manifest = _json.loads(manifest_path.read_text())
+    artifacts = manifest["artifacts"]
+    assert artifacts["repositories"]["infra-remote"]["ref"] == "v2.0.0"
+    assert {"name": "redis", "image": "redis:7.2"} in artifacts["images"]
+    assert {"name": "authentik", "chart": "authentik", "version": "2024.2.0"} in artifacts["charts"]
+
+
+def test_manifest_without_any_pin_records_the_declared_values(tmp_path: Path, _terraform_stub):
+    """Control case: with no `kind: version` document at all, the manifest
+    still records every reachable target's own declared value — "the
+    effective value for every actually-deployed target, not only pinned
+    ones" (this doc's own Phase 6 requirement)."""
+    root = _solution_with_workload(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    _finalize(root, build_path)
+
+    manifest_path = next(layout.audit_dir(root).rglob("_manifest.json"))
+    import json as _json
+
+    manifest = _json.loads(manifest_path.read_text())
+    artifacts = manifest["artifacts"]
+    assert artifacts["repositories"]["infra-remote"]["ref"] == "main"
+    assert {"name": "redis", "image": "redis:7"} in artifacts["images"]
+    assert {"name": "authentik", "chart": "authentik", "version": "2024.1.0"} in artifacts["charts"]
+
+
+def test_manifest_pin_records_the_pinned_effective_values_not_the_on_disk_ones(tmp_path: Path, _terraform_stub):
+    """`--pin`'s own "Done when" extended to the audit record: the manifest
+    reflects what was *actually* deployed (the pin), not `spec.version` as
+    hand-written on disk (absent here entirely)."""
+    root = _solution_with_workload(tmp_path, version_doc=_WORKLOAD_VERSION_DOC, reference_version_from_deployment=False)
+    assert "version" not in (root / "deployment.yaml").read_text(encoding="utf-8")
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    context = _context(root)
+    started_at = datetime.now(timezone.utc) - timedelta(seconds=5)
+    finalize_and_distribute_deploy_audit(
+        context,
+        "app",
+        build_path,
+        execution_id="11111111-1111-1111-1111-111111111111",
+        started_at=started_at,
+        run_diagnostics=Diagnostics(),
+        pin="prd",
+    )
+
+    manifest_path = next(layout.audit_dir(root).rglob("_manifest.json"))
+    import json as _json
+
+    manifest = _json.loads(manifest_path.read_text())
+    artifacts = manifest["artifacts"]
+    assert artifacts["repositories"]["infra-remote"]["ref"] == "v2.0.0"
+    assert {"name": "redis", "image": "redis:7.2"} in artifacts["images"]
+    assert {"name": "authentik", "chart": "authentik", "version": "2024.2.0"} in artifacts["charts"]
+
+
+def test_manifest_artifacts_bom_absent_when_workspace_reaches_nothing(tmp_path: Path, _terraform_stub):
+    """The base `_solution_root()` fixture (no namespaces/modules/remotes
+    reachable) must not regress — repositories/images/charts stay unset,
+    exactly as before this phase, not empty lists/dicts."""
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    _finalize(root, build_path)
+
+    manifest_path = next(layout.audit_dir(root).rglob("_manifest.json"))
+    manifest_text = manifest_path.read_text()
+    assert '"repositories"' not in manifest_text
+    assert '"images"' not in manifest_text
+    assert '"charts"' not in manifest_text
+
+
+# ---------------------------------------------------------------------------
 # change_reference (docs/design/audit-trail.md's ChangeReferenceModel CLI wiring)
 # ---------------------------------------------------------------------------
 

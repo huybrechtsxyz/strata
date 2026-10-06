@@ -21,6 +21,7 @@ dependencies = [
     "azure-identity>=1.15",
     "azure-keyvault-secrets>=4.7",
     "azure-appconfiguration>=1.6",
+    "ruamel.yaml>=0.18",
 ]
 
 [project.optional-dependencies]

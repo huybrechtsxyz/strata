@@ -165,12 +165,15 @@ def test_version_rejects_unknown_pin_category():
         VersionModel.model_validate(_version({"modules": {"a": "1"}}))
 
 
-def test_version_accepts_tooling_hash():
-    """hash is written by tooling for tamper detection and round-trips."""
+def test_version_rejects_hash_field():
+    """spec.hash was a v2-only field with zero real consumers, removed
+    2026-10-06 (docs/work/version-lifecycle.md Phase 0) — its
+    tamper-detection premise didn't hold up (the audit manifest's own git
+    history is already the tamper-evidence)."""
     data = _version({"images": {"a": "1"}})
     data["spec"]["hash"] = "c3f7bbe0e93803073e8d080ace0e69be92b54185ecf94a4200d0c16d81a74c95"
-    model = VersionModel.model_validate(data)
-    assert model.spec.hash.startswith("c3f7bbe0")
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        VersionModel.model_validate(data)
 
 
 def test_artifacts_pin_is_a_separate_category_from_images():

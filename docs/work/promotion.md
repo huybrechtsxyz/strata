@@ -565,6 +565,92 @@ applies to every tenant referencing that one file at once. Adding customer
 #251 to `general` is one new deployment document pointing at the existing
 `dspapi-prd` version document — nothing else changes.
 
+## Implementation Plan
+
+Phased, one focused change at a time, full check suite
+(`mypy src/strata`, `ruff check src/ tests/`, `pytest -q`, `lint-imports`)
+clean before moving to the next phase — same discipline as every other
+feature in this repo. **Phases 1-3 are the MVP** — ship-visibility, no
+enforcement, matches this whole design's own "ship the smallest thing
+first" stance. Phases 4-6 are real, valuable, but not required for the
+MVP to be useful.
+
+Depends on [version-lifecycle.md](version-lifecycle.md)'s own Phase 1
+(`Version.spec.workspace` + its exclusivity check) landing first —
+everything here assumes that field and check already exist, since the
+blast-radius guarantee matters regardless of whether a document carries
+ring/order/wave tags at all. **✅ Shipped 2026-10-06** — unblocked, this
+doc's own Phase 1 can start.
+
+### Phase 1 (MVP) — `VersionPromotionModel` schema
+
+- Add `VersionSpecModel.promotion: VersionPromotionModel | None` —
+  `{ring: str | None, order: int | None, wave: str | None}`.
+- Phase 1 validators: `wave` without `ring` rejected; `ring` without
+  `order` rejected (see "Validating that the right 'promotions' get
+  created" above for the exact rules).
+- No CLI changes yet — schema only.
+- **Done when**: new model tests cover both rejections, full check suite
+  clean.
+
+### Phase 2 (MVP) — `build_promotion_view()` + Phase 2 validation
+
+- New function (new module, e.g. `strata/controllers/promotion_controller.py`
+  to match `graph_controller.py`'s precedent) building `PromotionView` from
+  every `Version` document sharing a workspace.
+- Implements the three Phase 2 checks: ring↔order bijection,
+  `(ring, order, wave)` uniqueness, no mixing waved/waveless at one slot.
+- Implements the orphan-ring/wave warning (no `Deployment` references it).
+- Wired into `strata validate`'s existing Phase 2 pass, same place
+  `check_version_pins()` already runs.
+- **Done when**: unit tests cover every rule in "Validating that the right
+  'promotions' get created" above, both the pass and the fail case for
+  each; `strata validate` surfaces a real violation end-to-end against a
+  small fixture solution.
+
+### Phase 3 (MVP) — `strata promote status <workspace>`
+
+- New `promote` command group, `status` subcommand.
+- Renders `PromotionView` as the table shown throughout this doc —
+  `ring`/`order`/`wave`/`version`/`status` columns, `← behind` marker
+  computed by comparing `order`s.
+- `--output json` envelope, matching every other command's shape.
+- **Done when**: CLI tests cover the worked-example-B-shaped fixture
+  (multi-ring, wave divergence) and the worked-example-A-shaped fixture
+  (no tags at all — empty/trivial output, not an error).
+
+### Phase 4 — `resolved.yaml`'s new `promotion` section
+
+- `build_controller.write_resolved_manifest()` gains an optional
+  `promotion` key, populated only when the deployment's `spec.version`
+  resolved to a document carrying `spec.promotion`.
+- Update `docs/design/build-time-value-categories.md`'s documented shape
+  to match.
+- **Done when**: a `build run` against a tagged `Version` document
+  produces the new section with the right values; untagged documents
+  produce no section at all (not a null/empty one).
+
+### Phase 5 — `strata promote apply <workspace> <ring> [--wave W]`
+
+- Implements the settled mechanics: find target ring's `order`, find the
+  preceding `order` in the same workspace, copy every common pin key,
+  reset `status`/`reviewed`, require `--wave` when the ring has more than
+  one.
+- Reuses Phase 2's `build_promotion_view()` to find both rings' documents
+  — no separate lookup logic.
+- **Done when**: CLI tests cover the single-wave case, the multi-wave
+  case requiring `--wave`, and the multi-wave case erroring without it.
+
+### Phase 6 — `strata promote view <workspace> [--output <path>]`
+
+- Separate command, reuses Phase 2's builder, emits the full structured
+  `PromotionView` (YAML/JSON), stdout by default.
+- Explicitly **not** wired into `audit_run.py`/`_manifest.json` — no
+  changes to the audit trail at all in this phase.
+- **Done when**: output round-trips (what `promote view` emits parses back
+  into a `PromotionView`), and a grep of `audit_run.py` confirms it's
+  never called from there.
+
 ## Related Decisions
 
 - [ADR-0019](../decisions/0019-version-pinning.md) — dropped `spec.ring`
@@ -680,3 +766,13 @@ applies to every tenant referencing that one file at once. Adding customer
   effect of any build/deploy command) makes the boundary from the audit
   trail unambiguous: a point-in-time export someone asks for on purpose,
   not a compliance artifact strata generates on its own initiative.
+- 2026-10-06: Added a full Implementation Plan — six phases, 1-3 marked as
+  the MVP (schema, `build_promotion_view()` + validation, `promote
+  status`), 4-6 as valuable-but-not-blocking (`resolved.yaml` section,
+  `promote apply`, `promote view`). Explicit dependency on
+  [version-lifecycle.md](version-lifecycle.md)'s own Phase 1
+  (`Version.spec.workspace` + exclusivity) landing first.
+- 2026-10-06: [version-lifecycle.md](version-lifecycle.md)'s Phase 1
+  shipped (`VersionSpecModel.workspace` + `_check_version_workspace()`) —
+  this doc's own Phase 1 (`VersionPromotionModel` schema) is now
+  unblocked and can start.

@@ -17,6 +17,7 @@ from strata.controllers.build_controller import build_run
 from strata.controllers.deploy_controller import deploy_run, tf_var_env
 from strata.controllers.solution_context import open_solution
 from strata.integrations.resolved_context import ValueResolution
+from strata.utils.errors import UsageError
 from strata.utils.transport import CommandResult
 
 MANIFEST = """apiVersion: strata.huybrechts.xyz/v2
@@ -278,6 +279,176 @@ def test_deploy_run_injects_tf_var_env_for_every_step(tmp_path: Path, monkeypatc
     # terraform-tfvars-parity.md: every real file is actually named
     # "resources" regardless of type, not TF_VAR_resx_<type>).
     assert all(env is not None and "TF_VAR_resources" in env for env in envs)
+
+
+# ---------------------------------------------------------------------------
+# deploy_run()'s --pin (docs/work/version-lifecycle.md Phase 5) — covers the
+# `artifacts` pin category, the one that resolves live at deploy time.
+# ---------------------------------------------------------------------------
+
+
+def _artifact_pin_solution(tmp_path: Path, *, reference_version_from_deployment: bool) -> Path:
+    """One Terraform provisioner, one Artifact, one Version document pinning
+    it, and a `store: artifact` environment variable — `reference_version_from_deployment`
+    controls whether `deployment.spec.version` names the Version document
+    directly (the hand-edited case) or not at all (the --pin-only case)."""
+    root = _solution(tmp_path)
+    _write(root, "infra/main.tf", "# root module\n")
+    _write(
+        root,
+        "provider.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
+        "  properties:\n    type: local\n    region: local\n",
+    )
+    _write(
+        root,
+        "resource.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
+        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  default_tags:\n    managed-by: strata\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    _write(
+        root,
+        "artifact.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: artifact\nmeta:\n  name: dspapi_container\nspec:\n"
+        "  image_name: int-docker-test/src/acme.dispatcher.api\n  image_tag: '1.0.0'\n",
+    )
+    _write(
+        root,
+        "version.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n"
+        "  pins:\n    artifacts:\n      dspapi_container: '2.0.0'\n",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        "  variables:\n    - key: image_tag\n      store: artifact\n      value: dspapi_container\n"
+        "      field: image_tag\n",
+    )
+    version_line = "  version: prd\n" if reference_version_from_deployment else ""
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        f"  workspace: main\n{version_line}  environments:\n    - prd\n",
+    )
+    return root
+
+
+def test_deploy_run_pin_resolves_the_artifacts_category(tmp_path: Path, monkeypatch):
+    root = _artifact_pin_solution(tmp_path, reference_version_from_deployment=False)
+    assert "version" not in (root / "deployment.yaml").read_text(encoding="utf-8")
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    envs: list[dict[str, str] | None] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        envs.append(env)
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, pin="prd")
+
+    assert diagnostics.ok, diagnostics.messages()
+    # TF_VAR delivery for a 'variables'-category key is JSON-encoded
+    # (deploy_controller.py's FLAT_CATEGORIES handling), unlike a secret's
+    # raw TF_VAR_ value — real Terraform TF_VAR convention for a value with
+    # no explicit HCL type declared.
+    assert all(env is not None and env.get("TF_VAR_image_tag") == '"2.0.0"' for env in envs)
+
+
+def test_deploy_run_without_pin_uses_the_artifacts_own_declared_tag(tmp_path: Path, monkeypatch):
+    """Control case: omitting --pin leaves the artifact's own declared
+    image_tag in effect, proving the pin (not some other change) is what
+    moved the value in the test above."""
+    root = _artifact_pin_solution(tmp_path, reference_version_from_deployment=False)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    envs: list[dict[str, str] | None] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        envs.append(env)
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert all(env is not None and env.get("TF_VAR_image_tag") == '"1.0.0"' for env in envs)
+
+
+def test_deploy_run_pin_never_mutates_the_deployment_document_on_disk(tmp_path: Path, monkeypatch):
+    root = _artifact_pin_solution(tmp_path, reference_version_from_deployment=False)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+    deployment_path = root / "deployment.yaml"
+    before = deployment_path.read_text(encoding="utf-8")
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    deploy_run(_context(root), "app", build_path, force=True, pin="prd")
+
+    assert deployment_path.read_text(encoding="utf-8") == before
+
+
+def test_deploy_run_pin_raises_for_an_unknown_version(tmp_path: Path):
+    root = _terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    with pytest.raises(UsageError, match="--pin names an unknown version document: 'ghost'"):
+        deploy_run(_context(root), "app", build_path, force=True, pin="ghost")
+
+
+def test_deploy_run_pin_matches_hand_editing_spec_version(tmp_path: Path, monkeypatch):
+    """The exact "Done when" criterion, deploy side: a --pin'd deploy
+    produces identical resolution to hand-editing spec.version."""
+    hand_edited_root = _artifact_pin_solution(tmp_path / "hand-edited", reference_version_from_deployment=True)
+    pinned_root = _artifact_pin_solution(tmp_path / "pinned", reference_version_from_deployment=False)
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    hand_edited_build = tmp_path / "hand-edited-build"
+    build_run(_context(hand_edited_root), "app", hand_edited_build)
+    hand_edited_diagnostics = deploy_run(_context(hand_edited_root), "app", hand_edited_build, force=True)
+
+    pinned_build = tmp_path / "pinned-build"
+    build_run(_context(pinned_root), "app", pinned_build)
+    pinned_diagnostics = deploy_run(_context(pinned_root), "app", pinned_build, force=True, pin="prd")
+
+    assert hand_edited_diagnostics.ok and pinned_diagnostics.ok
 
 
 def test_deploy_run_stops_on_plan_failure(tmp_path: Path, monkeypatch):

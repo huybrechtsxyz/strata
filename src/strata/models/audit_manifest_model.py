@@ -131,6 +131,15 @@ class ManifestImageModel(PlatformBaseModel):
     digest: str | None = Field(default=None, description="Image content digest (sha256:...), when available")
 
 
+class ManifestChartModel(PlatformBaseModel):
+    """A Helm/ArgoCD chart used during the deployment — the effective,
+    pin-resolved chart version, not the module's own bare declaration."""
+
+    name: str = Field(description="Module document name")
+    chart: str = Field(description="Chart name (SourceModel.chart_name)")
+    version: str | None = Field(default=None, description="Effective chart version, when known")
+
+
 class ManifestProviderModel(PlatformBaseModel):
     """Provisioner entry used in the deployment — tool, state backend, type-specific details."""
 
@@ -148,6 +157,7 @@ class ManifestArtifactsModel(PlatformBaseModel):
         default=None, description="Pinned source repository versions keyed by repository name"
     )
     images: list[ManifestImageModel] | None = Field(default=None, description="Container images used")
+    charts: list[ManifestChartModel] | None = Field(default=None, description="Helm/ArgoCD charts used")
     providers: list[ManifestProviderModel] | None = Field(default=None, description="Provisioners invoked")
 
 

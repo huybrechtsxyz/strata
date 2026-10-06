@@ -347,6 +347,299 @@ version column is prospective, not actual" problem — once wired, `promote
 status` can source a deployment's shown version from its own last audit
 manifest instead of the live pin.
 
+## Implementation Plan
+
+Phased, one focused change at a time, full check suite
+(`mypy src/strata`, `ruff check src/ tests/`, `pytest -q`, `lint-imports`)
+clean before moving to the next phase. **Phase 1 blocks
+[promotion.md](promotion.md) entirely** — its whole design assumes
+`Version.spec.workspace` and the exclusivity check already exist. Phases
+2-4 (`path`, `version new`/`update`/`set`) are needed for the CI/CD
+scenarios but not for promotion's own MVP. Phases 5-6 are independently
+valuable, lower urgency.
+
+### Phase 0 — ✅ DONE (2026-10-06) — cleanup
+
+- Remove `VersionSpecModel.hash` from `src/strata/models/version_model.py`
+  — confirmed dead (grepped every call site, zero construction anywhere),
+  and this doc's own "The audit gap, and why `spec.hash` isn't the fix"
+  section settled it's not needed, not merely deferred. Trivial, do it
+  first so nothing downstream has to account for a field being phased
+  out mid-effort.
+- **Done when**: field removed, no remaining references, full check suite
+  clean.
+- **Shipped as**: field removed from
+  [version_model.py](../../src/strata/models/version_model.py) (`extra:
+  forbid` now rejects it rather than accepting it, same as the already-
+  dropped `spec.ring`); module docstring updated with a dated removal
+  note. [test_models_version.py](../../tests/strata/models/test_models_version.py)'s
+  `test_version_accepts_tooling_hash` replaced with
+  `test_version_rejects_hash_field` (mirrors `test_version_rejects_v1_ring_field`'s
+  own shape). Full check suite clean, same 1964 tests (one replaced, not
+  added — no new behavior to cover, just a field made absent).
+
+### Phase 1 (blocks promotion.md) — ✅ DONE (2026-10-06) — `Version.spec.workspace` + exclusivity check
+
+- Add `VersionSpecModel.workspace: Annotated[PlatformName,
+  References(PlatformKind.WORKSPACE)] | None`.
+- New Phase 2 check (same family as `_check_deployment_layers()`): every
+  `Deployment` resolving to a given `Version` document must agree on its
+  workspace; first real reference establishes it if unset, a declared
+  value is authoritative, mismatch is an error.
+- **Done when**: tests cover first-reference-establishes, declared-value-
+  authoritative, and the mismatch-is-an-error cases; `strata validate`
+  surfaces a real cross-workspace mistake end-to-end.
+- **Shipped as**: `VersionSpecModel.workspace` field
+  ([version_model.py](../../src/strata/models/version_model.py)) +
+  `_check_version_workspace()` in
+  [semantic_checks.py](../../src/strata/controllers/semantic_checks.py),
+  wired into `run_semantic_checks()`. Tests:
+  [test_models_version.py](../../tests/strata/models/test_models_version.py),
+  [test_semantic_checks.py](../../tests/strata/controllers/test_semantic_checks.py)
+  (`test_version_*` cases: declared-match, declared-mismatch, unset-
+  established-by-first-referrer, unset-second-referrer-disagrees, no-
+  referrer no-op, no-workspace-on-referrer skip). Full check suite
+  (`mypy`/`ruff`/`pytest`/`lint-imports`) clean.
+- Note: Phase 0's `VersionSpecModel.hash` removal was **not** bundled into
+  this phase — it is independent cleanup, left for its own pass so this
+  phase's diff stayed focused on the one new field + check it exists to
+  add (matches this plan's own "one focused change at a time" discipline).
+
+### Phase 2 — ✅ DONE (2026-10-06) — `strata path get`/`path list`
+
+- New top-level `path` command group (settled placement — see its own
+  section above).
+- `get <kind> <name>` resolves via the existing document index; `list
+  <kind> [--workspace X]` enumerates.
+- **Done when**: both subcommands work against every real kind, not just
+  `version`; `--output json` shape matches `{kind, name, path, exists}`
+  for `get`.
+- **Shipped as**: [path_controller.py](../../src/strata/controllers/path_controller.py)
+  (`get_path()`/`list_paths()`, Phase 1-only resolution against the
+  existing `DocumentIndex` — no `require_valid()`, matching `graph_command`'s
+  own reasoning) + [path_command.py](../../src/strata/commands/path_command.py)
+  (`strata path get <kind> <name>`, `strata path list <kind> [--workspace
+  X]`), registered in [cli.py](../../src/strata/commands/cli.py). `path
+  get` exits 3 (not found) rather than silently printing nothing; `path
+  list` always exits 0, an empty result is not a failure (same convention
+  `graph` already uses for "nothing found isn't a failure here"). Every
+  `PlatformKind` is a valid `<kind>` argument via `click.Choice`, not just
+  `version`/`deployment` — confirmed end to end against the real
+  `config/` dogfood solution during manual testing, not only fixtures.
+  `--workspace` filters by `spec.workspace` wherever a kind's spec model
+  declares that field (today: `deployment`, `version`); any other kind
+  returns empty rather than erroring — documented directly in both the
+  CLI help text and `list_paths()`'s own docstring. Tests:
+  [test_path_controller.py](../../tests/strata/controllers/test_path_controller.py)
+  (unit-level) and
+  [test_commands_path.py](../../tests/strata/commands/test_commands_path.py)
+  (CLI-level, `CliRunner`). Full check suite clean, 1982 tests (18 new).
+
+### Phase 3 — ✅ DONE (2026-10-06) — `strata version new`/`version update`
+
+- `new <name> --workspace <ws> [--ring R --order N --wave W] [--from
+  <existing>]` — needs a new `kind: version` template under
+  `src/strata/templates/` (confirmed none exists today).
+- `update <name>` — inverts `check_version_pins()`'s existence census;
+  never touches an existing pin's value, only keys.
+- **Done when**: `new --from` correctly clones pin keys without values/
+  reasons; `update` correctly identifies both missing and orphaned pin
+  keys against a real fixture solution.
+- **Scope deviation, deliberate**: `--ring`/`--order`/`--wave` were **not**
+  implemented — `VersionSpecModel.promotion` (promotion.md Phase 1) does
+  not exist in the schema yet, so there was nothing real for them to set.
+  Accepting and silently discarding them would be worse than not offering
+  them at all; add them to `version new` once promotion.md's Phase 1
+  ships, not before. No generic per-kind template tree was added under
+  `src/strata/templates/` either — `scaffold_version()` writes the YAML
+  directly (`yaml.safe_dump`), the same way `scaffold_controller.py`'s own
+  `_ensure_manifest()` writes `strata.yaml` — inventing a Jinja-template
+  mechanism for one small, fixed-shape document would be machinery with
+  no second consumer yet.
+- **Shipped as**: [version_controller.py](../../src/strata/controllers/version_controller.py)
+  (`scaffold_version()`, `reconcile_version()`, plus private per-category
+  inventory helpers shared by both) +
+  [version_command.py](../../src/strata/commands/version_command.py)
+  (`strata version new`/`strata version update`), registered in
+  [cli.py](../../src/strata/commands/cli.py). The flagged naming
+  collision was real and is now resolved: `version` is a Click group with
+  `invoke_without_command=True`; `strata version` with no subcommand
+  still just prints the CLI version (regression-guarded by
+  `test_bare_version_still_prints_the_cli_version` plus the untouched
+  pre-existing `test_commands_cli.py` suite, both passing unmodified).
+  `update` is **read-only** — it only ever reports add/remove candidates
+  (a `ReconcileRow` list), never writes a file; "a proposal, not an
+  auto-apply" per this doc's own design, and is why `ruamel.yaml` (Phase
+  4's own dependency, for `version set`'s surgical writes) was not needed
+  here. A real bug was caught and fixed during manual smoke-testing
+  against the `config/` dogfood solution before tests were even written:
+  an "add" candidate whose real target declares no value of its own
+  (e.g. a `fetch: external` remote, or a module service with no `image`)
+  was initially offered with `seed_value=None` — fixed to drop such
+  candidates entirely, matching the same rule `scaffold_version()`'s own
+  `--from` cloning already followed. `version update`'s exit code follows
+  `values status`'s own convention: 0 when fully reconciled, 3 when
+  there are candidates to review (actionable, not a hard failure).
+  Tests: [test_version_controller.py](../../tests/strata/controllers/test_version_controller.py)
+  (13, unit-level — including the exact "no honest value to seed"
+  and "fetch: external never offered" cases the manual-testing bug
+  surfaced) and
+  [test_commands_version.py](../../tests/strata/commands/test_commands_version.py)
+  (11, CLI-level). Full check suite clean, 2006 tests (24 new).
+
+### Phase 4 — ✅ DONE (2026-10-06) — `strata version set`
+
+- Add `ruamel.yaml` as a real dependency (`pyproject.toml`) — settled
+  write strategy, round-trip mode.
+- `set <name> <category> <target> [<value>] [--available VALUE]
+  [--force]`, resolution via Phase 2's `path get` internally.
+- Guardrails: never touches `reason`/`reviewed`; refuses to change
+  `version` on a `held`/`unverified` pin without `--force`; `--available`-
+  only mode always allowed.
+- **Done when**: a round-trip test proves hand-written comments survive a
+  `set` call untouched; the `held`-without-`--force` refusal and the
+  `--force` override are both covered; no git/clone/commit logic exists
+  anywhere in this command.
+- **Shipped as**: `set_version_pin()` added to
+  [version_controller.py](../../src/strata/controllers/version_controller.py)
+  + `strata version set` added to
+  [version_command.py](../../src/strata/commands/version_command.py).
+  `ruamel.yaml>=0.18` added to `pyproject.toml`'s real `dependencies`
+  (`uv sync --index-strategy unsafe-best-match` — the repo's own known
+  Acme-feed quirk, not a new issue). Resolution reuses
+  `path_controller.get_path()` exactly as designed — one discovery
+  mechanism, not two, even inside strata. Creates a brand-new pin
+  (shorthand scalar, no `--available`) when `target` isn't declared yet,
+  provided `<value>` is given; upgrades a shorthand pin to a structured
+  mapping only when `--available` requires the extra field; mutates an
+  existing structured mapping's `version`/`available` keys in place via
+  `ruamel.yaml`'s `CommentedMap`, leaving `status`/`reason`/`reviewed`
+  and every comment/quote-style/ordering untouched. Every write is
+  re-parsed through `VersionModel` before returning, so a caller never
+  has to re-read the file to trust the result. Manually verified against
+  the real `config/versions/prd.yaml` (shorthand edit, held-without-force
+  refusal, `--force` override, available-only on an `unverified` pin) —
+  comment-for-comment identical except the one intended value, then
+  reverted via `git checkout`. Exit codes match the controller's own
+  `UsageError`s (bad category, nothing to set, empty value, creating a
+  pin with only `--available`, held/unverified without `--force`) — all
+  exit 2, consistent with `value_controller.py`'s own precedent for
+  business-rule refusals, not exit 3. Tests:
+  [test_version_controller.py](../../tests/strata/controllers/test_version_controller.py)
+  (11 new, unit-level) and
+  [test_commands_version.py](../../tests/strata/commands/test_commands_version.py)
+  (9 new, CLI-level). Full check suite clean, 2026 tests (20 new).
+
+
+### Phase 5 — ✅ DONE (2026-10-06) — `--pin` on `build run` (primary) and `deploy run`
+
+- Ephemeral, per-invocation override of `Deployment.spec.version` —
+  resolves a name against `kind: version`, substitutes it for this run
+  only, zero persisted mutation.
+- Primary target is `build run` (3 of 4 pin categories only take effect at
+  build time); `deploy run` support covers the `artifacts` category.
+- **Done when**: a `--pin`'d build produces identical output to hand-
+  editing `spec.version` and building without the flag; the deployment
+  document itself is provably untouched on disk afterward.
+- **Shipped as**: the override happens in exactly one place —
+  `value_controller.resolve_deployment()` gained a `version_pin` keyword
+  that, when given, validates it names a real indexed Version document
+  (else `UsageError`) and returns a `model_copy()` of the resolved
+  deployment with `spec.version` replaced — nothing else to thread
+  through, since every real consumer (`resolve_version()`,
+  `resolve_artifact_field()`, the images/charts/remotes overlays in
+  `build_controller.py`) reads `spec.version` off whatever deployment
+  object it was handed. `resolve_values()` forwards the same parameter to
+  its own internal `resolve_deployment()` call (it does its own,
+  independent resolution rather than reusing a caller's) — without that,
+  `--resolve`'s validation and the `artifacts` category at deploy time
+  would silently see the on-disk version instead of the pin, since
+  `store: artifact` resolves live through `resolve_artifact_field()`, the
+  one category deploy time actually needs it for. `build_run()`/
+  `deploy_run()` both gained a `pin` parameter forwarded to both calls;
+  `build_command.py`/`deploy_command.py` both gained a `--pin VERSION`
+  option. Discovered and fixed one real gap while implementing, not
+  before: `resolve_values()` originally did not forward the pin at all —
+  caught by deliberately testing the `artifacts` category specifically
+  (the one category the design doc itself flags as "the one that resolves
+  live"), not just the three build-time categories `_apply_remote_version_pins()`
+  already covered. `audit_run.py` was deliberately left unpinned — the
+  audit manifest doesn't capture version/pin provenance at all yet
+  (confirmed: `ManifestImageModel`/`ManifestRepositoryModel` are still
+  never constructed anywhere), so threading `pin` into it now would be
+  premature; that wiring is exactly Phase 6's job, not this one's.
+  Verified both "Done when" halves directly:
+  `test_build_run_pin_produces_identical_output_to_hand_editing_spec_version`/
+  `test_deploy_run_pin_matches_hand_editing_spec_version` build the same
+  fixture twice — once with `spec.version` hand-edited on disk, once with
+  it absent and `--pin` supplied instead — and assert identical rendered
+  output; `test_build_run_pin_never_mutates_the_deployment_document_on_disk`/
+  `test_deploy_run_pin_never_mutates_the_deployment_document_on_disk`
+  assert the deployment file's bytes are unchanged afterward. Tests:
+  [test_value_controller.py](../../tests/strata/controllers/test_value_controller.py)
+  (6 new — `resolve_deployment()`/`resolve_values()` unit-level),
+  [test_build_controller.py](../../tests/strata/controllers/test_build_controller.py)
+  (4 new), [test_deploy_controller.py](../../tests/strata/controllers/test_deploy_controller.py)
+  (6 new — including the artifacts-category coverage that caught the
+  `resolve_values()` gap), and CLI-level smoke tests in
+  [test_commands_build.py](../../tests/strata/commands/test_commands_build.py)/
+  [test_commands_deploy.py](../../tests/strata/commands/test_commands_deploy.py)
+  (2 each). Full check suite clean, 2045 tests (19 new).
+
+### Phase 6 — ✅ DONE (2026-10-06) — audit gap wiring
+
+- Populate `ManifestRepositoryModel` at the `remotes` overlay's existing
+  computation point.
+- Populate `ManifestImageModel` at the `images`/`artifacts` overlay
+  points.
+- Add `ManifestChartModel{name, chart, version}` (or widen
+  `ManifestImageModel`) for `charts` — no existing slot covers it.
+- **Done when**: a real `deploy run` against a multi-category pinned
+  deployment produces a manifest recording the *effective* value for
+  every actually-deployed target, not only pinned ones; this is also the
+  prerequisite for fixing [promotion.md](promotion.md)'s "prospective, not
+  actual" column and for verifying `--pin`'s effect post-build.
+- **Shipped as**: `ManifestChartModel` added to
+  [audit_manifest_model.py](../../src/strata/models/audit_manifest_model.py),
+  plus `repositories`/`images`/`charts` fields on `ManifestArtifactsModel`
+  (all `None` by default, matching every other optional field there).
+  [audit_run.py](../../src/strata/controllers/audit_run.py) gained
+  `_collect_artifacts_bom()` and a `pin` parameter (threaded from
+  `deploy_command.py`, matching `deploy_run()`'s own Phase 5 parameter —
+  the manifest must record what was *actually* deployed, not whatever
+  `spec.version` says on disk).
+  **Deliberately not sourced from `sbom.json`**: a real investigation
+  during implementation found `write_sbom()` resolves every module
+  straight off the `DocumentIndex` (`sbom_controller._resolve_all_modules()`),
+  with **no `kind: version` pin overlay applied at all** — accurate for
+  *which* images/charts exist, silently wrong for their *effective*
+  version whenever a pin is active. (A real, separate, pre-existing SBOM
+  gap, out of this phase's scope to fix — noted below instead.) Reused
+  the exact same overlay functions `build_run()` itself calls instead, so
+  there is exactly one resolution path, not a second independently-
+  maintained copy: `workload_controller._apply_version_pins()` and
+  `build_controller._apply_remote_version_pins()` were both promoted to
+  public (`apply_version_pins()`/`apply_remote_version_pins()`) since
+  `audit_run.py` is now a second, real production caller of each, not
+  just their own tests reaching into a private helper. Scoped to what
+  the deployment's own workspace actually reaches (its provisioners' and
+  modules' `source.remote`, its namespaces' modules) — never the whole
+  solution's — matching "effective value for every actually-deployed
+  target," not everything merely declared somewhere else. Verified with
+  a real multi-category fixture (one `fetch: strata` remote, one
+  chart-based module, one image-based module, one `Version` document
+  pinning all three) in three shapes: pinned via `spec.version` on disk,
+  unpinned (declared values recorded faithfully — "not only pinned
+  ones"), and pinned via `--pin` with no on-disk `spec.version` at all
+  (proving Phase 5's audit-side gap is closed too). A fourth test
+  confirms the pre-Phase-6 base fixture (nothing reachable) still omits
+  all three fields entirely, not empty lists/dicts — no regression to
+  `exclude_none` serialisation. Tests:
+  [test_audit_run.py](../../tests/strata/controllers/test_audit_run.py)
+  (4 new). Full check suite clean, 2049 tests.
+  **Phases 0-6 are now all done — docs/work/version-lifecycle.md's full
+  Implementation Plan is complete.**
+
 ## Related Decisions
 
 - [ADR-0019](../decisions/0019-version-pinning.md) — source of
@@ -364,17 +657,22 @@ manifest instead of the live pin.
 
 ## Remaining Work / Open Questions
 
-- `version new`/`version update`/`version set` are designed, not built —
-  `version set`'s write strategy (`ruamel.yaml` round-trip) is settled,
-  just not implemented yet. The `version` CLI naming collision (today a
-  bare command, needs to become a group while still printing the CLI
-  version with no subcommand) is a real implementation detail, not just a
-  doc nit. `strata path get`/`list` are designed, not built either.
-- Wiring `ManifestArtifactsModel.images`/`.repositories` (and the new
-  `ManifestChartModel`) is real, scoped, not-yet-built work — the actual
-  fix for the audit gap, for `promotion.md`'s prospective-vs-actual
-  problem, and for verifying `--pin`'s effect post-build (see its own
-  section above).
+- All six phases are now built (see the Implementation Plan above for
+  what shipped, when, and with which tests). Nothing in this doc's own
+  scope remains designed-but-unbuilt.
+- **New, separate gap found during Phase 6's implementation, deliberately
+  left unfixed here**: `write_sbom()` resolves every module straight off
+  the `DocumentIndex` (`sbom_controller._resolve_all_modules()`), with no
+  `kind: version` pin overlay applied at all — `sbom.json` is accurate for
+  *which* images/charts exist, silently wrong for their *effective*
+  version whenever a pin is active. Phase 6 worked around this by
+  re-deriving the effective BOM independently for the audit manifest
+  (reusing `apply_version_pins()`/`apply_remote_version_pins()`, not the
+  SBOM) rather than fixing the SBOM's own resolution — a real, scoped fix
+  for a future pass: thread the same `apply_version_pins()` overlay into
+  `sbom_controller._resolve_all_modules()` itself (it already receives
+  `graph`, which carries `deployment`; needs `resolve_version()`'s result
+  threaded in alongside).
 - Digests remain deferred — pending a real digest field on
   `VersionPinModel` and actual demand. (`spec.hash`, by contrast, is a
   settled "don't build this," not merely deferred.)
@@ -416,3 +714,140 @@ manifest instead of the live pin.
   time, so `--pin` has to live there to affect them at all. Also connected
   `--pin` to the audit gap: once wired, that's the verification that the
   pin actually took effect, rather than trusting the invocation blindly.
+- 2026-10-06: Added a full Implementation Plan — seven phases (0-6),
+  starting with removing the now-settled-dead `VersionSpecModel.hash`
+  field and adding `Version.spec.workspace` (both small, both block
+  [promotion.md](promotion.md) entirely), then `path`, then `version new`/
+  `update`/`set`, then `--pin`, then the audit-gap wiring. Each phase has
+  a concrete "done when" check, not just a description of what it adds.
+- 2026-10-06: **Shipped Phase 1** — `VersionSpecModel.workspace` field plus
+  `_check_version_workspace()`, the cross-document exclusivity check
+  (declared value authoritative, first referencing deployment establishes
+  it when unset, mismatch is an error). 6 new tests across the model and
+  semantic-check suites; full check suite clean. This unblocks
+  [promotion.md](promotion.md), whose entire ring/order/wave design
+  assumed this field and check already existed. Phase 0 (removing the
+  dead `spec.hash` field) was deliberately left out of this pass — kept
+  as its own, separately-scoped cleanup rather than bundled in.
+- 2026-10-06: **Shipped Phase 0** — removed `VersionSpecModel.hash`.
+  Re-grepped every call site immediately before deleting it (confirming
+  the earlier census still held: zero real construction anywhere besides
+  the field definition and its own now-replaced test) rather than trusting
+  the prior grep's result at a distance. Phases 0 and 1 are now both done;
+  Phase 2 (`strata path get`/`list`) is next.
+- 2026-10-06: **Shipped Phase 2** — the `path` command group:
+  `path_controller.py` (`get_path()`/`list_paths()`) + `path_command.py`
+  (`strata path get`/`strata path list`), both Phase-1-only, no
+  `require_valid()` (matching `graph_command`'s reasoning that a lookup is
+  meaningful even against a Phase-2-broken solution). Verified against
+  every `PlatformKind`, not just `version`, and manually exercised against
+  the real `config/` dogfood solution end to end (not only test
+  fixtures). `--workspace`'s documented limitation (empty, not an error,
+  for a kind with no `spec.workspace` field) was deliberately kept rather
+  than resolved with a `UsageError` — matches the "skip rather than guess
+  a policy that was never declared" rule already used elsewhere in this
+  codebase. Phases 0-2 are now all done; Phase 3 (`version new`/`update`)
+  is next.
+- 2026-10-06: **Shipped Phase 3** — `strata version new`/`strata version
+  update`. Resolved the flagged `version` naming collision for real (Click
+  group, `invoke_without_command=True`, bare `strata version` unchanged).
+  Deliberately scoped down from the original plan: `--ring`/`--order`/
+  `--wave` deferred (promotion.md's schema doesn't exist yet — nothing
+  real for them to set), and no generic per-kind template-tree mechanism
+  was built (one small fixed-shape document doesn't justify one). `update`
+  shipped strictly read-only (report-only `ReconcileRow` list, exit 0/3
+  mirroring `values status`'s own convention) — confirming Phase 4 is
+  where `ruamel.yaml` actually needs to enter the dependency tree, not
+  here. Manual smoke-testing against the real `config/` dogfood solution
+  (not just fixtures) caught a real bug before any test was written: an
+  "add" candidate for a target with no current value of its own (a
+  `fetch: external` remote, an imageless module service) was being
+  offered with a `None` seed — fixed to drop such candidates, matching
+  `scaffold_version()`'s own `--from`-cloning rule. 24 new tests (13
+  controller-level, 11 CLI-level); full check suite clean. Phases 0-3 are
+  now all done; Phase 4 (`version set`) is next.
+- 2026-10-06: **Shipped Phase 4** — `strata version set`, and with it
+  `ruamel.yaml` entered the dependency tree for real
+  (`uv sync --index-strategy unsafe-best-match`, same documented Acme-feed
+  workaround as every other `uv sync` in this repo). Manually verified
+  comment-for-comment preservation against the real
+  `config/versions/prd.yaml` (not just fixtures) before writing a single
+  test — a shorthand edit, a held-pin refusal, a `--force` override, and
+  an available-only change on an unverified pin, each confirmed byte-exact
+  except the one intended field, then reverted. Settled, not previously
+  spelled out: creating a brand-new pin stays shorthand unless
+  `--available` forces a structured mapping; business-rule refusals
+  (unknown category, nothing to set, empty value, creating with only
+  `--available`, held/unverified without `--force`) are all `UsageError`/
+  exit 2, matching `value_controller.py`'s own precedent for this shape
+  of refusal rather than treating them as validation failures (exit 3).
+  20 new tests (11 controller-level, 9 CLI-level); full check suite clean,
+  2026 tests. **Phases 0-4 are now all done** — the hand-editing-or-tooling
+  parity this whole doc opened with is real: every mutation a human could
+  make by hand to a `kind: version` document now has a narrow, guarded
+  CLI equivalent. Phase 5 (`--pin` on `build run`/`deploy run`) is next.
+- 2026-10-06: **Shipped Phase 5** — `--pin` on `build run`/`deploy run`.
+  Centralized the override in one place, `resolve_deployment()`'s own new
+  `version_pin` keyword, rather than threading a parallel parameter
+  through every real consumer separately — every one of them already
+  reads `spec.version` off the deployment object it was handed. Caught
+  (via deliberately testing the `artifacts` category, not just the three
+  build-time ones) and fixed a real gap mid-implementation:
+  `resolve_values()` has its own independent internal `resolve_deployment()`
+  call, so without also forwarding the pin there, `--resolve`'s validation
+  and `deploy run --pin`'s `store: artifact` resolution would have
+  silently used the on-disk version instead. Both "Done when" halves
+  verified directly — a `--pin`'d run matches hand-editing `spec.version`
+  byte-for-byte in rendered output, and the deployment document's own
+  bytes are provably unchanged afterward — for both `build run` and
+  `deploy run`. `audit_run.py` deliberately left out of scope: the audit
+  manifest doesn't capture version/pin provenance at all yet (confirmed:
+  `ManifestImageModel`/`ManifestRepositoryModel` still never constructed
+  anywhere), so that's genuinely Phase 6's job, not a thing to bolt on
+  here. 19 new tests across `value_controller`/`build_controller`/
+  `deploy_controller` plus CLI smoke tests; full check suite clean, 2045
+  tests. Phases 0-5 are now all done; Phase 6 (audit gap wiring) is next.
+- 2026-10-06: **Shipped Phase 6** — the audit gap, closed. Added
+  `ManifestChartModel` and wired `ManifestArtifactsModel.repositories`/
+  `.images`/`.charts`. Found and deliberately worked around a real,
+  separate gap while implementing: `sbom.json`'s own components are
+  never pin-overlaid (`write_sbom()` resolves modules straight off the
+  index), so the manifest's BOM is re-derived independently, reusing the
+  same `apply_version_pins()`/`apply_remote_version_pins()` overlay
+  functions `build_run()` itself calls — promoted both from private to
+  public since `audit_run.py` is now a second real caller of each, not
+  just their own tests reaching in. `deploy_command.py`'s `--pin` now
+  also flows into the audit finalize step, closing Phase 5's own
+  deliberately-deferred gap. Verified with a real multi-category fixture
+  in three shapes (hand-edited `spec.version`, no version at all, `--pin`
+  with no on-disk version) plus a no-regression case for the base
+  fixture. 4 new tests; full check suite clean, 2049 tests.
+  **Phases 0-6 are now all done — docs/work/version-lifecycle.md's full
+  Implementation Plan is complete.** One real, separate gap was
+  discovered and intentionally left for a future pass rather than
+  scope-crept into this one: `sbom.json` itself still doesn't reflect
+  pin overlays (documented in Remaining Work above).
+- 2026-10-06: **Code review of Phases 0-6.** Read every changed file
+  against its own design intent rather than re-trusting the tests that
+  already passed. Found and fixed one real bug: `scaffold_version()`
+  (`version new`) never validated the new document's `meta.name` before
+  writing — `strata version new "Invalid Name" --workspace main`
+  silently wrote a permanently schema-invalid file to disk (confirmed by
+  actually running it, not just inspecting the code), with zero feedback
+  until a later `strata validate` run. Fixed by validating the assembled
+  document through `VersionModel` before writing, translating a pydantic
+  `ValidationError` into a `UsageError` — same "catch it at the one
+  command that can still say something useful, not two steps later"
+  standard `set_version_pin()` already met via its own post-write
+  re-parse. One new regression test. Also fixed a small doc-accuracy
+  nit: `cli.py`'s own module docstring listed `version` as `(new/update)`,
+  missing `set`. Noted, not fixed (deliberate, low-value tradeoffs):
+  `apply_version_pins()`/`apply_remote_version_pins()` now run twice per
+  real pin application per `deploy run` (once during `build run`, again
+  when `audit_run.py` re-derives the effective BOM) — both calls are
+  correct and cheap, but each logs its own "version pin applied" line,
+  so that event no longer means "exactly once per real application";
+  re-deriving from the pin-resolution functions rather than threading
+  computed data across two separate CLI invocations was the deliberate
+  Phase 6 tradeoff, and duplicate log lines are its one visible cost.
+  Full check suite clean, 2050 tests (1 new).

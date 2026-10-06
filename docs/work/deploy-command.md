@@ -18,8 +18,20 @@
   already-working, already-tested claimed example (empirically
   reproduced) — fixing that is now step (0) of this design, ahead of the
   new capability/checks
-- Last updated: 2026-09-29 (design review found `unresolved_value_tokens()`
-  is stale post-gap-#12 — added as prerequisite step (0))
+- Last updated: 2026-10-06 (linked new `--smoke-test`/`--dry-run`-redefine/
+  streaming work doc, below — `unresolved_value_tokens()` staleness note
+  from 2026-09-29 still applies)
+
+See also: [deploy-plan-preview.md](deploy-plan-preview.md) — a confirmed
+gap found via a real CI pipeline run: `--dry-run` never calls
+`init`/`validate`/`plan` at all (not even a real Terraform/Helm/Compose/
+GitOps plan preview), and subprocess output streaming (`line_callback`) is
+not wired end-to-end despite the low-level transport already supporting it.
+Proposed fix renames today's zero-contact behaviour to a new `--smoke-test`
+flag and redefines `--dry-run` itself to run a real plan — tracked
+separately since it's a sizeable, distinct design (naming change, graceful
+per-tool capability degradation, streaming) — fold back into this doc once
+built.
 
 ## Overview
 

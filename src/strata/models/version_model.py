@@ -48,12 +48,20 @@ Three v1 fields are deliberately NOT ported:
   Declaring the version a recipe expects stays on `ProvisionerModel.version`,
   where it is an **assertion** strata verifies against what is present.
   Installing software is not strata's job.
+
+``spec.hash`` was a v2-only field (never ported from v1, never built against
+any real consumer) removed on 2026-10-06 (docs/work/version-lifecycle.md
+Phase 0): grepped every call site and found zero construction anywhere, and
+its own tamper-detection premise didn't survive scrutiny — `_manifest.json`
+is already pushed to a git audit sink, so its own commit history is the
+tamper-evidence, not a hash on the one document in the system explicitly
+designed to be hand-edited. Not deferred, not needed.
 """
 
 from collections.abc import Iterator
 from datetime import date
 from enum import Enum
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import Field, model_validator
 
@@ -64,6 +72,7 @@ from strata.models.common_models import (
     PlatformVersion,
     validate_kind_matches,
 )
+from strata.models.reference_fields import References
 
 #: Pin categories, in the order they are reported. Each maps to exactly one
 #: field elsewhere in the schema — see `VersionPinsModel`.
@@ -202,16 +211,18 @@ class VersionPinsModel(PlatformBaseModel):
 class VersionSpecModel(PlatformBaseModel):
     """Specification for a version document."""
 
+    workspace: Annotated[PlatformName, References(PlatformKind.WORKSPACE)] | None = Field(
+        None,
+        description="Name of the Workspace document this version document applies to. Bounds the blast "
+        "radius of editing this file to deployments running that one workspace. Phase 2 validation checks "
+        "every Deployment referencing this document (via 'spec.version') agrees on the workspace: the first "
+        "real reference establishes it when unset here, a declared value is authoritative, and a mismatch "
+        "is an error.",
+    )
     pins: VersionPinsModel = Field(
         default=VersionPinsModel(),
         description="Version pins grouped by target category. May be empty — a new document with nothing "
         "pinned yet is valid.",
-    )
-    hash: str | None = Field(
-        None,
-        min_length=1,
-        description="SHA-256 of the canonical pins payload, written by tooling. When present, resolution can "
-        "detect that the file changed since it was locked. Absent on hand-written documents.",
     )
     description: str | None = Field(None, description="Optional description for documentation purposes")
 

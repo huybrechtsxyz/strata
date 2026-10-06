@@ -119,7 +119,9 @@ class _Resolvers:
         return self._instances[integration_type]
 
 
-def resolve_deployment(context: SolutionContext, deployment_name: str) -> DeploymentModel:
+def resolve_deployment(
+    context: SolutionContext, deployment_name: str, *, version_pin: str | None = None
+) -> DeploymentModel:
     """Find `deployment_name` and fold in its `extends`/tenant-defaults chain.
 
     Shared by `resolve_values()` (this module) and `build_controller.build_run()`
@@ -128,8 +130,22 @@ def resolve_deployment(context: SolutionContext, deployment_name: str) -> Deploy
     `index.get(DEPLOYMENT, ...)` lookup could silently disagree with what
     `resolve_values()` used).
 
+    Args:
+        context: The loaded solution.
+        deployment_name: `meta.name` of the deployment to resolve.
+        version_pin: `--pin` (docs/work/version-lifecycle.md Phase 5) — when
+            given, overrides the resolved deployment's `spec.version` to this
+            name for the returned model only, never written to disk. The
+            one place this override happens: every real consumer
+            (`resolve_version()`, `resolve_artifact_field()`, the build-time
+            images/charts/remotes overlays) reads `spec.version` off the
+            deployment object it was handed, so overriding it here makes
+            every one of them see the pin transparently, with nothing
+            else to thread it through.
+
     Raises:
-        UsageError: `deployment_name` does not name a real deployment.
+        UsageError: `deployment_name` does not name a real deployment, or
+            `version_pin` does not name an indexed Version document.
     """
     index = context.controller.index
     entry = index.get(PlatformKind.DEPLOYMENT, deployment_name)
@@ -138,7 +154,14 @@ def resolve_deployment(context: SolutionContext, deployment_name: str) -> Deploy
             f"No deployment named '{deployment_name}'. Available: {sorted(index.names_of(PlatformKind.DEPLOYMENT))}"
         )
     resolved_deployments, _ = resolve_deployment_chains(index)
-    return resolved_deployments.get(deployment_name, cast(DeploymentModel, entry.model))
+    deployment = resolved_deployments.get(deployment_name, cast(DeploymentModel, entry.model))
+
+    if version_pin is not None:
+        if index.get(PlatformKind.VERSION, version_pin) is None:
+            raise UsageError(f"--pin names an unknown version document: '{version_pin}'.")
+        deployment = deployment.model_copy(update={"spec": deployment.spec.model_copy(update={"version": version_pin})})
+
+    return deployment
 
 
 def resolve_tenant(context: SolutionContext, deployment: DeploymentModel) -> TenantModel | None:
@@ -382,7 +405,9 @@ def merge_workspace_environment_deployment_properties(
     return result
 
 
-def resolve_values(context: SolutionContext, deployment_name: str, keys: list[str]) -> ValueResolution:
+def resolve_values(
+    context: SolutionContext, deployment_name: str, keys: list[str], *, version_pin: str | None = None
+) -> ValueResolution:
     """Resolve `keys` against `deployment_name`'s merged environment(s).
 
     `store: artifact` variables are resolved directly against the
@@ -416,6 +441,11 @@ def resolve_values(context: SolutionContext, deployment_name: str, keys: list[st
         context: An already-`require_valid()`-ed solution.
         deployment_name: `meta.name` of the deployment to resolve values for.
         keys: The variable/secret/feature keys to look up.
+        version_pin: `--pin` (docs/work/version-lifecycle.md Phase 5) —
+            forwarded to `resolve_deployment()`, so a `store: artifact`
+            key's `resolve_artifact_field()` lookup sees the pinned
+            version too, not just `build_run()`'s own images/charts/
+            remotes overlays.
 
     Returns:
         Every key in `keys`, either in `.values` or as a finding in
@@ -425,9 +455,10 @@ def resolve_values(context: SolutionContext, deployment_name: str, keys: list[st
         not resolve.
 
     Raises:
-        UsageError: `deployment_name` does not name a real deployment.
+        UsageError: `deployment_name` does not name a real deployment, or
+            `version_pin` does not name an indexed Version document.
     """
-    deployment = resolve_deployment(context, deployment_name)
+    deployment = resolve_deployment(context, deployment_name, version_pin=version_pin)
     environments = reachable_environments(context, deployment)
 
     variables, secrets, features = merge_environment_models(environments)

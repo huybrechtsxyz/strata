@@ -224,6 +224,33 @@ def test_force_flag_is_accepted_and_currently_inert(runner, solution, _stub_terr
 
 
 # ---------------------------------------------------------------------------
+# --pin (docs/work/version-lifecycle.md Phase 5)
+# ---------------------------------------------------------------------------
+
+
+def test_pin_is_accepted_and_overrides_spec_version(runner, solution, _stub_terraform):
+    _write(
+        solution,
+        "version.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n  pins: {}\n",
+    )
+    _build(runner, solution)
+    before = (solution / "deployment.yaml").read_text(encoding="utf-8")
+
+    result = _deploy(runner, "app", "--path", solution, "--force", "--pin", "prd")
+
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert (solution / "deployment.yaml").read_text(encoding="utf-8") == before
+
+
+def test_pin_names_an_unknown_version_exits_two(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--force", "--pin", "ghost")
+    assert result.exit_code == EXIT_USAGE
+    assert _stub_terraform == []
+
+
+# ---------------------------------------------------------------------------
 # --change-* (docs/design/audit-trail.md's ChangeReferenceModel CLI wiring)
 # ---------------------------------------------------------------------------
 

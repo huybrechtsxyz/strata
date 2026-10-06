@@ -196,6 +196,7 @@ def deploy_run(
     stage: str | None = None,
     scope: str | None = None,
     on_step: Callable[[str], None] | None = None,
+    pin: str | None = None,
 ) -> Diagnostics:
     """Execute `deployment_name`'s workspace provisioners against `build_path`
     (already rendered by a prior `build run` — this never re-renders it).
@@ -228,6 +229,15 @@ def deploy_run(
             matches (docs/design/deploy-command.md's resolved `scope`
             placement — workspace-owned, not deployment-owned).
         on_step: Called with a one-line progress message per step.
+        pin: `--pin` (docs/work/version-lifecycle.md Phase 5) — overrides
+            `deployment.spec.version` for this invocation only, zero
+            persisted mutation. Covers the `artifacts` pin category here
+            (the one category that resolves live, at deploy time, via
+            `resolve_values()`'s `store: artifact` handling) —
+            `images`/`charts`/`remotes` only ever take effect at build
+            time, so `build run --pin` is where those three actually need
+            it; passing the same pin to both commands keeps one deploy
+            consistent with the build it is executing.
 
     Returns:
         Diagnostics accumulated while resolving values, preflight-
@@ -237,7 +247,8 @@ def deploy_run(
 
     Raises:
         UsageError: `deployment_name` does not exist, its `workspace` is
-            unset or does not resolve, or a provisioning step names an
+            unset or does not resolve, `pin` does not name an indexed
+            Version document, or a provisioning step names an
             integration/provisioner that cannot be resolved.
     """
 
@@ -247,7 +258,7 @@ def deploy_run(
 
     index = context.controller.index
 
-    deployment = resolve_deployment(context, deployment_name)
+    deployment = resolve_deployment(context, deployment_name, version_pin=pin)
     if deployment.spec.workspace is None:
         raise UsageError(f"Deployment '{deployment_name}' has no workspace to deploy.")
     workspace_entry = index.get(PlatformKind.WORKSPACE, deployment.spec.workspace)
@@ -262,7 +273,7 @@ def deploy_run(
     environments = reachable_environments(context, deployment)
     variables, secrets, features = merge_environment_models(environments)
     all_keys = sorted({**variables, **secrets, **features})
-    resolved = resolve_values(context, deployment_name, all_keys)
+    resolved = resolve_values(context, deployment_name, all_keys, version_pin=pin)
     diagnostics.extend(resolved.diagnostics)
     if not resolved.diagnostics.ok:
         return diagnostics

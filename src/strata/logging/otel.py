@@ -16,7 +16,7 @@ Requires the optional `strata-v2[otel]` extra.
 import logging
 import warnings
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from opentelemetry.sdk._logs import LoggerProvider
@@ -93,7 +93,7 @@ def attach_otlp(
         handler = LoggingHandler(level=level, logger_provider=provider)
 
     handler.setFormatter(formatter)
-    return handler
+    return cast(logging.Handler, handler)
 
 
 def shutdown_otlp() -> None:

@@ -240,6 +240,33 @@ def test_dry_run_still_exits_two_for_an_unknown_deployment(runner, solution):
 
 
 # ---------------------------------------------------------------------------
+# --pin (docs/work/version-lifecycle.md Phase 5)
+# ---------------------------------------------------------------------------
+
+
+def test_pin_overrides_spec_version_for_this_invocation_only(runner, solution):
+    _write(
+        solution,
+        "version.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n"
+        "  pins:\n    remotes:\n      infra-remote: v2.0.0\n",
+    )
+    before = (solution / "deployment.yaml").read_text(encoding="utf-8")
+    assert "version" not in before
+
+    result = _run(runner, "app", "--path", solution, "--pin", "prd")
+
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert (solution / "deployment.yaml").read_text(encoding="utf-8") == before
+
+
+def test_pin_names_an_unknown_version_exits_two(runner, solution):
+    result = _run(runner, "app", "--path", solution, "--pin", "ghost")
+    assert result.exit_code == EXIT_USAGE
+    assert "ghost" in result.output
+
+
+# ---------------------------------------------------------------------------
 # JSON
 # ---------------------------------------------------------------------------
 

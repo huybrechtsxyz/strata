@@ -76,6 +76,14 @@ def build_command() -> None:
     "have, the way a CI pipeline's own exported env vars would. Repeatable; a real, "
     "already-exported env var always wins over a file's value. Applied in the order given.",
 )
+@click.option(
+    "--pin",
+    default=None,
+    metavar="VERSION",
+    help="Override spec.version with this kind: version document for this invocation only "
+    "(ADR-0019) — zero persisted mutation, the deployment document on disk is never touched. "
+    "The primary place to pin: images/charts/remotes pins only take effect at build time.",
+)
 @output_option
 @quiet_option
 @verbose_option
@@ -87,6 +95,7 @@ def build_run_command(
     dry_run: bool,
     resolve: bool,
     env_files: tuple[Path, ...],
+    pin: str | None,
     output: str,
     quiet: bool,
     verbose: bool,
@@ -98,7 +107,8 @@ def build_run_command(
     \b
     Exit codes:
       0  every step rendered; every value --resolve was asked to validate resolved
-      2  bad arguments, DEPLOYMENT does not exist, or not inside a solution
+      2  bad arguments, DEPLOYMENT does not exist, --pin names an unknown
+         version document, or not inside a solution
       3  the solution is invalid, or (only with --resolve) a declared value failed to resolve
       1  system failure — a remote could not be fetched, a source could
          not be materialised, or --build-path could not be cleaned
@@ -130,6 +140,7 @@ def build_run_command(
             on_step=run.step,
             resolve=resolve,
             env_files=list(env_files),
+            pin=pin,
         )
         if not dry_run:
             run.step(f"rendered to {target}")

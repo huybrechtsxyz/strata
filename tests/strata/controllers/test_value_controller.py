@@ -269,6 +269,99 @@ def test_resolve_version_returns_none_when_reference_does_not_resolve(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# resolve_deployment()'s version_pin / resolve_values()'s version_pin
+# (docs/work/version-lifecycle.md Phase 5's --pin, ADR-0019)
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_deployment_version_pin_overrides_spec_version(tmp_path):
+    root = _solution(tmp_path)
+    _version_doc(root, "prd")
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", environments=["prd"])  # no spec.version at all
+
+    deployment = resolve_deployment(_context(root), "app", version_pin="prd")
+
+    assert deployment.spec.version == "prd"
+
+
+def test_resolve_deployment_version_pin_overrides_an_existing_declared_version(tmp_path):
+    root = _solution(tmp_path)
+    _version_doc(root, "prd")
+    _version_doc(root, "canary")
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", version="prd", environments=["prd"])
+
+    deployment = resolve_deployment(_context(root), "app", version_pin="canary")
+
+    assert deployment.spec.version == "canary"
+
+
+def test_resolve_deployment_without_version_pin_leaves_spec_version_untouched(tmp_path):
+    root = _solution(tmp_path)
+    _version_doc(root, "prd")
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", version="prd", environments=["prd"])
+
+    deployment = resolve_deployment(_context(root), "app")
+
+    assert deployment.spec.version == "prd"
+
+
+def test_resolve_deployment_version_pin_raises_for_an_unknown_version(tmp_path):
+    root = _solution(tmp_path)
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", environments=["prd"])
+
+    with pytest.raises(UsageError, match="--pin names an unknown version document: 'ghost'"):
+        resolve_deployment(_context(root), "app", version_pin="ghost")
+
+
+def test_resolve_deployment_version_pin_never_mutates_the_file_on_disk(tmp_path):
+    root = _solution(tmp_path)
+    _version_doc(root, "prd")
+    _environment(root, "prd", variables=[{"key": "REGION", "store": "constant", "value": "westeurope"}])
+    _deployment(root, "app", environments=["prd"])
+    deployment_path = root / "app.yaml"
+    before = deployment_path.read_text(encoding="utf-8")
+
+    resolve_deployment(_context(root), "app", version_pin="prd")
+
+    assert deployment_path.read_text(encoding="utf-8") == before
+
+
+def test_resolve_values_version_pin_affects_store_artifact_resolution(tmp_path):
+    """The whole reason `resolve_values()` also forwards `version_pin`: the
+    `artifacts` category resolves live, via a deployment object pulled from
+    its own independent `resolve_deployment()` call inside `resolve_values()` —
+    without threading the pin through here too, `build run --pin`'s
+    `--resolve` validation (and `deploy run --pin`) would silently see the
+    deployment's on-disk version instead of the pin."""
+    root = _solution(tmp_path)
+    _artifact(root, "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.0.0")
+    _version_doc(root, "prd", artifact_pins={"dspapi_container": "2.0.0"})
+    _environment(
+        root,
+        "prd",
+        variables=[
+            {"key": "IMAGE_TAG", "store": "artifact", "value": "dspapi_container"},
+        ],
+    )
+    # field: image_tag must be set on the variable for the artifact store —
+    # _environment()'s generic block writer doesn't support extra keys, so
+    # patch it in directly.
+    env_path = root / "environments" / "prd.yaml"
+    env_path.write_text(
+        env_path.read_text(encoding="utf-8").rstrip("\n") + "\n      field: image_tag\n", encoding="utf-8"
+    )
+    _deployment(root, "app", environments=["prd"])  # no spec.version declared at all
+
+    result = resolve_values(_context(root), "app", ["IMAGE_TAG"], version_pin="prd")
+
+    assert result.values["IMAGE_TAG"] == "2.0.0"
+
+
+# ---------------------------------------------------------------------------
 # resolve_artifact() / resolve_artifact_field() (docs/design/artifact-references.md)
 # ---------------------------------------------------------------------------
 
@@ -284,7 +377,7 @@ def _artifact(root: Path, name: str, *, image_name: str, image_tag: str | None =
 
 
 def _version_doc(root: Path, name: str, *, artifact_pins: dict[str, str] | None = None) -> None:
-    pins_block = ""
+    pins_block = "  pins: {}\n"
     if artifact_pins:
         lines = [f"      {k}: {v!r}" for k, v in artifact_pins.items()]
         pins_block = "  pins:\n    artifacts:\n" + "\n".join(lines) + "\n"
