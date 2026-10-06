@@ -131,6 +131,36 @@ below, pending a confirmed repro. The report is being taken at face value
 for now; "could still be a pipeline bug" is the working hypothesis, not a
 conclusion.
 
+### Finding 4 — `--follow`'s plumbing was always meant to feed a future `--output ndjson`, not stay console-only
+
+v1 had an `--output ndjson` mode for streaming deploy progress
+(`json_output.py`'s own docstring: "A future `--output ndjson` for
+streaming commands (v1 had one for deploy progress)"); v2 has not ported
+it — `OUTPUT_FORMATS = ("console", "json")` only, `ndjson` tracked as
+explicit future work (`docs/design/deploy-plan-preview.md`'s "Not Built
+Here", [ADR-0030](../decisions/0030-deploy-run-plan-preview-and-streaming.md)).
+
+This is not an unrelated third output mode — `--follow`'s own `on_line:
+Callable[[str, str, str], None]` plumbing (the per-line `(tool, stream,
+text)` callback threaded through `deploy_run()`) was *designed* to be
+what an eventual NDJSON writer would consume, confirmed directly in two
+places: `json_output.py`'s own `step()` docstring ("per-step reporting is
+what `--output ndjson` will be for") and `deploy-plan-preview.md`'s own
+streaming section ("the same `on_line` plumbing here is exactly what a
+future NDJSON writer would consume"). `deploy_run()`'s own secret-
+redaction wrapper around `on_line` is explicitly written to "protect every
+current/future consumer of `on_line` (today's `--follow` writer, a future
+NDJSON writer) automatically" — the two were never meant to be separate
+mechanisms needing separate redaction, separate plumbing, or a separate
+design.
+
+**Practical effect on the fix decision**: `--output ndjson`, once built,
+is arguably the actually-intended, structurally-correct answer to "I want
+live progress *and* a machine-parseable, CI-safe output stream at the
+same time" — closer to what the cfgint report is really asking for than
+any of options 1-4 below, each of which is a narrower patch to
+`--follow`'s own current console-only behavior. See Option 5 below.
+
 ### The general mechanism — is `--follow` the only flag of this shape?
 
 Surveyed every command for a flag whose *entire effect* only exists in
@@ -171,9 +201,9 @@ underlying tool, matching the real report.
 | #   | `STRATA_OUTPUT` env var | `--output`/`-o` flag      | `--follow`/`-f`       | What happens today                                                                                                                                                                                                                                                                                                                                                  |
 | --- | ----------------------- | ------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | unset                   | unset (default `console`) | yes                   | **Works as expected** — live `terraform │ ...` lines stream to stdout as they arrive.                                                                                                                                                                                                                                                                               |
-| 2   | unset                   | unset (default `console`) | no                    | Normal console output only (header/steps/summary) — no live subprocess lines, same as always; `--follow` was never requested.                                                                                                                                                                                                                                       |
-| 3   | `json`                  | unset                     | yes                   | **The reported bug.** `output` resolves to `json` via the env var; `on_line` stays `None`; zero live output, zero warning — only the final JSON envelope on stdout once the whole run finishes.                                                                                                                                                                     |
-| 4   | unset                   | `json`                    | yes                   | Same silent result as #3 — the explicit flag produces an identical `output == "json"`, so the same `if follow and output == "console":` gate fails the same way. Confirms the bug is keyed on *effective* output mode, not on *how* it was set.                                                                                                                     |
+| 2   | unset                   | unset (default `console`) | no                    | Normal console output only (header/steps/summary) — no live subprocess lines, same as always; `--follow` was never requested.  !! what happens to the output of the subprocess?                                                                                                                                                                                     |
+| 3   | `json`                  | unset                     | yes                   | **The reported bug.** `output` resolves to `json` via the env var; `on_line` stays `None`; zero live output, zero warning — only the final JSON envelope on stdout once the whole run finishes.  !! to be fixed                                                                                                                                                     |
+| 4   | unset                   | `json`                    | yes                   | Same silent result as #3 — the explicit flag produces an identical `output == "json"`, so the same `if follow and output == "console":` gate fails the same way. Confirms the bug is keyed on *effective* output mode, not on *how* it was ~~ set.                                                                                                                  |
 | 5   | `json`                  | `console` (explicit)      | yes                   | **Works** — this is the reporter's own documented workaround. Click's own precedence (explicit flag beats `envvar` fallback) means the command-line `--output console` wins over the pipeline-wide `STRATA_OUTPUT=json`, so `output == "console"` is true and `--follow` streams normally.                                                                          |
 | 6   | `json`                  | unset                     | no                    | Clean, single JSON document on stdout, nothing on stderr beyond normal logs — the common, intended CI shape every other command (`values get`, etc.) already relies on. No bug here; included only to show the contrast with #3.                                                                                                                                    |
 | 7   | `json`                  | unset                     | yes, plus `--verbose` | Still the bug from #3 for the streamed lines — but `--verbose`'s own INFO-level logs keep appearing on stderr throughout the run regardless (Finding 2's point: logging never goes silent under JSON, only `--follow`'s stream does). An operator watching stderr sees *some* progress signal (log lines) but not the live `terraform │ ...` output they asked for. |
@@ -213,6 +243,21 @@ own current help text incorrectly implies already exists.
    a line is about to be rerouted, so an operator watching stderr knows
    *why* `terraform │ ...` lines are appearing there instead of stdout
    under this mode. Most complete, most moving parts.
+5. **Build `--output ndjson` instead of patching `--follow`** (Finding 4).
+   The structurally "correct" long-term answer — `on_line`'s plumbing
+   already exists for exactly this, `format_json()`'s `indent=None` branch
+   is already sitting there waiting ("which is what a future NDJSON
+   writer needs"), and it is the one option that gives the cfgint team
+   what they actually wanted (live progress, *and* a structured,
+   CI-parseable stream) rather than a choice between the two. Real
+   downsides: materially bigger scope than 1-4 (a new `OUTPUT_FORMATS`
+   member, a per-line JSON writer, deciding the final-summary-line
+   framing, deciding whether `--follow` becomes redundant once `--output
+   ndjson` exists or the two compose), and it does nothing for the
+   reporter's *current* pain on its own — `ndjson` has no ship date yet.
+   Not mutually exclusive with 1-4: a quick option-2-style fix now,
+   `--output ndjson` as the real follow-up once scoped, is a legitimate
+   combination to consider rather than an either/or.
 
 No option selected yet — needs a decision before implementation.
 
@@ -226,13 +271,27 @@ No option selected yet — needs a decision before implementation.
   badly with a per-step flag — is exactly the real usage pattern that
   ADR already predicted and designed for; this is the first confirmed
   case of that interaction actually causing a real problem.
+- [ADR-0030](../decisions/0030-deploy-run-plan-preview-and-streaming.md) —
+  built `--follow`'s own `on_line` streaming plumbing in the first place,
+  explicitly scoping real `--output ndjson` support out at the time
+  (Finding 4) while deliberately shaping `on_line` so a future NDJSON
+  writer could reuse it unchanged.
 
 ## Remaining Work / Open Questions
 
-- **Decide which fix option (1-4 above) to implement for `--follow`.**
-  Leaning toward option 2 (or 4) over the report's own suggested option 1,
-  since 1 only acknowledges the problem rather than solving it — but not
-  decided yet, flagging for discussion before writing any code.
+- **Decide which fix option (1-5 above) to implement for `--follow`.**
+  Leaning toward option 2 (or 4) as the near-term fix over the report's
+  own suggested option 1, since 1 only acknowledges the problem rather
+  than solving it — with option 5 (`--output ndjson`) as the real,
+  structurally-correct destination worth scoping separately rather than
+  blocking the near-term fix on it. Not decided yet, flagging for
+  discussion before writing any code.
+- **If `--output ndjson` (option 5) is pursued, scope it as its own,
+  separate work doc** rather than folding a new output format's full
+  design into this one — this doc's own job is the `--follow`/
+  `STRATA_OUTPUT` interaction specifically, not NDJSON's full design
+  (framing, final-line shape, whether `--follow` stays a separate flag
+  or becomes implied by `--output ndjson`).
 - **Confirm or refute the `build run`/`STRATA_OUTPUT` asymmetry (Finding
   3) with a real repro.** Needs the cfgint team's actual pipeline YAML
   (or an exact local repro) showing `build run` genuinely ignoring the
@@ -256,6 +315,85 @@ No option selected yet — needs a decision before implementation.
   anticipating a second console-only flag later? Revisit once the fix
   option itself is chosen — the shape of the fix determines whether
   extraction is worth it.
+
+## Open design question — is `--follow` conflating timing and format?
+
+A cleaner restatement of everything above, which the doc hasn't squarely
+asked as its own question until now — really one question, not five:
+
+- `--output` should describe *what shape* the command's output takes
+  (console text vs. a single JSON document vs., once built, NDJSON) — a
+  **format** concern.
+- `--follow` should describe *when* subprocess output becomes visible
+  (streamed live vs. buffered until the end) — a **timing** concern,
+  logically independent of format.
+- Today's actual code conflates the two directly: `--follow` only does
+  anything when `output == "console"` — one flag's effect silently
+  depends on another flag's value, instead of the two composing.
+- But does `--output ndjson` (Finding 4 / Option 5 /
+  [ndjson-output.md](ndjson-output.md)) just reintroduce the same
+  conflation on purpose? NDJSON *is* inherently a streaming format —
+  which suggests format and timing can't be fully decoupled, at least
+  not for that one format.
+
+So: **can `--follow` (timing) be decoupled from `--output` (format)
+entirely, and if so, how does NDJSON's own inherently-streaming nature
+fit into that decoupled model instead of becoming a third special
+case?**
+
+Possible answers, not decided yet:
+
+1. **Decouple them fully.** `--follow` always means "stream subprocess
+   lines as they arrive," for *any* `--output` value. Under `console`
+   that's today's tool-prefixed text; under `json`, each line becomes a
+   small per-line JSON event written as its own line — which is, in
+   effect, `--follow --output json` behaving like today's non-existent
+   `--output ndjson`. Under this answer `ndjson` stops being a fourth,
+   independent format and becomes nothing more than "`--follow` is
+   implicitly on, plus a full envelope as the final line." Real
+   tradeoff: plain `--output json` with no `--follow` must stay exactly
+   one document on stdout (every existing consumer already relies on
+   that) — so `--follow` turning it into N+1 lines can only be allowed
+   under a format that explicitly declares a multi-line contract, which
+   is just NDJSON by another name. Decoupling fully still ends up
+   needing format to know about timing after all, just expressed as
+   "format declares whether multi-line is legal" rather than "format
+   silences the flag outright."
+2. **Keep them coupled, but name the coupling honestly instead of hiding
+   it behind a silent no-op.** Accept that `--follow`'s only observable
+   behavior genuinely is tied to format, because "timing" only has a
+   visible difference when something is *already* being emitted
+   incrementally — `json`'s own contract (exactly one document, emitted
+   once, complete) has no "early" moment to show anything at, until
+   NDJSON exists specifically to create one. Under this answer the fix
+   isn't decoupling `--follow` from `--output` at all, it's giving
+   `--follow` an explicit, *documented* behavior per format instead of a
+   silent one: console → prefixed live lines; json → none, by the
+   format's own contract (this is the thing that needs a warning, not a
+   redesign); ndjson, once built → streaming is simply always on, no
+   separate flag meaningfully needed (matches
+   [ndjson-output.md](ndjson-output.md)'s own open question about
+   whether `--follow` even survives once ndjson exists).
+3. **Split the concept in two, matching v1's own real precedent**
+   ([ndjson-output.md](ndjson-output.md) Finding 4): v1 never had a
+   `--follow` flag at all — "timing" was never a user-facing knob, it
+   was simply implied by which format/verbosity was already active
+   (`--verbose` streamed to console, `ndjson` streamed as structured
+   events, `json` alone never streamed, full stop). Under this answer,
+   v2's `--follow`-as-an-independent-orthogonal-flag is itself the part
+   that doesn't fit the model — the real fix isn't decoupling `--follow`
+   from `--output`, it's recognizing v1's own design never had two
+   separate knobs for this at all, and `--follow` should fold into
+   `--verbose` (console) and `ndjson` (structured) rather than survive
+   as its own third, orthogonal flag.
+
+None of these three is adopted yet. This sits squarely at the
+intersection of this doc's own near-term fix (Options 1-4 above) and
+[ndjson-output.md](ndjson-output.md)'s open design questions, and
+likely needs resolving *before* either doc's fix/design is finalized —
+which of options 1-4 is "right" for `--follow` today depends on which
+of these three mental models is actually the target one, not the other
+way around.
 
 ## Changelog
 
@@ -281,3 +419,22 @@ No option selected yet — needs a decision before implementation.
   `STRATA_OUTPUT=json` per Click's own precedence) and what changes under
   the leading fix options (rows 3/4/7, if streamed lines reroute to
   stderr instead of disappearing).
+- 2026-10-06: Added Finding 4 — v1 had `--output ndjson` for streaming
+  deploy progress; v2 never ported it, but `--follow`'s own `on_line`
+  callback plumbing was explicitly designed, from the start (ADR-0030),
+  to be what a future NDJSON writer would consume unchanged — the two are
+  not independent mechanisms. Added Option 5 (build `--output ndjson`
+  instead of/alongside patching `--follow`) as the structurally-correct
+  long-term destination, while keeping it explicitly non-blocking on the
+  near-term fix decision and recommending it get its own separate work
+  doc if pursued, rather than being designed inline here.
+- 2026-10-06: Added an "Open design question" section naming the real
+  underlying tension directly: `--output` is a *format* concern,
+  `--follow` is a *timing* concern, and today's code conflates them —
+  but NDJSON is inherently a streaming format, which complicates a clean
+  decoupling. Laid out three possible mental models (fully decouple with
+  format declaring multi-line legality; keep coupled but document it
+  honestly instead of silently; fold `--follow` into `--verbose`/`ndjson`
+  matching v1's own precedent, dropping it as an independent flag) with
+  no option adopted yet — flagged as needing resolution before either
+  this doc's near-term fix or `ndjson-output.md`'s design is finalized.
