@@ -359,6 +359,102 @@ Possible answers, not decided yet:
    needing format to know about timing after all, just expressed as
    "format declares whether multi-line is legal" rather than "format
    silences the flag outright."
+
+   **Concrete shape**, refined from a sketch tried directly in this doc:
+   keep `--output` exactly as today (`console`/`json` — the command's own
+   final-result envelope, unchanged), and give the *stream* its own,
+   separate axis entirely — `--follow` (boolean: stream subprocess lines
+   live, period, no dependency on `--output`'s value at all) plus a
+   second, stream-specific option choosing what shape those streamed
+   lines take (`console`, today's tool-prefixed text, as the default; or
+   `ndjson`). This is "format declares whether multi-line is legal," made
+   concrete: the *stream's* own format is asked for explicitly, by name,
+   instead of being inferred from `--output`.
+
+   One naming wrinkle worth flagging before calling that second option
+   `--format`: `--format` already has two unrelated meanings elsewhere in
+   this CLI — `values get --format` (table/raw/env/export, a console
+   rendering choice) and `values generate --format` (urlsafe/hex/
+   password/uuid4/uuid7, *which kind* of secret to generate). Click
+   doesn't actually conflict here (each is its own per-command option),
+   but a reader scanning `--help` across commands would meet a third,
+   different meaning for the same flag name. A distinct name — e.g.
+   `--follow-format`/`--stream-format` — avoids `--format` becoming an
+   overloaded word across the CLI's own help text.
+
+   **Can Click enforce the combination (e.g. `--stream-format ndjson`
+   requires `--follow`)?** Not declaratively — Click has no built-in
+   "option X requires option Y" primitive. But this codebase already has
+   an established, repeated idiom for exactly this, in the very same
+   function `--follow` itself lives in (`deploy_command.py`'s
+   `deploy_run_command()`), as a plain guard in the command body right
+   after `command_run(...)` opens:
+
+   ```python
+   if dry_run and smoke_test:
+       raise UsageError("--dry-run and --smoke-test are mutually exclusive — pick one.")
+
+   change_fields = (change_system, change_id, change_reason)
+   if any(change_fields) and not all(change_fields):
+       raise UsageError("--change-system/--change-id/--change-reason must be supplied together, or not at all.")
+   ```
+
+   The same one-line pattern enforces this cleanly — e.g.
+   `if stream_format == "ndjson" and not follow: raise
+   UsageError("--stream-format ndjson requires --follow.")` — no new
+   Click machinery needed, just the same guard this file already uses
+   three times over for other flag-combination rules.
+
+   One more thing worth naming directly, found while locating that
+   precedent: the *existing* code's own comment, immediately above
+   today's silent `on_line` gate, already explains why it chose silence
+   over a `UsageError`:
+
+   ```python
+   # Tier-1 console streaming — console output only, same "never make
+   # JSON unparseable" precedent --verbose already follows. Silently
+   # inert otherwise, matching --verbose's own behaviour rather than
+   # raising a UsageError for a flag combination that simply has
+   # nothing to do.
+   ```
+
+   That's the exact same `--verbose` analogy Finding 2 already found to
+   be inaccurate. The silent design wasn't an oversight — it was a
+   *deliberate* choice, grounded in the same premise this doc has since
+   disproved. That's a concrete point in favor of revisiting it now, not
+   just a hypothetical one.
+
+   **Can `--follow` itself be both a bare boolean flag and take an
+   optional value** (`--follow` alone → `console`; `--follow ndjson` →
+   `ndjson`), avoiding a second flag name entirely? Verified directly
+   against the installed Click 8.5.0 (`click.testing.CliRunner`, not
+   assumed from docs) — yes, via `is_flag=False, flag_value="console"`:
+
+   ```python
+   @click.option(
+       "--follow", is_flag=False, flag_value="console", default=None,
+       type=click.Choice(["console", "ndjson"]),
+   )
+   ```
+
+   confirmed: omitted → `None`; bare `--follow` → `"console"`;
+   `--follow ndjson` / `--follow=ndjson` → `"ndjson"`. This would let
+   `--follow` absorb the stream-format question itself, with no separate
+   flag or naming collision with `--format` at all.
+
+   One real footgun found while verifying, not merely theoretical:
+   Click's optional-value parsing greedily tries to consume the *next*
+   token as the flag's value, so a bare `--follow` written *before* a
+   positional argument breaks — `deploy run --follow my-deployment`
+   fails with `Invalid value for '--follow': 'my-deployment' is not one
+   of 'console', 'ndjson'`, while `deploy run my-deployment --follow`
+   (and every value-ful form) works fine. A plain boolean flag never has
+   this ordering sensitivity. Since this CLI's real invocations already
+   put `DEPLOYMENT` first (see the report's own example), this is likely
+   a non-issue in practice — but it's a real, user-visible tradeoff this
+   approach introduces that a separate second flag (`--stream-format`)
+   would not.
+
 2. **Keep them coupled, but name the coupling honestly instead of hiding
    it behind a silent no-op.** Accept that `--follow`'s only observable
    behavior genuinely is tied to format, because "timing" only has a
@@ -386,6 +482,23 @@ Possible answers, not decided yet:
    separate knobs for this at all, and `--follow` should fold into
    `--verbose` (console) and `ndjson` (structured) rather than survive
    as its own third, orthogonal flag.
+
+   **Counter-finding, checked directly against v2's own source**: v2's
+   `--verbose` is already single-purpose, not dual-purpose like v1's.
+   `verbose_option()`'s own docstring/help text (`options.py`) says
+   plainly "Affects logging only" / "Log at INFO instead of WARNING",
+   and the `verbose` bool's *only* consumer anywhere in the command flow
+   is `command_run()`'s `configure_logging(level=logging.INFO if verbose
+   else logging.WARNING)` — it is never threaded into `make_reporter()`,
+   never checked again in any command body. v1's own `--verbose` did two
+   unrelated things at once (raise log level **and** trigger Tier-1 live
+   subprocess streaming); v2 already split those into two single-purpose
+   flags. That makes v2's `--verbose`/`--follow` split a **deliberate
+   improvement on v1's own design**, not an accidental divergence worth
+   reverting — which is a real argument *against* this option (folding
+   `--follow` back into `--verbose` would be un-doing an already-cleaner
+   separation of concerns, re-introducing the exact two-unrelated-
+   things-one-flag shape v1 had).
 
 None of these three is adopted yet. This sits squarely at the
 intersection of this doc's own near-term fix (Options 1-4 above) and
@@ -438,3 +551,42 @@ way around.
   matching v1's own precedent, dropping it as an independent flag) with
   no option adopted yet — flagged as needing resolution before either
   this doc's near-term fix or `ndjson-output.md`'s design is finalized.
+- 2026-10-06: Fleshed out Option 1 (full decoupling) with a concrete flag
+  shape — `--output` stays the command's own final-result format;
+  `--follow` becomes a pure boolean (stream or don't, independent of
+  `--output`); a second, stream-specific option (not reusing `--format`,
+  which already has two unrelated meanings on `values get`/`values
+  generate`) picks the streamed shape (`console` default or `ndjson`).
+  Answered the Click-enforcement question directly: Click has no
+  declarative "option X requires option Y," but this codebase already
+  has a repeated, established idiom for it — a plain `UsageError` guard
+  in the command body, demonstrated with the real `--dry-run`/
+  `--smoke-test` and `--change-*` checks already in
+  `deploy_run_command()`. Also found that the *existing* silent-gate
+  code's own comment explicitly cites the same `--verbose` analogy
+  Finding 2 already disproved — the current silent design was a
+  deliberate choice, not an oversight, grounded in a premise this doc has
+  since shown to be inaccurate.
+- 2026-10-06: Verified directly against the installed Click 8.5.0 (not
+  assumed) that `--follow` could absorb the stream-format question
+  itself as an optional-value flag (`is_flag=False, flag_value="console"`
+  — bare `--follow` → `"console"`, `--follow ndjson` → `"ndjson"`,
+  omitted → `None`), avoiding a second flag name entirely. Also found a
+  real, confirmed footgun this approach introduces: Click's optional-
+  value parsing greedily consumes the *next* token as the value, so a
+  bare `--follow` written before a positional argument breaks (`deploy
+  run --follow my-deployment` fails; `deploy run my-deployment --follow`
+  works) — an ordering sensitivity a plain boolean flag or a separate
+  second flag (`--stream-format`) wouldn't have.
+- 2026-10-06: Checked v2's `--verbose` directly against source in
+  response to a direct question about what it actually does — confirmed
+  it is already single-purpose: `verbose_option()`'s own docstring says
+  "Affects logging only", and the `verbose` bool's only consumer
+  anywhere is `command_run()`'s `configure_logging(...INFO if verbose
+  else WARNING)` call, nothing else. Added this as a counter-finding to
+  Option 3 (fold `--follow` into `--verbose`, matching v1): v1's own
+  `--verbose` was dual-purpose (log level **and** Tier-1 live streaming
+  trigger, per `ndjson-output.md`'s Finding 4), so v2's split into two
+  single-purpose flags is a deliberate improvement on v1, not an
+  accidental divergence — an argument against reverting to v1's
+  conflated shape via Option 3.
