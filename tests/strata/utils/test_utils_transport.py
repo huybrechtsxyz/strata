@@ -8,6 +8,8 @@ machine the suite runs on, and needs no mocking. HTTP tests stub
 
 import json
 import sys
+import threading
+import time
 
 import pytest
 import requests
@@ -198,6 +200,35 @@ def test_streaming_accepts_input_on_stdin():
     )
     assert result.is_successful
     assert ("stdout", "piped-value") in lines
+
+
+def test_line_callback_is_never_invoked_concurrently():
+    """Code review finding 3 (2026-10-06): stdout and stderr are drained on
+    two separate threads, both calling `line_callback` — regression test
+    for the `callback_lock` serialization fix in `_run_streaming()`. The
+    callback holds a flag set for a few ms per call, long enough that an
+    unsynchronized pair of threads would almost certainly be caught
+    overlapping; with the lock in place, this passes deterministically.
+    """
+    in_callback = threading.Event()
+    overlap_detected = threading.Event()
+
+    def _callback(stream: str, line: str) -> None:
+        if in_callback.is_set():
+            overlap_detected.set()
+        in_callback.set()
+        time.sleep(0.005)
+        in_callback.clear()
+
+    result = run_command(
+        _python(
+            "import sys\nfor i in range(20): print(f'out-{i}', flush=True); print(f'err-{i}', file=sys.stderr, flush=True)"
+        ),
+        line_callback=_callback,
+    )
+
+    assert result.is_successful
+    assert not overlap_detected.is_set()
 
 
 # ---------------------------------------------------------------------------

@@ -194,7 +194,15 @@ def run_command(
             and the process is run in streaming mode instead of buffered.
             Needed for a provisioner that runs for minutes (`terraform
             apply`, `helm upgrade`) — buffering the whole run would leave a
-            caller silent until the process exits.
+            caller silent until the process exits. Stdout and stderr are
+            drained on two separate threads (so a full pipe on one stream
+            can never block the other), but `line_callback` itself is
+            never invoked concurrently — calls are serialized with an
+            internal lock, so a caller that writes to a shared resource
+            (e.g. the console) from `line_callback` needs no synchronization
+            of its own. Only the *order* between stdout and stderr lines is
+            unspecified (whichever stream's next line arrives first calls
+            back first) — expected for live-streamed output, not a defect.
 
     Returns:
         The outcome, including partial output when the timeout fired.
@@ -270,9 +278,21 @@ def _run_streaming(
     timeout: int | None,
     line_callback: Callable[[str, str], None],
 ) -> CommandResult:
-    """Run while forwarding each line of output to `line_callback` as it arrives."""
+    """Run while forwarding each line of output to `line_callback` as it
+    arrives.
+
+    Reads stdout/stderr on two separate threads (so a full pipe on one
+    stream never blocks the other), but `line_callback` is only ever
+    called from one thread at a time — serialized with `callback_lock`
+    below, so a caller writing to a shared resource (console, a log
+    buffer) needs no synchronization of its own. Found and fixed in a
+    code review (2026-10-06): before this lock, a caller's
+    `line_callback` could genuinely be entered by both the stdout- and
+    stderr-reader threads at the same instant.
+    """
     stdout_lines: list[str] = []
     stderr_lines: list[str] = []
+    callback_lock = threading.Lock()
 
     if input is not None:
         assert process.stdin is not None
@@ -283,7 +303,8 @@ def _run_streaming(
         for raw in pipe:
             line = raw.rstrip("\r\n")
             lines.append(line)
-            line_callback(stream_name, line)
+            with callback_lock:
+                line_callback(stream_name, line)
 
     assert process.stdout is not None
     assert process.stderr is not None
