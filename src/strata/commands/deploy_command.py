@@ -15,6 +15,7 @@ split).
 """
 
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -62,7 +63,25 @@ def deploy_command() -> None:
     "--dry-run",
     is_flag=True,
     default=False,
-    help="Report which steps would run without calling init/validate/plan/deploy at all.",
+    help="Run init/validate/plan for real (saved to <step>.tfplan) and stop before deploy. "
+    "A step whose tool doesn't meaningfully support a preview is warned about and skipped, "
+    "not a hard failure. Mutually exclusive with --smoke-test (zero tool contact at all).",
+)
+@click.option(
+    "--smoke-test",
+    is_flag=True,
+    default=False,
+    help="Report which steps would run without calling init/validate/plan/deploy at all "
+    "— zero tool contact, no auth needed. Mutually exclusive with --dry-run.",
+)
+@click.option(
+    "--follow",
+    "-f",
+    is_flag=True,
+    default=False,
+    help="Stream each subprocess output line live as it arrives, tool-prefixed "
+    "(e.g. 'terraform │ ...'). Console output only — silently inert with --output json, "
+    'matching --verbose\'s own "never make JSON unparseable" precedent.',
 )
 @click.option(
     "--stage",
@@ -148,6 +167,8 @@ def deploy_run_command(
     build_path: Path | None,
     force: bool,
     dry_run: bool,
+    smoke_test: bool,
+    follow: bool,
     stage: str | None,
     scope: str | None,
     pin: str | None,
@@ -177,6 +198,9 @@ def deploy_run_command(
     only executes what is already on disk at --build-path.
     """
     with command_run("deploy run", output=output, quiet=quiet, verbose=verbose) as run:
+        if dry_run and smoke_test:
+            raise UsageError("--dry-run and --smoke-test are mutually exclusive — pick one.")
+
         change_fields = (change_system, change_id, change_reason)
         if any(change_fields) and not all(change_fields):
             raise UsageError("--change-system/--change-id/--change-reason must be supplied together, or not at all.")
@@ -204,22 +228,40 @@ def deploy_run_command(
         execution_id = str(uuid.uuid4())
         started_at = datetime.now(timezone.utc)
 
+        # Tier-1 console streaming (docs/work/deploy-plan-preview.md §4) —
+        # console output only, same "never make JSON unparseable" precedent
+        # --verbose already follows. Silently inert otherwise, matching
+        # --verbose's own behaviour rather than raising a UsageError for a
+        # flag combination that simply has nothing to do.
+        on_line: Callable[[str, str, str], None] | None = None
+        if follow and output == "console":
+
+            def on_line(tool: str, stream: str, text: str) -> None:
+                if stream == "stderr":
+                    click.secho(f"      {tool} │ {text}", fg="yellow", err=True)
+                else:
+                    click.secho(f"      {tool} │ {text}", fg="cyan")
+
         diagnostics = deploy_run(
             context,
             deployment,
             target,
             force=force,
             dry_run=dry_run,
+            smoke_test=smoke_test,
             stage=stage,
             scope=scope,
             on_step=run.step,
+            on_line=on_line,
             pin=pin,
         )
 
         # Audit trail — finalize + write locally + distribute (docs/design/
         # audit-trail.md's Layer 2). Never affects which deploy stages ran or
         # their recorded outcome; a required sink's push failure can still
-        # fail this command's own exit code, merged in below.
+        # fail this command's own exit code, merged in below. `smoke_test`
+        # is zero-contact, same as `dry_run` — both must no-op the manifest/
+        # metrics write (docs/work/deploy-plan-preview.md §5).
         audit_diagnostics = finalize_and_distribute_deploy_audit(
             context,
             deployment,
@@ -227,7 +269,7 @@ def deploy_run_command(
             execution_id=execution_id,
             started_at=started_at,
             run_diagnostics=diagnostics,
-            dry_run=dry_run,
+            dry_run=dry_run or smoke_test,
             pin=pin,
             change_system=change_system,
             change_id=change_id,

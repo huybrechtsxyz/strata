@@ -42,7 +42,7 @@ rather than silently ignoring it.
 """
 
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -135,6 +135,7 @@ class ComposeIntegration(InfraIntegration):
         tokens: dict[str, str],
         dry_run: bool,
         env: dict[str, str] | None = None,
+        line_callback: Callable[[str, str], None] | None = None,
         **kwargs: Any,
     ) -> Diagnostics:
         """Deploy `namespace`'s merged `docker-compose.yml` as one Swarm stack
@@ -158,6 +159,14 @@ class ComposeIntegration(InfraIntegration):
         `docker stack deploy`/`stack config` subprocess's own environment
         (`env=`, merged by `Integration.run()`), which Compose's own
         interpolation engine reads at parse time.
+
+        `dry_run` (docs/work/deploy-plan-preview.md §2a): still writes the
+        resolved compose file (a preview needs the same real input a
+        `docker stack deploy` would use) then calls `self.plan_or_warn(...)`
+        (`docker stack config`) instead of `self.deploy(...)` — never
+        both. A tool-unsupported preview is a warning, not a failure
+        (`plan_or_warn()`'s own contract); a real plan failure is still an
+        error.
         """
         del kwargs
         diagnostics = Diagnostics()
@@ -179,12 +188,32 @@ class ComposeIntegration(InfraIntegration):
             diagnostics.error(f"Namespace '{namespace.meta.name}': {exc}", location=str(namespace.meta.name))
             return diagnostics
 
-        if dry_run:
-            return diagnostics
-
         compose_file.write_text(yaml.safe_dump(resolved_document, sort_keys=False, default_flow_style=False))
 
-        result = self.deploy(compose_file, namespace=str(namespace.meta.name), env={**(env or {}), **secrets})
+        if dry_run:
+            # Real preview, not a skip (docs/work/deploy-plan-preview.md
+            # §2a) — `docker stack config` needs the same rendered file on
+            # disk a real `deploy()` would use, just not followed by one.
+            plan_result = self.plan_or_warn(
+                compose_file,
+                diagnostics=diagnostics,
+                location=str(namespace.meta.name),
+                env={**(env or {}), **secrets},
+                line_callback=line_callback,
+            )
+            if plan_result is not None and not plan_result.is_successful:
+                diagnostics.error(
+                    f"Namespace '{namespace.meta.name}': docker stack config (dry-run) failed — {plan_result.stderr}",
+                    location=str(namespace.meta.name),
+                )
+            return diagnostics
+
+        result = self.deploy(
+            compose_file,
+            namespace=str(namespace.meta.name),
+            env={**(env or {}), **secrets},
+            line_callback=line_callback,
+        )
         if not result.is_successful:
             diagnostics.error(
                 f"Namespace '{namespace.meta.name}': docker stack deploy failed — {result.stderr}",
@@ -193,13 +222,21 @@ class ComposeIntegration(InfraIntegration):
         return diagnostics
 
     def plan(
-        self, path: Path, *, timeout: int = 60, env: Mapping[str, str] | None = None, **kwargs: Any
+        self,
+        path: Path,
+        *,
+        timeout: int = 60,
+        env: Mapping[str, str] | None = None,
+        line_callback: Callable[[str, str], None] | None = None,
+        **kwargs: Any,
     ) -> CommandResult:
         """`docker stack config -c path` — renders the merged compose file.
         No true dry-run exists for Swarm (v1's own admitted limitation);
         this is the closest real analog. Takes no stack name — it renders
         the file, it does not target a live stack."""
-        return self.run("stack", "config", "-c", str(path), cwd=path.parent, env=env, timeout=timeout)
+        return self.run(
+            "stack", "config", "-c", str(path), cwd=path.parent, env=env, timeout=timeout, line_callback=line_callback
+        )
 
     def deploy(
         self,
@@ -209,6 +246,7 @@ class ComposeIntegration(InfraIntegration):
         with_registry_auth: bool = True,
         timeout: int = 300,
         env: Mapping[str, str] | None = None,
+        line_callback: Callable[[str, str], None] | None = None,
         **kwargs: Any,
     ) -> CommandResult:
         """`docker stack deploy [--with-registry-auth] -c path namespace`.
@@ -224,7 +262,7 @@ class ComposeIntegration(InfraIntegration):
         if with_registry_auth:
             args.append("--with-registry-auth")
         args.extend(["-c", str(path), namespace])
-        return self.run(*args, cwd=path.parent, env=env, timeout=timeout)
+        return self.run(*args, cwd=path.parent, env=env, timeout=timeout, line_callback=line_callback)
 
     def destroy(
         self,

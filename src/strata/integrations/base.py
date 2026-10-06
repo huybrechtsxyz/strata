@@ -19,7 +19,7 @@ executable, pin a version, point at a networked transport, ...).
 
 import shutil
 from abc import ABC
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import ClassVar
 
@@ -175,8 +175,16 @@ class Integration(ABC):
         cwd: Path | None = None,
         env: Mapping[str, str] | None = None,
         timeout: int = 300,
+        line_callback: Callable[[str, str], None] | None = None,
     ) -> CommandResult:
-        """Run `command` with `args` (see `strata.utils.transport.run_command`)."""
+        """Run `command` with `args` (see `strata.utils.transport.run_command`).
+
+        `line_callback` (docs/work/deploy-plan-preview.md §4): when given,
+        called as `(stream, line)` for every line of output as it arrives
+        — forwarded straight through to `run_command()`, which already
+        implements the actual streaming (`_run_streaming()`). `None`
+        (default) keeps today's buffered-until-exit behaviour unchanged.
+        """
         command = self.command
         if command is None:
             return CommandResult(
@@ -184,7 +192,7 @@ class Integration(ABC):
                 stdout="",
                 stderr=f"{self.name}: no command configured for the 'cli' transport",
             )
-        return run_command([command, *args], cwd=cwd, env=env, timeout=timeout)
+        return run_command([command, *args], cwd=cwd, env=env, timeout=timeout, line_callback=line_callback)
 
     # ------------------------------------------------------------------
     # networked transports (http, sdk, ...)

@@ -194,11 +194,62 @@ def test_build_path_option_overrides_the_default(runner, solution, tmp_path, _st
     assert result.exit_code == EXIT_SUCCESS, result.output
 
 
-def test_dry_run_never_calls_run_command(runner, solution, _stub_terraform):
+def test_dry_run_calls_plan_but_not_apply(runner, solution, _stub_terraform):
+    """docs/work/deploy-plan-preview.md Implementation Plan phase 2 —
+    `--dry-run` now runs a real preview (init/validate/plan) and stops;
+    the old "zero tool contact" meaning moved to `--smoke-test`.
+    """
     _build(runner, solution)
     result = _deploy(runner, "app", "--path", solution, "--dry-run")
     assert result.exit_code == EXIT_SUCCESS, result.output
+    commands = [call[1] for call in _stub_terraform]
+    assert commands == ["init", "validate", "plan"]
+
+
+def test_smoke_test_never_calls_run_command(runner, solution, _stub_terraform):
+    """`--smoke-test` keeps the old `--dry-run` meaning permanently: zero
+    tool contact at all."""
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--smoke-test")
+    assert result.exit_code == EXIT_SUCCESS, result.output
     assert _stub_terraform == []
+
+
+def test_dry_run_and_smoke_test_are_mutually_exclusive(runner, solution, _stub_terraform):
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--dry-run", "--smoke-test")
+    assert result.exit_code == EXIT_USAGE, result.output
+    assert _stub_terraform == []
+
+
+@pytest.fixture
+def _stub_terraform_streaming(monkeypatch):
+    """Like `_stub_terraform`, but also invokes `line_callback` with one
+    fake line per call — docs/work/deploy-plan-preview.md §4."""
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if line_callback is not None:
+            line_callback("stdout", f"fake output for {' '.join(args)}")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+
+def test_follow_streams_tool_prefixed_lines_on_console_output(runner, solution, _stub_terraform_streaming):
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--force", "--follow")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "terraform │" in result.output
+
+
+def test_follow_is_silently_inert_with_json_output(runner, solution, _stub_terraform_streaming):
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--force", "--follow", "--output", "json")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "terraform │" not in result.output
 
 
 def test_stage_option_restricts_execution(runner, solution, _stub_terraform):

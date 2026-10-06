@@ -11,7 +11,11 @@
   what `prepare()`/`prepare_namespace()` actually write, and how a user can
   customise it)
 - See also: [docs/work/build-pipeline-status.md](../work/build-pipeline-status.md)
-  for cross-ADR status across ADR-0021/0022/0023
+  for cross-ADR status across ADR-0021/0022/0023;
+  [ADR-0029](0029-provisioner-source-dependencies.md) (and its
+  [work doc](../work/provisioner-source-dependencies.md)) for the resolution
+  of a gap this ADR's D3 found but did not close — a provisioner with
+  no execution step is never materialised at all today
 
 ## Context and Problem Statement
 

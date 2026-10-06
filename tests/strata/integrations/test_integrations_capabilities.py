@@ -580,3 +580,83 @@ def test_every_registered_class_is_compliant():
     for integration_type in _KNOWN:
         instance = get(integration_type)
         assert find_capability_mismatches(type(instance)) == [], integration_type
+
+
+# ---------------------------------------------------------------------------
+# InfraIntegration.plan_or_warn() (docs/work/deploy-plan-preview.md §3) —
+# graceful degradation: "preview if the tool supports it, otherwise not".
+# ---------------------------------------------------------------------------
+
+
+def test_plan_or_warn_returns_a_successful_plan_result_unchanged():
+    from strata.utils.diagnostics import Diagnostics
+    from strata.utils.transport import CommandResult
+
+    class _Planner(_Bare):
+        def plan(self, path, **kwargs):
+            return CommandResult(returncode=0, stdout="no changes", stderr="")
+
+    diagnostics = Diagnostics()
+    result = _Planner().plan_or_warn(Path("."), diagnostics=diagnostics, location="step1")
+
+    assert result is not None
+    assert result.is_successful
+    assert result.stdout == "no changes"
+    assert diagnostics.warnings == []
+
+
+def test_plan_or_warn_returns_a_failed_plan_result_for_the_caller_to_report():
+    """A `plan()` that runs but fails for a real, tool-specific reason stays
+    a real result — `plan_or_warn()` itself never turns that into a
+    warning or raises; the caller still decides severity (a hard error,
+    matching a real plan() failure on the apply path)."""
+    from strata.utils.diagnostics import Diagnostics
+    from strata.utils.transport import CommandResult
+
+    class _Planner(_Bare):
+        def plan(self, path, **kwargs):
+            return CommandResult(returncode=1, stdout="", stderr="invalid HCL")
+
+    diagnostics = Diagnostics()
+    result = _Planner().plan_or_warn(Path("."), diagnostics=diagnostics, location="step1")
+
+    assert result is not None
+    assert not result.is_successful
+    assert result.stderr == "invalid HCL"
+    assert diagnostics.warnings == []  # not plan_or_warn()'s job to report this
+
+
+def test_plan_or_warn_turns_integration_error_into_a_warning_not_a_raise():
+    from strata.integrations.errors import IntegrationError
+    from strata.utils.diagnostics import Diagnostics
+
+    class _NoPreview(_Bare):
+        def plan(self, path, **kwargs):
+            raise IntegrationError("no preview mechanism for this tool")
+
+    diagnostics = Diagnostics()
+    result = _NoPreview().plan_or_warn(Path("."), diagnostics=diagnostics, location="step1")
+
+    assert result is None
+    assert len(diagnostics.warnings) == 1
+    warning = diagnostics.warnings[0]
+    assert "no plan preview available" in warning.message
+    assert "no preview mechanism for this tool" in warning.message
+    assert warning.location == "step1"
+
+
+def test_plan_or_warn_forwards_kwargs_to_plan():
+    from strata.utils.diagnostics import Diagnostics
+    from strata.utils.transport import CommandResult
+
+    class _Planner(_Bare):
+        def plan(self, path, **kwargs):
+            self.received = kwargs  # type: ignore[attr-defined]
+            return CommandResult(returncode=0, stdout="", stderr="")
+
+    integration = _Planner()
+    integration.plan_or_warn(
+        Path("."), diagnostics=Diagnostics(), location="step1", out_file="step1.tfplan", env={"K": "V"}
+    )
+
+    assert integration.received == {"out_file": "step1.tfplan", "env": {"K": "V"}}  # type: ignore[attr-defined]

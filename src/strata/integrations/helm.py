@@ -27,7 +27,7 @@ run`'s job, not `build run`'s (ADR-0023's value-substitution table), and no
 """
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -104,6 +104,7 @@ class HelmIntegration(InfraIntegration):
         dry_run: bool,
         remotes: dict[str, SolutionRemoteModel] | None = None,
         env: dict[str, str] | None = None,
+        line_callback: Callable[[str, str], None] | None = None,
         **kwargs: Any,
     ) -> Diagnostics:
         """Deploy every Helm module in `modules` (docs/design/gap_fit_v1.md gap #13).
@@ -117,6 +118,14 @@ class HelmIntegration(InfraIntegration):
         (gap #9 Phase 4) and rewritten in place for non-secret leaves,
         while secret-shaped leaves are delivered via `--set-string`,
         never written to disk.
+
+        `dry_run` (docs/work/deploy-plan-preview.md §2a): still writes the
+        resolved `values.yaml` (a preview needs the same real input a
+        `helm upgrade` would use) then calls `self.plan_or_warn(...)`
+        (`helm upgrade --dry-run --install`) instead of `self.deploy(...)`
+        — never both. A tool-unsupported preview is a warning, not a
+        failure (`plan_or_warn()`'s own contract); a real plan failure is
+        still an error.
         """
         del kwargs
         diagnostics = Diagnostics()
@@ -154,11 +163,31 @@ class HelmIntegration(InfraIntegration):
             resolved_values, secrets = resolve_module_values(item.module, tokens)
             set_string = list(secrets.items())
 
-            if dry_run:
-                continue
-
             if resolved_values:
                 values_file.write_text(yaml.safe_dump(resolved_values, sort_keys=False, default_flow_style=False))
+
+            if dry_run:
+                # Real preview, not a skip (docs/work/deploy-plan-preview.md
+                # §2a) — `plan()` needs the same rendered file on disk a real
+                # `deploy()` would use, just not followed by one.
+                plan_result = self.plan_or_warn(
+                    values_file,
+                    diagnostics=diagnostics,
+                    location=item.reference.name,
+                    release=release,
+                    namespace=release_namespace,
+                    chart=chart,
+                    set_string=set_string,
+                    env=env,
+                    line_callback=line_callback,
+                )
+                if plan_result is not None and not plan_result.is_successful:
+                    diagnostics.error(
+                        f"Namespace '{namespace.meta.name}', module '{item.reference.name}': "
+                        f"helm plan (dry-run) failed — {plan_result.stderr}",
+                        location=item.reference.name,
+                    )
+                continue
 
             result = self.deploy(
                 values_file,
@@ -167,6 +196,7 @@ class HelmIntegration(InfraIntegration):
                 chart=chart,
                 set_string=set_string,
                 env=env,
+                line_callback=line_callback,
             )
             if not result.is_successful:
                 diagnostics.error(
@@ -187,6 +217,7 @@ class HelmIntegration(InfraIntegration):
         set_string: Sequence[tuple[str, str]] | None = None,
         timeout: int = 600,
         env: Mapping[str, str] | None = None,
+        line_callback: Callable[[str, str], None] | None = None,
         **kwargs: Any,
     ) -> CommandResult:
         """`helm upgrade --dry-run --install --namespace ns -f path [--set-string ...] release chart [--version v]`.
@@ -203,7 +234,7 @@ class HelmIntegration(InfraIntegration):
         args.extend([release, chart])
         if version:
             args.extend(["--version", version])
-        return self.run(*args, cwd=path.parent, env=env, timeout=timeout)
+        return self.run(*args, cwd=path.parent, env=env, timeout=timeout, line_callback=line_callback)
 
     def deploy(
         self,
@@ -220,6 +251,7 @@ class HelmIntegration(InfraIntegration):
         deploy_timeout: str = "5m",
         timeout: int = 600,
         env: Mapping[str, str] | None = None,
+        line_callback: Callable[[str, str], None] | None = None,
         **kwargs: Any,
     ) -> CommandResult:
         """`helm upgrade --install [--create-namespace] [--wait] [--atomic] --timeout T
@@ -241,7 +273,7 @@ class HelmIntegration(InfraIntegration):
         args.extend([release, chart])
         if version:
             args.extend(["--version", version])
-        return self.run(*args, cwd=path.parent, env=env, timeout=timeout)
+        return self.run(*args, cwd=path.parent, env=env, timeout=timeout, line_callback=line_callback)
 
     def destroy(
         self,

@@ -511,7 +511,11 @@ def test_deploy_namespace_unresolvable_token_reports_a_diagnostic(monkeypatch, t
     assert "did not resolve to a value" in diagnostics.errors[0].message
 
 
-def test_deploy_namespace_dry_run_never_touches_disk_or_runs_a_command(monkeypatch, tmp_path: Path):
+def test_deploy_namespace_dry_run_calls_plan_not_deploy(monkeypatch, tmp_path: Path):
+    """docs/work/deploy-plan-preview.md §2a — `dry_run` is a real preview
+    now: it writes the resolved `docker-compose.yml` (same real input a
+    deploy would use) and calls `docker stack config` via
+    `plan_or_warn()`, never `self.deploy()`."""
     captured = _capture(monkeypatch)
     module = _module("portainer", services=[ModuleServiceModel(name="portainer")])
     namespace_dir = tmp_path / "hearth"
@@ -525,8 +529,31 @@ def test_deploy_namespace_dry_run_never_touches_disk_or_runs_a_command(monkeypat
     )
 
     assert diagnostics.ok
-    assert "args" not in captured
-    assert (namespace_dir / "docker-compose.yml").read_text() == contents_before
+    assert captured["args"] == ["docker", "stack", "config", "-c", str(namespace_dir / "docker-compose.yml")]
+    # A real preview needs the same real, resolved input a deploy would use.
+    assert (namespace_dir / "docker-compose.yml").read_text() != contents_before
+
+
+def test_deploy_namespace_dry_run_plan_failure_is_reported_as_an_error(monkeypatch, tmp_path: Path):
+    module = _module("portainer", services=[ModuleServiceModel(name="portainer")])
+    namespace_dir = tmp_path / "hearth"
+    namespace_dir.mkdir(parents=True)
+    (namespace_dir / "docker-compose.yml").write_text(yaml.safe_dump({"services": {"portainer": {}}}))
+    resolved_module = _resolved("portainer", module, namespace_dir / "portainer")
+
+    def _failing_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        return CommandResult(returncode=1, stdout="", stderr="invalid compose file")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _failing_run_command)
+
+    diagnostics = ComposeIntegration().deploy_namespace(
+        _namespace("hearth"), [resolved_module], tokens={}, dry_run=True
+    )
+
+    assert not diagnostics.ok
+    assert "docker stack config (dry-run) failed" in diagnostics.errors[0].message
 
 
 def test_deploy_namespace_does_nothing_for_an_empty_group():

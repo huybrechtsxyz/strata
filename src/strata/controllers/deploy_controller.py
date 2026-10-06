@@ -193,9 +193,11 @@ def deploy_run(
     *,
     force: bool = False,
     dry_run: bool = False,
+    smoke_test: bool = False,
     stage: str | None = None,
     scope: str | None = None,
     on_step: Callable[[str], None] | None = None,
+    on_line: Callable[[str, str, str], None] | None = None,
     pin: str | None = None,
 ) -> Diagnostics:
     """Execute `deployment_name`'s workspace provisioners against `build_path`
@@ -220,15 +222,40 @@ def deploy_run(
             approval gates (AI plan review, promotion-override guards),
             neither of which v2 has built yet. Kept in the signature so
             a future gate can consume it without changing the call shape.
-        dry_run: Report which steps would run without calling
-            `init`/`validate`/`plan`/`deploy` at all — matches
-            `build_run()`'s own `--dry-run` treatment (report, no
-            mutation), not a Terraform "plan only" mode.
+        dry_run: Runs `init`/`validate`/`plan` for real (saved to
+            `<step>.tfplan`, same as a normal run) and stops — `deploy()`
+            is never called. Matches v1's own `setup -> check -> plan`
+            dry-run sequence (docs/work/deploy-plan-preview.md
+            Implementation Plan phase 2) — **not** a zero-contact "would
+            run" report; that's `smoke_test` now. A step whose tool
+            doesn't meaningfully support a preview gets a warning instead
+            of a hard failure (`InfraIntegration.plan_or_warn()`), and the
+            run continues to the next step. A container-capable
+            (Helm/Compose) step's `deploy_namespace()` gets the
+            equivalent real-preview treatment (phase 3). Mutually
+            exclusive with `smoke_test` (enforced by `deploy_command.py`,
+            not here).
+        smoke_test: Report which steps would run without calling
+            `init`/`validate`/`plan`/`deploy` at all — zero tool contact,
+            no auth needed. Mutually exclusive with `dry_run` (enforced by
+            `deploy_command.py`, not here).
         stage: Restrict to the one step named `stage`.
         scope: Restrict to steps whose `ProvisioningStepModel.scope`
             matches (docs/design/deploy-command.md's resolved `scope`
             placement — workspace-owned, not deployment-owned).
         on_step: Called with a one-line progress message per step.
+        on_line: Called as `(tool, stream, text)` for every subprocess
+            output line as it arrives (docs/work/deploy-plan-preview.md
+            §4) — `tool` is the resolved integration's own `TYPE`
+            (`"terraform"`/`"helm"`/`"compose"`), `stream` is
+            `"stdout"`/`"stderr"`, `text` the raw line. `None` (default)
+            keeps today's buffered-until-exit behaviour. This function
+            itself only enriches a lower-level `Callable[[str, str],
+            None]` (what every `Integration.run()`/`InfraIntegration.
+            plan()`/`.deploy()` call actually expects) with the current
+            step's `tool` name before forwarding — the orchestrator is
+            what knows which tool is running at any given point in the
+            loop, not the caller.
         pin: `--pin` (docs/work/version-lifecycle.md Phase 5) — overrides
             `deployment.spec.version` for this invocation only, zero
             persisted mutation. Covers the `artifacts` pin category here
@@ -489,7 +516,23 @@ def deploy_run(
             path = build_path / relative
         integration_type = type(integration).__name__
 
-        if dry_run:
+        # `_tool` is bound as a default argument, not read from the
+        # enclosing scope at call time (ruff B023) — `integration` is a
+        # loop variable, and this closure must capture *this* iteration's
+        # value, not whatever `integration` happens to be by the time
+        # `_line` is actually called (always within the same iteration in
+        # practice, but the default-argument binding is correct regardless).
+        def _line(stream: str, text: str, _tool: str = integration.TYPE) -> None:
+            if on_line is not None:
+                on_line(_tool, stream, text)
+
+        # `smoke_test` is the only flag that short-circuits here — zero
+        # tool contact at all. `dry_run` (docs/work/deploy-plan-preview.md
+        # Implementation Plan phase 2) flows all the way through
+        # init/validate/plan and only stops before `deploy()` below, after
+        # a successful plan — it is intentionally absent from this
+        # condition.
+        if smoke_test:
             _step(f"would deploy step '{step.name}' via {integration_type}")
             continue
 
@@ -522,6 +565,7 @@ def deploy_run(
                     location=step.name,
                 )
                 return diagnostics
+            _step(f"running step '{step.name}' via {integration_type}")
             for namespace in namespaces_targeted:
                 by_type = resolve_namespace_modules(index, namespace, build_path)
                 modules = by_type.get(integration.TYPE, [])
@@ -529,7 +573,13 @@ def deploy_run(
                     continue
                 diagnostics.extend(
                     integration.deploy_namespace(
-                        namespace, modules, tokens=tokens, dry_run=dry_run, remotes=remotes, env=env
+                        namespace,
+                        modules,
+                        tokens=tokens,
+                        dry_run=dry_run,
+                        remotes=remotes,
+                        env=env,
+                        line_callback=_line,
                     )
                 )
             if not diagnostics.ok:
@@ -639,12 +689,19 @@ def deploy_run(
                 )
                 return diagnostics
 
+        _step(f"running step '{step.name}' via {integration_type}")
         init = getattr(integration, "init", None)
         if init is not None:
-            init(path, backend_config=backend_config, env=env)
+            init_result = init(path, backend_config=backend_config, env=env, line_callback=_line)
+            if not init_result.is_successful:
+                diagnostics.error(f"Step '{step.name}': init failed — {init_result.stderr}", location=step.name)
+                return diagnostics
         validate = getattr(integration, "validate", None)
         if validate is not None:
-            validate(path, env=env)
+            validate_result = validate(path, env=env, line_callback=_line)
+            if not validate_result.is_successful:
+                diagnostics.error(f"Step '{step.name}': validate failed — {validate_result.stderr}", location=step.name)
+                return diagnostics
 
         # Real credentials for a GitOps remote (docs/design/
         # gitops-integration.md Implementation Plan Phase 5) — resolved
@@ -668,15 +725,52 @@ def deploy_run(
                 if integration_entry is not None:
                     auth = cast(IntegrationModel, integration_entry.model).spec.authentication
 
-        plan_result = integration.plan(
-            path, out_file=f"{step.name}.tfplan", env=env, auth=auth, resolved_values=step_resolved_values
+        plan_result = integration.plan_or_warn(
+            path,
+            diagnostics=diagnostics,
+            location=step.name,
+            out_file=f"{step.name}.tfplan",
+            env=env,
+            auth=auth,
+            resolved_values=step_resolved_values,
+            line_callback=_line,
         )
+        if plan_result is None:
+            # No real plan preview available for this integration. Under
+            # `--dry-run` that's a graceful skip — a warning was already
+            # recorded by `plan_or_warn()`; move on to the next step
+            # rather than aborting the whole run (docs/work/
+            # deploy-plan-preview.md §3: "if the IaC/provisioner supports
+            # it, otherwise not"). On a real apply, `plan()` is a required
+            # prerequisite, not an optional preview — silently skipping
+            # `deploy()` here would report the run as successful having
+            # never actually deployed this step, so this is a hard error
+            # instead, matching Helm/Compose's `deploy_namespace()`, which
+            # only ever calls `plan_or_warn()` inside its own `dry_run`
+            # branch and goes straight to `deploy()` otherwise.
+            if dry_run:
+                continue
+            diagnostics.error(
+                f"Step '{step.name}': plan is required before apply, but no plan preview is available for "
+                f"'{integration_type}' — cannot proceed with apply.",
+                location=step.name,
+            )
+            return diagnostics
         if not plan_result.is_successful:
             diagnostics.error(f"Step '{step.name}': plan failed — {plan_result.stderr}", location=step.name)
             return diagnostics
 
+        if dry_run:
+            _step(f"planned step '{step.name}' via {integration_type} (dry-run, no apply)")
+            continue
+
         deploy_result = integration.deploy(
-            path, plan_file=f"{step.name}.tfplan", env=env, auth=auth, resolved_values=step_resolved_values
+            path,
+            plan_file=f"{step.name}.tfplan",
+            env=env,
+            auth=auth,
+            resolved_values=step_resolved_values,
+            line_callback=_line,
         )
         if not deploy_result.is_successful:
             diagnostics.error(f"Step '{step.name}': deploy failed — {deploy_result.stderr}", location=step.name)

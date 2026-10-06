@@ -240,7 +240,7 @@ Precisely, in `deploy_run()`'s step loop (`deploy_controller.py`):
   - `init`/`validate` always run (for both `dry_run` and a normal
     execution — only `smoke_test`'s earlier `continue` skips them).
   - The existing unconditional `integration.plan(...)` call is replaced by
-    the new `_plan_or_warn()` helper (§3).
+    the new `plan_or_warn()` helper (§3).
   - Immediately after a successful plan: `if dry_run: _step(f"planned step
     '{step.name}' via {integration_type} (dry-run, no apply)"); continue`
     — `deploy()`/`collect_step_outputs()` are skipped, matching v1's
@@ -273,14 +273,14 @@ skip-everything to call-plan-and-report:
   writes `values.yaml` exactly as the real-deploy path already does — a
   preview needs the real rendered file on disk to run `helm upgrade
   --dry-run` against, same input the real `deploy()` call would use, just
-  not followed by one. Then calls `self._plan_or_warn(values_file,
+  not followed by one. Then calls `self.plan_or_warn(values_file,
   diagnostics=diagnostics, location=item.reference.name, release=release,
   namespace=release_namespace, chart=chart, set_string=set_string,
   env=env, line_callback=line_callback)` instead of `continue`; a failed
   (but supported) plan becomes `diagnostics.error(...)`, matching the real
   `deploy()` failure branch immediately below it.
 - **Compose**: same shape — writes the resolved compose file, then
-  `self._plan_or_warn(compose_file, diagnostics=diagnostics,
+  `self.plan_or_warn(compose_file, diagnostics=diagnostics,
   location=str(namespace.meta.name), env={**(env or {}), **secrets},
   line_callback=line_callback)` instead of `return diagnostics`.
 - Neither integration does anything new under `smoke_test` —
@@ -288,7 +288,7 @@ skip-everything to call-plan-and-report:
   `continue` still applies before the container branch), so no "skip"
   logic needs to exist inside `deploy_namespace()` at all going forward.
 
-### 3. Graceful degradation — one shared `_plan_or_warn()` helper
+### 3. Graceful degradation — one shared `plan_or_warn()` helper
 
 v1's `if step_name not in deployer.get_supported_steps(): ... return False`
 is a hard abort for the whole stage. This design deliberately does **not**
@@ -303,7 +303,7 @@ same "base-implemented, not abstract" precedent already used for
 `prepare()`/`default_output()`, ADR-0023 D5):
 
 ```python
-def _plan_or_warn(
+def plan_or_warn(
     self, path: Path, *, diagnostics: Diagnostics, location: str, **kwargs: Any,
 ) -> CommandResult | None:
     """Call `self.plan(path, **kwargs)`, folding an `IntegrationError` into
@@ -365,7 +365,7 @@ Concrete changes:
      `plan()` was seen calling `run_command(["git", "diff", ...])`
      directly in one spot) and wire whichever is the real call site.
 3. `deploy_run()` gains `on_line: Callable[[str, str], None] | None =
-   None`, passed to every `init`/`validate`/`_plan_or_warn`/`deploy` call
+   None`, passed to every `init`/`validate`/`plan_or_warn`/`deploy` call
    and into `deploy_namespace(..., line_callback=on_line)`.
 4. CLI layer (`deploy_command.py`) builds the real callback only when
    `--follow` is set **and** output is console (not `--output json`) —
@@ -400,7 +400,7 @@ actually changed") — that reasoning holds identically for the redefined
 
 ### 6. Saved plan artifact
 
-Terraform's `_plan_or_warn(..., out_file=f"{step.name}.tfplan", ...)` call
+Terraform's `plan_or_warn(..., out_file=f"{step.name}.tfplan", ...)` call
 already writes a real `.tfplan` file under `--dry-run`, for free — the
 same convention the real-apply path already uses, no new design needed. A
 future `strata deploy plan` (v1's offline saved-plan reader, `terraform
@@ -423,57 +423,125 @@ phase's artifact naming is chosen so that follow-on needs no rename.
 Phased the same way `deploy-command.md`'s own Implementation Plan was —
 small, independently-testable, full check suite after each.
 
-1. **`--smoke-test` flag, additive only — no behaviour change yet.** Add
-   `smoke_test: bool = False` to `deploy_run()` and `deploy run
-   --smoke-test`; the orchestrator's early continue becomes `if smoke_test
-   or dry_run: continue` temporarily (both flags still gate the exact
-   same zero-contact path) so this phase is a pure rename/addition with
-   nothing behaviourally different yet. Add the mutual-exclusivity
-   `UsageError` now too. Update existing tests that pass `dry_run=True`
-   expecting zero `run_command` calls to also cover `smoke_test=True`
-   identically; add a new test asserting both flags together raise
-   `UsageError`.
-2. **Redefine `--dry-run`'s real behaviour.** Remove `dry_run` from the
-   early-continue condition (only `smoke_test` remains). Add
-   `InfraIntegration._plan_or_warn()` (§3) to `capabilities.py`. Replace
-   the top loop's unconditional `integration.plan(...)` call with
-   `_plan_or_warn(...)`, add the post-plan `if dry_run: ...; continue`
-   before the existing `deploy(...)` call. Update `deploy_command.py`'s
-   `--dry-run` help text to describe the new real-preview behaviour, and
-   its `finalize_and_distribute_deploy_audit(...)` call to pass
-   `dry_run=dry_run or smoke_test` (§5). Update the existing
-   `test_commands_deploy.py` assertion that `--dry-run` makes zero
-   `run_command` calls — move that exact assertion onto `--smoke-test`
-   instead — and add new tests: `--dry-run` calls `init`/`validate`/`plan`
-   but never `deploy`, a failed plan under `--dry-run` is a hard error, an
-   `IntegrationError` from `plan()` becomes a warning and the run
-   continues to the next step.
-3. **Container-capable (`deploy_namespace()`) alignment (§2a).** Update
-   `HelmIntegration.deploy_namespace()` and `ComposeIntegration.
-   deploy_namespace()`'s `if dry_run:` branches to call `self._plan_or_warn(...)`
-   instead of skipping, reusing phase 2's helper. New tests per
-   integration: dry-run writes the rendered file and calls `plan()` (not
-   `deploy()`), a failed plan is an error, `smoke_test` never reaches
-   `deploy_namespace()` at all (no new assertion needed beyond
-   phase 1's, confirms no regression).
-4. **Streaming (§4).** Add `line_callback` to `Integration.run()` and to
-   every method listed in §4 point 2. Add `on_line` to `deploy_run()`,
-   threaded to every call site. Add `--follow`/`-f` to `deploy_command.py`
-   plus the callback builder, gated on console (non-JSON) output. New
-   tests: a stubbed `run_command` that synchronously invokes its
-   `line_callback` with a couple of fake lines, asserting those lines
-   reach `deploy_run()`'s `on_line` unchanged; CLI-level test asserting
-   `--follow` without `--output json` produces the tool-prefixed console
-   lines, and that `--follow --output json` is accepted but produces no
-   extra console noise (silently inert, matching `--verbose`'s own
-   precedent).
-5. **Docs/cross-link cleanup.** Update [deploy-command.md](deploy-command.md)'s
-   CLI signature section (`--force [--smoke-test] [--dry-run] [--follow]
-   [--stage NAME] [--scope LABEL]`) and fold this doc's `## Overview`/
-   `## Proposed Design` findings into it per that doc's own graduation
-   convention once every phase above is done and nothing remains open;
-   update [v2-schema-overview.md](../design/v2-schema-overview.md)'s
-   `deploy run` status row.
+1. ✅ **`--smoke-test` flag, additive only — no behaviour change yet.** Done
+   2026-10-06. Added `smoke_test: bool = False` to `deploy_run()`
+   (`deploy_controller.py`) and `deploy run --smoke-test`
+   (`deploy_command.py`); the orchestrator's early continue is now `if
+   smoke_test or dry_run: continue` — both flags still gate the exact same
+   zero-contact path, so this phase is a pure rename/addition with nothing
+   behaviourally different yet for `--dry-run`. Added the mutual-exclusivity
+   `UsageError` (`--dry-run and --smoke-test are mutually exclusive`) in
+   `deploy_command.py`, ahead of every other validation. One deliberate
+   pull-forward from phase 2's own plan: `finalize_and_distribute_deploy_audit(...)`
+   is already called with `dry_run=dry_run or smoke_test` (not just
+   `dry_run=dry_run`) — without this, a bare `--smoke-test` run (no
+   `--dry-run`) would have written a real audit manifest for a run that
+   touched nothing, a correctness gap introduced by the new flag itself
+   rather than a pre-existing one, so it was fixed immediately instead of
+   deferred. New tests: `test_deploy_run_smoke_test_never_calls_run_command`
+   (controller level, mirrors the existing `dry_run` test exactly),
+   `test_smoke_test_never_calls_run_command` +
+   `test_dry_run_and_smoke_test_are_mutually_exclusive` (CLI level). Full
+   check suite green (2053 tests, mypy 143 files, 0 broken import-linter
+   contracts).
+2. ✅ **Redefine `--dry-run`'s real behaviour.** Done 2026-10-06. Removed
+   `dry_run` from the early-continue condition (only `smoke_test`
+   remains). Added `InfraIntegration.plan_or_warn()` (§3) to
+   `capabilities.py` — named without a leading underscore (deviates from
+   this doc's original `_plan_or_warn()` sketch): it's genuinely called
+   across a module boundary (`deploy_controller.py`), matching every
+   other extension point on `InfraIntegration` (`plan`/`deploy`/
+   `destroy`/`prepare`/`default_output`, all public, no underscore).
+   Replaced the top loop's unconditional `integration.plan(...)` call
+   with `plan_or_warn(...)` — a `None` result (graceful skip) now
+   `continue`s to the next step, and a successful plan followed by `if
+   dry_run: ...; continue` stops before the existing `deploy(...)` call.
+   `deploy_command.py`'s `--dry-run` help text now describes the
+   real-preview behaviour (the `dry_run=dry_run or smoke_test` audit
+   no-op from §5 was already done in phase 1). Replaced the now-wrong
+   `test_deploy_run_dry_run_never_calls_run_command`/
+   `test_dry_run_never_calls_run_command` tests (controller + CLI) with
+   ones asserting the real sequence (`init`/`validate`/`plan`, no
+   `deploy`/`output`); added a hard-failure test (a failing `plan()` is
+   still an error under `--dry-run`) and a graceful-degradation test (an
+   `IntegrationError` from `plan()` is a warning, run continues, exit
+   stays success) at the controller level, plus 4 new unit tests for
+   `plan_or_warn()` itself (success passthrough, failure passthrough,
+   `IntegrationError` → warning, kwargs forwarding) in
+   `test_integrations_capabilities.py`. Full check suite green (2059
+   tests, mypy 143 files, 0 broken import-linter contracts).
+3. ✅ **Container-capable (`deploy_namespace()`) alignment (§2a).** Done
+   2026-10-06. `HelmIntegration.deploy_namespace()` and
+   `ComposeIntegration.deploy_namespace()`'s `if dry_run:` branches now
+   call `self.plan_or_warn(...)` instead of skipping, reusing phase 2's
+   helper — both still write the resolved rendered file to disk first (a
+   preview needs the same real input a real `deploy()` would use), then
+   preview instead of apply. New tests per integration (replacing the old,
+   now-wrong "never touches disk or runs a command" tests): dry-run writes
+   the rendered file and calls `plan()` (not `deploy()`) with the real
+   `--dry-run`/`stack config` argv, and a failed plan is reported as an
+   error. Added one new controller-level end-to-end test exercising the
+   full `deploy_run()` orchestrator against the real Helm fixture under
+   `--dry-run` (Terraform step still only `init`/`validate`/`plan`; Helm
+   step gets exactly one real `helm upgrade --dry-run --install` call,
+   never the real-deploy argv shape). `smoke_test` needed no new test —
+   it already never reaches `deploy_namespace()` at all (phase 1/2's outer
+   short-circuit), confirmed as a non-regression by the existing phase 1
+   tests still passing unchanged. Full check suite green (2062 tests,
+   mypy 143 files, 0 broken import-linter contracts).
+4. ✅ **Streaming (§4).** Done 2026-10-06. Added `line_callback:
+   Callable[[str, str], None] | None = None` to `Integration.run()`
+   (`base.py`), forwarded to `run_command(...)`. Added the same parameter
+   to every method listed in §4 point 2 that calls `self.run()`:
+   `TerraformIntegration` (`init`/`validate`/`plan`/`deploy`/`destroy`/
+   `output`/`show`), `HelmIntegration`/`ComposeIntegration` (`plan`/
+   `deploy`, plus their `deploy_namespace()` methods, forwarding to their
+   own `plan_or_warn()`/`deploy()` per module). **Scope cut, decided
+   during implementation**: `GitOpsIntegration.plan()` gained
+   `line_callback` (its one real, direct `run_command()` call — `git
+   diff`), but `deploy()`/`destroy()` did not — both delegate to
+   `git_push.py`'s `push_file()`/`remove_file()`, which each make several
+   internal `run_command()` calls (clone/fetch/verify/reset/config/add/
+   commit/push) that would need their own threading first; deferred as a
+   separate, larger follow-up rather than bundled in here, since GitOps
+   is not a proven Tier-1 critical-path integration (repo memory's
+   v1-consumer-usage notes). `deploy_run()` gained `on_line:
+   Callable[[str, str, str], None] | None = None` (tool, stream, text) —
+   a **design refinement over the original sketch**: v1's CLI drove the
+   per-step loop itself and could rebuild a tool-prefixed callback each
+   iteration, but v2's entire step loop lives inside `deploy_run()` as one
+   call — so the *orchestrator* (which knows the current step's
+   `integration.TYPE`) now builds a small per-step `_line` closure that
+   enriches the plain `Callable[[str, str], None]` every `Integration.run()`
+   call actually expects with the tool name, then calls the richer 3-arg
+   `on_line` the CLI supplied. `deploy_command.py` gained `--follow`/`-f`
+   (new flag, not reusing `--verbose` — see §4's own reasoning) and a
+   console-only callback builder (`click.secho`, tool-prefixed, yellow
+   stderr/cyan stdout — direct port of v1's `_make_verbose_cb`), silently
+   inert under `--output json`. New tests: `Integration.run()` forwards
+   `line_callback` to `run_command()` (unit); `deploy_run()`'s `on_line`
+   receives `(tool, stream, text)` across a full Terraform lifecycle
+   (controller, end-to-end); `--follow` prints tool-prefixed console
+   lines and is silently inert with `--output json` (CLI). Full check
+   suite green (2066 tests, mypy 143 files, 0 broken import-linter
+   contracts).
+5. ✅ **Docs/cross-link cleanup.** Done 2026-10-06, scoped down from the
+   original sketch. Updated [deploy-command.md](deploy-command.md)'s
+   "Orchestrator shape" CLI signature pseudocode (`--force [--smoke-test |
+   --dry-run] [--follow] [--stage NAME] [--scope LABEL]`,
+   `deploy_run(..., smoke_test=False, on_line=None)`) and added a note
+   flagging its own `if not dry_run:` per-step body as superseded, pointing
+   to this doc's §§1-4 rather than rewriting that historical pseudocode
+   block line-by-line. Updated its header "See also" cross-link from
+   "proposed" to "now built." Updated
+   [v2-schema-overview.md](../design/v2-schema-overview.md)'s `deploy run`
+   status row + `## History`. **Deliberately not done**: the full
+   graduation (folding this doc's `## Overview`/`## Proposed Design` into
+   `deploy-command.md` and deleting this file) that the original
+   Implementation Plan sketch for this phase described — per
+   [docs/design/README.md](../design/README.md)'s own rule, a design doc
+   may never have a pending phase in its body, and phase 6 below is still
+   open, so this doc cannot graduate yet. Revisit once phase 6 ships.
 6. **Consumer coordination.** Confirm with haven/cfg-int-deployment
    maintainers before merging/releasing — their `mode: smoke` CI stage
    needs to switch from `--dry-run` to `--smoke-test` to keep its current
@@ -520,7 +588,7 @@ Implementation Plan's six phases above. The only genuinely open item:
   zero-contact behaviour, chosen to match the reporting CI's own real
   `mode: smoke` stage name over a generic industry term.
 - 2026-10-06: Full design finalized — resolved every prior open question:
-  `_plan_or_warn()` as the single graceful-degradation helper (§3),
+  `plan_or_warn()` as the single graceful-degradation helper (§3),
   `deploy_namespace()`'s `dry_run` parameter repurposed rather than
   replaced (§2a), `--follow`/`-f` decided over widening `--verbose`'s
   existing shared contract (§4), audit/manifest treatment (§5), and the
@@ -530,3 +598,60 @@ Implementation Plan's six phases above. The only genuinely open item:
   `deploy_namespace()` "second bug" is actually a currently-unreachable
   vestigial parameter, not an independently-triggered second short-circuit
   — re-verified directly against source before writing the fix.
+- 2026-10-06: Implementation Plan phase 1 done — `--smoke-test` flag
+  added end-to-end (CLI, controller, mutual exclusivity with `--dry-run`,
+  audit no-op treatment pulled forward from phase 2 for correctness). Zero
+  behaviour change to `--dry-run` itself yet. Full check suite green.
+- 2026-10-06: Implementation Plan phase 2 done — `--dry-run` redefined to
+  run a real `init`/`validate`/`plan` preview and stop before `deploy()`.
+  Added `InfraIntegration.plan_or_warn()` (named without the leading
+  underscore this doc originally sketched — it's called across a module
+  boundary, same convention as every other public extension point on the
+  class). Full check suite green (2059 tests).
+- 2026-10-06: Implementation Plan phase 3 done — Helm/Compose
+  `deploy_namespace()` now call `plan_or_warn()` under `dry_run` (real
+  `helm upgrade --dry-run`/`docker stack config` preview) instead of
+  skipping entirely, reusing phase 2's helper unchanged. Full check suite
+  green (2062 tests).
+- 2026-10-06: Implementation Plan phase 4 done — `line_callback` threaded
+  through `Integration.run()` and every Terraform/Helm/Compose method
+  that calls it (GitOps's `plan()` only — `deploy()`/`destroy()`
+  deferred, see phase 4's own entry above for why). `deploy_run()` gained
+  `on_line(tool, stream, text)`; the orchestrator itself builds the
+  per-step tool-prefixed wrapper, not the CLI, since v2's step loop lives
+  entirely inside `deploy_run()` (a real, discovered departure from v1's
+  own per-step CLI loop, not assumed up front). `--follow`/`-f` added to
+  `deploy run`. Full check suite green (2066 tests).
+- 2026-10-06: Implementation Plan phase 5 done, scoped down from its
+  original sketch — updated `deploy-command.md`'s CLI signature
+  pseudocode + a superseded-behaviour note (rather than rewriting its
+  whole historical per-step body), its header cross-link, and
+  `v2-schema-overview.md`'s status row/history. Did **not** fully
+  graduate this doc into `deploy-command.md` as phase 5 originally
+  described — `docs/design/README.md`'s own rule forbids a design doc
+  having any pending phase, and phase 6 is still open.
+- 2026-10-06: Post-implementation code review found and fixed a real
+  correctness bug in phase 2's `plan_or_warn()` wiring: the top-level
+  (Terraform/GitOps) loop treated a missing plan-preview capability
+  (`plan_result is None`) as a graceful skip **regardless of `dry_run`**
+  — on a real, non-dry-run apply, this would silently skip `deploy()`
+  entirely while still reporting the run as successful. Fixed by gating
+  the graceful skip on `dry_run`; a real apply now hard-fails instead,
+  matching Helm/Compose's `deploy_namespace()`, which only ever treats a
+  missing plan capability as a graceful skip inside its own `dry_run`
+  branch. Also added a `_step()` progress message before a step's first
+  tool invocation (both branches) — fixes a minor `--follow` ordering
+  issue where streamed subprocess output could appear before the run's
+  own header, since streamed lines bypass `CommandRun`'s lazy-header
+  mechanism entirely. New test:
+  `test_deploy_run_real_apply_integration_error_from_plan_is_a_hard_failure`.
+  Full check suite green (2067 tests).
+- 2026-10-06: Code review finding 1 fixed — `terraform init`/`validate`'s
+  own `CommandResult`s were discarded unchecked (pre-existing, predates
+  phases 1-4), so a failing `init`/`validate` silently fell through to
+  `validate`/`plan` instead of aborting the step. Both are now checked
+  for `.is_successful`, each a hard `diagnostics.error()` + early return
+  on failure, matching `plan`/`deploy`'s existing pattern exactly. New
+  tests: `test_deploy_run_init_failure_is_a_hard_error`,
+  `test_deploy_run_validate_failure_is_a_hard_error`. Full check suite
+  green (2069 tests).

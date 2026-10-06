@@ -751,7 +751,11 @@ def test_deploy_namespace_unresolvable_chart_remote_reports_a_diagnostic_and_ski
     assert "not declared" in diagnostics.errors[0].message
 
 
-def test_deploy_namespace_dry_run_never_touches_disk_or_runs_a_command(monkeypatch, tmp_path: Path):
+def test_deploy_namespace_dry_run_calls_plan_not_deploy(monkeypatch, tmp_path: Path):
+    """docs/work/deploy-plan-preview.md §2a — `dry_run` is a real preview
+    now: it writes the resolved `values.yaml` (same real input a deploy
+    would use) and calls `helm upgrade --dry-run --install` via
+    `plan_or_warn()`, never `self.deploy()`."""
     captured = _capture(monkeypatch)
     module = _module(
         services=[
@@ -770,5 +774,38 @@ def test_deploy_namespace_dry_run_never_touches_disk_or_runs_a_command(monkeypat
     )
 
     assert diagnostics.ok
-    assert "args" not in captured
-    assert (module_dir / "values.yaml").read_text() == values_before
+    assert captured["args"] == [
+        "helm",
+        "upgrade",
+        "--dry-run",
+        "--install",
+        "--namespace",
+        "apps",
+        "-f",
+        str(module_dir / "values.yaml"),
+        "authentik",
+        str(module_dir),
+    ]
+    # A real preview needs the same real, resolved input a deploy would use.
+    assert (module_dir / "values.yaml").read_text() != values_before
+
+
+def test_deploy_namespace_dry_run_plan_failure_is_reported_as_an_error(monkeypatch, tmp_path: Path):
+    module = _module(services=[ModuleServiceModel(name="server")])
+    module_dir = tmp_path / "apps" / "authentik"
+    module_dir.mkdir(parents=True)
+    (module_dir / "meta.yaml").write_text(yaml.safe_dump({"releaseName": "authentik", "namespace": "apps"}))
+    (module_dir / "values.yaml").write_text(yaml.safe_dump({"authentik-server": {}}))
+    resolved_module = _resolved_module("authentik", module, module_dir)
+
+    def _failing_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        return CommandResult(returncode=1, stdout="", stderr="chart not found")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _failing_run_command)
+
+    diagnostics = HelmIntegration().deploy_namespace(_namespace(), [resolved_module], tokens={}, dry_run=True)
+
+    assert not diagnostics.ok
+    assert "helm plan (dry-run) failed" in diagnostics.errors[0].message

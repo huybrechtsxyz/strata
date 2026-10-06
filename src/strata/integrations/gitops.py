@@ -217,10 +217,23 @@ class BaseGitOpsIntegration(InfraIntegration):
         freshly-rendered file — a preview, never a mutation. Folds v1's
         separate `check` step in (see the design doc's own "Integration
         class(es)" section) — an unreachable remote surfaces as a failure
-        here, there is no separate reachability probe."""
+        here, there is no separate reachability probe.
+
+        `line_callback` (docs/work/deploy-plan-preview.md §4): streams this
+        method's one real subprocess call (`git diff`). `deploy()`/
+        `destroy()` do **not** support it yet — both delegate to
+        `git_push.py`'s `push_file()`/`remove_file()`, which each make
+        several internal `run_command()` calls (clone/fetch/verify/reset/
+        config/add/commit/push) that would all need their own
+        `line_callback` threaded through first; deferred as a separate,
+        larger follow-up rather than bundled into this phase (GitOps is
+        not a proven Tier-1 critical-path integration per docs/repo
+        memory's v1-consumer-usage notes, unlike Terraform/Helm/Compose).
+        """
         env = kwargs.get("env")
         auth = kwargs.get("auth")
         resolved_values = kwargs.get("resolved_values")
+        line_callback = kwargs.get("line_callback")
         sidecar = _read_sidecar(path)
         if sidecar is None:
             return CommandResult(
@@ -250,6 +263,7 @@ class BaseGitOpsIntegration(InfraIntegration):
             ["git", "diff", "--no-index", "--", str(existing_file), str(rendered_file)],
             env=env,
             timeout=_GIT_TIMEOUT,
+            line_callback=line_callback,
         )
         # `--no-index` exits 0 (identical) or 1 (differences, including one
         # side missing entirely — "new file") on a successful comparison;

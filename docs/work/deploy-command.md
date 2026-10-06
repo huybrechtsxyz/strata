@@ -18,20 +18,24 @@
   already-working, already-tested claimed example (empirically
   reproduced) — fixing that is now step (0) of this design, ahead of the
   new capability/checks
-- Last updated: 2026-10-06 (linked new `--smoke-test`/`--dry-run`-redefine/
-  streaming work doc, below — `unresolved_value_tokens()` staleness note
+- Last updated: 2026-10-06 (linked `--smoke-test`/`--dry-run`-redefine/
+  streaming work, now built — `unresolved_value_tokens()` staleness note
   from 2026-09-29 still applies)
 
 See also: [deploy-plan-preview.md](deploy-plan-preview.md) — a confirmed
-gap found via a real CI pipeline run: `--dry-run` never calls
+gap found via a real CI pipeline run: `--dry-run` never called
 `init`/`validate`/`plan` at all (not even a real Terraform/Helm/Compose/
-GitOps plan preview), and subprocess output streaming (`line_callback`) is
-not wired end-to-end despite the low-level transport already supporting it.
-Proposed fix renames today's zero-contact behaviour to a new `--smoke-test`
-flag and redefines `--dry-run` itself to run a real plan — tracked
-separately since it's a sizeable, distinct design (naming change, graceful
-per-tool capability degradation, streaming) — fold back into this doc once
-built.
+GitOps plan preview), and subprocess output streaming (`line_callback`)
+was not wired end-to-end despite the low-level transport already
+supporting it. **Now built** (that doc's Implementation Plan phases 1-4):
+today's zero-contact behaviour moved to a new `--smoke-test` flag,
+`--dry-run` itself now runs a real `init`/`validate`/`plan` preview and
+stops before `deploy()`, and `--follow`/`-f` streams subprocess output
+live, tool-prefixed. Phases 5 (this cross-link) and 6 (consumer
+coordination with haven/cfg-int-deployment) remain — not yet folded back
+into this doc's own body since that doc isn't fully graduated yet
+(docs/design/README.md's own "nothing pending" rule for promoting a
+work doc).
 
 ## Overview
 
@@ -163,14 +167,16 @@ while investigating what `deploy run` would need to call:
 
 ```
 strata deploy run DEPLOYMENT [--path PATH] [--build-path PATH] --force
-  [--dry-run] [--stage NAME] [--scope LABEL] [--verbose]
+  [--smoke-test | --dry-run] [--follow] [--stage NAME] [--scope LABEL] [--verbose]
   └─ deploy_command.py: deploy_run_command()
        ├─ context = open_solution(path).require_valid()
        ├─ build_path = build_path or layout.build_dir(context.root, deployment)  # same default as build run
        └─ diagnostics = deploy_run(context, deployment, build_path, force=force, dry_run=dry_run,
-                                     stage=stage, scope=scope, on_step=run.step)
+                                     smoke_test=smoke_test, stage=stage, scope=scope,
+                                     on_step=run.step, on_line=on_line)
 
-deploy_run(context, deployment_name, build_path, *, force, dry_run=False, stage=None, scope=None, on_step=None)
+deploy_run(context, deployment_name, build_path, *, force, dry_run=False, smoke_test=False,
+           stage=None, scope=None, on_step=None, on_line=None)
   ├─ deployment = resolve_deployment(context, deployment_name)   # shared with build_run(), value_controller.py
   ├─ workspace = index.get(WORKSPACE, deployment.spec.workspace)
   ├─ environments = reachable_environments(context, deployment)
@@ -209,6 +215,18 @@ deploy_run(context, deployment_name, build_path, *, force, dry_run=False, stage=
   │
   └─ return diagnostics                                              # extension point 3 (unconditional): locking/audit cleanup later
 ```
+
+**Superseded by [deploy-plan-preview.md](deploy-plan-preview.md)**: the
+`if not dry_run:` skip-everything branch above reflects this section's
+original design, not current behaviour. `--dry-run` now runs `init`/
+`validate`/`plan` for real and only skips `deploy()` (and the output
+collection that follows a real apply) — the zero-contact "would run"
+report this pseudocode originally described moved to the new
+`--smoke-test` flag instead. `on_line` (streaming) is also new, not shown
+in the per-step body above. See that doc's §§1-4 for the current, exact
+behaviour — not repeated here to avoid two sources of truth drifting
+apart; this pseudocode block is kept as the original orchestrator-shape
+record, not continuously updated line-by-line as later phases land.
 
 Deliberately **not** shown as a separate step: `output.template`'s
 actual Jinja2 render. Every value needed for it is now available

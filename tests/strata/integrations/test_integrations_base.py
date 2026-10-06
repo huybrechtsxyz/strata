@@ -189,6 +189,29 @@ def test_run_delegates_to_run_command_with_the_resolved_executable():
     assert result.payload.strip() == "hi"
 
 
+def test_run_forwards_line_callback_to_run_command(monkeypatch):
+    """docs/work/deploy-plan-preview.md §4 — `run()` must thread
+    `line_callback` through to `run_command()`, which already implements
+    the real streaming."""
+    captured: dict[str, object] = {}
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=300, input=None, line_callback=None):
+        captured["line_callback"] = line_callback
+        return CommandResult(returncode=0, stdout="", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+
+    def _cb(stream: str, text: str) -> None:
+        pass
+
+    integration = _CliOnly(_config(command="widget-cli"))
+    integration.run("--version", line_callback=_cb)
+
+    assert captured["line_callback"] is _cb
+
+
 def test_request_reports_a_missing_endpoint_without_raising():
     result = _NetworkedOnly().request("GET", "/v1/kv/x")
     assert isinstance(result, HttpResult)

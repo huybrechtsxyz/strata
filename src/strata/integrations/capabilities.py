@@ -313,6 +313,46 @@ class InfraIntegration(Integration):
     def plan(self, path: Path, **kwargs: Any) -> CommandResult:
         """Preview the change `path`'s code would make, without applying it."""
 
+    def plan_or_warn(
+        self, path: Path, *, diagnostics: Diagnostics, location: str, **kwargs: Any
+    ) -> CommandResult | None:
+        """Call `self.plan(path, **kwargs)`, folding an `IntegrationError` into
+        a warning instead of propagating it (docs/work/deploy-plan-preview.md
+        §3) — "preview if the tool supports it, otherwise just say so."
+        `deploy_run()`'s real `--dry-run` preview and both Helm/Compose
+        `deploy_namespace()` implementations call this instead of `plan()`
+        directly, so the graceful-degradation rule lives in exactly one
+        place rather than being duplicated per call site.
+
+        Base-implemented, not abstract, same "every subclass gets this for
+        free" precedent as `prepare()`/`default_output()` (ADR-0023 D5).
+        Public (no leading underscore) despite being a thin wrapper around
+        `plan()` — unlike a true private implementation detail, this is
+        genuinely called across module boundaries (`deploy_controller.py`),
+        matching every other extension point on this class.
+
+        Since `plan()` is `@abstractmethod` here, every current subclass
+        (Terraform/Helm/Compose/GitOps) must implement *something* — none
+        of them are expected to actually raise `IntegrationError` from
+        `plan()` today; this exists for a *future* integration that might,
+        so today's behaviour for all four is unchanged by its existence.
+
+        Returns:
+            `None` when `plan()` itself isn't meaningfully supported —
+            callers should treat `None` as "skip, a diagnostic was already
+            recorded" — or the real `CommandResult` otherwise. Callers
+            still check `.is_successful` themselves: a `plan()` that runs
+            but fails for a real, tool-specific reason (bad backend
+            config, invalid HCL, unreachable remote) stays a hard error,
+            same severity as a real `plan()` failure on the apply path —
+            only a missing *capability* is graceful.
+        """
+        try:
+            return self.plan(path, **kwargs)
+        except IntegrationError as exc:
+            diagnostics.warning(f"no plan preview available for '{self.name}' — {exc}", location=location)
+            return None
+
     @abstractmethod
     def deploy(self, path: Path, **kwargs: Any) -> CommandResult:
         """Apply the change `path`'s code describes."""

@@ -29,7 +29,7 @@ inspect `result.returncode` directly, not `.is_successful` (which stays
 
 import json
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -73,6 +73,7 @@ class TerraformIntegration(InfraIntegration):
         reconfigure: bool = False,
         timeout: int = 300,
         env: Mapping[str, str] | None = None,
+        line_callback: Callable[[str, str], None] | None = None,
     ) -> CommandResult:
         """`terraform init`. Not part of `InfraIntegration` (no `init` in the ABC) —
         the future deployer (ADR-0021 Phase 7) calls this as its own step, same as
@@ -85,16 +86,22 @@ class TerraformIntegration(InfraIntegration):
             args.append("-upgrade")
         if reconfigure:
             args.append("-reconfigure")
-        return self.run(*args, cwd=path, env=env, timeout=timeout)
+        return self.run(*args, cwd=path, env=env, timeout=timeout, line_callback=line_callback)
 
     def validate(
-        self, path: Path, *, json_output: bool = False, timeout: int = 60, env: Mapping[str, str] | None = None
+        self,
+        path: Path,
+        *,
+        json_output: bool = False,
+        timeout: int = 60,
+        env: Mapping[str, str] | None = None,
+        line_callback: Callable[[str, str], None] | None = None,
     ) -> CommandResult:
         """`terraform validate`. v1's `check` step."""
         args = ["validate"]
         if json_output:
             args.append("-json")
-        return self.run(*args, cwd=path, env=env, timeout=timeout)
+        return self.run(*args, cwd=path, env=env, timeout=timeout, line_callback=line_callback)
 
     def output(
         self,
@@ -105,6 +112,7 @@ class TerraformIntegration(InfraIntegration):
         raw: bool = False,
         timeout: int = 60,
         env: Mapping[str, str] | None = None,
+        line_callback: Callable[[str, str], None] | None = None,
         **kwargs: Any,
     ) -> CommandResult:
         """`terraform output`. v1's `output` step.
@@ -129,7 +137,7 @@ class TerraformIntegration(InfraIntegration):
             args.append("-raw")
         if output_name:
             args.append(output_name)
-        return self.run(*args, cwd=path, env=env, timeout=timeout)
+        return self.run(*args, cwd=path, env=env, timeout=timeout, line_callback=line_callback)
 
     def show(
         self,
@@ -139,6 +147,7 @@ class TerraformIntegration(InfraIntegration):
         json_format: bool = True,
         timeout: int = 60,
         env: Mapping[str, str] | None = None,
+        line_callback: Callable[[str, str], None] | None = None,
     ) -> CommandResult:
         """`terraform show` — current state, or decode a saved plan file. v1's `show_plan` step."""
         args = ["show"]
@@ -146,7 +155,7 @@ class TerraformIntegration(InfraIntegration):
             args.append("-json")
         if plan_file:
             args.append(plan_file)
-        return self.run(*args, cwd=path, env=env, timeout=timeout)
+        return self.run(*args, cwd=path, env=env, timeout=timeout, line_callback=line_callback)
 
     # ------------------------------------------------------------------
     # InfraIntegration
@@ -164,6 +173,7 @@ class TerraformIntegration(InfraIntegration):
         target: Sequence[str] | None = None,
         timeout: int = 600,
         env: Mapping[str, str] | None = None,
+        line_callback: Callable[[str, str], None] | None = None,
         **kwargs: Any,
     ) -> CommandResult:
         """`terraform plan`. Also backs v1's `plan_destroy` step (`destroy=True`) and
@@ -185,7 +195,7 @@ class TerraformIntegration(InfraIntegration):
             args.append("-detailed-exitcode")
         for resource in target or []:
             args.extend(["-target", resource])
-        return self.run(*args, cwd=path, env=env, timeout=timeout)
+        return self.run(*args, cwd=path, env=env, timeout=timeout, line_callback=line_callback)
 
     def deploy(
         self,
@@ -198,6 +208,7 @@ class TerraformIntegration(InfraIntegration):
         target: Sequence[str] | None = None,
         timeout: int = 1800,
         env: Mapping[str, str] | None = None,
+        line_callback: Callable[[str, str], None] | None = None,
         **kwargs: Any,
     ) -> CommandResult:
         """`terraform apply`. Applies a saved `plan_file` when given; otherwise
@@ -215,7 +226,7 @@ class TerraformIntegration(InfraIntegration):
                 args.extend(["-var", f"{key}={value}"])
             for resource in target or []:
                 args.extend(["-target", resource])
-        return self.run(*args, cwd=path, env=env, timeout=timeout)
+        return self.run(*args, cwd=path, env=env, timeout=timeout, line_callback=line_callback)
 
     def destroy(
         self,
@@ -227,6 +238,7 @@ class TerraformIntegration(InfraIntegration):
         target: Sequence[str] | None = None,
         timeout: int = 1800,
         env: Mapping[str, str] | None = None,
+        line_callback: Callable[[str, str], None] | None = None,
         **kwargs: Any,
     ) -> CommandResult:
         """`terraform destroy`."""
@@ -239,7 +251,7 @@ class TerraformIntegration(InfraIntegration):
             args.extend(["-var", f"{key}={value}"])
         for resource in target or []:
             args.extend(["-target", resource])
-        return self.run(*args, cwd=path, env=env, timeout=timeout)
+        return self.run(*args, cwd=path, env=env, timeout=timeout, line_callback=line_callback)
 
     # ------------------------------------------------------------------
     # InfraIntegration.default_output (ADR-0023 D1/D5, Phase 1)

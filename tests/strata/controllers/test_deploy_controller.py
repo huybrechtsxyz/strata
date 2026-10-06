@@ -148,12 +148,190 @@ def test_deploy_run_apply_never_uses_auto_approve(tmp_path: Path, _capture):
     assert "-auto-approve" not in apply_call
 
 
-def test_deploy_run_dry_run_never_calls_run_command(tmp_path: Path, _capture):
+def test_deploy_run_dry_run_calls_init_validate_plan_but_not_deploy(tmp_path: Path, _capture):
+    """docs/work/deploy-plan-preview.md Implementation Plan phase 2 —
+    `--dry-run` now runs a real preview (`init`/`validate`/`plan`, saved to
+    `<step>.tfplan` same as a normal run) and stops — `deploy`/`output`
+    are never called. Matches v1's own `setup -> check -> plan` dry-run
+    sequence; replaces the old "zero tool contact" meaning, which moved to
+    `smoke_test`.
+    """
     root = _terraform_solution(tmp_path)
     build_path = tmp_path / "build"
     build_run(_context(root), "app", build_path)
 
     diagnostics = deploy_run(_context(root), "app", build_path, force=True, dry_run=True)
+
+    assert diagnostics.ok
+    commands = [call[1] for call in _capture]
+    assert commands == ["init", "validate", "plan"]
+
+
+def test_deploy_run_dry_run_plan_failure_is_a_hard_error(tmp_path: Path, monkeypatch):
+    root = _terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if args[1] == "plan":
+            return CommandResult(returncode=1, stdout="", stderr="plan exploded")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, dry_run=True)
+
+    assert not diagnostics.ok
+    assert any("plan failed" in e.message for e in diagnostics.errors)
+
+
+def test_deploy_run_init_failure_is_a_hard_error(tmp_path: Path, monkeypatch):
+    """Code review finding 1 (2026-10-06): `terraform init`'s own
+    `CommandResult` was previously discarded unchecked — a failing init
+    silently fell through to `validate`/`plan` instead of aborting."""
+    root = _terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if args[1] == "init":
+            return CommandResult(returncode=1, stdout="", stderr="init exploded")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert not diagnostics.ok
+    assert any("init failed" in e.message for e in diagnostics.errors)
+
+
+def test_deploy_run_validate_failure_is_a_hard_error(tmp_path: Path, monkeypatch):
+    """Code review finding 1 (2026-10-06): same gap as init, for
+    `terraform validate`."""
+    root = _terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if args[1] == "validate":
+            return CommandResult(returncode=1, stdout="", stderr="validate exploded")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert not diagnostics.ok
+    assert any("validate failed" in e.message for e in diagnostics.errors)
+
+
+def test_deploy_run_dry_run_integration_error_from_plan_is_a_warning_not_a_failure(tmp_path: Path, monkeypatch):
+    """docs/work/deploy-plan-preview.md §3 — a tool whose `plan()` raises
+    `IntegrationError` (no meaningful preview supported) is a warning, and
+    the run continues — not a hard failure."""
+    root = _terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    from strata.integrations.errors import IntegrationError
+    from strata.integrations.terraform import TerraformIntegration
+
+    def _raising_plan(self, path, **kwargs):
+        raise IntegrationError("no preview mechanism for this tool")
+
+    monkeypatch.setattr(TerraformIntegration, "plan", _raising_plan)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, dry_run=True)
+
+    assert diagnostics.ok
+    assert len(diagnostics.warnings) == 1
+    assert "no plan preview available" in diagnostics.warnings[0].message
+
+
+def test_deploy_run_real_apply_integration_error_from_plan_is_a_hard_failure(tmp_path: Path, monkeypatch):
+    """Code review finding (2026-10-06): a tool whose `plan()` raises
+    `IntegrationError` must NOT silently skip `deploy()` on a real,
+    non-dry-run apply — `plan()` is a required prerequisite there, not an
+    optional preview, so reporting the run as successful having never
+    actually deployed the step would be a real correctness bug. Matches
+    Helm/Compose's `deploy_namespace()`, which only ever treats a missing
+    plan capability as a graceful skip inside its own `dry_run` branch."""
+    root = _terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    from strata.integrations.errors import IntegrationError
+    from strata.integrations.terraform import TerraformIntegration
+
+    def _raising_plan(self, path, **kwargs):
+        raise IntegrationError("no preview mechanism for this tool")
+
+    monkeypatch.setattr(TerraformIntegration, "plan", _raising_plan)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert not diagnostics.ok
+    assert any("plan is required before apply" in e.message for e in diagnostics.errors)
+
+
+def test_deploy_run_streams_subprocess_lines_tool_prefixed(tmp_path: Path, monkeypatch):
+    """docs/work/deploy-plan-preview.md §4 — `on_line` receives
+    `(tool, stream, text)` for every subprocess output line, enriched with
+    the current step's integration type by the orchestrator itself (the
+    CLI layer has no per-step hook of its own)."""
+    root = _terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if line_callback is not None:
+            line_callback("stdout", f"fake output for {' '.join(args)}")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    lines: list[tuple[str, str, str]] = []
+    diagnostics = deploy_run(
+        _context(root),
+        "app",
+        build_path,
+        force=True,
+        on_line=lambda tool, stream, text: lines.append((tool, stream, text)),
+    )
+
+    assert diagnostics.ok
+    assert lines  # at least one line streamed
+    assert all(tool == "terraform" for tool, _stream, _text in lines)
+    assert all(stream == "stdout" for _tool, stream, _text in lines)
+    assert any("init" in text for _tool, _stream, text in lines)
+    assert any("plan" in text for _tool, _stream, text in lines)
+    assert any("apply" in text for _tool, _stream, text in lines)
+
+
+def test_deploy_run_smoke_test_never_calls_run_command(tmp_path: Path, _capture):
+    """docs/work/deploy-plan-preview.md — `smoke_test` keeps the old
+    `dry_run` meaning permanently: zero tool contact. `dry_run` itself was
+    redefined in phase 2 to run a real init/validate/plan preview instead
+    (see `test_deploy_run_dry_run_calls_init_validate_plan_but_not_deploy`).
+    """
+    root = _terraform_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, smoke_test=True)
 
     assert diagnostics.ok
     assert _capture == []
@@ -1643,6 +1821,42 @@ def test_deploy_run_dispatches_container_capable_step_to_deploy_namespace(tmp_pa
         "--atomic",
         "--timeout",
         "5m",
+        "--namespace",
+        "apps",
+        "-f",
+        str(module_dir / "values.yaml"),
+        "auth",
+        str(module_dir),
+    ]
+
+
+def test_deploy_run_dry_run_previews_container_capable_step_via_plan(tmp_path: Path, _capture):
+    """docs/work/deploy-plan-preview.md phase 3 — a container-capable step
+    gets a real preview under `--dry-run` too: `helm upgrade --dry-run
+    --install` via `deploy_namespace()`'s `plan_or_warn()` call, never a
+    real `helm upgrade`/`deploy()`."""
+    root = _helm_solution(tmp_path)
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, dry_run=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+
+    # Terraform step: real init/validate/plan, stops before apply.
+    tf_commands = [call[1] for call in _capture if call[0] == "terraform"]
+    assert tf_commands == ["init", "validate", "plan"]
+
+    # Helm step: one real preview call, `--dry-run`, never `deploy()`'s
+    # `--install --create-namespace --wait --atomic --timeout 5m` shape.
+    helm_calls = [call for call in _capture if call[0] == "helm"]
+    assert len(helm_calls) == 1
+    module_dir = build_path / "apps" / "auth"
+    assert helm_calls[0] == [
+        "helm",
+        "upgrade",
+        "--dry-run",
+        "--install",
         "--namespace",
         "apps",
         "-f",
