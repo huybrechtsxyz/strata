@@ -207,7 +207,7 @@ def resolve_version(context: SolutionContext, deployment: DeploymentModel) -> Ve
 
 def resolve_artifact(context: SolutionContext, artifact_name: str) -> ArtifactModel | None:
     """The `ArtifactModel` named `artifact_name`, or `None` if unresolvable
-    (docs/design/artifact-references.md).
+    (docs/work/artifact-references.md).
 
     A missing artifact reference silently returns `None` — `validate_references`
     is the layer that reports a bad reference, not this function, matching
@@ -223,7 +223,7 @@ def resolve_artifact_field(
     context: SolutionContext, deployment: DeploymentModel, artifact_name: str, field: str
 ) -> str | None:
     """Resolve one `(artifact_name, field)` pair to a plain string
-    (docs/design/artifact-references.md's `store: artifact` mechanism).
+    (docs/work/artifact-references.md's `store: artifact` mechanism).
 
     `field` is one of `image_name`/`image_tag`/`image_ref`:
 
@@ -238,7 +238,7 @@ def resolve_artifact_field(
       application is logged (ADR-0019 decision 7).
     - `image_ref` synthesises `"{image_name}:{image_tag}"` (or bare
       `image_name` when the tag is blank/unset) — adminapp's real combined
-      Terraform variable shape (docs/design/artifact-references.md).
+      Terraform variable shape (docs/work/artifact-references.md).
 
     Returns `None` when `artifact_name` doesn't resolve — same
     silently-return-None treatment as `resolve_artifact()`/`resolve_tenant()`.
@@ -317,7 +317,7 @@ def build_value_references(
     casting, `VariableStoreModel.value`/`FeatureStoreModel.value` are not
     cross-validated against `type` in v2 either), `environment` (a local
     `os.environ` read - not network I/O), and `artifact` (an in-solution
-    document lookup, docs/design/artifact-references.md - variables only,
+    document lookup, docs/work/artifact-references.md - variables only,
     never features/secrets) stores. Every other store type, and every
     secret regardless of store type, gets `value=None` - structurally,
     never resolved here (Q5: integration-backed resolution is deploy's

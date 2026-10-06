@@ -6,13 +6,22 @@ from pathlib import Path
 import pytest
 import yaml
 
-from strata.controllers.solution_controller import DocumentIndex, DocumentRef, IndexEntry
-from strata.controllers.workload_controller import apply_version_pins, build_workload_modules, resolve_module
+from strata.controllers.solution_context import SolutionContext
+from strata.controllers.solution_controller import DocumentIndex, DocumentRef, IndexEntry, SolutionController
+from strata.controllers.workload_controller import (
+    apply_version_pins,
+    build_workload_modules,
+    resolve_artifact_services,
+    resolve_module,
+)
 from strata.integrations.resolved_context import ValueResolution
+from strata.models.artifact_model import ArtifactMetaModel, ArtifactModel, ArtifactSpecModel
 from strata.models.common_models import ModuleReferenceModel, PlatformKind, SourceModel
+from strata.models.deployment_model import DeploymentMetaModel, DeploymentModel, DeploymentSpecModel
 from strata.models.module_model import ModuleMetaModel, ModuleModel, ModuleServiceModel, ModuleSpecModel
 from strata.models.namespace_model import NamespaceMetaModel, NamespaceModel, NamespaceSpecModel
 from strata.models.version_model import VersionMetaModel, VersionModel, VersionSpecModel
+from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError
 
 
@@ -39,6 +48,24 @@ def _index(*modules: ModuleModel) -> DocumentIndex:
         ref = DocumentRef(kind=PlatformKind.MODULE, name=model.meta.name)
         index.add(IndexEntry(ref=ref, model=model, source=Path(f"{model.meta.name}.yaml")))
     return index
+
+
+def _artifact(name: str, *, image_name: str, image_tag: str | None = None) -> ArtifactModel:
+    return ArtifactModel(
+        meta=ArtifactMetaModel(name=name), spec=ArtifactSpecModel(image_name=image_name, image_tag=image_tag)
+    )
+
+
+def _deployment(*, version: str | None = None) -> DeploymentModel:
+    return DeploymentModel(
+        meta=DeploymentMetaModel(name="app"), spec=DeploymentSpecModel(partial=True, version=version)
+    )
+
+
+def _context(root: Path, index: DocumentIndex) -> SolutionContext:
+    controller = SolutionController(root)
+    controller.index = index
+    return SolutionContext(controller=controller, diagnostics=Diagnostics())
 
 
 def _namespace(*refs: ModuleReferenceModel) -> NamespaceModel:
@@ -181,6 +208,114 @@ def test_apply_version_pins_logs_each_application():
     lines = [json.loads(line) for line in stream.getvalue().strip().splitlines()]
     categories = {entry["category"] for entry in lines}
     assert categories == {"charts", "images"}
+
+
+# ---------------------------------------------------------------------------
+# resolve_artifact_services() (docs/work/artifact-references.md Path 1)
+# ---------------------------------------------------------------------------
+
+
+def _module_with_artifact(name: str, artifact_name: str) -> ModuleModel:
+    return ModuleModel(
+        meta=ModuleMetaModel(name=name),
+        spec=ModuleSpecModel(
+            source=SourceModel(source_path=f"services/{name}"),
+            type="compose",
+            services=[ModuleServiceModel(name=name, artifact=artifact_name)],
+            default_labels={},
+        ),
+    )
+
+
+def test_resolve_artifact_services_is_a_no_op_when_context_is_none():
+    module = _module_with_artifact("app", "dspapi_container")
+    assert resolve_artifact_services(module, None, _deployment()) is module
+
+
+def test_resolve_artifact_services_is_a_no_op_when_deployment_is_none(tmp_path: Path):
+    module = _module_with_artifact("app", "dspapi_container")
+    context = _context(tmp_path, _index())
+    assert resolve_artifact_services(module, context, None) is module
+
+
+def test_resolve_artifact_services_is_a_no_op_when_no_service_has_artifact(tmp_path: Path):
+    module = _module("app")  # plain .image service, no .artifact
+    context = _context(tmp_path, _index())
+    assert resolve_artifact_services(module, context, _deployment()) is module
+
+
+def test_resolve_artifact_services_overrides_image_and_clears_artifact(tmp_path: Path):
+    module = _module_with_artifact("dispatcher", "dspapi_container")
+    index = DocumentIndex()
+    index.add(
+        IndexEntry(
+            ref=DocumentRef(kind=PlatformKind.MODULE, name="dispatcher"), model=module, source=Path("dispatcher.yaml")
+        )
+    )
+    index.add(
+        IndexEntry(
+            ref=DocumentRef(kind=PlatformKind.ARTIFACT, name="dspapi_container"),
+            model=_artifact(
+                "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.2.3"
+            ),
+            source=Path("dspapi_container.yaml"),
+        )
+    )
+    context = _context(tmp_path, index)
+
+    resolved = resolve_artifact_services(module, context, _deployment())
+
+    service = resolved.spec.services[0]
+    assert service.image == "int-docker-test/src/acme.dispatcher.api:1.2.3"
+    assert service.artifact is None
+
+
+def test_resolve_artifact_services_leaves_other_services_untouched(tmp_path: Path):
+    """A module with more than one service only overlays the one using
+    `.artifact` — mirrors `apply_version_pins()`'s own multi-service
+    treatment (`overrides.get(s.name, s)` fallback)."""
+    module = ModuleModel(
+        meta=ModuleMetaModel(name="app"),
+        spec=ModuleSpecModel(
+            source=SourceModel(source_path="services/app"),
+            type="compose",
+            services=[
+                ModuleServiceModel(name="web", artifact="dspapi_container"),
+                ModuleServiceModel(name="sidecar", image="redis:7"),
+            ],
+            default_labels={},
+        ),
+    )
+    index = DocumentIndex()
+    index.add(IndexEntry(ref=DocumentRef(kind=PlatformKind.MODULE, name="app"), model=module, source=Path("app.yaml")))
+    index.add(
+        IndexEntry(
+            ref=DocumentRef(kind=PlatformKind.ARTIFACT, name="dspapi_container"),
+            model=_artifact(
+                "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.2.3"
+            ),
+            source=Path("dspapi_container.yaml"),
+        )
+    )
+    context = _context(tmp_path, index)
+
+    resolved = resolve_artifact_services(module, context, _deployment())
+
+    services_by_name = {s.name: s for s in resolved.spec.services}
+    assert services_by_name["web"].image == "int-docker-test/src/acme.dispatcher.api:1.2.3"
+    assert services_by_name["web"].artifact is None
+    assert services_by_name["sidecar"].image == "redis:7"
+
+
+def test_resolve_artifact_services_raises_when_artifact_reference_does_not_resolve(tmp_path: Path):
+    """Unreachable in a `require_valid()`-passed solution — exercised here by
+    bypassing `validate_references()` on purpose, to prove the defensive
+    backstop fires rather than silently skipping."""
+    module = _module_with_artifact("dispatcher", "ghost")
+    context = _context(tmp_path, _index())  # empty index — "ghost" never resolves
+
+    with pytest.raises(UsageError, match="ghost"):
+        resolve_artifact_services(module, context, _deployment())
 
 
 # ---------------------------------------------------------------------------
@@ -367,6 +502,50 @@ def test_build_workload_modules_applies_image_pin_end_to_end(tmp_path: Path):
 
     merged = yaml.safe_load((build_path / "apps" / "docker-compose.yml").read_text())
     assert merged["services"]["redis"]["image"] == "redis:7.2"
+
+
+def test_build_workload_modules_resolves_artifact_reference_end_to_end(tmp_path: Path):
+    """A service's `.artifact` reference reaches the real rendered
+    `docker-compose.yml` as a resolved `.image` string (docs/work/
+    artifact-references.md Path 1)."""
+    root = tmp_path / "sln"
+    _write(root / "services" / "dispatcher" / "docker-compose.yml", "# stand-in\n")
+    module = ModuleModel(
+        meta=ModuleMetaModel(name="dispatcher"),
+        spec=ModuleSpecModel(
+            source=SourceModel(source_path="services/dispatcher"),
+            type="compose",
+            services=[ModuleServiceModel(name="dispatcher", artifact="dspapi_container")],
+            default_labels={},
+        ),
+    )
+    index = _index(module)
+    index.add(
+        IndexEntry(
+            ref=DocumentRef(kind=PlatformKind.ARTIFACT, name="dspapi_container"),
+            model=_artifact(
+                "dspapi_container", image_name="int-docker-test/src/acme.dispatcher.api", image_tag="1.2.3"
+            ),
+            source=Path("dspapi_container.yaml"),
+        )
+    )
+    namespace = _namespace(ModuleReferenceModel(name="dispatcher", module="dispatcher"))
+    build_path = tmp_path / "build"
+    context = _context(root, index)
+
+    build_workload_modules(
+        index,
+        root,
+        remotes={},
+        namespace=namespace,
+        resolved=ValueResolution(deployment="app"),
+        build_path=build_path,
+        context=context,
+        deployment=_deployment(),
+    )
+
+    merged = yaml.safe_load((build_path / "apps" / "docker-compose.yml").read_text())
+    assert merged["services"]["dispatcher"]["image"] == "int-docker-test/src/acme.dispatcher.api:1.2.3"
 
 
 def test_build_workload_modules_keys_directories_by_reference_name_not_module_name(tmp_path: Path):

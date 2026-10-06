@@ -10,7 +10,7 @@ class ArtifactService(BaseService[ArtifactModel]):
 
     No Phase 2 cross-checks yet — `spec.integration` referencing a real
     Integration with the `sources` capability is deferred until real usage
-    exists (docs/design/artifact-references.md), same discipline as
+    exists (docs/work/artifact-references.md), same discipline as
     `TenantService.spec.environments`.
     """
 

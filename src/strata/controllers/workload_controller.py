@@ -24,12 +24,15 @@ from pathlib import Path
 from typing import Any, cast
 
 from strata.controllers.integration_resolution import resolve_module_integration
+from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.source_sync import describe_source, sync_module_source
+from strata.controllers.value_controller import resolve_artifact_field
 from strata.controllers.version_pins import log_pin_applied
 from strata.integrations.errors import IntegrationError
 from strata.integrations.resolved_context import ResolvedModule, ValueResolution
 from strata.models.common_models import ModuleReferenceModel, PlatformKind
+from strata.models.deployment_model import DeploymentModel
 from strata.models.module_model import ModuleModel
 from strata.models.namespace_model import NamespaceModel
 from strata.models.solution_model import SolutionRemoteModel
@@ -73,7 +76,7 @@ def apply_version_pins(module: ModuleModel, version: VersionModel | None) -> Mod
       exact case.
     - `images` only overrides a service's `.image` when that service
       already declares one — a service may instead use `.artifact`
-      (mutually exclusive with `.image`, docs/design/artifact-references.md,
+      (mutually exclusive with `.image`, docs/work/artifact-references.md,
       itself pinned via the `artifacts` category through a different
       path), and a pin changes a version, never which field is in use.
 
@@ -112,6 +115,56 @@ def apply_version_pins(module: ModuleModel, version: VersionModel | None) -> Mod
     return module.model_copy(update={"spec": module.spec.model_copy(update=spec_updates)})
 
 
+def resolve_artifact_services(
+    module: ModuleModel, context: SolutionContext | None, deployment: DeploymentModel | None
+) -> ModuleModel:
+    """Resolve every `service.artifact` reference into `service.image`
+    (docs/work/artifact-references.md Path 1).
+
+    Mirrors `apply_version_pins()`'s own overlay shape — resolve something
+    external, overlay it onto a service via `model_copy()`, return a new
+    `ModuleModel`. Clears `.artifact` on the returned service once resolved,
+    so every render function (`compose.py`'s `_render_namespace_services()`,
+    `helm.py`'s `_render_values()`) keeps checking only `.image` — no second
+    field for either to learn about.
+
+    `context`/`deployment` being `None` is a graceful no-op — same
+    precedent `build_value_references()`'s own optional `context`/
+    `deployment` keyword params already established — so every existing
+    caller that doesn't pass them keeps working unchanged.
+
+    Raises:
+        UsageError: a service's `.artifact` does not resolve. Unreachable in
+            a `require_valid()`-passed solution — `.artifact` is an
+            unconditional `References(PlatformKind.ARTIFACT)` field, already
+            guaranteed to resolve by Phase 2 `validate_references()` (unlike
+            `store: artifact`'s conditionally-meaningful `value`). Same
+            defensive-backstop treatment as `resolve_module()`'s own
+            `UsageError`.
+    """
+    if context is None or deployment is None:
+        return module
+
+    services = module.spec.services or []
+    overrides: dict[str, Any] = {}
+    for service in services:
+        if service.artifact is None:
+            continue
+        image_ref = resolve_artifact_field(context, deployment, str(service.artifact), "image_ref")
+        if image_ref is None:
+            raise UsageError(
+                f"Module '{module.meta.name}' service '{service.name}': artifact reference "
+                f"'{service.artifact}' did not resolve."
+            )
+        overrides[service.name] = service.model_copy(update={"image": image_ref, "artifact": None})
+
+    if not overrides:
+        return module
+    return module.model_copy(
+        update={"spec": module.spec.model_copy(update={"services": [overrides.get(s.name, s) for s in services]})}
+    )
+
+
 def build_workload_modules(
     index: DocumentIndex,
     root: Path,
@@ -121,6 +174,8 @@ def build_workload_modules(
     build_path: Path,
     *,
     version: VersionModel | None = None,
+    context: SolutionContext | None = None,
+    deployment: DeploymentModel | None = None,
     dry_run: bool = False,
     on_step: Callable[[str], None] | None = None,
 ) -> None:
@@ -167,6 +222,14 @@ def build_workload_modules(
             `pins.charts`/`pins.images` reachable from each module before
             it's rendered. `None` is the default and the common case
             (a deployment with no `spec.version`).
+        context: The loaded `SolutionContext`, or `None` (docs/work/
+            artifact-references.md Path 1) — resolves any `service.artifact`
+            reference reachable from each module before it's rendered.
+            `None` is a graceful no-op, same as `deployment` below.
+        deployment: The deployment being built, or `None` — required
+            alongside `context` to resolve a `service.artifact` reference
+            (needs `deployment.spec.version` for pin lookup); `None` skips
+            artifact resolution entirely, same as `context` above.
         dry_run: Report what would happen instead of doing it — skips
             materialising a module's source and skips `prepare_namespace()`.
             `resolve_module()`/`resolve_module_integration()` still run, so
@@ -178,7 +241,8 @@ def build_workload_modules(
 
     Raises:
         UsageError: a module reference does not resolve, `module.spec.type`
-            is unset, or its resolved integration is not infra/container-capable.
+            is unset, its resolved integration is not infra/container-capable,
+            or a `service.artifact` reference does not resolve.
         SourceSyncError: a module's source could not be materialised.
     """
 
@@ -194,6 +258,7 @@ def build_workload_modules(
 
         module = resolve_module(index, reference)
         module = apply_version_pins(module, version)
+        module = resolve_artifact_services(module, context, deployment)
         if module.spec.type is None:
             raise UsageError(
                 f"Namespace '{namespace.meta.name}', module '{reference.name}': "

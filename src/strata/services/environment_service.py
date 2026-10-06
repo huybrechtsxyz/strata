@@ -66,7 +66,7 @@ class EnvironmentService(BaseService[EnvironmentModel]):
 
     def validate_artifact_references(self, artifact_names: set[str]) -> Diagnostics:
         """Check every `store: artifact` variable's `value` names a real
-        `ArtifactModel` (docs/design/artifact-references.md).
+        `ArtifactModel` (docs/work/artifact-references.md).
 
         The one `(kind, name)` reference `references.py`'s generic
         `References()` field walker can't check itself:

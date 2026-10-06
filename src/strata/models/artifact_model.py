@@ -3,7 +3,7 @@
 
 An `Artifact` is a pinnable, named reference to something external strata
 does not fetch or deploy itself — a container image today, possibly a chart
-or other identifier later (docs/design/artifact-references.md). Referenced
+or other identifier later (docs/work/artifact-references.md). Referenced
 by identity (ADR-0015) from anywhere in the solution: a `store: artifact`
 variable (an opaque external provisioner's own input, e.g. dispatcher_api's
 `dspapi_container_image_tag`) or a `ModuleServiceModel.artifact` (a

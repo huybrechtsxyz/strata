@@ -140,7 +140,7 @@ class VariableStoreType(str, Enum):
     `CONSTANT`/`ENVIRONMENT`/`ARTIFACT` are built-in resolvers (no
     integration needed) — `ARTIFACT` resolves against an in-solution
     `kind: artifact` document, not an external system
-    (docs/design/artifact-references.md). `AZURE_APPCONFIG`/`INFISICAL`
+    (docs/work/artifact-references.md). `AZURE_APPCONFIG`/`INFISICAL`
     resolve against a real `Integration` document today (see module
     docstring); `HASHICORP_CONSUL`/`HASHICORP_VAULT`/`ETCD` are still
     recognized values with no runtime resolver behind them yet.

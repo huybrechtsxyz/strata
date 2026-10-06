@@ -634,6 +634,8 @@ def build_run(
             resolved,
             build_path,
             version=version,
+            context=context,
+            deployment=deployment,
             dry_run=dry_run,
             on_step=on_step,
         )

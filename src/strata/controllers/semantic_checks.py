@@ -457,7 +457,7 @@ def _check_workspace_subnets(index: DocumentIndex, workspace: WorkspaceModel) ->
 
 def _check_environments(index: DocumentIndex) -> Diagnostics:
     """Every `store: artifact` variable's `value` names a real `ArtifactModel`
-    (docs/design/artifact-references.md's full-review finding, 2026-09-27):
+    (docs/work/artifact-references.md's full-review finding, 2026-09-27):
     `VariableStoreModel.value: Any` is only conditionally an artifact
     reference, so `references.py`'s generic `References()` walker never
     checks it — this is that missing check, following the exact

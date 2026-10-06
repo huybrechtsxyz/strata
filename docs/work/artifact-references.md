@@ -1,9 +1,10 @@
 # Pinnable artifact references — Design
 
-- Status: partially-implemented — Path 2 (`store: artifact`) fully built;
-  Path 1 (`ModuleServiceModel.artifact` → Compose/Helm rendering)
-  deliberately deferred (see [ADR-0026](../decisions/0026-pinnable-artifact-references.md))
-- Last updated: 2026-09-27
+- Status: implemented — Path 2 (`store: artifact`) done 2026-09-27; Path 1
+  (`ModuleServiceModel.artifact` → Compose/Helm rendering) done 2026-10-06
+  (see [ADR-0026](../decisions/0026-pinnable-artifact-references.md) and
+  "Path 1 Resolution Wiring — Solution Design" below)
+- Last updated: 2026-10-06
 
 ## Overview
 
@@ -465,9 +466,9 @@ in Open questions below for the full reasoning.
    (already a generic loop). 3 new/updated tests, including one confirming
    `pins.images`/`pins.artifacts` don't collide even with the same key
    name. Full check suite green (1060 tests).
-5. 🔶 **Resolution wiring — Path 2 (`store: artifact`) done 2026-09-27;
-   Path 1 (`ModuleServiceModel.artifact` → Compose/Helm) deliberately
-   deferred.** `resolve_artifact()`/`resolve_artifact_field()` added to
+5. ✅ **Resolution wiring — Path 2 (`store: artifact`) done 2026-09-27;
+   Path 1 (`ModuleServiceModel.artifact` → Compose/Helm) done 2026-10-06.**
+   `resolve_artifact()`/`resolve_artifact_field()` added to
    `value_controller.py`, mirroring `resolve_tenant()` — `image_name` read
    straight off the artifact (never pin-overlaid); `image_tag` checks
    `deployment.spec.version` → `VersionModel.spec.pins.artifacts[name]`
@@ -482,26 +483,182 @@ in Open questions below for the full reasoning.
    `build_controller.py`'s one call site passes both through. 10 new
    tests, full check suite green (1070 tests).
 
-   **Path 1 deferred, not abandoned**: wiring `ModuleServiceModel.artifact`
-   into the actual Compose/Helm rendering (`compose.py`'s
-   `_render_namespace_services()`, and the Helm equivalent) requires
-   resolving the reference in the *controller* layer
-   (`workload_controller.py`, which already holds `index`/would need
-   `deployment` threaded in too — ADR-0021 D2's "controller resolves,
-   integration only renders" split) and passing a resolved image lookup
-   down through `prepare_namespace()`'s signature on *both*
-   `ComposeIntegration` and `HelmIntegration`. That's real, working,
-   already-tested integration-layer surface to touch, and — checked
-   directly — zero real haven module today sets `service.artifact` (every
-   real module still uses a plain `image: caddy:2-alpine`-style literal).
-   Deferred until real usage exists, same discipline as `modules`/`chart`
-   pinning elsewhere in this doc — not worth the risk on zero evidence.
+   **Path 1 — done 2026-10-06, per the "Path 1 Resolution Wiring —
+   Solution Design" section below.** `resolve_artifact_services()` added
+   to `workload_controller.py`, mirroring `apply_version_pins()`'s own
+   `model_copy()` overlay shape; wired into `build_workload_modules()`'s
+   per-reference loop right after `apply_version_pins()`.
+   `build_workload_modules()` gained optional keyword-only `context`/
+   `deployment` params (default `None`, graceful no-op — same precedent
+   `build_value_references()`'s own params already established, so none of
+   the 18 existing test call sites needed updating); `build_controller.py`'s
+   one call site passes both through (both already in local scope). As
+   corrected below, `compose.py`/`helm.py` needed **zero** changes — Helm
+   never read `.image`/`.artifact` at all, and Compose already only ever
+   needed `.image` populated with a real string. 9 new tests. Full check
+   suite green: mypy (146 files), ruff, import-linter (0 broken
+   contracts), pytest (2176 passed).
 6. ✅ **Full check suite + docs** — done 2026-09-27. Wrote
    [ADR-0026](../decisions/0026-pinnable-artifact-references.md)
    (`partially-implemented` — Path 2 done, Path 1 deferred with reasoning);
    added `artifact` to `v2-schema-overview.md`'s kind catalog; this doc's
    status updated to match the ADR. Final full check suite: 1070 tests,
    mypy 105 files clean, ruff clean, 0 broken import-linter contracts.
+   **Superseded 2026-10-06**: Path 1 is now also done (item 5 above) —
+   ADR-0026's status should be updated from `partially-implemented` to
+   `implemented` the next time that ADR is touched.
+
+## Path 1 Resolution Wiring — Solution Design (2026-10-06)
+
+**✅ Implemented 2026-10-06 — matches this design exactly, see
+"Implementation" at the end of this section.** Kept as the original design
+record below (unchanged) for history.
+
+Design only (at the time this section was written) — sizes the remaining
+work precisely against real code (correcting Implementation Plan item 5's
+original, less precise framing above), after directly reading
+`compose.py`/`helm.py`/`workload_controller.py`/`build_controller.py`.
+
+### Correction to the original deferral note
+
+The original note said resolving `ModuleServiceModel.artifact` "requires...
+passing a resolved image lookup down through `prepare_namespace()`'s
+signature on *both* `ComposeIntegration` and `HelmIntegration`." Checked
+directly — this overstates it:
+
+- `ComposeIntegration._render_namespace_services()` (`compose.py`) reads
+  only `service.image` (`if service.image: entry["image"] = service.image`)
+  — never `.artifact`.
+- `HelmIntegration._render_values()` (`helm.py`) reads
+  `.environment`/`.mounts`/`.configuration` **and never reads `.image` or
+  `.artifact` at all** — matches `ModuleServiceModel.image`'s own field
+  docstring ("Omit for Helm charts that define their own image"). Helm
+  needs zero changes for Path 1 under any design.
+
+Both integrations only ever need `service.image` populated with a real
+string — nothing downstream needs to know `.artifact` was ever set. The
+fix belongs entirely one layer up, in the controller that already
+resolves everything else before an integration ever runs (ADR-0021 D2) —
+not in either integration.
+
+### The design: resolve `.artifact` into `.image`, once, before grouping
+
+`workload_controller.apply_version_pins()` already does the exact shape
+this needs — resolve something external, overlay it onto a service via
+`model_copy()`, return a new `ModuleModel` — for `pins.images`/`pins.charts`.
+Path 1 is the same shape, a different source:
+
+```python
+def resolve_artifact_services(
+    module: ModuleModel, context: SolutionContext, deployment: DeploymentModel
+) -> ModuleModel:
+    """Resolve every service.artifact reference into service.image.
+
+    Mirrors apply_version_pins()'s own overlay shape. Clears `.artifact`
+    on the returned service once resolved, so every render function keeps
+    checking only `.image` — no second field for compose.py/helm.py to
+    learn about.
+    """
+    services = module.spec.services or []
+    overrides: dict[str, Any] = {}
+    for service in services:
+        if service.artifact is None:
+            continue
+        image_ref = resolve_artifact_field(context, deployment, str(service.artifact), "image_ref")
+        if image_ref is None:
+            # Unreachable in a require_valid()-passed solution — .artifact is an
+            # unconditional References(PlatformKind.ARTIFACT) field, already
+            # guaranteed to resolve by Phase 2 validate_references(). Same
+            # defensive-backstop treatment as resolve_module()'s own UsageError.
+            raise UsageError(
+                f"Module '{module.meta.name}' service '{service.name}': artifact reference did not resolve."
+            )
+        overrides[service.name] = service.model_copy(update={"image": image_ref, "artifact": None})
+
+    if not overrides:
+        return module
+    return module.model_copy(
+        update={"spec": module.spec.model_copy(update={"services": [overrides.get(s.name, s) for s in services]})}
+    )
+```
+
+Called from `build_workload_modules()`'s per-reference loop
+(`workload_controller.py`, right after `apply_version_pins()`, same spot),
+so a module can have both a version pin *and* an artifact reference
+resolved in the same pass — order doesn't matter between them since they
+touch different fields (`pins.images` only overlays a service that
+already has `.image` set; `.artifact` is mutually exclusive with `.image`
+on the same service, so the two overlays never compete for the same field
+on one service).
+
+### Why `field="image_ref"`, not `"image_name"`/`"image_tag"` separately
+
+`.image`'s own real shape is one string, `"name:tag"` (`image:
+caddy:2-alpine`) — exactly what `resolve_artifact_field()`'s synthesised
+`image_ref` already produces (`f"{image_name}:{image_tag}"`, bare
+`image_name` when the tag is blank). No new formatting logic needed; this
+is the one `field` value Path 1 ever needs to request.
+
+### Signature changes — minimal, additive only
+
+- `build_workload_modules()` gains two new required params: `context:
+  SolutionContext`, `deployment: DeploymentModel` — added alongside the
+  existing `index`/`root`/`remotes` (not replacing them, despite `context`
+  already wrapping `index`/`root` — a larger signature simplification is
+  real but out of scope for this fix; zero blast radius preferred over a
+  larger refactor).
+- `build_controller.py`'s one call site (the `for namespace in
+  graph.namespaces.values(): build_workload_modules(...)` loop) already
+  has both `context` and `deployment` in local scope (`deployment =
+  resolve_deployment(context, deployment_name, version_pin=pin)` runs well
+  before this loop) — passing them through is the only change needed at
+  the call site itself.
+- `compose.py`/`helm.py` — **no changes**, per the correction above.
+
+### Testing surface
+
+A new module fixture with one service using `.artifact` instead of
+`.image`, a real `Artifact` document it resolves against, run through
+`build_workload_modules()` end to end — assert the rendered
+`docker-compose.yml`'s `image:` key equals the artifact's resolved
+`image_ref`. Mirrors the shape of `apply_version_pins()`'s own existing
+test file (same fixture-and-assert pattern, different source field).
+
+### Still gated on real usage, not on cost
+
+This sizing doesn't change the original call to defer — zero real haven
+module sets `.artifact` today (every real module still uses a plain
+`image:` literal). It does mean that *when* this is picked up, it is a
+small, well-understood, single-function change plus two call-site
+parameters — not the "both integrations' signatures" effort the original
+deferral note implied.
+
+### Implementation (2026-10-06)
+
+Built exactly as designed above, with one refinement: `context`/
+`deployment` are optional keyword-only params on `build_workload_modules()`
+(default `None`, graceful no-op when either is unset) rather than required
+— matching `build_value_references()`'s own existing precedent for the
+same pair of params, so none of the 18 existing `build_workload_modules()`
+test call sites needed updating.
+
+- `resolve_artifact_services()` added to `workload_controller.py`, right
+  after `apply_version_pins()` — same `model_copy()` overlay shape, called
+  from `build_workload_modules()`'s per-reference loop immediately after
+  `apply_version_pins()`.
+- `build_workload_modules()` gained `context: SolutionContext | None = None`
+  and `deployment: DeploymentModel | None = None` keyword-only params.
+- `build_controller.py`'s one call site now passes `context=context,
+  deployment=deployment` — both were already in local scope, no new
+  plumbing needed above the call site.
+- `compose.py`/`helm.py` — **zero changes**, confirmed.
+- 9 new tests (5 unit tests for `resolve_artifact_services()` covering the
+  `None`-context/`None`-deployment/no-`.artifact` no-op paths, the overlay-
+  and-clear path, and the defensive-backstop `UsageError`; 1 new end-to-end
+  `build_workload_modules()` test confirming a resolved artifact reaches
+  the real rendered `docker-compose.yml`'s `image:` key). Full check suite
+  green: mypy (146 files), ruff, import-linter (0 broken contracts), pytest
+  (2176 passed).
 
 ## Related Decisions
 
@@ -672,4 +829,40 @@ in Open questions below for the full reasoning.
   8th cross-document check — the same precedent `WorkspaceService.
   validate_topology_references()` already established for a
   conditionally-meaningful field `references.py`'s generic walker can't
-  check itself. 6 new tests. Full check suite green (1128 tests).
+  check itself. 6 new tests. Full check suite green (1128 tests).- 2026-10-06: **Path 1 re-sized, corrected, and fully designed — still not
+  built.** Direct request to check Implementation Plan item 5's deferral
+  note against real code. Found it overstated the cost: `helm.py`'s
+  `_render_values()` never reads `.image`/`.artifact` at all (only
+  `.environment`/`.mounts`/`.configuration`), so Helm needs zero changes
+  under any design — the "both integrations' `prepare_namespace()`
+  signatures" framing was wrong. Added a full "Path 1 Resolution Wiring —
+  Solution Design" section: a new `resolve_artifact_services()` mirroring
+  `apply_version_pins()`'s own `model_copy()` overlay shape, called from
+  `build_workload_modules()`'s existing per-reference loop; confirmed
+  `build_controller.py`'s one call site already has both `context` and
+  `deployment` in local scope, so only two new parameters are needed
+  end to end; confirmed `.artifact` is an unconditional
+  `References(PlatformKind.ARTIFACT)` field (already guaranteed to
+  resolve by Phase 2 `validate_references()`, unlike `store: artifact`'s
+  conditionally-meaningful `value`), so a resolution failure here is a
+  defensive-backstop `UsageError` (matching `resolve_module()`'s own
+  precedent), never a graceful skip. `compose.py`/`helm.py` need zero
+  changes either way. Still gated on real usage (zero real haven module
+  sets `.artifact` today) — this is a re-sizing and a ready-to-implement
+  design, not a decision to build it now.
+- 2026-10-06: **Path 1 implemented** ("do that otherwise haven is not
+  going to be able to use that"). Built exactly per the "Path 1 Resolution
+  Wiring — Solution Design" section's design, with one refinement:
+  `context`/`deployment` made optional (default `None`, graceful no-op)
+  rather than required, matching `build_value_references()`'s own existing
+  precedent for the same pair of params — avoided touching any of the 18
+  existing `build_workload_modules()` test call sites. New
+  `resolve_artifact_services()` in `workload_controller.py`; `compose.py`/
+  `helm.py` confirmed to need zero changes, as the design predicted. 9 new
+  tests (5 unit + 1 end-to-end `build_workload_modules()` test confirming
+  a resolved artifact reaches the real rendered `docker-compose.yml`, plus
+  3 no-op/graceful-skip cases). Full check suite green: mypy (146 files),
+  ruff, import-linter (0 broken contracts), pytest (2176 passed). This
+  doc's status updated to `implemented`; ADR-0026 still says
+  `partially-implemented` and should be updated the next time it's
+  touched.

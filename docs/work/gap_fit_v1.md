@@ -1181,7 +1181,7 @@ durable, reviewable record.
   automatically, same as v1, for the 4 covered component types. A
   migrated solution regains this artifact with zero manifest changes.
 
-### 19. No mechanism for multiple documents to each contribute a fragment of the same variable value
+### 19. ~~No mechanism for multiple documents to each contribute a fragment of the same variable value - Resolved (2026-10-02)~~
 
 - **Found in:** direct real-world report (2026-10-02) — Azure Application
   Gateway + WAF, where the real hand-vendored Terraform module
