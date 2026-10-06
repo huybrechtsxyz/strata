@@ -1,0 +1,324 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments) &mdash; strata 2.0.0-Alpha8 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=c7b08b93"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value" href="generate-per-instance-terraform-blocks.html" />
+    <link rel="prev" title="How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)" href="azure-private-dns-zones.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            strata
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../README.html">strata</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GLOSSARY.html">Strata Glossary</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">How-To Guides:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="azure-certificates.html">How To: Get a TLS Certificate onto an Azure Application Gateway / WAF</a></li>
+<li class="toctree-l1"><a class="reference internal" href="azure-private-dns-zones.html">How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#the-short-answer">The short answer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#worked-example">Worked example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#rules-that-actually-matter">Rules that actually matter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#related">Related</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
+<li class="toctree-l1"><a class="reference internal" href="migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sbom-generation.html">How To: Use the SBOM Feature (CycloneDX)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Files:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../config/readme.html">Configuration Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/solution.html">Solution (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">solution</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/configuration.html">Configuration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">configuration</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/provider.html">Provider (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">provider</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/providerconfig.html">ProviderConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">providerconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/resource.html">Resource (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">resource</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/network.html">Network (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">network</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/firewall.html">Firewall (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">firewall</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/dns.html">DNS (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">dns</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/topologyconfig.html">TopologyConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">topologyconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/workspace.html">Workspace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">workspace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/module.html">Module (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">module</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/namespace.html">Namespace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">namespace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/tenant.html">Tenant (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">tenant</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">environment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/deployment.html">Deployment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/README.html">Integrations — How to Configure Each One</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/infisical.html">Infisical (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">infisical</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-keyvault.html">Azure Key Vault (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-keyvault</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-appconfig.html">Azure App Configuration (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-appconfig</span></code>)</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">strata</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/how-to/composite-variable-fragments.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="how-to-compose-one-variable-s-value-from-several-files-per-customer-per-ring-fragments">
+<h1>How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)<a class="headerlink" href="#how-to-compose-one-variable-s-value-from-several-files-per-customer-per-ring-fragments" title="Link to this heading"></a></h1>
+<p>You have one value — e.g. an Azure Application Gateway’s <code class="docutils literal notranslate"><span class="pre">appgateway_config</span></code>, a deeply nested
+<code class="docutils literal notranslate"><span class="pre">map(object({</span> <span class="pre">hosts,</span> <span class="pre">path_rules,</span> <span class="pre">waf_policy,</span> <span class="pre">...</span> <span class="pre">}))</span></code> Terraform variable — that different
+customers, teams, or rings need to contribute their own piece of, from their own file, without
+editing one shared blob every time someone onboards. <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">environment</span></code>’s <code class="docutils literal notranslate"><span class="pre">spec.variables</span></code>
+(<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">constant</span></code>) can’t do this: two Environment documents declaring the same variable <code class="docutils literal notranslate"><span class="pre">key</span></code>
+have the <strong>second one’s value win entirely</strong> (whole-value override, not a combine) — see
+<span class="xref myst">docs/design/composite-variable-merge.md</span> for the full
+investigation. This guide covers the pattern that already solves it today, with no new strata
+code.</p>
+<section id="the-short-answer">
+<h2>The short answer<a class="headerlink" href="#the-short-answer" title="Link to this heading"></a></h2>
+<p><strong>Author the shared value under <code class="docutils literal notranslate"><span class="pre">spec.properties</span></code>, not <code class="docutils literal notranslate"><span class="pre">spec.variables</span></code>.</strong> Split it across as
+many Environment documents as you have contributors (one per customer, one per ring, whatever
+your real ownership boundary is) — each document sets only its own fragment, nested at whatever
+path it owns. Every <code class="docutils literal notranslate"><span class="pre">properties</span></code> dict a reachable Environment declares is <strong>recursively deep
+merged</strong> (Workspace → each reachable Environment, in order → the Deployment’s own), not
+overridden — confirmed directly against real code
+(<code class="docutils literal notranslate"><span class="pre">merge_workspace_environment_deployment_properties()</span></code>,
+<code class="docutils literal notranslate"><span class="pre">strata/controllers/value_controller.py</span></code>) and
+<span class="xref myst">experimentally verified</span> by actually running three
+fragment documents through it. The merged result is delivered to Terraform exactly like any
+other property — written straight into <code class="docutils literal notranslate"><span class="pre">properties.auto.tfvars.json</span></code>, which Terraform
+auto-loads with no <code class="docutils literal notranslate"><span class="pre">-var-file</span></code> flag needed.</p>
+</section>
+<section id="worked-example">
+<h2>Worked example<a class="headerlink" href="#worked-example" title="Link to this heading"></a></h2>
+<p>Three separate files, three separate owners, one combined <code class="docutils literal notranslate"><span class="pre">appgateway_config</span></code>.</p>
+<p><strong><code class="docutils literal notranslate"><span class="pre">customers/unisonplanning/environment.yaml</span></code></strong> — owned by the <code class="docutils literal notranslate"><span class="pre">unisonplanning</span></code> team, declares
+their own domain and their first ring:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">unisonplanning-agw</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">appgateway_config</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">unisonplanning</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">domain</span><span class="p">:</span><span class="w"> </span><span class="s">"unisonplanning.com"</span>
+<span class="w">        </span><span class="nt">hosts</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">c0224</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">domain_name</span><span class="p">:</span><span class="w"> </span><span class="s">"c0224-agw-dev.westeurope.cloudapp.azure.com"</span>
+<span class="w">            </span><span class="nt">backend_pools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"apim"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"dispatcher-dev"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"datahub-admin-dev"</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+<p><strong><code class="docutils literal notranslate"><span class="pre">customers/unisonplanning/ring-c0225.yaml</span></code></strong> — a <em>later</em> onboarding, adding a second ring to
+the <em>same</em> customer, from its own file — this is the real scaling case (“add a new ring to a
+customer” shouldn’t mean editing someone else’s file):</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">unisonplanning-agw-ring2</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">appgateway_config</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">unisonplanning</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">hosts</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">c0225</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">domain_name</span><span class="p">:</span><span class="w"> </span><span class="s">"c0225-agw-stage.westeurope.cloudapp.azure.com"</span>
+<span class="w">            </span><span class="nt">backend_pools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"apim"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"dispatcher-stage"</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+<p><strong><code class="docutils literal notranslate"><span class="pre">customers/acmecorp/environment.yaml</span></code></strong> — a different customer entirely, owned by a different
+team, contributing their own top-level key:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acmecorp-agw</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">appgateway_config</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">acmecorp</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">domain</span><span class="p">:</span><span class="w"> </span><span class="s">"acmecorp.com"</span>
+<span class="w">        </span><span class="nt">hosts</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">c0300</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">domain_name</span><span class="p">:</span><span class="w"> </span><span class="s">"c0300-agw-dev.westeurope.cloudapp.azure.com"</span>
+<span class="w">            </span><span class="nt">backend_pools</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"apim"</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+<p><strong>The deployment lists all three</strong>, in any order that doesn’t matter here (none of these
+fragments collide on the same leaf key):</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub-agw</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">workspace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub-agw-workspace</span>
+<span class="w">  </span><span class="nt">environments</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">unisonplanning-agw</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">unisonplanning-agw-ring2</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acmecorp-agw</span>
+</pre></div>
+</div>
+<p><strong>The result</strong>, exactly what <code class="docutils literal notranslate"><span class="pre">properties.auto.tfvars.json</span></code> would contain — and exactly what
+<code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">plan</span></code> sees as <code class="docutils literal notranslate"><span class="pre">var.appgateway_config</span></code>:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"appgateway_config"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"unisonplanning"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"domain"</span><span class="p">:</span><span class="w"> </span><span class="s2">"unisonplanning.com"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"hosts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"c0224"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"domain_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"c0224-agw-dev.westeurope.cloudapp.azure.com"</span><span class="p">,</span><span class="w"> </span><span class="nt">"backend_pools"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"apim"</span><span class="p">,</span><span class="w"> </span><span class="s2">"dispatcher-dev"</span><span class="p">,</span><span class="w"> </span><span class="s2">"datahub-admin-dev"</span><span class="p">]</span><span class="w"> </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">"c0225"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"domain_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"c0225-agw-stage.westeurope.cloudapp.azure.com"</span><span class="p">,</span><span class="w"> </span><span class="nt">"backend_pools"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"apim"</span><span class="p">,</span><span class="w"> </span><span class="s2">"dispatcher-stage"</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"acmecorp"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"domain"</span><span class="p">:</span><span class="w"> </span><span class="s2">"acmecorp.com"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"hosts"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"c0300"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"domain_name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"c0300-agw-dev.westeurope.cloudapp.azure.com"</span><span class="p">,</span><span class="w"> </span><span class="nt">"backend_pools"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"apim"</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Nothing was dropped — both rings under <code class="docutils literal notranslate"><span class="pre">unisonplanning</span></code>, both customers side by side — because
+every fragment nests at a <em>different</em> path. Onboarding a fourth customer, or a third ring, means
+adding one more small file and one more line in <code class="docutils literal notranslate"><span class="pre">spec.environments</span></code> — never touching the other
+owners’ files.</p>
+</section>
+<section id="rules-that-actually-matter">
+<h2>Rules that actually matter<a class="headerlink" href="#rules-that-actually-matter" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>Merge order is <code class="docutils literal notranslate"><span class="pre">environments:</span></code> list order, later wins per leaf key.</strong> A Tenant’s own
+<code class="docutils literal notranslate"><span class="pre">environments</span></code> are already folded in ahead of a Deployment’s own list
+(<code class="docutils literal notranslate"><span class="pre">reachable_environments()</span></code>), so the full precedence is: Workspace’s own <code class="docutils literal notranslate"><span class="pre">properties</span></code> →
+Tenant’s <code class="docutils literal notranslate"><span class="pre">environments</span></code>, in order → Deployment’s own <code class="docutils literal notranslate"><span class="pre">environments</span></code>, in order → the
+Deployment’s own <code class="docutils literal notranslate"><span class="pre">properties</span></code>. If two fragments genuinely need to set the <em>exact same</em> leaf
+key, the one named later always wins — silently, with no collision warning. Keep fragments
+non-overlapping by construction (each customer/ring owns its own subtree) rather than relying
+on ordering to resolve a real conflict.</p></li>
+<li><p><strong>Dicts merge recursively; lists do not.</strong> <code class="docutils literal notranslate"><span class="pre">deep_merge()</span></code>
+(<code class="docutils literal notranslate"><span class="pre">strata/utils/dict_merge.py</span></code>) merges nested <code class="docutils literal notranslate"><span class="pre">dict</span></code> values at any depth, but a list-valued leaf
+(like <code class="docutils literal notranslate"><span class="pre">backend_pools</span></code> above) is <strong>replaced wholesale</strong>, not concatenated or deduped. Never
+have two different fragments both set the same list-valued field expecting them to combine —
+one will silently and completely discard the other’s list. Keep list-valued fields inside the
+deepest leaf a single fragment owns (as in the example: each ring owns its own
+<code class="docutils literal notranslate"><span class="pre">backend_pools</span></code>), never at a level two different fragments both touch.</p></li>
+<li><p><strong>Strata stays opaque to what’s inside the value (ADR-0025).</strong> Nothing here validates
+<code class="docutils literal notranslate"><span class="pre">domain_name</span></code>/<code class="docutils literal notranslate"><span class="pre">backend_pools</span></code>/<code class="docutils literal notranslate"><span class="pre">waf_policy</span></code> shape — a typo inside a fragment is invisible to
+strata; the real Terraform module’s own <code class="docutils literal notranslate"><span class="pre">variable</span></code> type constraint is the only thing that will
+ever catch it, at <code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">plan</span></code> time.</p></li>
+<li><p><strong>This is Terraform-specific as confirmed so far</strong> — <code class="docutils literal notranslate"><span class="pre">properties</span></code>/<code class="docutils literal notranslate"><span class="pre">custom</span></code> are delivered via
+<code class="docutils literal notranslate"><span class="pre">properties.auto.tfvars.json</span></code>/<code class="docutils literal notranslate"><span class="pre">custom.auto.tfvars.json</span></code>. Whether the same convention reaches
+Helm/Compose targets the same way <code class="docutils literal notranslate"><span class="pre">spec.variables</span></code> does has not yet been checked; don’t assume
+it does for a non-Terraform provisioner without verifying first.</p></li>
+<li><p><strong>You give up <code class="docutils literal notranslate"><span class="pre">VariableStoreModel</span></code>’s typed wrapper</strong> (<code class="docutils literal notranslate"><span class="pre">type</span></code>/<code class="docutils literal notranslate"><span class="pre">description</span></code>, HCL-emission
+hints) by moving a value out of <code class="docutils literal notranslate"><span class="pre">spec.variables</span></code>. If a real variable actually relies on those
+(a declared <code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">map</span></code>/<code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">list</span></code> cross-check, or documentation <code class="docutils literal notranslate"><span class="pre">description</span></code>), keep it
+under <code class="docutils literal notranslate"><span class="pre">spec.variables</span></code> instead — this pattern is for values that need <strong>composing from
+several files</strong>, not a wholesale replacement for <code class="docutils literal notranslate"><span class="pre">spec.variables</span></code>.</p></li>
+</ul>
+</section>
+<section id="related">
+<h2>Related<a class="headerlink" href="#related" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><span class="xref myst">docs/design/composite-variable-merge.md</span> — the full
+investigation (why <code class="docutils literal notranslate"><span class="pre">spec.variables</span></code> can’t do this, what v1 had and didn’t generalize, and the
+experiment that confirmed this pattern against real code).</p></li>
+<li><p><span class="xref myst">docs/work/gap_fit_v1.md</span> gap #19 — the tracked gap this closes.</p></li>
+<li><p><span class="xref myst">docs/design/build-time-value-categories.md</span> — how
+<code class="docutils literal notranslate"><span class="pre">spec.properties</span></code>/<code class="docutils literal notranslate"><span class="pre">.custom</span></code> are merged and delivered end to end.</p></li>
+<li><p><a class="reference internal" href="generate-per-instance-terraform-blocks.html"><span class="std std-doc">generate-per-instance-terraform-blocks.md</span></a> — once
+you have a composite value like this, generating one static Terraform block per entry (e.g. a
+<code class="docutils literal notranslate"><span class="pre">provider</span></code>/<code class="docutils literal notranslate"><span class="pre">module</span></code> pair per customer) from a template, instead of hand-maintaining one file
+per instance.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="azure-private-dns-zones.html" class="btn btn-neutral float-left" title="How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="generate-per-instance-terraform-blocks.html" class="btn btn-neutral float-right" title="How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Huybrechts XYZ.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,380 +1,187 @@
 # strata
 
-strata is a **modular, multi-repository infrastructure platform** for managing workspaces and cluster orchestration. It uses a separation-of-concerns architecture where configuration, modules, and deployments live in separate version-controlled repositories, enabling repeatable, audit-ready infrastructure deployments.
+strata is a **declarative YAML layer over Terraform, Helm, and Docker Compose**: infrastructure and
+deployments are described once as plain YAML documents, validated as a whole, then rendered and
+executed by whichever provisioner a workspace declares.
 
-All infrastructure is defined in YAML. The CLI (`strata`) orchestrates the full lifecycle — from workspace initialization through build artifact generation and Terraform provisioning — without manual scripting.
+This is **v2** — a ground-up rebuild, redesigned from lessons learned tracing v1's real behaviour
+(see [docs/decisions/](decisions/0001-v1-schema-analysis-findings-for-v2.md) for the full ADR trail).
+For the current implementation status of each document kind, see
+[docs/design/v2-schema-overview.md](design/v2-schema-overview.md) — this page is the practical,
+task-focused guide; that one is the up-to-date status table.
 
 ## Table of Contents
 
-- [strata](#strata)
-  - [Table of Contents](#table-of-contents)
-  - [Key Features](#key-features)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-  - [Quick Start](#quick-start)
-  - [Configuration](#configuration)
-  - [CLI Reference](#cli-reference)
-  - [Deployment Workflow](#deployment-workflow)
-  - [Testing](#testing)
-  - [Troubleshooting](#troubleshooting)
-  - [Contributing](#contributing)
-  - [Security](#security)
-  - [License](#license)
-  - [Acknowledgments](#acknowledgments)
-  - [Contact](#contact)
-  - [Glossary](#glossary)
-  - [Core Concepts](#core-concepts)
-    - [Separation of Concerns](#separation-of-concerns)
-    - [Version Control Everything](#version-control-everything)
-    - [Declarative Configuration](#declarative-configuration)
-    - [Audit Trail](#audit-trail)
+- [Key Features](#key-features)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Document Shape](#document-shape)
+- [CLI Reference](#cli-reference)
+- [Deployment Workflow](#deployment-workflow)
+- [Testing](#testing)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [Security](#security)
+- [License](#license)
+- [Glossary](#glossary)
 
 ---
 
 ## Key Features
 
-- **Multi-repository architecture** — Platform code, modules, configuration, and deployments in separate repos; each independently versioned and tagged.
-- **Declarative YAML configuration** — All infrastructure defined in Kubernetes-style YAML (`apiVersion`, `kind`, `meta`, `spec`). No imperative scripts.
-- **Two-phase validation** — Phase 1: Pydantic schema checks. Phase 2: cross-repo reference resolution and integration credential checks.
-- **Profile management** — Named profiles group environment-specific file references (config, environment, secrets). Switch between `dev`, `staging`, `prod` without touching YAML.
-- **Audit-ready deployment manifests** — Every build captures exact Git commits, version tags, timestamps, user, and resource configuration — ready for NIS2 / ISAE 3402 evidence packages.
-- **Pluggable secret backends** — Bitwarden, HashiCorp Vault, Azure Key Vault, Azure App Config, and environment variables all supported through a unified integration layer.
-- **Terraform orchestration** — Build generates `.tfvars.json` and `platform.json` artifacts; deploy runs `terraform init → validate → plan → apply` per stage in the correct order.
-- **No lock-in** — Build output is plain Terraform. Copy it, run it yourself, and strata is out of the picture. See [Value Proposition & Escape Hatch](platform/value-proposition.md).
-
-> **New here?** Start with the [feature overview](guides/features.md) for a practical, terminal-focused rundown of everything strata does.
-
----
+- **Declarative YAML configuration** — every document follows the same Kubernetes-style shape
+  (`apiVersion`, `kind`, `meta`, `spec`), validated with Pydantic v2 in strict mode
+  (`extra="forbid"` — unknown fields are a validation error, not a silent typo).
+- **Documents, not file paths.** Every cross-document reference is `(kind, meta.name)` — never a
+  path — so renaming or reorganizing files never breaks a reference.
+- **Solution-wide discovery.** One `strata.yaml` (`kind: solution`) marks the root; every document
+  under it is discovered and indexed automatically, in any directory layout you like.
+- **Two-phase validation.** Schema checks (Pydantic) first, then cross-document semantics — dangling
+  references, unresolved variables, mismatched kinds, stale version pins — all before anything is
+  rendered or applied.
+- **render, then execute.** `build run` renders a deployment's workspace into on-disk Terraform/
+  Helm/Compose artifacts; `deploy run` is the only step that actually calls `terraform plan/apply`
+  (or the Helm/Compose equivalent) — and only against what `build run` already wrote.
+- **Pluggable value resolution.** `${var:KEY}` / `${secret:KEY}` / `${feature:KEY}` tokens resolve
+  against named stores — constants, environment variables, or an integration-backed secret store —
+  so the same document works unchanged across environments.
+- **Scriptable by design.** `--output json` (or `STRATA_OUTPUT=json`) emits one structured JSON
+  envelope per run on stdout, with stable exit codes — built for CI pipelines and AI agents, not
+  just interactive use.
 
 ## Prerequisites
 
-| Tool                                                   | Version | Required for                            |
-| ------------------------------------------------------ | ------- | --------------------------------------- |
-| Python                                                 | 3.13+   | CLI runtime                             |
-| [uv](https://docs.astral.sh/uv/)                       | latest  | Package and environment management      |
-| Git                                                    | any     | Repo management (`strata repo sync`)    |
-| [Terraform](https://developer.hashicorp.com/terraform) | 1.5+    | `strata build` and `strata deploy` only |
-
----
+| Tool                                                   | Version | Required for                                       |
+| ------------------------------------------------------ | ------- | -------------------------------------------------- |
+| Python                                                 | 3.13+   | CLI runtime (`requires-python >=3.13`)             |
+| [uv](https://docs.astral.sh/uv/)                       | latest  | Package and environment management                 |
+| [Terraform](https://developer.hashicorp.com/terraform) | 1.5+    | Only if a workspace uses a `terraform` provisioner |
+| [Helm](https://helm.sh/)                               | 3.x     | Only if a workspace uses a `helm` provisioner      |
+| [Docker Compose](https://docs.docker.com/compose/)     | v2      | Only if a workspace uses a `compose` provisioner   |
 
 ## Installation
 
-```bash
-uv sync
-```
+Not published to PyPI yet — run from a development install:
 
-**Linux / macOS:**
-```bash
-source .venv/bin/activate
-strata --help
-```
-
-**Windows:**
 ```powershell
-.venv\Scripts\Activate.ps1
+uv sync
+.\.venv\Scripts\Activate.ps1
 strata --help
 ```
 
-Or invoke directly without activating:
-```bash
+Or without activating:
+
+```powershell
 uv run strata --help
 ```
 
----
-
 ## Quick Start
 
-```bash
-# 1. Initialize a new workspace
-cd /path/to/my-workspace
-strata sln init --name my-workspace
-# Opens in VS Code? Select "Reopen in Container" to use the pre-configured dev container.
+The [`config/`](../config/README.md) directory is a real, working solution — not a toy fixture —
+so every command below actually runs against it:
 
-# 2. Register external repositories
-strata repo add xyz-config         git@github.com:org/xyz-config.git         --branch main --clone
-strata repo add xyz-infrastructure git@github.com:org/xyz-infrastructure.git --branch main --clone
+```powershell
+cd config
 
-# 3. Create an environment profile
-strata profile add prd --activate
+# Validate every document in the solution
+strata validate
 
-# 4. Add file references to the active profile
-strata ref config add global-config --path "@xyz-config/config/xyz-config.yaml"
-strata ref env    add prd-env       --path "@xyz-config/environments/xyz-env-prd.yaml"
+# Inspect resolved values before building anything
+strata values get prd-deployment REGION PUBLIC_IP
 
-# 5. Validate a YAML file
-strata validate repos/xyz-config/config/xyz-config.yaml
+# Render the deployment's workspace to disk (Terraform/Helm/Compose artifacts)
+strata build run prd-deployment
 
-# 6. Inspect resolved values before building
-strata values list -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
-
-# 7. Build deployment artifacts
-strata build run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
-
-# 8. Deploy
-strata deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
-strata deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+# Report what deploy run would do, without calling any provisioner
+strata deploy run prd-deployment --dry-run
 ```
 
-> **Tip:** Persist output format and verbosity once so you don't repeat flags:
-> ```bash
-> strata config set output console
-> strata config set verbose true
-> ```
+## Document Shape
 
----
-
-## Configuration
-
-Platform YAML files follow a Kubernetes-style schema:
+Every strata document follows the same shape:
 
 ```yaml
-apiVersion: strata.huybrechts.xyz/v1
-kind: workspace          # workspace | deployment | environment | provider | resource | ...
+apiVersion: strata.huybrechts.xyz/v2
+kind: deployment # see docs/design/v2-schema-overview.md for the full kind list
 meta:
-  name: my-workspace
+  name: prd-deployment
   annotations:
-    description: Production infrastructure workspace
+    description: "Production instance"
 spec:
   ...
 ```
 
-Full schema documentation: [config/](config/readme.md)
-
-Supported kinds: `configuration`, `workspace`, `deployment`, `environment`, `provider`, `resource`, `firewall`, `module`, `namespace`, `workspace-template`.
-
----
+Full, current kind list and implementation status:
+[docs/design/v2-schema-overview.md](design/v2-schema-overview.md).
 
 ## CLI Reference
 
-```
-strata <command> [options]
-```
+| Command                               | Purpose                                                                       |
+| ------------------------------------- | ----------------------------------------------------------------------------- |
+| `strata validate [PATH]`              | Schema + cross-document validation for the whole solution                     |
+| `strata values get DEPLOYMENT KEY...` | Resolve one or more variables/secrets/feature flags for a deployment          |
+| `strata build run DEPLOYMENT`         | Render a deployment's workspace into on-disk artifacts                        |
+| `strata deploy run DEPLOYMENT`        | Execute `build run`'s output (`plan`/`apply`, or the Helm/Compose equivalent) |
+| `strata version`                      | Show the strata version                                                       |
 
-Standard options accepted by every command:
+Common options accepted by most commands:
 
-| Option                         | Description                                                                  |
-| ------------------------------ | ---------------------------------------------------------------------------- |
-| `--work-path PATH`             | Workspace root (or `STRATA_WORK_PATH` env var; walks up from CWD if not set) |
-| `--output console\|text\|json` | Output format (default: `console`)                                           |
-| `--verbose`                    | Show structured log output                                                   |
-| `--quiet`                      | Suppress all output                                                          |
+| Option                   | Description                                                                   |
+| ------------------------ | ----------------------------------------------------------------------------- |
+| `--path PATH`            | Where to start looking for the solution (or `STRATA_WORK_PATH`; default: cwd) |
+| `--output console\|json` | Output format (default: `console`; or `STRATA_OUTPUT`)                        |
+| `--verbose` / `--quiet`  | More or less console output                                                   |
 
-Full command reference: [platform/commands.md](platform/commands.md)
-
----
-
-## AI Integration via MCP
-
-**Connect strata to Claude, GitHub Copilot, or custom AI agents** using the Model Context Protocol (MCP) server.
-
-The strata MCP server exposes infrastructure operations as AI-friendly tools:
-- **Validate** YAML with `validate_file()` — catch errors before deployment
-- **Preview** builds and deployments with `build_plan()` and `deploy_plan()`
-- **Query** infrastructure state with `deploy_status()` and `audit_query()`
-- **Generate** deployment files with `scaffold_file()` from templates
-
-**Perfect for:**
-- AI-assisted infrastructure planning and code review
-- Troubleshooting via drift detection and audit log analysis
-- Approval workflows: AI previews, human reviews, CLI executes
-
-Get started: [MCP Server Integration Guide for AI Agents](mcp/README.md)
-
----
+`build run`/`deploy run` also accept `--build-path` and `--dry-run`; `deploy run` adds `--stage`/
+`--scope` to restrict which provisioning steps run. Run `strata <command> --help` for the full,
+authoritative list.
 
 ## Deployment Workflow
 
-The full lifecycle from workspace setup to running infrastructure:
-
-1. `strata sln init` — create workspace, optionally from a template
-2. `strata repo add / sync` — register and clone external repos
-3. `strata profile add / activate` — create named environment profiles
-4. `strata ref config / env add` — attach config and environment files to the active profile
-5. `strata validate` — validate individual YAML files
-6. `strata values list` — inspect resolved variables, secrets, and feature flags
-7. `strata build run` — generate `.tfvars.json`, `platform.json`, rendered templates
-8. `strata deploy run` — execute Terraform provisioners per stage
-
-Full guide: [platform/workflow.md](platform/workflow.md)
-
-CI/CD integration: [platform/ci-integration.md](platform/ci-integration.md)
-
----
+1. `strata validate` — check every document's schema and cross-document references.
+2. `strata values get` — inspect resolved variables/secrets/feature flags before building anything.
+3. `strata build run` — render the deployment's workspace into on-disk Terraform/Helm/Compose
+   artifacts. Renders only — never calls `plan`, `apply`, or `deploy`.
+4. `strata deploy run` — execute what `build run` wrote: `terraform plan`/`apply` (or the Helm/
+   Compose equivalent), per provisioning step, in dependency order.
 
 ## Testing
 
-```bash
-# Run full test suite
-uv run pytest tests/ --no-cov -q
-
-# Run with coverage
-uv run pytest tests/ --cov=strata --cov-report=term-missing
+```powershell
+& .\.venv\Scripts\python.exe -m mypy src
+& .\.venv\Scripts\python.exe -m ruff check --fix src tests
+& .\.venv\Scripts\lint-imports.exe
+& .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-For linting, type checking, and the full nox pipeline, see [CONTRIBUTING.md](../.github/CONTRIBUTING.md#developer-setup).
-
----
+See [CONTRIBUTING.md](../.github/CONTRIBUTING.md) for the full workflow.
 
 ## Troubleshooting
 
-```bash
-# Built-in help topics
-strata help --list
-strata help --topic troubleshooting
-strata help --topic quickstart
-```
+| Symptom                                            | Likely cause                                          | Fix                                                          |
+| -------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------ |
+| `Not inside a strata solution: no strata.yaml ...` | Command run outside any solution tree                 | `cd` into the solution, or pass `--path`/`STRATA_WORK_PATH`  |
+| Exit code `2`                                      | Bad arguments, or not inside a solution               | Check `strata <command> --help`                              |
+| Exit code `3`                                      | Schema or cross-document validation failed            | Read the reported diagnostics — each names the failing field |
+| Exit code `1`                                      | System failure (I/O, unexpected crash)                | Not a configuration problem — check the traceback/logs       |
+| `... environment variable 'X' is not set`          | A `store: environment` secret/variable isn't exported | Export it before running `deploy run`/`build run --resolve`  |
 
-Common issues:
-
-| Symptom                               | Likely cause                      | Fix                                                     |
-| ------------------------------------- | --------------------------------- | ------------------------------------------------------- |
-| `Not inside an strata workspace`      | CWD not in a workspace tree       | Run `strata sln init` or pass `--work-path`             |
-| Exit 2 on any command                 | Missing required option           | Check `strata <command> --help`                         |
-| Exit 3 on `strata validate`           | Schema-invalid YAML               | Read the validation error output                        |
-| Exit 4 on `strata deploy run/destroy` | Deployment lock held elsewhere    | Wait for other process to finish, or use `--force-lock` |
-| `@repo-name/...` reference not found  | Repo not registered or not cloned | `strata repo add` + `strata repo sync`                  |
-| Terraform not found                   | `terraform` not on PATH           | Install Terraform 1.5+                                  |
-
-### Inspecting Resolved Values Before Deploy
-
-Before deploying, inspect all variables, secrets, and features that will be used:
-
-```bash
-# List all resolved values for a deployment
-strata values list -f xyz-deploy-prd.yaml
-
-# Show store references (where each secret/variable comes from)
-strata values list -f xyz-deploy-prd.yaml --show-store
-
-# Find entries that failed to resolve (exit code 3)
-strata values list -f xyz-deploy-prd.yaml --unresolved
-
-# Inspect a single key
-strata values get -f xyz-deploy-prd.yaml DB_PASSWORD
-```
-
-Use this **before** running `strata deploy run` to catch missing credentials or typos early.
-
-### Using Dry-Run to Validate Deployment
-
-Always dry-run before a real deployment. The dry-run step validates configuration, builds artifacts, and plans (without applying):
-
-```bash
-# Plan without applying anything
-strata deploy run -f xyz-deploy-prd.yaml --dry-run
-
-# If successful, run the real deploy
-strata deploy run -f xyz-deploy-prd.yaml
-
-# Inspect what a specific stage would do
-strata deploy run -f xyz-deploy-prd.yaml --stage production --dry-run
-```
-
-### Debugging a Failed Deployment
-
-If a deploy fails, query the audit log to see what happened:
-
-```bash
-# Show the most recent deployment
-strata audit changes --last 1
-
-# Show all deployments in the last 24 hours
-strata audit changes --since 2026-07-05T00:00:00Z
-
-# Query which stage failed
-strata audit changes --stage infrastructure
-
-# Export audit log for analysis
-strata audit changes --last 50 --output json > audit.json
-```
-
-For more details, see the [audit traceability guide](guides/deployment-manifests.md).
-
----
+Exit code reference: `0` success · `1` system failure · `2` usage error · `3` validation failure.
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](../.github/CONTRIBUTING.md) for workflow guidelines and developer setup (linting, testing, nox, lockfiles).
-
----
+See [CONTRIBUTING.md](../.github/CONTRIBUTING.md) for workflow, conventions, and architecture rules.
 
 ## Security
 
 See [SECURITY.md](../.github/SECURITY.md) for the vulnerability reporting policy.
 
----
-
 ## License
 
-This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). See the [LICENSE](../LICENSE) file for details.
-
----
-
-## Acknowledgments
-
-See [ACKNOWLEDGMENTS.md](../.github/ACKNOWLEDGMENTS.md).
-
----
-
-## Contact
-
-See [SUPPORT.md](../.github/SUPPORT.md) for where to get help and expected response times.
-
----
+GNU Affero General Public License v3.0 (AGPL-3.0) — see [LICENSE](../LICENSE).
 
 ## Glossary
 
-| Term                         | Definition                                                                |
-| ---------------------------- | ------------------------------------------------------------------------- |
-| Configuration                | Settings defining providers, resources, and platform behavior             |
-| Deployment                   | An instance of infrastructure/application in a specific environment       |
-| Environment                  | A specific setup (dev, staging, prod) that overrides workspace defaults   |
-| Firewall                     | Security rules governing network traffic to/from resources                |
-| Infrastructure as Code (IaC) | Managing infrastructure through declarative code and automation           |
-| Module                       | A deployable application component (source + lifecycle hooks)             |
-| Namespace                    | A logical grouping of modules within a workspace                          |
-| Platform                     | The core CLI and orchestration layer                                      |
-| Profile                      | A named set of file references for a specific environment                 |
-| Provider                     | A cloud service provider (Azure, AWS, GCP, Kamatera, local)               |
-| Ref                          | A typed file reference (env, config, data, secret) attached to a profile  |
-| Resource                     | An individual infrastructure component (VM, disk, network)                |
-| Topology                     | The arrangement and relationships of resources within a workspace         |
-| Workspace                    | A logical grouping of resources that defines WHAT infrastructure to build |
+Full list of terms and concepts: [docs/GLOSSARY.md](GLOSSARY.md).
 
----
-
-## Core Concepts
-
-### Separation of Concerns
-
-Each concern lives in its own repository:
-
-| Repo type            | Example name         | Contains                                                   |
-| -------------------- | -------------------- | ---------------------------------------------------------- |
-| Platform (this repo) | `strata`             | CLI, provisioners, built-in defaults                       |
-| Configuration        | `xyz-config`         | Provider credentials, topology definitions, firewall rules |
-| Infrastructure       | `xyz-infrastructure` | Deployment manifests, Terraform backends                   |
-| Service config       | `xyz-svc-<service>`  | Service-specific configuration files                       |
-
-### Version Control Everything
-
-- Each repository independently versioned and tagged
-- Git commits form an immutable audit trail
-- Tags mark approved configurations
-- Branches support environment-specific variations
-
-### Declarative Configuration
-
-- All infrastructure defined in YAML — no imperative deployment scripts
-- Reproducible deployments from manifests
-- Configuration drift detectable via `strata build plan`
-
-### Audit Trail
-
-Every `strata build run` generates a deployment manifest capturing:
-- Exact Git commits for all configuration sources
-- Version tags for platform and modules
-- Timestamp, user, and resource configuration
-- Approval metadata (when configured)
-
-This provides audit-ready evidence for regulatory frameworks (NIS2, ISAE 3402 Type 2).

@@ -1,0 +1,216 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Solution (kind: solution) &mdash; strata 2.0.0-Alpha8 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=c7b08b93"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Configuration (kind: configuration)" href="configuration.html" />
+    <link rel="prev" title="Configuration Files" href="readme.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            strata
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../README.html">strata</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GLOSSARY.html">Strata Glossary</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">How-To Guides:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/azure-certificates.html">How To: Get a TLS Certificate onto an Azure Application Gateway / WAF</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/azure-private-dns-zones.html">How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/sbom-generation.html">How To: Use the SBOM Feature (CycloneDX)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Files:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="readme.html">Configuration Files</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Solution (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">solution</span></code>)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#schema">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#example">Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">configuration</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="provider.html">Provider (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">provider</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="providerconfig.html">ProviderConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">providerconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="resource.html">Resource (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">resource</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="network.html">Network (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">network</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="firewall.html">Firewall (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">firewall</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dns.html">DNS (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">dns</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="topologyconfig.html">TopologyConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">topologyconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workspace.html">Workspace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">workspace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="module.html">Module (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">module</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="namespace.html">Namespace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">namespace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tenant.html">Tenant (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">tenant</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="environment.html">Environment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">environment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deployment.html">Deployment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/README.html">Integrations — How to Configure Each One</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/infisical.html">Infisical (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">infisical</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-keyvault.html">Azure Key Vault (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-keyvault</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-appconfig.html">Azure App Configuration (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-appconfig</span></code>)</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">strata</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Solution (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">solution</span></code>)</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/config/solution.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="solution-kind-solution">
+<h1>Solution (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">solution</span></code>)<a class="headerlink" href="#solution-kind-solution" title="Link to this heading"></a></h1>
+<p>The bootstrap document — <code class="docutils literal notranslate"><span class="pre">strata.yaml</span></code> at the solution root. Marks “a strata solution starts
+here” and supplies the minimum needed to find everything else: discovery rules and remotes live
+downstream of it, never inside it. Found by walking up from any path (like <code class="docutils literal notranslate"><span class="pre">go.mod</span></code>/<code class="docutils literal notranslate"><span class="pre">package.json</span></code>),
+not by discovery itself.</p>
+<section id="schema">
+<h2>Schema<a class="headerlink" href="#schema" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.configuration</span></code> — relative path to this solution’s <code class="docutils literal notranslate"><span class="pre">configuration.yaml</span></code> (adjacent by convention)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.discovery.exclude</span></code> — glob patterns excluded from document discovery, additive to the
+loader’s built-in ignores (<code class="docutils literal notranslate"><span class="pre">.git</span></code>, <code class="docutils literal notranslate"><span class="pre">build</span></code>, <code class="docutils literal notranslate"><span class="pre">.strata</span></code>, tool caches)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.remotes[]</span></code> — named external artifact sources, each:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">name</span></code> — referenced elsewhere as <code class="docutils literal notranslate"><span class="pre">&#64;&lt;name&gt;/&lt;path&gt;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">type</span></code> — <code class="docutils literal notranslate"><span class="pre">local</span></code>, <code class="docutils literal notranslate"><span class="pre">git</span></code>, <code class="docutils literal notranslate"><span class="pre">oci</span></code>, or <code class="docutils literal notranslate"><span class="pre">helm</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">url</span></code> — the source location</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fetch</span></code> — <code class="docutils literal notranslate"><span class="pre">strata</span></code> (strata materializes it) or <code class="docutils literal notranslate"><span class="pre">external</span></code> (already placed by CI/elsewhere)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">description</span></code> — optional, human-readable</p></li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="example">
+<h2>Example<a class="headerlink" href="#example" title="Link to this heading"></a></h2>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">solution</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">example</span>
+<span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">"Example</span><span class="nv"> </span><span class="s">solution</span><span class="nv"> </span><span class="s">used</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">exercise</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">discovery</span><span class="nv"> </span><span class="s">loader</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">full</span><span class="nv"> </span><span class="s">strata</span><span class="nv"> </span><span class="s">build</span><span class="nv"> </span><span class="s">run</span><span class="nv"> </span><span class="s">pipeline</span><span class="nv"> </span><span class="s">end</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">end"</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">configuration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">configuration.yaml</span>
+<span class="w">  </span><span class="nt">discovery</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">exclude</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"templates/**"</span>
+<span class="w">  </span><span class="nt">remotes</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infra</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">      </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">vendor/infra</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">charts</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">helm</span>
+<span class="w">      </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://charts.example.io</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bundled</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">      </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">modules</span>
+</pre></div>
+</div>
+</section>
+<section id="notes">
+<h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Scope discipline: this document answers “what/where is this solution”, never “what rules
+govern it” — platform policy (provider/topology registries) stays in <code class="docutils literal notranslate"><span class="pre">Configuration</span></code>.</p></li>
+<li><p>Remotes supply <em>artifacts</em> (Terraform modules, charts, copied files), not strata <em>documents</em> —
+a <code class="docutils literal notranslate"><span class="pre">Module</span></code>/<code class="docutils literal notranslate"><span class="pre">ProviderConfig</span></code> document must live in the solution’s own discovery tree.</p></li>
+<li><p>No lock file: <code class="docutils literal notranslate"><span class="pre">reference</span></code> (a remote’s pinned ref, see <a class="reference internal" href="version.html"><span class="std std-doc">version.md</span></a>) is declared
+here or overridden by a <code class="docutils literal notranslate"><span class="pre">version</span></code> document; the checkout location is a CLI convention, not a
+second recorded fact.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="readme.html" class="btn btn-neutral float-left" title="Configuration Files" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="configuration.html" class="btn btn-neutral float-right" title="Configuration (kind: configuration)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Huybrechts XYZ.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,356 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How To: Get a TLS Certificate onto an Azure Application Gateway / WAF &mdash; strata 2.0.0-Alpha8 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=c7b08b93"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)" href="azure-private-dns-zones.html" />
+    <link rel="prev" title="Strata Glossary" href="../GLOSSARY.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            strata
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../README.html">strata</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GLOSSARY.html">Strata Glossary</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">How-To Guides:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">How To: Get a TLS Certificate onto an Azure Application Gateway / WAF</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#the-short-answer">The short answer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#what-the-iac-creates">What the IaC creates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#getting-the-certificate-into-key-vault">Getting the certificate into Key Vault</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#option-a-manual-one-time-import">Option A — manual, one-time import</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#option-b-key-vault-integrated-ca-issuer-semi-automated">Option B — Key Vault-integrated CA issuer (semi-automated)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#option-c-let-s-encrypt-via-key-vault-acmebot-fully-automated-free-ca">Option C — Let’s Encrypt via Key Vault Acmebot (fully automated, free CA)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#mapping-this-onto-strata">Mapping this onto strata</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="azure-private-dns-zones.html">How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
+<li class="toctree-l1"><a class="reference internal" href="migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sbom-generation.html">How To: Use the SBOM Feature (CycloneDX)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Files:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../config/readme.html">Configuration Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/solution.html">Solution (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">solution</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/configuration.html">Configuration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">configuration</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/provider.html">Provider (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">provider</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/providerconfig.html">ProviderConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">providerconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/resource.html">Resource (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">resource</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/network.html">Network (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">network</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/firewall.html">Firewall (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">firewall</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/dns.html">DNS (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">dns</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/topologyconfig.html">TopologyConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">topologyconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/workspace.html">Workspace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">workspace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/module.html">Module (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">module</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/namespace.html">Namespace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">namespace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/tenant.html">Tenant (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">tenant</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">environment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/deployment.html">Deployment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/README.html">Integrations — How to Configure Each One</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/infisical.html">Infisical (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">infisical</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-keyvault.html">Azure Key Vault (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-keyvault</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-appconfig.html">Azure App Configuration (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-appconfig</span></code>)</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">strata</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">How To: Get a TLS Certificate onto an Azure Application Gateway / WAF</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/how-to/azure-certificates.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="how-to-get-a-tls-certificate-onto-an-azure-application-gateway-waf">
+<h1>How To: Get a TLS Certificate onto an Azure Application Gateway / WAF<a class="headerlink" href="#how-to-get-a-tls-certificate-onto-an-azure-application-gateway-waf" title="Link to this heading"></a></h1>
+<p>You are deploying an Azure Application Gateway v2 (WAF_v2) with Bicep/Terraform and its HTTPS
+listener needs a certificate. This guide covers what the IaC actually automates, what stays a
+manual (or separately-automated) step, and how it maps onto strata’s own model — see the
+worked example in <span class="xref myst"><code class="docutils literal notranslate"><span class="pre">config/</span></code></span>: <code class="docutils literal notranslate"><span class="pre">resources/networking.yaml</span></code>
+(<code class="docutils literal notranslate"><span class="pre">key-vault</span></code>, <code class="docutils literal notranslate"><span class="pre">app-gateway-waf</span></code>), <code class="docutils literal notranslate"><span class="pre">integrations/azure-keyvault.yaml</span></code>, and the
+<code class="docutils literal notranslate"><span class="pre">APPGW_CERT_SECRET_ID</span></code> secret in <code class="docutils literal notranslate"><span class="pre">environments/prd.yaml</span></code>.</p>
+<section id="the-short-answer">
+<h2>The short answer<a class="headerlink" href="#the-short-answer" title="Link to this heading"></a></h2>
+<p><strong>Terraform/Bicep automate the plumbing, not the certificate itself:</strong></p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Automated by Terraform/Bicep</p></th>
+<th class="head"><p>NOT automated by Terraform/Bicep</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Creating the Key Vault</p></td>
+<td><p>Issuing/renewing the certificate</p></td>
+</tr>
+<tr class="row-odd"><td><p>The user-assigned managed identity</p></td>
+<td><p>Uploading the certificate’s private key</p></td>
+</tr>
+<tr class="row-even"><td><p>The RBAC role assignment (<code class="docutils literal notranslate"><span class="pre">Key</span> <span class="pre">Vault</span> <span class="pre">Secrets</span> <span class="pre">User</span></code>) granting App Gateway read access</p></td>
+<td><p>Rotating the certificate before expiry</p></td>
+</tr>
+<tr class="row-odd"><td><p>The App Gateway’s <code class="docutils literal notranslate"><span class="pre">ssl_certificate</span></code>/<code class="docutils literal notranslate"><span class="pre">sslCertificates</span></code> block referencing the Key Vault secret by URI</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+<p>So yes — <strong>populating the certificate is a separate action from the <code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">apply</span></code>/<code class="docutils literal notranslate"><span class="pre">bicep</span> <span class="pre">deploy</span></code> that creates the Key Vault and wires up access.</strong> It is either:</p>
+<ol class="arabic simple">
+<li><p><strong>A one-time manual action</strong> (<code class="docutils literal notranslate"><span class="pre">az</span> <span class="pre">keyvault</span> <span class="pre">certificate</span> <span class="pre">import</span></code>, or the portal) — fine for an
+internal cert, a short-lived dev cert, or a cert from a CA with no Key Vault integration.</p></li>
+<li><p><strong>A separately-automated, ongoing process</strong> — a Key Vault-integrated CA issuer (DigiCert/
+GlobalSign), or a small standalone component like
+<a class="reference external" href="https://github.com/shibayan/keyvault-acmebot">Key Vault Acmebot</a> for Let’s Encrypt — which
+renews the secret in Key Vault on its own schedule, entirely outside the App Gateway’s own
+IaC lifecycle.</p></li>
+</ol>
+<p>Either way, the App Gateway’s Terraform/Bicep never sees the certificate bytes: it only ever
+reads a <code class="docutils literal notranslate"><span class="pre">keyVaultSecretId</span></code>/<code class="docutils literal notranslate"><span class="pre">key_vault_secret_id</span></code> that already exists.</p>
+</section>
+<section id="what-the-iac-creates">
+<h2>What the IaC creates<a class="headerlink" href="#what-the-iac-creates" title="Link to this heading"></a></h2>
+<p><strong>Bicep:</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>resource kv 'Microsoft.KeyVault/vaults@2023-07-01' = {
+  name: kvName
+  location: location
+  properties: {
+    sku: { family: 'A', name: 'standard' }
+    tenantId: subscription().tenantId
+    enableRbacAuthorization: true
+  }
+}
+
+resource appgwIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'id-appgw'
+  location: location
+}
+
+resource kvSecretsUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(kv.id, appgwIdentity.id, 'KeyVaultSecretsUser')
+  scope: kv
+  properties: {
+    principalId: appgwIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      '4633458b-17de-408a-b874-0445c86b69e6' // Key Vault Secrets User
+    )
+  }
+}
+
+resource appgw 'Microsoft.Network/applicationGateways@2023-11-01' = {
+  name: 'appgw-example'
+  location: location
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: { '${appgwIdentity.id}': {} }
+  }
+  properties: {
+    sslCertificates: [
+      {
+        name: 'primary-cert'
+        properties: {
+          // The secret must already exist — this apply does not create it.
+          keyVaultSecretId: 'https://${kvName}${environment().suffixes.keyvaultDns}/secrets/appgw-cert'
+        }
+      }
+    ]
+  }
+}
+</pre></div>
+</div>
+<p><strong>Terraform:</strong></p>
+<div class="highlight-hcl notranslate"><div class="highlight"><pre><span></span><span class="kr">resource</span><span class="w"> </span><span class="nc">"azurerm_key_vault"</span><span class="w"> </span><span class="nv">"this"</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">name</span><span class="w">                       </span><span class="o">=</span><span class="w"> </span><span class="nv">var.kv_name</span>
+<span class="w">  </span><span class="na">location</span><span class="w">                   </span><span class="o">=</span><span class="w"> </span><span class="nv">var.location</span>
+<span class="w">  </span><span class="na">resource_group_name</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="nv">var.rg_name</span>
+<span class="w">  </span><span class="na">tenant_id</span><span class="w">                  </span><span class="o">=</span><span class="w"> </span><span class="nv">data.azurerm_client_config.current.tenant_id</span>
+<span class="w">  </span><span class="na">sku_name</span><span class="w">                   </span><span class="o">=</span><span class="w"> </span><span class="s2">"standard"</span>
+<span class="w">  </span><span class="na">enable_rbac_authorization</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="no">true</span>
+<span class="p">}</span>
+
+<span class="kr">resource</span><span class="w"> </span><span class="nc">"azurerm_user_assigned_identity"</span><span class="w"> </span><span class="nv">"appgw"</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">name</span><span class="w">                </span><span class="o">=</span><span class="w"> </span><span class="s2">"id-appgw"</span>
+<span class="w">  </span><span class="na">location</span><span class="w">            </span><span class="o">=</span><span class="w"> </span><span class="nv">var.location</span>
+<span class="w">  </span><span class="na">resource_group_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.rg_name</span>
+<span class="p">}</span>
+
+<span class="kr">resource</span><span class="w"> </span><span class="nc">"azurerm_role_assignment"</span><span class="w"> </span><span class="nv">"appgw_kv_reader"</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">scope</span><span class="w">                </span><span class="o">=</span><span class="w"> </span><span class="nv">azurerm_key_vault.this.id</span>
+<span class="w">  </span><span class="na">role_definition_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"Key Vault Secrets User"</span>
+<span class="w">  </span><span class="na">principal_id</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="nv">azurerm_user_assigned_identity.appgw.principal_id</span>
+<span class="p">}</span>
+
+<span class="c1"># Data source, not a managed resource — the secret is assumed to already</span>
+<span class="c1"># exist. `terraform apply` never creates or rotates it.</span>
+<span class="kr">data</span><span class="w"> </span><span class="nc">"azurerm_key_vault_secret"</span><span class="w"> </span><span class="nv">"appgw_cert"</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">name</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="s2">"appgw-cert"</span>
+<span class="w">  </span><span class="na">key_vault_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">azurerm_key_vault.this.id</span>
+<span class="p">}</span>
+
+<span class="kr">resource</span><span class="w"> </span><span class="nc">"azurerm_application_gateway"</span><span class="w"> </span><span class="nv">"this"</span><span class="w"> </span><span class="p">{</span>
+<span class="c1">  # ...</span>
+<span class="w">  </span><span class="nb">identity</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">type</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="s2">"UserAssigned"</span>
+<span class="w">    </span><span class="na">identity_ids</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="nv">azurerm_user_assigned_identity.appgw.id</span><span class="p">]</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="w">  </span><span class="nb">ssl_certificate</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">name</span><span class="w">                </span><span class="o">=</span><span class="w"> </span><span class="s2">"primary-cert"</span>
+<span class="w">    </span><span class="na">key_vault_secret_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">data.azurerm_key_vault_secret.appgw_cert.id</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Using a <code class="docutils literal notranslate"><span class="pre">data</span></code> source (not <code class="docutils literal notranslate"><span class="pre">azurerm_key_vault_certificate</span></code>) is deliberate: it keeps certificate
+issuance out of the App Gateway’s own <code class="docutils literal notranslate"><span class="pre">apply</span></code> cycle, and keeps the private key out of Terraform
+state.</p>
+</section>
+<section id="getting-the-certificate-into-key-vault">
+<h2>Getting the certificate into Key Vault<a class="headerlink" href="#getting-the-certificate-into-key-vault" title="Link to this heading"></a></h2>
+<section id="option-a-manual-one-time-import">
+<h3>Option A — manual, one-time import<a class="headerlink" href="#option-a-manual-one-time-import" title="Link to this heading"></a></h3>
+<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="n">az</span> <span class="n">keyvault</span> <span class="n">certificate</span> <span class="n">import</span> <span class="p">`</span>
+  <span class="p">-</span><span class="n">-vault-name</span> <span class="n">kv-example</span> <span class="p">`</span>
+  <span class="p">-</span><span class="n">-name</span> <span class="n">appgw-cert</span> <span class="p">`</span>
+  <span class="p">-</span><span class="o">-file</span> <span class="p">./</span><span class="n">appgw-cert</span><span class="p">.</span><span class="n">pfx</span> <span class="p">`</span>
+  <span class="p">-</span><span class="n">-password</span> <span class="p">&lt;</span><span class="n">pfx-password</span><span class="p">&gt;</span>
+</pre></div>
+</div>
+<p>Use this for an internal/private-CA cert, a dev/self-signed cert, or any CA that has no Key
+Vault integration. You (or whoever owns the cert) are responsible for re-running this before
+expiry — nothing in the IaC reminds you.</p>
+</section>
+<section id="option-b-key-vault-integrated-ca-issuer-semi-automated">
+<h3>Option B — Key Vault-integrated CA issuer (semi-automated)<a class="headerlink" href="#option-b-key-vault-integrated-ca-issuer-semi-automated" title="Link to this heading"></a></h3>
+<p>If you have a DigiCert/GlobalSign contract, configure it once as a Key Vault “issuer”, then let
+Key Vault manage the CSR, submission, and renewal itself:</p>
+<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="n">az</span> <span class="n">keyvault</span> <span class="n">certificate</span> <span class="n">issuer</span> <span class="n">create</span> <span class="p">-</span><span class="n">-vault-name</span> <span class="n">kv-example</span> <span class="p">-</span><span class="n">-issuer-name</span> <span class="n">digicert</span> <span class="p">-</span><span class="n">-provider</span> <span class="n">DigiCert</span>
+<span class="n">az</span> <span class="n">keyvault</span> <span class="n">certificate</span> <span class="n">create</span> <span class="p">-</span><span class="n">-vault-name</span> <span class="n">kv-example</span> <span class="p">-</span><span class="n">-name</span> <span class="n">appgw-cert</span> <span class="p">`</span>
+  <span class="p">-</span><span class="n">-policy</span> <span class="s2">"</span><span class="p">$(</span><span class="n">az</span> <span class="n">keyvault</span> <span class="n">certificate</span> <span class="nb">get-default</span><span class="n">-policy</span> <span class="p">-</span><span class="n">-output</span> <span class="n">json</span> <span class="p">|</span> <span class="n">jq</span> <span class="s1">'.issuerParameters.name = "digicert"'</span><span class="p">)</span><span class="s2">"</span>
+</pre></div>
+</div>
+<p>Key Vault auto-renews before expiry — no manual re-import needed once configured.</p>
+</section>
+<section id="option-c-let-s-encrypt-via-key-vault-acmebot-fully-automated-free-ca">
+<h3>Option C — Let’s Encrypt via Key Vault Acmebot (fully automated, free CA)<a class="headerlink" href="#option-c-let-s-encrypt-via-key-vault-acmebot-fully-automated-free-ca" title="Link to this heading"></a></h3>
+<p>Deploy <a class="reference external" href="https://github.com/shibayan/keyvault-acmebot">Key Vault Acmebot</a> (an Azure Functions app,
+itself a small separate Bicep/Terraform deployment) once. It performs the ACME DNS-01/HTTP-01
+challenge and writes/renews the certificate into Key Vault on a timer trigger — completely
+decoupled from the App Gateway’s own IaC pipeline.</p>
+</section>
+</section>
+<section id="mapping-this-onto-strata">
+<h2>Mapping this onto strata<a class="headerlink" href="#mapping-this-onto-strata" title="Link to this heading"></a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">config/</span></code> example encodes exactly this split:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">resources/networking.yaml</span></code>’s <code class="docutils literal notranslate"><span class="pre">key-vault</span></code> resource — the Key Vault Terraform creates.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">resources/networking.yaml</span></code>’s <code class="docutils literal notranslate"><span class="pre">app-gateway-waf</span></code> resource — declares a capability
+<code class="docutils literal notranslate"><span class="pre">dependencies[]</span></code> entry on <code class="docutils literal notranslate"><span class="pre">key_vault</span></code>, and its <code class="docutils literal notranslate"><span class="pre">configuration.key_vault_secret_id</span></code> is
+<code class="docutils literal notranslate"><span class="pre">${secret:APPGW_CERT_SECRET_ID}</span></code> — never a literal PFX/password.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">environments/prd.yaml</span></code>’s <code class="docutils literal notranslate"><span class="pre">APPGW_CERT_SECRET_ID</span></code> secret (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-keyvault</span></code>) — names the
+<em>existing</em> secret; its own <code class="docutils literal notranslate"><span class="pre">description</span></code> field is where you record which of Options A/B/C
+above populates it, since strata itself never issues or rotates the certificate.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">integrations/azure-keyvault.yaml</span></code> — the integration that resolves that token at deploy time.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code>/<code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> only ever read the secret’s identifier — issuing or renewing the
+certificate stays entirely outside strata’s own responsibility, same as it stays outside
+Terraform/Bicep’s.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../GLOSSARY.html" class="btn btn-neutral float-left" title="Strata Glossary" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="azure-private-dns-zones.html" class="btn btn-neutral float-right" title="How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Huybrechts XYZ.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

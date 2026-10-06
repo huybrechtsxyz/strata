@@ -1,0 +1,284 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value &mdash; strata 2.0.0-Alpha8 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=c7b08b93"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="How To: Migrate a v1 workspace.yaml (Topology/Provisioning Decoupling)" href="migrate-v1-workspace-topology-provisioning.html" />
+    <link rel="prev" title="How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)" href="composite-variable-fragments.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            strata
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../README.html">strata</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GLOSSARY.html">Strata Glossary</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">How-To Guides:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="azure-certificates.html">How To: Get a TLS Certificate onto an Azure Application Gateway / WAF</a></li>
+<li class="toctree-l1"><a class="reference internal" href="azure-private-dns-zones.html">How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#the-short-answer">The short answer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#worked-example">Worked example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#rules-that-actually-matter">Rules that actually matter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#related">Related</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sbom-generation.html">How To: Use the SBOM Feature (CycloneDX)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Files:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../config/readme.html">Configuration Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/solution.html">Solution (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">solution</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/configuration.html">Configuration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">configuration</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/provider.html">Provider (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">provider</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/providerconfig.html">ProviderConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">providerconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/resource.html">Resource (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">resource</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/network.html">Network (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">network</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/firewall.html">Firewall (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">firewall</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/dns.html">DNS (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">dns</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/topologyconfig.html">TopologyConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">topologyconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/workspace.html">Workspace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">workspace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/module.html">Module (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">module</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/namespace.html">Namespace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">namespace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/tenant.html">Tenant (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">tenant</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">environment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/deployment.html">Deployment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/README.html">Integrations — How to Configure Each One</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/infisical.html">Infisical (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">infisical</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-keyvault.html">Azure Key Vault (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-keyvault</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-appconfig.html">Azure App Configuration (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-appconfig</span></code>)</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">strata</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/how-to/generate-per-instance-terraform-blocks.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="how-to-generate-repeated-per-instance-terraform-blocks-providers-modules-from-one-composite-value">
+<h1>How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value<a class="headerlink" href="#how-to-generate-repeated-per-instance-terraform-blocks-providers-modules-from-one-composite-value" title="Link to this heading"></a></h1>
+<p>You have many instances of the same pattern — e.g. one <code class="docutils literal notranslate"><span class="pre">provider</span> <span class="pre">&quot;azurerm&quot;</span></code> alias + one
+<code class="docutils literal notranslate"><span class="pre">module</span></code> block per customer, each needing its own subscription/provider configuration — and
+Terraform’s own language rules won’t let you collapse them into a single <code class="docutils literal notranslate"><span class="pre">for_each</span></code>/<code class="docutils literal notranslate"><span class="pre">count</span></code>
+module call:</p>
+<blockquote>
+<div><p>Since the association between resources and provider configurations is static, module calls
+using <code class="docutils literal notranslate"><span class="pre">for_each</span></code> or <code class="docutils literal notranslate"><span class="pre">count</span></code> cannot pass different provider configurations to different
+instances. If you need different instances of your module to use different provider
+configurations then you must use a separate <code class="docutils literal notranslate"><span class="pre">module</span></code> block for each distinct set of provider
+configurations.</p>
+</div></blockquote>
+<p>That’s a real, permanent HCL-language constraint — strata cannot and should not try to route
+around it. What strata <em>can</em> do is stop you from hand-maintaining <code class="docutils literal notranslate"><span class="pre">provider-1.tf</span></code>,
+<code class="docutils literal notranslate"><span class="pre">provider-2.tf</span></code>, … by hand: generate the repeated boilerplate from one template and one
+composite list.</p>
+<section id="the-short-answer">
+<h2>The short answer<a class="headerlink" href="#the-short-answer" title="Link to this heading"></a></h2>
+<p><strong>Use <code class="docutils literal notranslate"><span class="pre">provisioner.output.template</span></code></strong> (ADR-0023 D3, rendered at <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> time — ADR-0027) —
+a real, already-shipped Jinja2 full-file-template escape hatch. Its render context already
+includes <code class="docutils literal notranslate"><span class="pre">properties</span></code> (and <code class="docutils literal notranslate"><span class="pre">custom</span></code>), which is exactly the same merged dict described in
+<a class="reference internal" href="composite-variable-fragments.html"><span class="std std-doc">composite-variable-fragments.md</span></a> — so if your per-customer
+data is already assembled there, a loop over it is all the template needs:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># strata/integrations/capabilities.py: render_output_template()'s real context</span>
+<span class="n">context</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"graph"</span><span class="p">:</span> <span class="n">graph</span><span class="p">,</span>
+    <span class="s2">"variables"</span><span class="p">:</span> <span class="p">{</span><span class="o">...</span><span class="p">},</span> <span class="s2">"flags"</span><span class="p">:</span> <span class="p">{</span><span class="o">...</span><span class="p">},</span> <span class="s2">"secrets"</span><span class="p">:</span> <span class="p">{</span><span class="o">...</span><span class="p">},</span>
+    <span class="s2">"properties"</span><span class="p">:</span> <span class="n">graph</span><span class="o">.</span><span class="n">properties</span><span class="p">,</span>   <span class="c1"># &lt;- the merged, composite dict</span>
+    <span class="s2">"custom"</span><span class="p">:</span> <span class="n">graph</span><span class="o">.</span><span class="n">custom</span><span class="p">,</span>
+    <span class="s2">"provisioner"</span><span class="p">:</span> <span class="n">provisioner</span><span class="p">,</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="worked-example">
+<h2>Worked example<a class="headerlink" href="#worked-example" title="Link to this heading"></a></h2>
+<p><strong>The composite data</strong> — assembled exactly as in
+<a class="reference internal" href="composite-variable-fragments.html"><span class="std std-doc">composite-variable-fragments.md</span></a>, one Environment document per
+customer, each contributing its own fragment under <code class="docutils literal notranslate"><span class="pre">spec.properties</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">agw_customers</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">unisonplanning</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">subscription_id</span><span class="p">:</span><span class="w"> </span><span class="s">"11111111-1111-1111-1111-111111111111"</span>
+<span class="w">        </span><span class="nt">domain</span><span class="p">:</span><span class="w"> </span><span class="s">"unisonplanning.com"</span>
+<span class="w">      </span><span class="nt">acmecorp</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">subscription_id</span><span class="p">:</span><span class="w"> </span><span class="s">"22222222-2222-2222-2222-222222222222"</span>
+<span class="w">        </span><span class="nt">domain</span><span class="p">:</span><span class="w"> </span><span class="s">"acmecorp.com"</span>
+</pre></div>
+</div>
+<p><strong>The template</strong> — <code class="docutils literal notranslate"><span class="pre">providers.tf.j2</span></code>, referenced from the provisioner:</p>
+<div class="highlight-jinja notranslate"><div class="highlight"><pre><span></span><span class="cp">{%</span> <span class="k">for</span> <span class="nv">customer</span><span class="o">,</span> <span class="nv">cfg</span> <span class="k">in</span> <span class="nv">properties.agw_customers.items</span><span class="o">()</span> <span class="cp">%}</span>
+<span class="x">provider "azurerm" {</span>
+<span class="x">  alias           = "</span><span class="cp">{{</span> <span class="nv">customer</span> <span class="cp">}}</span><span class="x">"</span>
+<span class="x">  subscription_id = "</span><span class="cp">{{</span> <span class="nv">cfg.subscription_id</span> <span class="cp">}}</span><span class="x">"</span>
+<span class="x">  features {}</span>
+<span class="x">}</span>
+
+<span class="x">module "agw_</span><span class="cp">{{</span> <span class="nv">customer</span> <span class="cp">}}</span><span class="x">" {</span>
+<span class="x">  source = "../../modules/agw"</span>
+<span class="x">  providers = {</span>
+<span class="x">    azurerm = azurerm.</span><span class="cp">{{</span> <span class="nv">customer</span> <span class="cp">}}</span>
+<span class="x">  }</span>
+<span class="x">  domain = "</span><span class="cp">{{</span> <span class="nv">cfg.domain</span> <span class="cp">}}</span><span class="x">"</span>
+<span class="x">}</span>
+<span class="cp">{%</span> <span class="k">endfor</span> <span class="cp">%}</span>
+</pre></div>
+</div>
+<p><strong>The provisioner</strong> declares it:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">provisioners</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tf_main</span>
+<span class="w">      </span><span class="nt">tool</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">source_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infra</span>
+<span class="w">      </span><span class="nt">output</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">template</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">providers.tf.j2</span>
+</pre></div>
+</div>
+<p><strong>The result</strong>, written once per <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span></code>, as <code class="docutils literal notranslate"><span class="pre">providers.tf</span></code> (the <code class="docutils literal notranslate"><span class="pre">.j2</span></code> suffix is
+stripped — <code class="docutils literal notranslate"><span class="pre">template_path.name</span></code> with <code class="docutils literal notranslate"><span class="pre">.j2</span></code>/<code class="docutils literal notranslate"><span class="pre">.jinja2</span></code>/<code class="docutils literal notranslate"><span class="pre">.jinja</span></code> removed): one real, static,
+Terraform-legal <code class="docutils literal notranslate"><span class="pre">provider</span></code>/<code class="docutils literal notranslate"><span class="pre">module</span></code> block pair per customer, generated — never hand-copied.
+Onboarding a fourth customer means adding one more fragment file (per
+<a class="reference internal" href="composite-variable-fragments.html"><span class="std std-doc">composite-variable-fragments.md</span></a>) — the template and the
+provisioner declaration never change.</p>
+</section>
+<section id="rules-that-actually-matter">
+<h2>Rules that actually matter<a class="headerlink" href="#rules-that-actually-matter" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>Build-time only validates; deploy-time actually renders.</strong> <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code> checks that
+every name the template references (<code class="docutils literal notranslate"><span class="pre">properties</span></code>, <code class="docutils literal notranslate"><span class="pre">variables</span></code>, etc.) exists somewhere in the
+declared schema (<code class="docutils literal notranslate"><span class="pre">validate_template_references()</span></code>) — it never renders, and never catches a
+Jinja2 loop producing invalid HCL. The real render — and the first point anything resembling a
+Terraform syntax error would surface — happens at <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span></code>, via
+<code class="docutils literal notranslate"><span class="pre">InfraIntegration.render_output_template()</span></code>.</p></li>
+<li><p><strong>This is the sanctioned “generate a new file” escape hatch, not a source rewrite.</strong> Unlike
+<code class="docutils literal notranslate"><span class="pre">sync_source()</span></code> (which copies vendored/third-party source byte-for-byte, deliberately <em>never</em>
+template-rendered — ADR-0025), <code class="docutils literal notranslate"><span class="pre">output.template</span></code> produces a file your own deployment owns
+outright. Nothing about this violates strata staying opaque to AGW/WAF/whatever-shape your
+template emits — the template’s author owns the HCL shape completely; strata only ever
+substitutes values into it.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">properties</span></code>/<code class="docutils literal notranslate"><span class="pre">custom</span></code> are intentionally “unchecked, arbitrary-shape” roots</strong> in
+<code class="docutils literal notranslate"><span class="pre">validate_template_references()</span></code> — only the top-level name (<code class="docutils literal notranslate"><span class="pre">properties</span></code>) is checked to exist,
+never its nested keys (<code class="docutils literal notranslate"><span class="pre">properties.agw_customers.unisonplanning...</span></code>). A typo inside a fragment,
+or inside the loop body, is invisible until the real <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> render — same opacity
+tradeoff as everywhere else <code class="docutils literal notranslate"><span class="pre">properties</span></code> is used.</p></li>
+<li><p><strong>One <code class="docutils literal notranslate"><span class="pre">output.template</span></code> per provisioner.</strong> If a provisioner needs both the default
+<code class="docutils literal notranslate"><span class="pre">*.auto.tfvars.json</span></code> projection <em>and</em> a generated file like this, check whether your case
+actually needs the default projection at all — <code class="docutils literal notranslate"><span class="pre">output.template</span></code> <strong>replaces</strong>
+<code class="docutils literal notranslate"><span class="pre">default_output()</span></code>’s projection entirely for that provisioner, it does not layer on top of it.</p></li>
+</ul>
+</section>
+<section id="related">
+<h2>Related<a class="headerlink" href="#related" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="composite-variable-fragments.html"><span class="std std-doc">composite-variable-fragments.md</span></a> — how the composite
+<code class="docutils literal notranslate"><span class="pre">properties</span></code> value this template loops over gets assembled from several files in the first
+place.</p></li>
+<li><p><span class="xref myst">docs/design/composite-variable-merge.md</span> — the full
+investigation this pattern grew out of.</p></li>
+<li><p><span class="xref myst">docs/design/value-token-resolution.md</span> — the full
+<code class="docutils literal notranslate"><span class="pre">output.template</span></code> design (build-time validation vs. deploy-time render split).</p></li>
+<li><p><span class="xref myst">docs/decisions/0023-build-output-rendering.md</span> /
+<span class="xref myst">0027-strata-deploy-run.md</span> — where <code class="docutils literal notranslate"><span class="pre">output.template</span></code>
+was designed and where its actual render was implemented.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="composite-variable-fragments.html" class="btn btn-neutral float-left" title="How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="migrate-v1-workspace-topology-provisioning.html" class="btn btn-neutral float-right" title="How To: Migrate a v1 workspace.yaml (Topology/Provisioning Decoupling)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Huybrechts XYZ.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

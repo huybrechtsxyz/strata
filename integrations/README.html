@@ -1,0 +1,192 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Integrations — How to Configure Each One &mdash; strata 2.0.0-Alpha8 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=c7b08b93"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Infisical (store: infisical)" href="infisical.html" />
+    <link rel="prev" title="Integration (kind: integration)" href="../config/integration.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            strata
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../README.html">strata</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GLOSSARY.html">Strata Glossary</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">How-To Guides:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/azure-certificates.html">How To: Get a TLS Certificate onto an Azure Application Gateway / WAF</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/azure-private-dns-zones.html">How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/sbom-generation.html">How To: Use the SBOM Feature (CycloneDX)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Files:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../config/readme.html">Configuration Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/solution.html">Solution (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">solution</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/configuration.html">Configuration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">configuration</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/provider.html">Provider (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">provider</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/providerconfig.html">ProviderConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">providerconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/resource.html">Resource (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">resource</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/network.html">Network (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">network</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/firewall.html">Firewall (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">firewall</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/dns.html">DNS (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">dns</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/topologyconfig.html">TopologyConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">topologyconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/workspace.html">Workspace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">workspace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/module.html">Module (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">module</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/namespace.html">Namespace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">namespace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/tenant.html">Tenant (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">tenant</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">environment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/deployment.html">Deployment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Integrations — How to Configure Each One</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#secret-variable-feature-stores">Secret/variable/feature stores</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#how-binding-works-in-one-paragraph">How binding works, in one paragraph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#what-s-real-vs-what-s-not-yet">What’s real vs. what’s not yet</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="infisical.html">Infisical (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">infisical</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="azure-keyvault.html">Azure Key Vault (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-keyvault</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="azure-appconfig.html">Azure App Configuration (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-appconfig</span></code>)</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">strata</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Integrations — How to Configure Each One</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/integrations/README.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="integrations-how-to-configure-each-one">
+<h1>Integrations — How to Configure Each One<a class="headerlink" href="#integrations-how-to-configure-each-one" title="Link to this heading"></a></h1>
+<p>This folder is task-focused: “I have a real Infisical project / Azure Key Vault / Azure App
+Configuration instance — how do I point strata at it?” For the generic <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code> schema
+that applies uniformly to every integration type, see
+<a class="reference internal" href="../config/integration.html"><span class="std std-doc">docs/config/integration.md</span></a> instead; for the internal design/rationale
+behind how a store finds and binds to one of these documents, see
+<span class="xref myst">docs/design/store-integration-configuration.md</span>.</p>
+<section id="secret-variable-feature-stores">
+<h2>Secret/variable/feature stores<a class="headerlink" href="#secret-variable-feature-stores" title="Link to this heading"></a></h2>
+<p>An <a class="reference internal" href="../config/environment.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">environment</span></code></span></a> document’s <code class="docutils literal notranslate"><span class="pre">variables</span></code>/<code class="docutils literal notranslate"><span class="pre">secrets</span></code>/<code class="docutils literal notranslate"><span class="pre">features</span></code> entries
+set <code class="docutils literal notranslate"><span class="pre">store:</span></code> to one of these types to resolve a real value from an external system, instead of a
+<code class="docutils literal notranslate"><span class="pre">constant</span></code> literal or a bare <code class="docutils literal notranslate"><span class="pre">environment</span></code> variable read:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="infisical.html"><span class="std std-doc">infisical.md</span></a> — <code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">infisical</span></code> (variables, secrets)</p></li>
+<li><p><a class="reference internal" href="azure-keyvault.html"><span class="std std-doc">azure-keyvault.md</span></a> — <code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-keyvault</span></code> (secrets)</p></li>
+<li><p><a class="reference internal" href="azure-appconfig.html"><span class="std std-doc">azure-appconfig.md</span></a> — <code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-appconfig</span></code> (variables, features)</p></li>
+</ul>
+</section>
+<section id="how-binding-works-in-one-paragraph">
+<h2>How binding works, in one paragraph<a class="headerlink" href="#how-binding-works-in-one-paragraph" title="Link to this heading"></a></h2>
+<p>A store names a <strong>type</strong> (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">infisical</span></code>), never a specific document — strata looks for a
+single <em>enabled</em> <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code> document whose <code class="docutils literal notranslate"><span class="pre">spec.type</span></code> matches and uses it automatically;
+zero matches falls back to environment-variable-only configuration (each guide below documents
+exactly which env vars); more than one enabled match is a validation error naming every candidate,
+never a silent guess. You never need an explicit reference field on the store itself.</p>
+</section>
+<section id="what-s-real-vs-what-s-not-yet">
+<h2>What’s real vs. what’s not yet<a class="headerlink" href="#what-s-real-vs-what-s-not-yet" title="Link to this heading"></a></h2>
+<p>The worked <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code> examples in each guide below are the <strong>designed</strong> end state
+(<span class="xref myst">docs/design/store-integration-configuration.md</span>);
+until that design is implemented, only the environment-variable configuration each guide documents
+is live. Each guide is written against the designed end state on purpose, so it doesn’t need a
+rewrite once implementation lands — check that design doc’s own Status line for current progress.</p>
+<p>None of the three integrations below use <code class="docutils literal notranslate"><span class="pre">spec.authentication</span></code> — every guide explains why up
+front, so it isn’t mistaken for an oversight.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../config/integration.html" class="btn btn-neutral float-left" title="Integration (kind: integration)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="infisical.html" class="btn btn-neutral float-right" title="Infisical (store: infisical)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Huybrechts XYZ.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

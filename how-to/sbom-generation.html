@@ -1,0 +1,297 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How To: Use the SBOM Feature (CycloneDX) &mdash; strata 2.0.0-Alpha8 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=c7b08b93"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Configuration Files" href="../config/readme.html" />
+    <link rel="prev" title="How To: Migrate a v1 workspace.yaml (Topology/Provisioning Decoupling)" href="migrate-v1-workspace-topology-provisioning.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            strata
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../README.html">strata</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GLOSSARY.html">Strata Glossary</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">How-To Guides:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="azure-certificates.html">How To: Get a TLS Certificate onto an Azure Application Gateway / WAF</a></li>
+<li class="toctree-l1"><a class="reference internal" href="azure-private-dns-zones.html">How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
+<li class="toctree-l1"><a class="reference internal" href="migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">How To: Use the SBOM Feature (CycloneDX)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#the-short-answer">The short answer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#what-gets-scanned">What gets scanned</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#example-output">Example output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#feeding-it-into-an-external-scanner-or-registry">Feeding it into an external scanner or registry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#what-s-not-covered-yet">What’s not covered yet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#adding-a-collector-for-a-new-technology">Adding a collector for a new technology</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Files:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../config/readme.html">Configuration Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/solution.html">Solution (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">solution</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/configuration.html">Configuration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">configuration</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/provider.html">Provider (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">provider</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/providerconfig.html">ProviderConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">providerconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/resource.html">Resource (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">resource</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/network.html">Network (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">network</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/firewall.html">Firewall (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">firewall</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/dns.html">DNS (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">dns</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/topologyconfig.html">TopologyConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">topologyconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/workspace.html">Workspace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">workspace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/module.html">Module (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">module</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/namespace.html">Namespace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">namespace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/tenant.html">Tenant (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">tenant</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">environment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/deployment.html">Deployment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/README.html">Integrations — How to Configure Each One</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/infisical.html">Infisical (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">infisical</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-keyvault.html">Azure Key Vault (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-keyvault</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-appconfig.html">Azure App Configuration (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-appconfig</span></code>)</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">strata</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">How To: Use the SBOM Feature (CycloneDX)</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/how-to/sbom-generation.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="how-to-use-the-sbom-feature-cyclonedx">
+<h1>How To: Use the SBOM Feature (CycloneDX)<a class="headerlink" href="#how-to-use-the-sbom-feature-cyclonedx" title="Link to this heading"></a></h1>
+<p>Every <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code> now also generates a CycloneDX 1.6 Software Bill of Materials
+(SBOM) — automatically, with no flag to opt in or out. This guide covers what gets
+scanned, where the output lands, how to feed it into an external scanner/registry, and
+how to add a collector for a technology this doesn’t cover yet. See
+<span class="xref myst">docs/work/sbom-generation.md</span> for the full design
+rationale and evidence trail.</p>
+<section id="the-short-answer">
+<h2>The short answer<a class="headerlink" href="#the-short-answer" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>Nothing to configure.</strong> <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code> writes <code class="docutils literal notranslate"><span class="pre">sbom.json</span></code> at the root of
+<code class="docutils literal notranslate"><span class="pre">--build-path</span></code> (next to <code class="docutils literal notranslate"><span class="pre">resolved.yaml</span></code>), every time, right after every provisioner
+and workload module has been rendered.</p></li>
+<li><p><strong>It’s a real, spec-compliant CycloneDX 1.6 document</strong>, validated in-process before
+being written — any CycloneDX-consuming tool (<code class="docutils literal notranslate"><span class="pre">cyclonedx-cli</span></code>, trivy, grype, OWASP
+Dependency-Track, Anchore Syft) can read it directly, today, with zero strata-specific
+tooling.</p></li>
+<li><p><strong>4 component sources today</strong>: container images, Helm charts, and Terraform
+providers/modules. Application-level dependencies (lockfiles) and CVE scanning are not
+built yet — see <a class="reference internal" href="#what-s-not-covered-yet">What’s not covered yet</a>.</p></li>
+</ul>
+</section>
+<section id="what-gets-scanned">
+<h2>What gets scanned<a class="headerlink" href="#what-gets-scanned" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Collector</p></th>
+<th class="head"><p>What it reads</p></th>
+<th class="head"><p>Where that data comes from</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">image</span></code></p></td>
+<td><p>Every resolved module’s <code class="docutils literal notranslate"><span class="pre">spec.services[].image</span></code></p></td>
+<td><p>The in-memory, already-resolved <code class="docutils literal notranslate"><span class="pre">ModuleModel</span></code> (no file scan needed)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">compose</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">services.&lt;name&gt;.image</span></code> in every rendered <code class="docutils literal notranslate"><span class="pre">docker-compose.yml</span></code>/<code class="docutils literal notranslate"><span class="pre">.yaml</span></code></p></td>
+<td><p>Files <code class="docutils literal notranslate"><span class="pre">ComposeIntegration.prepare_namespace()</span></code> already wrote under <code class="docutils literal notranslate"><span class="pre">build_path</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">helm</span></code></p></td>
+<td><p>Chart-based modules’ <code class="docutils literal notranslate"><span class="pre">spec.source.{chart_name,chart_version}</span></code>, <strong>and</strong> every rendered <code class="docutils literal notranslate"><span class="pre">Chart.yaml</span></code> + its <code class="docutils literal notranslate"><span class="pre">dependencies[]</span></code></p></td>
+<td><p>Both the resolved module and files <code class="docutils literal notranslate"><span class="pre">sync_module_source()</span></code> already materialised</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">terraform</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">required_providers</span> <span class="pre">{}</span></code> and <code class="docutils literal notranslate"><span class="pre">module</span> <span class="pre">&quot;x&quot;</span> <span class="pre">{}</span></code> blocks in every <code class="docutils literal notranslate"><span class="pre">*.tf</span></code> file</p></td>
+<td><p>The synced provisioner source under <code class="docutils literal notranslate"><span class="pre">build_path</span></code>, parsed via <code class="docutils literal notranslate"><span class="pre">python-hcl2</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>A floating/mutable tag (<code class="docutils literal notranslate"><span class="pre">:latest</span></code>, <code class="docutils literal notranslate"><span class="pre">:main</span></code>, a tag that isn’t semver-shaped) is still
+included as a component — it just gets a <code class="docutils literal notranslate"><span class="pre">strata:tag-stability:</span> <span class="pre">floating</span></code> property and a
+<code class="docutils literal notranslate"><span class="pre">Severity.WARNING</span></code> finding in the command’s diagnostics output. This never fails the
+build; it’s informational.</p>
+</section>
+<section id="example-output">
+<h2>Example output<a class="headerlink" href="#example-output" title="Link to this heading"></a></h2>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"bomFormat"</span><span class="p">:</span><span class="w"> </span><span class="s2">"CycloneDX"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"specVersion"</span><span class="p">:</span><span class="w"> </span><span class="s2">"1.6"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"components"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"container"</span><span class="p">,</span><span class="w"> </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"server"</span><span class="p">,</span><span class="w"> </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2024.1.0"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"purl"</span><span class="p">:</span><span class="w"> </span><span class="s2">"pkg:docker/ghcr.io/goauthentik/server@2024.1.0"</span><span class="w"> </span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"library"</span><span class="p">,</span><span class="w"> </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"authentik"</span><span class="p">,</span><span class="w"> </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2024.1.0"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"purl"</span><span class="p">:</span><span class="w"> </span><span class="s2">"pkg:helm/authentik@2024.1.0"</span><span class="w"> </span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"library"</span><span class="p">,</span><span class="w"> </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"azurerm"</span><span class="p">,</span><span class="w"> </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"~&gt;3.90"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"purl"</span><span class="p">:</span><span class="w"> </span><span class="s2">"pkg:terraform/hashicorp/azurerm@~&gt;3.90"</span><span class="w"> </span><span class="p">}</span>
+<span class="w">  </span><span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="feeding-it-into-an-external-scanner-or-registry">
+<h2>Feeding it into an external scanner or registry<a class="headerlink" href="#feeding-it-into-an-external-scanner-or-registry" title="Link to this heading"></a></h2>
+<p>Since <code class="docutils literal notranslate"><span class="pre">sbom.json</span></code> is a standard CycloneDX document, wire it into whatever your pipeline
+already uses — strata doesn’t need to know about any of these:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Fail the pipeline on a CRITICAL finding (trivy)</span>
+trivy<span class="w"> </span>sbom<span class="w"> </span>build/sbom.json<span class="w"> </span>--exit-code<span class="w"> </span><span class="m">1</span><span class="w"> </span>--severity<span class="w"> </span>CRITICAL
+
+<span class="c1"># Same idea with grype</span>
+grype<span class="w"> </span>sbom:build/sbom.json<span class="w"> </span>--fail-on<span class="w"> </span>critical
+
+<span class="c1"># Validate against the official CycloneDX schema with the canonical CLI</span>
+cyclonedx-cli<span class="w"> </span>validate<span class="w"> </span>--input-file<span class="w"> </span>build/sbom.json<span class="w"> </span>--input-format<span class="w"> </span>json
+
+<span class="c1"># Upload to OWASP Dependency-Track for trend tracking</span>
+curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">"</span><span class="nv">$DTRACK_URL</span><span class="s2">/api/v1/bom"</span><span class="w"> </span>-H<span class="w"> </span><span class="s2">"X-Api-Key: </span><span class="nv">$DTRACK_API_KEY</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-F<span class="w"> </span><span class="s2">"project=</span><span class="nv">$PROJECT_UUID</span><span class="s2">"</span><span class="w"> </span>-F<span class="w"> </span><span class="s2">"bom=@build/sbom.json"</span>
+</pre></div>
+</div>
+<p><strong>strata itself does not gate a build or deploy on scan results today.</strong> It only
+generates the artifact. v1 had an in-process CVE scanner + policy engine that <em>could</em>
+block a build — v2 doesn’t have that yet (see
+<a class="reference internal" href="#what-s-not-covered-yet">What’s not covered yet</a>). Until it does, the pattern above (a
+separate pipeline step reading <code class="docutils literal notranslate"><span class="pre">sbom.json</span></code>) is the way to gate on vulnerability findings.</p>
+</section>
+<section id="what-s-not-covered-yet">
+<h2>What’s not covered yet<a class="headerlink" href="#what-s-not-covered-yet" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>Application-level dependencies</strong> (<code class="docutils literal notranslate"><span class="pre">requirements.txt</span></code>, <code class="docutils literal notranslate"><span class="pre">package-lock.json</span></code>, <code class="docutils literal notranslate"><span class="pre">go.sum</span></code>,
+…) — no lockfile collector exists yet; no trigger defined for when to build one.</p></li>
+<li><p><strong>Ansible collections</strong> — no v2 Ansible integration exists to collect from at all.</p></li>
+<li><p><strong>CVE scanning</strong> — no in-process <code class="docutils literal notranslate"><span class="pre">trivy</span></code>/<code class="docutils literal notranslate"><span class="pre">grype</span></code> integration; use the external-tool
+pattern above instead.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">sbom_*</span></code> policies / blocking a build on severity</strong> — would need the CVE scanner
+integration above plus a scoped policy check; not designed yet.</p></li>
+<li><p><strong>Deployment manifest embedding</strong> — <code class="docutils literal notranslate"><span class="pre">sbom.json</span></code>’s hash isn’t recorded anywhere else
+yet (no v2 deployment manifest feature exists). The file itself is still written and
+verified; nothing currently reads a reference to it.</p></li>
+</ul>
+</section>
+<section id="adding-a-collector-for-a-new-technology">
+<h2>Adding a collector for a new technology<a class="headerlink" href="#adding-a-collector-for-a-new-technology" title="Link to this heading"></a></h2>
+<p>A collector is one small class implementing <code class="docutils literal notranslate"><span class="pre">SbomCollector.collect()</span></code> — no changes to
+<code class="docutils literal notranslate"><span class="pre">write_sbom()</span></code> or any existing collector are ever needed.</p>
+<p><strong>Built-in</strong> (ships with strata): add the class under
+<code class="docutils literal notranslate"><span class="pre">strata/integrations/sbom_collectors/</span></code>, then one entry in <code class="docutils literal notranslate"><span class="pre">registry.py</span></code>’s <code class="docutils literal notranslate"><span class="pre">_KNOWN</span></code> dict:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># strata/integrations/sbom_collectors/npm_collector.py</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">NpmLockfileCollector</span><span class="p">(</span><span class="n">SbomCollector</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">collect</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">graph</span><span class="p">,</span> <span class="n">modules</span><span class="p">,</span> <span class="n">build_path</span><span class="p">):</span>
+        <span class="o">...</span>
+
+<span class="c1"># registry.py</span>
+<span class="n">_KNOWN</span><span class="p">[</span><span class="s2">"npm"</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"strata.integrations.sbom_collectors.npm_collector"</span><span class="p">,</span> <span class="s2">"NpmLockfileCollector"</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><strong>Third-party / private</strong> (an org-specific source strata will never ship): a separate
+installable package registering an entry point — zero changes to this repo:</p>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="c1"># some-other-package's pyproject.toml</span>
+<span class="k">[project.entry-points.</span><span class="s2">"strata.sbom_collectors"</span><span class="k">]</span>
+<span class="n">npm</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"acme_strata_plugins.npm_collector:NpmLockfileCollector"</span>
+</pre></div>
+</div>
+<p>Either way, <code class="docutils literal notranslate"><span class="pre">write_sbom()</span></code> picks it up automatically via
+<code class="docutils literal notranslate"><span class="pre">registry.list_collectors()</span></code> — see
+<span class="xref myst">docs/work/sbom-generation.md</span>
+for the full extensibility design.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="migrate-v1-workspace-topology-provisioning.html" class="btn btn-neutral float-left" title="How To: Migrate a v1 workspace.yaml (Topology/Provisioning Decoupling)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../config/readme.html" class="btn btn-neutral float-right" title="Configuration Files" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Huybrechts XYZ.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

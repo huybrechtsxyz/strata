@@ -1,0 +1,292 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones) &mdash; strata 2.0.0-Alpha8 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=c7b08b93"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)" href="composite-variable-fragments.html" />
+    <link rel="prev" title="How To: Get a TLS Certificate onto an Azure Application Gateway / WAF" href="azure-certificates.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            strata
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../README.html">strata</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GLOSSARY.html">Strata Glossary</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">How-To Guides:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="azure-certificates.html">How To: Get a TLS Certificate onto an Azure Application Gateway / WAF</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#the-short-answer">The short answer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#why-not-a-dedicated-private-vnet-links-external-id-schema">Why not a dedicated <code class="docutils literal notranslate"><span class="pre">private</span></code>/<code class="docutils literal notranslate"><span class="pre">vnet_links</span></code>/<code class="docutils literal notranslate"><span class="pre">external_id</span></code> schema?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#worked-example-1-zone-strata-owns-linked-to-a-vnet">Worked example 1 — zone strata owns, linked to a VNet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#worked-example-2-externally-owned-hub-zone-records-only">Worked example 2 — externally-owned hub zone, records only</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#mapping-this-onto-strata">Mapping this onto strata</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
+<li class="toctree-l1"><a class="reference internal" href="migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sbom-generation.html">How To: Use the SBOM Feature (CycloneDX)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Files:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../config/readme.html">Configuration Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/solution.html">Solution (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">solution</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/configuration.html">Configuration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">configuration</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/provider.html">Provider (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">provider</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/providerconfig.html">ProviderConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">providerconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/resource.html">Resource (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">resource</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/network.html">Network (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">network</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/firewall.html">Firewall (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">firewall</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/dns.html">DNS (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">dns</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/topologyconfig.html">TopologyConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">topologyconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/workspace.html">Workspace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">workspace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/module.html">Module (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">module</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/namespace.html">Namespace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">namespace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/tenant.html">Tenant (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">tenant</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">environment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/deployment.html">Deployment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/README.html">Integrations — How to Configure Each One</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/infisical.html">Infisical (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">infisical</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-keyvault.html">Azure Key Vault (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-keyvault</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-appconfig.html">Azure App Configuration (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-appconfig</span></code>)</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">strata</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/how-to/azure-private-dns-zones.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="how-to-model-azure-private-dns-zones-vnet-links-externally-owned-zones">
+<h1>How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)<a class="headerlink" href="#how-to-model-azure-private-dns-zones-vnet-links-externally-owned-zones" title="Link to this heading"></a></h1>
+<p>You are driving an Azure private DNS Terraform component (e.g. AKS’s private cluster zone, an
+application zone linked to a VNet, or a hub-owned zone a spoke only writes a few records into)
+from strata, and <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">dns</span></code>’s schema has no <code class="docutils literal notranslate"><span class="pre">vnet_id</span></code>/<code class="docutils literal notranslate"><span class="pre">private</span></code>/<code class="docutils literal notranslate"><span class="pre">external_id</span></code>-shaped fields.
+This guide covers why that’s intentional and how to model both patterns today with
+<code class="docutils literal notranslate"><span class="pre">spec.zones[].configuration</span></code> — strata’s provisioner passthrough field — instead of a dedicated
+schema.</p>
+<section id="the-short-answer">
+<h2>The short answer<a class="headerlink" href="#the-short-answer" title="Link to this heading"></a></h2>
+<p><strong><code class="docutils literal notranslate"><span class="pre">spec.configuration</span></code> is not a stopgap — it’s the correct, permanent place for this.</strong> A real
+Azure private-DNS Terraform component’s actual contract (checked directly against a live
+consumer) is just a few named inputs on top of <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">dns</span></code>’s existing <code class="docutils literal notranslate"><span class="pre">records[]</span></code>:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Concept</p></th>
+<th class="head"><p>Real Terraform input shape</p></th>
+<th class="head"><p>Where it goes in strata</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>VNet to link the zone to</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">vnet_id</span></code> (string, one ARM ID)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.zones[].configuration.vnet_id</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Zone created in this subscription</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">local_zone</span> <span class="pre">=</span> <span class="pre">{</span> <span class="pre">name</span> <span class="pre">}</span></code></p></td>
+<td><p>the zone’s own <code class="docutils literal notranslate"><span class="pre">name</span></code> + <code class="docutils literal notranslate"><span class="pre">records[]</span></code> (already modeled)</p></td>
+</tr>
+<tr class="row-even"><td><p>Zone owned elsewhere, records written into it</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">hub_zone</span> <span class="pre">=</span> <span class="pre">{</span> <span class="pre">resource_id</span> <span class="pre">}</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.zones[].configuration.hub_zone.resource_id</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>No new top-level fields needed, and nothing is lost by using <code class="docutils literal notranslate"><span class="pre">configuration</span></code> instead:
+<code class="docutils literal notranslate"><span class="pre">${var:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${secret:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${feature:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${output:...}</span></code> tokens inside it resolve exactly the same
+way they would in a dedicated field — <code class="docutils literal notranslate"><span class="pre">resolve_value_tokens_in_mapping()</span></code> and the
+<code class="docutils literal notranslate"><span class="pre">${output:...}</span></code>-ownership safety check (<code class="docutils literal notranslate"><span class="pre">_contains_output_token()</span></code>) both recurse generically
+into every nested <code class="docutils literal notranslate"><span class="pre">dict</span></code>/<code class="docutils literal notranslate"><span class="pre">list</span></code>, not just known top-level keys.</p>
+</section>
+<section id="why-not-a-dedicated-private-vnet-links-external-id-schema">
+<h2>Why not a dedicated <code class="docutils literal notranslate"><span class="pre">private</span></code>/<code class="docutils literal notranslate"><span class="pre">vnet_links</span></code>/<code class="docutils literal notranslate"><span class="pre">external_id</span></code> schema?<a class="headerlink" href="#why-not-a-dedicated-private-vnet-links-external-id-schema" title="Link to this heading"></a></h2>
+<p>Checked against the real, named consumer’s Terraform component before deciding: its actual
+<code class="docutils literal notranslate"><span class="pre">variables.tf</span></code> takes a single <code class="docutils literal notranslate"><span class="pre">vnet_id</span></code> string and a <code class="docutils literal notranslate"><span class="pre">hub_zone</span> <span class="pre">=</span> <span class="pre">{</span> <span class="pre">resource_id</span> <span class="pre">}</span></code> object — not
+the generalized <code class="docutils literal notranslate"><span class="pre">vnet_links:</span> <span class="pre">list[str]</span></code>/<code class="docutils literal notranslate"><span class="pre">external_id:</span> <span class="pre">str</span></code> shape a first pass at this schema
+proposed. Minting fields that don’t match any real module’s actual contract would mean
+<em>more</em> translation work for whoever owns that Terraform module, not less — they’d have to map
+strata’s reshaped names back onto their own <code class="docutils literal notranslate"><span class="pre">variables.tf</span></code> by hand, in both directions.</p>
+<p>Every other “promote this to a real schema field” decision in strata’s model layer (see
+<span class="xref myst">ADR-0006</span> on <code class="docutils literal notranslate"><span class="pre">output_key</span></code>, or the
+<code class="docutils literal notranslate"><span class="pre">chart_repository</span></code> → named <code class="docutils literal notranslate"><span class="pre">remotes</span></code> consolidation) was made only after finding <strong>two or more</strong>
+independently-written real consumers converging on the same shape. This has exactly one real
+consumer so far — the bar isn’t met yet. Revisit if a second, independently-authored Azure
+private-DNS Terraform component needs the same shape.</p>
+</section>
+<section id="worked-example-1-zone-strata-owns-linked-to-a-vnet">
+<h2>Worked example 1 — zone strata owns, linked to a VNet<a class="headerlink" href="#worked-example-1-zone-strata-owns-linked-to-a-vnet" title="Link to this heading"></a></h2>
+<p>A zone created and fully owned by this deployment (e.g. an application domain for an AKS
+cluster), linked to the spoke’s own VNet:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dns</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spoke-app-dns</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">zones</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">apps.internal.example.com</span>
+<span class="w">      </span><span class="nt">ttl</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3600</span>
+<span class="w">      </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">vnet_id</span><span class="p">:</span><span class="w"> </span><span class="s">"${output:vnet.vnet_id}"</span>
+<span class="w">      </span><span class="nt">records</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">grafana</span>
+<span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">A</span>
+<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">"${var:APP_LB_IP}"</span>
+<span class="w">      </span><span class="nt">default_tags</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">environment</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prd</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">vnet_id</span></code> here is a <code class="docutils literal notranslate"><span class="pre">${output:...}</span></code> token because, in this mapping, the VNet is created by a
+<em>different</em> strata execution step (<code class="docutils literal notranslate"><span class="pre">vnet</span></code>) than the one that applies this <code class="docutils literal notranslate"><span class="pre">dns</span></code> document —
+<code class="docutils literal notranslate"><span class="pre">dns</span></code>’s step must <code class="docutils literal notranslate"><span class="pre">depends_on:</span> <span class="pre">[vnet]</span></code> and list this document under its own <code class="docutils literal notranslate"><span class="pre">targets</span></code> so the
+existing ownership-claiming check (gap #12) accepts the token. If your workspace instead
+provisions the VNet and the DNS zone in the <em>same</em> Terraform root/step (as the real reference
+consumer actually does — <code class="docutils literal notranslate"><span class="pre">module.vnet</span></code> and <code class="docutils literal notranslate"><span class="pre">module.dns</span></code> wired together in one <code class="docutils literal notranslate"><span class="pre">main.tf</span></code>), there
+is no cross-step reference at all: <code class="docutils literal notranslate"><span class="pre">vnet_id</span></code> is pure intra-root HCL the Terraform module itself
+resolves, and <code class="docutils literal notranslate"><span class="pre">configuration</span></code> doesn’t need to carry it — don’t invent a token where the real
+module has none.</p>
+</section>
+<section id="worked-example-2-externally-owned-hub-zone-records-only">
+<h2>Worked example 2 — externally-owned hub zone, records only<a class="headerlink" href="#worked-example-2-externally-owned-hub-zone-records-only" title="Link to this heading"></a></h2>
+<p>A zone owned by a separate, centrally-managed hub subscription. This deployment doesn’t create
+it — it only links its own VNet to it and writes a couple of its own records:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dns</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">spoke-hub-dns</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">zones</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hub.internal.example.com</span><span class="w">   </span><span class="c1"># documentation only — nothing is created with this name</span>
+<span class="w">      </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">vnet_id</span><span class="p">:</span><span class="w"> </span><span class="s">"${var:SPOKE_VNET_ID}"</span>
+<span class="w">        </span><span class="nt">hub_zone</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">resource_id</span><span class="p">:</span><span class="w"> </span><span class="s">"${secret:HUB_DNS_ZONE_RESOURCE_ID}"</span>
+<span class="w">      </span><span class="nt">records</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">grafana</span>
+<span class="w">          </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">A</span>
+<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">"${var:APP_LB_IP}"</span>
+<span class="w">      </span><span class="c1"># No default_tags/custom_tags — a zone this deployment doesn't own has no cloud-resource</span>
+<span class="w">      </span><span class="c1"># identity here to tag. ttl is still fine to set: it's a default for the records THIS</span>
+<span class="w">      </span><span class="c1"># document writes, not a property of the zone resource itself.</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">vnet_id</span></code>/<code class="docutils literal notranslate"><span class="pre">hub_zone.resource_id</span></code> are <code class="docutils literal notranslate"><span class="pre">${var:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${secret:}</span></code> tokens here, not <code class="docutils literal notranslate"><span class="pre">${output:...}</span></code> —
+the hub’s VNet and zone are long-lived infrastructure created entirely outside this workspace’s
+own execution graph, so from strata’s point of view they’re just already-known constants, the
+same as <code class="docutils literal notranslate"><span class="pre">environment_info.subscription_id</span></code> already is. A Value token is opaque: it never needs
+to understand that the string happens to be an ARM resource ID.</p>
+</section>
+<section id="mapping-this-onto-strata">
+<h2>Mapping this onto strata<a class="headerlink" href="#mapping-this-onto-strata" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.zones[].configuration</span></code> — raw, provisioner-specific passthrough (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">dns</span></code>’s own
+schema reference: <a class="reference internal" href="../config/dns.html"><span class="std std-doc">config/dns.md</span></a>). Not validated by strata beyond
+Value-token syntax; the Terraform module’s own <code class="docutils literal notranslate"><span class="pre">variables.tf</span></code>/<code class="docutils literal notranslate"><span class="pre">precondition</span></code> blocks are the
+real contract and the real guardrails.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">${output:step.key}</span></code> vs. <code class="docutils literal notranslate"><span class="pre">${var:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${secret:}</span></code> — use <code class="docutils literal notranslate"><span class="pre">${output:...}</span></code> only when the value is
+produced by a <em>different strata execution step</em> in the <em>same</em> workspace that this document’s
+own step <code class="docutils literal notranslate"><span class="pre">depends_on</span></code>; use <code class="docutils literal notranslate"><span class="pre">${var:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${secret:}</span></code> for anything externally-known (hub
+infrastructure, values supplied via environment/secret stores). See
+<span class="xref myst">value-token-resolution.md</span> for the full token model.</p></li>
+<li><p>Nothing about this pattern is Azure-specific at the strata-schema level — the same
+<code class="docutils literal notranslate"><span class="pre">configuration</span></code> passthrough convention applies equally to a Cloudflare/Route53 provider’s own
+zone-association concepts, whatever shape those turn out to need.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="azure-certificates.html" class="btn btn-neutral float-left" title="How To: Get a TLS Certificate onto an Azure Application Gateway / WAF" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="composite-variable-fragments.html" class="btn btn-neutral float-right" title="How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Huybrechts XYZ.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
