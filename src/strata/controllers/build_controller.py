@@ -2,7 +2,7 @@
 """`strata build run`'s orchestrator (ADR-0022) — renders a workspace's
 provisioners into on-disk artifacts, never executes anything.
 
-Three small, independent helpers plus the loop itself:
+Four small, independent helpers plus the loop itself:
 
 - `build_resolved_workspace_graph()` (ADR-0022 D1a's assembly step) — the
   only place `ResolvedWorkspaceGraph` gets built from a real
@@ -19,6 +19,11 @@ Three small, independent helpers plus the loop itself:
 - `find_provisioner()` — `WorkspaceSpecModel.validate_execution()` already
   guarantees `step.provisioner` names a real entry in `spec.provisioners`;
   this is a lookup, not a check.
+- `materialise_provisioner_sources()` (ADR-0029 — docs/work/
+  provisioner-source-dependencies.md Phase 4) — recursively syncs a
+  provisioner's own `depends_on` chain before the step loop materialises
+  the step's own provisioner, so a provisioner named only in another
+  provisioner's `depends_on` (never in `execution`) still gets synced.
 
 `build_run()` only calls `prepare()` — never `plan`/`deploy`/`destroy`
 (ADR-0022 D4: build renders, deploy executes).
@@ -66,6 +71,7 @@ from strata.models.version_model import VersionModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
 from strata.services.version_service import VersionService
+from strata.utils.dependency_order import topological_order
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.env_file import load_env_file
 from strata.utils.errors import SystemError, UsageError
@@ -215,23 +221,20 @@ def ordered_by_depends_on(steps: list[ProvisioningStepModel]) -> list[Provisioni
 
     Assumes `steps` already passed `provisioning_model.validate_provisioning_steps()`
     (acyclic, unique names, `depends_on` referencing real steps) — does not
-    re-validate; a cycle here would hang rather than raise, which is why
-    this is never called on unvalidated input (`WorkspaceSpecModel`'s own
-    `validate_execution()` already guarantees it for `spec.execution`).
+    re-validate existence. A cycle here now raises (via `topological_order()`,
+    docs/design/provisioner-source-dependencies.md — the same
+    Kahn's-algorithm shape `validate_provisioning_steps()` already uses to
+    *detect* a cycle, here used to keep the real order instead) rather than
+    silently dropping the cyclic steps from the result, which was this
+    function's old behaviour — this is never called on unvalidated input in
+    the first place (`WorkspaceSpecModel`'s own `validate_execution()`
+    already guarantees it for `spec.execution`), so the change is not
+    observable on any real call site.
     """
     by_name = {step.name: step for step in steps}
-    in_degree = {step.name: len(step.depends_on or []) for step in steps}
-    queue = [step.name for step in steps if in_degree[step.name] == 0]
-    ordered: list[ProvisioningStepModel] = []
-    while queue:
-        current = queue.pop(0)
-        ordered.append(by_name[current])
-        for step in steps:
-            if current in (step.depends_on or []):
-                in_degree[step.name] -= 1
-                if in_degree[step.name] == 0:
-                    queue.append(step.name)
-    return ordered
+    depends_on = {step.name: step.depends_on or [] for step in steps}
+    order = topological_order(list(by_name), depends_on, label="execution steps")
+    return [by_name[name] for name in order]
 
 
 def find_provisioner(workspace: WorkspaceModel, name: str) -> ProvisionerModel:
@@ -247,6 +250,81 @@ def find_provisioner(workspace: WorkspaceModel, name: str) -> ProvisionerModel:
         if provisioner.name == name:
             return provisioner
     raise UsageError(f"Provisioner '{name}' is not declared in workspace '{workspace.meta.name}'.")
+
+
+def materialise_provisioner_sources(
+    context: SolutionContext,
+    build_path: Path,
+    remotes: dict[str, SolutionRemoteModel],
+    workspace: WorkspaceModel,
+    provisioner: ProvisionerModel,
+    materialised: dict[str, Path | None],
+    *,
+    dry_run: bool = False,
+    on_step: Callable[[str], None] | None = None,
+) -> Path | None:
+    """Recursively sync `provisioner.depends_on`'s own sources first, then
+    `provisioner`'s own (ADR-0029 — docs/design/provisioner-source-dependencies.md).
+    This is the actual fix for the reported bug: a provisioner
+    named only in another provisioner's `depends_on`, never in `execution`,
+    used to never be passed to `sync_source()` at all.
+
+    Plain reachability DFS, not a full topological sort — sibling sources
+    are independent file copies into separate directories with no
+    cross-reads at sync time, so the *order* two unrelated dependencies are
+    copied in never matters, only whether each gets synced at all does
+    (contrast `ordered_by_depends_on()` above, which orders *execution*
+    steps, where real ordering does matter). `WorkspaceSpecModel.
+    validate_provisioner_depends_on()` already guarantees this graph is
+    acyclic, so this never needs to detect a cycle itself.
+
+    `materialised` is shared across the whole `build_run()` invocation
+    (seeded once before the step loop) so a dependency provisioner named by
+    more than one consumer (the issue's own `iac_components`/
+    `iac_primitives` example, each depended on by the same or different
+    step provisioners) is synced exactly once. Keyed by provisioner name,
+    not by path — a provisioner with no `source` (a sync/GitOps dependency,
+    an unusual but not rejected shape, see this doc's own Open Questions)
+    maps to `None` and is treated as already handled on a repeat visit.
+
+    Returns the path `provisioner`'s source was (or, under `dry_run`, would
+    be) materialised to — `None` for a sync/GitOps provisioner with no
+    `source` to copy. Only called for a provisioner reached via some other
+    provisioner's `depends_on`; the step loop's own per-step materialisation
+    (handling the step-name-keyed GitOps destination convention) is
+    unchanged and separate — a provisioner that happens to be both a
+    `depends_on` target and the subject of its own execution step is
+    synced twice (once here, once by the step loop), which is harmless
+    (`sync_source()` is an idempotent copy) but not deduplicated against
+    the step loop's own call.
+    """
+    if provisioner.name in materialised:
+        return materialised[provisioner.name]
+    for dep_name in provisioner.depends_on or []:
+        materialise_provisioner_sources(
+            context,
+            build_path,
+            remotes,
+            workspace,
+            find_provisioner(workspace, dep_name),
+            materialised,
+            dry_run=dry_run,
+            on_step=on_step,
+        )
+    source_path: Path | None = None
+    if provisioner.source is not None:
+        if dry_run:
+            if on_step:
+                on_step(
+                    f"would materialise provisioner '{provisioner.name}' source "
+                    f"(dependency, {describe_source(provisioner.source)})"
+                )
+        else:
+            source_path = sync_source(context.root, build_path, provisioner.source, remotes)
+            if on_step:
+                on_step(f"materialised provisioner '{provisioner.name}' source at {source_path} (dependency)")
+    materialised[provisioner.name] = source_path
+    return source_path
 
 
 def build_run(
@@ -407,8 +485,20 @@ def build_run(
     )
     remotes = apply_remote_version_pins(remotes, version)
 
+    materialised: dict[str, Path | None] = {}
     for step in ordered_by_depends_on(workspace.spec.execution or []):
         provisioner = find_provisioner(workspace, step.provisioner)
+        for dep_name in provisioner.depends_on or []:
+            materialise_provisioner_sources(
+                context,
+                build_path,
+                remotes,
+                workspace,
+                find_provisioner(workspace, dep_name),
+                materialised,
+                dry_run=dry_run,
+                on_step=on_step,
+            )
         integration = resolve_integration(index, provisioner)
         integration_type = type(integration).__name__
 

@@ -16,17 +16,21 @@ Work/Implementation Plan for the specifics; they are not duplicated here.
 
 ## Current Status
 
-| Layer | ADR | Status |
-| --- | --- | --- |
-| Integration layer (capability ABCs, registry, Terraform/Compose/Helm classes) | [ADR-0021](../decisions/0021-integration-layer.md) | **Implemented** — Phases 1-6 all done |
-| `strata build run` orchestration (the loop calling `prepare()`/`prepare_namespace()` per provisioner/namespace) | [ADR-0022](../decisions/0022-strata-build-run.md) | Designed, not built — `prepare()`'s signature and `ResolvedWorkspaceGraph` (D1a) exist as part of ADR-0023 Phase 1's work; the orchestrator loop (`build_controller.py`), `resolve_integration()`, `sync_source()`, and the workload pipeline (D5-D7) are not built |
-| Build output rendering (default Terraform projection, `OutputProfileModel` rejection, the Jinja2 escape hatch) | [ADR-0023](../decisions/0023-build-output-rendering.md) | Partially implemented — Phase 1's `dns`/`networks` categories done; `modules` (2b) skipped; `tenant` (2c) and Phases 3-5 (token substitution, Jinja2 escape hatch, Compose/Helm rendering) not started |
+| Layer                                                                                                           | ADR                                                     | Status                                                                                                                                                                                                                                                              |
+| --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Integration layer (capability ABCs, registry, Terraform/Compose/Helm classes)                                   | [ADR-0021](../decisions/0021-integration-layer.md)      | **Implemented** — Phases 1-6 all done                                                                                                                                                                                                                               |
+| `strata build run` orchestration (the loop calling `prepare()`/`prepare_namespace()` per provisioner/namespace) | [ADR-0022](../decisions/0022-strata-build-run.md)       | Designed, not built — `prepare()`'s signature and `ResolvedWorkspaceGraph` (D1a) exist as part of ADR-0023 Phase 1's work; the orchestrator loop (`build_controller.py`), `resolve_integration()`, `sync_source()`, and the workload pipeline (D5-D7) are not built |
+| Build output rendering (default Terraform projection, `OutputProfileModel` rejection, the Jinja2 escape hatch)  | [ADR-0023](../decisions/0023-build-output-rendering.md) | Partially implemented — Phase 1's `dns`/`networks` categories done; `modules` (2b) skipped; `tenant` (2c) and Phases 3-5 (token substitution, Jinja2 escape hatch, Compose/Helm rendering) not started                                                              |
 
 ## Related Decisions
 
 - [ADR-0021](../decisions/0021-integration-layer.md) — Integration layer
 - [ADR-0022](../decisions/0022-strata-build-run.md) — build run orchestration
 - [ADR-0023](../decisions/0023-build-output-rendering.md) — output rendering
+- [ADR-0029](../decisions/0029-provisioner-source-dependencies.md) —
+  `ProvisionerModel.depends_on` (built 2026-10-06) — materialises a
+  provisioner's source even when nothing in `execution` ever names it; see
+  [provisioner-source-dependencies.md](../design/provisioner-source-dependencies.md)
 
 ## Remaining Work / Open Questions
 
@@ -51,6 +55,10 @@ not duplicated here:
 
 ## Changelog
 
+- 2026-10-06: Added [ADR-0029](../decisions/0029-provisioner-source-dependencies.md)
+  to Related Decisions — a new capability (`ProvisionerModel.depends_on`),
+  not a fix to anything tracked in this dashboard's own (stale) status
+  table above.
 - 2026-09-25: Added a pointer to [build-command.md](build-command.md)'s new
   "v1 parity gaps found 2026-09-25" section, so the items no ADR covers are
   reachable from this dashboard too.

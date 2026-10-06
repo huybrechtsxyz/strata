@@ -81,6 +81,17 @@ def test_ordered_by_depends_on_handles_a_diamond():
     assert ordered.index("a") < ordered.index("c") < ordered.index("d")
 
 
+def test_ordered_by_depends_on_raises_on_a_cycle():
+    """Regression test for the Phase 1 refactor (docs/work/
+    provisioner-source-dependencies.md): this used to silently drop cyclic
+    steps from the result instead of raising — confirm the new
+    `topological_order()`-backed implementation actually raises instead.
+    """
+    steps = [_step("a", depends_on=["b"]), _step("b", depends_on=["a"])]
+    with pytest.raises(ValueError, match="Circular dependency in execution steps"):
+        ordered_by_depends_on(steps)
+
+
 # ---------------------------------------------------------------------------
 # find_provisioner()
 # ---------------------------------------------------------------------------
@@ -267,6 +278,203 @@ def test_build_run_materialises_source_and_writes_terraform_output(tmp_path: Pat
     assert (materialised / "workspace.auto.tfvars.json").exists()
     assert (materialised / "providers.auto.tfvars.json").exists()
     assert (materialised / "resx_server.auto.tfvars.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# materialise_provisioner_sources() (ADR-0029) — a provisioner named only in
+# another provisioner's depends_on, never in execution, still gets synced.
+# ---------------------------------------------------------------------------
+
+
+def _terraform_solution_with_dependency(tmp_path: Path) -> Path:
+    """Shaped exactly like the reported issue: `tf_main` depends on
+    `iac_components`/`iac_primitives`, neither of which has an execution
+    step of its own — they're reachable only via `tf_main`'s `depends_on`."""
+    root = _terraform_solution(tmp_path)
+    _write(root, "components/main.tf", "# shared components module\n")
+    _write(root, "primitives/main.tf", "# shared primitives module\n")
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n"
+        "    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "      depends_on:\n        - iac_components\n        - iac_primitives\n"
+        "    - name: iac_components\n      tool: terraform\n      source:\n        source_path: components\n"
+        "    - name: iac_primitives\n      tool: terraform\n      source:\n        source_path: primitives\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    return root
+
+
+def _terraform_solution_with_shared_dependency(tmp_path: Path) -> Path:
+    """Two deployable provisioners (`tf_a`/`tf_b`) both depend on the same
+    staging provisioner (`iac_components`) — it must be synced exactly once
+    per `build_run()` invocation, not once per consumer."""
+    root = _solution(tmp_path)
+    _write(root, "infra_a/main.tf", "# root module a\n")
+    _write(root, "infra_b/main.tf", "# root module b\n")
+    _write(root, "components/main.tf", "# shared components module\n")
+    _write(
+        root,
+        "provider.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
+        "  properties:\n    type: local\n    region: local\n",
+    )
+    _write(
+        root,
+        "resource.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
+        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  default_tags:\n    managed-by: strata\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n"
+        "    - name: tf_a\n      tool: terraform\n      source:\n        source_path: infra_a\n"
+        "      depends_on:\n        - iac_components\n"
+        "    - name: tf_b\n      tool: terraform\n      source:\n        source_path: infra_b\n"
+        "      depends_on:\n        - iac_components\n"
+        "    - name: iac_components\n      tool: terraform\n      source:\n        source_path: components\n"
+        "  execution:\n"
+        "    - name: apply_a\n      provisioner: tf_a\n      targets:\n        - r1\n"
+        "    - name: apply_b\n      provisioner: tf_b\n      targets:\n        - r2\n"
+        "  resources:\n    - name: r1\n      resource: r1\n    - name: r2\n      resource: r1\n",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec: {}\n",
+    )
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        "  workspace: main\n  environments:\n    - prd\n",
+    )
+    return root
+
+
+def _terraform_solution_with_transitive_dependency(tmp_path: Path) -> Path:
+    """A chain: `tf_main` depends on `iac_components`, which itself depends
+    on `iac_primitives` — neither dependency has an execution step."""
+    root = _terraform_solution(tmp_path)
+    _write(root, "components/main.tf", "# shared components module\n")
+    _write(root, "primitives/main.tf", "# shared primitives module\n")
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n"
+        "    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "      depends_on:\n        - iac_components\n"
+        "    - name: iac_components\n      tool: terraform\n      source:\n        source_path: components\n"
+        "      depends_on:\n        - iac_primitives\n"
+        "    - name: iac_primitives\n      tool: terraform\n      source:\n        source_path: primitives\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    return root
+
+
+def test_build_run_materialises_a_dependency_provisioner_with_no_execution_step(tmp_path: Path):
+    root = _terraform_solution_with_dependency(tmp_path)
+    build_path = tmp_path / "build"
+
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok
+    assert (build_path / "infra" / "main.tf").exists()
+    assert (build_path / "components" / "main.tf").exists()
+    assert (build_path / "primitives" / "main.tf").exists()
+
+
+def test_build_run_materialises_a_transitive_dependency_chain(tmp_path: Path):
+    root = _terraform_solution_with_transitive_dependency(tmp_path)
+    build_path = tmp_path / "build"
+
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok
+    assert (build_path / "infra" / "main.tf").exists()
+    assert (build_path / "components" / "main.tf").exists()
+    assert (build_path / "primitives" / "main.tf").exists()
+
+
+def test_build_run_materialises_a_shared_dependency_only_once(tmp_path: Path, monkeypatch):
+    root = _terraform_solution_with_shared_dependency(tmp_path)
+    build_path = tmp_path / "build"
+
+    from strata.controllers import build_controller as build_controller_module
+
+    real_sync_source = build_controller_module.sync_source
+    calls: list[str] = []
+
+    def _counting_sync_source(root_, build_path_, source, remotes):
+        calls.append(source.source_path)
+        return real_sync_source(root_, build_path_, source, remotes)
+
+    monkeypatch.setattr(build_controller_module, "sync_source", _counting_sync_source)
+
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok
+    assert calls.count("components") == 1
+    assert calls.count("infra_a") == 1
+    assert calls.count("infra_b") == 1
+
+
+def test_build_run_dry_run_materialises_a_shared_dependency_only_once(tmp_path: Path):
+    """Same dedup guarantee as the real-run version above, under --dry-run -
+    memoisation must short-circuit on the second visit even though no real
+    sync_source() call (and thus no 'already materialised' path) happens."""
+    root = _terraform_solution_with_shared_dependency(tmp_path)
+    build_path = tmp_path / "build"
+    steps: list[str] = []
+
+    build_run(_context(root), "app", build_path, dry_run=True, on_step=steps.append)
+
+    dependency_messages = [s for s in steps if "provisioner 'iac_components'" in s]
+    assert len(dependency_messages) == 1
+
+
+def test_build_run_dry_run_reports_dependency_materialisation(tmp_path: Path):
+    root = _terraform_solution_with_dependency(tmp_path)
+    build_path = tmp_path / "build"
+    steps: list[str] = []
+
+    build_run(_context(root), "app", build_path, dry_run=True, on_step=steps.append)
+
+    assert any("would materialise provisioner 'iac_components' source (dependency," in s for s in steps)
+    assert any("would materialise provisioner 'iac_primitives' source (dependency," in s for s in steps)
+    assert not build_path.exists()
+
+
+def test_build_run_never_resolves_integration_for_a_dependency_only_provisioner(tmp_path: Path, monkeypatch):
+    root = _terraform_solution_with_dependency(tmp_path)
+    build_path = tmp_path / "build"
+
+    from strata.controllers import build_controller as build_controller_module
+
+    real_resolve_integration = build_controller_module.resolve_integration
+    resolved_for: list[str] = []
+
+    def _recording_resolve_integration(index, provisioner):
+        resolved_for.append(provisioner.name)
+        return real_resolve_integration(index, provisioner)
+
+    monkeypatch.setattr(build_controller_module, "resolve_integration", _recording_resolve_integration)
+
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok
+    assert resolved_for == ["tf_main"]  # iac_components/iac_primitives never go through resolve_integration()
 
 
 # ---------------------------------------------------------------------------

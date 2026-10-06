@@ -6,7 +6,7 @@
   [workload-pipeline.md](workload-pipeline.md)), stale-output cleaning
   (`--clean`/`--no-clean`), and `--dry-run` with shared step-by-step
   progress reporting on every run. Remaining parity-gap items: see below.
-- Last updated: 2026-09-25
+- Last updated: 2026-10-06
 
 ## Overview
 
@@ -49,6 +49,9 @@ build_run(context, deployment_name, build_path, *, clean=True, dry_run=False, on
   ├─ write_resolved_manifest(build_path, graph)   # Q8 — build_path/resolved.yaml, skipped under --dry-run
   └─ for step in ordered_by_depends_on(workspace.spec.execution):  # build_controller.py, Kahn's-algorithm order
        ├─ provisioner = find_provisioner(workspace, step.provisioner)
+       ├─ for dep_name in provisioner.depends_on: materialise_provisioner_sources(..., find_provisioner(workspace, dep_name), materialised, ...)
+                                                                 # ADR-0029/docs/design/provisioner-source-dependencies.md — syncs a
+                                                                 # dependency provisioner's source even though it has no execution step
        ├─ integration = resolve_integration(index, provisioner)   # always resolved for real, even under --dry-run
        ├─ if dry_run: on_step("would materialise/render ..."); continue
        ├─ source_path = sync_source(context.root, build_path, provisioner.source, remotes)  # skipped for sync/GitOps provisioners (no .source)
@@ -84,6 +87,7 @@ variant of the provisioner loop above.
 | `sync_source()` (D3, including the sibling-provisioner relative-path gap)                                               | `strata/controllers/source_sync.py`                                        | Built — mirrors each source's own `source_path` as its build-directory destination (not the step name), which is what makes sibling relative composition resolve correctly with no cross-provisioner awareness needed. Chart-based sources explicitly out of scope (Helm's own pull mechanism, not a file copy).        |
 | `build_resolved_workspace_graph()` (D1a's assembly step)                                                                | `strata/controllers/build_controller.py`                                   | Built — walks all seven of a workspace's name-lists (providers/topology/resources/namespaces/firewalls/dns_zones/networks) via the index, skipping a name that does not resolve (defensive; Phase 1's `validate_references` already guarantees these exist).                                                            |
 | `ordered_by_depends_on()`                                                                                               | `strata/controllers/build_controller.py`                                   | Built — Kahn's-algorithm topological sort, same shape `provisioning_model.validate_provisioning_steps()` already uses to *detect* a cycle, but returning the order instead of discarding it. Assumes already-validated input (acyclic) — `WorkspaceSpecModel.validate_execution()` guarantees this for real workspaces. |
+| `materialise_provisioner_sources()` (ADR-0029)                                                                          | `strata/controllers/build_controller.py`                                   | Built — recursively syncs a provisioner's `depends_on` chain before the step loop materialises the step's own provisioner, so a provisioner named only in another provisioner's `depends_on` (never in `execution`) still gets synced — see [provisioner-source-dependencies.md](provisioner-source-dependencies.md).   |
 | `find_provisioner()`                                                                                                    | `strata/controllers/build_controller.py`                                   | Built — trivial lookup; `WorkspaceSpecModel.validate_execution()` already guarantees the name exists.                                                                                                                                                                                                                   |
 | `build_value_references()`/`merge_workspace_environment_deployment_properties()` (replaces the old `build_time_keys()`) | `strata/controllers/value_controller.py`                                   | Built — see [build-time-value-categories.md](build-time-value-categories.md) Q1/Q3/Q4/Q6 for the full design; reuses `resolve_deployment()`/`reachable_environments()` (now public) so it can never disagree with `resolve_values()` about which environments are in scope.                                             |
 | Build orchestrator (`build_controller.build_run()`, the loop itself)                                                    | `strata/controllers/build_controller.py`                                   | Built and end-to-end tested — a real workspace/provider/resource/deployment fixture materialises its Terraform source and writes real `.auto.tfvars.json` output (`tests/strata/controllers/test_build_controller.py`). Also calls the workload pipeline (below) for every namespace on the resolved graph.             |
@@ -118,6 +122,7 @@ convention:
 - [build-time-value-categories.md](build-time-value-categories.md) — design in progress for the `features`/`variables`/`properties`/`custom` gap in `default_output()` table above
 - [remotes.md](remotes.md) — `sync_source()`'s own prerequisite (remote-to-filesystem-path resolution, done for `local`/`git`)
 - [build-pipeline-status.md](build-pipeline-status.md) — the cross-ADR phase dashboard this doc's "what's built" table refines with real code references
+- [ADR-0029](../decisions/0029-provisioner-source-dependencies.md) / [provisioner-source-dependencies.md](provisioner-source-dependencies.md) — `ProvisionerModel.depends_on`, materialising a provisioner's source even when nothing in `execution` ever names it
 
 ## Remaining Work / Open Questions
 
@@ -144,6 +149,13 @@ instead. Don't force `modules` just to have something to build — wait for
 either `deploy run` to start, or real evidence of an actual
 topology-component-level `modules:` attachment (as opposed to a container
 image on an external provisioner) to appear.
+
+**New capability built 2026-10-06, not a gap found in this review:**
+[ADR-0029](../decisions/0029-provisioner-source-dependencies.md)/
+[provisioner-source-dependencies.md](provisioner-source-dependencies.md) —
+`ProvisionerModel.depends_on`, letting a provisioner's source be
+materialised even when nothing in `execution` ever names it (a real IaC
+team's reported gap, not a pre-existing v1 parity item).
 
 ### v1 parity gaps found 2026-09-25 — not recorded in any ADR
 

@@ -30,6 +30,7 @@ from strata.models.common_models import (
 )
 from strata.models.reference_fields import References, RemoteReference
 from strata.utils.builtin_types import SYNC_PROVISIONER_TYPES, TERRAFORM_COMPATIBLE_TYPES, ProvisionerType
+from strata.utils.dependency_order import topological_order
 from strata.utils.names import check_unique_names
 from strata.utils.path_safety import validate_relative_path
 
@@ -172,6 +173,15 @@ class ProvisionerModel(PlatformBaseModel):
         description="Jinja2 full-file-template escape hatch, replacing the default output projection. "
         "Valid for any 'tool' (ADR-0023 D3) — build run only validates it, see OutputModel.",
     )
+    depends_on: list[PlatformName] | None = Field(
+        None,
+        description="Names of other Provisioners in this same workspace whose 'source' must be materialised "
+        "before this one's, independent of 'execution'/'targets' (ADR-0029). A dependency provisioner named "
+        "here does not need its own execution step — it is synced purely to make its files available on disk "
+        "for this provisioner's own source code to compose (e.g. a relative Terraform module path) at build "
+        "time. Never implies an execution order or deploy-time relationship by itself — see "
+        "ProvisioningStepModel.depends_on for that, which names steps, not provisioners.",
+    )
 
     @model_validator(mode="after")
     def validate_source_required_unless_sync(self) -> "ProvisionerModel":
@@ -261,6 +271,18 @@ class ProvisionerModel(PlatformBaseModel):
                 raise ValueError(f"Provisioner '{self.name}': 'gitops' is only valid for tool 'argocd' or 'flux'.")
         return self
 
+    @model_validator(mode="after")
+    def validate_no_self_dependency(self) -> "ProvisionerModel":
+        """A provisioner cannot depend on itself (ADR-0029).
+
+        Mirrors `ProvisioningStepModel.validate_no_self_dependency()` below —
+        same rule, same reasoning, different name-space (provisioner names,
+        not step names).
+        """
+        if self.depends_on and self.name in self.depends_on:
+            raise ValueError(f"Provisioner '{self.name}' cannot depend on itself.")
+        return self
+
 
 class ProvisioningStepModel(PlatformBaseModel):
     """One recipe entry: run a Provisioner against a set of targets, after other steps.
@@ -343,20 +365,13 @@ def validate_provisioning_steps(steps: list[ProvisioningStepModel]) -> None:
         raise ValueError("; ".join(errors))
 
     graph: dict[str, set[str]] = {s.name: set(s.depends_on or []) for s in steps}
-    reverse_in = {node: len(deps) for node, deps in graph.items()}
-    queue = [n for n, d in reverse_in.items() if d == 0]
-    visited = 0
-    while queue:
-        current = queue.pop(0)
-        visited += 1
-        for node, deps in graph.items():
-            if current in deps:
-                reverse_in[node] -= 1
-                if reverse_in[node] == 0:
-                    queue.append(node)
-    if visited < len(graph):
-        cycle_nodes = sorted(n for n, d in reverse_in.items() if d > 0)
-        raise ValueError(f"Circular dependency in provisioning step depends_on: {' -> '.join(cycle_nodes)}")
+    # Order discarded — only used here to detect a cycle. `topological_order()`
+    # (docs/design/provisioner-source-dependencies.md) is the same
+    # Kahn's-algorithm shape this function used to run inline; build_controller.
+    # ordered_by_depends_on() is the other caller, which keeps the real order.
+    topological_order(
+        list(graph), {name: list(deps) for name, deps in graph.items()}, label="provisioning step depends_on"
+    )
 
     def reachable_from(start: str) -> set[str]:
         seen: set[str] = set()

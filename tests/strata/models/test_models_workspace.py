@@ -272,6 +272,81 @@ def test_workspace_rejects_unknown_fields():
 
 
 # ---------------------------------------------------------------------------
+# Provisioner depends_on (ADR-0029) — materialising a source with no
+# execution step; cross-document (sibling-provisioner) validation.
+# ---------------------------------------------------------------------------
+
+
+def _provisioner(name: str, **overrides) -> dict:
+    data = {"name": name, "tool": "terraform", "source": {"remote": "infra-repo", "source_path": f"terraform/{name}"}}
+    data.update(overrides)
+    return data
+
+
+def test_workspace_accepts_provisioner_depends_on_with_real_siblings():
+    """A provisioner's depends_on resolving to real sibling provisioners is accepted."""
+    data = _minimal_workspace()
+    data["spec"]["provisioners"] = [
+        _provisioner("spoke_infra", depends_on=["iac_components", "iac_primitives"]),
+        _provisioner("iac_components"),
+        _provisioner("iac_primitives"),
+    ]
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.provisioners[0].depends_on == ["iac_components", "iac_primitives"]
+
+
+def test_workspace_accepts_provisioner_with_no_execution_step_but_a_depends_on_consumer():
+    """The actual point of ADR-0029: iac_components/iac_primitives need no
+    execution step at all — they're reachable only via spoke_infra's own
+    depends_on, never as a deployable step, so --scope/--stage filtering has
+    nothing to accidentally include or exclude them from."""
+    data = _minimal_workspace()
+    data["spec"]["provisioners"] = [
+        _provisioner("spoke_infra", depends_on=["iac_components", "iac_primitives"]),
+        _provisioner("iac_components"),
+        _provisioner("iac_primitives"),
+    ]
+    data["spec"]["resources"] = [{"name": "spoke_network", "resource": "network-class"}]
+    data["spec"]["execution"] = [
+        {"name": "spoke_infra_step", "provisioner": "spoke_infra", "targets": ["spoke_network"]}
+    ]
+    model = WorkspaceModel.model_validate(data)
+    step_provisioners = {step.provisioner for step in model.spec.execution}
+    assert step_provisioners == {"spoke_infra"}  # iac_components/iac_primitives are not, and need not be, steps
+
+
+def test_workspace_rejects_unknown_provisioner_depends_on():
+    """A provisioner's depends_on referencing an undeclared provisioner is rejected."""
+    data = _minimal_workspace()
+    data["spec"]["provisioners"][0]["depends_on"] = ["nonexistent"]
+    with pytest.raises(ValidationError, match="not a declared provisioner"):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_rejects_provisioner_depends_on_cycle():
+    """A cycle in provisioner depends_on (independent of any execution step) is rejected."""
+    data = _minimal_workspace()
+    data["spec"]["provisioners"] = [
+        _provisioner("a", depends_on=["b"]),
+        _provisioner("b", depends_on=["a"]),
+    ]
+    with pytest.raises(ValidationError, match="Circular dependency in provisioner depends_on"):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_accepts_transitive_provisioner_depends_on_chain():
+    """A depends on B depends on C — a transitive chain with no cycle is accepted."""
+    data = _minimal_workspace()
+    data["spec"]["provisioners"] = [
+        _provisioner("a", depends_on=["b"]),
+        _provisioner("b", depends_on=["c"]),
+        _provisioner("c"),
+    ]
+    model = WorkspaceModel.model_validate(data)
+    assert model.spec.provisioners[1].depends_on == ["c"]
+
+
+# ---------------------------------------------------------------------------
 # TopologySpecModel (inline on WorkspaceSpecModel.topology, ADR-0028)
 # ---------------------------------------------------------------------------
 

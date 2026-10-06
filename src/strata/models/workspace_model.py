@@ -38,6 +38,7 @@ from strata.models.common_models import (
 )
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel, validate_provisioning_steps
 from strata.models.reference_fields import References
+from strata.utils.dependency_order import topological_order
 from strata.utils.names import check_unique_names
 
 
@@ -478,6 +479,42 @@ class WorkspaceSpecModel(PlatformBaseModel):
                     )
         if errors:
             raise ValueError("; ".join(errors))
+        return self
+
+    @model_validator(mode="after")
+    def validate_provisioner_depends_on(self) -> "WorkspaceSpecModel":
+        """Validate `ProvisionerModel.depends_on` (ADR-0029): every name must
+        reference a real sibling in `self.provisioners`, and the resulting
+        graph must be acyclic.
+
+        A same-document Phase 1 check, same shape as `validate_execution()`'s
+        own `step.provisioner`/`depends_on` cross-checks above — a lone
+        `ProvisionerModel` has no sibling awareness (confirmed:
+        `test_provisioner_accepts_depends_on()` validates a `depends_on` name
+        with zero existence checking), so this can only be done here, once
+        every provisioner in the workspace is loaded together.
+
+        Deliberately independent of `validate_execution()`/
+        `validate_provisioning_steps()` above: a provisioner's `depends_on`
+        names other *provisioners* (materialisation order), never *steps*
+        (execution order) — a provisioner with no execution step at all is
+        not only allowed here, it's the entire point of ADR-0029 (no
+        borrowed `targets:`/fake step needed just to get materialised).
+        """
+        names = {p.name for p in self.provisioners}
+        errors = []
+        for provisioner in self.provisioners:
+            for dep in provisioner.depends_on or []:
+                if dep not in names:
+                    errors.append(
+                        f"Provisioner '{provisioner.name}': depends_on '{dep}' is not a declared provisioner."
+                    )
+        if errors:
+            raise ValueError("; ".join(errors))
+
+        topological_order(
+            names, {p.name: p.depends_on or [] for p in self.provisioners}, label="provisioner depends_on"
+        )
         return self
 
 

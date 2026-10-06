@@ -8,8 +8,8 @@
   (the provisioner/topology decoupling precedent this decision's "orthogonal
   facts" reasoning follows), [ADR-0002](0002-requirement-interface-injection-grant-lessons-from-v1.md)
   (why `requires` was rejected as this field's name)
-- See also: [docs/work/provisioner-source-dependencies.md](../work/provisioner-source-dependencies.md)
-  for the full alternatives analysis and the phased implementation plan —
+- See also: [docs/design/provisioner-source-dependencies.md](../design/provisioner-source-dependencies.md)
+  for how the mechanism actually works, now that it's fully built —
   not duplicated here
 
 ## Context and Problem Statement
@@ -60,8 +60,8 @@ and planning/applying one for real.
 
 Full comparison, including code sketches and a criteria-by-criteria
 breakdown, is in
-[docs/work/provisioner-source-dependencies.md](../work/provisioner-source-dependencies.md)'s
-Alternatives Considered section. Summarised:
+[docs/design/provisioner-source-dependencies.md](../design/provisioner-source-dependencies.md)'s
+`## History` section. Summarised:
 
 - **A — `ProvisionerModel.depends_on: list[PlatformName]`.** The dependency
   is declared on the tool definition that actually needs it — a sibling

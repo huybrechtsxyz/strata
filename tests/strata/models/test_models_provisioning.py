@@ -302,6 +302,47 @@ def test_provisioner_gitops_is_optional():
 
 
 # ---------------------------------------------------------------------------
+# depends_on (ADR-0029) — names other Provisioners in the same workspace
+# whose source must be materialised first, independent of execution/targets.
+# Cross-field validation (unknown-name/cycle checks) needs sibling awareness
+# and lives on WorkspaceSpecModel instead — see test_models_workspace.py.
+# ---------------------------------------------------------------------------
+
+
+def test_provisioner_accepts_depends_on():
+    data = _minimal_provisioner()
+    data["depends_on"] = ["iac_components", "iac_primitives"]
+    model = ProvisionerModel.model_validate(data)
+    assert model.depends_on == ["iac_components", "iac_primitives"]
+
+
+def test_provisioner_depends_on_is_optional():
+    model = ProvisionerModel.model_validate(_minimal_provisioner())
+    assert model.depends_on is None
+
+
+def test_provisioner_rejects_self_dependency():
+    data = _minimal_provisioner()
+    data["depends_on"] = ["terraform-main"]
+    with pytest.raises(ValidationError, match="cannot depend on itself"):
+        ProvisionerModel.model_validate(data)
+
+
+def test_provisioner_depends_on_is_distinct_from_step_depends_on():
+    """A provisioner with no execution step at all can still declare
+    depends_on — this is the whole point of ADR-0029 (no borrowed
+    'targets:'/fake execution step needed just to get materialised)."""
+    model = ProvisionerModel.model_validate(
+        {
+            "name": "iac_components",
+            "tool": "terraform",
+            "source": {"remote": "infra-repo", "source_path": "terraform/components"},
+        }
+    )
+    assert model.depends_on is None  # itself has no further dependencies, but is a valid dependency target
+
+
+# ---------------------------------------------------------------------------
 # ProvisioningStepModel
 # ---------------------------------------------------------------------------
 
