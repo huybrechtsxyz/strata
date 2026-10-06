@@ -139,6 +139,7 @@ def build_resolved_workspace_graph(
     custom: dict[str, Any] | None = None,
     tenant: TenantModel | None = None,
     deployment: DeploymentModel | None = None,
+    version: VersionModel | None = None,
 ) -> ResolvedWorkspaceGraph:
     """Assemble a `ResolvedWorkspaceGraph` by walking every name `workspace`
     references (ADR-0022 D1a).
@@ -168,6 +169,7 @@ def build_resolved_workspace_graph(
         custom=custom or {},
         tenant=tenant,
         deployment=deployment,
+        version=version,
     )
 
 
@@ -190,6 +192,47 @@ def _dump_refs(refs: list[ValueReference]) -> dict[str, dict[str, Any]]:
     return dumped
 
 
+def _dump_promotion(graph: ResolvedWorkspaceGraph) -> dict[str, Any] | None:
+    """`resolved.yaml`'s optional `promotion` section (docs/work/promotion.md
+    Phase 4) — present only when `graph.deployment.spec.version` resolved to
+    a `Version` document actually tagged with a ring (`spec.promotion.ring`).
+
+    Answers a different question than Phase 2's cross-document checks:
+    "did *this* deployment land where *I* meant it to", a human-intent
+    check against the one document this build actually used — not whether
+    every `Version` document in the workspace is internally consistent with
+    every other one (that's `validate_promotions()`'s job, already wired
+    into `strata validate`). So this reads `graph.version` directly, never
+    `build_promotion_view()` — no cross-document grouping is needed to
+    answer it.
+
+    `workspace` comes from the deployment's own `spec.workspace`, not
+    `version.spec.workspace` — this section is deployment-scoped ("did
+    *my* deployment land right"), and the deployment's own declared value
+    is the one a human actually wrote down, whether or not the `Version`
+    document also happens to declare one. `wave` is omitted entirely (not
+    `null`) when the document carries no wave, matching every other
+    omitted-rather-than-null field in this file.
+    """
+    version = graph.version
+    if version is None:
+        return None
+    promotion = version.spec.promotion
+    if promotion is None or promotion.ring is None:
+        return None
+
+    workspace = graph.deployment.spec.workspace if graph.deployment is not None else version.spec.workspace
+    entry: dict[str, Any] = {
+        "workspace": workspace,
+        "ring": promotion.ring,
+        "order": promotion.order,
+        "version": version.meta.name,
+    }
+    if promotion.wave is not None:
+        entry["wave"] = promotion.wave
+    return entry
+
+
 def write_resolved_manifest(build_path: Path, graph: ResolvedWorkspaceGraph) -> Path:
     """Write `build_path/resolved.yaml` (docs/design/build-time-value-categories.md,
     Q8) — plain YAML, deliberately not `*.auto.tfvars.json`: Terraform never
@@ -202,6 +245,11 @@ def write_resolved_manifest(build_path: Path, graph: ResolvedWorkspaceGraph) -> 
     file elsewhere in this same build. `graph.secret_refs` never carries a
     `value` at all — enforced by `ValueReference`'s own construction in
     `build_value_references()`, not filtered out here.
+
+    Gains an optional `promotion` key (docs/work/promotion.md Phase 4,
+    `_dump_promotion()`) when `graph.version` resolved to a document tagged
+    with a ring — omitted entirely, not written as `null`/`{}`, for the
+    common untagged case (Worked Example A).
     """
     manifest = {
         "variables": _dump_refs(graph.variable_refs),
@@ -210,6 +258,9 @@ def write_resolved_manifest(build_path: Path, graph: ResolvedWorkspaceGraph) -> 
         "properties": graph.properties,
         "custom": graph.custom,
     }
+    promotion = _dump_promotion(graph)
+    if promotion is not None:
+        manifest["promotion"] = promotion
     build_path.mkdir(parents=True, exist_ok=True)
     path = build_path / "resolved.yaml"
     path.write_text(yaml.safe_dump(manifest, sort_keys=True), encoding="utf-8")
@@ -472,6 +523,7 @@ def build_run(
         custom=custom,
         tenant=tenant,
         deployment=deployment,
+        version=version,
     )
     if dry_run:
         _step(f"would write {build_path / 'resolved.yaml'}")

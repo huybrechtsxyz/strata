@@ -5,7 +5,7 @@ Configuration instance — how do I point strata at it?" For the generic `kind: 
 that applies uniformly to every integration type, see
 [docs/config/integration.md](../config/integration.md) instead; for the internal design/rationale
 behind how a store finds and binds to one of these documents, see
-[docs/work/store-integration-configuration.md](../work/store-integration-configuration.md).
+[docs/design/store-integration-configuration.md](../design/store-integration-configuration.md).
 
 ## Secret/variable/feature stores
 
@@ -28,7 +28,7 @@ never a silent guess. You never need an explicit reference field on the store it
 ## What's real vs. what's not yet
 
 The worked `kind: integration` examples in each guide below are the **designed** end state
-([docs/work/store-integration-configuration.md](../work/store-integration-configuration.md));
+([docs/design/store-integration-configuration.md](../design/store-integration-configuration.md));
 until that design is implemented, only the environment-variable configuration each guide documents
 is live. Each guide is written against the designed end state on purpose, so it doesn't need a
 rewrite once implementation lands — check that design doc's own Status line for current progress.

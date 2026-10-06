@@ -36,9 +36,16 @@ Three v1 fields are deliberately NOT ported:
 - ``spec.ring`` — duplicated `meta.name` in the only real document (both
   "prd"), the same redundancy dropped from `tenant.spec.code`. Rings resolve
   against a progression registry (v1's `promotion_model.py`) that v2 has not
-  ported. Ring/promotion is planned as a follow-up for rollout automation;
-  when it lands it attaches *around* this model (which version document a
-  ring selects) rather than inside it, so nothing here needs to change.
+  ported. **Update, 2026-10-06 (docs/work/promotion.md Phase 1)**: ring
+  tagging did land inside this model after all, as `spec.promotion.ring` —
+  the plan above (attaching *around* this model via a separate kind) was
+  reconsidered: once `spec.workspace` existed to group every version
+  document by product, a dedicated kind's only job was a `promote status`
+  table equally derivable by tagging `Version` documents directly. See
+  `VersionPromotionModel` below. Not a resurrection of the original
+  `spec.ring` this bullet dropped — that duplicated `meta.name` as a bare
+  top-level field; `spec.promotion.ring` is one tag among three
+  (`ring`/`order`/`wave`), grouped in its own optional sub-model.
 - ``track: latest`` / ``resolved`` / ``resolved_at`` / ``resolved_sha`` — a
   floating-pin mechanism with zero real use. A pin that floats is not a pin;
   `status: current` plus a refreshed `available` covers the intent without a
@@ -208,6 +215,59 @@ class VersionPinsModel(PlatformBaseModel):
                 yield category, name, pin
 
 
+class VersionPromotionModel(PlatformBaseModel):
+    """Optional ring/order/wave rollout-visibility tags (docs/work/promotion.md).
+
+    Not a separate `kind: promotion` document — ADR-0015's identity
+    mechanism (`Deployment.spec.version`) already lets several deployments
+    share one `Version` document, so tagging *that* document is enough to
+    answer "where is version X right now, across every ring?" by
+    computation (`strata promote status`), without a second,
+    user-maintained source of truth to keep in sync. All three fields are
+    optional — a single-app product with no rollout pipeline omits
+    `spec.promotion` entirely (see Worked Example A).
+
+    Deliberately permissive about what counts as valid *content* here: no
+    inference from `meta.name` or file location, no enum of known ring
+    names, no bound on `order`'s range. The two rules this model enforces
+    are the only ones statable without looking at another document —
+    everything else (ring/order bijection across a workspace, uniqueness
+    of a `(ring, order, wave)` slot, no mixing waved/waveless at one slot)
+    needs to see every `Version` document sharing a workspace together,
+    which is `build_promotion_view()`'s job (Phase 2), not this model's.
+    """
+
+    ring: str | None = Field(
+        None, min_length=1, description="Which ring this document represents (e.g. 'dev', 'qas', 'prd')"
+    )
+    order: int | None = Field(
+        None,
+        description="Sequence position in the rollout (e.g. dev=1, qas=2, prd=3) — required whenever 'ring' is set",
+    )
+    wave: str | None = Field(
+        None,
+        min_length=1,
+        description="Distinguishes documents sharing the same (ring, order) — e.g. 'canary'/'general'. "
+        "Required whenever set alongside a 'ring'; requires 'ring' to be set at all.",
+    )
+
+    @model_validator(mode="after")
+    def validate_wave_requires_ring(self) -> "VersionPromotionModel":
+        """A wave of *which* ring? No inference — state it explicitly."""
+        if self.wave is not None and self.ring is None:
+            raise ValueError("'wave' requires 'ring' to also be set.")
+        return self
+
+    @model_validator(mode="after")
+    def validate_ring_requires_order(self) -> "VersionPromotionModel":
+        """`order` is the entire reason sortability works — no inferring it
+        from name or file order, same "no guessing" rule this doc applies
+        everywhere else."""
+        if self.ring is not None and self.order is None:
+            raise ValueError("'ring' requires 'order' to also be set.")
+        return self
+
+
 class VersionSpecModel(PlatformBaseModel):
     """Specification for a version document."""
 
@@ -218,6 +278,11 @@ class VersionSpecModel(PlatformBaseModel):
         "every Deployment referencing this document (via 'spec.version') agrees on the workspace: the first "
         "real reference establishes it when unset here, a declared value is authoritative, and a mismatch "
         "is an error.",
+    )
+    promotion: VersionPromotionModel | None = Field(
+        None,
+        description="Optional ring/order/wave rollout-visibility tags (docs/work/promotion.md). Omit "
+        "entirely for a product with no multi-ring rollout pipeline.",
     )
     pins: VersionPinsModel = Field(
         default=VersionPinsModel(),

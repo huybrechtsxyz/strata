@@ -153,7 +153,7 @@ out for early/internal testing — "installable and internally coherent," not
   exit criterion gates leaving this stage other than Stage 2's entry bar
   below. Candidate units likely to each warrant a new alpha tag:
   build output rendering's remaining phases (see
-  [build-pipeline-status.md](build-pipeline-status.md)), `deploy run`'s
+  [build-command.md](build-command.md)), `deploy run`'s
   confirmed `store: artifact` gap (see
   [deploy-command.md](deploy-command.md) Remaining Work item 8), and the
   Tier 2 commands (`init`/`repo`/`profile`/`config`/`audit`/`tools`) starting
@@ -174,7 +174,7 @@ example or synthetic tests. Concretely, before the first beta:
    yet.
 3. Build output rendering's remaining phases — token substitution, the
    Jinja2 escape hatch, Compose/Helm rendering, `modules`/`tenant`
-   categories — land (see [build-pipeline-status.md](build-pipeline-status.md)
+   categories — land (see [build-command.md](build-command.md)
    for current phase status).
 4. `deploy run`'s confirmed `store: artifact`-at-deploy-time gap closes (see
    [deploy-command.md](deploy-command.md) Remaining Work). Locking,

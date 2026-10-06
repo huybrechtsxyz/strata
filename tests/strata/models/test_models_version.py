@@ -209,3 +209,67 @@ def test_artifacts_pin_shorthand_and_held_status():
     pin = model.spec.pins.artifacts["dspapi_container"]
     assert pin.status is VersionPinStatus.HELD
     assert pin.reason == "pending product team confirmation"
+
+
+# ---------------------------------------------------------------------------
+# spec.promotion — VersionPromotionModel (docs/work/promotion.md Phase 1)
+# ---------------------------------------------------------------------------
+
+
+def _version_with_promotion(promotion: dict) -> dict:
+    data = _version()
+    data["spec"]["promotion"] = promotion
+    return data
+
+
+def test_promotion_is_omitted_by_default():
+    """A single-app product with no rollout pipeline omits spec.promotion
+    entirely — never a null/empty placeholder."""
+    model = VersionModel.model_validate(_version())
+    assert model.spec.promotion is None
+
+
+def test_promotion_accepts_all_three_fields():
+    model = VersionModel.model_validate(_version_with_promotion({"ring": "prd", "order": 3, "wave": "canary"}))
+    assert model.spec.promotion.ring == "prd"
+    assert model.spec.promotion.order == 3
+    assert model.spec.promotion.wave == "canary"
+
+
+def test_promotion_accepts_ring_and_order_with_no_wave():
+    """wave is optional even when ring/order are set — most rings have only one wave."""
+    model = VersionModel.model_validate(_version_with_promotion({"ring": "dev", "order": 1}))
+    assert model.spec.promotion.ring == "dev"
+    assert model.spec.promotion.order == 1
+    assert model.spec.promotion.wave is None
+
+
+def test_promotion_wave_without_ring_is_rejected():
+    """A wave of *which* ring? No inference."""
+    with pytest.raises(ValidationError, match="'wave' requires 'ring'"):
+        VersionModel.model_validate(_version_with_promotion({"wave": "canary"}))
+
+
+def test_promotion_ring_without_order_is_rejected():
+    """order is the entire reason sortability works — no inferring it."""
+    with pytest.raises(ValidationError, match="'ring' requires 'order'"):
+        VersionModel.model_validate(_version_with_promotion({"ring": "prd"}))
+
+
+def test_promotion_wave_without_ring_or_order_is_still_rejected_on_the_ring_rule():
+    """wave alone (no ring, no order) is rejected on the wave->ring rule
+    specifically — confirms the two validators don't mask each other."""
+    with pytest.raises(ValidationError, match="'wave' requires 'ring'"):
+        VersionModel.model_validate(_version_with_promotion({"wave": "canary", "order": 3}))
+
+
+def test_promotion_rejects_unknown_fields():
+    """extra='forbid' applies here too — same closed-schema discipline as
+    every other model in this file."""
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        VersionModel.model_validate(_version_with_promotion({"ring": "prd", "order": 3, "scope": "tenant"}))
+
+
+def test_promotion_ring_and_wave_must_be_non_empty():
+    with pytest.raises(ValidationError):
+        VersionModel.model_validate(_version_with_promotion({"ring": "", "order": 1}))

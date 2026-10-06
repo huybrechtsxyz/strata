@@ -3,7 +3,8 @@
 - Status: current — Phases 1-6 implemented (transport primitives, model
   fields, base/capability ABCs, registry + store retrofit, Terraform,
   Compose + Helm)
-- Last updated: 2026-09-29
+- Last updated: 2026-10-06 (refreshed stale Remaining Work against
+  build-command.md/workload-pipeline.md's own since-updated status)
 
 ## Overview
 
@@ -89,14 +90,14 @@ real behaviour there).
 
 ### Built classes
 
-| Class                    | Type              | Transport(s)     | Capability                       | Notes                                                                                                                                                                                                                                       |
-| ------------------------ | ----------------- | ---------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `InfisicalResolver`      | `infisical`       | —                | `variables`/`secrets`/`features` | Retrofit of the pre-existing resolver; now reads a bound `Integration` document's `spec.endpoints`/`.configuration` first, falling back to its original env vars ([store-integration-configuration.md](store-integration-configuration.md)) |
-| `AzureKeyVaultResolver`  | `azure-keyvault`  | SDK              | `secrets`                        | Retrofit; same config-first, env-fallback wiring as `InfisicalResolver`                                                                                                                                                                     |
-| `AzureAppConfigResolver` | `azure-appconfig` | SDK              | `variables`/`features`           | Retrofit; same config-first, env-fallback wiring as `InfisicalResolver`                                                                                                                                                                     |
-| `TerraformIntegration`   | `terraform`       | `cli`            | `infrastructure`                 | `plan`/`deploy`/`destroy` + real v1 extras (`init`/`validate`/`output`/`show`); secrets injected via `TF_VAR_*` env vars, never argv; `default_output()` built                                                                              |
-| `ComposeIntegration`     | `compose`         | `cli` (`docker`) | `container`                      | Deploys via `docker stack` (Swarm), not standalone Compose CLI — matches real v1 usage. `plan()` has no true dry-run (`docker stack config`, admitted v1 limitation)                                                                        |
-| `HelmIntegration`        | `helm`            | `cli` (`helm`)   | `container`                      | Argv shapes copied from v1's real `HelmDeployer`                                                                                                                                                                                            |
+| Class                    | Type              | Transport(s)     | Capability                       | Notes                                                                                                                                                                                                                                                 |
+| ------------------------ | ----------------- | ---------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `InfisicalResolver`      | `infisical`       | —                | `variables`/`secrets`/`features` | Retrofit of the pre-existing resolver; now reads a bound `Integration` document's `spec.endpoints`/`.configuration` first, falling back to its original env vars ([store-integration-configuration.md](../design/store-integration-configuration.md)) |
+| `AzureKeyVaultResolver`  | `azure-keyvault`  | SDK              | `secrets`                        | Retrofit; same config-first, env-fallback wiring as `InfisicalResolver`                                                                                                                                                                               |
+| `AzureAppConfigResolver` | `azure-appconfig` | SDK              | `variables`/`features`           | Retrofit; same config-first, env-fallback wiring as `InfisicalResolver`                                                                                                                                                                               |
+| `TerraformIntegration`   | `terraform`       | `cli`            | `infrastructure`                 | `plan`/`deploy`/`destroy` + real v1 extras (`init`/`validate`/`output`/`show`); secrets injected via `TF_VAR_*` env vars, never argv; `default_output()` built                                                                                        |
+| `ComposeIntegration`     | `compose`         | `cli` (`docker`) | `container`                      | Deploys via `docker stack` (Swarm), not standalone Compose CLI — matches real v1 usage. `plan()` has no true dry-run (`docker stack config`, admitted v1 limitation)                                                                                  |
+| `HelmIntegration`        | `helm`            | `cli` (`helm`)   | `container`                      | Argv shapes copied from v1's real `HelmDeployer`                                                                                                                                                                                                      |
 
 ### Version ownership
 
@@ -114,15 +115,27 @@ integration document's `version` (a PEP 440 specifier).
 
 ## Remaining Work / Open Questions
 
-- `ComposeIntegration`/`HelmIntegration` do not override `default_output()`
-  yet — they currently render nothing, which is correct for Bicep but not
-  intentional for these two. Needs the workload pipeline
-  (`prepare_namespace()`, ADR-0022 D5-D7) to actually be meaningful — see
-  [build-command.md](build-command.md).
+- ~~`ComposeIntegration`/`HelmIntegration` do not override `default_output()`
+  yet~~ — **resolved, 2026-10-06 refresh**: this bullet was stale.
+  `default_output()`/`prepare()` is the provisioner-pipeline path only;
+  Compose/Helm's real usage is as **namespace modules**, which go through
+  the separate, now-fully-built workload pipeline instead
+  (`prepare_namespace()`, [workload-pipeline.md](../design/workload-pipeline.md),
+  done 2026-09-25 — see [build-command.md](build-command.md)). Checked
+  real usage directly: no workspace in `config/` declares `compose`/`helm`
+  as a direct *provisioner* (only `terraform`), so `default_output()`
+  staying empty for these two classes is an unexercised theoretical gap,
+  not a real one — revisit only if a real provisioner-level (not
+  namespace-module) Compose/Helm usage appears.
 - `output.template` (the Jinja2 escape hatch, ADR-0023 D3) and
   `provisioner.backend` token substitution (D2) are not wired into
   `InfraIntegration.prepare()` yet — it currently only calls
-  `default_output()` unconditionally.
+  `default_output()` unconditionally. Still accurate as of 2026-10-06:
+  [build-command.md](build-command.md) confirms only `output.template`'s
+  *build-time validation* half is done — the actual-render half and
+  `backend`/`.configuration`/`dns`/`networks` token substitution are all
+  deploy-time-only, blocked on `deploy run`'s own remaining work, not this
+  layer's.
 - No `sources` capability ABC yet — remote fetching (beyond `SourceModel`'s
   existing git/OCI/chart reference, ADR-0018) is not built.
 - `ansible`/`bicep`/`opentofu`/`vault`/`consul`/`etcd`/`bitwarden`/
@@ -135,4 +148,6 @@ integration document's `version` (a PEP 440 specifier).
 ## Changelog
 
 - 2026-09-24: Created, grounded directly in `src/strata/integrations/` (base.py, capabilities.py, registry.py, terraform.py, compose.py, helm.py) rather than reconstructed from ADR-0021 text alone.
-- 2026-09-29: Noted that store auto-bind wiring is now built — `value_controller.py`'s store resolution auto-binds a real `Integration` document by type (reusing `integration_resolution.py`'s `bind_integration_config()`), and all three store resolvers now read that document's `spec.endpoints`/`.configuration` before falling back to their original env vars. Full design, rationale, and worked examples in [store-integration-configuration.md](store-integration-configuration.md) — not duplicated here.
+- 2026-09-29: Noted that store auto-bind wiring is now built — `value_controller.py`'s store resolution auto-binds a real `Integration` document by type (reusing `integration_resolution.py`'s `bind_integration_config()`), and all three store resolvers now read that document's `spec.endpoints`/`.configuration` before falling back to their original env vars. Full design, rationale, and worked examples in [store-integration-configuration.md](../design/store-integration-configuration.md) — not duplicated here.
+- 2026-10-06: `store-integration-configuration.md` graduated to `docs/design/` — all three phases were already fully implemented, and the two open design questions it left (untyped `configuration` dict access; a disabled `Integration` document staying silently ignored) were both resolved as its own stated leaning, matching current behaviour. Link above updated.
+- 2026-10-06: Refreshed Remaining Work against build-command.md/workload-pipeline.md, both updated since this doc's last pass. The `ComposeIntegration`/`HelmIntegration` `default_output()` bullet was stale — resolved by clarifying it describes the provisioner pipeline only, which no real workspace exercises for these two tool types; their real usage (namespace modules) goes through the separate, now-fully-built workload pipeline instead. The `output.template`/token-substitution bullet remains accurate. Also retired `build-pipeline-status.md` (deleted — its own status table had gone stale and was contradicted by this doc and build-command.md); readers should use build-command.md/this doc directly for current status instead.

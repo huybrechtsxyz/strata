@@ -10,8 +10,9 @@
   [ADR-0023](0023-build-output-rendering.md) (split out of this document -
   what `prepare()`/`prepare_namespace()` actually write, and how a user can
   customise it)
-- See also: [docs/work/build-pipeline-status.md](../work/build-pipeline-status.md)
-  for cross-ADR status across ADR-0021/0022/0023;
+- See also: [docs/work/build-command.md](../work/build-command.md) for
+  current cross-ADR build-pipeline status (superseding the former
+  `build-pipeline-status.md` dashboard, retired 2026-10-06 once stale);
   [ADR-0029](0029-provisioner-source-dependencies.md) (and its
   [design doc](../design/provisioner-source-dependencies.md)) for the
   resolution of a gap this ADR's D3 found but did not close — a provisioner

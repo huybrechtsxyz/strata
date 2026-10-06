@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from strata.controllers.deployment_resolution import resolve_deployment_chains
+from strata.controllers.promotion_controller import validate_promotions
 from strata.controllers.references import validate_references
 from strata.controllers.semantic_checks import run_semantic_checks
 from strata.controllers.solution_controller import SolutionController, find_solution_root
@@ -73,7 +74,7 @@ class SolutionContext:
     def resolve(self) -> Diagnostics:
         """Run cross-document checks and merge the findings in.
 
-        Four passes, in order:
+        Five passes, in order:
 
         1. Reference *existence* (`validate_references`) — does the name
            point at something real?
@@ -90,6 +91,10 @@ class SolutionContext:
         4. Version pin checks (`check_version_pins`) — independent of (2)/(3):
            a pin is a fact about the Version document itself, checked once
            regardless of which (or how many) deployments reference it.
+        5. Promotion checks (`validate_promotions`) — ring/order/wave
+           consistency across every `Version` document sharing a workspace
+           (docs/work/promotion.md Phase 2). Takes the resolved deployments
+           from (2) for its own orphan-ring warning, same reason (3) does.
 
         Only meaningful once every document loaded: a document that failed
         schema validation never entered the index, so reference checks would
@@ -114,6 +119,7 @@ class SolutionContext:
             )
         )
         found.extend(check_version_pins(self.controller.index, self.controller.solution))
+        found.extend(validate_promotions(self.controller.index, resolved_deployments))
         self.diagnostics.extend(found)
         return found
 

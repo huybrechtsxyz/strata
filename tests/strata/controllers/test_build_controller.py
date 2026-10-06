@@ -1208,6 +1208,81 @@ def test_build_run_env_file_never_overrides_a_real_env_var(tmp_path: Path, monke
 
 
 # ---------------------------------------------------------------------------
+# resolved.yaml's `promotion` section (docs/work/promotion.md Phase 4)
+# ---------------------------------------------------------------------------
+
+
+def _terraform_solution_with_version(tmp_path: Path, version_doc: str) -> Path:
+    """Like `_terraform_solution()`, but `deployment.yaml` names a
+    `kind: version` document (`version.yaml`) via `spec.version`."""
+    root = _terraform_solution(tmp_path)
+    _write(root, "version.yaml", version_doc)
+    deployment_path = root / "deployment.yaml"
+    deployment_path.write_text(deployment_path.read_text(encoding="utf-8") + "  version: prd\n", encoding="utf-8")
+    return root
+
+
+def test_build_run_writes_promotion_section_for_a_tagged_version(tmp_path: Path):
+    root = _terraform_solution_with_version(
+        tmp_path,
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n"
+        "  workspace: main\n  promotion:\n    ring: prd\n    order: 3\n    wave: canary\n  pins: {}\n",
+    )
+    build_path = tmp_path / "build"
+
+    build_run(_context(root), "app", build_path)
+
+    manifest = yaml.safe_load((build_path / "resolved.yaml").read_text())
+    assert manifest["promotion"] == {
+        "workspace": "main",
+        "ring": "prd",
+        "order": 3,
+        "wave": "canary",
+        "version": "prd",
+    }
+
+
+def test_build_run_promotion_section_omits_wave_when_unset(tmp_path: Path):
+    root = _terraform_solution_with_version(
+        tmp_path,
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n"
+        "  workspace: main\n  promotion:\n    ring: dev\n    order: 1\n  pins: {}\n",
+    )
+    build_path = tmp_path / "build"
+
+    build_run(_context(root), "app", build_path)
+
+    manifest = yaml.safe_load((build_path / "resolved.yaml").read_text())
+    assert manifest["promotion"] == {"workspace": "main", "ring": "dev", "order": 1, "version": "prd"}
+    assert "wave" not in manifest["promotion"]
+
+
+def test_build_run_omits_promotion_section_for_an_untagged_version(tmp_path: Path):
+    """Worked example A: a Version document with no `spec.promotion` at all
+    — no section written, not a null/empty one."""
+    root = _terraform_solution_with_version(
+        tmp_path,
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: version\nmeta:\n  name: prd\nspec:\n  pins: {}\n",
+    )
+    build_path = tmp_path / "build"
+
+    build_run(_context(root), "app", build_path)
+
+    manifest = yaml.safe_load((build_path / "resolved.yaml").read_text())
+    assert "promotion" not in manifest
+
+
+def test_build_run_omits_promotion_section_when_deployment_has_no_version(tmp_path: Path):
+    root = _terraform_solution(tmp_path)  # no version document, no spec.version at all
+    build_path = tmp_path / "build"
+
+    build_run(_context(root), "app", build_path)
+
+    manifest = yaml.safe_load((build_path / "resolved.yaml").read_text())
+    assert "promotion" not in manifest
+
+
+# ---------------------------------------------------------------------------
 # output.template (ADR-0023 D3, docs/design/value-token-resolution.md option C)
 # ---------------------------------------------------------------------------
 

@@ -558,11 +558,26 @@ prd   3      general  1.0.0         current   ← behind
 
 Canary (`1.1.0`) genuinely runs ahead of general (`1.0.0`) — an actual
 version difference, not deploy-order theater, because each wave is its own
-document. Promoting `general` to `1.1.0` is one hand-edit to
-`versions/dspapi-prd.yaml` (or, with `strata promote apply dspapi prd`
-once built, a mechanical copy) — zero deployment documents change, and it
-applies to every tenant referencing that one file at once. Adding customer
-#251 to `general` is one new deployment document pointing at the existing
+document. Promoting `general` by hand (a direct edit to
+`versions/dspapi-prd.yaml`'s `pins.images.dspapi`) can set it to whatever
+value an operator has actually decided on — including matching `canary`'s
+own `1.1.0`, if that is the judgment call being made. **`strata promote
+apply dspapi prd --wave general`** (Phase 5) is a narrower, purely
+mechanical version of that same edit: it does not read `canary` at all —
+waves carry no ordering field of their own (only `(ring, order)` is
+sortable; a `wave` name is just a disambiguating label, "no inference
+from name or file order"), so one wave cannot generically be "the"
+designated predecessor of a sibling at the same `(ring, order)`. It
+instead copies forward from the preceding **order** (`qas`, `1.2.0` here)
+— the one source every wave at `prd` can unambiguously agree shares a
+value with. Reaching `canary`'s own `1.1.0` specifically is still exactly
+one hand-edit away, same as before `apply` existed; `apply` automates the
+*other* real promotion this pipeline needs just as often — catching a
+ring up to what already proved out one order back — without inventing a
+second, wave-level ordering concept this schema deliberately does not
+have. Zero deployment documents change either way, and it applies to
+every tenant referencing that one file at once. Adding customer #251 to
+`general` is one new deployment document pointing at the existing
 `dspapi-prd` version document — nothing else changes.
 
 ## Implementation Plan
@@ -582,7 +597,7 @@ blast-radius guarantee matters regardless of whether a document carries
 ring/order/wave tags at all. **✅ Shipped 2026-10-06** — unblocked, this
 doc's own Phase 1 can start.
 
-### Phase 1 (MVP) — `VersionPromotionModel` schema
+### Phase 1 (MVP) — ✅ DONE (2026-10-06) — `VersionPromotionModel` schema
 
 - Add `VersionSpecModel.promotion: VersionPromotionModel | None` —
   `{ring: str | None, order: int | None, wave: str | None}`.
@@ -592,8 +607,34 @@ doc's own Phase 1 can start.
 - No CLI changes yet — schema only.
 - **Done when**: new model tests cover both rejections, full check suite
   clean.
+- **Shipped as**: `VersionPromotionModel` added to
+  [version_model.py](../../src/strata/models/version_model.py) — `ring`/
+  `wave` are `str | None` (`min_length=1`, so an empty string is rejected
+  the same way an unset field is represented as absent, not `""`),
+  `order: int | None` deliberately left unbounded (no `ge=`/`le=` —
+  nothing in the design calls for one, and inventing a range would be
+  guessing a constraint nobody asked for). Two `model_validator(mode=
+  "after")` methods enforce the two Phase 1 rules independently (wave
+  requires ring; ring requires order), confirmed by a dedicated test that
+  `wave` set alongside `order` but no `ring` still fails on the
+  wave-requires-ring rule specifically — the two validators don't mask
+  each other. `VersionSpecModel.promotion` defaults to `None` and is
+  never constructed with an empty placeholder — a single-app product's
+  `kind: version` document omits it entirely (confirmed by a test
+  asserting `model.spec.promotion is None` on a plain document, not
+  `VersionPromotionModel()`). Also corrected a stale note in this
+  model's own module docstring, left over from ADR-0019's original
+  "`spec.ring` dropped, ring/promotion attaches *around* this model" plan
+  — that plan changed (this revision attaches ring *inside* the model,
+  as `spec.promotion.ring`), so the docstring now says so instead of
+  contradicting the code next to it. Tests:
+  [test_models_version.py](../../tests/strata/models/test_models_version.py)
+  (8 new — both rejections, the independence check, the omitted-by-
+  default case, extra-field rejection, empty-string rejection). Full
+  check suite clean, 2107 tests (8 new; the much larger jump from 2050 is
+  unrelated parallel work already in this workspace, not this phase).
 
-### Phase 2 (MVP) — `build_promotion_view()` + Phase 2 validation
+### Phase 2 (MVP) — ✅ DONE (2026-10-06) — `build_promotion_view()` + Phase 2 validation
 
 - New function (new module, e.g. `strata/controllers/promotion_controller.py`
   to match `graph_controller.py`'s precedent) building `PromotionView` from
@@ -607,8 +648,47 @@ doc's own Phase 1 can start.
   'promotions' get created" above, both the pass and the fail case for
   each; `strata validate` surfaces a real violation end-to-end against a
   small fixture solution.
+- **Shipped as**: `PromotionWaveView`/`PromotionRingView`/`PromotionView`
+  (plain pydantic `BaseModel`, not `PlatformBaseModel` — an internal,
+  computed aggregate strata builds, never user-authored) plus
+  `build_promotion_view(workspace, index, resolved=None)` and
+  `validate_promotions(index, resolved)` in new
+  [promotion_controller.py](../../src/strata/controllers/promotion_controller.py).
+  Only `Version` documents with BOTH a *declared* `spec.workspace` and a
+  tagged `spec.promotion.ring` participate — an untagged document (worked
+  example A) or one with no declared workspace is excluded entirely ("skip
+  rather than guess", not inferred the way `_check_version_workspace()`
+  infers one for its own, narrower purpose). All three Phase 2 checks run
+  as designed: ring↔order bijection (checked both directions — a ring
+  claiming >1 order, and an order claimed by >1 ring — since a typo could
+  break the bijection from either side), `(ring, order, wave)` uniqueness
+  (a duplicate keeps its first-seen occupant and reports an error, the
+  same degrade-gracefully pattern a dangling reference uses), and no
+  mixing a waveless document with waved ones at one slot. The orphan-ring
+  warning threads `resolve_deployment_chains()`'s own resolved-deployments
+  dict through (same reason `_check_version_workspace()` does, so a
+  deployment that only gets `spec.version` through `extends` isn't
+  misreported as a non-referrer), falling back to each deployment's raw
+  document when `resolved` is `None` (for a future standalone caller that
+  has not run extends-resolution). Wired into
+  [solution_context.py](../../src/strata/controllers/solution_context.py)'s
+  `resolve()` as a 5th pass, right after `check_version_pins()`, reusing
+  the same `resolved_deployments` already computed for pass 3. `validate_
+  promotions()` discovers every distinct, declared workspace among tagged
+  documents and runs the builder once per workspace, merging findings —
+  so `strata validate` catches a violation without the caller needing to
+  know workspace names in advance. Tests:
+  [test_promotion_controller.py](../../tests/strata/controllers/test_promotion_controller.py)
+  (10 new — both the untagged/no-workspace exclusion cases, the full
+  worked-example-B-shaped grouping/sorting shape, both bijection
+  directions, both duplicate-slot cases (waveless and waved), the mixed-
+  waveless case, and both orphan-ring cases (warned and not)) — every one
+  exercises the real `strata validate` path (`open_solution(...).resolve()`),
+  not the builder in isolation, matching this phase's own "end-to-end
+  against a small fixture solution" done-when criterion. Full check suite
+  clean, 2117 tests (10 new).
 
-### Phase 3 (MVP) — `strata promote status <workspace>`
+### Phase 3 (MVP) — ✅ DONE (2026-10-06) — `strata promote status <workspace>`
 
 - New `promote` command group, `status` subcommand.
 - Renders `PromotionView` as the table shown throughout this doc —
@@ -618,8 +698,48 @@ doc's own Phase 1 can start.
 - **Done when**: CLI tests cover the worked-example-B-shaped fixture
   (multi-ring, wave divergence) and the worked-example-A-shaped fixture
   (no tags at all — empty/trivial output, not an error).
+- **Shipped as**: `strata promote status WORKSPACE` in new
+  [promote_command.py](../../src/strata/commands/promote_command.py), read-
+  only and Phase 1 (schema) only — same posture as `graph`/`path`, never
+  `.require_valid()` — and **always exits 0** (a promotion finding is
+  shown, not failed on; enforcement already lives in `strata validate`'s
+  Phase 2 wiring, shipped last phase). Two real design decisions made
+  during implementation, beyond this doc's own illustrative table:
+  - **A row is per-*pin*, not per-document** — the table gained a `target`
+    column (`category/name`, e.g. `images/dspapi`) beyond the doc's
+    illustrative 5-column example. Necessary, not a scope-creep: the one
+    real production `kind: version` document this whole model was
+    designed around (`version_model.py`'s own docstring) carries **14**
+    pins at once — collapsing a multi-pin document into one row would
+    have to silently pick one pin's value and discard the rest. A wave
+    with zero pins declared yet still gets one placeholder row (`target`/
+    `version`/`status` all `-`), so a ring doesn't silently vanish from
+    the table before anyone's pinned anything to it.
+  - **`← behind` is computed within one `(ring, order)` group, per pin
+    target, comparing sibling waves against each other** — not "across
+    orders" as the doc's own prose literally said. Worked example B's own
+    "canary runs ahead of general" only makes sense this way: both share
+    `(ring=prd, order=3)`; comparing across different orders instead
+    would not single out `general` the way the example shows. Uses
+    `packaging.version.Version` (already a real dependency, previously
+    only used for `SpecifierSet` assertions) to parse and compare;
+    computed **only** when a target's value is declared by more than one
+    sibling wave **and every one of those values parses as a `Version`**
+    — a git ref, commit SHA, or floating tag cannot be safely ordered,
+    and this doc's own "skip rather than guess" rule applies here exactly
+    as everywhere else: no marker, not a guessed one, when values aren't
+    comparable.
+  Tests:
+  [test_promotion_controller.py](../../tests/strata/controllers/test_promotion_controller.py)
+  (5 new, for the new `build_status_rows()` — the placeholder row, one
+  row per pin on a multi-pin document, the behind marker firing/not-
+  firing, and the non-semver skip) and
+  [test_commands_promote.py](../../tests/strata/commands/test_commands_promote.py)
+  (7 new — both worked-example shapes, JSON output, a tagged ring with no
+  pins yet, and a real Phase 2 violation shown without failing the
+  command). Full check suite clean, 2129 tests (12 new).
 
-### Phase 4 — `resolved.yaml`'s new `promotion` section
+### Phase 4 — ✅ DONE (2026-10-06) — `resolved.yaml`'s new `promotion` section
 
 - `build_controller.write_resolved_manifest()` gains an optional
   `promotion` key, populated only when the deployment's `spec.version`
@@ -629,8 +749,37 @@ doc's own Phase 1 can start.
 - **Done when**: a `build run` against a tagged `Version` document
   produces the new section with the right values; untagged documents
   produce no section at all (not a null/empty one).
+- **Shipped as**: `ResolvedWorkspaceGraph` (`strata.integrations.
+  resolved_context`) gains a new `version: VersionModel | None` field —
+  `build_controller.build_run()` already computed this value
+  (`resolve_version(context, deployment)`, already reflecting `--pin`) for
+  the remote-pin overlay, so Phase 4 only had to thread the same value one
+  step further rather than re-resolve it. New `_dump_promotion(graph)` in
+  [build_controller.py](../../src/strata/controllers/build_controller.py)
+  reads `graph.version.spec.promotion` directly — **not**
+  `build_promotion_view()` — a deliberate choice: this section answers
+  "did *my* deployment land where *I* meant it to" (a human-intent check
+  against the one document this build actually used), a different
+  question than Phase 2's "is every `Version` document in the workspace
+  internally consistent with every other one" (`validate_promotions()`,
+  already wired into `strata validate`) — no cross-document grouping is
+  needed to answer the deployment-scoped question, so none is done.
+  `workspace` in the written section comes from the **deployment's own**
+  `spec.workspace`, not `version.spec.workspace` — this section is
+  deployment-scoped by design (the doc's own "did *my* deployment..."
+  framing), and the deployment's own declared value is the one a human
+  actually wrote down. `wave` is omitted entirely (not `null`) when unset,
+  matching every other omitted-rather-than-null field already in this
+  file (`_dump_refs()`'s `description`/`value`). Tests: 4 new in
+  [test_build_controller.py](../../tests/strata/controllers/test_build_controller.py)
+  (a tagged document with a wave, one without a wave confirming omission,
+  an untagged document confirming no section at all, and a deployment
+  with no `spec.version` at all confirming the same). Manually smoke-
+  tested against the real `config/` dogfood solution (`prd-deployment`,
+  whose real `versions/prd.yaml` is untagged) — confirmed no `promotion`
+  key appears, as expected. Full check suite clean, 2133 tests (4 new).
 
-### Phase 5 — `strata promote apply <workspace> <ring> [--wave W]`
+### Phase 5 — ✅ DONE (2026-10-06) — `strata promote apply <workspace> <ring> [--wave W]`
 
 - Implements the settled mechanics: find target ring's `order`, find the
   preceding `order` in the same workspace, copy every common pin key,
@@ -640,8 +789,62 @@ doc's own Phase 1 can start.
   — no separate lookup logic.
 - **Done when**: CLI tests cover the single-wave case, the multi-wave
   case requiring `--wave`, and the multi-wave case erroring without it.
+- **Shipped as**: `apply_promotion(workspace, ring, index, *, wave=None)`
+  in [promotion_controller.py](../../src/strata/controllers/promotion_controller.py),
+  exposed as `strata promote apply WORKSPACE RING [--wave W]` in
+  [promote_command.py](../../src/strata/commands/promote_command.py).
+  **A real design ambiguity surfaced during implementation, resolved and
+  documented in place** (Worked Example B's own prose above): "the
+  preceding order" and "canary's already-proven sibling value" are two
+  different sources once a ring is split, and the doc's own illustrative
+  narrative ("promoting `general` to `1.1.0`", `canary`'s value) had
+  quietly assumed the latter while the "Mechanics, settled" bullets
+  describe the former. Resolved in favour of **the preceding order,
+  uniformly, regardless of source wave** — the only one of the two that
+  is generically well-defined: `wave` carries no ordering field at all
+  (Phase 1's own "no inference from name or file order" rule), so nothing
+  in the schema could tell `apply` that `canary` precedes `general`
+  specifically, as opposed to some third/fourth wave sharing that same
+  `(ring, order)`. Worked Example B's prose corrected to match (now reads
+  the actual shipped number, `1.2.0`, with the reasoning spelled out
+  inline) rather than leave code and doc silently disagreeing. Mechanics
+  precisely as settled otherwise: **every common pin key** (the
+  intersection of both documents' declared keys — never creates a key
+  only the source has; that remains `version update`'s job), **always**
+  resets `status` to `current` and `reviewed` to today on the copied
+  key (dropping any old `reason` implicitly — a fresh promotion retires
+  the prior hold's rationale), **never** touches `available` (orthogonal
+  upstream-tracking bookkeeping the doc never mentions resetting). Source
+  selection is asymmetric by design: the **target** wave must match
+  `--wave` strictly (required when the ring has more than one, rejected
+  if given but not found); the **source** ring only needs a matching wave
+  name when *it* is itself split — a single-occupant preceding ring
+  (the common case, e.g. waveless `qas` feeding both of `prd`'s waves)
+  applies regardless of the target's own wave name. **One safety margin
+  beyond the doc's literal scope**: refuses outright (`UsageError`) when
+  `build_promotion_view()` itself reports a Phase 2 error for the
+  workspace — `promote status` only *displays* a possibly-ambiguous view,
+  but `apply` *writes a file*, and silently resolving an ambiguous slot
+  to its first-seen occupant (the view's own degrade-gracefully behaviour)
+  is the wrong default for a mutating command. Zero common pin keys is
+  a real, reported outcome (`copied: []`), not an error — nothing to
+  promote is a legitimate state, not a failure. Reuses `version_controller.
+  py`'s exact `ruamel.yaml` round-trip technique (a fresh, intentionally
+  duplicated 6-line `_round_trip_yaml()` rather than a cross-module import
+  of a private helper) for the same reason: comments, key ordering and
+  quote style on every *untouched* pin in the file must survive. Manually
+  smoke-tested end-to-end against a scratch solution modelled on Worked
+  Example B before writing automated tests — confirmed the exact
+  mechanics above (comments/quotes preserved on an untouched sibling
+  `charts` pin, `reason` dropped, `reviewed` set to the real run date) and
+  every error path (missing `--wave`, unknown wave, unknown ring, no
+  preceding order). Tests: 10 new in
+  [test_promotion_controller.py](../../tests/strata/controllers/test_promotion_controller.py)
+  and 8 new in
+  [test_commands_promote.py](../../tests/strata/commands/test_commands_promote.py).
+  Full check suite clean, 2151 tests (18 new).
 
-### Phase 6 — `strata promote view <workspace> [--output <path>]`
+### Phase 6 — ✅ DONE (2026-10-06) — `strata promote view <workspace> [--output <path>]`
 
 - Separate command, reuses Phase 2's builder, emits the full structured
   `PromotionView` (YAML/JSON), stdout by default.
@@ -650,6 +853,52 @@ doc's own Phase 1 can start.
 - **Done when**: output round-trips (what `promote view` emits parses back
   into a `PromotionView`), and a grep of `audit_run.py` confirms it's
   never called from there.
+- **Shipped as**: `strata promote view WORKSPACE [--output-path PATH]` in
+  [promote_command.py](../../src/strata/commands/promote_command.py).
+  **One real naming conflict surfaced and resolved during implementation**:
+  the doc's own literal invocation (`strata promote view dspapi --output
+  promotion-view.yaml`) reuses `--output` as a *file path* — but every
+  other command in this CLI (including `promote status`/`apply`, already
+  shipped) already gives `-o/--output` a different, established meaning
+  (`console`/`json` rendering, `STRATA_OUTPUT`-env-var-aware). Reusing the
+  same flag name for a path here would have silently broken that
+  convention for this one command and surprised anyone used to it
+  elsewhere. Resolved by keeping `-o/--output {console,json}` exactly as
+  everywhere else, and introducing a deliberately differently-named
+  `--output-path PATH` for "write here instead of stdout" — functionally
+  identical to the doc's own intent, just not spelled the way its one-line
+  example literally showed it. `-o console` (default) renders the bare
+  `PromotionView` as YAML directly to stdout (matching the doc's own
+  `promotion-view.yaml` naming) — not wrapped in the usual header/footer
+  content, though `command_run()`'s own chrome still prints around it the
+  same as any other console-mode command (use `--quiet`, already a
+  standard flag on every command, for byte-clean output — no new
+  mechanism needed). `-o json` puts the view in the standard envelope's
+  `data` field, so `STRATA_OUTPUT=json` (the documented CI convention)
+  keeps working here exactly like everywhere else. `--output-path` writes
+  the *bare* rendered content (YAML or JSON, matching `-o`) to a file
+  instead of stdout — and when given, stdout's own `data`/output becomes
+  a small `{written_to, rings}` confirmation rather than a second,
+  duplicate copy of what could be a large payload (one real document per
+  ring/wave, each one a full `VersionModel`). Confirmed exit-code parity
+  with `status`: always `0` — a promotion inconsistency (Phase 2) is
+  surfaced via the normal diagnostics block, never failed on; enforcement
+  stays `strata validate`'s job. Manually smoke-tested all four
+  console/quiet/json/`--output-path` combinations against a scratch
+  Worked-Example-B-shaped solution before writing automated tests —
+  confirmed the YAML/JSON both round-trip through `PromotionView.
+  model_validate()`. Confirmed by grep: `audit_run.py` contains zero
+  references to `promotion_controller`/`promote_command`/
+  `build_promotion_view` (also asserted as a test, not just a one-off
+  check). Tests: 8 new in
+  [test_commands_promote.py](../../tests/strata/commands/test_commands_promote.py)
+  (console/json round-trip, the untagged-workspace empty-view case,
+  both `--output-path` combinations, the promotion-violation-shown-but-
+  not-failed case, outside-a-solution, and the audit-trail-isolation
+  grep). Full check suite clean, 2159 tests (8 new).
+
+  **The Implementation Plan's all six phases are now shipped** — the MVP
+  (Phases 1-3) plus the three "valuable but not blocking" phases (4-6).
 
 ## Related Decisions
 
@@ -678,8 +927,9 @@ doc's own Phase 1 can start.
   `ring`/`order`/`wave`'s shape against yet. Not treated as blocking —
   proceeding on the same informed-but-unproven basis as the rest of this
   doc, not waiting on it.
-- `strata promote apply`'s mechanics are settled (see its own section
-  above) — only the implementation itself remains to be built.
+- `strata promote apply`'s mechanics are settled and ✅ shipped 2026-10-06
+  (Phase 5) — including a resolved design ambiguity (preceding-order vs.
+  sibling-wave source; see Phase 5's own "Shipped as" entry).
 - **The "version" column is prospective, not actual** — depends on
   [version-lifecycle.md](version-lifecycle.md)'s audit-manifest wiring to
   fix properly; currently just a known, accepted limitation. Don't let
@@ -690,15 +940,17 @@ doc's own Phase 1 can start.
   succeeded" even means.
 - `build_promotion_view()` and its validation rules (ring↔order bijection,
   `(ring, order, wave)` uniqueness, no mixing waved/waveless at one slot,
-  the orphan-ring warning) are designed, not built.
-- `resolved.yaml`'s new optional `promotion` section is designed, not
-  built — needs `build_controller.write_resolved_manifest()` updated, and
-  `docs/design/build-time-value-categories.md`'s documented shape updated
-  to match.
-- `strata promote view <workspace> [--output <path>]` is designed, not
-  built — a separate command from `promote status`, deliberately not
-  wired into `audit_run.py`/`_manifest.json` so its boundary from the
-  audit trail stays unambiguous.
+  the orphan-ring warning) — ✅ shipped 2026-10-06 (Phase 2).
+- `resolved.yaml`'s new optional `promotion` section — ✅ shipped
+  2026-10-06 (Phase 4). `docs/design/build-time-value-categories.md`'s
+  documented shape updated to match.
+- `strata promote view <workspace> [--output <path>]` — ✅ shipped
+  2026-10-06 (Phase 6) as `strata promote view WORKSPACE [--output-path
+  PATH]` (see Phase 6's own "Shipped as" entry for the `--output` naming
+  conflict this resolved) — a separate command from `promote status`,
+  deliberately not wired into `audit_run.py`/`_manifest.json` so its
+  boundary from the audit trail stays unambiguous (confirmed by grep,
+  also asserted as a test).
 
 ## Changelog
 
@@ -776,3 +1028,86 @@ doc's own Phase 1 can start.
   shipped (`VersionSpecModel.workspace` + `_check_version_workspace()`) —
   this doc's own Phase 1 (`VersionPromotionModel` schema) is now
   unblocked and can start.
+- 2026-10-06: **Shipped Phase 1** — `VersionPromotionModel`
+  (`ring`/`order`/`wave`, both Phase 1 intra-document rules enforced).
+  Corrected a stale cross-reference in `version_model.py`'s own module
+  docstring (ADR-0019's original "ring attaches around this model" plan,
+  superseded by this doc's critical-review revision that attaches it
+  *inside* the model instead) rather than leaving code and prose
+  disagreeing. 8 new tests; full check suite clean. Phase 2
+  (`build_promotion_view()` + cross-document validation) is next.
+- 2026-10-06: **Shipped Phase 2** — `build_promotion_view()` +
+  `validate_promotions()` in new `promotion_controller.py`, implementing
+  all three Phase 2 checks (ring↔order bijection, `(ring, order, wave)`
+  uniqueness, no mixing waved/waveless at one slot) plus the orphan-ring
+  warning, wired into `strata validate`'s `SolutionContext.resolve()` as a
+  5th pass alongside `check_version_pins()`. `PromotionWaveView`/
+  `PromotionRingView`/`PromotionView` built as plain pydantic models, not
+  `PlatformBaseModel` — matching this doc's own "the user never authors
+  this" design note. 10 new tests, every one end-to-end through
+  `open_solution(...).resolve()` rather than the builder in isolation.
+  Full check suite clean, 2117 tests. Phase 3 (`strata promote status`)
+  is next.
+- 2026-10-06: **Shipped Phase 3** — `strata promote status <workspace>`,
+  read-only, always exits 0 (enforcement is `strata validate`'s job).
+  Two decisions made beyond the doc's own illustrative table: a row is
+  per-*pin* (new `target` column), since the one real production
+  `kind: version` document this schema was designed around pins 14
+  targets at once; and `← behind` compares sibling waves within one
+  `(ring, order)` group (not "across orders"), using
+  `packaging.version.Version`, only when every sibling's value actually
+  parses as one. 12 new tests. Full check suite clean, 2129 tests. Phase
+  4 (`resolved.yaml`'s `promotion` section) is next.
+- 2026-10-06: **Shipped Phase 4** — `resolved.yaml`'s optional `promotion`
+  section, populated from `ResolvedWorkspaceGraph`'s new `version` field
+  (the same already-pin-aware value `build_run()` computed for the
+  `remotes` overlay, simply threaded one step further). Reads
+  `graph.version.spec.promotion` directly, not `build_promotion_view()`
+  — a deliberate scope split: this section answers a deployment-scoped,
+  human-intent question ("did *my* deployment land where I meant it to"),
+  not the cross-document consistency question Phase 2 already owns.
+  `workspace` in the section is the deployment's own `spec.workspace`, not
+  the `Version` document's. 4 new tests, plus a manual smoke test against
+  the real `config/` dogfood solution (untagged — confirmed no section
+  written). Full check suite clean, 2133 tests. Phase 5
+  (`strata promote apply`) is next.
+- 2026-10-06: **Shipped Phase 5** — `strata promote apply <workspace>
+  <ring> [--wave W]`. Surfaced and resolved a real ambiguity in this very
+  doc: Worked Example B's own prose had quietly assumed `general` would
+  promote from its sibling `canary` wave's already-proven value, while
+  the "Mechanics, settled" bullets describe copying from the preceding
+  *order* instead — two different sources once a ring is split. Resolved
+  in favour of the preceding order, uniformly: `wave` carries no ordering
+  field (Phase 1's own "no inference from name or file order" rule), so
+  nothing could tell `apply` that `canary` precedes `general` specifically
+  rather than some third sibling. Corrected the worked example's own
+  prose to match the shipped number rather than leave doc and code
+  disagreeing. One safety margin added beyond the doc's literal scope:
+  refuses outright when the workspace has an unresolved Phase 2 error —
+  `apply` writes a file, so silently resolving an ambiguous slot to its
+  first-seen occupant (`promote status`'s own acceptable degrade-
+  gracefully behaviour) would be the wrong default for a mutation. 18 new
+  tests, plus a manual end-to-end smoke test confirming comments/quotes
+  survive on an untouched sibling pin. Full check suite clean, 2151
+  tests. Phase 6 (`strata promote view`) is next.
+- 2026-10-06: **Shipped Phase 6** — `strata promote view WORKSPACE
+  [--output-path PATH]`, the last of all six phases. Surfaced and
+  resolved a second real design conflict in this doc: its own literal
+  invocation example reused `--output` as a file-path flag, but every
+  other command in this CLI (including this doc's own `status`/`apply`)
+  already gives `-o/--output` an established, different meaning
+  (console/json rendering, `STRATA_OUTPUT`-env-var-aware). Kept the
+  established flag exactly as-is everywhere, and added a deliberately
+  differently-named `--output-path PATH` for "write here instead of
+  stdout" instead — same functional intent, no silent breakage of an
+  existing, documented convention. `-o console` (default) renders the
+  bare `PromotionView` as YAML, matching the doc's own `promotion-
+  view.yaml` naming; `-o json` puts it in the standard envelope, so
+  `STRATA_OUTPUT=json` keeps working here too; `--output-path` writes the
+  same bare content to a file, with stdout then carrying only a small
+  `{written_to, rings}` confirmation rather than a duplicate copy of a
+  potentially large payload. Confirmed both the YAML and JSON forms
+  round-trip through `PromotionView.model_validate()`, and confirmed (by
+  grep, and as a real test) that `audit_run.py` references nothing from
+  this feature at all. 8 new tests. Full check suite clean, 2159 tests.
+  **All six phases of this doc's Implementation Plan are now shipped.**

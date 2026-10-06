@@ -121,7 +121,6 @@ convention:
 - [ADR-0025](../decisions/0025-strata-supplies-input-not-source-rewriting.md) — why `sync_source()` copies verbatim and never rewrites a materialised source
 - [build-time-value-categories.md](build-time-value-categories.md) — design in progress for the `features`/`variables`/`properties`/`custom` gap in `default_output()` table above
 - [remotes.md](remotes.md) — `sync_source()`'s own prerequisite (remote-to-filesystem-path resolution, done for `local`/`git`)
-- [build-pipeline-status.md](build-pipeline-status.md) — the cross-ADR phase dashboard this doc's "what's built" table refines with real code references
 - [ADR-0029](../decisions/0029-provisioner-source-dependencies.md) / [provisioner-source-dependencies.md](provisioner-source-dependencies.md) — `ProvisionerModel.depends_on`, materialising a provisioner's source even when nothing in `execution` ever names it
 
 ## Remaining Work / Open Questions

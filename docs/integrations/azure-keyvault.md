@@ -12,7 +12,7 @@ instance — via the real Azure SDK (`azure-keyvault-secrets`), not the `az` CLI
 ## Authentication — ambient, via `DefaultAzureCredential`, never `spec.authentication`
 
 `kind: integration`'s `spec.authentication` field is not used here, deliberately — see
-[docs/work/store-integration-configuration.md](../work/store-integration-configuration.md#deliberately-out-of-scope)
+[docs/design/store-integration-configuration.md](../design/store-integration-configuration.md#deliberately-out-of-scope)
 for the full reasoning. In short: `DefaultAzureCredential`'s entire point is *not* needing an
 explicit credential value — it chains through managed identity, workload identity/OIDC, then
 `az login`, automatically, with nothing to declare in the common case (a managed identity assigned

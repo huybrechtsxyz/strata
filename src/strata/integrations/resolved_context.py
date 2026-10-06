@@ -33,6 +33,7 @@ from strata.models.provider_model import ProviderModel
 from strata.models.resource_model import ResourceModel
 from strata.models.store_model import VariableValueType
 from strata.models.tenant_model import TenantModel
+from strata.models.version_model import VersionModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.utils.diagnostics import Diagnostics
 
@@ -125,6 +126,12 @@ class ResolvedWorkspaceGraph:
     caller with no deployment in scope (none exist today; kept optional for
     the same reason `tenant` is), in which case that function falls back to
     workspace-only defaults.
+
+    `version` is the `Version` document `deployment.spec.version` resolved
+    to (docs/work/promotion.md Phase 4), already reflecting `--pin` when
+    one was given (`value_controller.resolve_version()`'s own job) — needed
+    by `write_resolved_manifest()`'s optional `promotion` section. `None`
+    when the deployment names no version, same as `tenant`.
     """
 
     workspace: WorkspaceModel
@@ -141,6 +148,7 @@ class ResolvedWorkspaceGraph:
     custom: dict[str, Any] = field(default_factory=dict)
     tenant: TenantModel | None = None
     deployment: DeploymentModel | None = None
+    version: VersionModel | None = None
 
 
 @dataclass(frozen=True)

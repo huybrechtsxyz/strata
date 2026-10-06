@@ -12,7 +12,7 @@ strata talks to it over its REST API directly (no `infisical` CLI dependency).
 ## Authentication — always an environment variable, never `spec.authentication`
 
 `kind: integration`'s `spec.authentication` field is not used for Infisical, deliberately —
-see [docs/work/store-integration-configuration.md](../work/store-integration-configuration.md#deliberately-out-of-scope)
+see [docs/design/store-integration-configuration.md](../design/store-integration-configuration.md#deliberately-out-of-scope)
 for the full reasoning. In short: an `authentication` value would itself need to be a
 `${secret:...}` reference, which would need to already be resolved before this very integration
 can resolve anything — a real circularity, not just an inconvenience. Set these as real process
