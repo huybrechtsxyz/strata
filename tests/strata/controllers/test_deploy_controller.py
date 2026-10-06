@@ -250,6 +250,14 @@ def test_deploy_run_dry_run_integration_error_from_plan_is_a_warning_not_a_failu
 
     monkeypatch.setattr(TerraformIntegration, "plan", _raising_plan)
 
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
     diagnostics = deploy_run(_context(root), "app", build_path, force=True, dry_run=True)
 
     assert diagnostics.ok
@@ -276,6 +284,14 @@ def test_deploy_run_real_apply_integration_error_from_plan_is_a_hard_failure(tmp
         raise IntegrationError("no preview mechanism for this tool")
 
     monkeypatch.setattr(TerraformIntegration, "plan", _raising_plan)
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
 
     diagnostics = deploy_run(_context(root), "app", build_path, force=True)
 
