@@ -317,8 +317,8 @@ class InfraIntegration(Integration):
         self, path: Path, *, diagnostics: Diagnostics, location: str, **kwargs: Any
     ) -> CommandResult | None:
         """Call `self.plan(path, **kwargs)`, folding an `IntegrationError` into
-        a warning instead of propagating it (docs/work/deploy-plan-preview.md
-        §3) — "preview if the tool supports it, otherwise just say so."
+        a warning instead of propagating it — "preview if the tool
+        supports it, otherwise just say so."
         `deploy_run()`'s real `--dry-run` preview and both Helm/Compose
         `deploy_namespace()` implementations call this instead of `plan()`
         directly, so the graceful-degradation rule lives in exactly one

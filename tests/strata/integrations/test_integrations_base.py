@@ -190,9 +190,8 @@ def test_run_delegates_to_run_command_with_the_resolved_executable():
 
 
 def test_run_forwards_line_callback_to_run_command(monkeypatch):
-    """docs/work/deploy-plan-preview.md §4 — `run()` must thread
-    `line_callback` through to `run_command()`, which already implements
-    the real streaming."""
+    """`run()` must thread `line_callback` through to `run_command()`,
+    which already implements the real streaming."""
     captured: dict[str, object] = {}
 
     def _fake_run_command(args, *, cwd=None, env=None, timeout=300, input=None, line_callback=None):

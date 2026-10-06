@@ -149,8 +149,7 @@ def test_deploy_run_apply_never_uses_auto_approve(tmp_path: Path, _capture):
 
 
 def test_deploy_run_dry_run_calls_init_validate_plan_but_not_deploy(tmp_path: Path, _capture):
-    """docs/work/deploy-plan-preview.md Implementation Plan phase 2 —
-    `--dry-run` now runs a real preview (`init`/`validate`/`plan`, saved to
+    """`--dry-run` now runs a real preview (`init`/`validate`/`plan`, saved to
     `<step>.tfplan` same as a normal run) and stops — `deploy`/`output`
     are never called. Matches v1's own `setup -> check -> plan` dry-run
     sequence; replaces the old "zero tool contact" meaning, which moved to
@@ -236,9 +235,9 @@ def test_deploy_run_validate_failure_is_a_hard_error(tmp_path: Path, monkeypatch
 
 
 def test_deploy_run_dry_run_integration_error_from_plan_is_a_warning_not_a_failure(tmp_path: Path, monkeypatch):
-    """docs/work/deploy-plan-preview.md §3 — a tool whose `plan()` raises
-    `IntegrationError` (no meaningful preview supported) is a warning, and
-    the run continues — not a hard failure."""
+    """A tool whose `plan()` raises `IntegrationError` (no meaningful
+    preview supported) is a warning, and the run continues — not a hard
+    failure."""
     root = _terraform_solution(tmp_path)
     build_path = tmp_path / "build"
     build_run(_context(root), "app", build_path)
@@ -285,10 +284,9 @@ def test_deploy_run_real_apply_integration_error_from_plan_is_a_hard_failure(tmp
 
 
 def test_deploy_run_streams_subprocess_lines_tool_prefixed(tmp_path: Path, monkeypatch):
-    """docs/work/deploy-plan-preview.md §4 — `on_line` receives
-    `(tool, stream, text)` for every subprocess output line, enriched with
-    the current step's integration type by the orchestrator itself (the
-    CLI layer has no per-step hook of its own)."""
+    """`on_line` receives `(tool, stream, text)` for every subprocess
+    output line, enriched with the current step's integration type by the
+    orchestrator itself (the CLI layer has no per-step hook of its own)."""
     root = _terraform_solution(tmp_path)
     build_path = tmp_path / "build"
     build_run(_context(root), "app", build_path)
@@ -321,11 +319,109 @@ def test_deploy_run_streams_subprocess_lines_tool_prefixed(tmp_path: Path, monke
     assert any("apply" in text for _tool, _stream, text in lines)
 
 
+def _solution_with_secret(tmp_path: Path, secret_value: str) -> Path:
+    """One Terraform step, one declared secret — shared by the redaction
+    tests below."""
+    root = _solution(tmp_path)
+    _write(root, "infra/main.tf", "# root module\n")
+    _write(
+        root,
+        "provider.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
+        "  properties:\n    type: local\n    region: local\n",
+    )
+    _write(
+        root,
+        "resource.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
+        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  default_tags:\n    managed-by: strata\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec:\n"
+        f"  secrets:\n    - key: db_password\n      store: constant\n      value: {secret_value}\n",
+    )
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        "  workspace: main\n  environments:\n    - prd\n",
+    )
+    return root
+
+
+def test_deploy_run_redacts_secret_values_from_streamed_output(tmp_path: Path, monkeypatch):
+    """A resolved secret value must never reach `on_line` verbatim, since
+    some tools (Helm's `--dry-run` rendered manifest) echo substituted
+    values in their own output."""
+    root = _solution_with_secret(tmp_path, "hunter2")
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if line_callback is not None:
+            line_callback("stdout", "db_password = hunter2")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    lines: list[str] = []
+    diagnostics = deploy_run(
+        _context(root), "app", build_path, force=True, on_line=lambda tool, stream, text: lines.append(text)
+    )
+
+    assert diagnostics.ok
+    assert lines
+    assert all("hunter2" not in text for text in lines)
+    assert any("***" in text for text in lines)
+
+
+def test_deploy_run_does_not_redact_a_secret_shorter_than_the_floor(tmp_path: Path, monkeypatch):
+    """A secret value below `_MIN_REDACT_LENGTH` is left unmasked —
+    accepted tradeoff, redacting it would turn ordinary short substrings
+    throughout the rest of the output into `***` too."""
+    root = _solution_with_secret(tmp_path, "abc")
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if line_callback is not None:
+            line_callback("stdout", "db_password = abc")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    lines: list[str] = []
+    diagnostics = deploy_run(
+        _context(root), "app", build_path, force=True, on_line=lambda tool, stream, text: lines.append(text)
+    )
+
+    assert diagnostics.ok
+    assert any("abc" in text for text in lines)
+
+
 def test_deploy_run_smoke_test_never_calls_run_command(tmp_path: Path, _capture):
-    """docs/work/deploy-plan-preview.md — `smoke_test` keeps the old
-    `dry_run` meaning permanently: zero tool contact. `dry_run` itself was
-    redefined in phase 2 to run a real init/validate/plan preview instead
-    (see `test_deploy_run_dry_run_calls_init_validate_plan_but_not_deploy`).
+    """`smoke_test` keeps the old `dry_run` meaning permanently: zero tool
+    contact. `dry_run` itself was redefined to run a real
+    init/validate/plan preview instead (see
+    `test_deploy_run_dry_run_calls_init_validate_plan_but_not_deploy`).
     """
     root = _terraform_solution(tmp_path)
     build_path = tmp_path / "build"
@@ -1831,10 +1927,9 @@ def test_deploy_run_dispatches_container_capable_step_to_deploy_namespace(tmp_pa
 
 
 def test_deploy_run_dry_run_previews_container_capable_step_via_plan(tmp_path: Path, _capture):
-    """docs/work/deploy-plan-preview.md phase 3 — a container-capable step
-    gets a real preview under `--dry-run` too: `helm upgrade --dry-run
-    --install` via `deploy_namespace()`'s `plan_or_warn()` call, never a
-    real `helm upgrade`/`deploy()`."""
+    """A container-capable step gets a real preview under `--dry-run` too:
+    `helm upgrade --dry-run --install` via `deploy_namespace()`'s
+    `plan_or_warn()` call, never a real `helm upgrade`/`deploy()`."""
     root = _helm_solution(tmp_path)
     build_path = tmp_path / "build"
     build_run(_context(root), "app", build_path)

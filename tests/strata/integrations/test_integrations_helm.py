@@ -752,10 +752,10 @@ def test_deploy_namespace_unresolvable_chart_remote_reports_a_diagnostic_and_ski
 
 
 def test_deploy_namespace_dry_run_calls_plan_not_deploy(monkeypatch, tmp_path: Path):
-    """docs/work/deploy-plan-preview.md §2a — `dry_run` is a real preview
-    now: it writes the resolved `values.yaml` (same real input a deploy
-    would use) and calls `helm upgrade --dry-run --install` via
-    `plan_or_warn()`, never `self.deploy()`."""
+    """`dry_run` is a real preview now: it writes the resolved
+    `values.yaml` (same real input a deploy would use) and calls `helm
+    upgrade --dry-run --install` via `plan_or_warn()`, never
+    `self.deploy()`."""
     captured = _capture(monkeypatch)
     module = _module(
         services=[

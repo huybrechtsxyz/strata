@@ -119,13 +119,12 @@ class HelmIntegration(InfraIntegration):
         while secret-shaped leaves are delivered via `--set-string`,
         never written to disk.
 
-        `dry_run` (docs/work/deploy-plan-preview.md §2a): still writes the
-        resolved `values.yaml` (a preview needs the same real input a
-        `helm upgrade` would use) then calls `self.plan_or_warn(...)`
-        (`helm upgrade --dry-run --install`) instead of `self.deploy(...)`
-        — never both. A tool-unsupported preview is a warning, not a
-        failure (`plan_or_warn()`'s own contract); a real plan failure is
-        still an error.
+        `dry_run`: still writes the resolved `values.yaml` (a preview
+        needs the same real input a `helm upgrade` would use) then calls
+        `self.plan_or_warn(...)` (`helm upgrade --dry-run --install`)
+        instead of `self.deploy(...)` — never both. A tool-unsupported
+        preview is a warning, not a failure (`plan_or_warn()`'s own
+        contract); a real plan failure is still an error.
         """
         del kwargs
         diagnostics = Diagnostics()
@@ -167,9 +166,9 @@ class HelmIntegration(InfraIntegration):
                 values_file.write_text(yaml.safe_dump(resolved_values, sort_keys=False, default_flow_style=False))
 
             if dry_run:
-                # Real preview, not a skip (docs/work/deploy-plan-preview.md
-                # §2a) — `plan()` needs the same rendered file on disk a real
-                # `deploy()` would use, just not followed by one.
+                # Real preview, not a skip — `plan()` needs the same
+                # rendered file on disk a real `deploy()` would use, just
+                # not followed by one.
                 plan_result = self.plan_or_warn(
                     values_file,
                     diagnostics=diagnostics,

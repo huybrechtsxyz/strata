@@ -1,6 +1,10 @@
 # `strata deploy run` — Execution Orchestrator
 
-- Status: accepted
+- Status: accepted — `--dry-run`'s exact preview semantics within
+  `deploy run` (left unspecified here beyond listing the flag) are now
+  decided by [ADR-0030](0030-deploy-run-plan-preview-and-streaming.md),
+  which also adds `--smoke-test`/`--follow`; every other decision in this
+  ADR stands unchanged.
 - Date: 2026-09-27
 - Related: [ADR-0021](0021-integration-layer.md) (the integration layer
   this consumes — `InfraIntegration.plan()`/`.deploy()`/`.destroy()`,

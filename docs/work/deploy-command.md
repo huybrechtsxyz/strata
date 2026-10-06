@@ -18,24 +18,23 @@
   already-working, already-tested claimed example (empirically
   reproduced) — fixing that is now step (0) of this design, ahead of the
   new capability/checks
-- Last updated: 2026-10-06 (linked `--smoke-test`/`--dry-run`-redefine/
-  streaming work, now built — `unresolved_value_tokens()` staleness note
-  from 2026-09-29 still applies)
+- Last updated: 2026-10-06 (graduated the `--smoke-test`/`--dry-run`-
+  redefine/streaming feature to its own finished design doc + ADR-0030,
+  below — `unresolved_value_tokens()` staleness note from 2026-09-29
+  still applies)
 
-See also: [deploy-plan-preview.md](deploy-plan-preview.md) — a confirmed
-gap found via a real CI pipeline run: `--dry-run` never called
-`init`/`validate`/`plan` at all (not even a real Terraform/Helm/Compose/
-GitOps plan preview), and subprocess output streaming (`line_callback`)
-was not wired end-to-end despite the low-level transport already
-supporting it. **Now built** (that doc's Implementation Plan phases 1-4):
-today's zero-contact behaviour moved to a new `--smoke-test` flag,
-`--dry-run` itself now runs a real `init`/`validate`/`plan` preview and
-stops before `deploy()`, and `--follow`/`-f` streams subprocess output
-live, tool-prefixed. Phases 5 (this cross-link) and 6 (consumer
-coordination with haven/cfg-int-deployment) remain — not yet folded back
-into this doc's own body since that doc isn't fully graduated yet
-(docs/design/README.md's own "nothing pending" rule for promoting a
-work doc).
+See also: [docs/design/deploy-plan-preview.md](../design/deploy-plan-preview.md)
+([ADR-0030](../decisions/0030-deploy-run-plan-preview-and-streaming.md))
+— a confirmed gap found via a real CI pipeline run (`--dry-run` never
+called `init`/`validate`/`plan` at all; subprocess streaming was accepted
+but never wired end-to-end) is now a **finished, graduated feature**:
+today's zero-contact behaviour moved to `--smoke-test`, `--dry-run` now
+runs a real `init`/`validate`/`plan` preview and stops before `deploy()`,
+and `--follow`/`-f` streams subprocess output live, tool-prefixed, with
+secret redaction. Not folded into this doc's own body since it's a
+cleanly separable, independently-finished feature — this doc remains
+open for its own unrelated concerns (locking, SIEM, whole-run timeout,
+`store: artifact` at deploy time).
 
 ## Overview
 
@@ -216,14 +215,14 @@ deploy_run(context, deployment_name, build_path, *, force, dry_run=False, smoke_
   └─ return diagnostics                                              # extension point 3 (unconditional): locking/audit cleanup later
 ```
 
-**Superseded by [deploy-plan-preview.md](deploy-plan-preview.md)**: the
-`if not dry_run:` skip-everything branch above reflects this section's
+**Superseded by [docs/design/deploy-plan-preview.md](../design/deploy-plan-preview.md)**:
+the `if not dry_run:` skip-everything branch above reflects this section's
 original design, not current behaviour. `--dry-run` now runs `init`/
 `validate`/`plan` for real and only skips `deploy()` (and the output
 collection that follows a real apply) — the zero-contact "would run"
 report this pseudocode originally described moved to the new
 `--smoke-test` flag instead. `on_line` (streaming) is also new, not shown
-in the per-step body above. See that doc's §§1-4 for the current, exact
+in the per-step body above. See that doc for the current, exact
 behaviour — not repeated here to avoid two sources of truth drifting
 apart; this pseudocode block is kept as the original orchestrator-shape
 record, not continuously updated line-by-line as later phases land.

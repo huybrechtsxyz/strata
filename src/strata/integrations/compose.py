@@ -160,13 +160,12 @@ class ComposeIntegration(InfraIntegration):
         (`env=`, merged by `Integration.run()`), which Compose's own
         interpolation engine reads at parse time.
 
-        `dry_run` (docs/work/deploy-plan-preview.md §2a): still writes the
-        resolved compose file (a preview needs the same real input a
-        `docker stack deploy` would use) then calls `self.plan_or_warn(...)`
-        (`docker stack config`) instead of `self.deploy(...)` — never
-        both. A tool-unsupported preview is a warning, not a failure
-        (`plan_or_warn()`'s own contract); a real plan failure is still an
-        error.
+        `dry_run`: still writes the resolved compose file (a preview
+        needs the same real input a `docker stack deploy` would use) then
+        calls `self.plan_or_warn(...)` (`docker stack config`) instead of
+        `self.deploy(...)` — never both. A tool-unsupported preview is a
+        warning, not a failure (`plan_or_warn()`'s own contract); a real
+        plan failure is still an error.
         """
         del kwargs
         diagnostics = Diagnostics()
@@ -191,9 +190,9 @@ class ComposeIntegration(InfraIntegration):
         compose_file.write_text(yaml.safe_dump(resolved_document, sort_keys=False, default_flow_style=False))
 
         if dry_run:
-            # Real preview, not a skip (docs/work/deploy-plan-preview.md
-            # §2a) — `docker stack config` needs the same rendered file on
-            # disk a real `deploy()` would use, just not followed by one.
+            # Real preview, not a skip — `docker stack config` needs the
+            # same rendered file on disk a real `deploy()` would use, just
+            # not followed by one.
             plan_result = self.plan_or_warn(
                 compose_file,
                 diagnostics=diagnostics,

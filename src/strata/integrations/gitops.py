@@ -219,8 +219,8 @@ class BaseGitOpsIntegration(InfraIntegration):
         class(es)" section) — an unreachable remote surfaces as a failure
         here, there is no separate reachability probe.
 
-        `line_callback` (docs/work/deploy-plan-preview.md §4): streams this
-        method's one real subprocess call (`git diff`). `deploy()`/
+        `line_callback`: streams this method's one real subprocess call
+        (`git diff`). `deploy()`/
         `destroy()` do **not** support it yet — both delegate to
         `git_push.py`'s `push_file()`/`remove_file()`, which each make
         several internal `run_command()` calls (clone/fetch/verify/reset/

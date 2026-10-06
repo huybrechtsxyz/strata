@@ -512,10 +512,9 @@ def test_deploy_namespace_unresolvable_token_reports_a_diagnostic(monkeypatch, t
 
 
 def test_deploy_namespace_dry_run_calls_plan_not_deploy(monkeypatch, tmp_path: Path):
-    """docs/work/deploy-plan-preview.md §2a — `dry_run` is a real preview
-    now: it writes the resolved `docker-compose.yml` (same real input a
-    deploy would use) and calls `docker stack config` via
-    `plan_or_warn()`, never `self.deploy()`."""
+    """`dry_run` is a real preview now: it writes the resolved
+    `docker-compose.yml` (same real input a deploy would use) and calls
+    `docker stack config` via `plan_or_warn()`, never `self.deploy()`."""
     captured = _capture(monkeypatch)
     module = _module("portainer", services=[ModuleServiceModel(name="portainer")])
     namespace_dir = tmp_path / "hearth"

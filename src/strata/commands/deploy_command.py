@@ -228,11 +228,11 @@ def deploy_run_command(
         execution_id = str(uuid.uuid4())
         started_at = datetime.now(timezone.utc)
 
-        # Tier-1 console streaming (docs/work/deploy-plan-preview.md §4) —
-        # console output only, same "never make JSON unparseable" precedent
-        # --verbose already follows. Silently inert otherwise, matching
-        # --verbose's own behaviour rather than raising a UsageError for a
-        # flag combination that simply has nothing to do.
+        # Tier-1 console streaming — console output only, same "never make
+        # JSON unparseable" precedent --verbose already follows. Silently
+        # inert otherwise, matching --verbose's own behaviour rather than
+        # raising a UsageError for a flag combination that simply has
+        # nothing to do.
         on_line: Callable[[str, str, str], None] | None = None
         if follow and output == "console":
 
@@ -261,7 +261,7 @@ def deploy_run_command(
         # their recorded outcome; a required sink's push failure can still
         # fail this command's own exit code, merged in below. `smoke_test`
         # is zero-contact, same as `dry_run` — both must no-op the manifest/
-        # metrics write (docs/work/deploy-plan-preview.md §5).
+        # metrics write.
         audit_diagnostics = finalize_and_distribute_deploy_audit(
             context,
             deployment,

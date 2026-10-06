@@ -195,8 +195,7 @@ def test_build_path_option_overrides_the_default(runner, solution, tmp_path, _st
 
 
 def test_dry_run_calls_plan_but_not_apply(runner, solution, _stub_terraform):
-    """docs/work/deploy-plan-preview.md Implementation Plan phase 2 —
-    `--dry-run` now runs a real preview (init/validate/plan) and stops;
+    """`--dry-run` now runs a real preview (init/validate/plan) and stops;
     the old "zero tool contact" meaning moved to `--smoke-test`.
     """
     _build(runner, solution)
@@ -225,7 +224,7 @@ def test_dry_run_and_smoke_test_are_mutually_exclusive(runner, solution, _stub_t
 @pytest.fixture
 def _stub_terraform_streaming(monkeypatch):
     """Like `_stub_terraform`, but also invokes `line_callback` with one
-    fake line per call — docs/work/deploy-plan-preview.md §4."""
+    fake line per call."""
 
     def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
         if line_callback is not None:

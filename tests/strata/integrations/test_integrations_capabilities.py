@@ -583,8 +583,8 @@ def test_every_registered_class_is_compliant():
 
 
 # ---------------------------------------------------------------------------
-# InfraIntegration.plan_or_warn() (docs/work/deploy-plan-preview.md §3) —
-# graceful degradation: "preview if the tool supports it, otherwise not".
+# InfraIntegration.plan_or_warn() — graceful degradation: "preview if the
+# tool supports it, otherwise not".
 # ---------------------------------------------------------------------------
 
 

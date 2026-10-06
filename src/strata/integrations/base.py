@@ -179,11 +179,11 @@ class Integration(ABC):
     ) -> CommandResult:
         """Run `command` with `args` (see `strata.utils.transport.run_command`).
 
-        `line_callback` (docs/work/deploy-plan-preview.md §4): when given,
-        called as `(stream, line)` for every line of output as it arrives
-        — forwarded straight through to `run_command()`, which already
-        implements the actual streaming (`_run_streaming()`). `None`
-        (default) keeps today's buffered-until-exit behaviour unchanged.
+        `line_callback`: when given, called as `(stream, line)` for every
+        line of output as it arrives — forwarded straight through to
+        `run_command()`, which already implements the actual streaming
+        (`_run_streaming()`). `None` (default) keeps today's
+        buffered-until-exit behaviour unchanged.
         """
         command = self.command
         if command is None:

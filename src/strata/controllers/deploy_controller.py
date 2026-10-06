@@ -57,6 +57,13 @@ from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError
 from strata.utils.value_tokens import extract_value_tokens, resolve_value_tokens_in_mapping
 
+#: Minimum length a resolved secret value must have before `_redact()`
+#: will replace it out of streamed subprocess output — a short secret
+#: would otherwise turn redaction into a scattergun replace that corrupts
+#: unrelated, innocuous output. Same accepted tradeoff tools like GitHub
+#: Actions' own log masking make.
+_MIN_REDACT_LENGTH = 6
+
 
 def _contains_output_token(node: object) -> bool:
     """True if `node` (a raw dns/networks/firewalls payload, or any nested
@@ -225,11 +232,10 @@ def deploy_run(
         dry_run: Runs `init`/`validate`/`plan` for real (saved to
             `<step>.tfplan`, same as a normal run) and stops — `deploy()`
             is never called. Matches v1's own `setup -> check -> plan`
-            dry-run sequence (docs/work/deploy-plan-preview.md
-            Implementation Plan phase 2) — **not** a zero-contact "would
-            run" report; that's `smoke_test` now. A step whose tool
-            doesn't meaningfully support a preview gets a warning instead
-            of a hard failure (`InfraIntegration.plan_or_warn()`), and the
+            dry-run sequence — **not** a zero-contact "would run" report;
+            that's `smoke_test` now. A step whose tool doesn't
+            meaningfully support a preview gets a warning instead of a
+            hard failure (`InfraIntegration.plan_or_warn()`), and the
             run continues to the next step. A container-capable
             (Helm/Compose) step's `deploy_namespace()` gets the
             equivalent real-preview treatment (phase 3). Mutually
@@ -245,8 +251,8 @@ def deploy_run(
             placement — workspace-owned, not deployment-owned).
         on_step: Called with a one-line progress message per step.
         on_line: Called as `(tool, stream, text)` for every subprocess
-            output line as it arrives (docs/work/deploy-plan-preview.md
-            §4) — `tool` is the resolved integration's own `TYPE`
+            output line as it arrives — `tool` is the resolved
+            integration's own `TYPE`
             (`"terraform"`/`"helm"`/`"compose"`), `stream` is
             `"stdout"`/`"stderr"`, `text` the raw line. `None` (default)
             keeps today's buffered-until-exit behaviour. This function
@@ -304,6 +310,24 @@ def deploy_run(
     diagnostics.extend(resolved.diagnostics)
     if not resolved.diagnostics.ok:
         return diagnostics
+
+    # Secret redaction for streamed output — `resolved.values` deliberately
+    # drops which store a value came from (`ValueResolution`'s own
+    # docstring), but `secrets` above still has every declared secret key
+    # name, so the actual resolved secret *values* can be reconstructed
+    # here, once, and redacted out of every streamed line before a caller
+    # (console
+    # `--follow`, a future NDJSON writer) ever sees it. This one set also
+    # covers Helm/Compose's own per-module `--set-string` secrets for
+    # free — `resolve_module_values()`/`resolve_compose_values()` derive
+    # those from `${secret:KEY}` tokens resolved against this exact same
+    # `resolved.values` dict, so no second mechanism is needed.
+    secret_values = {v for k, v in resolved.values.items() if k in secrets and len(v) >= _MIN_REDACT_LENGTH}
+
+    def _redact(text: str) -> str:
+        for value in secret_values:
+            text = text.replace(value, "***")
+        return text
 
     # For `provisioner.output.template` rendering only (phase 8) — same
     # assembly `build_run()` uses, so a template validated at build time
@@ -524,11 +548,10 @@ def deploy_run(
         # practice, but the default-argument binding is correct regardless).
         def _line(stream: str, text: str, _tool: str = integration.TYPE) -> None:
             if on_line is not None:
-                on_line(_tool, stream, text)
+                on_line(_tool, stream, _redact(text))
 
         # `smoke_test` is the only flag that short-circuits here — zero
-        # tool contact at all. `dry_run` (docs/work/deploy-plan-preview.md
-        # Implementation Plan phase 2) flows all the way through
+        # tool contact at all. `dry_run` flows all the way through
         # init/validate/plan and only stops before `deploy()` below, after
         # a successful plan — it is intentionally absent from this
         # condition.
