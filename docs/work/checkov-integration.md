@@ -3,7 +3,8 @@
 - Status: not started — catalog only, sized against v1's real source. The
   one hard prerequisite this doc originally flagged (`build run`'s
   provisioner-path resolution) is now unblocked — see "v2: current state"
-  below
+  below. **The `on_missing_data` granularity/configurability question is
+  provisionally decided (2026-10-07) — see "v2 design decision" below.**
 - Last updated: 2026-10-07
 - Related: [policy-engine-architecture.md](policy-engine-architecture.md)
   (umbrella catalog — `checkov` is bucket C: needs a real external scanner,
@@ -150,6 +151,93 @@ enforced" is never indistinguishable from "scanned and clean":
   provisioners in the same policy still get scanned).
 - Scan subprocess fails → pass, skip that one provisioner only.
 
+**Note what v1 does NOT have, confirmed by re-reading its own real
+`checkov_policy.py` config surface above**: there is no `on_missing_data`
+field anywhere in Checkov's real v1 config (contrast with
+[cve-scanner-integration.md](cve-scanner-integration.md)'s own
+`on_missing_data: skip|warn|block`, a real, documented ADR-0082 field).
+v1's Checkov degradation is hardcoded to "always skip, always warn" —
+never configurable to block. This is the real shape the decision below
+has to reconcile against, not an assumption.
+
+### v2 design decision (provisional — decided ahead of implementation, 2026-10-07)
+
+Per [cve-scanner-integration.md](cve-scanner-integration.md)'s own
+Remaining Work item #3 ("decide explicitly when Checkov is picked up, not
+by default"): made here as a **provisional**, pre-implementation design
+call, not validated against real code yet — the user explicitly asked for
+this to be decided now, in the abstract, rather than waiting for the
+actual build. Revisit/confirm once Phase 1 of this integration is
+actually built and tested.
+
+**The question has two genuinely separable parts, not one — worth stating
+precisely before answering either:**
+
+1. **Granularity** — does a missing-data condition affect the whole
+   policy result, or just the one provisioner/namespace it was found on?
+2. **Configurability** — is the response to missing data
+   (skip/warn/block) a config knob at all, or hardcoded?
+
+**Part 1 — Decision: keep v1's real per-provisioner granularity, do NOT
+normalize to a single whole-policy switch.** v1's own behavior here is
+better, not just different, and worth preserving deliberately: Checkov
+(via `scope: staged|all|<stage-name>`) can legitimately scan **N
+independent provisioners/namespaces** in one policy evaluation — CVE never
+has more than one `sbom.json` to scan, so its own `on_missing_data` is
+necessarily a whole-policy scalar by construction, not a considered
+design choice to *not* be per-unit. Collapsing Checkov to a single
+whole-policy switch would be a real regression versus v1: one
+misconfigured or unscannable provisioner (e.g. a registry-pulled Helm
+chart with no local source, explicitly already skipped-with-warning
+above) would block coverage of every *other*, perfectly scannable
+provisioner in the same policy — exactly the "don't let one bad apple
+spoil the batch" case v1's own docstring (already quoted above: "skip
+that one provisioner only (other provisioners in the same policy still
+get scanned)") was written to prevent. Normalizing away a deliberately
+better, already-tested v1 behavior for the sake of superficial
+consistency with CVE would be the wrong trade.
+
+**Part 2 — Decision: ADD a real `on_missing_data: skip|warn|block`
+field to v2's `checkov_policy`, unlike v1 — matching CVE's exact field
+name and vocabulary, applied per-provisioner (per Part 1).** This is a
+deliberate *improvement* over v1, not a straight port, and the
+justification is the same one [cve-scanner-integration.md](cve-scanner-integration.md)'s
+own "Graceful degradation" section already established and chose to
+preserve/harden for CVE specifically: *"a security-flavored guardrail...
+'never actually scanned' should not look the same as 'scanned and
+clean'."* That reasoning is not CVE-specific —
+Checkov is equally a security guardrail (CRITICAL/HIGH misconfiguration
+findings), and v1's hardcoded "always skip, always warn" means an
+operator can never configure a Checkov policy to actually *fail* a build
+when, say, the `checkov` binary silently isn't installed on a CI runner —
+the exact same silent-pass risk CVE's own docstring already flagged, and
+v2 already decided to put a real, configurable knob on for CVE. Concretely:
+
+- `skip` — no finding recorded for that provisioner at all (matches v1's
+  only real behavior today).
+- `warn` — a warning scoped to that one provisioner; the policy's overall
+  `passed` is unaffected by it alone.
+- `block` (recommended default, matching `cve_policy`'s own
+  rationale/default) — an error scoped to that one provisioner. Note this
+  does **not** stop *other* provisioners from still being scanned and
+  reported (Part 1's own granularity decision) — but since any error
+  anywhere fails `Diagnostics.ok`, a `block`-triggered missing-data
+  condition on even one provisioner still fails the overall build, the
+  same end result CVE's own `on_missing_data: block` produces for its one
+  scan target.
+
+**Net effect — one shared, consistent operator-facing vocabulary
+(`on_missing_data: skip|warn|block`, same field name, same three values,
+same `block` default) across every scanner-type policy, while each
+policy's own internal evaluation granularity stays whatever its real
+data shape demands** (one scalar check for CVE's one SBOM; N independent
+per-provisioner checks for Checkov's N scannable targets). An operator who
+already understands `cve_policy.on_missing_data` does not have to learn a
+second concept for `checkov_policy` — only that it is evaluated once per
+scanned provisioner instead of once per policy, a natural and discoverable
+consequence of Checkov's own `scope` field already being plural, not a
+new idea to teach.
+
 ## v2: current state
 
 No `integrations/checkov.py`, no `PolicyModel`/`CheckovPolicyModel` for any
@@ -186,9 +274,11 @@ complexity, concentrated in path resolution rather than evaluation logic:
    design decisions to revisit.
 2. **A `CheckovPolicy` (or v2-equivalent model)** — the framework→
    provisioner-type mapping, `scope` resolution (`staged`/`all`/
-   `<stage-name>`), severity-gate comparison. Previously blocked on
-   `build run`'s provisioner-path resolution existing — **no longer
-   blocked**, see "v2: current state" above.
+   `<stage-name>`), severity-gate comparison, **plus a new
+   `on_missing_data: skip|warn|block` field v1 never had** (see "v2
+   design decision" above — provisional, decided 2026-10-07). Previously
+   blocked on `build run`'s provisioner-path resolution existing — **no
+   longer blocked**, see "v2: current state" above.
 3. **Helm's separate resolution path** — namespace/module enumeration via
    `NamespaceService`, local-vs-registry chart distinction. Can be deferred
    to a second phase (terraform/bicep/ansible first, matching
@@ -256,3 +346,21 @@ complexity, concentrated in path resolution rather than evaluation logic:
   field + inline evaluator, same as every other policy type shipped so
   far — nothing left open here. No code changed — doc update only, this
   integration itself remains not started.
+- 2026-10-07: Provisionally decided the `on_missing_data` granularity/
+  configurability question (cve-scanner-integration.md's Remaining Work
+  item #3), per direct request to make this call now rather than wait
+  for Checkov's own implementation. Split the question into two separable
+  parts: **granularity** (keep v1's real per-provisioner behavior — a
+  whole-policy switch would regress real coverage, since Checkov can
+  legitimately scan N independent provisioners per `scope`, unlike CVE's
+  single `sbom.json`) and **configurability** (add a real
+  `on_missing_data: skip|warn|block` field v1 never had, applied
+  per-provisioner — a deliberate improvement over v1, reusing the exact
+  same "a security guardrail shouldn't silently treat 'never scanned' as
+  'scanned clean'" reasoning this doc's own CVE sibling already
+  established and hardened). Net result: one shared operator-facing
+  vocabulary across every scanner-type policy, evaluated at whichever
+  granularity each policy's own real data shape demands. Marked
+  explicitly provisional — not yet validated against real code, to be
+  confirmed once this integration is actually built. No code changed —
+  doc update only.
