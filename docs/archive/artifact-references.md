@@ -426,7 +426,7 @@ in Open questions below for the full reasoning.
   later"). A narrower name (`image-ref`, `container-image`) would undersell
   a shape already built to generalize.
 - Out of scope for now: this is not a `build_run` gap (build_run's own
-  remaining work is exhausted, see [build-command.md](build-command.md)) —
+  remaining work is exhausted, see [build-command.md](../work/build-command.md)) —
   it's `version`/resolution scope, and `deploy run` doesn't exist yet
   either, so there's no urgency to settle the shape before real deploy-time
   resolution work begins.

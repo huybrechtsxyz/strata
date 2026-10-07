@@ -3,7 +3,7 @@
 - Status: accepted
 - Date: 2026-09-27
 
-Related: [docs/work/artifact-references.md](../work/artifact-references.md)
+Related: [docs/archive/artifact-references.md](../archive/artifact-references.md)
 (full design history, evidence, and rejected-alternative reasoning — this
 ADR summarizes the outcome, that doc is the living record)
 
@@ -88,11 +88,18 @@ confirmed in `haven/versions/prd.yaml`).
 - Good: the real "four images share one build tag" case is expressible
   today (four `pins.artifacts` entries with the same `version`, each still
   independently carrying its own `status`/`reason`/`reviewed`).
-- Bad: `ModuleServiceModel.artifact` (Path 1) has no resolution wiring yet
-  — it validates and round-trips, but nothing renders it into an actual
-  image in Compose/Helm output. Deliberate, not an oversight — Path 1
-  resolution wiring is deferred until a real module sets `.artifact`
-  (checked directly: zero real haven module does today).
+- Both Path 1 and Path 2 are now fully implemented (Path 1 shipped
+  2026-10-06, via `resolve_artifact_services()` in
+  `workload_controller.py`, mirroring `apply_version_pins()`'s own
+  overlay shape — `compose.py`/`helm.py` needed zero changes). The
+  `ModuleServiceModel.artifact`-has-no-resolution-wiring gap below is
+  historical, kept for the record of the original tradeoff, not current
+  state.
+- ~~Bad: `ModuleServiceModel.artifact` (Path 1) has no resolution wiring
+  yet~~ — it validates and round-trips, but nothing renders it into an
+  actual image in Compose/Helm output. Deliberate, not an oversight — Path
+  1 resolution wiring was deferred until a real module sets `.artifact`
+  (checked directly: zero real haven module did at the time).
 - Bad: two ways to reference an artifact (Path 1 vs. Path 2) is more
   surface area than one — judged necessary rather than redundant, since
   each solves a structurally different problem (strata owns vs. does not
