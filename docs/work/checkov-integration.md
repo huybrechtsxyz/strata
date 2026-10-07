@@ -9,13 +9,12 @@
 - Related: [policy-engine-architecture.md](policy-engine-architecture.md)
   (umbrella catalog — `checkov` is bucket C: needs a real external scanner,
   not derivable from strata's own document graph or a Terraform plan),
-  [cve-scanner-integration.md](cve-scanner-integration.md) (sibling
+  [cve-scanner-integration.md](../archive/cve-scanner-integration.md) (sibling
   bucket-C concern and the framework doc for scanner-type integrations —
-  `ScannerIntegration` capability, shared open questions all three face),
-  [trivy-integration.md](trivy-integration.md)/
-  [grype-integration.md](grype-integration.md) (the other two scanner
-  integrations, both already implemented as `CveScannerIntegration`
-  backends), [sbom-generation.md](sbom-generation.md) (sibling bucket-C
+  `ScannerIntegration` capability, shared open questions all three face;
+  also now contains the Trivy/Grype per-backend detail, merged back in
+  from their own split-out docs 2026-10-07),
+  [sbom-generation.md](sbom-generation.md) (sibling bucket-C
   concern, same "real external tool, not a strata-internal check" shape)
 
 ## Overview
@@ -154,7 +153,7 @@ enforced" is never indistinguishable from "scanned and clean":
 **Note what v1 does NOT have, confirmed by re-reading its own real
 `checkov_policy.py` config surface above**: there is no `on_missing_data`
 field anywhere in Checkov's real v1 config (contrast with
-[cve-scanner-integration.md](cve-scanner-integration.md)'s own
+[cve-scanner-integration.md](../archive/cve-scanner-integration.md)'s own
 `on_missing_data: skip|warn|block`, a real, documented ADR-0082 field).
 v1's Checkov degradation is hardcoded to "always skip, always warn" —
 never configurable to block. This is the real shape the decision below
@@ -162,7 +161,7 @@ has to reconcile against, not an assumption.
 
 ### v2 design decision (provisional — decided ahead of implementation, 2026-10-07)
 
-Per [cve-scanner-integration.md](cve-scanner-integration.md)'s own
+Per [cve-scanner-integration.md](../archive/cve-scanner-integration.md)'s own
 Remaining Work item #3 ("decide explicitly when Checkov is picked up, not
 by default"): made here as a **provisional**, pre-implementation design
 call, not validated against real code yet — the user explicitly asked for
@@ -201,7 +200,7 @@ consistency with CVE would be the wrong trade.
 field to v2's `checkov_policy`, unlike v1 — matching CVE's exact field
 name and vocabulary, applied per-provisioner (per Part 1).** This is a
 deliberate *improvement* over v1, not a straight port, and the
-justification is the same one [cve-scanner-integration.md](cve-scanner-integration.md)'s
+justification is the same one [cve-scanner-integration.md](../archive/cve-scanner-integration.md)'s
 own "Graceful degradation" section already established and chose to
 preserve/harden for CVE specifically: *"a security-flavored guardrail...
 'never actually scanned' should not look the same as 'scanned and
@@ -303,7 +302,7 @@ complexity, concentrated in path resolution rather than evaluation logic:
    logic need any adjustment beyond "look up `source_path` by provisioner
    name," or is that the whole story? Worth a closer check once this is
    actually picked up, not assumed clean from this catalog pass alone.
-3. **Resolved, not open — shared with [cve-scanner-integration.md](cve-scanner-integration.md)'s
+3. **Resolved, not open — shared with [cve-scanner-integration.md](../archive/cve-scanner-integration.md)'s
    own "Framework" section.** [policy-engine-architecture.md](policy-engine-architecture.md)'s
    Open Question 1 (generic `PolicyModel`/dispatcher vs. bespoke) is decided
    (2026-10-07): bespoke, indefinitely. Checkov wires in via its own
@@ -332,10 +331,11 @@ complexity, concentrated in path resolution rather than evaluation logic:
   added two new Open Questions (the real output shape's exact
   implications; the shared generic-vs-bespoke policy framework decision,
   cross-referenced from the new
-  [cve-scanner-integration.md](cve-scanner-integration.md) "Framework"
+  [cve-scanner-integration.md](../archive/cve-scanner-integration.md) "Framework"
   section). Also linked the two sibling scanner-integration docs split out
-  this same pass, [trivy-integration.md](trivy-integration.md)/
-  [grype-integration.md](grype-integration.md). No code written — catalog
+  this same pass, `trivy-integration.md`/`grype-integration.md` (both
+  later re-merged back into `cve-scanner-integration.md` on 2026-10-07 —
+  no longer separate files). No code written — catalog
   correction only, this integration itself remains not started.
 - 2026-10-07: Updated Sizing #4 and Open Question 3 — the shared
   generic-vs-bespoke policy engine question both pointed to is now

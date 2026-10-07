@@ -1609,7 +1609,7 @@ a v2 ADR/implementation:
   `destroyed`/`measured`), not v1's full 20-type list.
 - **`DeploymentManifestModel.policy_results` population — ~~IMPLEMENTED
   (2026-10-07)~~.** Raised from
-  [cve-scanner-integration.md](cve-scanner-integration.md)'s own
+  [cve-scanner-integration.md](../archive/cve-scanner-integration.md)'s own
   "Remaining Work" tracking (`cve_policy`'s own evaluation result is the
   first real, concrete case needing this) — confirmed by direct grep:
   `ManifestPolicyResultModel` is instantiated nowhere in `src/` today,
@@ -1705,8 +1705,8 @@ a v2 ADR/implementation:
     field name itself** (`policy_name="cve_policy"`) whenever no
     operator-assigned name exists — an honest, if slightly awkward,
     consequence of the "small dedicated field, not a generic `policies:`
-    list" decision [cve-scanner-integration.md](
-    cve-scanner-integration.md)'s own Design section already made for
+    list" decision [cve-scanner-integration.md](../archive/cve-scanner-integration.md)'s
+    own Design section already made for
     `cve_policy` specifically; not a reason to revisit that decision now.
 
   **A real call-site wrinkle this design must not gloss over:**
@@ -2937,7 +2937,7 @@ flags, shipped 2026-10-05) — no REST-polling script to write at all.
   ruff check, ruff format, import-linter (1 kept, 0 broken), pytest
   (1958 passed, up from 1948).
 - 2026-10-07: **Fully designed `policy_results` population**, raised from
-  [cve-scanner-integration.md](cve-scanner-integration.md)'s own
+  [cve-scanner-integration.md](../archive/cve-scanner-integration.md)'s own
   "Remaining Work" tracking item ("create the design for it"). Found the
   real architectural wrinkle by reading `finalize_and_distribute_deploy_
   audit()` directly: the manifest is built exactly once, at the end of a

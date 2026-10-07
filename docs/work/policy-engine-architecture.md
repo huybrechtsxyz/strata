@@ -145,9 +145,9 @@ of the SBOM, and nothing for any bucket-A/B policy type either).
   (`sbom_components` production). Phase 1 implemented; CVE scanning and the
   `sbom_*` policy types explicitly marked out of scope there, picked up by
   this doc's siblings below.
-- `docs/work/checkov-integration.md` — `checkov` (bucket C). New, see below.
-- `docs/work/cve-scanner-integration.md` — `cve_max_severity` (bucket C).
-  New, see below.
+- `docs/work/checkov-integration.md` — `checkov` (bucket C). Not started.
+- `docs/archive/cve-scanner-integration.md` — `cve_max_severity` (bucket
+  C). Shipped end to end, archived.
 - [gap_fit_v1.md](gap_fit_v1.md) gap #7 — the original "still fully open"
   flag this whole family of docs is resolving piece by piece.
 
@@ -191,7 +191,7 @@ once at least one real policy type exists to compare against).
    C" finding above: a generic engine's real win is narrower than it
    looks — it only simplifies the *evaluation* step, already "the
    simplest part of this entire feature" for every bucket-C type shipped
-   so far (confirmed directly in [cve-scanner-integration.md](cve-scanner-integration.md)'s
+   so far (confirmed directly in [cve-scanner-integration.md](../archive/cve-scanner-integration.md)'s
    own Sizing section, written before this question was answered). It
    does nothing for the real work — SBOM collectors, the CVE scanner,
    Checkov's own rule engine, Infracost, an AI agent — each of which has
@@ -237,7 +237,7 @@ once at least one real policy type exists to compare against).
    SBOM-dependent types before starting Checkov/Infracost/AI from scratch.
 3. **No real-usage evidence gathered yet for any bucket-C policy type —
    partially answered above.** `cve_max_severity` itself was already
-   checked directly in [cve-scanner-integration.md](cve-scanner-integration.md)'s
+   checked directly in [cve-scanner-integration.md](../archive/cve-scanner-integration.md)'s
    own Open Question 1 (commented-out, unconfigured in both real repos).
    Checkov, Infracost, and `ai_review` remain unchecked — worth
    confirming before investing in any of them, same discipline just
@@ -257,7 +257,7 @@ once at least one real policy type exists to compare against).
   existing rule library, `ai_review`'s non-deterministic LLM judgment).
   Cross-linked from [tenant-zone-policy.md](tenant-zone-policy.md).
 - 2026-10-07: Resolved Open Question 1, per direct request to look at the
-  next open item in [cve-scanner-integration.md](cve-scanner-integration.md)'s
+  next open item in [cve-scanner-integration.md](../archive/cve-scanner-integration.md)'s
   own `## Remaining Work` checklist (which pointed back here). Checked
   real usage directly rather than reasoning
   from precedent alone: `cfg-int-deployment`'s real `config/policies.yaml`
@@ -271,6 +271,6 @@ once at least one real policy type exists to compare against).
   strata-unaware custom rule) is named explicitly, with its own cheap
   fallback (a dedicated `script` type), rather than left open-ended.
   Updated [checkov-integration.md](checkov-integration.md)'s Sizing #4/
-  Open Question 3 and [cve-scanner-integration.md](cve-scanner-integration.md)'s
+  Open Question 3 and [cve-scanner-integration.md](../archive/cve-scanner-integration.md)'s
   `## Remaining Work` item to point here rather than duplicate the
   reasoning. No code changed — decision and doc update only.
