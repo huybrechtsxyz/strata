@@ -37,6 +37,7 @@ from typing import Any, cast
 
 import yaml
 
+from strata.controllers.checkov_controller import evaluate_checkov_policy
 from strata.controllers.integration_resolution import resolve_integration
 from strata.controllers.policy_results import write_policy_results
 from strata.controllers.remote_resolution import resolve_remote  # noqa: F401  (re-exported for callers)
@@ -344,12 +345,15 @@ def materialise_provisioner_sources(
     be) materialised to — `None` for a sync/GitOps provisioner with no
     `source` to copy. Only called for a provisioner reached via some other
     provisioner's `depends_on`; the step loop's own per-step materialisation
-    (handling the step-name-keyed GitOps destination convention) is
-    unchanged and separate — a provisioner that happens to be both a
-    `depends_on` target and the subject of its own execution step is
-    synced twice (once here, once by the step loop), which is harmless
-    (`sync_source()` is an idempotent copy) but not deduplicated against
-    the step loop's own call.
+    (handling the step-name-keyed GitOps destination convention) is a
+    separate call site that now writes into this same `materialised` dict
+    too (docs/work/checkov-integration.md Open Question 2 — so a future
+    evaluator reads one unified mapping regardless of how a provisioner was
+    reached) — a provisioner that happens to be both a `depends_on` target
+    and the subject of its own execution step is synced twice (once here,
+    once by the step loop), which is harmless (`sync_source()` is an
+    idempotent copy); the step loop's own write simply overwrites this
+    function's entry with the (identical) path afterwards.
     """
     if provisioner.name in materialised:
         return materialised[provisioner.name]
@@ -596,6 +600,18 @@ def build_run(
             source_path = sync_source(context.root, build_path, provisioner.source, remotes)
             _step(f"materialised provisioner '{step.name}' source at {source_path}")
 
+        # Extends `materialised` (ADR-0029, seeded above) to also cover
+        # execution-step provisioners, not just dependency-only ones — a
+        # real prerequisite found while designing the Checkov integration
+        # (docs/work/checkov-integration.md Open Question 2): this
+        # `source_path` used to be a local variable, discarded here before
+        # any future evaluator could read it. `materialised` is now the one
+        # unified mapping regardless of how a provisioner was reached —
+        # reusing the existing dict rather than adding a second, parallel
+        # one that would otherwise sit unread until a future phase wires in
+        # a real consumer.
+        materialised[provisioner.name] = source_path
+
         try:
             # `remotes`/`root` are unused by every `prepare()` override except
             # `BaseGitOpsIntegration`'s (docs/design/gitops-integration.md
@@ -665,9 +681,29 @@ def build_run(
         # policy_results population" design).
         cve_diagnostics = evaluate_cve_policy(build_path, graph.workspace, index)
         diagnostics.extend(cve_diagnostics)
-        policy_result = _cve_policy_result(graph.workspace, cve_diagnostics)
-        if policy_result is not None:
-            write_policy_results(build_path, [policy_result])
+        cve_policy_result = _cve_policy_result(graph.workspace, cve_diagnostics)
+
+        # Checkov policy gate (docs/work/checkov-integration.md Phase 2/3) —
+        # same placement/capture-then-extend pattern as the CVE gate just
+        # above; reads each provisioner's real source path from the same
+        # `materialised` dict the step loop above now populates for every
+        # provisioner (Phase 1's own prerequisite fix). `namespaces`/`index`
+        # are only used by the `framework: helm` branch (Phase 3) — already
+        # in scope here, same `graph`/`index` the rest of `build_run()` uses.
+        checkov_diagnostics = evaluate_checkov_policy(
+            build_path, graph.workspace, materialised, namespaces=graph.namespaces, index=index
+        )
+        diagnostics.extend(checkov_diagnostics)
+        checkov_policy_result = _checkov_policy_result(graph.workspace, checkov_diagnostics)
+
+        # Both results are written together, not via two separate calls —
+        # write_policy_results() overwrites the whole file each call, so a
+        # second, independent call here would have silently discarded
+        # whichever policy's result was written first the moment a second
+        # build-phase policy was ever configured at once.
+        policy_results = [r for r in (cve_policy_result, checkov_policy_result) if r is not None]
+        if policy_results:
+            write_policy_results(build_path, policy_results)
     else:
         _step(f"would write {build_path / 'sbom.json'}")
 
@@ -694,6 +730,25 @@ def _cve_policy_result(workspace: WorkspaceModel, diagnostics: Diagnostics) -> M
     return ManifestPolicyResultModel(
         policy_name="cve_policy",
         policy_type="cve_max_severity",
+        phase="build",
+        enforcement=policy.enforcement,
+        passed=diagnostics.ok,
+        violations=violations,
+    )
+
+
+def _checkov_policy_result(workspace: WorkspaceModel, diagnostics: Diagnostics) -> ManifestPolicyResultModel | None:
+    """Build the `checkov_policy` entry for `policy_results.json`, or
+    `None` when the policy is unset — mirrors `_cve_policy_result()`
+    exactly (docs/work/checkov-integration.md Phase 2).
+    """
+    policy = workspace.spec.checkov_policy
+    if policy is None:
+        return None
+    violations = diagnostics.messages(Severity.ERROR) + diagnostics.messages(Severity.WARNING)
+    return ManifestPolicyResultModel(
+        policy_name="checkov_policy",
+        policy_type="checkov",
         phase="build",
         enforcement=policy.enforcement,
         passed=diagnostics.ok,

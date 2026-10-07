@@ -19,6 +19,7 @@ from strata.controllers.build_controller import (
 )
 from strata.controllers.solution_context import open_solution
 from strata.controllers.solution_controller import DocumentIndex, DocumentRef, IndexEntry
+from strata.models.checkov_model import CheckovFindingModel, CheckovScanResultModel
 from strata.models.common_models import PlatformKind, SourceModel
 from strata.models.provider_model import ProviderMetaModel, ProviderModel, ProviderPropertiesModel, ProviderSpecModel
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel
@@ -476,6 +477,96 @@ def test_build_run_never_resolves_integration_for_a_dependency_only_provisioner(
 
     assert diagnostics.ok
     assert resolved_for == ["tf_main"]  # iac_components/iac_primitives never go through resolve_integration()
+
+
+# ---------------------------------------------------------------------------
+# build_run()'s `materialised` dict as a unified provisioner -> source_path
+# mapping (docs/work/checkov-integration.md Open Question 2 / Phase 1 —
+# a real prerequisite for a future evaluator, not purely additive).
+# ---------------------------------------------------------------------------
+
+
+def _terraform_solution_with_dependency_also_executed(tmp_path: Path) -> Path:
+    """`iac_components` is reachable BOTH ways at once: named in `tf_main`'s
+    `depends_on` AND the subject of its own execution step — the documented
+    'synced twice, harmlessly' case (`materialise_provisioner_sources()`'s
+    own docstring)."""
+    root = _terraform_solution_with_dependency(tmp_path)
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n"
+        "    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "      depends_on:\n        - iac_components\n        - iac_primitives\n"
+        "    - name: iac_components\n      tool: terraform\n      source:\n        source_path: components\n"
+        "    - name: iac_primitives\n      tool: terraform\n      source:\n        source_path: primitives\n"
+        "  execution:\n"
+        "    - name: apply_components\n      provisioner: iac_components\n      targets:\n        - r1\n"
+        "    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "      depends_on:\n        - apply_components\n"
+        "  resources:\n    - name: r1\n      resource: r1\n",
+    )
+    return root
+
+
+def _capture_materialised_dict(monkeypatch):
+    """Capture the real `materialised` dict object `build_run()` builds and
+    mutates — by recording what's passed into `materialise_provisioner_
+    sources()`, the same dict instance the main step loop now also writes
+    into directly."""
+    from strata.controllers import build_controller as build_controller_module
+
+    captured: dict[str, dict] = {}
+    real_materialise = build_controller_module.materialise_provisioner_sources
+
+    def _capturing_materialise(context, build_path_, remotes, workspace, provisioner, materialised, **kwargs):
+        captured["materialised"] = materialised
+        return real_materialise(context, build_path_, remotes, workspace, provisioner, materialised, **kwargs)
+
+    monkeypatch.setattr(build_controller_module, "materialise_provisioner_sources", _capturing_materialise)
+    return captured
+
+
+def test_build_run_captures_every_execution_step_provisioners_source_path(tmp_path: Path, monkeypatch):
+    """Regression test for the Checkov Phase 1 prerequisite: an
+    execution-step provisioner's own `source_path` used to be a local
+    variable, discarded before any future evaluator could read it. It must
+    now also land in the same `materialised` dict dependency-only
+    provisioners already use."""
+    root = _terraform_solution_with_dependency(tmp_path)
+    build_path = tmp_path / "build"
+    captured = _capture_materialised_dict(monkeypatch)
+
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok
+    materialised = captured["materialised"]
+    # Dependency-only provisioners (pre-existing behaviour).
+    assert materialised["iac_components"] == build_path / "components"
+    assert materialised["iac_primitives"] == build_path / "primitives"
+    # NEW: the execution-step provisioner's own path is captured too.
+    assert materialised["tf_main"] == build_path / "infra"
+
+
+def test_build_run_unified_mapping_survives_a_provisioner_reached_both_ways(tmp_path: Path, monkeypatch):
+    """A provisioner that is both a `depends_on` target and the subject of
+    its own execution step (the documented double-sync case) ends up with
+    exactly one, correct entry in `materialised` — not a crash, not two
+    conflicting entries."""
+    root = _terraform_solution_with_dependency_also_executed(tmp_path)
+    build_path = tmp_path / "build"
+    captured = _capture_materialised_dict(monkeypatch)
+
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok
+    materialised = captured["materialised"]
+    assert materialised["iac_components"] == build_path / "components"
+    assert materialised["iac_primitives"] == build_path / "primitives"
+    assert materialised["tf_main"] == build_path / "infra"
+    assert (build_path / "components" / "main.tf").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -938,7 +1029,26 @@ def _patch_cve_scanner(monkeypatch: pytest.MonkeyPatch, result: CveAuditResultMo
     monkeypatch.setattr(sbom_controller_module, "CveScannerIntegration", lambda: _FakeScanner(result=result))
 
 
-def _minimal_solution(tmp_path: Path, *, cve_policy_yaml: str = "") -> Path:
+class _FakeCheckovScanner:
+    """Mirrors `_FakeScanner` above, for `checkov_controller`'s own
+    `CheckovIntegration()` construction site."""
+
+    def __init__(self, *, result: CheckovScanResultModel):
+        self._result = result
+        self.scanned_directories: list[Path] = []
+
+    def scan(self, directory, *, framework, skip_checks, include_checks, custom_checks_dir, timeout):
+        self.scanned_directories.append(directory)
+        return self._result
+
+
+def _patch_checkov_scanner(monkeypatch: pytest.MonkeyPatch, result: CheckovScanResultModel) -> None:
+    import strata.controllers.checkov_controller as checkov_controller_module
+
+    monkeypatch.setattr(checkov_controller_module, "CheckovIntegration", lambda: _FakeCheckovScanner(result=result))
+
+
+def _minimal_solution(tmp_path: Path, *, cve_policy_yaml: str = "", checkov_policy_yaml: str = "") -> Path:
     root = _solution(tmp_path)
     _write(root, "infra/main.tf", "# root module\n")
     _write(
@@ -961,7 +1071,7 @@ def _minimal_solution(tmp_path: Path, *, cve_policy_yaml: str = "") -> Path:
         "  providers:\n    - p1\n"
         "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
         "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
-        "  resources:\n    - name: r1\n      resource: r1\n" + cve_policy_yaml,
+        "  resources:\n    - name: r1\n      resource: r1\n" + cve_policy_yaml + checkov_policy_yaml,
     )
     _write(
         root,
@@ -1026,6 +1136,179 @@ def test_build_run_writes_no_policy_results_file_when_cve_policy_unset(tmp_path:
 
     assert diagnostics.ok
     assert not (build_path / "policy_results.json").exists()
+
+
+def _checkov_result(*severities: str) -> CheckovScanResultModel:
+    findings = [
+        CheckovFindingModel(check_id=f"CKV_{i}", check_name="n", resource="r", file_path="f", severity=sev)
+        for i, sev in enumerate(severities)
+    ]
+    return CheckovScanResultModel(
+        scanner_version="3.2.0", framework="terraform", scanned_path="infra", findings=findings, failed=len(findings)
+    )
+
+
+def test_build_run_writes_policy_results_when_checkov_policy_breaches(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    _patch_checkov_scanner(monkeypatch, _checkov_result("CRITICAL"))
+    root = _minimal_solution(
+        tmp_path, checkov_policy_yaml="  checkov_policy:\n    severity_gate: high\n    enforcement: deny\n"
+    )
+
+    build_path = tmp_path / "build"
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert not diagnostics.ok
+    results = json.loads((build_path / "policy_results.json").read_text(encoding="utf-8"))["policy_results"]
+    assert len(results) == 1
+    assert results[0]["policy_name"] == "checkov_policy"
+    assert results[0]["policy_type"] == "checkov"
+    assert results[0]["passed"] is False
+    assert len(results[0]["violations"]) >= 1
+
+
+def test_build_run_records_a_warn_enforcement_checkov_breach_as_passed_with_violations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _patch_checkov_scanner(monkeypatch, _checkov_result("CRITICAL"))
+    root = _minimal_solution(
+        tmp_path, checkov_policy_yaml="  checkov_policy:\n    severity_gate: high\n    enforcement: warn\n"
+    )
+
+    build_path = tmp_path / "build"
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok  # a warn-mode breach doesn't fail the build itself
+    results = json.loads((build_path / "policy_results.json").read_text(encoding="utf-8"))["policy_results"]
+    assert len(results) == 1
+    assert results[0]["passed"] is True
+    assert len(results[0]["violations"]) >= 1
+
+
+def test_build_run_writes_no_policy_results_file_when_checkov_policy_unset(tmp_path: Path):
+    root = _minimal_solution(tmp_path)
+
+    build_path = tmp_path / "build"
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok
+    assert not (build_path / "policy_results.json").exists()
+
+
+def test_build_run_writes_both_cve_and_checkov_policy_results_together(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Regression test for the Phase 2 write_policy_results() fix: a
+    second, independent call would have silently discarded whichever
+    policy's result was written first — both must land in the same
+    policy_results.json from one call."""
+    _patch_cve_scanner(
+        monkeypatch,
+        CveAuditResultModel(scanner="trivy", scanner_version="1.0", sbom_path="sbom.json", total_findings=0),
+    )
+    _patch_checkov_scanner(monkeypatch, _checkov_result("CRITICAL"))
+    root = _minimal_solution(
+        tmp_path,
+        cve_policy_yaml="  cve_policy:\n    max_severity: HIGH\n    max_count: 0\n    enforcement: deny\n",
+        checkov_policy_yaml="  checkov_policy:\n    severity_gate: high\n    enforcement: deny\n",
+    )
+
+    build_path = tmp_path / "build"
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert not diagnostics.ok  # the checkov breach alone fails the build
+    results = json.loads((build_path / "policy_results.json").read_text(encoding="utf-8"))["policy_results"]
+    policy_names = {r["policy_name"] for r in results}
+    assert policy_names == {"cve_policy", "checkov_policy"}
+    cve_result = next(r for r in results if r["policy_name"] == "cve_policy")
+    checkov_result = next(r for r in results if r["policy_name"] == "checkov_policy")
+    assert cve_result["passed"] is True  # no CVE findings
+    assert checkov_result["passed"] is False  # a real checkov breach
+
+
+# ---------------------------------------------------------------------------
+# framework: helm end to end (docs/work/checkov-integration.md Phase 3) —
+# reuses test_build_run_renders_helm_workload_modules()'s own fixture shape.
+# ---------------------------------------------------------------------------
+
+
+def _helm_solution(tmp_path: Path, *, checkov_policy_yaml: str = "") -> Path:
+    root = _solution(tmp_path)
+    _write(root, "infra/main.tf", "# root module\n")
+    _write(root, "charts/authentik/Chart.yaml", "name: authentik\n")
+    _write(
+        root,
+        "provider.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
+        "  properties:\n    type: local\n    region: local\n",
+    )
+    _write(
+        root,
+        "resource.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
+        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  default_tags:\n    managed-by: strata\n",
+    )
+    _write(
+        root,
+        "module.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: module\nmeta:\n  name: authentik\nspec:\n"
+        "  source:\n    source_path: charts/authentik\n  type: helm\n"
+        "  default_labels:\n    app: authentik\n"
+        "  services:\n    - name: server\n",
+    )
+    _write(
+        root,
+        "namespace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: namespace\nmeta:\n  name: apps\nspec:\n"
+        "  default_labels:\n    app: apps\n"
+        "  modules:\n    - name: auth\n      module: authentik\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  namespaces:\n    - apps\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n" + checkov_policy_yaml,
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec: {}\n",
+    )
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        "  workspace: main\n  environments:\n    - prd\n",
+    )
+    return root
+
+
+def test_build_run_checkov_policy_helm_scans_the_real_materialised_chart(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """End to end: the Helm module `build_workload_modules()` materialises
+    to `build_path/apps/auth` (same fixture as `test_build_run_renders_
+    helm_workload_modules`) is the exact directory `evaluate_checkov_policy()`'s
+    `helm` branch independently recomputes and scans — not a separate,
+    possibly-divergent path."""
+    scanner = _FakeCheckovScanner(result=_checkov_result("CRITICAL"))
+    import strata.controllers.checkov_controller as checkov_controller_module
+
+    monkeypatch.setattr(checkov_controller_module, "CheckovIntegration", lambda: scanner)
+    root = _helm_solution(
+        tmp_path, checkov_policy_yaml="  checkov_policy:\n    framework: helm\n    severity_gate: high\n"
+    )
+
+    build_path = tmp_path / "build"
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert not diagnostics.ok
+    assert scanner.scanned_directories == [build_path / "apps" / "auth"]
+    results = json.loads((build_path / "policy_results.json").read_text(encoding="utf-8"))["policy_results"]
+    assert results[0]["policy_name"] == "checkov_policy"
+    assert results[0]["passed"] is False
 
 
 # ---------------------------------------------------------------------------
