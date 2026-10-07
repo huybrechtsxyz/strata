@@ -579,3 +579,75 @@ def test_workspace_rejects_duplicate_topology_names():
     data["spec"]["topology"].append(dict(data["spec"]["topology"][0]))
     with pytest.raises(ValidationError):
         WorkspaceModel.model_validate(data)
+
+
+# ---------------------------------------------------------------------------
+# spec.cve_policy (docs/work/cve-scanner-integration.md)
+# ---------------------------------------------------------------------------
+
+
+def test_workspace_cve_policy_is_optional():
+    """spec.cve_policy may be omitted entirely — the common case."""
+    model = WorkspaceModel.model_validate(_minimal_workspace())
+    assert model.spec.cve_policy is None
+
+
+def test_workspace_accepts_cve_policy_with_defaults():
+    """A minimal cve_policy (only the required max_severity) fills in its own defaults."""
+    data = _minimal_workspace()
+    data["spec"]["cve_policy"] = {"max_severity": "HIGH"}
+    model = WorkspaceModel.model_validate(data)
+    policy = model.spec.cve_policy
+    assert policy.max_severity == "HIGH"
+    assert policy.max_count == 0
+    assert policy.severity_threshold is None
+    assert policy.enforcement == "deny"
+    assert policy.on_missing_data == "block"
+
+
+def test_workspace_accepts_fully_specified_cve_policy():
+    """Every cve_policy field can be set explicitly."""
+    data = _minimal_workspace()
+    data["spec"]["cve_policy"] = {
+        "max_severity": "CRITICAL",
+        "max_count": 3,
+        "severity_threshold": "LOW",
+        "enforcement": "warn",
+        "on_missing_data": "skip",
+    }
+    model = WorkspaceModel.model_validate(data)
+    policy = model.spec.cve_policy
+    assert policy.max_count == 3
+    assert policy.severity_threshold == "LOW"
+    assert policy.enforcement == "warn"
+    assert policy.on_missing_data == "skip"
+
+
+def test_workspace_cve_policy_rejects_invalid_max_severity():
+    """max_severity only accepts CRITICAL/HIGH/MEDIUM/LOW — not UNKNOWN (gating on 'unknown
+    severity' findings is meaningless)."""
+    data = _minimal_workspace()
+    data["spec"]["cve_policy"] = {"max_severity": "UNKNOWN"}
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_cve_policy_rejects_negative_max_count():
+    data = _minimal_workspace()
+    data["spec"]["cve_policy"] = {"max_severity": "HIGH", "max_count": -1}
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_cve_policy_rejects_unknown_fields():
+    data = _minimal_workspace()
+    data["spec"]["cve_policy"] = {"max_severity": "HIGH", "unknown_field": "oops"}
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_cve_policy_rejects_a_threshold_more_restrictive_than_max_severity():
+    data = _minimal_workspace()
+    data["spec"]["cve_policy"] = {"max_severity": "LOW", "severity_threshold": "HIGH"}
+    with pytest.raises(ValidationError, match="more restrictive"):
+        WorkspaceModel.model_validate(data)

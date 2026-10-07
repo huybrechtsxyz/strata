@@ -1602,6 +1602,238 @@ a v2 ADR/implementation:
   dict[str, bool] | None`, validated against a closed set scoped to only
   the three events v2 actually produces (`deployment.completed`/
   `destroyed`/`measured`), not v1's full 20-type list.
+- **`DeploymentManifestModel.policy_results` population — fully designed
+  2026-10-07, not yet implemented.** Raised from
+  [cve-scanner-integration.md](cve-scanner-integration.md)'s own
+  "Remaining Work" tracking (`cve_policy`'s own evaluation result is the
+  first real, concrete case needing this) — confirmed by direct grep:
+  `ManifestPolicyResultModel` is instantiated nowhere in `src/` today,
+  for any policy type.
+
+  **The real architectural wrinkle, found by reading
+  `finalize_and_distribute_deploy_audit()` directly, not assumed:**
+  `DeploymentManifestModel` is constructed in exactly one place, at the
+  end of a `deploy run` invocation. Every policy that exists today
+  evaluates somewhere else entirely — `cve_policy` inline in `build
+  run` (`sbom_controller.evaluate_cve_policy()`), `tenant_zone`/
+  `path_convention` during `strata validate`
+  (`semantic_checks.py`). These are three **separate CLI invocations**,
+  not one atomic call — a policy's `Diagnostics` result does not
+  naturally survive from the command that produced it to the later
+  command that builds the manifest. Naively calling
+  `evaluate_cve_policy()` a second time from inside
+  `finalize_and_distribute_deploy_audit()` would re-run the scan
+  pointlessly (and need the same `index`/`workspace` already resolved
+  once); it also still wouldn't reach `tenant_zone`/`path_convention` at
+  all, since those run during `validate`, a command with no necessary
+  temporal relationship to any one later `deploy run` invocation.
+
+  **The precedent already established, reused exactly, not reinvented:**
+  `build_path` is already the real hand-off artifact directory between
+  `build run` and `deploy run` — `resolved.yaml` and `sbom.json` are both
+  written once by `build run`, then re-read and re-hashed by
+  `finalize_and_distribute_deploy_audit()`'s own `_platform_reference()`/
+  `_sbom_reference()` (both already optional — a missing file is fine,
+  no diagnostic, matching `_sbom_reference()`'s own stated reasoning).
+  **Decision: policy results follow the identical pattern** — a new,
+  optional `build_path/policy_results.json` sidecar, written by `build
+  run` itself right after each inline policy evaluator runs, read back
+  by a new `_policy_results_reference(build_path)` helper in
+  `audit_run.py` modeled 1:1 on `_sbom_reference()`'s own shape.
+
+  **Scope, decided explicitly, not implied:** Phase 1 covers **only
+  build-phase policies** (`cve_policy` today; any future build-phase
+  policy the same way) — the one case this precedent cleanly solves.
+  **Validate-phase policies (`tenant_zone`/`path_convention`) are
+  explicitly out of scope for this pass** — `strata validate` has no
+  `build_path` concept to write a sidecar into, and critically, is not
+  necessarily run immediately before any one specific `deploy run`
+  invocation at all (a solution can be validated once, deployed many
+  times later; the two commands have no enforced 1:1 temporal
+  relationship the way `build run` → `deploy run` does via a shared
+  `build_path`). Wiring those in is a genuinely harder, separate
+  problem — tracked here as still open, not solved by this design.
+
+  **Concrete shape — no new model needed:** reuse
+  `ManifestPolicyResultModel` exactly as it already exists
+  (`policy_name`/`policy_type`/`phase`/`enforcement`/`passed`/
+  `violations`); the sidecar is simply `{"policy_results":
+  [ManifestPolicyResultModel, ...]}`. `build_controller.build_run()`
+  collects a `list[ManifestPolicyResultModel]` across every inline
+  policy evaluator it calls (today: one entry, from `cve_policy`, when
+  `workspace.spec.cve_policy` is set — `None`/unset produces no entry,
+  matching every other "nothing declared, nothing recorded" convention
+  already used throughout this feature), and writes the file once at
+  the end of the run — skipped entirely when the list is empty, the
+  same "optional, omit rather than write an empty artifact" convention
+  `write_sbom()`'s own SBOM-is-optional behavior already established.
+
+  A small new helper builds each entry from a policy's own `Diagnostics`
+  result — e.g. `_cve_policy_result(workspace, diagnostics) ->
+  ManifestPolicyResultModel | None` in `build_controller.py` (not
+  `sbom_controller.py` — `evaluate_cve_policy()`'s own signature/
+  behavior stays completely unchanged, matching the established
+  "policy function reports `Diagnostics` only, the orchestrator decides
+  what to do with it" separation of concerns `build_run()` already
+  uses for every other inline check):
+  - `passed = diagnostics.ok` — strictly "no errors," matching
+    `Diagnostics.ok`'s own existing semantics unchanged. An
+    `enforcement: warn` breach still reports `passed=True` here — the
+    build itself wasn't blocked — but see the next point for why the
+    finding itself isn't lost.
+  - `violations` folds in **both** error and warning messages, not
+    errors only — an `enforcement: warn` breach is still a real,
+    substantive finding worth an auditable record, even though it
+    didn't fail the build; recording only `passed=True` with an empty
+    `violations` list would silently discard exactly the information a
+    "warn, don't block, but still tell someone" policy exists to
+    surface in the first place.
+  - **A real, open naming gap, surfaced by this design, not
+    glossed over:** `ManifestPolicyResultModel.policy_name` is
+    documented as "policy name as declared in configuration" — a
+    concept that assumes v1's own `policies: [{name: ..., type:
+    ...}]` named-list shape. v2's `cve_policy` (and `tenant_zone`) are
+    **unnamed**, single, bespoke fields — there is no operator-chosen
+    name to record at all (unlike `path_convention`, which **is** a
+    named list, `PathConventionModel.name`, and so has a real name to
+    use here whenever its own turn comes). **Decision: fall back to the
+    field name itself** (`policy_name="cve_policy"`) whenever no
+    operator-assigned name exists — an honest, if slightly awkward,
+    consequence of the "small dedicated field, not a generic `policies:`
+    list" decision [cve-scanner-integration.md](
+    cve-scanner-integration.md)'s own Design section already made for
+    `cve_policy` specifically; not a reason to revisit that decision now.
+
+  **A real call-site wrinkle this design must not gloss over:**
+  `build_run()`'s current call site immediately discards
+  `evaluate_cve_policy()`'s own return value into the shared,
+  function-wide `diagnostics` accumulator
+  (`diagnostics.extend(evaluate_cve_policy(...))`) — once merged, there
+  is no way to tell which items in `diagnostics` came from `cve_policy`
+  specifically versus everything else `build_run()` already
+  accumulated (SBOM warnings, provisioner errors, ...). `_cve_policy_result()`
+  needs `evaluate_cve_policy()`'s own, *unmerged* `Diagnostics` object,
+  so the call site must capture it in its own local variable first,
+  then extend the shared one — a small, real, two-line reordering, not
+  just "call a new function," which is why it's spelled out here rather
+  than left implicit:
+
+  ```python
+  # build_controller.py, inside build_run(), replacing the existing
+  # single line `diagnostics.extend(evaluate_cve_policy(build_path, graph.workspace, index))`:
+  cve_diagnostics = evaluate_cve_policy(build_path, graph.workspace, index)
+  diagnostics.extend(cve_diagnostics)
+  policy_result = _cve_policy_result(graph.workspace, cve_diagnostics)
+  if policy_result is not None:
+      write_policy_results(build_path, [policy_result])
+
+
+  def _cve_policy_result(workspace: WorkspaceModel, diagnostics: Diagnostics) -> ManifestPolicyResultModel | None:
+      policy = workspace.spec.cve_policy
+      if policy is None:
+          return None
+      return ManifestPolicyResultModel(
+          policy_name="cve_policy",
+          policy_type="cve_max_severity",
+          phase="build",
+          enforcement=policy.enforcement,
+          passed=diagnostics.ok,
+          violations=[item.message for item in diagnostics.items],
+      )
+  ```
+
+  No filtering by `code` is needed in `violations` — `diagnostics` here
+  is already `evaluate_cve_policy()`'s own, unmerged result (every item
+  in it genuinely came from this one policy), unlike the shared
+  `build_run()` accumulator this is deliberately kept separate from.
+
+  **The write/read pair, in full — a new, small, shared module** (not
+  folded into `build_controller.py`/`audit_run.py` directly: the write
+  half is called from `build run`, the read half from `deploy run`'s
+  audit finalize step — two different commands, so the shared file-format
+  contract between them deserves one file neither owns outright):
+
+  ```python
+  # strata/controllers/policy_results.py
+  """Policy evaluation results sidecar (`build_path/policy_results.json`)
+  — docs/work/audit-trail.md's "DeploymentManifestModel.policy_results
+  population" design. The one shared file-format contract between
+  `build run` (writes) and `deploy run`'s audit finalize step (reads) —
+  matches the existing `resolved.yaml`/`sbom.json` hand-off precedent.
+  """
+
+  import json
+  from pathlib import Path
+
+  from strata.models.audit_manifest_model import ManifestPolicyResultModel
+
+  POLICY_RESULTS_FILENAME = "policy_results.json"
+
+
+  def write_policy_results(build_path: Path, results: list[ManifestPolicyResultModel]) -> None:
+      """Write `build_path/policy_results.json`, or do nothing when `results`
+      is empty — optional artifact, matching `write_sbom()`'s own "nothing
+      relevant, no file" precedent."""
+      if not results:
+          return
+      path = build_path / POLICY_RESULTS_FILENAME
+      payload = {"policy_results": [r.model_dump(mode="json") for r in results]}
+      path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+  def read_policy_results(build_path: Path) -> list[ManifestPolicyResultModel] | None:
+      """Read `build_path/policy_results.json` back, or `None` when it
+      doesn't exist — same optional, no-diagnostic shape as
+      `audit_run.py`'s own `_sbom_reference()`; a build with no configured
+      build-phase policy writes none, and that must not be an error here."""
+      path = build_path / POLICY_RESULTS_FILENAME
+      if not path.exists():
+          return None
+      payload = json.loads(path.read_text(encoding="utf-8"))
+      return [ManifestPolicyResultModel.model_validate(item) for item in payload["policy_results"]]
+  ```
+
+  `audit_run.py` then just calls `read_policy_results(build_path)`
+  directly and wires its result into
+  `DeploymentManifestModel(..., policy_results=...)` — no separate
+  `_policy_results_reference()` wrapper needed after all, since
+  `read_policy_results()` already has exactly the right optional
+  signature; the earlier sketch of a second, audit_run-local wrapper
+  function was unnecessary indirection, corrected here.
+
+  **Implementation plan:**
+  1. `audit_manifest_model.py`: no change — `ManifestPolicyResultModel`
+     already has the right shape.
+  2. New `strata/controllers/policy_results.py`: `write_policy_results()`/
+     `read_policy_results()`, exactly as sketched above.
+  3. `build_controller.py`: add `_cve_policy_result()`; restructure the
+     `evaluate_cve_policy()` call site to capture its own `Diagnostics`
+     before merging (the two-line reordering above); call
+     `write_policy_results(build_path, [policy_result])` when non-`None`.
+  4. `audit_run.py`: import `read_policy_results` from the new module;
+     call it once, pass the result straight into
+     `DeploymentManifestModel(..., policy_results=...)`.
+  5. Tests, named explicitly (not just scenarios):
+     - `test_build_run_writes_policy_results_when_cve_policy_breaches`
+       — `enforcement: deny` breach produces a `policy_results.json`
+       with one entry, `passed=False`, non-empty `violations`.
+     - `test_build_run_records_a_warn_enforcement_breach_as_passed_with_violations`
+       — `enforcement: warn` still writes `passed=True` but a non-empty
+       `violations` (the "don't silently discard a warn-mode finding"
+       decision above, specifically exercised).
+     - `test_build_run_writes_no_policy_results_file_when_cve_policy_unset`
+       — the common case; no file at all, not an empty one.
+     - `test_write_policy_results_skips_writing_when_results_is_empty`
+       — unit test on the new module directly.
+     - `test_read_policy_results_round_trips_a_written_file` and
+       `test_read_policy_results_is_none_when_file_is_missing` — the
+       read half, in isolation.
+     - `test_finalize_and_distribute_deploy_audit_includes_policy_results_in_the_manifest`
+       — the real end-to-end case this whole design exists to serve:
+       a prior `build run`'s `policy_results.json` ends up in the
+       `deploy run`-produced `_manifest.json`.
+  6. Full check suite clean before considering this done, same
+     discipline as every other feature in this repo.
 
 ## Compliance Gap Analysis (NIS2 / ISO 27001 / ISAE 3402) — 2026-10-03
 
@@ -2678,5 +2910,46 @@ flags, shipped 2026-10-05) — no REST-polling script to write at all.
   `test_commands_deploy.py`. Full check suite green: mypy (139 files),
   ruff check, ruff format, import-linter (1 kept, 0 broken), pytest
   (1958 passed, up from 1948).
+- 2026-10-07: **Fully designed `policy_results` population**, raised from
+  [cve-scanner-integration.md](cve-scanner-integration.md)'s own
+  "Remaining Work" tracking item ("create the design for it"). Found the
+  real architectural wrinkle by reading `finalize_and_distribute_deploy_
+  audit()` directly: the manifest is built exactly once, at the end of a
+  `deploy run` invocation, but every policy that exists today evaluates
+  in an earlier, separate CLI invocation (`cve_policy` in `build run`,
+  `tenant_zone`/`path_convention` in `strata validate`) — a `Diagnostics`
+  result does not naturally survive from the command that produced it to
+  the later command that builds the manifest. Resolved by reusing the
+  exact precedent already established for `resolved.yaml`/`sbom.json`:
+  `build_path` as the real hand-off artifact directory, with a new,
+  optional `build_path/policy_results.json` sidecar written by `build
+  run` and read back by a new `_policy_results_reference()` helper,
+  modeled 1:1 on `_sbom_reference()`'s own shape. Scoped deliberately to
+  build-phase policies only for this pass (`cve_policy`); validate-phase
+  policies (`tenant_zone`/`path_convention`) are explicitly deferred as a
+  harder, separate problem — `strata validate` has no `build_path` and no
+  enforced 1:1 relationship to any one later `deploy run`. Surfaced one
+  real, un-glossed-over naming gap: `ManifestPolicyResultModel.policy_name`
+  assumes v1's named-policy-list shape, which `cve_policy`/`tenant_zone`
+  (v2's unnamed, bespoke-field policies) don't have — resolved by falling
+  back to the field name itself (`"cve_policy"`) rather than revisiting
+  that earlier design decision. Full implementation plan (5 steps) and
+  test plan recorded; no code written this pass — design only, ready to
+  implement.
+- 2026-10-07: Brought the `policy_results` design up to the same rigor as
+  `cve-scanner-integration.md`'s own Phase 3 design, per a direct
+  completeness check ("is the design for this complete with
+  implementation plan?") — honest answer at the time: no, not quite.
+  Added the actual code (not just named functions): `_cve_policy_result()`'s
+  real body, a new shared `strata/controllers/policy_results.py`
+  (`write_policy_results()`/`read_policy_results()`, replacing the
+  earlier sketch's separate `audit_run`-local wrapper — unnecessary
+  indirection, corrected), and the real two-line `build_run()` call-site
+  change this design's first pass had glossed over: `evaluate_cve_policy()`'s
+  own `Diagnostics` must be captured in its own local variable before
+  merging into the shared accumulator, or there is no way to tell which
+  findings came from this one policy. Replaced the prose test scenarios
+  with 6 explicitly named test functions. No code written yet — still
+  design only, now genuinely implementation-ready.
 
 

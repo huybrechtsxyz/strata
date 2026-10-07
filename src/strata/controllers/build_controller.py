@@ -39,7 +39,7 @@ import yaml
 
 from strata.controllers.integration_resolution import resolve_integration
 from strata.controllers.remote_resolution import resolve_remote  # noqa: F401  (re-exported for callers)
-from strata.controllers.sbom_controller import write_sbom
+from strata.controllers.sbom_controller import evaluate_cve_policy, write_sbom
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
 from strata.controllers.source_sync import describe_source, sync_source
@@ -648,6 +648,12 @@ def build_run(
         sbom_diagnostics = write_sbom(build_path, graph, index)
         diagnostics.extend(sbom_diagnostics)
         _step(f"wrote {build_path / 'sbom.json'}")
+
+        # CVE policy gate (docs/work/cve-scanner-integration.md) — runs
+        # immediately after SBOM generation, the only point `build_run()`
+        # has both a written SBOM and the resolved workspace to read
+        # `spec.cve_policy` from. A no-op when that field is unset.
+        diagnostics.extend(evaluate_cve_policy(build_path, graph.workspace, index))
     else:
         _step(f"would write {build_path / 'sbom.json'}")
 

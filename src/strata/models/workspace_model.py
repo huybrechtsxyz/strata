@@ -38,6 +38,7 @@ from strata.models.common_models import (
 )
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel, validate_provisioning_steps
 from strata.models.reference_fields import References
+from strata.models.sbom_model import CveMaxSeverityPolicyModel
 from strata.utils.dependency_order import topological_order
 from strata.utils.names import check_unique_names
 
@@ -341,6 +342,12 @@ class WorkspaceSpecModel(PlatformBaseModel):
     )
     networks: list[Annotated[PlatformName, References(PlatformKind.NETWORK)]] | None = Field(
         None, description="Network document names"
+    )
+    cve_policy: CveMaxSeverityPolicyModel | None = Field(
+        None,
+        description="Gates 'build run' on CVE findings in the SBOM it just generated (docs/work/"
+        "cve-scanner-integration.md). Lives here, not on Deployment, because it is a build-phase "
+        "concern — the same scope `execution`/`provisioners` already own — not a per-deployment one.",
     )
 
     @model_validator(mode="after")

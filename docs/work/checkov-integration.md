@@ -1,12 +1,21 @@
 # Checkov Integration (`policies: checkov`) — v1 Capability Catalog and v2 Gap
 
-- Status: not started — catalog only, sized against v1's real source
-- Last updated: 2026-10-06
+- Status: not started — catalog only, sized against v1's real source. The
+  one hard prerequisite this doc originally flagged (`build run`'s
+  provisioner-path resolution) is now unblocked — see "v2: current state"
+  below
+- Last updated: 2026-10-07
 - Related: [policy-engine-architecture.md](policy-engine-architecture.md)
   (umbrella catalog — `checkov` is bucket C: needs a real external scanner,
   not derivable from strata's own document graph or a Terraform plan),
-  [sbom-generation.md](sbom-generation.md) (sibling bucket-C concern, same
-  "real external tool, not a strata-internal check" shape)
+  [cve-scanner-integration.md](cve-scanner-integration.md) (sibling
+  bucket-C concern and the framework doc for scanner-type integrations —
+  `ScannerIntegration` capability, shared open questions all three face),
+  [trivy-integration.md](trivy-integration.md)/
+  [grype-integration.md](grype-integration.md) (the other two scanner
+  integrations, both already implemented as `CveScannerIntegration`
+  backends), [sbom-generation.md](sbom-generation.md) (sibling bucket-C
+  concern, same "real external tool, not a strata-internal check" shape)
 
 ## Overview
 
@@ -143,13 +152,28 @@ enforced" is never indistinguishable from "scanned and clean":
 
 ## v2: current state
 
-Nothing — confirmed via `list_dir` on `src/strata/{models,integrations}`:
-no `PolicyModel`, no `validators/policies/` package, no
-`integrations/checkov.py`. No `build run` command exists yet either
-(`v1-consumer-usage.md`'s rebuild order has it as "next" after `validate`),
-so there is no `get_provisioner_path()`-equivalent to resolve paths
-through yet — this is a hard prerequisite, not just a nice-to-have, given
-the porting trap flagged above.
+No `integrations/checkov.py`, no `PolicyModel`/`CheckovPolicyModel` for any
+type to attach to — confirmed via `list_dir` on
+`src/strata/{models,integrations}`.
+
+**The one hard prerequisite this doc originally flagged — resolved.** It
+read "no `build run` command exists yet either... no
+`get_provisioner_path()`-equivalent to resolve paths through." `build run`
+now exists (`build_controller.build_run()`, shipped) and already resolves
+exactly this: each execution step computes `source_path = sync_source(
+context.root, build_path, provisioner.source, remotes)` (the real,
+already-materialised on-disk directory for that provisioner, honouring
+`source.target_path`/`source.source_path` the same way the matching
+provisioner's own render step does), and every dependency-only provisioner
+(reachable only via another provisioner's `depends_on`, never its own
+execution step) is resolved the same way into a `materialised: dict[str,
+Path]` map inside `materialise_provisioner_sources()`. A future Checkov
+evaluator wired inline into `build_run()` (matching `evaluate_cve_policy()`'s
+own precedent) would have direct access to both — no new path-resolution
+machinery needs to be built, only assembling the two into one `dict[str,
+Path]` the evaluator can look up by provisioner name. The `helm` framework's
+own separate resolution (namespace/module enumeration) is unaffected by
+this — still needs `NamespaceService` enumeration as originally scoped.
 
 ## Sizing
 
@@ -162,9 +186,9 @@ complexity, concentrated in path resolution rather than evaluation logic:
    design decisions to revisit.
 2. **A `CheckovPolicy` (or v2-equivalent model)** — the framework→
    provisioner-type mapping, `scope` resolution (`staged`/`all`/
-   `<stage-name>`), severity-gate comparison. Needs `build run`'s
-   provisioner-path resolution to exist first (see above) — this is the
-   actual blocker, not the Checkov wrapper itself.
+   `<stage-name>`), severity-gate comparison. Previously blocked on
+   `build run`'s provisioner-path resolution existing — **no longer
+   blocked**, see "v2: current state" above.
 3. **Helm's separate resolution path** — namespace/module enumeration via
    `NamespaceService`, local-vs-registry chart distinction. Can be deferred
    to a second phase (terraform/bicep/ansible first, matching
@@ -181,11 +205,21 @@ complexity, concentrated in path resolution rather than evaluation logic:
 1. Real-usage evidence — is `checkov` actually declared in either real
    consumer's `policies:` block today? Not yet checked (same gap flagged
    in the umbrella doc).
-2. Does v2's eventual `build run` even produce a flat per-provisioner
-   directory shape compatible with `get_provisioner_path()`'s v1 contract,
-   or will v2's build-command design (not started) end up organizing
-   output differently, requiring this integration's path-resolution logic
-   to be redesigned rather than ported as-is?
+2. `build run`'s real output shape (confirmed: each provisioner's
+   `source_path` is wherever `sync_source()` materialised it, honouring
+   `source.target_path`/`source.source_path` — not necessarily one flat
+   directory per framework) — does this integration's path-resolution
+   logic need any adjustment beyond "look up `source_path` by provisioner
+   name," or is that the whole story? Worth a closer check once this is
+   actually picked up, not assumed clean from this catalog pass alone.
+3. Shared with [cve-scanner-integration.md](cve-scanner-integration.md)'s
+   own "Framework" section: does Checkov wire in via its own bespoke
+   `WorkspaceSpecModel.checkov_policy` field + inline evaluator function
+   (matching `cve_policy`/`tenant_zone`/`path_convention`'s established
+   precedent), or does this become the trigger to finally build a generic
+   `PolicyModel`/dispatcher (`policy-engine-architecture.md`'s own Open
+   Question 1, still undecided)? Not this doc's decision alone — see the
+   framework doc.
 
 ## Changelog
 
@@ -197,3 +231,18 @@ complexity, concentrated in path resolution rather than evaluation logic:
   v2 port must not repeat. Split out from
   [policy-engine-architecture.md](policy-engine-architecture.md)'s bucket-C
   catalog into its own tracked doc per direct request.
+- 2026-10-07: Re-checked this doc's own "hard prerequisite" claim against
+  v2's real, now-shipped `build_controller.build_run()` (not assumed
+  stale — actually read) and found it resolved: `build run` already
+  computes each provisioner's real materialised `source_path` via
+  `sync_source()`, and a `materialised: dict[str, Path]` map for
+  dependency-only provisioners, inside `materialise_provisioner_sources()`.
+  Corrected "v2: current state"/Sizing #2's stale blocker framing and
+  added two new Open Questions (the real output shape's exact
+  implications; the shared generic-vs-bespoke policy framework decision,
+  cross-referenced from the new
+  [cve-scanner-integration.md](cve-scanner-integration.md) "Framework"
+  section). Also linked the two sibling scanner-integration docs split out
+  this same pass, [trivy-integration.md](trivy-integration.md)/
+  [grype-integration.md](grype-integration.md). No code written — catalog
+  correction only, this integration itself remains not started.

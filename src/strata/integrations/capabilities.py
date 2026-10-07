@@ -393,6 +393,36 @@ class AuditSinkIntegration(Integration):
         """
 
 
+class ScannerIntegration(Integration):
+    """Capability: `scanner`. Detects an external security scanner and
+    raises a clear, actionable error when it isn't installed.
+
+    Deliberately thin — unlike `StoreIntegration.resolve()` or
+    `InfraIntegration.plan()`/`.deploy()`/`.destroy()`, this ABC does NOT
+    force a shared `scan()` method signature across every scanner-type
+    integration. `CveScannerIntegration` (an SBOM file in,
+    `CveAuditResultModel` out) and a future Checkov integration (an IaC
+    directory in, a completely different findings model out, docs/work/
+    checkov-integration.md) have genuinely different inputs and outputs —
+    that doc's own explicit stance is "do not conflate the two or build
+    one in a way that assumes it's the other." Forcing one `scan()`
+    signature here would be exactly that conflation. What IS genuinely
+    identical across both: the "the tool isn't installed" failure mode —
+    `CveScannerIntegration`'s own real, already-shipped `ensure_available()`
+    is the contract every scanner-type integration implements the same way.
+    """
+
+    @abstractmethod
+    def ensure_available(self) -> None:
+        """Raise when the underlying scanner tool(s) are not installed.
+
+        Raises:
+            strata.integrations.errors.IntegrationError: Always, when
+                unavailable — with an actionable message (what to install,
+                from where).
+        """
+
+
 #: Capability -> the ABC a class declaring it must implement. Keyed by
 #: `str`, not `Capability`, even though every key is a `Capability` member
 #: (`Capability <: str`, so this stays assignable) — `find_capability_
@@ -411,6 +441,7 @@ CAPABILITY_ABCS: dict[str, type[Integration]] = {
     Capability.INFRASTRUCTURE: InfraIntegration,
     Capability.CONTAINER: InfraIntegration,
     Capability.AUDIT: AuditSinkIntegration,
+    Capability.SCANNER: ScannerIntegration,
 }
 
 

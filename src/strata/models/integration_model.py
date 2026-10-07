@@ -113,6 +113,15 @@ class Capability(StrEnum):
     # and `capabilities.py`'s own contract is that an `x-`-prefixed capability
     # "never reaches here — there is nothing to dispatch it to".
     AUDIT = "audit"  #: AuditSinkModel-backed audit event destinations
+    # The "cve scanner" entry the class docstring above already anticipated
+    # — now a real, concrete, shipped v2 feature
+    # (docs/work/cve-scanner-integration.md), not speculative. Covers any
+    # external security scanner (`CveScannerIntegration`'s Trivy/Grype
+    # today; a future Checkov integration, docs/work/
+    # checkov-integration.md, would declare it too) — see
+    # `ScannerIntegration`'s own docstring (`capabilities.py`) for exactly
+    # how thin that shared contract deliberately is.
+    SCANNER = "scanner"  #: External security scanner tools (CVE/SCA, static IaC, ...)
 
 
 #: Capability vocabulary v2 currently has real consumers for. Closed/curated

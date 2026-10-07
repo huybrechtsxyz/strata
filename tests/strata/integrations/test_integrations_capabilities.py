@@ -8,6 +8,7 @@ from strata.integrations.capabilities import (
     CAPABILITY_ABCS,
     AuditSinkIntegration,
     InfraIntegration,
+    ScannerIntegration,
     StoreIntegration,
     find_capability_mismatches,
 )
@@ -187,7 +188,7 @@ def test_no_mismatch_for_a_capability_with_no_abc_yet():
 
 def test_capability_abcs_covers_every_core_capability_with_a_real_consumer():
     """variables/secrets/features -> StoreIntegration; infrastructure/container ->
-    InfraIntegration; audit -> AuditSinkIntegration."""
+    InfraIntegration; audit -> AuditSinkIntegration; scanner -> ScannerIntegration."""
     assert CAPABILITY_ABCS == {
         "variables": StoreIntegration,
         "secrets": StoreIntegration,
@@ -195,7 +196,51 @@ def test_capability_abcs_covers_every_core_capability_with_a_real_consumer():
         "infrastructure": InfraIntegration,
         "container": InfraIntegration,
         "audit": AuditSinkIntegration,
+        "scanner": ScannerIntegration,
     }
+
+
+# ---------------------------------------------------------------------------
+# ScannerIntegration (Capability.SCANNER) — deliberately thin: only
+# ensure_available() is abstract, no shared scan() signature (docs/work/
+# cve-scanner-integration.md, docs/work/checkov-integration.md).
+# ---------------------------------------------------------------------------
+
+
+def test_scanner_integration_requires_ensure_available():
+    class _Incomplete(ScannerIntegration):
+        TYPE = "widget"
+        CAPABILITIES = frozenset({"scanner"})
+        TRANSPORTS = frozenset({"cli"})
+
+    import pytest
+
+    with pytest.raises(TypeError):
+        _Incomplete()  # type: ignore[abstract]
+
+
+def test_scanner_integration_can_be_instantiated_when_complete():
+    class _Complete(ScannerIntegration):
+        TYPE = "widget"
+        CAPABILITIES = frozenset({"scanner"})
+        TRANSPORTS = frozenset({"cli"})
+
+        def ensure_available(self) -> None:
+            pass
+
+    _Complete().ensure_available()  # does not raise
+
+
+def test_no_mismatch_for_a_compliant_scanner_integration():
+    class _Compliant(ScannerIntegration):
+        TYPE = "widget"
+        CAPABILITIES = frozenset({"scanner"})
+        TRANSPORTS = frozenset({"cli"})
+
+        def ensure_available(self) -> None:
+            pass
+
+    assert find_capability_mismatches(_Compliant) == []
 
 
 # ---------------------------------------------------------------------------

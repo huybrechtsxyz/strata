@@ -238,3 +238,40 @@ def test_configuration_path_convention_enforcement_can_be_set_to_deny():
     ]
     model = ConfigurationModel.model_validate(data)
     assert model.spec.paths[0].enforcement == "deny"
+
+
+# ---------------------------------------------------------------------------
+# spec.cve_allowed (docs/work/cve-scanner-integration.md Phase 3)
+# ---------------------------------------------------------------------------
+
+
+def test_configuration_cve_allowed_is_optional():
+    model = ConfigurationModel.model_validate(_minimal_configuration())
+    assert model.spec.cve_allowed is None
+
+
+def test_configuration_accepts_cve_allowed_entries():
+    data = _minimal_configuration()
+    data["spec"]["cve_allowed"] = [
+        {"id": "CVE-2024-1234", "reason": "false positive"},
+        {"id": "CVE-2024-5678", "reason": "scoped to one package", "package": "openssl", "expires": "2026-12-31"},
+    ]
+    model = ConfigurationModel.model_validate(data)
+    assert model.spec.cve_allowed[0].id == "CVE-2024-1234"
+    assert model.spec.cve_allowed[0].package is None
+    assert model.spec.cve_allowed[1].package == "openssl"
+    assert model.spec.cve_allowed[1].expires == "2026-12-31"
+
+
+def test_configuration_cve_allowed_rejects_a_non_iso_expires_date():
+    data = _minimal_configuration()
+    data["spec"]["cve_allowed"] = [{"id": "CVE-2024-1234", "reason": "false positive", "expires": "31-12-2026"}]
+    with pytest.raises(ValidationError, match="not a valid ISO date"):
+        ConfigurationModel.model_validate(data)
+
+
+def test_configuration_cve_allowed_rejects_unknown_fields():
+    data = _minimal_configuration()
+    data["spec"]["cve_allowed"] = [{"id": "CVE-2024-1234", "reason": "false positive", "unknown_field": "oops"}]
+    with pytest.raises(ValidationError):
+        ConfigurationModel.model_validate(data)

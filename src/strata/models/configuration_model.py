@@ -53,6 +53,7 @@ from strata.models.common_models import (
     validate_kind_matches,
 )
 from strata.models.reference_fields import References
+from strata.models.sbom_model import CveAllowedEntryModel
 from strata.utils.names import check_unique_names
 
 
@@ -179,9 +180,9 @@ class PathConventionModel(PlatformBaseModel):
 class ConfigurationSpecModel(PlatformBaseModel):
     """Configuration specification.
 
-    Only `providers`/`topologies`/`security`/`paths`/`audit` are modeled so
-    far — see module docstring for what v1 has that v2 is deliberately
-    deferring.
+    Only `providers`/`topologies`/`security`/`paths`/`audit`/`cve_allowed`
+    are modeled so far — see module docstring for what v1 has that v2 is
+    deliberately deferring.
     """
 
     properties: dict[str, Any] | None = Field(None, description="Optional additional properties for the configuration.")
@@ -203,6 +204,13 @@ class ConfigurationSpecModel(PlatformBaseModel):
     )
     audit: AuditConfigModel | None = Field(
         None, description="Deployment audit trail: local manifest/metrics + optional git/SIEM distribution."
+    )
+    cve_allowed: list[CveAllowedEntryModel] | None = Field(
+        None,
+        description="Solution-wide CVE suppression list, consumed by every workspace's own cve_policy gate "
+        "(docs/work/cve-scanner-integration.md Phase 3). Lives here, not on Workspace, because v1's real "
+        "equivalent (.strata/cve-allowed.yaml) is keyed off the solution root, not any one workspace — one "
+        "list shared across every workspace, not duplicated per-workspace.",
     )
 
     @model_validator(mode="after")
