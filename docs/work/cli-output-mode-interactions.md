@@ -455,6 +455,74 @@ Possible answers, not decided yet:
    approach introduces that a separate second flag (`--stream-format`)
    would not.
 
+   **Feasibility, checked directly against the real implementation**
+   (`deploy_command.py`, `deploy_controller.py`, `json_output.py`): one
+   piece is cheap, one piece is a hidden correctness risk.
+
+   The cheap part: `on_line` is already a raw closure built entirely in
+   `deploy_command.py`'s own command body and plumbed straight through
+   `deploy_controller.deploy_run()` as an opaque callback (confirmed —
+   it's invoked at the deployer layer as plain `on_line(_tool, stream,
+   _redact(text))`, nothing in between inspects or depends on what it
+   does). Making it branch on `output` to build either today's
+   `click.secho(...)` console line or a new JSON-line event is confined
+   entirely to the command layer — no controller or layering change
+   needed (ADR-0003 stays clean).
+
+   The real problem: `JsonReporter` (`json_output.py`) is architecturally
+   built around producing **exactly one document, printed once, at
+   `footer()`** — its own `step()` method is a *documented* no-op
+   ("per-step reporting is what `--output ndjson` will be for", not
+   `json`), and the module's own docstring states this isn't just
+   convention: "a command run produces exactly **one** JSON document on
+   stdout... real pipelines depend on this... capture stdout, branch on
+   the exit code, and then pipe the *same* captured text to `jq`."
+   Making `on_line` print per-line JSON events under `--output json`
+   means stdout gets N+1 lines instead of one document — but only
+   *conditionally*, only when `--follow` also happens to be passed.
+   That makes `--output json`'s own structural contract depend on a
+   *different* flag's value: a user who adds `--follow` to an `--output
+   json` invocation they already trust (and already pipe to `jq`) would
+   silently get a different stdout shape, with no warning — precisely
+   the kind of surprise this whole doc exists to eliminate for
+   `--follow` itself, just relocated onto `--output json` instead.
+
+   **Net assessment: Option 1 does not avoid Option 5's scope, it
+   converges on it** — a per-line JSON writer still has to be built
+   either way — while being *strictly riskier* than Option 5, because it
+   reshapes `json`'s own documented single-envelope contract
+   conditionally instead of giving the multi-line shape its own explicit,
+   separately-named format (`ndjson`) the way Option 5 already does.
+   This is a real point against "decouple fully" as stated: the
+   decoupling is cleanest when the multi-line contract has its own name,
+   not when it's a side effect of combining two existing flags.
+
+   **What goes in the streamed lines vs. the final JSON object?** Not the
+   same content duplicated twice — checked directly against v1's own
+   real implementation to settle this rather than guessing. v1's final
+   `complete` event carries a `data` field sourced from `self._output_data`,
+   which its own source comments plainly as `# Structured result data`
+   (a separate accumulator for things like collected stage outputs/
+   deployment-manifest facts) — **not** the raw subprocess line text
+   already emitted via earlier `line` events. Those lines are each
+   streamed exactly once, live, and never re-appear in the final event.
+   The two are different concerns: the stream is *transient progress*
+   (useful only at the moment it arrives, e.g. watching a `terraform
+   apply` crawl through resources), the final object is *the durable
+   result* (what `jq`/CI actually parses afterward) — and v2's own
+   `build_envelope()` shape already matches this split today: `deploy
+   run`'s `JsonReporter.data` is left empty (no call anywhere in
+   `deploy_command.py` populates it, unlike `values get`'s explicit
+   `run.reporter.data = {...}` assignment), so the final envelope for
+   `deploy run --output json` is already lean (`ok`/`summary`/
+   `diagnostics` only) — confirming there's nothing today pulling
+   per-line text toward the final document in the first place. Any
+   `--follow`+`json`/`ndjson` design should keep that split: stream the
+   lines once, live, and leave the final envelope exactly as lean as it
+   is today — not a full transcript. See
+   [ndjson-output.md](ndjson-output.md)'s own "Final event shape"
+   question, updated with this same finding.
+
 2. **Keep them coupled, but name the coupling honestly instead of hiding
    it behind a silent no-op.** Accept that `--follow`'s only observable
    behavior genuinely is tied to format, because "timing" only has a
@@ -507,6 +575,133 @@ likely needs resolving *before* either doc's fix/design is finalized —
 which of options 1-4 is "right" for `--follow` today depends on which
 of these three mental models is actually the target one, not the other
 way around.
+
+## Design — Phase 1: fix `--follow`, keep it a plain boolean (`ndjson` deferred)
+
+Decided: ship only the bug fix now. `--follow` stays exactly the plain
+boolean flag it already is today — **no** `[console|ndjson]` optional-value
+shape yet. `ndjson` (whichever flag ends up triggering it — `--follow
+ndjson` or its own `--output ndjson`, still an open question, see
+[ndjson-output.md](ndjson-output.md)) is fully deferred to that doc's own,
+separate implementation. This section only fixes `--follow`'s own
+silent-no-op bug.
+
+**The fix itself** — unchanged flag, corrected behavior:
+
+```python
+on_line: Callable[[str, str, str], None] | None = None
+if follow:
+
+    def on_line(tool: str, stream: str, text: str) -> None:
+        # Reroute to stderr whenever stdout must stay a single JSON
+        # document — matches --verbose's own real precedent instead of
+        # merely citing it (Finding 2). Previously: `if follow and output
+        # == "console"` left on_line as None entirely under json, silently
+        # dropping every line with no warning.
+        to_stderr = stream == "stderr" or output == "json"
+        click.secho(f"      {tool} │ {text}", fg=("yellow" if stream == "stderr" else "cyan"), err=to_stderr)
+```
+
+| `--output` | `--follow` | Behavior                                                                                                                                       |
+| ---------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `console`  | off        | Today's default — header/steps/summary only. Unchanged.                                                                                        |
+| `console`  | on         | Today's live streaming — tool-prefixed lines to stdout. Unchanged.                                                                             |
+| `json`     | off        | Today's default — exactly one JSON document on stdout. Unchanged.                                                                              |
+| `json`     | on         | **The fix.** Lines reroute to **stderr**, tool-prefixed — stdout still emits exactly one clean JSON document at the end. No more silent no-op. |
+
+### `--quiet` and `--verbose`: checked directly — both already independent of `--follow`, consistently
+
+Raised directly: does `--quiet` suppress `--follow`'s stream too (since
+`--quiet`'s own docstring says "suppress... progress")? Checked against
+real source (`output.py`, `deploy_command.py`) — **no**, and this isn't a
+gap to fix, it's already a consistent design:
+
+- `quiet` is wired *only* into `make_reporter()`'s `ConsoleReporter`
+  construction (suppresses header/step/footer chrome — `output.py`'s own
+  `if self.quiet:` checks, confirmed directly). `deploy_command.py`'s own
+  `quiet` parameter is passed *only* into `command_run(...)` — never read
+  anywhere near `on_line`/`follow`. So `--quiet --follow` together still
+  streams every live line uninterrupted; only the reporter chrome around
+  it is suppressed.
+- `--verbose` (recap, confirmed earlier): raises the log level from
+  WARNING to INFO; logs always go to stderr, unconditionally
+  (`configure_logging()`, `options.py`'s own docstring: "Affects logging
+  only"). That's its *only* effect.
+- **New finding**: `--quiet` doesn't affect `--verbose`'s logging either —
+  `configure_logging()` is never passed `quiet` at all. Both `--follow`'s
+  stream and `--verbose`'s logs sit entirely *outside* the `Reporter`
+  abstraction `--quiet` is scoped to (`make_reporter()`'s own docstring:
+  "console only — JSON has no decoration to suppress", about reporter
+  chrome specifically). This is a real, consistent architectural fact —
+  not a bug to fix, but worth stating plainly: `--quiet` only ever touches
+  the header/step/footer the active `Reporter` renders; raw passthrough
+  (`--follow`'s stream) and logging (`--verbose`) are both separate
+  mechanisms, and both already consistently ignore it.
+
+## Implementation Plan
+
+Single phase — `ndjson` is fully deferred (see Design section above and
+[ndjson-output.md](ndjson-output.md)). Full check suite clean before
+considering this done: `mypy src`, `ruff check src/ tests/`, `ruff format
+src/ tests/`, `lint-imports`, `pytest -q` — same discipline as every
+other feature in this repo.
+
+### Phase 1 — ✅ DONE (2026-10-07) — fix `--follow`'s silent no-op under `--output json`
+
+- `deploy_command.py`'s `deploy_run_command()`: change the gate from
+  `if follow and output == "console":` to `if follow:` — `on_line` is now
+  always constructed whenever `--follow` is passed, regardless of
+  `--output`.
+- Inside `on_line`, add `output == "json"` to the existing
+  `stream == "stderr"` reroute condition (one `to_stderr` bool), so every
+  streamed line goes to stderr whenever stdout must stay a single JSON
+  document — console mode's own behavior (both streams to stdout,
+  colour-coded) is unchanged.
+- Update `--follow`'s own `--help` text: stop citing `--verbose`'s
+  precedent inaccurately (Finding 2) — state the real, now-true behavior
+  directly: streams live; automatically rerouted to stderr under
+  `--output json` so stdout stays exactly one document.
+- No Click option type change — `--follow`/`-f` stays `is_flag=True`,
+  exactly as today (Phase 1 decision above).
+- No `STRATA_OUTPUT`/`--output` changes at all — unaffected, same
+  precedence as always.
+- **Tests** (`tests/strata/commands/test_commands_deploy.py`, confirmed
+  exact current names):
+  - `test_follow_streams_tool_prefixed_lines_on_console_output` —
+    unchanged, already asserts the still-correct console behavior.
+  - `test_follow_is_silently_inert_with_json_output` — **rename and
+    rewrite**, since it currently asserts the bug itself as if it were
+    correct (`assert "terraform │" not in result.output`). New version
+    (e.g. `test_follow_reroutes_to_stderr_with_json_output`) must assert
+    the fix precisely, using `CliRunner`'s separate stdout/stderr capture
+    (confirmed directly against the installed Click 8.5.0 — `result.stdout`/
+    `result.stderr` are genuinely separate, `result.output` merges both):
+    ```python
+    assert "terraform │" in result.stderr
+    assert "terraform │" not in result.stdout
+    json.loads(result.stdout)  # still exactly one parseable document
+    ```
+- **Done when**: both tests above pass, full check suite clean, a manual
+  `strata deploy run ... --follow --output json | jq .` against a real
+  fixture still parses cleanly while lines are visible on the terminal
+  (stderr, not swallowed by the pipe).
+- **Shipped as**: `deploy_command.py`'s gate changed to `if follow:`
+  (`on_line` now always constructed when `--follow` is passed); the
+  closure reroutes to stderr whenever `stream == "stderr" or output ==
+  "json"` (one `to_stderr` bool, same `click.secho(..., err=to_stderr)`
+  call for both stdout- and stderr-origin lines) — console mode's own
+  dual-stream colour-coding is unchanged. `--follow`'s `--help` text
+  rewritten to state the real behavior directly instead of citing
+  `--verbose`'s precedent inaccurately. Test
+  `test_follow_is_silently_inert_with_json_output` renamed to
+  `test_follow_reroutes_to_stderr_with_json_output` and rewritten to
+  assert the fix using `CliRunner`'s separate `result.stdout`/
+  `result.stderr` capture, plus `json.loads(result.stdout)` confirming
+  stdout still parses as exactly one document;
+  `test_follow_streams_tool_prefixed_lines_on_console_output` unchanged.
+  Full check suite clean: `mypy` clean (146 files), `ruff check`/`ruff
+  format` clean, `lint-imports` kept, full suite **2177 passed** (21 in
+  `test_commands_deploy.py` alone).
 
 ## Changelog
 
@@ -590,3 +785,89 @@ way around.
   single-purpose flags is a deliberate improvement on v1, not an
   accidental divergence — an argument against reverting to v1's
   conflated shape via Option 3.
+- 2026-10-07: Checked Option 1's ("decouple fully") real feasibility
+  against the actual implementation (`deploy_command.py`'s `on_line`
+  closure, `deploy_controller.deploy_run()`'s plumbing, `JsonReporter`/
+  `format_json` in `json_output.py`). Rewiring `on_line` to branch on
+  `output` is cheap and command-layer-only (it's already an opaque
+  closure, not depended on by the controller). But `JsonReporter` is
+  architecturally built around exactly one document printed once at
+  `footer()` — a documented, real-pipeline-relied-upon invariant
+  (`json_output.py`'s own module docstring) — and making that
+  conditional on whether `--follow` also happens to be set means
+  `--output json`'s own structural contract would silently change shape
+  depending on a different flag. Concluded Option 1 doesn't avoid Option
+  5's scope (still needs a new per-line JSON writer) while being
+  strictly riskier (reshapes `json`'s contract conditionally instead of
+  naming the multi-line shape its own format) — a real point against
+  "decouple fully" as originally stated.
+- 2026-10-07: Answered a direct question — does the final JSON object
+  duplicate everything already streamed live? Checked v1's real
+  `_output_data` directly: its own source comments it as "Structured
+  result data", and it holds accumulated facts (stage outputs etc.), not
+  the raw per-line text already emitted via separate `line` events — v1
+  never re-included streamed lines in its final `complete` event. Also
+  confirmed v2's own `deploy run` already leaves `JsonReporter.data`
+  empty today (no assignment anywhere in `deploy_command.py`, unlike
+  `values get`'s explicit one). Concluded any `--follow`+structured-
+  output design should keep the same split: stream lines once, live;
+  keep the final envelope exactly as lean as today, not a transcript.
+  Cross-referenced into `ndjson-output.md`'s "Final event shape"
+  question.
+- 2026-10-07: Decided scope directly: ship only the `--follow` bug fix for
+  now, keeping it the plain boolean it already is today — the earlier
+  `[console|ndjson]` optional-value shape is deferred entirely until
+  `ndjson-output.md` actually ships something. Replaced the "Design"
+  section with the Phase-1-only version: same fix (reroute to stderr
+  under `--output json`), simplified 4-row matrix, no Click type change,
+  no new `UsageError` gate needed yet. Also investigated a direct
+  question — does `--quiet` suppress `--follow`'s stream? Checked
+  `output.py`/`deploy_command.py` directly: no — `quiet` only ever
+  reaches `ConsoleReporter`'s own header/step/footer chrome, never
+  `on_line`; `--quiet --follow` together still streams every line
+  uninterrupted. Also confirmed `--quiet` doesn't touch `--verbose`'s
+  logging either — both sit outside the `Reporter` abstraction `--quiet`
+  is scoped to. Not a bug — a consistent, now explicitly documented
+  architectural fact.
+- 2026-10-07: Added an "Implementation Plan" section (repo's own
+  established template, matching `promotion.md`'s precedent) — a single
+  Phase 1 covering exactly the Design section's fix: change
+  `deploy_command.py`'s gate to `if follow:`, add `output == "json"` to
+  the stderr-reroute condition, update `--follow`'s `--help` text. Found
+  the two exact existing tests to touch
+  (`tests/strata/commands/test_commands_deploy.py`'s
+  `test_follow_streams_tool_prefixed_lines_on_console_output` — unchanged
+  — and `test_follow_is_silently_inert_with_json_output` — must be
+  renamed and rewritten, since it currently asserts the bug itself as
+  correct). Verified directly against the installed Click 8.5.0's
+  `CliRunner` that `result.stdout`/`result.stderr` are genuinely captured
+  separately (`result.output` merges both) — gives the new test an exact,
+  confirmed assertion pattern (`"terraform │" in result.stderr`, `not in
+  result.stdout`, `json.loads(result.stdout)` still parses cleanly)
+  rather than a guessed one.
+- 2026-10-07: **Phase 1 implemented and shipped.** `deploy_command.py`'s
+  `--follow` gate changed from `if follow and output == "console":` to
+  `if follow:`; the `on_line` closure now reroutes to stderr whenever
+  `stream == "stderr" or output == "json"`, fixing the real reported bug
+  (no more silent drop under `STRATA_OUTPUT=json`/`--output json`).
+  `--follow`'s `--help` text rewritten to describe the real, now-true
+  behavior instead of inaccurately citing `--verbose`. Test
+  `test_follow_is_silently_inert_with_json_output` renamed to
+  `test_follow_reroutes_to_stderr_with_json_output` and rewritten to
+  assert the fix via `CliRunner`'s separate stdout/stderr capture.
+  Full check suite clean: `mypy` (146 files), `ruff check`, `ruff
+  format`, `lint-imports` (layering kept), full suite **2177 passed**.
+  `ndjson` remains fully deferred to `ndjson-output.md`.
+- 2026-10-07: Processed this doc's findings/fix into the permanent living
+  design doc, [deploy-plan-preview.md](../design/deploy-plan-preview.md)
+  (`--follow`'s own design doc, per ADR-0030) — corrected its stale
+  "silently inert with `--output json`" claims to describe the real,
+  fixed behavior, linked back here and to `ndjson-output.md` as source
+  work docs, and appended a History entry recording the real bug report
+  and fix. ADR-0030 itself left unedited (immutable decision record, per
+  this repo's own convention) — the correction lives in the design doc,
+  not the ADR. Also touched `v2-schema-overview.md`'s `deploy run` row
+  and changelog. This doc itself stays in `docs/work/` as the detailed
+  investigation record, per this repo's established pattern (e.g.
+  `deploy-command.md` alongside `deploy-plan-preview.md`) — not merged
+  or deleted.

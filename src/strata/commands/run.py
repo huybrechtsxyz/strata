@@ -141,6 +141,7 @@ def command_run(
     output: str,
     quiet: bool = False,
     verbose: bool = False,
+    compact: bool = False,
     context: Mapping[str, str] | None = None,
 ) -> Iterator[CommandRun]:
     """Run `name`, reporting and exiting consistently.
@@ -153,6 +154,10 @@ def command_run(
         output: Rendering format, from `--output`.
         quiet: Suppress decoration but never findings.
         verbose: Raise the log level from WARNING to INFO.
+        compact: Force single-line JSON for the final envelope — needed
+            when other newline-delimited JSON is already being written to
+            stdout ahead of it (`--follow ndjson`). No effect under
+            `console` or plain `json`.
         context: Facts for the header known before the command runs.
 
     Yields:
@@ -167,7 +172,7 @@ def command_run(
     run_id = uuid.uuid4().hex
     bind_run(run_id)
 
-    run = CommandRun(make_reporter(name, output, quiet=quiet), run_id, output)
+    run = CommandRun(make_reporter(name, output, quiet=quiet, compact=compact), run_id, output)
     if context:
         run.describe(**context)
 

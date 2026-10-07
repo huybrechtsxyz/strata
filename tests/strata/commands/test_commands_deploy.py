@@ -7,6 +7,7 @@ to populate `--build-path`, then exercises `deploy run` against it with
 same convention `test_deploy_controller.py` already established.
 """
 
+import json
 from pathlib import Path
 
 import pytest
@@ -244,11 +245,69 @@ def test_follow_streams_tool_prefixed_lines_on_console_output(runner, solution, 
     assert "terraform │" in result.output
 
 
-def test_follow_is_silently_inert_with_json_output(runner, solution, _stub_terraform_streaming):
+def test_follow_reroutes_to_stderr_with_json_output(runner, solution, _stub_terraform_streaming):
+    """Previously `--follow` was silently inert under `--output json` (no
+    warning, lines dropped entirely) — now it reroutes every line to
+    stderr instead, matching `--verbose`'s own real precedent, while
+    stdout stays exactly one parseable JSON document."""
     _build(runner, solution)
     result = _deploy(runner, "app", "--path", solution, "--force", "--follow", "--output", "json")
     assert result.exit_code == EXIT_SUCCESS, result.output
-    assert "terraform │" not in result.output
+    assert "terraform │" in result.stderr
+    assert "terraform │" not in result.stdout
+    json.loads(result.stdout)
+
+
+def test_follow_ndjson_requires_output_json(runner, solution, _stub_terraform_streaming):
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--force", "--follow", "ndjson")
+    assert result.exit_code == EXIT_USAGE, result.output
+
+
+def test_follow_ndjson_streams_line_and_progress_events_to_stdout(runner, solution, _stub_terraform_streaming):
+    """`--follow ndjson` (requires `--output json`) streams one JSON event
+    per subprocess line and per progress message to stdout, ending with
+    the normal `build_envelope()` result as the final line — unchanged
+    from plain `--output json`, not a bespoke shape (docs/work/
+    ndjson-output.md's "Final event shape" decision)."""
+    _build(runner, solution)
+    result = _deploy(runner, "app", "--path", solution, "--force", "--follow", "ndjson", "--output", "json")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+
+    events = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+    assert len(events) > 1  # at least one live event, plus the final envelope
+
+    live, final = events[:-1], events[-1]
+    kinds = {entry["event"] for entry in live}
+    assert "line" in kinds
+    assert "progress" in kinds
+    assert any(entry["event"] == "line" and entry["tool"] == "terraform" for entry in live)
+
+    assert final["ok"] is True
+    assert final["command"] == "deploy run"
+    assert "event" not in final
+
+
+def test_follow_ndjson_does_not_escape_non_ascii_text(runner, solution, monkeypatch):
+    """`json.dumps(..., ensure_ascii=False)` must match `format_json()`'s
+    own policy — a non-ASCII subprocess line should appear literally in
+    the `line` event, not as a `\\uXXXX` escape sequence."""
+    _build(runner, solution)
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        if line_callback is not None:
+            line_callback("stdout", "café résumé → done")
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    result = _deploy(runner, "app", "--path", solution, "--force", "--follow", "ndjson", "--output", "json")
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "café résumé → done" in result.stdout
+    assert "\\u" not in result.stdout
 
 
 def test_stage_option_restricts_execution(runner, solution, _stub_terraform):

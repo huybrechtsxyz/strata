@@ -14,6 +14,7 @@ directory `build run` already wrote to (ADR-0022 D4's render-vs-execute
 split).
 """
 
+import json
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -77,11 +78,14 @@ def deploy_command() -> None:
 @click.option(
     "--follow",
     "-f",
-    is_flag=True,
-    default=False,
-    help="Stream each subprocess output line live as it arrives, tool-prefixed "
-    "(e.g. 'terraform │ ...'). Console output only — silently inert with --output json, "
-    'matching --verbose\'s own "never make JSON unparseable" precedent.',
+    is_flag=False,
+    flag_value="console",
+    default=None,
+    type=click.Choice(["console", "ndjson"]),
+    help="Stream subprocess output live. Bare --follow streams tool-prefixed console "
+    "text (to stdout normally; automatically rerouted to stderr under --output json, "
+    "so stdout stays exactly one document). --follow ndjson streams newline-delimited "
+    "JSON events to stdout instead — requires --output json (docs/work/ndjson-output.md).",
 )
 @click.option(
     "--stage",
@@ -168,7 +172,7 @@ def deploy_run_command(
     force: bool,
     dry_run: bool,
     smoke_test: bool,
-    follow: bool,
+    follow: str | None,
     stage: str | None,
     scope: str | None,
     pin: str | None,
@@ -197,9 +201,12 @@ def deploy_run_command(
     Run 'strata build run DEPLOYMENT' first — this never renders anything,
     only executes what is already on disk at --build-path.
     """
-    with command_run("deploy run", output=output, quiet=quiet, verbose=verbose) as run:
+    with command_run("deploy run", output=output, quiet=quiet, verbose=verbose, compact=(follow == "ndjson")) as run:
         if dry_run and smoke_test:
             raise UsageError("--dry-run and --smoke-test are mutually exclusive — pick one.")
+
+        if follow == "ndjson" and output != "json":
+            raise UsageError("--follow ndjson requires --output json.")
 
         change_fields = (change_system, change_id, change_reason)
         if any(change_fields) and not all(change_fields):
@@ -228,19 +235,52 @@ def deploy_run_command(
         execution_id = str(uuid.uuid4())
         started_at = datetime.now(timezone.utc)
 
-        # Tier-1 console streaming — console output only, same "never make
-        # JSON unparseable" precedent --verbose already follows. Silently
-        # inert otherwise, matching --verbose's own behaviour rather than
-        # raising a UsageError for a flag combination that simply has
-        # nothing to do.
+        # Live subprocess-line streaming — reroutes to stderr whenever stdout
+        # must stay a single parseable JSON document, matching --verbose's own
+        # real "logs to stderr, stdout stays clean" precedent instead of merely
+        # citing it. Console mode keeps today's colour-coded dual-stream split
+        # (stdout for stdout lines, stderr for stderr lines). `--follow ndjson`
+        # (requires --output json, checked above) instead emits one JSON event
+        # per line to stdout — `stream` stays metadata describing which stream
+        # the *subprocess* line came from, never a routing instruction for our
+        # own output (docs/work/ndjson-output.md). `on_step`'s own progress
+        # messages get the same treatment: a generic "progress" event per call
+        # — a deliberate first-cut scope-down from v1's richer structured
+        # step_start/step_end events, since v2's on_step only ever carries a
+        # flat message string, not a separate step name/tool (ndjson-output.md's
+        # own "Per-line event shape" design question).
         on_line: Callable[[str, str, str], None] | None = None
-        if follow and output == "console":
+        on_step: Callable[[str], None] = run.step
+        if follow == "console":
 
             def on_line(tool: str, stream: str, text: str) -> None:
-                if stream == "stderr":
-                    click.secho(f"      {tool} │ {text}", fg="yellow", err=True)
-                else:
-                    click.secho(f"      {tool} │ {text}", fg="cyan")
+                to_stderr = stream == "stderr" or output == "json"
+                click.secho(f"      {tool} │ {text}", fg=("yellow" if stream == "stderr" else "cyan"), err=to_stderr)
+
+        elif follow == "ndjson":
+
+            def on_line(tool: str, stream: str, text: str) -> None:
+                click.echo(
+                    json.dumps(
+                        {
+                            "event": "line",
+                            "tool": tool,
+                            "stream": stream,
+                            "text": text,
+                            "ts": datetime.now(timezone.utc).isoformat(),
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+
+            def on_step(message: str) -> None:
+                click.echo(
+                    json.dumps(
+                        {"event": "progress", "message": message, "ts": datetime.now(timezone.utc).isoformat()},
+                        ensure_ascii=False,
+                    )
+                )
+                run.step(message)
 
         diagnostics = deploy_run(
             context,
@@ -251,7 +291,7 @@ def deploy_run_command(
             smoke_test=smoke_test,
             stage=stage,
             scope=scope,
-            on_step=run.step,
+            on_step=on_step,
             on_line=on_line,
             pin=pin,
         )

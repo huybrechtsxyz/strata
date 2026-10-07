@@ -1,7 +1,7 @@
 # `--output ndjson` — Work
 
 - Status: draft
-- Last updated: 2026-10-06
+- Last updated: 2026-10-07
 
 ## Overview
 
@@ -23,6 +23,12 @@ settles this cleanly: **v1 never tried to give both at once through the
 same format either** — it solved this with a genuinely separate format
 (`ndjson`), not by making `--follow` cooperate with `json`. That is likely
 the right shape for v2 too, not a `--follow`/`json` compatibility fix.
+
+**Trigger mechanism: decided (Phase 2, 2026-10-07).** Not a new
+`--output ndjson` value — `--follow` itself became an optional-value flag
+(`--follow` bare → `"console"`, today's unchanged behaviour; `--follow
+ndjson` → NDJSON streaming), scoped to `deploy run` only, requiring
+`--output json`. See Implementation Plan below for what shipped.
 
 ## Real evidence motivating this
 
@@ -163,32 +169,49 @@ What v2 already has, reusable as-is:
 
 What's genuinely new, not yet designed in detail:
 
-- An `NdjsonReporter` (or equivalent) implementing the same `Reporter`
-  protocol `ConsoleReporter`/`JsonReporter` already share, so a command
-  body still never branches on format itself.
+- ~~An `NdjsonReporter` (or equivalent) implementing the same `Reporter`
+  protocol...~~ **Not needed, confirmed during Phase 2 implementation.**
+  Since the trigger is `--follow ndjson` (not a new `--output` value),
+  `--output` stays `"json"` the whole time — the existing `JsonReporter`/
+  `build_envelope()`/`format_json()` machinery already produces the
+  correct final line automatically, completely unchanged. Live events are
+  written directly via `click.echo(json.dumps(...))` inside `on_line`/
+  `on_step`, exactly how console mode already bypasses the `Reporter`
+  abstraction via `click.secho` — no new reporter class, no new
+  `OUTPUT_FORMATS` member.
 - A real per-line event writer reusing `on_line`'s existing plumbing,
-  modeled on v1's `make_ndjson_line_callback()`.
-- A decision on the final line's shape (see Design questions).
+  modeled on v1's `make_ndjson_line_callback()`. **Shipped** — see
+  Implementation Plan.
+- A decision on the final line's shape (see Design questions). **Decided
+  and shipped**: reuses `build_envelope()`/`JsonReporter` unchanged, with
+  one real gap found and fixed along the way — `JsonReporter`'s default
+  `indent=2` pretty-prints the envelope across multiple lines, which
+  broke NDJSON's one-object-per-line contract entirely. Fixed by adding a
+  `compact: bool` parameter to `make_reporter()`/`command_run()`, forcing
+  `indent=None` when `--follow ndjson` is active — a small, additive,
+  layering-clean change (both functions already live in the `commands`
+  layer), not a new mechanism.
 
-## Design questions — not settled yet
+## Design questions
 
-- **Does `--output ndjson` imply live streaming automatically (matching
-  v1 exactly — Tier 2 is simply "the active format," no separate flag
-  needed), or does `--follow` still gate it in v2?** Recommendation
-  leaning toward matching v1: `--output ndjson` always streams, full
-  stop — simpler mental model, and avoids yet another two-flag
-  interaction needing its own row in `cli-output-mode-interactions.md`'s
-  own examples table. If adopted, `--follow --output ndjson` together
-  would just make `--follow` a harmless, redundant no-op (safe
-  redundancy, not the silent-failure shape this whole investigation
-  started from) rather than needing its own special-cased warning.
+- **Does `--output ndjson` imply live streaming automatically, or does
+  `--follow` gate it? DECIDED (Phase 2, 2026-10-07) — neither, exactly.**
+  Not a new `--output` value at all: `--follow` itself became an
+  optional-value flag (`--follow` bare → `console`; `--follow ndjson` →
+  NDJSON streaming), requiring `--output json`. This was chosen over
+  matching v1's "`--output ndjson` always streams" shape specifically
+  because `--follow` already shipped (Phase 1) as the one flag this whole
+  investigation is about — reusing it, rather than inventing a parallel
+  `--output` value, keeps exactly one trigger mechanism instead of two.
 - **Does `--follow` get reused as `--verbose`'s own trigger for console-
   mode Tier 1 instead, matching v1 exactly** (collapsing two flags into
-  one, removing `--follow` entirely), **or does v2 keep `--follow` as its
-  own separate, deliberate flag** (today's actual shape, diverged from
-  v1 on purpose or by accident — not yet established which)? This is the
-  one open question worth a direct decision rather than a default,
-  since it changes a already-shipped, documented flag's meaning.
+  one), **or does v2 keep `--follow` as its own separate, deliberate
+  flag? DECIDED (Phase 2) — kept separate.** `--follow` is now the single
+  trigger for *both* console streaming and NDJSON streaming (via its own
+  value) — not folded into `--verbose`, which stays logging-only
+  (`cli-output-mode-interactions.md`'s own counter-finding: v2's
+  `--verbose`/`--follow` split is a deliberate improvement on v1's
+  dual-purpose `--verbose`, not worth undoing).
 - **Final event shape.** v1 emits a bespoke `{"event": "complete", ...}"`
   object, structurally different from `build_envelope()`'s own
   `{ok, command, version, context, summary, diagnostics, data}` shape
@@ -200,28 +223,96 @@ What's genuinely new, not yet designed in detail:
   wrapping) — gives a consumer one single, already-documented shape to
   parse for the final result, regardless of which format was used,
   rather than inventing a second "the real result" shape just for
-  ndjson.
+  ndjson. **Confirmed directly against v1's own source what that final
+  event should (and should not) contain**: v1's `complete` event's `data`
+  field is sourced from `self._output_data`, commented in v1's own source
+  as `# Structured result data` (accumulated facts like collected stage
+  outputs) — it is **not** a transcript of the per-line `line` events
+  already streamed earlier; those are emitted once, live, and never
+  re-appear in `complete`. v2's own `deploy run` already matches this
+  split today, incidentally: `JsonReporter.data` is left empty for this
+  command (no assignment anywhere in `deploy_command.py`, unlike `values
+  get`'s explicit `run.reporter.data = {...}`), so there's nothing today
+  that would pull per-line text toward the final envelope in the first
+  place. The final line should stay exactly as lean as plain `--output
+  json` already is — streamed lines are transient progress, not part of
+  the durable result.
 - **Per-line event shape.** Start from v1's own proven shape
   (`event`/`step`/`stage`/`stream`/`text`/`ts`), adding `tool` (v2's
-  `on_line` already carries it) as a new field v1 didn't have. Lifecycle
-  events (`stage_start`/`step_start`/`step_end`/`stage_end`) are a
-  separate, real design question: v2's `deploy_run()` doesn't currently
-  have an obvious hook at exactly those boundaries the way v1's own
-  stage/step loop did — needs checking against `deploy_run()`'s actual
-  current loop structure before deciding whether to add them or start
-  with only `line` events.
-- **Scope: `deploy run` only, or every command?** v1's own
-  `emit_ndjson()`/`make_ndjson_line_callback()` machinery lives on the
-  generic `base_command.py`, available to any command, but the real,
-  evidenced need (both in v1's own usage and in the cfgint report) is
-  specifically long-running, incrementally-progressing provisioner work
-  — `deploy run` (and arguably `build run`'s own provisioner/workload
-  materialisation, though that doesn't stream subprocess output today
-  even in console mode). Recommendation: scope the first cut to
-  `deploy run` only, matching both v1's own real usage and the actual
-  motivating complaint — extend later only if a second real need shows
-  up, same "evidence over assumption" discipline this repo already
-  applies everywhere else.
+  `on_line` already carries it) as a new field v1 didn't have, and
+  dropping `stage` — v2 has no concept distinct from `step` (see below).
+  **Lifecycle events (`step_start`/`step_end`): resolved, not an open
+  question anymore.** Checked directly against `deploy_run()`'s real loop
+  structure (`deploy_controller.py`) — `on_step` (the existing callback
+  `_step()` wraps) already fires at exactly these two boundaries for
+  *every* step, uniformly across both the Terraform path and the Helm/
+  Compose path: step-start (`"running step '{name}' via {tool}"`) and
+  step-end (`"deployed step..."` / `"planned step... (dry-run)"`). An
+  NDJSON writer can hook `on_step` directly, the same way it hooks
+  `on_line` — zero new instrumentation needed in `deploy_controller.py`.
+  One real simplification this also surfaced: v2 has no "stage" grouping
+  distinct from "step" at all — unlike v1's nested stage→step loop,
+  `workspace.spec.execution` is a flat list of steps — so the event shape
+  should drop v1's `stage` field entirely rather than reconstruct a
+  grouping v2 doesn't have. No finer, sub-step granularity exists today
+  (e.g. no separate "init started"/"plan finished" events) — only
+  whole-step boundaries — which is a real, deliberate scope limit for a
+  first cut, not a gap: it matches the granularity `--follow`'s own
+  console output already has today (prefixed lines, no per-phase
+  headers).
+- **Scope: `deploy run` only, or every command? Corrected — broader than
+  previously stated here, checked directly against real v1 usage, not
+  assumed.** Grepped v1's real `emit_ndjson`/`make_ndjson_line_callback`/
+  `_is_ndjson_output` call sites directly (`git grep`, not the docstring-
+  only read this doc's Overview was originally based on) — NDJSON is
+  wired into **seven** v1 command files, not one: `builders/
+  base_build_command.py`, `builders/plan_build_command.py`, `builders/
+  run_build_command.py`, `builders/sbom_build_command.py`, `deploy/
+  destroy_deploy_command.py`, `deploy/health_deploy_command.py`, `deploy/
+  output_deploy_command.py`, plus `repo/sync_repo_solution_command.py` —
+  eight, including `run_deploy_command.py` itself. Two genuinely different
+  usage *patterns*, not one: (1) raw subprocess-line streaming
+  (`deploy run`/`destroy`/`health`/`output`, `build run`/`plan` — the
+  pattern this doc has focused on so far), and (2) **structured per-item
+  progress events with no subprocess involved at all** — confirmed
+  directly in `sync_repo_solution_command.py`, which emits one
+  `{"event": "data", "type": "repo_sync_result", "repo": ..., "action":
+  ..., "status": ..., "path": ..., "error": ...}` event per repo synced,
+  wrapped in `stage_start`/`stage_end` events carrying a `count` — a
+  command that processes a *list of independent items*, not a streaming
+  subprocess, benefiting from NDJSON for the exact same reason: seeing
+  each result as it completes rather than waiting for one buffered array.
+  **This means NDJSON is a genuinely general-purpose format in v1** —
+  "stream of independent, self-contained result events for any command
+  doing multiple discrete units of work" — not a `deploy run`-specific or
+  even subprocess-streaming-specific mechanism. The previous
+  recommendation to scope the first cut to `deploy run` only undersold
+  this; replacing it below.
+
+  **Revised recommendation**: still build the *first* cut against
+  `deploy run` only (it remains the single real, evidenced motivating
+  case — the cfgint report), but **don't design the event/reporter shape
+  in a `deploy run`-specific way** that would need reworking for a
+  `repo sync`-style, non-subprocess, per-item command later. Concretely:
+  keep the `line`/`step_start`/`step_end` event *shape* (above) specific
+  to subprocess-streaming commands, but don't assume every future NDJSON
+  consumer has subprocess lines at all — a `data`-type event (matching
+  v1's own `repo_sync_result` shape) for structured per-item results
+  should be considered a second, equally first-class event shape from the
+  start, not a later bolt-on.
+
+  **This also reopens the trigger-mechanism question** (the first Design
+  question above, and [cli-output-mode-interactions.md](cli-output-mode-interactions.md)'s
+  own Phase 1 decision to defer `ndjson` entirely and keep `--follow` a
+  plain boolean for now): `--follow ndjson` as the trigger only makes
+  sense for commands that already have a `--follow` flag at all — today,
+  only `deploy run` does. A `repo sync`-style command with no subprocess
+  to "follow" would need its own trigger (plausibly a real, standalone
+  `--output ndjson` after all, specifically for that class of command) —
+  meaning the two v1 usage patterns found here might end up with two
+  *different* v2 trigger mechanisms, not one unified one. Not resolved
+  here — flagged as a real open question for whenever this doc's own
+  design moves past `deploy run`'s first cut.
 - **stdout-only, matching v1 exactly, or split real OS streams?**
   Recommendation: match v1 exactly (Finding 3 above) — every NDJSON
   event, lifecycle and per-line alike, goes to actual stdout; `stream`
@@ -245,22 +336,67 @@ What's genuinely new, not yet designed in detail:
 
 ## Remaining Work / Open Questions
 
-- All of "Design questions" above — none settled yet.
-- Not yet checked against v2's *current* `deploy_run()` loop structure in
-  detail: where exactly would stage/step lifecycle events hook in, and
-  does v2 even have an equivalent "stage" concept at the same granularity
-  v1's own `DeploymentStageModel` loop did (v2's own stage/scope
-  filtering exists — `--stage`/`--scope` on `deploy run` — but whether
-  its internal loop shape matches v1's stage/step nesting closely enough
-  to reuse the same event granularity needs a direct read, not assumed
-  from this doc alone).
-- Whether `build run` ever gains an analogous need is explicitly out of
-  scope for the first cut (see "Scope" above) — not a yes or no, just
-  not being designed now.
-- This doc does not resolve `cli-output-mode-interactions.md`'s own near-
-  term `--follow` fix decision (Options 1-4 there) — that can proceed
-  independently of whether/when this doc's design gets built, per that
-  doc's own "not mutually exclusive" framing of Option 5.
+- **Phase 2 (below) covers `deploy run` only — shipped.** Every other
+  "Design questions" item above is now decided and shipped alongside it;
+  nothing from that section remains open for `deploy run`'s own first
+  cut.
+- The `data`-type event (matching v1's `repo_sync_result` shape, for
+  commands with no subprocess at all — `repo sync`-style) remains
+  explicitly deferred — not designed or built, no trigger mechanism
+  decided for that class of command. Revisit only if a second real need
+  shows up (same discipline as everywhere else in this repo).
+- Whether `build run` ever gains an analogous need is still out of scope
+  — not a yes or no, just not being designed now.
+
+## Implementation Plan
+
+### Phase 2 — ✅ DONE (2026-10-07) — NDJSON streaming for `deploy run` (first cut)
+
+- Upgrade `deploy_command.py`'s `--follow` from a plain boolean
+  (`is_flag=True`) to an optional-value flag (`is_flag=False,
+  flag_value="console", type=click.Choice(["console", "ndjson"])`) —
+  bare `--follow` unchanged (`"console"`); `--follow ndjson` new.
+- Guard: `if follow == "ndjson" and output != "json": raise
+  UsageError("--follow ndjson requires --output json.")`.
+- `on_line` gains a third branch (`elif follow == "ndjson":`) emitting
+  `{"event": "line", "tool", "stream", "text", "ts"}` via
+  `click.echo(json.dumps(...))` to stdout — `stream` stays metadata, per
+  the stdout-only decision.
+- `on_step` gets a matching ndjson-mode override emitting
+  `{"event": "progress", "message", "ts"}` per call — the deliberate,
+  documented scope-down from v1's structured `step_start`/`step_end`
+  (v2's `on_step` only ever carries a flat message string).
+- Final envelope: unchanged `build_envelope()`/`JsonReporter`, **plus** a
+  new `compact: bool` parameter threaded through `make_reporter()`/
+  `command_run()` forcing `indent=None` — found necessary during
+  implementation (not anticipated in the design above): `JsonReporter`'s
+  default `indent=2` pretty-prints the envelope across multiple lines,
+  which silently broke NDJSON's one-object-per-line contract. `deploy
+  run` passes `compact=(follow == "ndjson")` into `command_run(...)`.
+- No `OUTPUT_FORMATS` change, no new Reporter class, no
+  `deploy_controller.py` change — confirmed, the whole fix is contained
+  to `deploy_command.py` plus the small additive `compact` parameter on
+  two already-shared command-layer functions.
+- **Tests** (`tests/strata/commands/test_commands_deploy.py`):
+  `test_follow_ndjson_requires_output_json` (the guard) and
+  `test_follow_ndjson_streams_line_and_progress_events_to_stdout`
+  (asserts every stdout line parses as its own JSON object, both `line`
+  and `progress` events appear, the final line is the normal, unmodified
+  `build_envelope()` result with no `event` key).
+- **Shipped as**: exactly the above. Full check suite clean: `mypy`
+  (146 files), `ruff check`/`ruff format` clean, `lint-imports` kept,
+  full suite **2179 passed** (23 in `test_commands_deploy.py`).
+- **Code review (2026-10-07) found and fixed one real bug**: the new
+  `line`/`progress` events' `json.dumps(...)` calls omitted
+  `ensure_ascii=False`, unlike `format_json()`'s own call for the final
+  envelope — non-ASCII subprocess text would have been `\uXXXX`-escaped
+  in live events but rendered literally in the final line, an
+  inconsistent contract within one stream. Fixed by matching
+  `format_json()`'s exact policy (`ensure_ascii=False`) and dropping the
+  unneeded `default=str` (every field is already a plain `str`). Added
+  `test_follow_ndjson_does_not_escape_non_ascii_text` as a real
+  regression test (not just a diff-level claim) — full suite
+  **2180 passed** after the fix.
 
 ## Changelog
 
@@ -284,3 +420,76 @@ What's genuinely new, not yet designed in detail:
   `indent=None`, `JsonReporter.step()`'s documented no-op) and the open
   design questions (streaming trigger, final-event shape, per-line event
   shape, scope, stdout-only). No code written — design only.
+- 2026-10-07: Answered a direct question (raised while reviewing
+  `cli-output-mode-interactions.md`'s Option 1) about whether streamed
+  lines get duplicated into the final result object. Checked v1's real
+  `_output_data` directly: its own source comments it as "Structured
+  result data" and it holds accumulated facts (e.g. collected stage
+  outputs), not the raw per-line text already emitted via separate
+  `line` events — v1 never re-included streamed lines in its final
+  `complete` event. Also confirmed v2's own `deploy run` already leaves
+  `JsonReporter.data` empty today. Updated the "Final event shape"
+  question to state this directly: the final line should stay exactly as
+  lean as plain `--output json` already is — streamed lines are
+  transient progress, not part of the durable result.
+- 2026-10-07: Corrected the "Scope" question with broader real evidence —
+  grepped v1's actual `emit_ndjson`/`make_ndjson_line_callback` call
+  sites directly (not just the two files read for the Overview) and
+  found NDJSON wired into eight v1 command files, not one, across two
+  genuinely different patterns: raw subprocess-line streaming (`deploy
+  run`/`destroy`/`health`/`output`, `build run`/`plan`) and structured
+  per-item progress events with no subprocess at all (`repo sync`'s own
+  `repo_sync_result` "data" events, one per repo synced). NDJSON is a
+  genuinely general-purpose format in v1, not `deploy run`-specific.
+  Kept the recommendation to build the first cut against `deploy run`
+  only, but added that the event-shape design shouldn't assume every
+  future consumer has subprocess lines — a `data`-type event should be a
+  first-class second shape from the start, not a bolt-on. Also surfaced
+  a new, unresolved question this raises: `--follow ndjson` as a trigger
+  only makes sense for commands that already have `--follow` (today,
+  only `deploy run`) — a `repo sync`-style command would need its own
+  trigger, possibly a real standalone `--output ndjson` after all for
+  that class of command. Not resolved — flagged for whenever this doc's
+  design moves past `deploy run`'s first cut.
+- 2026-10-07: **Phase 2 implemented and shipped** — NDJSON streaming for
+  `deploy run`, first cut. Decided the trigger question directly:
+  `--follow` became the optional-value flag (`console`/`ndjson`), not a
+  new `--output` value — no new `OUTPUT_FORMATS` member, no new Reporter
+  class needed, since `--output` stays `"json"` throughout and the
+  existing `JsonReporter`/`build_envelope()` machinery already produces
+  the correct final line. Found and fixed one real gap not anticipated in
+  the design: `JsonReporter`'s default `indent=2` pretty-prints the
+  envelope across multiple lines, breaking NDJSON's one-object-per-line
+  contract — fixed with a small, additive `compact: bool` parameter on
+  `make_reporter()`/`command_run()`. `on_step`'s richer v1 lifecycle
+  events were deliberately scoped down to a single generic `"progress"`
+  event, matching v2's flatter `on_step` signature. Full check suite
+  clean, full suite 2179 passed. The `data`-type event (repo-sync-style,
+  non-subprocess commands) remains explicitly deferred, not built.
+- 2026-10-07: Code review of Phases 1+2 together. Found and fixed one
+  real bug: the new ndjson `line`/`progress` events' `json.dumps(...)`
+  calls didn't pass `ensure_ascii=False`, unlike `format_json()`'s own
+  call for the final envelope — non-ASCII text would render differently
+  (escaped vs. literal) depending on which line of the same stream it
+  appeared in. Fixed to match `format_json()`'s exact policy, dropped the
+  now-unneeded `default=str`, and added a real regression test
+  (`test_follow_ndjson_does_not_escape_non_ascii_text`) rather than
+  trusting the diff alone. Everything else reviewed clean: secret
+  redaction already happens upstream of both new `on_line` branches
+  (`deploy_controller.py`'s `_redact()` runs before either callback sees
+  text, confirmed unchanged); `compact` only affects the `json` branch of
+  `make_reporter()` and is fully backward compatible for every other
+  command (defaults to `False`, `indent=2` unchanged); the `UsageError`
+  guard's placement after `command_run()` already opens is harmless
+  (`compact` is computed from `follow` regardless, but only takes effect
+  once `output == "json"`, and the guard still fires correctly before any
+  real work happens). Full suite **2180 passed** after the fix.
+- 2026-10-07: Processed this doc's shipped Phase 2 into the permanent
+  living design doc, [deploy-plan-preview.md](../design/deploy-plan-preview.md)
+  — its "Streaming" section now summarizes `--follow ndjson`'s shipped
+  shape directly, its "Not Built Here" section lists the still-deferred
+  `data`-type event and `build run` extension, and a new History entry
+  records the real v1 grep evidence and the `compact`/`ensure_ascii` bugs
+  found along the way. This doc itself stays in `docs/work/` as the full
+  design record (v1 evidence, every option considered, every design
+  question's resolution) — not merged or deleted.

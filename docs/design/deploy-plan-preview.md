@@ -1,7 +1,7 @@
 # `strata deploy run` — Plan Preview, Smoke Test, and Output Streaming
 
 - Status: current
-- Last updated: 2026-10-06
+- Last updated: 2026-10-07
 
 ## Overview
 
@@ -18,9 +18,13 @@ an orthogonal live-output flag:
   support is a warning here, not a hard failure.
 - *(neither flag, `--force`)* — a real apply, unchanged from before this
   feature existed.
-- **`--follow`/`-f`** — streams subprocess output live, tool-prefixed,
-  console output only (silently inert with `--output json`). Orthogonal
-  to the three modes above; works with any of them.
+- **`--follow`/`-f`** — streams subprocess output live, tool-prefixed.
+  Under `--output json`, lines reroute to stderr instead (stdout stays
+  exactly one parseable document) — **not** silently dropped, correcting
+  a real bug found in a later consumer report (see History). `--follow
+  ndjson` streams newline-delimited JSON events to stdout instead
+  (requires `--output json`) — a first cut, scoped to this command only.
+  Orthogonal to the three modes above; works with any of them.
 
 This closes a real gap: `--dry-run` used to mean the same thing
 `--smoke-test` means today (report-only, zero tool contact) — a CI
@@ -160,14 +164,26 @@ mean different things elsewhere.
   richer 3-arg `on_line` — necessary because v2's entire step loop lives
   inside one `deploy_run()` call (unlike v1, whose CLI drove the loop
   itself and could rebuild a tool-prefixed callback each iteration).
-- `deploy_command.py` builds the real console callback only when
-  `--follow` is set **and** output is console (`click.secho`,
-  tool-prefixed, yellow stderr/cyan stdout) — silently inert otherwise,
-  matching `--verbose`'s own "never make JSON output unparseable"
-  precedent.
-- NDJSON streaming (a second, structured output tier) stays out of scope
-  until `--output ndjson` exists in v2 at all — the same `on_line`
-  plumbing here is exactly what a future NDJSON writer would consume.
+- `deploy_command.py` builds the console callback when `--follow` is
+  bare (`click.secho`, tool-prefixed, yellow stderr/cyan stdout) —
+  automatically rerouted to stderr whenever `--output json` is also
+  active, so stdout always stays exactly one document. **Corrected**:
+  this used to be silently inert under `--output json` instead (no
+  warning, lines simply dropped) — a real consumer-reported bug, fixed
+  by matching `--verbose`'s own actual stderr-reroute precedent instead
+  of merely citing it (see History, [docs/work/
+  cli-output-mode-interactions.md](../work/cli-output-mode-interactions.md)).
+- `--follow ndjson` (requires `--output json`) emits one JSON event per
+  subprocess line (`{"event": "line", "tool", "stream", "text", "ts"}`)
+  and per progress message (`{"event": "progress", "message", "ts"}"`) to
+  stdout instead, ending with the normal `build_envelope()` result as the
+  final line (forced single-line via a new `compact` parameter on
+  `make_reporter()`/`command_run()`, so it stays consistent with the
+  per-line events ahead of it) — shipped as a first cut, scoped to
+  `deploy run` only; full design and remaining open questions (a
+  `repo sync`-style "data" event shape for non-subprocess commands,
+  whether `build run` ever gains an analogous need) tracked in
+  [docs/work/ndjson-output.md](../work/ndjson-output.md).
 
 ### Secret redaction for streamed output
 
@@ -243,8 +259,14 @@ dry_run or smoke_test`.
 - `strata deploy plan` — the offline saved-plan reader described above.
 - Infracost-style cost-diff-after-plan (v1 precedent) — no cost estimator
   integration exists in v2 yet.
-- NDJSON streaming — see "Streaming" above; revisit once `--output
-  ndjson` exists.
+- A `repo sync`-style structured "data" NDJSON event shape (for commands
+  with no subprocess at all) — `--follow ndjson` here only ever emits
+  `line`/`progress` events; the other shape remains undesigned, no
+  command exists yet that would need it ([docs/work/
+  ndjson-output.md](../work/ndjson-output.md)).
+- Extending `--follow`/NDJSON to `build run` — confirmed `build run` has
+  no subprocess/line-callback plumbing at all today, so there is nothing
+  to stream; revisit only if that changes.
 
 ## Related Decisions
 
@@ -254,9 +276,21 @@ dry_run or smoke_test`.
 - [ADR-0030](../decisions/0030-deploy-run-plan-preview-and-streaming.md) —
   the decision this doc documents the design for (naming scheme,
   graceful-degradation severity split, streaming/redaction approach).
+  Its own "silently inert with `--output json`" line records what was
+  decided/believed *at the time* (2026-10-06) — left unedited as the
+  historical record; the real behavior was corrected the next day (see
+  History below), with the correction documented here, in the living
+  design doc, rather than by editing the ADR itself.
 - [deploy-command.md](../work/deploy-command.md) — the main `deploy run`
   work doc, still in progress for unrelated concerns (locking, SIEM,
   whole-run timeout).
+- [cli-output-mode-interactions.md](../work/cli-output-mode-interactions.md) —
+  the real cfgint bug report and fix (`--follow` silently inert under
+  `--output json`), plus the general `--output`/`--quiet`/`--verbose`
+  interaction survey that motivated it.
+- [ndjson-output.md](../work/ndjson-output.md) — the full NDJSON design
+  (v1 precedent, event shapes, scope) this doc's "Streaming" section
+  summarizes the shipped first cut of.
 
 ## History
 
@@ -301,3 +335,32 @@ dry_run or smoke_test`.
   discarded (pre-existing, predates this feature) — now checked for
   `.is_successful`, each a hard failure on error, matching `plan`/
   `deploy`'s existing pattern.
+- 2026-10-07: A real external bug report (cfgint team, `xyz-strata`
+  2.0.0a8): `--follow` really was "silently inert with `--output json`"
+  exactly as documented above — but silent, with zero warning, caused an
+  11-minute real `terraform apply` to look completely hung with no
+  progress signal at all. Investigated and fixed
+  ([cli-output-mode-interactions.md](../work/cli-output-mode-interactions.md)):
+  `--follow` now reroutes every line to stderr under `--output json`
+  instead of dropping it, actually matching the `--verbose` precedent
+  this doc's own "Streaming" section already (incorrectly, at the time)
+  claimed it followed. Same investigation surveyed every other
+  console-only flag (`--quiet`) for the same shape — found independent,
+  no change needed there.
+- 2026-10-07: Shipped `--follow ndjson` as a first cut of the NDJSON
+  streaming this doc's "Streaming" section had deferred
+  ([ndjson-output.md](../work/ndjson-output.md)) — grounded directly in
+  v1's own real NDJSON implementation (`git show main:...`, not assumed),
+  which turned out to be used far more broadly than `deploy run` alone
+  (8 v1 command files, two patterns: subprocess-line streaming and
+  structured per-item "data" events with no subprocess at all). Chose
+  `--follow ndjson` over a new top-level `--output ndjson` specifically
+  to reuse the one flag this whole investigation is about rather than
+  invent a second trigger mechanism. Found and fixed one real gap not
+  anticipated in the design: `JsonReporter`'s default pretty-print
+  (`indent=2`) broke NDJSON's one-object-per-line contract for the final
+  envelope — fixed with an additive `compact` parameter. A follow-up code
+  review then found and fixed a second real bug: the new events' own
+  `json.dumps(...)` calls didn't match `format_json()`'s `ensure_ascii=
+  False` policy, which would have escaped non-ASCII subprocess text
+  inconsistently depending on which line of the stream it appeared in.

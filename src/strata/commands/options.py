@@ -114,6 +114,7 @@ def make_reporter(
     *,
     quiet: bool = False,
     stream: TextIO | None = None,
+    compact: bool = False,
 ) -> Reporter:
     """Return the renderer for `output`.
 
@@ -124,10 +125,15 @@ def make_reporter(
         output: One of `OUTPUT_FORMATS`.
         quiet: Console only — JSON has no decoration to suppress.
         stream: Where to write. Defaults to stdout.
+        compact: Force single-line JSON (`indent=None`) instead of the
+            default pretty-print — needed when the final envelope must
+            stay consistent with other newline-delimited JSON already on
+            stdout (`--follow ndjson`, docs/work/ndjson-output.md). No
+            effect under `console`.
 
     Returns:
         A `Reporter`.
     """
     if output == "json":
-        return JsonReporter(command, stream=stream)
+        return JsonReporter(command, stream=stream, indent=None if compact else 2)
     return ConsoleReporter(command, stream=stream, quiet=quiet)
