@@ -21,16 +21,16 @@ it — not to propose a specific fix yet.
 
 ### Terraform (`src/strata/integrations/terraform.py`)
 
-| Method | Timeout | Notes |
-|---|---|---|
-| `version` (via `Integration.get_version()` in `base.py`) | 10s | |
-| `init` | 300s (5 min) | |
-| `validate` | 60s | |
-| `output` | 60s | |
-| `show` | 60s | |
-| `plan` | 600s (10 min) | also backs v1's `plan_destroy` (`destroy=True`) and `drift` (`detailed_exitcode=True`) — not separate methods |
-| `deploy` (`terraform apply`) | 1800s (30 min) | |
-| `destroy` | 1800s (30 min) | |
+| Method                                                   | Timeout        | Notes                                                                                                         |
+| -------------------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------- |
+| `version` (via `Integration.get_version()` in `base.py`) | 10s            |                                                                                                               |
+| `init`                                                   | 300s (5 min)   |                                                                                                               |
+| `validate`                                               | 60s            |                                                                                                               |
+| `output`                                                 | 60s            |                                                                                                               |
+| `show`                                                   | 60s            |                                                                                                               |
+| `plan`                                                   | 600s (10 min)  | also backs v1's `plan_destroy` (`destroy=True`) and `drift` (`detailed_exitcode=True`) — not separate methods |
+| `deploy` (`terraform apply`)                             | 1800s (30 min) |                                                                                                               |
+| `destroy`                                                | 1800s (30 min) |                                                                                                               |
 
 ### Other CLI integrations, for comparison
 
