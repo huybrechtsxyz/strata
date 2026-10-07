@@ -30,6 +30,41 @@ the right shape for v2 too, not a `--follow`/`json` compatibility fix.
 ndjson` → NDJSON streaming), scoped to `deploy run` only, requiring
 `--output json`. See Implementation Plan below for what shipped.
 
+## Shipped design — quick reference (`deploy run`, Phase 2)
+
+Everything below is explained and justified in detail further down (`Real
+evidence`/`Design questions`/`Implementation Plan`) — this section exists
+so a reader doesn't have to read the whole investigation narrative just
+to know what actually exists today.
+
+- **Invoke**: `strata deploy run DEPLOYMENT --output json --follow ndjson`.
+  Requires `--output json` explicitly (`UsageError` otherwise) — `--follow
+  ndjson` does **not** imply `--output json` on its own.
+- **Per-line event** (one per subprocess output line):
+  `{"event": "line", "tool": "terraform", "stream": "stdout"|"stderr",
+  "text": "...", "ts": "2026-10-07T12:00:00+00:00"}`. `stream` is metadata
+  about which stream the *subprocess* line came from — every event goes
+  to v2's own stdout regardless (stdout-only, matching v1).
+- **Progress event** (one per step-boundary message, e.g. "running step
+  'apply_infra' via terraform"): `{"event": "progress", "message": "...",
+  "ts": "..."}`. A deliberate first-cut scope-down from v1's richer
+  `step_start`/`step_end` (with `step`/`stage` fields) — v2's `on_step`
+  callback only ever carries one flat message string, no structured
+  fields to split out without a `deploy_controller.py` change.
+- **Final line**: the exact same `build_envelope()` result plain
+  `--output json` already produces — `{ok, command, version, context,
+  summary, diagnostics, data}`, no `event` key, no transcript of the
+  streamed lines. Forced single-line (`indent=None`) via a new `compact`
+  parameter on `make_reporter()`/`command_run()` so it's consistent with
+  every line ahead of it.
+- **Scope**: `deploy run` only. No new `OUTPUT_FORMATS` member, no new
+  `Reporter` class, no `deploy_controller.py` change — the whole feature
+  lives in `deploy_command.py` plus the small additive `compact` param.
+- **Not built**: a `data`-type event for commands with no subprocess at
+  all (`repo sync`-style, per v1's own real usage) — no target command
+  exists in v2 yet; extending to `build run` — confirmed no subprocess/
+  line-callback plumbing exists there today, nothing to stream.
+
 ## Real evidence motivating this
 
 v1's real implementation, read directly from `main` (`src/strata/commands/
@@ -493,3 +528,10 @@ What's genuinely new, not yet designed in detail:
   found along the way. This doc itself stays in `docs/work/` as the full
   design record (v1 evidence, every option considered, every design
   question's resolution) — not merged or deleted.
+- 2026-10-07: Added a "Shipped design — quick reference" section right
+  after the Overview, summarizing the final shape (invocation, both event
+  shapes, final line, scope, what's not built) in one place — the rest of
+  the doc is an investigation journal built up over many turns (v1
+  evidence, options considered, per-question resolution), valuable as a
+  record but not the fastest way for a new reader to learn current
+  behavior. No content removed or restructured elsewhere; purely additive.
