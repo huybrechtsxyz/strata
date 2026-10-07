@@ -22,6 +22,7 @@ from strata.controllers.solution_controller import DocumentIndex, DocumentRef, I
 from strata.models.common_models import PlatformKind, SourceModel
 from strata.models.provider_model import ProviderMetaModel, ProviderModel, ProviderPropertiesModel, ProviderSpecModel
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel
+from strata.models.sbom_model import CveAuditResultModel
 from strata.models.solution_model import RemoteFetch, RemoteType, SolutionRemoteModel
 from strata.models.version_model import VersionMetaModel, VersionModel, VersionSpecModel
 from strata.models.workspace_model import WorkspaceMetaModel, WorkspaceModel, WorkspaceSpecModel
@@ -908,6 +909,123 @@ def test_build_run_dry_run_does_not_write_an_sbom(tmp_path: Path):
     diagnostics = build_run(_context(root), "app", build_path, dry_run=True)
     assert diagnostics.ok
     assert not (build_path / "sbom.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# build_run() writes policy_results.json for build-phase policies
+# (docs/work/audit-trail.md's ManifestPolicyResultModel population design)
+# ---------------------------------------------------------------------------
+
+
+class _FakeScanner:
+    """Mirrors test_sbom_controller.py's own `_FakeScanner` — patched onto
+    `sbom_controller`'s module namespace, since that's where
+    `evaluate_cve_policy()` constructs `CveScannerIntegration()` from."""
+
+    def __init__(self, *, result: CveAuditResultModel):
+        self._result = result
+
+    def is_available(self) -> bool:
+        return True
+
+    def scan_sbom(self, sbom_path: Path, *, severity_threshold: str) -> CveAuditResultModel:
+        return self._result
+
+
+def _patch_cve_scanner(monkeypatch: pytest.MonkeyPatch, result: CveAuditResultModel) -> None:
+    import strata.controllers.sbom_controller as sbom_controller_module
+
+    monkeypatch.setattr(sbom_controller_module, "CveScannerIntegration", lambda: _FakeScanner(result=result))
+
+
+def _minimal_solution(tmp_path: Path, *, cve_policy_yaml: str = "") -> Path:
+    root = _solution(tmp_path)
+    _write(root, "infra/main.tf", "# root module\n")
+    _write(
+        root,
+        "provider.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: provider\nmeta:\n  name: p1\nspec:\n"
+        "  properties:\n    type: local\n    region: local\n",
+    )
+    _write(
+        root,
+        "resource.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: resource\nmeta:\n  name: r1\nspec:\n"
+        "  properties:\n    provider_type: local\n    resource_type: server\n    category: compute\n"
+        "  default_tags:\n    managed-by: strata\n",
+    )
+    _write(
+        root,
+        "workspace.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: workspace\nmeta:\n  name: main\nspec:\n"
+        "  providers:\n    - p1\n"
+        "  provisioners:\n    - name: tf_main\n      tool: terraform\n      source:\n        source_path: infra\n"
+        "  execution:\n    - name: apply_infra\n      provisioner: tf_main\n      targets:\n        - r1\n"
+        "  resources:\n    - name: r1\n      resource: r1\n" + cve_policy_yaml,
+    )
+    _write(
+        root,
+        "environment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec: {}\n",
+    )
+    _write(
+        root,
+        "deployment.yaml",
+        "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
+        "  workspace: main\n  environments:\n    - prd\n",
+    )
+    return root
+
+
+def test_build_run_writes_policy_results_when_cve_policy_breaches(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    result = CveAuditResultModel(
+        scanner="trivy", scanner_version="1.0", sbom_path="sbom.json", total_findings=1, critical=1
+    )
+    _patch_cve_scanner(monkeypatch, result)
+    root = _minimal_solution(
+        tmp_path, cve_policy_yaml="  cve_policy:\n    max_severity: HIGH\n    max_count: 0\n    enforcement: deny\n"
+    )
+
+    build_path = tmp_path / "build"
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert not diagnostics.ok
+    results = json.loads((build_path / "policy_results.json").read_text(encoding="utf-8"))["policy_results"]
+    assert len(results) == 1
+    assert results[0]["policy_name"] == "cve_policy"
+    assert results[0]["passed"] is False
+    assert len(results[0]["violations"]) >= 1
+
+
+def test_build_run_records_a_warn_enforcement_breach_as_passed_with_violations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    result = CveAuditResultModel(
+        scanner="trivy", scanner_version="1.0", sbom_path="sbom.json", total_findings=1, critical=1
+    )
+    _patch_cve_scanner(monkeypatch, result)
+    root = _minimal_solution(
+        tmp_path, cve_policy_yaml="  cve_policy:\n    max_severity: HIGH\n    max_count: 0\n    enforcement: warn\n"
+    )
+
+    build_path = tmp_path / "build"
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok  # a warn-mode breach doesn't fail the build itself
+    results = json.loads((build_path / "policy_results.json").read_text(encoding="utf-8"))["policy_results"]
+    assert len(results) == 1
+    assert results[0]["passed"] is True
+    assert len(results[0]["violations"]) >= 1
+
+
+def test_build_run_writes_no_policy_results_file_when_cve_policy_unset(tmp_path: Path):
+    root = _minimal_solution(tmp_path)
+
+    build_path = tmp_path / "build"
+    diagnostics = build_run(_context(root), "app", build_path)
+
+    assert diagnostics.ok
+    assert not (build_path / "policy_results.json").exists()
 
 
 # ---------------------------------------------------------------------------

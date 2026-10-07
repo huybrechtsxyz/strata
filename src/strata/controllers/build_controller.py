@@ -38,6 +38,7 @@ from typing import Any, cast
 import yaml
 
 from strata.controllers.integration_resolution import resolve_integration
+from strata.controllers.policy_results import write_policy_results
 from strata.controllers.remote_resolution import resolve_remote  # noqa: F401  (re-exported for callers)
 from strata.controllers.sbom_controller import evaluate_cve_policy, write_sbom
 from strata.controllers.solution_context import SolutionContext
@@ -56,6 +57,7 @@ from strata.controllers.version_pins import log_pin_applied
 from strata.controllers.workload_controller import build_workload_modules
 from strata.integrations.errors import IntegrationError
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph, ValueReference, ValueResolution
+from strata.models.audit_manifest_model import ManifestPolicyResultModel
 from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import DeploymentModel
 from strata.models.dns_model import DnsModel
@@ -72,7 +74,7 @@ from strata.models.workspace_model import WorkspaceModel
 from strata.services.environment_service import merge_environment_models
 from strata.services.version_service import VersionService
 from strata.utils.dependency_order import topological_order
-from strata.utils.diagnostics import Diagnostics
+from strata.utils.diagnostics import Diagnostics, Severity
 from strata.utils.env_file import load_env_file
 from strata.utils.errors import SystemError, UsageError
 
@@ -653,8 +655,47 @@ def build_run(
         # immediately after SBOM generation, the only point `build_run()`
         # has both a written SBOM and the resolved workspace to read
         # `spec.cve_policy` from. A no-op when that field is unset.
-        diagnostics.extend(evaluate_cve_policy(build_path, graph.workspace, index))
+        #
+        # `evaluate_cve_policy()`'s own, unmerged Diagnostics is captured
+        # here (not immediately folded into the shared `diagnostics`
+        # accumulator) so `_cve_policy_result()` can build a
+        # ManifestPolicyResultModel from exactly this policy's own
+        # findings, not build_run()'s full, mixed accumulation
+        # (docs/work/audit-trail.md's "DeploymentManifestModel.
+        # policy_results population" design).
+        cve_diagnostics = evaluate_cve_policy(build_path, graph.workspace, index)
+        diagnostics.extend(cve_diagnostics)
+        policy_result = _cve_policy_result(graph.workspace, cve_diagnostics)
+        if policy_result is not None:
+            write_policy_results(build_path, [policy_result])
     else:
         _step(f"would write {build_path / 'sbom.json'}")
 
     return diagnostics
+
+
+def _cve_policy_result(workspace: WorkspaceModel, diagnostics: Diagnostics) -> ManifestPolicyResultModel | None:
+    """Build the `cve_policy` entry for `policy_results.json`, or `None`
+    when the policy is unset (docs/work/audit-trail.md's own design).
+
+    `passed` is strictly `diagnostics.ok` (no errors) — an
+    `enforcement: warn` breach still reports `passed=True` here, since the
+    build itself wasn't blocked. `violations` folds in both error and
+    warning messages, not errors only, so a warn-mode breach's finding
+    isn't silently discarded from the audit record. `policy_name` falls
+    back to the field name itself (`"cve_policy"`) — v2's bespoke,
+    single-field policies (unlike v1's named `policies:` list) have no
+    operator-assigned name to record.
+    """
+    policy = workspace.spec.cve_policy
+    if policy is None:
+        return None
+    violations = diagnostics.messages(Severity.ERROR) + diagnostics.messages(Severity.WARNING)
+    return ManifestPolicyResultModel(
+        policy_name="cve_policy",
+        policy_type="cve_max_severity",
+        phase="build",
+        enforcement=policy.enforcement,
+        passed=diagnostics.ok,
+        violations=violations,
+    )

@@ -43,8 +43,13 @@
   A full review pass (2026-10-05) found and fixed three real bugs
   (a command-name-specific error message, a non-inclusive `--until`
   bound, a misleading empty-result message) — see audit-commands.md's
-  own changelog for the detail.
-- Last updated: 2026-10-05
+  own changelog for the detail. **`DeploymentManifestModel.
+  policy_results` population is now implemented (2026-10-07)** — `build
+  run` writes an optional `build_path/policy_results.json` sidecar for
+  `cve_policy`'s own evaluation result, read back and folded into
+  `_manifest.json` by `finalize_and_distribute_deploy_audit()`. See
+  "Implementation Plan"'s own entry below for the full detail.
+- Last updated: 2026-10-07
 
 ## Overview
 
@@ -1602,8 +1607,8 @@ a v2 ADR/implementation:
   dict[str, bool] | None`, validated against a closed set scoped to only
   the three events v2 actually produces (`deployment.completed`/
   `destroyed`/`measured`), not v1's full 20-type list.
-- **`DeploymentManifestModel.policy_results` population — fully designed
-  2026-10-07, not yet implemented.** Raised from
+- **`DeploymentManifestModel.policy_results` population — ~~IMPLEMENTED
+  (2026-10-07)~~.** Raised from
   [cve-scanner-integration.md](cve-scanner-integration.md)'s own
   "Remaining Work" tracking (`cve_policy`'s own evaluation result is the
   first real, concrete case needing this) — confirmed by direct grep:
@@ -1834,6 +1839,27 @@ a v2 ADR/implementation:
        `deploy run`-produced `_manifest.json`.
   6. Full check suite clean before considering this done, same
      discipline as every other feature in this repo.
+
+  **Shipped as designed (2026-10-07), all 6 steps above, exactly as
+  sketched — no changes needed during implementation.** New
+  `src/strata/controllers/policy_results.py` (`write_policy_results()`/
+  `read_policy_results()`); `build_controller.py` gained
+  `_cve_policy_result()` and the two-line call-site reordering;
+  `audit_run.py` wires `policy_results=read_policy_results(build_path)`
+  into its one `DeploymentManifestModel(...)` construction. 7 new tests
+  (not 6 — the design's own step 5 bullet list names two tests in one
+  bullet): 3 in `test_build_controller.py`
+  (`test_build_run_writes_policy_results_when_cve_policy_breaches`,
+  `test_build_run_records_a_warn_enforcement_breach_as_passed_with_violations`,
+  `test_build_run_writes_no_policy_results_file_when_cve_policy_unset`),
+  3 in new `test_policy_results.py`
+  (`test_write_policy_results_skips_writing_when_results_is_empty`,
+  `test_read_policy_results_round_trips_a_written_file`,
+  `test_read_policy_results_is_none_when_file_is_missing`), 1 in
+  `test_audit_run.py`
+  (`test_finalize_and_distribute_deploy_audit_includes_policy_results_in_the_manifest`).
+  Full check suite green: mypy (148 files), ruff, ruff format,
+  import-linter (1 kept, 0 broken), pytest (2249 passed, up from 2242).
 
 ## Compliance Gap Analysis (NIS2 / ISO 27001 / ISAE 3402) — 2026-10-03
 

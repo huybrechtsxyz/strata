@@ -215,6 +215,45 @@ def test_manifest_includes_sbom_reference_when_present(tmp_path: Path, _terrafor
     assert '"sha256": "sha256:' in manifest_text
 
 
+def test_finalize_and_distribute_deploy_audit_includes_policy_results_in_the_manifest(
+    tmp_path: Path, _terraform_stub, monkeypatch
+):
+    """docs/work/audit-trail.md's `ManifestPolicyResultModel` population
+    design — a `build run`'s own `policy_results.json` sidecar (written
+    because `cve_policy` is configured and breaches) ends up folded into
+    the `deploy run`-produced `_manifest.json`."""
+    import strata.controllers.sbom_controller as sbom_controller_module
+    from strata.models.sbom_model import CveAuditResultModel
+
+    class _FakeScanner:
+        def is_available(self) -> bool:
+            return True
+
+        def scan_sbom(self, sbom_path: Path, *, severity_threshold: str) -> CveAuditResultModel:
+            return CveAuditResultModel(
+                scanner="trivy", scanner_version="1.0", sbom_path=str(sbom_path), total_findings=1, critical=1
+            )
+
+    monkeypatch.setattr(sbom_controller_module, "CveScannerIntegration", lambda: _FakeScanner())
+
+    root = _solution_root(tmp_path)
+    workspace_path = root / "workspace.yaml"
+    workspace_text = workspace_path.read_text()
+    workspace_path.write_text(
+        workspace_text.rstrip("\n")
+        + "\n  cve_policy:\n    max_severity: HIGH\n    max_count: 0\n    enforcement: warn\n"
+    )
+    build_path = _run_deploy_and_build(root, tmp_path)
+    assert (build_path / "policy_results.json").is_file()  # confirms the fixture actually exercises this path
+
+    _finalize(root, build_path)
+
+    manifest_path = next(layout.audit_dir(root).rglob("_manifest.json"))
+    manifest_text = manifest_path.read_text()
+    assert '"policy_name": "cve_policy"' in manifest_text
+    assert '"phase": "build"' in manifest_text
+
+
 # ---------------------------------------------------------------------------
 # artifacts.repositories/.images/.charts (docs/work/version-lifecycle.md
 # Phase 6 — the audit gap: effective, pin-resolved values, not the SBOM's

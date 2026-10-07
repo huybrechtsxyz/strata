@@ -50,6 +50,7 @@ from strata.controllers.audit_event_rendering import render_manifest_event, rend
 from strata.controllers.audit_path_resolution import resolve_audit_relative_path
 from strata.controllers.audit_push import push_audit_files
 from strata.controllers.build_controller import apply_remote_version_pins
+from strata.controllers.policy_results import read_policy_results
 from strata.controllers.sbom_controller import SBOM_FORMAT
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.value_controller import resolve_deployment, resolve_version
@@ -205,6 +206,7 @@ def finalize_and_distribute_deploy_audit(
         ),
         sbom=_sbom_reference(build_path),
         change_reference=change_reference,
+        policy_results=read_policy_results(build_path),
         errors=run_diagnostics.messages(Severity.ERROR) or None,
     )
     metrics = DeploymentMetricsModel(
