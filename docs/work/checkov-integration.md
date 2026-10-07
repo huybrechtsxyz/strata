@@ -508,15 +508,18 @@ every other feature in this repo. **All 3 phases shipped 2026-10-07**
   `None` by default (every Phase 2 call/test keeps working unchanged),
   populated by `build_run()`'s own call site from `graph.namespaces`/
   `index`, already in scope there.
-- **Tests** (`test_checkov_controller.py`, 10 new): a local chart scans
+- **Tests** (`test_checkov_controller.py`, 12): a local chart scans
   clean and can breach; a registry-pulled chart degrades via
-  `on_missing_data` (block/warn); a disabled module reference and a
-  non-helm module are both silently skipped (never reported at all,
-  not even as missing data); an unmaterialised local chart directory
-  degrades via `on_missing_data`; namespaces/index both unset degrades
-  at the whole-policy level; `scope: staged`/`scope: all` produce
-  identical results; `scope: <namespace-name>` narrows correctly; an
-  unknown namespace name degrades via `on_missing_data`. Plus one new
+  `on_missing_data` (block/warn); a namespace whose modules are *all*
+  disabled, or *all* a non-helm type, degrades via `on_missing_data`
+  at the whole-policy level (block/warn/skip — see the code-review
+  finding below; an individual disabled/non-helm module within an
+  otherwise-scannable namespace is still silently skipped, same as
+  before); an unmaterialised local chart directory degrades via
+  `on_missing_data`; namespaces/index both unset degrades at the
+  whole-policy level; `scope: staged`/`scope: all` produce identical
+  results; `scope: <namespace-name>` narrows correctly; an unknown
+  namespace name degrades via `on_missing_data`. Plus one new
   `test_build_controller.py` end-to-end test reusing the existing
   `test_build_run_renders_helm_workload_modules()` fixture shape,
   confirming the evaluator scans the exact same directory the workload
@@ -806,3 +809,43 @@ every other feature in this repo. **All 3 phases shipped 2026-10-07**
   and the "Done when" checklist (now fully satisfied) to reflect what
   was actually built. All 3 phases shipped — nothing left open in this
   doc's own Implementation Plan.
+- 2026-10-07: **Code review** (per direct request), covering all 3
+  phases. Fixed 4 stale docstrings left over from incremental phased
+  delivery (`integrations/checkov.py`'s module docstring still said
+  Helm resolution "is a later phase"; `checkov_model.py`'s
+  `CHECKOV_SEVERITY_ORDER` comment still said "a future
+  `checkov_controller`"; `WorkspaceSpecModel.checkov_policy`'s field
+  description only mentioned terraform/bicep/ansible;
+  `CheckovPolicyModel.scope`'s field description never documented the
+  Helm namespace-name form at all) — doc-only, no behavior change.
+  **Found and fixed one real gap during the follow-up "anything to dig
+  into further?" pass**: `_evaluate_helm()`'s only "nothing to
+  evaluate" check was on *namespaces* matching `scope` — if those
+  namespaces matched but **every** module inside them was disabled or
+  a non-helm type, the function returned with zero diagnostics at all,
+  not even an `on_missing_data` finding — precisely the "never scanned
+  looks the same as scanned clean" risk this whole design exists to
+  prevent (the provisioner-based path already guarded this correctly
+  via its own `if not provisioners:` check; Helm's per-module filtering
+  happened *inside* the loop with no equivalent whole-policy check
+  after it). Fixed by counting modules actually reached (enabled and
+  helm-typed) and reporting policy-level `on_missing_data` when that
+  count is zero. Two existing tests whose assertions had encoded the
+  bug as "correct" (`..._skips_a_disabled_module_reference_entirely`,
+  `..._skips_a_non_helm_module_type`) were corrected; 4 tests now cover
+  this (block/warn/skip for the all-disabled case, plus the all-non-helm
+  case). Also checked, with real evidence, whether the known
+  "`scope: staged`/`all` shadow a same-named step/namespace" edge case
+  (noted as a non-blocking limitation during the review) has any real
+  instances in `haven`/`cfg-int-deployment` — zero matches, confirmed
+  via direct grep, left as a documented limitation only. Also attempted
+  to smoke-test `CheckovIntegration.scan()` against a real `checkov`
+  binary to verify the assumed CLI flags/JSON schema (never previously
+  exercised against real output, only mocked in every test) — the one
+  local `checkov` install found is a broken pipx-style launcher
+  (missing Windows `.py` file association), so this remains
+  **unverified against a real binary**, same unverified-CLI-assumption
+  risk `cve-scanner-integration.md`'s own Trivy/Grype integration
+  already carries by the same precedent. Full check suite clean
+  (`mypy`, `ruff check`, `ruff format`, `lint-imports`, `pytest -q` —
+  2304 passed).
