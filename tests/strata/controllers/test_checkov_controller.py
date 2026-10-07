@@ -220,7 +220,12 @@ def test_evaluate_checkov_policy_helm_registry_pulled_chart_warns_when_configure
     assert len(diagnostics.warnings) == 1
 
 
-def test_evaluate_checkov_policy_helm_skips_a_disabled_module_reference_entirely(tmp_path: Path, monkeypatch):
+def test_evaluate_checkov_policy_helm_a_disabled_module_reference_reports_missing_data(tmp_path: Path, monkeypatch):
+    """Regression test: a namespace with modules in scope, but every one
+    disabled, used to silently produce zero diagnostics at all — the exact
+    'never scanned looks the same as scanned clean' risk on_missing_data
+    exists to prevent. Must now degrade like any other nothing-to-evaluate
+    case."""
     scanner = _FakeScanner(result=_scan_result(framework="helm"))
     _patch_scanner(monkeypatch, scanner)
     namespace = _namespace("apps", ModuleReferenceModel(name="nginx", module="nginx", enabled=False))
@@ -229,12 +234,40 @@ def test_evaluate_checkov_policy_helm_skips_a_disabled_module_reference_entirely
 
     diagnostics = evaluate_checkov_policy(tmp_path, workspace, {}, namespaces={"apps": namespace}, index=index)
 
-    assert diagnostics.ok
-    assert len(diagnostics.items) == 0
+    assert not diagnostics.ok  # on_missing_data defaults to block
+    assert "no helm modules found" in diagnostics.errors[0].message
     assert scanner.scanned_directories == []
 
 
-def test_evaluate_checkov_policy_helm_skips_a_non_helm_module_type(tmp_path: Path, monkeypatch):
+def test_evaluate_checkov_policy_helm_all_modules_skipped_warns_when_configured(tmp_path: Path, monkeypatch):
+    scanner = _FakeScanner(result=_scan_result(framework="helm"))
+    _patch_scanner(monkeypatch, scanner)
+    namespace = _namespace("apps", ModuleReferenceModel(name="nginx", module="nginx", enabled=False))
+    index = _index(_module("nginx"))
+    workspace = _workspace({"framework": "helm", "on_missing_data": "warn"})
+
+    diagnostics = evaluate_checkov_policy(tmp_path, workspace, {}, namespaces={"apps": namespace}, index=index)
+
+    assert diagnostics.ok
+    assert len(diagnostics.warnings) == 1
+
+
+def test_evaluate_checkov_policy_helm_all_modules_skipped_silent_when_configured(tmp_path: Path, monkeypatch):
+    scanner = _FakeScanner(result=_scan_result(framework="helm"))
+    _patch_scanner(monkeypatch, scanner)
+    namespace = _namespace("apps", ModuleReferenceModel(name="nginx", module="nginx", enabled=False))
+    index = _index(_module("nginx"))
+    workspace = _workspace({"framework": "helm", "on_missing_data": "skip"})
+
+    diagnostics = evaluate_checkov_policy(tmp_path, workspace, {}, namespaces={"apps": namespace}, index=index)
+
+    assert diagnostics.ok
+    assert len(diagnostics.items) == 0
+
+
+def test_evaluate_checkov_policy_helm_a_non_helm_module_type_reports_missing_data(tmp_path: Path, monkeypatch):
+    """Same regression as the disabled-module case above, for the
+    'every module in scope is a non-helm type' path."""
     scanner = _FakeScanner(result=_scan_result(framework="helm"))
     _patch_scanner(monkeypatch, scanner)
     (tmp_path / "apps" / "redis").mkdir(parents=True)
@@ -244,8 +277,8 @@ def test_evaluate_checkov_policy_helm_skips_a_non_helm_module_type(tmp_path: Pat
 
     diagnostics = evaluate_checkov_policy(tmp_path, workspace, {}, namespaces={"apps": namespace}, index=index)
 
-    assert diagnostics.ok
-    assert len(diagnostics.items) == 0
+    assert not diagnostics.ok  # on_missing_data defaults to block
+    assert "no helm modules found" in diagnostics.errors[0].message
     assert scanner.scanned_directories == []
 
 

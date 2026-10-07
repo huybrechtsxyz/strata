@@ -205,6 +205,7 @@ def _evaluate_helm(
         return
 
     scanner = CheckovIntegration()
+    modules_reached = 0
     for namespace in targets:
         for reference in namespace.spec.modules or []:
             if not reference.enabled:
@@ -212,6 +213,7 @@ def _evaluate_helm(
             module = resolve_module(index, reference)
             if module.spec.type != "helm":
                 continue
+            modules_reached += 1
 
             label = f"namespace '{namespace.meta.name}' module '{reference.name}'"
 
@@ -256,6 +258,23 @@ def _evaluate_helm(
                     f"'{policy.severity_gate}' — scanned with checkov {result.scanner_version}.",
                     code="checkov_policy_violation",
                 )
+
+    if modules_reached == 0:
+        # Every reachable module in scope was either disabled or not
+        # helm-typed — the "nothing to evaluate" case the provisioner-based
+        # path already guards (`if not provisioners:` above) was otherwise
+        # silently unreachable here: the only not-empty check before this
+        # loop is on *namespaces*, not on whether any of them actually had
+        # a helm module to scan. Left unguarded, a typo'd `type:` or an
+        # all-disabled namespace would produce zero diagnostics at all —
+        # exactly the "never scanned looks the same as scanned clean" risk
+        # `on_missing_data` exists to prevent (this doc's own "v2 design
+        # decision" section).
+        _report_missing_data(
+            diagnostics,
+            policy.on_missing_data,
+            f"no helm modules found across {len(targets)} namespace(s) for scope '{policy.scope}'",
+        )
 
 
 def _namespaces_for_scope(namespaces: dict[str, NamespaceModel], scope: str) -> list[NamespaceModel]:
