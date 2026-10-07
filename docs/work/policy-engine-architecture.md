@@ -2,8 +2,10 @@
 
 - Status: draft — catalog and sizing only, no v2 implementation started
   (umbrella doc; see "Related work docs" below for the concern-specific
-  tracking docs this one coordinates)
-- Last updated: 2026-10-06
+  tracking docs this one coordinates). **Open Question 1 (generic engine
+  vs. bespoke) is resolved (2026-10-07): bespoke, indefinitely — no
+  generic `PolicyModel`/engine planned.**
+- Last updated: 2026-10-07
 
 ## Overview
 
@@ -162,22 +164,84 @@ once at least one real policy type exists to compare against).
 
 ## Open Questions
 
-1. Does v2 want a generic `PolicyModel`/`PolicyEngine` at all, or does the
-   established "model the one real check directly" precedent
-   (`path_convention`, `tenant_zone`'s static tier) extend to *every*
-   policy type v2 ever builds — i.e., no generic engine, ever, just N
-   purpose-built models? The `opa`/`script` types are the one place this
-   precedent might not hold, since their entire purpose is genericness.
+1. **Does v2 want a generic `PolicyModel`/`PolicyEngine` at all, or does
+   the "model the one real check directly" precedent extend to every
+   policy type v2 ever builds? Decided (2026-10-07): bespoke,
+   indefinitely — no generic engine planned.** Checked against real usage
+   first, not assumed: `cfg-int-deployment`'s real `config/policies.yaml`
+   (the one real consumer repo with any policy infrastructure at all —
+   `haven` has none, confirmed by direct `Get-ChildItem` search, zero
+   `policies.yaml` anywhere) has exactly two **live, uncommented**
+   policies (`tenant_zone`'s `zone-isolation`, `path_convention`'s
+   `enforce-path-conventions`) — every other declared entry, **including
+   both of v1's own generic escape hatches, `script` and `opa`**, sits
+   commented out as an inert example, exactly like every unused bespoke
+   bucket-C type next to it. A direct search of that repo's real Azure
+   Pipelines YAML (`.azure/**`) for `type: opa`/`type: script`/`opa eval`/
+   `OPA_ENDPOINT` returned zero matches — not configured, and never
+   invoked. This is decisive: v1 already ships a working `opa`/`script`
+   dispatcher at zero marginal build cost to this consumer, and it is
+   **exactly as unused** as the bespoke types it would supposedly make
+   unnecessary. There is no real evidence anywhere that genericness
+   itself is a felt need — only that the *specific, still-unconfigured*
+   bucket-C types are unused, which says nothing about the dispatch
+   mechanism underneath them.
+
+   Cross-checked against this doc's own "Why OPA doesn't dissolve bucket
+   C" finding above: a generic engine's real win is narrower than it
+   looks — it only simplifies the *evaluation* step, already "the
+   simplest part of this entire feature" for every bucket-C type shipped
+   so far (confirmed directly in [cve-scanner-integration.md](cve-scanner-integration.md)'s
+   own Sizing section, written before this question was answered). It
+   does nothing for the real work — SBOM collectors, the CVE scanner,
+   Checkov's own rule engine, Infracost, an AI agent — each of which has
+   to be built and has to run regardless of which evaluator checks its
+   output.
+
+   v2's own real track record now has 3 shipped instances of the bespoke
+   pattern (`tenant_zone`'s static tier, `path_convention`, `cve_policy`),
+   each a small, independent model field + inline evaluator function, no
+   shared dispatcher, no reported friction. Checkov will be a 4th — not
+   evidence the pattern is straining, since each instance costs the same
+   small, fixed amount regardless of how many came before it; a generic
+   engine would still have to accommodate Checkov's own genuinely
+   different shape (real per-provisioner degradation, a configuration
+   surface an order of magnitude bigger than any other bucket-C type —
+   see [checkov-integration.md](checkov-integration.md)) just as easily
+   as the current bespoke approach already does.
+
+   **Decision: no generic `PolicyModel`/engine is planned.** Continue the
+   established "model the one real check directly" precedent for Checkov
+   and every future policy type. Building a dispatcher now, before any
+   real adopter has asked for the one thing it would uniquely provide
+   (next paragraph), would be exactly the "declared-but-unread machinery"
+   anti-pattern [audit-trail.md](audit-trail.md)'s own "Lessons from v1's
+   own defects" #1 warns against, just applied to the policy layer
+   instead of audit.
+
+   **The one concrete trigger that would reopen this, named explicitly
+   rather than left open-ended:** none of the bucket-A/B/C types (bespoke
+   or not) let an *operator* express a check strata itself doesn't
+   already know about — that is the one real, narrow value `script`/`opa`
+   uniquely provide (an extensibility escape hatch), orthogonal to
+   "codify more of v1's 19 known types faster." If a real consumer ever
+   asks for a custom, strata-unaware rule, the right answer is a small,
+   dedicated `script` policy type (run a command, JSON on stdin, exit
+   code signals pass/fail — bucket-A-cheap, no Rego/OPA-server
+   dependency), not a full `PolicyModel` with a per-type configuration
+   sub-schema. Revisit only then, scoped to exactly that need.
 2. Build order across the bucket-C integrations — SBOM-dependent types
    (5 `sbom_*` + `cve_max_severity`, 6 of 9) share one data source already
    half-built; Checkov and Infracost are both net-new integrations with no
    existing v2 scaffolding. Likely cheapest-first order: finish the
    SBOM-dependent types before starting Checkov/Infracost/AI from scratch.
-3. No real-usage evidence gathered yet for any bucket-C policy type in
-   either real consumer repo (haven, cfg-int-deployment) — unlike
-   `tenant_zone`'s own real `zone-isolation` config entry, nothing here has
-   been confirmed as "actually declared in a real `policies:` block" yet.
-   Worth checking before investing in any of bucket C.
+3. **No real-usage evidence gathered yet for any bucket-C policy type —
+   partially answered above.** `cve_max_severity` itself was already
+   checked directly in [cve-scanner-integration.md](cve-scanner-integration.md)'s
+   own Open Question 1 (commented-out, unconfigured in both real repos).
+   Checkov, Infracost, and `ai_review` remain unchecked — worth
+   confirming before investing in any of them, same discipline just
+   applied to this question's own `opa`/`script` check above.
 
 ## Changelog
 
@@ -192,3 +256,21 @@ once at least one real policy type exists to compare against).
   actual cost), with two concrete non-collapsible exceptions (`checkov`'s
   existing rule library, `ai_review`'s non-deterministic LLM judgment).
   Cross-linked from [tenant-zone-policy.md](tenant-zone-policy.md).
+- 2026-10-07: Resolved Open Question 1, per direct request to look at the
+  next open item in [cve-scanner-integration.md](cve-scanner-integration.md)'s
+  own `## Remaining Work` checklist (which pointed back here). Checked
+  real usage directly rather than reasoning
+  from precedent alone: `cfg-int-deployment`'s real `config/policies.yaml`
+  has both of v1's own generic dispatchers, `script` and `opa`, commented
+  out as inert examples — identically to every unused bespoke bucket-C
+  type — and a direct search of that repo's real Azure Pipelines YAML
+  found zero invocations of either. `haven` has no policy infrastructure
+  at all. **Decided: no generic `PolicyModel`/engine, ever, absent a named
+  trigger** — continue "model the one real check directly" for Checkov
+  and beyond; the one concrete reopening trigger (an operator needing a
+  strata-unaware custom rule) is named explicitly, with its own cheap
+  fallback (a dedicated `script` type), rather than left open-ended.
+  Updated [checkov-integration.md](checkov-integration.md)'s Sizing #4/
+  Open Question 3 and [cve-scanner-integration.md](cve-scanner-integration.md)'s
+  `## Remaining Work` item to point here rather than duplicate the
+  reasoning. No code changed — decision and doc update only.

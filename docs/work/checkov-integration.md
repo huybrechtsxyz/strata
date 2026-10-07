@@ -193,12 +193,13 @@ complexity, concentrated in path resolution rather than evaluation logic:
    `NamespaceService`, local-vs-registry chart distinction. Can be deferred
    to a second phase (terraform/bicep/ansible first, matching
    `sbom-generation.md`'s own "ship a small real slice first" precedent).
-4. **Decide the `PolicyModel` question** — same open question as
-   [policy-engine-architecture.md](policy-engine-architecture.md) #1: does
-   `checkov` get a dedicated v2 model (matching `path_convention`'s
-   precedent), or does v2 build a real generic `PolicyModel` once there are
-   enough policy types that one-model-per-type stops scaling? Worth
-   deciding once, not per policy type.
+4. **The `PolicyModel` question — resolved, not open.**
+   [policy-engine-architecture.md](policy-engine-architecture.md)'s own
+   Open Question 1 is decided (2026-10-07): bespoke, indefinitely — no
+   generic `PolicyModel`/engine planned. `checkov` gets its own dedicated
+   `WorkspaceSpecModel.checkov_policy` field + inline evaluator, matching
+   `path_convention`/`tenant_zone`/`cve_policy`'s precedent exactly —
+   nothing left to decide here when this is picked up.
 
 ## Open Questions
 
@@ -212,14 +213,14 @@ complexity, concentrated in path resolution rather than evaluation logic:
    logic need any adjustment beyond "look up `source_path` by provisioner
    name," or is that the whole story? Worth a closer check once this is
    actually picked up, not assumed clean from this catalog pass alone.
-3. Shared with [cve-scanner-integration.md](cve-scanner-integration.md)'s
-   own "Framework" section: does Checkov wire in via its own bespoke
-   `WorkspaceSpecModel.checkov_policy` field + inline evaluator function
-   (matching `cve_policy`/`tenant_zone`/`path_convention`'s established
-   precedent), or does this become the trigger to finally build a generic
-   `PolicyModel`/dispatcher (`policy-engine-architecture.md`'s own Open
-   Question 1, still undecided)? Not this doc's decision alone — see the
-   framework doc.
+3. **Resolved, not open — shared with [cve-scanner-integration.md](cve-scanner-integration.md)'s
+   own "Framework" section.** [policy-engine-architecture.md](policy-engine-architecture.md)'s
+   Open Question 1 (generic `PolicyModel`/dispatcher vs. bespoke) is decided
+   (2026-10-07): bespoke, indefinitely. Checkov wires in via its own
+   `WorkspaceSpecModel.checkov_policy` field + inline evaluator function,
+   matching `cve_policy`/`tenant_zone`/`path_convention`'s established
+   precedent — not a trigger for a generic dispatcher. See that doc's own
+   Open Question 1 for the full, real-usage-evidence-backed reasoning.
 
 ## Changelog
 
@@ -246,3 +247,12 @@ complexity, concentrated in path resolution rather than evaluation logic:
   this same pass, [trivy-integration.md](trivy-integration.md)/
   [grype-integration.md](grype-integration.md). No code written — catalog
   correction only, this integration itself remains not started.
+- 2026-10-07: Updated Sizing #4 and Open Question 3 — the shared
+  generic-vs-bespoke policy engine question both pointed to is now
+  resolved in [policy-engine-architecture.md](policy-engine-architecture.md)'s
+  own Open Question 1 (2026-10-07: bespoke, indefinitely, no generic
+  `PolicyModel`/engine planned, backed by direct real-usage evidence).
+  Checkov will wire in via its own `WorkspaceSpecModel.checkov_policy`
+  field + inline evaluator, same as every other policy type shipped so
+  far — nothing left open here. No code changed — doc update only, this
+  integration itself remains not started.

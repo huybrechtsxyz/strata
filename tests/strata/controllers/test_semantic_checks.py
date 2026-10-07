@@ -1091,6 +1091,37 @@ def test_filename_only_capture_mismatch_is_caught(tmp_path):
     assert any(d.code == "path_convention_mismatch" for d in context.diagnostics.warnings)
 
 
+def test_overlapping_scope_prefers_matching_depth_over_declaration_order(tmp_path):
+    """Multiple conventions can share one `scope` prefix to describe
+    different directory depths of the same hierarchy (the real
+    `deploy/hubs/**` bug this guards against — see
+    docs/design/path-conventions.md). The deeper convention is declared
+    FIRST here: under the old 'first scope match wins' behavior this would
+    have permanently shadowed the shallower, equally valid convention and
+    forced the tenant file to be checked against a pattern that can never
+    match it."""
+    root = _base_solution(tmp_path)
+    _relocate_tenant_under_customers(root)
+    _append_paths_config(
+        root,
+        """  paths:
+    - name: nested-path
+      scope: "customers/**"
+      pattern: "customers/{code}/{sub}"
+      filename_pattern: "extra.yaml"
+    - name: tenant-path
+      scope: "customers/**"
+      pattern: "customers/{code}"
+      filename_pattern: "tenant.yaml"
+      resolves: tenant
+""",
+    )
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+    assert not context.diagnostics.warnings
+
+
 # ---------------------------------------------------------------------------
 # DeploymentLayersModel cross-check (docs/design/path-conventions.md Phase 3)
 # ---------------------------------------------------------------------------

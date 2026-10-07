@@ -790,13 +790,36 @@ def _check_paths(index: DocumentIndex, root: Path | None) -> Diagnostics:
     resolved_root = root.resolve()
     for entry in index.all():
         relative = entry.source.resolve().relative_to(resolved_root).as_posix()
-        convention = next((c for c in configuration.spec.paths if in_scope(relative, c.scope)), None)
-        if convention is None:
+        in_scope_conventions = [c for c in configuration.spec.paths if in_scope(relative, c.scope)]
+        if not in_scope_conventions:
             continue
+        convention = _resolve_matching_convention(relative, in_scope_conventions)
         diagnostics.extend(
             _check_document_against_path_convention(entry, relative, convention), source=str(entry.source)
         )
     return diagnostics
+
+
+def _resolve_matching_convention(relative: str, candidates: list[PathConventionModel]) -> PathConventionModel:
+    """Pick which in-scope convention governs `relative`'s shape check.
+
+    Scope alone no longer picks a winner outright: several conventions can
+    legitimately share the same scope prefix to describe different depths of
+    the same hierarchy (e.g. a `deploy/hubs/**` scope with one convention per
+    depth — spoke-wide, customer-wide, ring-wide, instance-wide — each a
+    real, intentional file location, not a mismatch). Try every in-scope
+    convention's own directory/filename pattern, in declaration order, and
+    use the first one whose shape actually matches this document's real
+    path. If none match, fall back to the first in-scope convention
+    (declaration order) so `_check_document_against_path_convention()` still
+    has a concrete convention to report the mismatch against.
+    """
+    for candidate in candidates:
+        directory_match = match_directory(relative, candidate.pattern)
+        filename_match = match_filename(relative, candidate.filename_pattern) if candidate.filename_pattern else None
+        if directory_match is not None and (not candidate.filename_pattern or filename_match is not None):
+            return candidate
+    return candidates[0]
 
 
 def _check_document_against_path_convention(
