@@ -45,6 +45,7 @@ from strata.integrations.terraform_projection import (
     build_configuration_payloads,
     build_dns_networks_firewalls_payloads,
     real_variable_name,
+    resolve_deploy_time_files,
 )
 from strata.models.auth_models import AuthenticationModel
 from strata.models.common_models import PlatformKind
@@ -619,11 +620,20 @@ def deploy_run(
         # #9/#12, docs/design/value-token-resolution.md's "Full Solution"
         # Phase 2) and build_configuration_payloads()'s ten broadcast
         # categories (gap #8 + gap #17): the
-        # whole resolved payload as one JSON-encoded env var per category,
-        # same never-touches-disk pattern `backend.configuration` already
-        # has (`terraform_projection.py`'s own `*.auto.tfvars.json` written
-        # by `build run` is never rewritten). Named via `integration.
-        # ENV_VAR_PREFIX` + `real_variable_name(category)` (docs/design/
+        # whole resolved payload as one JSON-encoded env var per category.
+        # This USED TO be described as a "never touches disk" pattern
+        # matching `backend.configuration` — that was wrong: Terraform's
+        # own variable-definition precedence means a same-named
+        # `*.auto.tfvars.json` entry outranks this env var, not the other
+        # way around (docs/design/terraform-variable-precedence.md). The
+        # rewrite block right above this one (`resolve_deploy_time_files()`)
+        # is what actually keeps this delivery meaningful now: it rewrites
+        # `terraform_projection.py`'s own build-time file with the same
+        # resolved value when secret-free, or blanks it to `{}` when a
+        # secret-shaped leaf is present — only in the blanked case does
+        # this env var end up the uncontested, effective source; otherwise
+        # it's redundant with (and consistent with) the file. Named via
+        # `integration.ENV_VAR_PREFIX` + `real_variable_name(category)` (docs/design/
         # terraform-tfvars-parity.md) — never a hardcoded `"TF_VAR_"` literal
         # or the bare category name, so a real Terraform root's own
         # `TF_VAR_<declared_variable_name>` override actually matches what
@@ -652,12 +662,70 @@ def deploy_run(
         # Empty categories are skipped, matching `planned_files()`'s own
         # convention.
         if integration.ENV_VAR_PREFIX is not None:
-            for category, docs in dns_networks_firewalls.items():
-                docs_for_step = {
+            docs_for_step_by_category = {
+                category: {
                     name: payload
                     for name, payload in docs.items()
                     if name in step.targets or name not in claimed_by_category[category]
                 }
+                for category, docs in dns_networks_firewalls.items()
+                # Only a category `build run` actually wrote a file for in
+                # the first place (`planned_files()`'s own "skip empty
+                # categories" rule, keyed off the *workspace-wide* payload,
+                # not this step's claimed/broadcast view — those can differ:
+                # a real DNS document claimed entirely by a different step
+                # still means a file exists here, just with nothing this
+                # step can see in it). Without this filter, a workspace
+                # with zero `dns`/`networks`/`firewalls` documents at all
+                # would still get all three files newly CREATED below with
+                # empty content — `build_dns_networks_firewalls_payloads()`
+                # unconditionally returns all three keys even when empty,
+                # unlike `build_configuration_payloads()`, which already
+                # filters (confirmed empirically: caught in code review,
+                # not by the test suite — see docs/design/
+                # terraform-variable-precedence.md's own "this never
+                # creates a file build run did not produce" boundary).
+                if docs
+            }
+
+            # Rewrite every *.auto.tfvars.json file `build run` already
+            # wrote into this step's own directory with resolved values,
+            # so Terraform's own precedence (a `*.auto.tfvars.json` file
+            # outranks `TF_VAR_*`, confirmed against HashiCorp's own docs)
+            # can no longer shadow the correctly-resolved values this loop
+            # delivers below (docs/design/terraform-variable-precedence.md).
+            # `resx_<type>` categories are excluded here — handled
+            # by their own always-blank loop right below instead, never
+            # resolved per-file (see that loop's own comment for why).
+            # Gated the same way the `TF_VAR_` delivery below already is —
+            # a tool with no `ENV_VAR_PREFIX` has no `*.auto.tfvars.json`
+            # convention to rewrite either.
+            rewrite_payloads = {
+                **docs_for_step_by_category,
+                **{name: payload for name, payload in configuration_payloads.items() if not name.startswith("resx_")},
+            }
+            for filename, data in resolve_deploy_time_files(rewrite_payloads, tokens):
+                (path / filename).write_text(json.dumps(data))
+
+            # resx_<type>: always blanked, unconditionally — never resolved
+            # per-file (docs/design/terraform-variable-precedence.md).
+            # Every resx_<type> file declares the same real Terraform
+            # variable, "resources" (confirmed against v1's real
+            # `_build_resources_by_category()`); rewriting each file
+            # independently with its own type's resolved value would just
+            # reintroduce one file overwriting another's declaration of the
+            # same variable — the identical multi-declaration collision
+            # this whole mechanism exists to fix, one level down. Blanking
+            # every one unconditionally (not just when secret-shaped) means
+            # `TF_VAR_resources` below (already merging every type into one
+            # payload) is always the uncontested, sole source — simpler
+            # than per-file resolution, and sidesteps the collision
+            # question entirely rather than needing to answer it.
+            for name in configuration_payloads:
+                if name.startswith("resx_"):
+                    (path / f"{name}.auto.tfvars.json").write_text("{}")
+
+            for category, docs_for_step in docs_for_step_by_category.items():
                 if not docs_for_step:
                     continue
                 resolved_payload = resolve_value_tokens_in_mapping(docs_for_step, tokens)
@@ -683,13 +751,23 @@ def deploy_run(
             # variable (`workspace`'s six fixed keys; every user-declared
             # flag/variable/property/custom key). `flat_key_owner` above
             # already proved no two categories declare the same key.
+            # A plain string value is passed through RAW, never
+            # `json.dumps()`-wrapped — HashiCorp's own documented
+            # `TF_VAR_name=value` convention (no quotes needed/expected for
+            # a string-shaped variable, confirmed directly against a real
+            # `terraform plan`: a JSON-quoted value is taken completely
+            # literally, embedded quote characters included, never
+            # unwrapped — docs/design/terraform-variable-precedence.md.
+            # Only a genuinely complex value (`dict`/`list`) needs
+            # `json.dumps()`, matching `tf_var_env()`'s own already-correct
+            # convention for `resolved.values` above.
             for name in FLAT_CATEGORIES:
                 payload = configuration_payloads.get(name, {})
                 if not payload:
                     continue
                 resolved_payload = resolve_value_tokens_in_mapping(payload, tokens)
                 for key, value in resolved_payload.items():
-                    env[f"{integration.ENV_VAR_PREFIX}{key}"] = json.dumps(value)
+                    env[f"{integration.ENV_VAR_PREFIX}{key}"] = value if isinstance(value, str) else json.dumps(value)
 
             # resx_<type>: every type merges into the one real "resources"
             # variable (`merged_resources` above) — delivered once, not

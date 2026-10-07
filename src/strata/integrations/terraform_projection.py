@@ -55,6 +55,7 @@ from typing import Any
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph
 from strata.models.provisioning_model import ProvisionerModel
 from strata.models.workspace_model import WorkspaceResourceModel
+from strata.utils.value_tokens import resolve_value_tokens_tracking_secrets
 
 
 def _build_workspace_payload(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
@@ -740,4 +741,60 @@ def planned_files(payload: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
             continue
         real_name = _REAL_VARIABLE_NAME.get(category, category)
         files.append((f"{category}.auto.tfvars.json", {real_name: data}))
+    return files
+
+
+def resolve_deploy_time_files(payloads: dict[str, Any], tokens: dict[str, str]) -> list[tuple[str, dict[str, Any]]]:
+    """Deploy-time counterpart to `planned_files()` — rewrites the stale,
+    build-time-written `*.auto.tfvars.json` files so a resolved value can
+    no longer be shadowed by Terraform's own variable-definition precedence
+    (`*.auto.tfvars.json` outranks `TF_VAR_*`,
+    docs/design/terraform-variable-precedence.md).
+
+    Unlike `planned_files()`, every key in `payloads` is **always** emitted,
+    never skipped when its resolved content is empty — presence of a key
+    here means `build run` already wrote a same-named file for this
+    category into this step's own directory; an empty result must actively
+    blank that stale file (`{}`), not leave it untouched, or its literal,
+    unresolved content would still shadow a correctly-resolved `TF_VAR_`
+    env var exactly as before.
+
+    Two shapes, matching `FLAT_CATEGORIES` vs. everything else — the same
+    split `planned_files()` itself already makes, not a new one:
+
+    - **`FLAT_CATEGORIES`** (`workspace`/`flags`/`variables`/`properties`/
+      `custom`) — bare `{key: value}`, each key its own independent real
+      Terraform variable. Every key resolves except one with a
+      `${secret:}`-shaped leaf anywhere beneath it (`resolve_value_tokens_
+      tracking_secrets()`'s own rule) — that key is omitted entirely, left
+      for `TF_VAR_<key>` to deliver instead, now uncontested since the file
+      no longer declares it.
+    - **Everything else** (`providers`/`tenant`/`topologies`/`namespaces`,
+      and `dns`/`networks`/`firewalls` once the caller has already narrowed
+      their payload to this step's own claimed/broadcast view) — one dict
+      wrapped under its real variable name (`real_variable_name()`, matching
+      `planned_files()`'s own wrap). Any secret-shaped leaf anywhere taints
+      the whole variable: the file is blanked to `{}` and `TF_VAR_<name>`
+      alone determines the effective value, uncontested.
+
+    `resx_<type>` categories are deliberately never passed to this function
+    (docs/design/terraform-variable-precedence.md — every type
+    declares the same real `resources` variable, so rewriting each file
+    independently would just reintroduce the identical multi-declaration
+    collision this whole mechanism exists to fix; blanked unconditionally
+    by a dedicated, simpler step instead).
+    """
+    files: list[tuple[str, dict[str, Any]]] = []
+    for category, data in payloads.items():
+        resolved, secrets = resolve_value_tokens_tracking_secrets(data, tokens)
+        if category in FLAT_CATEGORIES:
+            tainted = {path.split(".", 1)[0] for path in secrets}
+            files.append(
+                (f"{category}.auto.tfvars.json", {key: value for key, value in resolved.items() if key not in tainted})
+            )
+            continue
+        if secrets:
+            files.append((f"{category}.auto.tfvars.json", {}))
+        else:
+            files.append((f"{category}.auto.tfvars.json", {real_variable_name(category): resolved}))
     return files

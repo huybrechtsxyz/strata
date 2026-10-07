@@ -11,6 +11,7 @@ from strata.integrations.terraform_projection import (
     build_configuration_payloads,
     build_platform_projection,
     planned_files,
+    resolve_deploy_time_files,
 )
 from strata.models.common_models import ModuleReferenceModel, SourceModel
 from strata.models.deployment_model import DeploymentMetaModel, DeploymentModel, DeploymentSpecModel
@@ -829,3 +830,111 @@ def test_configuration_payloads_excludes_disabled_resource():
     disabled = WorkspaceResourceModel(name="haven_vm_hetzner_hearth", resource="haven_vm_hetzner_hearth", enabled=False)
     payloads = build_configuration_payloads(_graph(resources=[disabled], topology_name=None))
     assert "resx_virtualmachine" not in payloads
+
+
+# ---------------------------------------------------------------------------
+# resolve_deploy_time_files() (docs/design/terraform-variable-precedence.md)
+# — the deploy-time counterpart to planned_files(): rewrites the
+# stale build-time file so it can no longer shadow a correctly-resolved
+# TF_VAR_ env var via Terraform's own variable-definition precedence.
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_deploy_time_files_flat_category_resolves_every_key():
+    """FLAT_CATEGORIES (here, 'properties'): a bare {key: value} map, no
+    secret anywhere — every key resolves and is written, matching what
+    build run itself would have written had the token already been
+    resolvable at build time."""
+    files = dict(
+        resolve_deploy_time_files(
+            {"properties": {"customer_code": "${var:CUSTOMER_CODE}", "tier": "gold"}},
+            {"CUSTOMER_CODE": "acme-42"},
+        )
+    )
+    assert files["properties.auto.tfvars.json"] == {"customer_code": "acme-42", "tier": "gold"}
+
+
+def test_resolve_deploy_time_files_flat_category_omits_only_the_tainted_key():
+    """A secret-shaped leaf taints only its OWN top-level key — every other
+    key in the same FLAT_CATEGORIES file still resolves and is written (the
+    whole point of the per-key granularity,
+    docs/design/terraform-variable-precedence.md's case 1)."""
+    files = dict(
+        resolve_deploy_time_files(
+            {"custom": {"db_password": "${secret:DB_PASSWORD}", "tier": "${var:TIER}"}},
+            {"DB_PASSWORD": "hunter2", "TIER": "gold"},
+        )
+    )
+    assert files["custom.auto.tfvars.json"] == {"tier": "gold"}
+    assert "db_password" not in files["custom.auto.tfvars.json"]
+
+
+def test_resolve_deploy_time_files_flat_category_all_tainted_writes_empty_dict():
+    """Every key secret-shaped — the file is still actively written, as an
+    empty dict, never left untouched
+    (docs/design/terraform-variable-precedence.md: 'always rewritten, never
+    conditionally skipped')."""
+    files = dict(
+        resolve_deploy_time_files({"properties": {"db_password": "${secret:DB_PASSWORD}"}}, {"DB_PASSWORD": "hunter2"})
+    )
+    assert files["properties.auto.tfvars.json"] == {}
+
+
+def test_resolve_deploy_time_files_single_variable_category_writes_resolved_value():
+    """'providers' (or tenant/topologies/namespaces/dns/networks/firewalls)
+    — one dict wrapped under its real variable name, written in full when
+    nothing inside is secret-shaped."""
+    files = dict(
+        resolve_deploy_time_files(
+            {"providers": {"p1": {"configuration": {"partner_id": "${var:PARTNER_ID}"}}}}, {"PARTNER_ID": "ACME123"}
+        )
+    )
+    assert files["providers.auto.tfvars.json"] == {
+        "platform_providers": {"p1": {"configuration": {"partner_id": "ACME123"}}}
+    }
+
+
+def test_resolve_deploy_time_files_single_variable_category_blanks_whole_file_on_any_secret():
+    """Unlike FLAT_CATEGORIES, a single-variable category has no per-key
+    granularity to fall back on — one secret-shaped leaf anywhere taints
+    the WHOLE variable, so the entire file is blanked
+    (docs/design/terraform-variable-precedence.md's case 2), even though
+    'partner_id' itself has no secret in it."""
+    files = dict(
+        resolve_deploy_time_files(
+            {
+                "providers": {
+                    "p1": {
+                        "configuration": {"partner_id": "${var:PARTNER_ID}"},
+                        "custom": {"cost_center": "${secret:COST_CENTER}"},
+                    }
+                }
+            },
+            {"PARTNER_ID": "ACME123", "COST_CENTER": "platform"},
+        )
+    )
+    assert files["providers.auto.tfvars.json"] == {}
+
+
+def test_resolve_deploy_time_files_every_input_category_is_always_emitted():
+    """'Always rewritten, never conditionally skipped' applies to every
+    category this function covers, not just the secret-tainted case — an
+    empty resolved result for a category must still produce a (blank)
+    file entry, since a stale build-time file may already exist there."""
+    files = dict(resolve_deploy_time_files({"dns": {}, "networks": {}}, {}))
+    assert files == {
+        "dns.auto.tfvars.json": {"dns_zones": {}},
+        "networks.auto.tfvars.json": {"networks": {}},
+    }
+
+
+def test_resolve_deploy_time_files_never_called_for_resx_categories():
+    """resx_<type> categories are deliberately never passed to this
+    function at all (docs/design/terraform-variable-precedence.md Phase 3
+    handles them separately, always-blank, unconditionally) — if one WERE
+    passed in regardless, it would still wrap under its own (wrong,
+    v1-incompatible) name rather than the shared 'resources' variable,
+    which is exactly why `deploy_controller.py`'s call site filters
+    `resx_`-prefixed keys out before calling this function."""
+    files = dict(resolve_deploy_time_files({"resx_server": {"resources": {"r1": {}}}}, {}))
+    assert files["resx_server.auto.tfvars.json"] == {"resx_server": {"resources": {"r1": {}}}}

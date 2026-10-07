@@ -27,7 +27,13 @@
   [cross-document-value-references.md](cross-document-value-references.md)'s
   own "Implementation Plan" section — all 7 phases done** — not
   duplicated here.
-- Last updated: 2026-09-29 (Phase 6 — documentation and a full
+- Last updated: 2026-10-07 (corrected the Terraform delivery section's
+  inverted precedence claim — an env-var-sourced value does not override
+  a same-named `*.auto.tfvars.json` entry, the file does — and its
+  "never touches disk"/"never rewritten" claims, both superseded by
+  docs/design/terraform-variable-precedence.md's fix; see that section and
+  the Phase 2 status entry below for what actually happens now).
+  Previously 2026-09-29 (Phase 6 — documentation and a full
   implementation review, including a live `.v2-cfg` migration proof —
   implemented and verified; the `value:` kind design is now fully done)
   primitive — implemented and verified)
@@ -256,12 +262,18 @@ directly, not assumed — see `docs/work/gap_fit_v1.md` gap #9's own investigati
    `provisioner.backend.configuration`), then pass the **whole resolved
    payload** as `TF_VAR_dns=<json>` / `TF_VAR_networks=<json>` /
    `TF_VAR_firewalls=<json>` — Terraform natively accepts a JSON-encoded env
-   var for a complex (object/list)-typed variable, and an env-var-sourced
-   value overrides the same-named `-var-file` entry. The on-disk
-   `.auto.tfvars.json` this was originally written to is **never rewritten**
-   and never carries a resolved secret — same "never touches disk"
-   guarantee `backend.configuration` already has, extended to three more
-   variable names instead of invented fresh.
+   var for a complex (object/list)-typed variable. **Corrected
+   (docs/design/terraform-variable-precedence.md):** an env-var-sourced value
+   does **not** override a same-named `*.auto.tfvars.json` entry —
+   Terraform's own documented precedence is the reverse; the file wins.
+   The on-disk `.auto.tfvars.json` this was originally written to is
+   therefore rewritten at deploy time too, not left alone as this
+   paragraph originally (and wrongly) assumed: a secret-free category gets
+   its resolved value written directly into the file; a category with any
+   secret-shaped leaf has its file blanked to `{}` instead, so the
+   `TF_VAR_` env var above becomes that variable's uncontested source.
+   Secrets still never reach disk — through the file's absence for that
+   one case, not through env-var precedence.
 2. **Helm — module `services[].environment[]` and (once gap #8 lands)
    `configuration`/`custom`.** Non-secret (`var`/`feature`) tokens: safe to
    rewrite directly into the already-written `values.yaml` — it's `build
@@ -551,7 +563,14 @@ real problems, both now fixed above:
    "never touches disk" guarantee `backend.configuration` already had. 1
    new test; full check suite green (1156 tests); `.v2-haven` unaffected
    (still the same known 44 errors — this phase is deploy-time only, not
-   a validation concern).
+   a validation concern). **Superseded 2026-10-07**
+   (docs/design/terraform-variable-precedence.md): the "never touched"/
+   "never touches disk" claim above rested on an incorrect assumption
+   about Terraform's own variable-definition precedence — an env var does
+   not override a same-named `*.auto.tfvars.json` entry, the file does.
+   The on-disk file is now rewritten at deploy time too (blanked to `{}`
+   only when a secret-shaped leaf is present), for this category and
+   every other one `resolve_deploy_time_files()` covers.
 3. **Path-tracking**: a sibling to `resolve_value_tokens_in_mapping()` (or
    an extension of it) that additionally reports `{dotted_path: value}` for
    every secret-shaped leaf, separate from the plain resolved-dict return

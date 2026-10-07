@@ -655,11 +655,13 @@ def test_deploy_run_pin_resolves_the_artifacts_category(tmp_path: Path, monkeypa
     diagnostics = deploy_run(_context(root), "app", build_path, force=True, pin="prd")
 
     assert diagnostics.ok, diagnostics.messages()
-    # TF_VAR delivery for a 'variables'-category key is JSON-encoded
-    # (deploy_controller.py's FLAT_CATEGORIES handling), unlike a secret's
-    # raw TF_VAR_ value — real Terraform TF_VAR convention for a value with
-    # no explicit HCL type declared.
-    assert all(env is not None and env.get("TF_VAR_image_tag") == '"2.0.0"' for env in envs)
+    # A 'variables'-category key (FLAT_CATEGORIES handling) is delivered as
+    # a raw string, same as a secret's own TF_VAR_ value — HashiCorp's own
+    # documented TF_VAR convention for a plain scalar (docs/work/
+    # terraform-variable-precedence.md Open Question 7 — json.dumps()-ing a
+    # plain string embedded spurious literal quote characters that Terraform
+    # never unwraps).
+    assert all(env is not None and env.get("TF_VAR_image_tag") == "2.0.0" for env in envs)
 
 
 def test_deploy_run_without_pin_uses_the_artifacts_own_declared_tag(tmp_path: Path, monkeypatch):
@@ -684,7 +686,7 @@ def test_deploy_run_without_pin_uses_the_artifacts_own_declared_tag(tmp_path: Pa
     diagnostics = deploy_run(_context(root), "app", build_path, force=True)
 
     assert diagnostics.ok, diagnostics.messages()
-    assert all(env is not None and env.get("TF_VAR_image_tag") == '"1.0.0"' for env in envs)
+    assert all(env is not None and env.get("TF_VAR_image_tag") == "1.0.0" for env in envs)
 
 
 def test_deploy_run_pin_never_mutates_the_deployment_document_on_disk(tmp_path: Path, monkeypatch):
@@ -847,7 +849,10 @@ def test_deploy_run_resolves_dns_networks_firewalls_tokens_via_tf_var(tmp_path: 
     is delivered as a whole resolved JSON payload via TF_VAR_dns_zones/networks/
     firewalls (docs/design/terraform-tfvars-parity.md: `dns`'s real v1
     Terraform variable name is `dns_zones`, not the file-category name)
-    — never rewritten into the on-disk .auto.tfvars.json."""
+    — AND (docs/design/terraform-variable-precedence.md) the on-disk
+    .auto.tfvars.json is now rewritten with the same resolved value, since
+    Terraform's own precedence would otherwise let the stale, unresolved
+    file silently shadow the correctly-resolved TF_VAR_ env var."""
     root = _solution(tmp_path)
     _write(root, "infra/main.tf", "# root module\n")
     _write(
@@ -916,14 +921,45 @@ def test_deploy_run_resolves_dns_networks_firewalls_tokens_via_tf_var(tmp_path: 
     dns_payload = json.loads(init_env["TF_VAR_dns_zones"])
     record_value = dns_payload["public-dns"]["zones"]["example.com"]["records"][0]["value"]
     assert record_value == "1.2.3.4"
-    # On-disk build artifact stays literal/unresolved — never rewritten.
-    # docs/design/terraform-tfvars-parity.md: the file's real v1 content is
-    # wrapped under "dns_zones", the real Terraform variable name.
+    # On-disk build artifact is now rewritten with the resolved value too
+    # (docs/design/terraform-variable-precedence.md) — no secret-shaped
+    # leaf anywhere in this category, so the file legitimately wins and must
+    # carry the correct value, not the stale literal token.
     on_disk = json.loads((build_path / "infra" / "dns.auto.tfvars.json").read_text())
-    assert on_disk["dns_zones"]["public-dns"]["zones"]["example.com"]["records"][0]["value"] == "${var:public_ip}"
+    assert on_disk["dns_zones"]["public-dns"]["zones"]["example.com"]["records"][0]["value"] == "1.2.3.4"
     # No networks/firewalls documents in this workspace — no TF_VAR set.
     assert "TF_VAR_networks" not in init_env
     assert "TF_VAR_firewalls" not in init_env
+
+
+def test_deploy_run_never_creates_dns_networks_firewalls_files_when_unused(tmp_path: Path, _capture):
+    """Code review finding (2026-10-08): `build_dns_networks_firewalls_payloads()`
+    unconditionally returns all three keys ('dns'/'networks'/'firewalls'),
+    even `{}` ones, unlike `build_configuration_payloads()`, which already
+    filters empty categories. Without filtering by the *workspace-wide*
+    payload first, the deploy-time file-rewrite step would have newly
+    CREATED `dns.auto.tfvars.json`/`networks.auto.tfvars.json`/
+    `firewalls.auto.tfvars.json` (each `{"<name>": {}}`) for every single
+    deploy run, even for a workspace declaring none of the three —
+    violating docs/design/terraform-variable-precedence.md's own "never
+    create a file build run did not produce" boundary, and risking a real
+    Terraform "value for undeclared variable" warning on every deploy of
+    every workspace that doesn't use these categories at all."""
+    root = _terraform_solution(tmp_path)  # no dns/networks/firewalls declared
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    infra = build_path / "infra"
+    before = {f.name for f in infra.glob("*.auto.tfvars.json")}
+    assert "dns.auto.tfvars.json" not in before
+    assert "networks.auto.tfvars.json" not in before
+    assert "firewalls.auto.tfvars.json" not in before
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok, diagnostics.messages()
+    after = {f.name for f in infra.glob("*.auto.tfvars.json")}
+    assert after == before, f"deploy run created new file(s): {after - before}"
 
 
 def test_deploy_run_resolves_configuration_payloads_tokens_via_tf_var(tmp_path: Path):
@@ -932,8 +968,10 @@ def test_deploy_run_resolves_configuration_payloads_tokens_via_tf_var(tmp_path: 
     'configuration' is delivered via TF_VAR_resources (docs/design/
     terraform-tfvars-parity.md: every resx_<type> merges into the one real
     "resources" Terraform variable, not a separate TF_VAR_resx_<type> per
-    type) — broadcast to every step, never rewritten into the on-disk
-    .auto.tfvars.json."""
+    type) — broadcast to every step. The on-disk resx_<type>.auto.tfvars.json
+    is always blanked to `{}` (docs/design/terraform-variable-precedence.md),
+    never rewritten with its own resolved value — TF_VAR_resources
+    above is the sole, uncontested source either way."""
     root = _solution(tmp_path)
     _write(root, "infra/main.tf", "# root module\n")
     _write(
@@ -993,9 +1031,12 @@ def test_deploy_run_resolves_configuration_payloads_tokens_via_tf_var(tmp_path: 
     assert "TF_VAR_resources" in init_env
     resources_payload = json.loads(init_env["TF_VAR_resources"])
     assert resources_payload["r1"]["configuration"]["admin_password"] == "hunter2"
-    # On-disk build artifact stays literal/unresolved — never rewritten.
+    # On-disk build artifact is always blanked, unconditionally (docs/work/
+    # terraform-variable-precedence.md Phase 3) — never rewritten with its
+    # own resolved value, since multiple resx_<type> files all declare the
+    # same "resources" variable; TF_VAR_resources above is the sole source.
     on_disk = json.loads((build_path / "infra" / "resx_server.auto.tfvars.json").read_text())
-    assert on_disk["resources"]["r1"]["configuration"]["admin_password"] == "${secret:vm_admin_password}"
+    assert on_disk == {}
 
 
 def test_deploy_run_merges_multiple_resx_types_into_one_tf_var_resources(tmp_path: Path):
@@ -1138,10 +1179,13 @@ def test_deploy_run_delivers_flat_categories_as_one_env_var_per_key(tmp_path: Pa
     # Per-key delivery, not a category blob.
     assert "TF_VAR_flags" not in init_env
     assert "TF_VAR_variables" not in init_env
+    # A plain string value is delivered raw, never JSON-quoted (docs/work/
+    # terraform-variable-precedence.md Open Question 7) — only a genuinely
+    # complex value (here, the bool) needs `json.loads()` to read back.
     assert json.loads(init_env["TF_VAR_NEW_UI"]) is True
-    assert json.loads(init_env["TF_VAR_REGION"]) == "westeurope"
+    assert init_env["TF_VAR_REGION"] == "westeurope"
     # workspace's own fixed keys are delivered the same way.
-    assert json.loads(init_env["TF_VAR_workspace_name"]) == "main"
+    assert init_env["TF_VAR_workspace_name"] == "main"
     assert "TF_VAR_workspace" not in init_env
 
 
@@ -1268,12 +1312,16 @@ def test_deploy_run_resolves_provider_configuration_tokens_via_tf_var(tmp_path: 
     providers_payload = json.loads(init_env["TF_VAR_platform_providers"])
     assert providers_payload["p1"]["configuration"]["partner_id"] == "ACME123"
     assert providers_payload["p1"]["custom"]["cost_center"] == "platform"
-    # On-disk build artifact stays literal/unresolved — never rewritten.
-    # docs/design/terraform-tfvars-parity.md: the file's real v1 content is
-    # wrapped under "platform_providers", the real Terraform variable name.
+    # On-disk build artifact is blanked entirely (docs/work/
+    # terraform-variable-precedence.md Phase 2) — "providers" is a
+    # single-variable category (one Terraform variable, "platform_providers",
+    # for the whole dict), and a secret-shaped leaf anywhere inside taints
+    # the whole variable: the file must not declare it at all, or Terraform's
+    # own precedence would let this stale, partially-unresolved file shadow
+    # TF_VAR_platform_providers above (secrets are never written to disk,
+    # even the resolved non-secret partner_id value next to it).
     on_disk = json.loads((build_path / "infra" / "providers.auto.tfvars.json").read_text())
-    assert on_disk["platform_providers"]["p1"]["configuration"]["partner_id"] == "${var:partner_id}"
-    assert on_disk["platform_providers"]["p1"]["custom"]["cost_center"] == "${secret:cost_center}"
+    assert on_disk == {}
 
 
 def test_deploy_run_rejects_output_token_in_configuration_payloads(tmp_path: Path):
