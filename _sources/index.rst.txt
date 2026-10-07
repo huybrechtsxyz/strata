@@ -17,6 +17,7 @@ strata-v2
    how-to/azure-certificates
    how-to/azure-private-dns-zones
    how-to/composite-variable-fragments
+   how-to/deploy-run-streaming
    how-to/generate-per-instance-terraform-blocks
    how-to/migrate-v1-workspace-topology-provisioning
    how-to/sbom-generation
