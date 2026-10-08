@@ -336,7 +336,12 @@ reads `graph.version.spec.promotion` directly from it, no separate lookup.
 - [build-command.md](../work/build-command.md) — tracks the original gap and the `OutputProfileModel` dependency.
 - [provisioning-injection-model.md](../work/provisioning-injection-model.md) — Context lifetime, build-time vs. deploy-time split.
 - [lifecycle.md](../work/lifecycle.md) — sibling, NOT the same design: same source data, translated to script env vars instead of tfvars JSON.
-- [deployment-tier-resource-sizing.md](../work/deployment-tier-resource-sizing.md) — **deferred**: per-deployment SKU/deploy-tier selection. Q3's `properties`/`custom` chain is the only per-deployment merge v2 has, and it deliberately does *not* reach resource `configuration` — so it is not the answer to "how does this deployment get a bigger SKU?". That question is parked there, not here.
+- [deployment-tier-resource-sizing.md](deployment-tier-resource-sizing.md) —
+  **decided (ADR-0034)**: per-deployment SKU/deploy-tier selection stays a
+  plain, opaque `properties` value (e.g. `deploy_tier`) flowing through
+  this same Q3 merge chain unchanged — the tier→SKU mapping lives
+  entirely in the consuming Terraform module, never in resource
+  `configuration` or a new strata merge layer.
 - [composite-variable-fragments.md](../how-to/composite-variable-fragments.md) — the how-to guide for the worked example above: composing one variable's value from several per-owner files via this same `properties` deep-merge chain, plus the rules that actually matter (merge order, lists replace rather than concatenate).
 
 
