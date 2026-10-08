@@ -20,6 +20,8 @@ Compose/Helm to implement methods they have no use for.
 """
 
 import json
+import os
+import re
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, cast
@@ -49,6 +51,7 @@ from strata.integrations.terraform_projection import (
 )
 from strata.models.auth_models import AuthenticationModel
 from strata.models.common_models import PlatformKind
+from strata.models.deployment_model import DeploymentStageModel
 from strata.models.integration_model import Capability, IntegrationModel
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel
 from strata.models.solution_model import SolutionRemoteModel
@@ -103,6 +106,36 @@ def tf_var_env(resolved: ValueResolution, prefix: str | None) -> dict[str, str]:
     if prefix is None:
         return {}
     return {f"{prefix}{key}": value for key, value in resolved.values.items()}
+
+
+def _timeout_kwargs(step: ProvisioningStepModel, stage: DeploymentStageModel | None, phase: str) -> dict[str, int]:
+    """`{"timeout": N}` for this step's `phase` (`setup`/`check`/`plan`/
+    `apply`/`destroy` — `DeploymentStageTimeoutsModel`'s own field names),
+    or `{}` to let the integration method's own hardcoded default apply —
+    never `{"timeout": None}`, which would mean "wait forever" instead of
+    "use the default" (docs/design/cli-timeout.md).
+
+    `STRATA_TIMEOUT_<STEP>_<PHASE>` (step name and phase upper-cased,
+    non-alphanumerics replaced with `_`) always wins when set, for a
+    one-off override with no document edit — `stage.timeouts.<phase>` is
+    the fallback. `stage` is this step's `DeploymentStageModel` (matched by
+    `stage.step == step.name`), not a field on the step/workspace side:
+    timeouts are a deploy-time runtime knob, same as this model's sibling
+    `health_checks`/`secrets`/`namespace` fields — a given Workspace recipe
+    is reused by many Deployments/Environments, so a timeout bump for one
+    slow environment must not force every other Deployment of that same
+    Workspace to carry it too.
+    """
+    env_name = "STRATA_TIMEOUT_" + re.sub(r"[^A-Za-z0-9]", "_", f"{step.name}_{phase}").upper()
+    override = os.environ.get(env_name)
+    if override is not None:
+        try:
+            return {"timeout": int(override)}
+        except ValueError:
+            pass
+    timeouts = stage.timeouts if stage is not None else None
+    configured = getattr(timeouts, phase, None) if timeouts is not None else None
+    return {"timeout": configured} if configured is not None else {}
 
 
 def collect_step_outputs(
@@ -519,6 +552,7 @@ def deploy_run(
 
     upstream_by_step = {s.name: _upstream_step_names(s.name, all_steps) for s in all_steps}
     step_outputs: dict[str, dict[str, str]] = {}
+    stage_by_step = {s.step: s for s in (deployment.spec.stages or [])}
 
     for step, provisioner, integration in resolved_steps:
         # Matches `build_run()`'s own `source_path` resolution exactly
@@ -540,6 +574,7 @@ def deploy_run(
             relative = provisioner.source.target_path or provisioner.source.source_path or step.name
             path = build_path / relative
         integration_type = type(integration).__name__
+        deployment_stage = stage_by_step.get(step.name)
 
         # `_tool` is bound as a default argument, not read from the
         # enclosing scope at call time (ruff B023) — `integration` is a
@@ -793,13 +828,21 @@ def deploy_run(
         _step(f"running step '{step.name}' via {integration_type}")
         init = getattr(integration, "init", None)
         if init is not None:
-            init_result = init(path, backend_config=backend_config, env=env, line_callback=_line)
+            init_result = init(
+                path,
+                backend_config=backend_config,
+                env=env,
+                line_callback=_line,
+                **_timeout_kwargs(step, deployment_stage, "setup"),
+            )
             if not init_result.is_successful:
                 diagnostics.error(f"Step '{step.name}': init failed — {init_result.stderr}", location=step.name)
                 return diagnostics
         validate = getattr(integration, "validate", None)
         if validate is not None:
-            validate_result = validate(path, env=env, line_callback=_line)
+            validate_result = validate(
+                path, env=env, line_callback=_line, **_timeout_kwargs(step, deployment_stage, "check")
+            )
             if not validate_result.is_successful:
                 diagnostics.error(f"Step '{step.name}': validate failed — {validate_result.stderr}", location=step.name)
                 return diagnostics
@@ -835,6 +878,7 @@ def deploy_run(
             auth=auth,
             resolved_values=step_resolved_values,
             line_callback=_line,
+            **_timeout_kwargs(step, deployment_stage, "plan"),
         )
         if plan_result is None:
             # No real plan preview available for this integration. Under
@@ -872,6 +916,7 @@ def deploy_run(
             auth=auth,
             resolved_values=step_resolved_values,
             line_callback=_line,
+            **_timeout_kwargs(step, deployment_stage, "apply"),
         )
         if not deploy_result.is_successful:
             diagnostics.error(f"Step '{step.name}': deploy failed — {deploy_result.stderr}", location=step.name)

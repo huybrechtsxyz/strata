@@ -46,7 +46,9 @@ def _context(root: Path):
     return context
 
 
-def _terraform_solution(tmp_path: Path, *, second_step: bool = False) -> Path:
+def _terraform_solution(
+    tmp_path: Path, *, second_step: bool = False, stage_timeouts: dict[str, int] | None = None
+) -> Path:
     """One provider/resource/workspace with 1 (or 2 dependent) Terraform
     provisioner step(s), one environment, one deployment — mirrors
     `test_build_controller.py`'s own fixture, extended with a second,
@@ -86,11 +88,17 @@ def _terraform_solution(tmp_path: Path, *, second_step: bool = False) -> Path:
         "environment.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: environment\nmeta:\n  name: prd\nspec: {}\n",
     )
+    stages = ""
+    if stage_timeouts:
+        stages = "  stages:\n    - step: apply_infra\n      timeouts:\n" + "".join(
+            f"        {key}: {value}\n" for key, value in stage_timeouts.items()
+        )
     _write(
         root,
         "deployment.yaml",
         "apiVersion: strata.huybrechts.xyz/v2\nkind: deployment\nmeta:\n  name: app\nspec:\n"
-        "  workspace: main\n  environments:\n    - prd\n",
+        "  workspace: main\n  environments:\n    - prd\n"
+        f"{stages}",
     )
     return root
 
@@ -484,6 +492,61 @@ def test_deploy_run_runs_dependent_steps_in_order(tmp_path: Path, _capture):
     infra_index = next(i for i, s in enumerate(steps) if "apply_infra" in s)
     apps_index = next(i for i, s in enumerate(steps) if "apply_apps" in s)
     assert infra_index < apps_index
+
+
+def test_deploy_run_passes_stage_declared_timeout_overrides(tmp_path: Path, monkeypatch):
+    """DeploymentStageModel.timeouts (docs/design/cli-timeout.md) flows into the real
+    `run_command(..., timeout=...)` call for each phase it sets; an unset phase keeps that
+    integration method's own hardcoded default. Deployment-scoped (not workspace-scoped) so the
+    same Workspace recipe can be reused by other Deployments/Environments without inheriting it."""
+    root = _terraform_solution(tmp_path, stage_timeouts={"setup": 123, "plan": 456})
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    seen: dict[str, int] = {}
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        seen[args[1]] = timeout
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok
+    assert seen["init"] == 123
+    assert seen["plan"] == 456
+    assert seen["validate"] == 60  # unset 'check' field -> TerraformIntegration's own default
+    assert seen["apply"] == 1800  # unset 'apply' field -> TerraformIntegration's own default
+
+
+def test_deploy_run_env_var_timeout_override_wins_over_stage_declared(tmp_path: Path, monkeypatch):
+    """STRATA_TIMEOUT_<STEP>_<PHASE> always wins over the stage's own 'timeouts' field,
+    for a one-off override with no document edit."""
+    root = _terraform_solution(tmp_path, stage_timeouts={"setup": 123})
+    build_path = tmp_path / "build"
+    build_run(_context(root), "app", build_path)
+
+    monkeypatch.setenv("STRATA_TIMEOUT_APPLY_INFRA_SETUP", "999")
+
+    seen: dict[str, int] = {}
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        seen[args[1]] = timeout
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    import strata.integrations.base as base_module
+
+    monkeypatch.setattr(base_module, "run_command", _fake_run_command)
+    monkeypatch.setattr(base_module.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True)
+
+    assert diagnostics.ok
+    assert seen["init"] == 999
 
 
 def test_tf_var_env_maps_resolved_values_to_tf_var_prefixed_env():
