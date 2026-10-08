@@ -363,3 +363,26 @@ Execution order (each its own small, checked phase per repo convention —
   status`). Local/reversible only — no tag pushed, no CI triggered, no
   publish; Decisions 1/3 and `scripts/Release.ps1` remain the same
   still-open items as before.
+- 2026-10-08: **Built alpha9** — bumped `VERSION.txt` to `2.0.0-Alpha9`
+  (normalizes to `2.0.0a9`; confirmed via `packaging.version.Version`
+  first). Full check suite green: mypy (151 files), ruff check, ruff
+  format --check (289 files), import-linter, pytest (2315 passed — hit
+  the documented stale-dist-info sharp edge first, `test_utils_version.py`
+  failed reporting `2.0.0a8` until `uv sync --reinstall-package xyz-strata
+  --index-strategy unsafe-best-match` + a follow-up `uv sync --all-extras`
+  to restore the `docs` group it drops as a side effect; green after).
+  `uv build --index-strategy unsafe-best-match` produced
+  `xyz_strata-2.0.0a9-py3-none-any.whl`/`.tar.gz`; installed into a fresh
+  isolated `uv venv`, confirmed `strata version` → `2.0.0a9` and `strata
+  --help` still lists the same nine commands. Verification venv removed
+  after. **Found and tagged this as the actual precedent going forward:
+  `v2.0.0-alpha5`/`alpha6`/`alpha8` are already real, pushed tags on
+  `origin`** (confirmed via `git ls-remote --tags origin`) — Decision 1
+  ("tag source branch: `v2` directly") is therefore already being
+  exercised in practice, not merely planned; this doc's own "Decisions 1,
+  3 ... remain outstanding" framing is stale for Decision 1 specifically
+  and should be read as "verified PyPI trusted-publisher settings
+  (Decision 3) only" going forward. Local build/verify steps done;
+  tag+push intentionally left for explicit user confirmation before
+  running (pushing a tag triggers real CI that publishes to PyPI/GHCR/
+  Docker Hub — a shared-system action).
