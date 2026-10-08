@@ -152,6 +152,92 @@ flowchart TB
     WORKLOAD --> COMPOSE["Compose: one docker-compose.yml per namespace"]
 ```
 
+### Worked example: one shared resource, declared once per tenant
+
+A concrete case for the `properties` deep-merge chain above (Q3) —
+accumulating a *map* across every reachable Environment, not just letting a
+later one win. Shared Azure Application Gateway WAF policy in front of
+several tenants, each contributing its own IP allow-list, plus one
+OMP-wide list that applies regardless of tenant:
+
+```yaml
+# workspace.yaml — the one shared recipe, never varies per tenant
+apiVersion: strata.huybrechts.xyz/v2
+kind: workspace
+meta:
+  name: waf-platform
+spec:
+  properties:
+    omp_gateway:
+      ip_addresses: ["20.50.10.5/32", "20.50.10.6/32"]
+  # providers/provisioners/execution/resources omitted for brevity
+```
+
+```yaml
+# customers/c0062/environment.yaml — declares only its OWN entry
+apiVersion: strata.huybrechts.xyz/v2
+kind: environment
+meta:
+  name: c0062-env
+spec:
+  properties:
+    tenant_gateway:
+      c0062:
+        hostname: c0062.apps.example.com
+        ip_addresses: ["203.0.113.10/32", "203.0.113.11/32"]
+```
+
+```yaml
+# customers/c0091/environment.yaml — same shape, different key
+apiVersion: strata.huybrechts.xyz/v2
+kind: environment
+meta:
+  name: c0091-env
+spec:
+  properties:
+    tenant_gateway:
+      c0091:
+        hostname: c0091.apps.example.com
+        ip_addresses: ["198.51.100.20/32"]
+```
+
+```yaml
+# deployments/waf-platform.yaml — a shared/platform deployment (no `tenant:`,
+# per DeploymentSpecModel's own docstring), pulling in every tenant whose
+# entry must be present in the merged map
+apiVersion: strata.huybrechts.xyz/v2
+kind: deployment
+meta:
+  name: waf-platform-deployment
+spec:
+  workspace: waf-platform
+  environments:
+    - c0062-env
+    - c0091-env
+```
+
+`merge_workspace_environment_deployment_properties()` walks Workspace →
+`c0062-env` → `c0091-env` → Deployment, deep-merging at each step. Since
+every tenant contributes a *different key* under `tenant_gateway`, there is
+nothing to overwrite — they accumulate:
+
+```json
+{
+  "omp_gateway": { "ip_addresses": ["20.50.10.5/32", "20.50.10.6/32"] },
+  "tenant_gateway": {
+    "c0062": { "hostname": "c0062.apps.example.com", "ip_addresses": ["203.0.113.10/32", "203.0.113.11/32"] },
+    "c0091": { "hostname": "c0091.apps.example.com", "ip_addresses": ["198.51.100.20/32"] }
+  }
+}
+```
+
+`properties` is a `FLAT_CATEGORIES` member, so each top-level key becomes
+its own Terraform variable with no further strata-side work:
+`TF_VAR_omp_gateway` and `TF_VAR_tenant_gateway` (the latter a map a
+`dynamic` block can iterate directly, one WAF `custom_rule` per tenant).
+Adding a third tenant is one new `environment.yaml` plus one line in the
+deployment's `environments:` list — no Terraform change.
+
 ## Design Principle: shared inputs, per-integration translation
 - change `build_run()`/`build_controller.py`'s orchestration to special-case
   Terraform,
@@ -251,6 +337,7 @@ reads `graph.version.spec.promotion` directly from it, no separate lookup.
 - [provisioning-injection-model.md](../work/provisioning-injection-model.md) — Context lifetime, build-time vs. deploy-time split.
 - [lifecycle.md](../work/lifecycle.md) — sibling, NOT the same design: same source data, translated to script env vars instead of tfvars JSON.
 - [deployment-tier-resource-sizing.md](../work/deployment-tier-resource-sizing.md) — **deferred**: per-deployment SKU/deploy-tier selection. Q3's `properties`/`custom` chain is the only per-deployment merge v2 has, and it deliberately does *not* reach resource `configuration` — so it is not the answer to "how does this deployment get a bigger SKU?". That question is parked there, not here.
+- [composite-variable-fragments.md](../how-to/composite-variable-fragments.md) — the how-to guide for the worked example above: composing one variable's value from several per-owner files via this same `properties` deep-merge chain, plus the rules that actually matter (merge order, lists replace rather than concatenate).
 
 
 ## History
@@ -264,3 +351,10 @@ reads `graph.version.spec.promotion` directly from it, no separate lookup.
 - `--env-file PATH` (repeatable) was added for local-dev parity with CI (which already exports real `ENVIRONMENT`-store values via the pipeline) - merged into `os.environ` via `setdefault()` so an already-exported real value always wins over a file's value.
 - `OutputProfileModel`/`emits`-based category gating is deliberately out of scope here - see [output-profile-model.md](../work/output-profile-model.md) for that separate, not-yet-started design.
 - 2026-10-06: `resolved.yaml` gained a sixth, optional `promotion` key (docs/work/promotion.md Phase 4) - `{workspace, ring, order, wave?, version}`, written only when the deployment's `spec.version` resolved to a `Version` document tagged with a ring. Answers "did my deployment land where I meant it to" (deployment-scoped, human-intent) - a different question from `strata validate`'s own cross-document ring/order/wave consistency checks (docs/work/promotion.md Phase 2), which run independently of any one deployment. `ResolvedWorkspaceGraph` gained a `version: VersionModel | None` field to carry the already-pin-aware resolved document through to `write_resolved_manifest()`.
+- 2026-10-08: Added a worked example (shared Azure Application Gateway WAF
+  policy, one `omp_gateway` list on the Workspace plus one `tenant_gateway`
+  map entry per tenant Environment) showing the `properties` deep-merge
+  chain accumulating a map across reachable Environments, not just
+  letting a later one win — came up directly while brainstorming that
+  scenario and found this doc had no concrete, numbers-in example of the
+  mechanism it otherwise only describes structurally.
