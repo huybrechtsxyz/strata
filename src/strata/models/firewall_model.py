@@ -188,7 +188,9 @@ class FirewallSpecModel(PlatformBaseModel):
         "otherwise modeled). Not validated by strata, passed through as-is to the provisioner.",
     )
     custom: dict[str, Any] | None = Field(
-        None, description="Custom user-defined data for scripts or extensions (e.g. becomes env vars)"
+        None,
+        description="Custom user-defined data for scripts or extensions. Rides inside the `firewalls` "
+        "category payload, delivered as part of one shared `TF_VAR_firewalls` env var — not its own.",
     )
     default_tags: dict[str, str] | None = Field(
         None,

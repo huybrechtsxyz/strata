@@ -39,7 +39,10 @@ class SubnetModel(PlatformBaseModel):
         "service endpoints, NSG association). Not validated by strata, passed through as-is to the provisioner.",
     )
     custom: dict[str, Any] | None = Field(
-        None, description="Custom user-defined data for scripts or extensions (e.g. becomes env vars)"
+        None,
+        description="Custom user-defined data for scripts or extensions. Rides inside this subnet's entry "
+        "in the `networks` category payload, delivered as part of one shared `TF_VAR_networks` env var — "
+        "not its own env var.",
     )
 
     @field_validator("cidr")
@@ -83,7 +86,10 @@ class NetworkDefinitionModel(PlatformBaseModel):
         "strata, passed through as-is to the provisioner.",
     )
     custom: dict[str, Any] | None = Field(
-        None, description="Custom user-defined data for scripts or extensions (e.g. becomes env vars)"
+        None,
+        description="Custom user-defined data for scripts or extensions. Rides inside this network's entry "
+        "in the `networks` category payload, delivered as part of one shared `TF_VAR_networks` env var — "
+        "not its own env var.",
     )
     default_tags: dict[str, str] | None = Field(
         None,

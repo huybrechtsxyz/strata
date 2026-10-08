@@ -264,7 +264,10 @@ class DeploymentSpecModel(PlatformBaseModel):
         None, description="Deployment properties, the last merge layer over tenant and environment properties"
     )
     custom: dict[str, Any] | None = Field(
-        None, description="Custom user-defined data for scripts or extensions (e.g. becomes env vars)"
+        None,
+        description="Custom user-defined data for scripts or extensions. Merges across the Tenant/"
+        "Environment/Deployment chain like `properties`, delivered as one JSON-encoded `TF_VAR_custom` "
+        "env var for the whole merged dict — not split into a separate env var per key.",
     )
 
     @model_validator(mode="after")

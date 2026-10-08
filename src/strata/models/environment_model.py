@@ -80,7 +80,10 @@ class EnvironmentSpecModel(PlatformBaseModel):
         "environment. Tenant properties merge in first, then this, then the deployment's own.",
     )
     custom: dict[str, Any] | None = Field(
-        None, description="Custom user-defined data for scripts or extensions (e.g. becomes env vars)"
+        None,
+        description="Custom user-defined data for scripts or extensions. Merges across the Tenant/"
+        "Environment/Deployment chain like `properties`, delivered as one JSON-encoded `TF_VAR_custom` "
+        "env var for the whole merged dict — not split into a separate env var per key.",
     )
     variables: list[VariableStoreModel] | None = Field(
         None, description="Variable declarations — what '${var:KEY}' tokens resolve against"

@@ -49,7 +49,9 @@ class NamespaceSpecModel(PlatformBaseModel):
         "not otherwise modeled). Not validated by strata, passed through as-is to the builder.",
     )
     custom: dict[str, Any] | None = Field(
-        None, description="Custom user-defined data for scripts or extensions (e.g. becomes env vars)"
+        None,
+        description="Custom user-defined data for scripts or extensions. Rides inside the `namespaces` "
+        "category payload, delivered as part of one shared `TF_VAR_namespaces` env var — not its own.",
     )
     # No default_tags/custom_tags: a Namespace is a Kubernetes-native grouping concept, not an
     # individually cloud-tagged ARM/AWS resource. Instead it gets default_labels/custom_labels —

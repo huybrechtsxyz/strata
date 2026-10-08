@@ -193,7 +193,9 @@ class IntegrationSpecModel(PlatformBaseModel):
         "modeled). Not validated by strata, passed through as-is.",
     )
     custom: dict[str, Any] | None = Field(
-        None, description="Custom user-defined data for scripts or extensions (e.g. becomes env vars)"
+        None,
+        description="Custom user-defined data for scripts or extensions. Integration is not part of the "
+        "deploy-value pipeline at all — this is not delivered as an env var or forwarded anywhere yet.",
     )
     # No default_tags/custom_tags: an Integration describes a connection to an external
     # system, not a deployed/tagged cloud resource of its own.

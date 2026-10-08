@@ -65,7 +65,10 @@ class DnsRecordModel(PlatformBaseModel):
     )
     notes: str | None = Field(None, min_length=1, description="Additional notes for the DNS record, not for provider")
     custom: dict[str, Any] | None = Field(
-        None, description="Custom user-defined data for scripts or extensions (e.g. becomes env vars)"
+        None,
+        description="Custom user-defined data for scripts or extensions. Rides inside this record's entry "
+        "in the `dns` category payload, delivered as part of one shared `TF_VAR_dns_zones` env var — not "
+        "its own env var.",
     )
 
     @field_validator("value")
@@ -105,7 +108,10 @@ class DnsZoneModel(PlatformBaseModel):
         "strata, passed through as-is to the provisioner.",
     )
     custom: dict[str, Any] | None = Field(
-        None, description="Custom user-defined data for scripts or extensions (e.g. becomes env vars)"
+        None,
+        description="Custom user-defined data for scripts or extensions. Rides inside this zone's entry "
+        "in the `dns` category payload, delivered as part of one shared `TF_VAR_dns_zones` env var — not "
+        "its own env var.",
     )
     default_tags: dict[str, str] | None = Field(
         None,

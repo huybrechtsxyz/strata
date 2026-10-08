@@ -281,7 +281,10 @@ class ModuleSpecModel(PlatformBaseModel):
     properties: ModulePropertiesModel | None = Field(None, description="Module-specific properties and configurations")
     configuration: dict[str, Any] | None = Field(None, description="Module-specific configuration data")
     custom: dict[str, Any] | None = Field(
-        None, description="Custom user-defined data for scripts or extensions (e.g. becomes env vars)"
+        None,
+        description="Custom user-defined data for scripts or extensions. Not Terraform at all — feeds the "
+        "Helm/Compose workload pipeline's own build output, not a literal env var (that's "
+        "`services[].environment`'s job, a separate field).",
     )
     # No default_tags/custom_tags: a Module deploys onto a Resource (e.g. code on a Function
     # App) — it has no cloud identity of its own to tag; the underlying Resource is what's tagged.
