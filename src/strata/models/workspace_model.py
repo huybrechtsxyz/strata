@@ -346,14 +346,14 @@ class WorkspaceSpecModel(PlatformBaseModel):
     )
     cve_policy: CveMaxSeverityPolicyModel | None = Field(
         None,
-        description="Gates 'build run' on CVE findings in the SBOM it just generated (docs/work/"
+        description="Gates 'build run' on CVE findings in the SBOM it just generated (docs/archive/"
         "cve-scanner-integration.md). Lives here, not on Deployment, because it is a build-phase "
         "concern — the same scope `execution`/`provisioners` already own — not a per-deployment one.",
     )
     checkov_policy: CheckovPolicyModel | None = Field(
         None,
         description="Gates 'build run' on Checkov static-IaC-security findings for this workspace's "
-        "terraform/bicep/ansible provisioners, or its Helm namespace modules (docs/work/"
+        "terraform/bicep/ansible provisioners, or its Helm namespace modules (docs/archive/"
         "checkov-integration.md). Same placement reasoning as cve_policy — a build-phase concern, "
         "not a per-deployment one.",
     )

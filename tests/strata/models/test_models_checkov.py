@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the Checkov models (docs/work/checkov-integration.md)."""
+"""Tests for the Checkov models (docs/archive/checkov-integration.md)."""
 
 from strata.models.checkov_model import (
     CHECKOV_SEVERITY_ORDER,

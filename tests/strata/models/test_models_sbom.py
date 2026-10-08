@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the CVE scanner models (docs/work/cve-scanner-integration.md)."""
+"""Tests for the CVE scanner models (docs/archive/cve-scanner-integration.md)."""
 
 import pytest
 from pydantic import ValidationError

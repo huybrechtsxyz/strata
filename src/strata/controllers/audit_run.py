@@ -41,6 +41,7 @@ misconfigured audit sink never takes down a deploy that already succeeded.
 
 import hashlib
 import json
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, cast
@@ -53,7 +54,12 @@ from strata.controllers.build_controller import apply_remote_version_pins
 from strata.controllers.policy_results import read_policy_results
 from strata.controllers.sbom_controller import SBOM_FORMAT
 from strata.controllers.solution_context import SolutionContext
-from strata.controllers.value_controller import resolve_deployment, resolve_version
+from strata.controllers.value_controller import (
+    reachable_environments,
+    resolve_deployment,
+    resolve_values,
+    resolve_version,
+)
 from strata.controllers.workload_controller import apply_version_pins, resolve_module
 from strata.integrations import registry
 from strata.integrations.capabilities import AuditSinkIntegration
@@ -69,7 +75,8 @@ from strata.models.audit_manifest_model import (
     ManifestSbomReferenceModel,
 )
 from strata.models.audit_metrics_model import DeploymentMetricsModel, MetricsDimensionsModel, MetricsMeasuresModel
-from strata.models.audit_model import EVENT_DEFAULTS, AuditSinkModel
+from strata.models.audit_model import EVENT_DEFAULTS, AuditGitSinkTargetModel, AuditSinkModel
+from strata.models.auth_models import AuthenticationModel
 from strata.models.common_models import PlatformKind, PlatformVersion
 from strata.models.configuration_model import ConfigurationModel
 from strata.models.deployment_model import DeploymentModel
@@ -77,6 +84,7 @@ from strata.models.integration_model import Capability, IntegrationModel
 from strata.models.module_model import ModuleModel
 from strata.models.namespace_model import NamespaceModel
 from strata.models.workspace_model import WorkspaceModel
+from strata.services.environment_service import merge_environment_models
 from strata.utils import layout
 from strata.utils.actor import resolve_actor
 from strata.utils.diagnostics import Diagnostics, Severity
@@ -235,6 +243,21 @@ def finalize_and_distribute_deploy_audit(
     event_enabled = {**EVENT_DEFAULTS, **(audit_config.event_overrides or {})}
     admitted_types = [t for t in ("deployment.completed", "deployment.measured") if event_enabled.get(t, True)]
 
+    # Deploy-time values a `git` sink's `remote.integration` credentials may
+    # reference (docs/design/gitops-integration.md's credential pattern,
+    # backported here 2026-10-08) — resolved once, same "all declared keys"
+    # shape `deploy_controller.py` resolves for `TF_VAR_`/Helm delivery, reused
+    # for every git sink rather than recomputed per-sink. Skipped entirely
+    # unless at least one git sink exists, since `resolve_values()` is not
+    # free (it runs every `${value:...}` cross-document reference and store
+    # resolution in the whole solution).
+    git_sink_values: Mapping[str, str] | None = None
+    if any(sink.enabled and sink.git is not None for sink in audit_config.sinks):
+        environments = reachable_environments(context, deployment)
+        variables, secrets, features = merge_environment_models(environments)
+        all_keys = sorted({**variables, **secrets, **features})
+        git_sink_values = resolve_values(context, deployment_name, all_keys, version_pin=pin).values
+
     for sink in audit_config.sinks:
         _dispatch_sink(
             sink,
@@ -248,6 +271,7 @@ def finalize_and_distribute_deploy_audit(
             actor=actor,
             api_version=deployment.apiVersion,
             diagnostics=diagnostics,
+            git_sink_values=git_sink_values,
         )
 
     return diagnostics
@@ -266,6 +290,7 @@ def _dispatch_sink(
     actor: str,
     api_version: PlatformVersion,
     diagnostics: Diagnostics,
+    git_sink_values: Mapping[str, str] | None,
 ) -> None:
     """Admission + dispatch for one sink — appends findings to `diagnostics` in place."""
     if not sink.enabled:
@@ -294,12 +319,48 @@ def _dispatch_sink(
     if "deployment.measured" in sink_events:
         files[_METRICS_FILENAME] = metrics_path
 
-    result = push_audit_files(context.root, sink.git, context.controller.solution, files, relative_path, actor)
+    auth = _resolve_git_sink_auth(context, sink.git)
+    result = push_audit_files(
+        context.root,
+        sink.git,
+        context.controller.solution,
+        files,
+        relative_path,
+        actor,
+        auth=auth,
+        resolved_values=git_sink_values,
+    )
     if result.success:
         return
     _record_sink_failure(
         sink, f"sink '{sink.name}': audit push failed — {result.detail}", "audit_sink_push_failed", diagnostics
     )
+
+
+def _resolve_git_sink_auth(context: SolutionContext, sink_git: AuditGitSinkTargetModel) -> AuthenticationModel | None:
+    """`sink_git.remote`'s declared `integration` -> its `AuthenticationModel`,
+    or `None` — same lookup `deploy_controller.py` already does for a GitOps
+    remote's `remote.integration` (`IntegrationModel.spec.authentication`),
+    applied here so an audit git sink stops being the one git-push path in
+    this codebase that ignores strata's single credential mechanism.
+
+    A missing/typo'd remote or integration name resolves to `None` (today's
+    ambient-only behaviour), never raises — `remote.integration` is
+    schema-declared but not existence-validated, matching `deploy_controller.
+    py`'s own documented reasoning for the identical GitOps lookup.
+    """
+    remotes_by_name = (
+        {remote.name: remote for remote in (solution.spec.remotes or [])}
+        if (solution := context.controller.solution)
+        else {}
+    )
+    remote = remotes_by_name.get(sink_git.remote)
+    if remote is None or not remote.integration:
+        return None
+    integration_entry = context.controller.index.get(PlatformKind.INTEGRATION, remote.integration)
+    if integration_entry is None:
+        return None
+    return cast(IntegrationModel, integration_entry.model).spec.authentication
 
 
 def _dispatch_integration_sink(

@@ -402,7 +402,7 @@ class ScannerIntegration(Integration):
     force a shared `scan()` method signature across every scanner-type
     integration. `CveScannerIntegration` (an SBOM file in,
     `CveAuditResultModel` out) and a future Checkov integration (an IaC
-    directory in, a completely different findings model out, docs/work/
+    directory in, a completely different findings model out, docs/archive/
     checkov-integration.md) have genuinely different inputs and outputs —
     that doc's own explicit stance is "do not conflate the two or build
     one in a way that assumes it's the other." Forcing one `scan()`

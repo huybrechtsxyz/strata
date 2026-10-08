@@ -347,7 +347,7 @@ def materialise_provisioner_sources(
     provisioner's `depends_on`; the step loop's own per-step materialisation
     (handling the step-name-keyed GitOps destination convention) is a
     separate call site that now writes into this same `materialised` dict
-    too (docs/work/checkov-integration.md Open Question 2 — so a future
+    too (docs/archive/checkov-integration.md Open Question 2 — so a future
     evaluator reads one unified mapping regardless of how a provisioner was
     reached) — a provisioner that happens to be both a `depends_on` target
     and the subject of its own execution step is synced twice (once here,
@@ -603,7 +603,7 @@ def build_run(
         # Extends `materialised` (ADR-0029, seeded above) to also cover
         # execution-step provisioners, not just dependency-only ones — a
         # real prerequisite found while designing the Checkov integration
-        # (docs/work/checkov-integration.md Open Question 2): this
+        # (docs/archive/checkov-integration.md Open Question 2): this
         # `source_path` used to be a local variable, discarded here before
         # any future evaluator could read it. `materialised` is now the one
         # unified mapping regardless of how a provisioner was reached —
@@ -667,7 +667,7 @@ def build_run(
         diagnostics.extend(sbom_diagnostics)
         _step(f"wrote {build_path / 'sbom.json'}")
 
-        # CVE policy gate (docs/work/cve-scanner-integration.md) — runs
+        # CVE policy gate (docs/archive/cve-scanner-integration.md) — runs
         # immediately after SBOM generation, the only point `build_run()`
         # has both a written SBOM and the resolved workspace to read
         # `spec.cve_policy` from. A no-op when that field is unset.
@@ -683,7 +683,7 @@ def build_run(
         diagnostics.extend(cve_diagnostics)
         cve_policy_result = _cve_policy_result(graph.workspace, cve_diagnostics)
 
-        # Checkov policy gate (docs/work/checkov-integration.md Phase 2/3) —
+        # Checkov policy gate (docs/archive/checkov-integration.md Phase 2/3) —
         # same placement/capture-then-extend pattern as the CVE gate just
         # above; reads each provisioner's real source path from the same
         # `materialised` dict the step loop above now populates for every
@@ -740,7 +740,7 @@ def _cve_policy_result(workspace: WorkspaceModel, diagnostics: Diagnostics) -> M
 def _checkov_policy_result(workspace: WorkspaceModel, diagnostics: Diagnostics) -> ManifestPolicyResultModel | None:
     """Build the `checkov_policy` entry for `policy_results.json`, or
     `None` when the policy is unset — mirrors `_cve_policy_result()`
-    exactly (docs/work/checkov-integration.md Phase 2).
+    exactly (docs/archive/checkov-integration.md Phase 2).
     """
     policy = workspace.spec.checkov_policy
     if policy is None:

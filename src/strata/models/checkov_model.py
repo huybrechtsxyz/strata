@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Checkov static-IaC-scanner models (docs/work/checkov-integration.md).
+"""Checkov static-IaC-scanner models (docs/archive/checkov-integration.md).
 
 A dedicated module, not folded into `sbom_model.py` the way CVE's models
 were: Checkov never touches an SBOM, it scans rendered IaC output
@@ -29,7 +29,7 @@ class CheckovFindingModel(PlatformBaseModel):
     """A single failed check from a Checkov scan.
 
     Field-for-field port of v1's real `CheckovFinding` dataclass
-    (docs/work/checkov-integration.md) — populated directly from
+    (docs/archive/checkov-integration.md) — populated directly from
     Checkov's own `--output json` `results.failed_checks` entries
     (`strata.integrations.checkov`).
     """
@@ -107,7 +107,7 @@ class CheckovPolicyModel(PlatformBaseModel):
         description="For terraform/bicep/ansible: 'staged' (default, provisioners with their own execution "
         "step) | 'all' (every declared provisioner of this framework) | the name of one specific "
         "execution step. For helm: 'staged' and 'all' are equivalent (every namespace this workspace "
-        "references) | the name of one specific namespace (docs/work/checkov-integration.md Phase 3).",
+        "references) | the name of one specific namespace (docs/archive/checkov-integration.md Phase 3).",
     )
     skip_checks: list[str] | None = Field(
         None, description="Check IDs to suppress (mutually exclusive with include_checks)"

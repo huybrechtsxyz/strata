@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `CheckovIntegration` (docs/work/checkov-integration.md)."""
+"""Tests for `CheckovIntegration` (docs/archive/checkov-integration.md)."""
 
 import json
 from pathlib import Path

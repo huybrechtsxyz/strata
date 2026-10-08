@@ -115,9 +115,9 @@ class Capability(StrEnum):
     AUDIT = "audit"  #: AuditSinkModel-backed audit event destinations
     # The "cve scanner" entry the class docstring above already anticipated
     # — now a real, concrete, shipped v2 feature
-    # (docs/work/cve-scanner-integration.md), not speculative. Covers any
+    # (docs/archive/cve-scanner-integration.md), not speculative. Covers any
     # external security scanner (`CveScannerIntegration`'s Trivy/Grype
-    # today; a future Checkov integration, docs/work/
+    # today; a future Checkov integration, docs/archive/
     # checkov-integration.md, would declare it too) — see
     # `ScannerIntegration`'s own docstring (`capabilities.py`) for exactly
     # how thin that shared contract deliberately is.

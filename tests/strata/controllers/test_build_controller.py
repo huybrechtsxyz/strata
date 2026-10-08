@@ -481,7 +481,7 @@ def test_build_run_never_resolves_integration_for_a_dependency_only_provisioner(
 
 # ---------------------------------------------------------------------------
 # build_run()'s `materialised` dict as a unified provisioner -> source_path
-# mapping (docs/work/checkov-integration.md Open Question 2 / Phase 1 —
+# mapping (docs/archive/checkov-integration.md Open Question 2 / Phase 1 —
 # a real prerequisite for a future evaluator, not purely additive).
 # ---------------------------------------------------------------------------
 
@@ -1224,7 +1224,7 @@ def test_build_run_writes_both_cve_and_checkov_policy_results_together(tmp_path:
 
 
 # ---------------------------------------------------------------------------
-# framework: helm end to end (docs/work/checkov-integration.md Phase 3) —
+# framework: helm end to end (docs/archive/checkov-integration.md Phase 3) —
 # reuses test_build_run_renders_helm_workload_modules()'s own fixture shape.
 # ---------------------------------------------------------------------------
 

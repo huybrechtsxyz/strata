@@ -151,7 +151,7 @@ def sync_read_checkout(root: Path, solution: SolutionModel | None, sink: AuditGi
         )
 
     checkout_path = layout.audit_read_checkout_path(root, remote.name, sink.branch)
-    synced = ensure_synced_checkout(remote.url, sink.branch, checkout_path)
+    synced = ensure_synced_checkout(remote.url, sink.branch, checkout_path, fetch=remote.fetch)
     if not synced.success:
         raise AuditReadError(synced.detail)
     return checkout_path

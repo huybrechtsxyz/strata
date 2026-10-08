@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Checkov policy gate (docs/work/checkov-integration.md) — gates `build
+"""Checkov policy gate (docs/archive/checkov-integration.md) — gates `build
 run` on static-IaC-security findings in the provisioners/Helm modules
 `build_run()` just materialised, when `workspace.spec.checkov_policy` is
 set.

@@ -145,7 +145,8 @@ of the SBOM, and nothing for any bucket-A/B policy type either).
   (`sbom_components` production). Phase 1 implemented; CVE scanning and the
   `sbom_*` policy types explicitly marked out of scope there, picked up by
   this doc's siblings below.
-- `docs/work/checkov-integration.md` — `checkov` (bucket C). Not started.
+- `docs/archive/checkov-integration.md` — `checkov` (bucket C). Shipped
+  end to end, archived.
 - `docs/archive/cve-scanner-integration.md` — `cve_max_severity` (bucket
   C). Shipped end to end, archived.
 - [gap_fit_v1.md](gap_fit_v1.md) gap #7 — the original "still fully open"
@@ -270,7 +271,7 @@ once at least one real policy type exists to compare against).
   and beyond; the one concrete reopening trigger (an operator needing a
   strata-unaware custom rule) is named explicitly, with its own cheap
   fallback (a dedicated `script` type), rather than left open-ended.
-  Updated [checkov-integration.md](checkov-integration.md)'s Sizing #4/
+  Updated [checkov-integration.md](../archive/checkov-integration.md)'s Sizing #4/
   Open Question 3 and [cve-scanner-integration.md](../archive/cve-scanner-integration.md)'s
   `## Remaining Work` item to point here rather than duplicate the
   reasoning. No code changed — decision and doc update only.

@@ -2,10 +2,10 @@
 
 - Status: draft — gap identified and evidenced, not designed
 - Last updated: 2026-10-07
-- Related: [ndjson-output.md](ndjson-output.md) (where this was first
-  surfaced, as an unrelated tangent while reviewing that doc's own
+- Related: [ndjson-output.md](../archive/ndjson-output.md) (where this was
+  first surfaced, as an unrelated tangent while reviewing that doc's own
   "Shipped design" section — NDJSON is purely a streaming/transport
-  format concern, orthogonal to this), [cli-output-mode-interactions.md](cli-output-mode-interactions.md)
+  format concern, orthogonal to this), [cli-output-mode-interactions.md](../archive/cli-output-mode-interactions.md)
 
 ## Overview
 
@@ -90,8 +90,8 @@ immediately after the gap was found, before any design work started.
 ## Changelog
 
 - 2026-10-07: Created — gap surfaced while reviewing
-  [ndjson-output.md](ndjson-output.md)'s own "Shipped design" section,
-  prompted by a direct question about whether any command emits
+  [ndjson-output.md](../archive/ndjson-output.md)'s own "Shipped design"
+  section, prompted by a direct question about whether any command emits
   corrective guidance. Confirmed via direct grep (not assumed) that
   `Severity.INFO` has only 5 real call sites codebase-wide and that no
   `Hint:`/`Tip:`/`Suggestion:`-style convention exists anywhere in

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `checkov_controller.evaluate_checkov_policy()` (docs/work/
+"""Tests for `checkov_controller.evaluate_checkov_policy()` (docs/archive/
 checkov-integration.md Phase 2/3)."""
 
 from pathlib import Path

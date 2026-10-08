@@ -208,7 +208,7 @@ class ConfigurationSpecModel(PlatformBaseModel):
     cve_allowed: list[CveAllowedEntryModel] | None = Field(
         None,
         description="Solution-wide CVE suppression list, consumed by every workspace's own cve_policy gate "
-        "(docs/work/cve-scanner-integration.md Phase 3). Lives here, not on Workspace, because v1's real "
+        "(docs/archive/cve-scanner-integration.md Phase 3). Lives here, not on Workspace, because v1's real "
         "equivalent (.strata/cve-allowed.yaml) is keyed off the solution root, not any one workspace — one "
         "list shared across every workspace, not duplicated per-workspace.",
     )

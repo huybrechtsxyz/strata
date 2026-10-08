@@ -241,7 +241,7 @@ def test_configuration_path_convention_enforcement_can_be_set_to_deny():
 
 
 # ---------------------------------------------------------------------------
-# spec.cve_allowed (docs/work/cve-scanner-integration.md Phase 3)
+# spec.cve_allowed (docs/archive/cve-scanner-integration.md Phase 3)
 # ---------------------------------------------------------------------------
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `CveScannerIntegration` (docs/work/cve-scanner-integration.md)."""
+"""Tests for `CveScannerIntegration` (docs/archive/cve-scanner-integration.md)."""
 
 import json
 from pathlib import Path

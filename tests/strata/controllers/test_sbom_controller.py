@@ -128,7 +128,7 @@ def test_write_sbom_raises_when_the_bom_fails_schema_validation(tmp_path: Path, 
 
 
 # ---------------------------------------------------------------------------
-# evaluate_cve_policy (docs/work/cve-scanner-integration.md)
+# evaluate_cve_policy (docs/archive/cve-scanner-integration.md)
 # ---------------------------------------------------------------------------
 
 
@@ -337,7 +337,7 @@ def test_evaluate_cve_policy_honors_an_explicit_severity_threshold(tmp_path: Pat
 
 
 # ---------------------------------------------------------------------------
-# allowlist (docs/work/cve-scanner-integration.md Phase 3)
+# allowlist (docs/archive/cve-scanner-integration.md Phase 3)
 # ---------------------------------------------------------------------------
 
 

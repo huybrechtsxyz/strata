@@ -202,8 +202,8 @@ def test_capability_abcs_covers_every_core_capability_with_a_real_consumer():
 
 # ---------------------------------------------------------------------------
 # ScannerIntegration (Capability.SCANNER) — deliberately thin: only
-# ensure_available() is abstract, no shared scan() signature (docs/work/
-# cve-scanner-integration.md, docs/work/checkov-integration.md).
+# ensure_available() is abstract, no shared scan() signature (docs/archive/
+# cve-scanner-integration.md, docs/archive/checkov-integration.md).
 # ---------------------------------------------------------------------------
 
 

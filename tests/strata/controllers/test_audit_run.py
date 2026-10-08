@@ -551,7 +551,7 @@ def test_event_override_disables_measured_dispatch_but_not_local_write(tmp_path:
 
     captured_files = {}
 
-    def _fake_push(root_arg, sink, solution, files, relative_path, actor):
+    def _fake_push(root_arg, sink, solution, files, relative_path, actor, **kwargs):
         captured_files.update(files)
         return PushResult(True)
 

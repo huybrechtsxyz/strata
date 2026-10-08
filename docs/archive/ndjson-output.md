@@ -1,19 +1,22 @@
 # `--follow ndjson` — NDJSON Streaming
 
-- Status: **Phase 2 shipped** (`deploy run` only). The current-state
-  summary lives in the living design doc,
+- Status: **Archived — shipped** (Phase 2, `deploy run` only). Current
+  state lives in the living design doc,
   [deploy-plan-preview.md](../design/deploy-plan-preview.md)'s own
-  "Streaming" section — this doc is the full investigation/decision
-  record (v1 evidence, every option considered, why each question
-  resolved the way it did), kept for that reason, not duplicated or
-  merged away.
-- Last updated: 2026-10-07
+  "Streaming" section; the decision itself is
+  [ADR-0033](../decisions/0033-ndjson-streaming-follow-trigger.md). Kept
+  here as the full investigation/evidence record (v1 source evidence,
+  every option considered) rather than deleted — not duplicated into the
+  design doc or the ADR, which each keep only what they need.
+- Last updated: 2026-10-08
 - Related: [deploy-plan-preview.md](../design/deploy-plan-preview.md)
-  (living doc, current-state reference), [cli-output-mode-interactions.md](cli-output-mode-interactions.md)
-  (sibling doc this was split out of — the concrete `--follow`/
-  `STRATA_OUTPUT` interaction bug), [diagnostic-guidance.md](diagnostic-guidance.md)
-  (an unrelated gap surfaced while reviewing this doc — corrective-hint
-  messaging, not a streaming/format concern)
+  (living doc, current-state reference), [ADR-0033](../decisions/0033-ndjson-streaming-follow-trigger.md)
+  (the trigger-mechanism decision this doc's evidence grounds),
+  [cli-output-mode-interactions.md](cli-output-mode-interactions.md)
+  (sibling archived doc this was split out of — the concrete `--follow`/
+  `STRATA_OUTPUT` interaction bug), [diagnostic-guidance.md](../work/diagnostic-guidance.md)
+  (an unrelated gap surfaced while reviewing this doc, still open — see
+  `docs/work/`)
 
 ## Overview
 
@@ -89,7 +92,8 @@ reasoning from this repo's own docstrings alone would have found:
    ...}` per repo synced. NDJSON is a general-purpose "stream of
    independent result events for any command doing multiple discrete
    units of work" in v1, not a `deploy run`-specific mechanism — the
-   first v2 cut intentionally undersells this (see "Remaining Work").
+   first v2 cut intentionally undersells this (see "Deliberately Out of
+   Scope").
 5. Every console-only `click.echo` in v1's `run_deploy_command.py` is
    gated behind a console-mode check with **zero warning** when another
    mode is active and that line is silently skipped — the same
@@ -102,8 +106,8 @@ reasoning from this repo's own docstrings alone would have found:
 - **Trigger mechanism**: not a new `--output` value. `--follow` itself
   became an optional-value flag (`--follow` bare → `"console"`,
   unchanged; `--follow ndjson` → NDJSON streaming), requiring `--output
-  json`. Chosen to keep exactly one trigger mechanism instead of two,
-  since `--follow` already existed.
+  json`. Full rationale and rejected alternatives recorded in
+  [ADR-0033](../decisions/0033-ndjson-streaming-follow-trigger.md).
 - **`--follow` stays its own flag**, not folded into `--verbose` (v1's
   real shape) — `--verbose` stays logging-only, matching
   `cli-output-mode-interactions.md`'s own "deliberate improvement, not
@@ -121,24 +125,23 @@ reasoning from this repo's own docstrings alone would have found:
 - **stdout-only**, matching v1 exactly (Finding 3) — `stream` stays
   metadata, nothing is ever written to real stderr.
 
-## Remaining Work
+## Deliberately Out of Scope
 
 - The `data`-type event (matching v1's `repo_sync_result` shape, for
-  commands with no subprocess at all) remains **explicitly deferred** —
-  no v2 command with that shape exists yet to need it. Revisit only if a
-  second real need shows up.
-- **A real open question, not yet resolved**: `--follow ndjson` as a
-  trigger only makes sense for commands that already have a `--follow`
-  flag — today, only `deploy run`. A future `repo sync`-style command
-  would need its own trigger (plausibly a real, standalone `--output
-  ndjson`, specifically for that class of command) — meaning the two
-  real v1 usage patterns found here might end up needing two *different*
-  v2 trigger mechanisms, not one unified one. Flagged, not designed.
-- Whether `build run` ever gains an analogous need is out of scope —
-  not a yes or no, just not being designed now (confirmed: no
-  subprocess/line-callback plumbing exists there today to stream).
+  commands with no subprocess at all) — no v2 command with that shape
+  exists yet to need it. Revisit only if a second real need shows up.
+- A trigger mechanism for a future non-`deploy run` command: `--follow
+  ndjson` only makes sense for a command that already has a `--follow`
+  flag. A `repo sync`-style command would need its own trigger
+  (plausibly a real, standalone `--output ndjson`, specifically for that
+  class of command) — the two real v1 usage patterns found here may end
+  up needing two *different* v2 trigger mechanisms, not one unified one.
+  Flagged, not designed.
+- Extending `--follow`/NDJSON to `build run` — confirmed `build run` has
+  no subprocess/line-callback plumbing at all today, so there is nothing
+  to stream.
 
-## Implementation (shipped, Phase 2)
+## Implementation (shipped)
 
 - `deploy_command.py`'s `--follow` upgraded from a plain boolean to an
   optional-value flag (`is_flag=False, flag_value="console",
@@ -177,35 +180,34 @@ reasoning from this repo's own docstrings alone would have found:
   real-CI-usage finding behind `STRATA_OUTPUT` existing at all.
 - [ADR-0030](../decisions/0030-deploy-run-plan-preview-and-streaming.md)
   — built `--follow`'s `on_line` plumbing with this exact reuse in mind.
+- [ADR-0033](../decisions/0033-ndjson-streaming-follow-trigger.md) — the
+  trigger-mechanism decision this doc's evidence directly grounds.
 - [cli-output-mode-interactions.md](cli-output-mode-interactions.md) —
   the sibling doc this was split out of; its own Option 5 points here.
 
-## Changelog
+## History
 
-- 2026-10-06: Created, split out from
-  [cli-output-mode-interactions.md](cli-output-mode-interactions.md)'s
-  Option 5. Investigated v1's real implementation directly (not assumed)
-  and recorded the design questions (trigger mechanism, event shapes,
-  scope, stdout-only). No code written — design only.
-- 2026-10-07: Resolved every open design question through two further
-  evidence passes: (1) confirmed the final event must never replay
-  streamed lines, by reading v1's real `_output_data` directly; (2)
-  broadened "Scope" after grepping v1's actual call sites directly (not
-  just the two files the Overview was first based on) and finding NDJSON
-  wired into eight v1 command files across two genuinely different
-  usage patterns, not one — kept the `deploy run`-only first cut but
-  flagged the future trigger-mechanism question this raises for a
-  `repo sync`-style command.
-- 2026-10-07: **Phase 2 implemented, shipped, and code-reviewed** — see
-  "Implementation" above for the exact shape and the one real bug found
-  (`ensure_ascii=False` missing) and fixed. Full check suite clean, 2180
-  passing.
-- 2026-10-07: Processed the shipped result into the permanent living
-  design doc, [deploy-plan-preview.md](../design/deploy-plan-preview.md)
-  (current-state reference now lives there). Condensed this doc's own
-  investigation narrative into the settled-decisions summary above (the
-  full back-and-forth remains available via git history) and split the
-  unrelated "no corrective-hint messaging anywhere" observation, found
-  while reviewing this doc, into its own gap doc,
-  [diagnostic-guidance.md](diagnostic-guidance.md) — a content concern,
-  orthogonal to this doc's own streaming/format scope.
+- v1's real NDJSON implementation settled every open design question
+  here with evidence instead of guesswork: no `--follow`-equivalent flag
+  (streaming was implied by `--verbose`); `ndjson` always a genuinely
+  separate format, never combined with single-envelope `json`; every
+  event (even `stderr`-tagged ones) written to v1's own real stdout; and
+  NDJSON used across eight v1 command files in two distinct shapes (raw
+  subprocess-line streaming vs. structured per-item `data` events with
+  no subprocess at all) — the first v2 cut deliberately covers only the
+  former.
+- Considered decoupling `--follow` (timing) from `--output` (format)
+  completely, so `--output json --follow` alone would emit per-line JSON
+  events. Rejected: it would make `--output json`'s own documented
+  single-envelope contract depend conditionally on whether `--follow`
+  also happened to be set — the same class of surprise this whole
+  investigation exists to eliminate, just relocated. Full reasoning and
+  the rejected alternatives are in ADR-0033.
+- Checked whether the final JSON envelope should replay every streamed
+  line — v1's own `_output_data` (its real final-event payload) is
+  commented plainly as "Structured result data," never a transcript of
+  already-emitted `line` events. v2's own `deploy run` already leaves
+  `JsonReporter.data` empty today, confirming there was nothing pulling
+  per-line text toward the final document to begin with — kept that
+  split: stream lines once, live; leave the final envelope exactly as
+  lean as it already was.

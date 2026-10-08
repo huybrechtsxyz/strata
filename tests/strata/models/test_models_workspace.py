@@ -582,7 +582,7 @@ def test_workspace_rejects_duplicate_topology_names():
 
 
 # ---------------------------------------------------------------------------
-# spec.cve_policy (docs/work/cve-scanner-integration.md)
+# spec.cve_policy (docs/archive/cve-scanner-integration.md)
 # ---------------------------------------------------------------------------
 
 

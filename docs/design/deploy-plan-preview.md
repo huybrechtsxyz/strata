@@ -171,8 +171,8 @@ mean different things elsewhere.
   this used to be silently inert under `--output json` instead (no
   warning, lines simply dropped) — a real consumer-reported bug, fixed
   by matching `--verbose`'s own actual stderr-reroute precedent instead
-  of merely citing it (see History, [docs/work/
-  cli-output-mode-interactions.md](../work/cli-output-mode-interactions.md)).
+  of merely citing it (see History, [docs/archive/
+  cli-output-mode-interactions.md](../archive/cli-output-mode-interactions.md)).
 - `--follow ndjson` (requires `--output json`) emits one JSON event per
   subprocess line (`{"event": "line", "tool", "stream", "text", "ts"}`)
   and per progress message (`{"event": "progress", "message", "ts"}"`) to
@@ -180,10 +180,11 @@ mean different things elsewhere.
   final line (forced single-line via a new `compact` parameter on
   `make_reporter()`/`command_run()`, so it stays consistent with the
   per-line events ahead of it) — shipped as a first cut, scoped to
-  `deploy run` only; full design and remaining open questions (a
-  `repo sync`-style "data" event shape for non-subprocess commands,
+  `deploy run` only; full design and the trigger-mechanism decision
+  (a `repo sync`-style "data" event shape for non-subprocess commands,
   whether `build run` ever gains an analogous need) tracked in
-  [docs/work/ndjson-output.md](../work/ndjson-output.md).
+  [docs/archive/ndjson-output.md](../archive/ndjson-output.md) and
+  [ADR-0033](../decisions/0033-ndjson-streaming-follow-trigger.md).
 
 ### Secret redaction for streamed output
 
@@ -262,8 +263,8 @@ dry_run or smoke_test`.
 - A `repo sync`-style structured "data" NDJSON event shape (for commands
   with no subprocess at all) — `--follow ndjson` here only ever emits
   `line`/`progress` events; the other shape remains undesigned, no
-  command exists yet that would need it ([docs/work/
-  ndjson-output.md](../work/ndjson-output.md)).
+  command exists yet that would need it ([docs/archive/
+  ndjson-output.md](../archive/ndjson-output.md)).
 - Extending `--follow`/NDJSON to `build run` — confirmed `build run` has
   no subprocess/line-callback plumbing at all today, so there is nothing
   to stream; revisit only if that changes.
@@ -281,14 +282,18 @@ dry_run or smoke_test`.
   historical record; the real behavior was corrected the next day (see
   History below), with the correction documented here, in the living
   design doc, rather than by editing the ADR itself.
+- [ADR-0033](../decisions/0033-ndjson-streaming-follow-trigger.md) — the
+  NDJSON trigger-mechanism decision (`--follow ndjson`, requiring
+  `--output json`) this doc's "Streaming" section summarizes the shipped
+  result of.
 - [deploy-command.md](../work/deploy-command.md) — the main `deploy run`
   work doc, still in progress for unrelated concerns (locking, SIEM,
   whole-run timeout).
-- [cli-output-mode-interactions.md](../work/cli-output-mode-interactions.md) —
+- [cli-output-mode-interactions.md](../archive/cli-output-mode-interactions.md) —
   the real cfgint bug report and fix (`--follow` silently inert under
   `--output json`), plus the general `--output`/`--quiet`/`--verbose`
   interaction survey that motivated it.
-- [ndjson-output.md](../work/ndjson-output.md) — the full NDJSON design
+- [ndjson-output.md](../archive/ndjson-output.md) — the full NDJSON design
   (v1 precedent, event shapes, scope) this doc's "Streaming" section
   summarizes the shipped first cut of.
 
@@ -340,7 +345,7 @@ dry_run or smoke_test`.
   exactly as documented above — but silent, with zero warning, caused an
   11-minute real `terraform apply` to look completely hung with no
   progress signal at all. Investigated and fixed
-  ([cli-output-mode-interactions.md](../work/cli-output-mode-interactions.md)):
+  ([cli-output-mode-interactions.md](../archive/cli-output-mode-interactions.md)):
   `--follow` now reroutes every line to stderr under `--output json`
   instead of dropping it, actually matching the `--verbose` precedent
   this doc's own "Streaming" section already (incorrectly, at the time)
@@ -349,7 +354,9 @@ dry_run or smoke_test`.
   no change needed there.
 - 2026-10-07: Shipped `--follow ndjson` as a first cut of the NDJSON
   streaming this doc's "Streaming" section had deferred
-  ([ndjson-output.md](../work/ndjson-output.md)) — grounded directly in
+  ([ndjson-output.md](../archive/ndjson-output.md), decision recorded as
+  [ADR-0033](../decisions/0033-ndjson-streaming-follow-trigger.md)) —
+  grounded directly in
   v1's own real NDJSON implementation (`git show main:...`, not assumed),
   which turned out to be used far more broadly than `deploy run` alone
   (8 v1 command files, two patterns: subprocess-line streaming and

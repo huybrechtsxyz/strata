@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CVE scanner integration (docs/work/cve-scanner-integration.md) — scans
+"""CVE scanner integration (docs/archive/cve-scanner-integration.md) — scans
 the SBOM `build run` just generated for known vulnerabilities, via either
 of the two real, evidenced v1 backends (Trivy or Grype).
 

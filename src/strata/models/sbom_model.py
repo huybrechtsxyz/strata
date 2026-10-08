@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """SBOM component/reference models (docs/design/sbom-generation.md Phase 1),
-plus the CVE scanner models (docs/work/cve-scanner-integration.md).
+plus the CVE scanner models (docs/archive/cve-scanner-integration.md).
 
 Ported from v1's `models/sbom_model.py`. `SbomIgnore*RuleModel`
 (`sbom-ignore.yaml`) remains a separate, not-yet-designed concern — the CVE
@@ -64,7 +64,7 @@ class CveFindingModel(PlatformBaseModel):
     """A single CVE finding from vulnerability scanning.
 
     Field-for-field port of v1's real `CveFindingModel`
-    (docs/work/cve-scanner-integration.md) — populated identically from
+    (docs/archive/cve-scanner-integration.md) — populated identically from
     either backend's own JSON output (`strata.integrations.cve_scanner`).
     """
 
@@ -130,7 +130,7 @@ class CveAllowedEntryModel(PlatformBaseModel):
 
 class CveMaxSeverityPolicyModel(PlatformBaseModel):
     """`WorkspaceSpecModel.cve_policy` — gates `build run` on CVE findings in
-    the SBOM it just generated (docs/work/cve-scanner-integration.md).
+    the SBOM it just generated (docs/archive/cve-scanner-integration.md).
 
     A small, dedicated field rather than a generic `policies:` list (v2 has
     no policy engine at all yet, docs/work/policy-engine-architecture.md's

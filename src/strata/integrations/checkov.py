@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Checkov integration (docs/work/checkov-integration.md) — wraps the real
+"""Checkov integration (docs/archive/checkov-integration.md) — wraps the real
 Checkov CLI to scan rendered IaC output (Terraform/Bicep/Ansible/Helm) for
 security misconfigurations. Framework-agnostic itself — resolving *which*
 directory to scan (a provisioner's materialised source, or a Helm module's

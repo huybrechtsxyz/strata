@@ -105,9 +105,10 @@ which kind/concept.
   what should have shipped); fixed to reroute to stderr instead, and
   `--follow ndjson` shipped as a first cut of the NDJSON streaming that
   entry had deferred ([deploy-plan-preview.md](deploy-plan-preview.md)'s
-  own History has the full record; [docs/work/
-  cli-output-mode-interactions.md](../work/cli-output-mode-interactions.md)/
-  [ndjson-output.md](../work/ndjson-output.md) are the source work docs).
+  own History has the full record; [docs/archive/
+  cli-output-mode-interactions.md](../archive/cli-output-mode-interactions.md)/
+  [ndjson-output.md](../archive/ndjson-output.md) are the source archived
+  investigation docs, decision recorded as [ADR-0033](../decisions/0033-ndjson-streaming-follow-trigger.md)).
   ADR-0030 itself left unedited, per this repo's own immutable-ADR
   convention — the correction lives in the living design doc instead.
 
