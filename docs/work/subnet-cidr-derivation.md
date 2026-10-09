@@ -1,8 +1,10 @@
 # Subnet CIDR Auto-Derivation (cidrsubnet-equivalent sizing) — Work
 
-- Status: draft — direction decided (size-driven allocation + a persist
-  command, see "Decision" below), schema/command shape not yet implemented
-- Last updated: 2026-10-06
+- Status: draft — direction decided (Approach 1b: `cidrsubnets()` does the
+  carving in the real `.tf` module, strata only carries an ordered
+  `(name, new_bits)` request list + a guard-rail snapshot check; see
+  "Decision" below), schema/guard-rail not yet implemented
+- Last updated: 2026-10-08
 - Related: [ADR-0007](../decisions/0007-network-model-design-decisions.md)
   (current `NetworkModel`/`SubnetModel` shape — `cidr` is a literal-or-Value-
   token `str`, nothing is derived); spun off two sibling docs from the
@@ -196,109 +198,116 @@ this repo's own version-pinning precedent:
 
 ## Decision
 
-Given the above — and given the user's explicit confirmation that a
-command which writes the computed split back into `network.yaml` is fine,
-because that's exactly what makes it idempotent / git-versionable /
-change-detectable — **this doc now adopts the size-driven, first-fit
-allocation direction (formerly "Approach 2/3") as the chosen path**,
-implemented as a separate allocate-and-persist command rather than
-live derivation at `validate`/`build run` time. Approach 1
-(`new_bits`+`netnum`, stable-by-construction) is kept below for the
-record, but is **not** the chosen direction — it solves a narrower problem
-(removes bit arithmetic only) than what was actually asked for (remove the
-layout planning too), and the architect habits above (central register,
-plan-before-apply, idempotent re-run, self-documenting intent) all point
-at "compute once, persist, review the diff" as the right shape rather than
-"recompute silently on every run."
+**Superseded (2026-10-08) — see Approach 1b below.** Everything in this
+section was the original 2026-10-06 decision (an allocate-and-persist
+command). Kept for the record since the evidence behind it (architect
+habits, the stability constraint) is still valid — only the *conclusion*
+changed, once Terraform's own `cidrsubnets()` (plural) was checked
+directly against HashiCorp's docs and found to already provide the exact
+stability property this section was trying to build by hand.
 
-### Sketch: command shape
+### The real decision: Terraform computes it, strata only carries the request
 
-```
-strata network allocate NETWORK_NAME [--path PATH] [--dry-run] [--force]
-```
+Confirmed directly against HashiCorp's own `cidrsubnets()` documentation,
+not assumed: *"you must not change any of the existing arguments once
+network addresses have been assigned to real infrastructure, or else
+later address assignments will be invalidated. However, you can append
+new arguments to existing calls safely, as long as there is sufficient
+address space available."* That is exactly this doc's own stability
+constraint — already solved, for free, by a Terraform builtin, as long as
+subnet requests are only ever **appended**, never reordered, resized, or
+removed.
 
-Not designed as an isolated one-off command: thinking through this as the
-network architect for a real multi-tenant hub-spoke consumer
-(`cfg-int-deployment` — each customer is its own `kind: tenant`, e.g.
-[config/customers/c0062.yaml](../../config/customers/c0062.yaml), each
-presumably getting its own spoke VNet routed through a shared hub), a
-`network` command group has a realistic multi-command roadmap, not just
-this one subcommand — justifying the group the same way `version` earned
-one (started as a single bare command, became a group once `new`/`update`/
-`set` arrived):
+This replaces the allocate-and-persist command entirely:
 
-- **`strata network show NETWORK_NAME`** (read-only IPAM report — address
-  space, each subnet's utilization, remaining free gaps) — cheap once
-  `allocate`'s gap-finding walk exists, and the single most-wanted report
-  for an architect doing capacity planning.
-- **`strata network check`** — cross-tenant/global overlap detection.
-  Today's overlap validators (ADR-0007) only compare *explicitly peered*
-  networks within one `NetworkSpecModel` — two customer spokes that are
-  never declared as peered to each other but both route through the same
-  hub firewall can still collide, and nothing catches that today. This is
-  the "cross-manifest overlap detection" gap already flagged as deferred
-  (`v1-consumer-usage.md` repo memory: "revisit once `build run` is being
-  designed" — `build run` now exists) — worth reopening specifically for
-  networks once this group exists.
-- Longer-term, lower-priority ideas (not designed): `reserve` (headroom
-  placeholder blocks), `next`/`suggest` (VNet-level allocation from an
-  org-wide supernet pool — needs its own central-registry design, bigger
-  scope than subnet derivation), `diagram` (reuse `strata graph`'s
-  infrastructure for a VNet/subnet/peering topology view), `doctor`/`audit`
-  (drift detection), `release` (deallocate — needs a cool-down/quarantine
-  design, genuinely risky to build naively).
+- **`SubnetModel.cidr` becomes optional**; a new `new_bits: int | None`
+  field is added, mutually exclusive with `cidr` (one of the two
+  required — same either/or validator pattern already used elsewhere in
+  this codebase).
+- **No new command.** The ordered list of `(name, new_bits)` pairs is
+  already delivered to Terraform as-is — `networks` is already one of the
+  structured broadcast categories (`_build_networks_payload()`,
+  `terraform_projection.py`), so no new strata delivery mechanism is
+  needed at all.
+- **The real `.tf` module computes the literal CIDRs**, via `cidrsubnets()`
+  (the official `hashicorp/subnets/cidr` registry module wraps this exact
+  named-subnet, append-only pattern — worth pointing consumers at
+  directly rather than hand-rolling the HCL):
 
-- Modeled directly on `set_version_pin()`
-  (`src/strata/controllers/version_controller.py`) — a surgical
-  `ruamel.yaml` round-trip edit of the network's *existing, checked-in*
-  source file, not a re-dump. Only the specific subnet entries being
-  allocated change; every other byte (comments, ordering, quote style,
-  unrelated networks/subnets in the same file) survives untouched — this
-  is what makes the resulting git diff minimal and reviewable.
-- **Idempotent by construction**: only subnets with a size request
-  (`host_count`/`new_bits`) and **no `cidr` yet** are candidates. A subnet
-  that already has a literal `cidr` is left completely alone — re-running
-  `allocate` with nothing new to allocate is a true no-op (matches
-  `terraform plan`'s "no changes" and `set_version_pin()`'s re-set-same-
-  value no-op).
-- **Append-only**: allocation walks the *other* subnets' already-literal
-  CIDRs (both hand-written ones and ones a prior `allocate` run already
-  wrote) to find the first free, correctly-aligned gap for each pending
-  request, in declaration order. It never moves or reconsiders an
-  already-resolved subnet.
-- **`--dry-run`**: prints the plan (which subnets would get which CIDR)
-  without writing — the plan/apply split the architect habits above call
-  for. Exit code distinguishes "would allocate N" from "nothing to do" the
-  same way other dry-run-capable commands in this repo already do
-  (`build run --dry-run`).
-- **`--force`**: required to touch a subnet that already has a literal
-  `cidr` (e.g. its declared size changed) — same refusal pattern
-  `set_version_pin()` already uses for `held`/`unverified` pins. Without
-  it, a changed size on an already-allocated subnet is a hard error
-  ("would move already-provisioned address space — use --force"), never a
-  silent recompute.
+  ```yaml
+  # network.yaml
+  spec:
+    networks:
+      - name: spoke-main
+        address_space: ["10.0.0.0/22"]
+        subnets:
+          - name: aks_nodes
+            new_bits: 3     # /22 + 3 = /25
+          - name: aks_kubeapi
+            new_bits: 6     # /22 + 6 = /28
+  ```
 
-### Schema implication (not yet made)
+  ```hcl
+  locals {
+    newbits = [for s in var.networks["spoke-main"].subnets : s.new_bits]
+    cidrs   = cidrsubnets(var.networks["spoke-main"].address_space[0], local.newbits...)
+  }
+
+  resource "azurerm_subnet" "this" {
+    for_each         = { for i, s in var.networks["spoke-main"].subnets : s.name => local.cidrs[i] }
+    name             = each.key
+    address_prefixes = [each.value]
+    # ...
+  }
+  ```
+
+  A subnet needed later is just a new entry **appended to the end** of
+  `subnets:` — `aks_nodes`/`aks_kubeapi` never move.
+
+### The real risk this still carries, and the guard-rail it needs
+
+Append-only is not a convention an author can be trusted to remember by
+hand — resizing an existing entry, inserting a new one mid-list, or
+simply reordering the list (even alphabetizing it) silently reshuffles
+every subnet positioned *after* the touched one. Unlike a YAML typo, this
+**succeeds validation cleanly** and only surfaces as a surprise
+`terraform plan` full of destroys — and because Azure generally refuses
+to change a subnet's address range while real resources are deployed
+inside it (a NIC/VM/private endpoint/AKS node pool holds specific IPs in
+that range), the real consequence is a forced destroy/recreate of the
+subnet *and* everything addressed inside it, not a quiet in-place update.
+
+This risk is not new, or specific to choosing `cidrsubnets()` — Approach
+2/3's own Python-side first-fit allocator had the identical
+declaration-order sensitivity (see its own "Cons," below). Terraform
+doing the arithmetic doesn't introduce the risk; it just means strata no
+longer needs a whole allocator to carry it.
+
+**Guard-rail (new, small, real work)**: strata should snapshot the
+ordered `(name, new_bits)` list per network — alongside `resolved.yaml`
+or a small dedicated file — and hard-error at `validate`/`build run` if
+any *existing* entry's position or value changed since the snapshot,
+requiring an explicit `--force` to proceed. Same refusal pattern
+`set_version_pin()` already uses elsewhere in this repo for "about to
+move already-provisioned address space." This is a tripwire, not an
+allocator — a few dozen lines, not a new command.
+
+### Schema implication
 
 `SubnetModel.cidr` is required today (`Field(..., min_length=1)` —
-ADR-0007). Supporting "not yet allocated" subnets means `cidr` has to
-become optional, paired with a new optional size field(s)
-(`host_count: int | None` and/or `new_bits: int | None`), with a
-`model_validator` requiring **exactly one of** `cidr` or a size field (not
-both, not neither) *before* allocation — and, deliberately, **allowing
-both to coexist after allocation** (per the self-documenting-intent habit
-above), in which case a second validator should check the two don't
-disagree (the literal's prefix length actually matches the declared
-size) — catching hand-edited drift between a resolved `cidr` and its own
-request, rather than letting the two silently diverge. `validate`/`build
-run` should treat a subnet with a size request but still no `cidr` as a
-hard error directing the author to run `strata network allocate` first —
-not a second, ephemeral derivation code path — keeping exactly one place
-that ever computes a literal CIDR.
+ADR-0007). It becomes optional, paired with a new `new_bits: int | None`
+field, with a `model_validator` requiring **exactly one of** `cidr` or
+`new_bits` (not both, not neither). No `host_count`/`netnum` fields are
+needed — `cidrsubnets()` takes additional-prefix-bits directly, and
+assigns position from list order automatically, so there is nothing else
+for the schema to carry. `validate`/`build run` need no new logic beyond
+that validator — the literal CIDR is never computed by strata at all,
+only by the consuming `.tf` module at plan/apply time.
 
 ## Candidate approaches considered
 
-### Approach 1 — explicit `cidrsubnet()`-equivalent (`new_bits` + `netnum`) — NOT chosen
+
+### Approach 1 — explicit `cidrsubnet()`-equivalent (`new_bits` + `netnum`) — superseded by Approach 1b
 
 `SubnetModel` gains `new_bits: int` + `netnum: int` as an alternative to
 `cidr: str` (mutually exclusive, validated like other either/or fields in
@@ -321,8 +330,33 @@ overlap/containment validators against the *resolved* literal as today.
   naturally `new_bits`-only for the first subnet but needs the author to
   already know where the first one ends before choosing the second one's
   `netnum` — i.e. doesn't fully remove "manual math", just shrinks it.
+  **Superseded by Approach 1b**: `cidrsubnets()` (plural) auto-assigns
+  position from list order, removing the need for `netnum` entirely —
+  this con doesn't apply to it.
 
-### Approach 2 — desired size, first-fit allocation over siblings already declared — CHOSEN DIRECTION
+### Approach 1b — `cidrsubnets()` (plural): Terraform packs the list, append-only — CHOSEN
+
+`SubnetModel` gains `new_bits: int` only (no `netnum`) — the ordered list
+of `(name, new_bits)` pairs is delivered to Terraform unchanged (`networks`
+is already a structured broadcast category), and the consuming `.tf`
+module calls `cidrsubnets(address_space, newbits...)` once, which
+auto-assigns each requested block's position from its place in the list.
+Full design in the "Decision" section above — this entry exists so the
+approach list stays a complete, comparable record.
+
+- Pros: solves Approach 1's own con (no manual position bookkeeping, even
+  for mixed sizes) without Approach 2/3's cost (no allocator to write, no
+  persist command, no ruamel round-trip) — Terraform's own builtin
+  already guarantees append-only stability (confirmed directly against
+  HashiCorp's docs, not assumed). Zero new strata delivery mechanism
+  needed; `networks` already reaches Terraform as structured data today.
+- Cons: shares Approach 2/3's declaration-order sensitivity (reordering,
+  resizing, or inserting mid-list reshuffles every subsequent subnet) —
+  needs the guard-rail snapshot check described in "Decision" above, since
+  this failure mode succeeds validation cleanly and only surfaces as a
+  destructive `terraform plan`.
+
+### Approach 2 — desired size, first-fit allocation over siblings already declared — superseded by Approach 1b
 
 `SubnetModel` gains a `host_count: int` (or `new_bits: int`) field with no
 `netnum` — strata looks at the *other* subnets already declared in the same
@@ -347,7 +381,7 @@ after it").
   pattern as `set_version_pin()`) rather than running at `validate`/`build
   run` time, which is more moving parts than Approach 1.
 
-### Approach 3 — same as Approach 2, built on `netaddr.IPSet` instead of stdlib
+### Approach 3 — same as Approach 2, built on `netaddr.IPSet` instead of stdlib — superseded by Approach 1b
 
 Same user-facing shape as Approach 2; only the internal gap-finding
 implementation differs (`IPSet` difference instead of a hand-rolled
@@ -356,43 +390,64 @@ version turns out to need meaningfully more logic than expected once
 written — see "Is there a Python library" above for why stdlib is the
 default pick.
 
-## Open questions (remaining, after the Approach 2/3 decision above)
+## Open questions (remaining, after the Approach 1b decision above)
 
-- **Allocation scope for Approach 2/3**: does "already claimed space" mean
-  only this network's own `subnets:` list (cheap, already in scope at
-  `NetworkDefinitionModel` validation time), or does it also need to see
-  *other* networks' address spaces — e.g. a peered network's range, the
-  same scope ADR-0007's `validate_cross_network_cidr_overlap` already
-  covers? Widening the scope changes where in the validator chain this
-  would need to run (currently per-`NetworkDefinitionModel`, cross-network
-  overlap runs one level up at `NetworkSpecModel`).
+- **Guard-rail snapshot shape**: where does the "last-known
+  `(name, new_bits)` order" live — a new small file next to
+  `resolved.yaml`, or folded into it? Keyed per network or per solution?
+  Needs designing before the hard-error/`--force` check can be built.
+- **Allocation scope**: `cidrsubnets()` only ever sees one network's own
+  `address_space` — cross-network/cross-tenant overlap (e.g. two peered
+  spokes whose parents happen to collide) is a separate, already-existing
+  concern (ADR-0007's `validate_cross_network_cidr_overlap`), unaffected
+  by this decision either way.
 - **Hybrid escape hatch**: should a literal `cidr:` remain valid alongside
-  whichever size-based field(s) are added (mutually exclusive per subnet),
-  so an author can mix "derive this one" and "I already know this one's
-  address" subnets in the same network? Likely yes, but not decided.
+  `new_bits` (mutually exclusive per subnet), so an author can mix
+  "derive this one" and "I already know this one's address" subnets in
+  the same network? Likely yes, but not decided.
 - **Value-token interaction**: if the parent `address_space` entry carries
-  a `${var:}`/`${secret:}` token, derivation can't run until that's
-  resolved — same "skip if any token present" escape hatch the existing
-  overlap validators already use, but needs to be re-confirmed for whichever
-  approach is chosen (a derived subnet's CIDR becomes itself a deferred/
-  computed value, not knowable at Phase 1 validation time, same bucket as
-  Phase 2's token resolution).
+  a `${var:}`/`${secret:}` token, strata's own transient validation can't
+  run until that's resolved — same "skip if any token present" escape
+  hatch the existing overlap validators already use. Irrelevant to the
+  real CIDR computation itself, which happens in Terraform regardless.
 - **Not yet filed upstream** — this doc is the write-up to file the actual
-  feature request/design proposal from, once an approach is picked.
+  feature request/design proposal from, once implemented.
 
 ## Remaining Work
 
-- [ ] Resolve the allocation-scope open question above.
-- [ ] Decide the hybrid-escape-hatch (likely yes, see "Schema implication"
-      above) and Value-token-interaction questions.
-- [ ] Make `SubnetModel.cidr` optional + add `host_count`/`new_bits` +
-      the two model_validators described in "Schema implication" above.
-- [ ] Build `strata network allocate` (`version_controller.py`'s
-      `set_version_pin()` as the direct template for the ruamel
-      round-trip write) + its `--dry-run`/`--force` behavior.
-- [ ] Wire `validate`/`build run` to hard-error on an unallocated
-      size-requested subnet, directing the author to run `strata network
-      allocate`.
-- [ ] Prototype the allocation + validator wiring in `network_model.py`.
+- [ ] Resolve the guard-rail snapshot shape open question above.
+- [ ] Decide the hybrid-escape-hatch and Value-token-interaction questions.
+- [ ] Make `SubnetModel.cidr` optional + add `new_bits: int | None` + the
+      either/or `model_validator` described in "Schema implication" above.
+- [ ] Build the guard-rail snapshot check (hard-error on an existing
+      entry's position/value changing since last recorded, `--force` to
+      override) — a tripwire, not an allocator; no new command needed.
+- [ ] Write (or link to) a reference `.tf` module snippet using
+      `cidrsubnets()`/`hashicorp/subnets/cidr` for consumers to copy.
 - [ ] File the proposal upstream (or close this out as "decided not to
       build" with the reasoning, if that's the outcome).
+
+## Changelog
+
+- 2026-10-08: Superseded the 2026-10-06 "allocate and persist" decision
+  (Approach 2/3) after confirming directly against HashiCorp's own
+  `cidrsubnets()` (plural) docs that Terraform already guarantees
+  append-only stability natively — no custom Python allocator, no ruamel
+  round-trip command needed. New chosen direction: **Approach 1b** —
+  `SubnetModel` gains `new_bits` only (no `netnum`); the ordered request
+  list is delivered to Terraform unchanged via the existing `networks`
+  structured category; the consuming `.tf` module calls `cidrsubnets()`
+  itself. Real risk surfaced and addressed: reordering/resizing/inserting
+  mid-list (not just removing an entry) silently reshuffles every
+  subsequent subnet's computed address, and since Azure generally refuses
+  to resize a subnet with real resources already deployed in it, the
+  practical consequence is a forced destroy/recreate — succeeds
+  validation cleanly, only surfaces as a surprise `terraform plan`. Added
+  a guard-rail requirement (snapshot the ordered request list, hard-error
+  on an existing entry changing, `--force` to override — same refusal
+  pattern `set_version_pin()` already uses) to catch this before it
+  reaches a real plan. Rewrote "Decision"/"Schema implication"/Approach
+  labels/Open Questions/Remaining Work accordingly; Approach 2/3's own
+  write-ups kept, marked superseded, not deleted (still the real record
+  of why `cidrsubnets()` wasn't considered the first time). No code
+  changed — decision and doc update only.
